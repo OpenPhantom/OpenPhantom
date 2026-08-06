@@ -30,7 +30,7 @@ Anyone interested in contributing is welcome to participate through code, docume
 
 # Discord Server
 
-Join the Phantom Discord community,a place for fans of Star Wars Episode I: The Phantom Menace to connect, discuss the game, share videos, showcase mods, and exchange ideas.
+Join the Phantom Discord community, a place for fans of Star Wars Episode I: The Phantom Menace to connect, discuss the game, share videos, showcase mods, and exchange ideas.
 
 The Discord is open to players, modders, developers, and anyone interested in preserving and expanding the game. As OpenPhantom develops, it will also become a hub for development updates, custom content, tools, and community projects.
 

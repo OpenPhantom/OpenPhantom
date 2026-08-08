@@ -8,6 +8,8 @@ For complete guides on installation, usage, and configuration, see the project [
 
 [Usage Guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Usage-Guide)
 
+[Currently Working on Spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers)
+
 # Project Goals
 
 The main objectives of OpenPhantom are:

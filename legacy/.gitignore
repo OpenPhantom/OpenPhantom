@@ -1,0 +1,18 @@
+# Nothing built ever goes in. The DLLs are produced from these sources with CMake; see README.md.
+build/
+*.obj
+*.pdb
+*.exp
+*.lib
+*.ilk
+*.dll
+*.exe
+
+# Written next to the game, not here, but people do copy them back for a bug report.
+engine_fixes.log
+engine_fixes.prev.log
+engine_fixes_diag.log
+
+# A tuned copy someone dropped in the checkout. The one that ships is dist/engine_fixes.ini
+# and is tracked; this only matches the repository root.
+/engine_fixes.ini

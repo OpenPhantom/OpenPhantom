@@ -1,0 +1,17 @@
+# Build output. Nothing in this directory is ever committed.
+#
+# The DLLs here are produced from src/ with CMake, and they belong in a GitHub release as an
+# attached archive rather than in the history: a binary in a commit outlives the source it was
+# built from, and nobody can tell afterwards which revision produced it.
+#
+# This file is the only thing in here that git tracks, so the directory survives a clone and says
+# what it is for.
+#
+# To fill it:
+#     cmake -S . -B build -A Win32
+#     cmake --build build --config Release
+#     ctest --test-dir build -C Release
+#     copy build\dist\dinput.dll and build\dist\mods\*.dll here, plus dist\engine_fixes.ini
+
+*
+!.gitignore

@@ -1,82 +1,91 @@
 # OpenPhantom
 
-OpenPhantom is a full decompilation and recompilation project for the PC version of Star Wars Episode I: The Phantom Menace engine. The goal is to create a documented, maintainable, and modern source code base while preserving the original game's behavior, enabling new platforms, engine improvements, and a complete suite of development and editing tools.
+OpenPhantom is a reverse engineering and preservation project for the PC version of *Star Wars
+Episode I: The Phantom Menace*. The aim is a documented, maintainable source base that keeps the
+original game's behaviour, runs on modern systems, and comes with the tools to edit and extend it.
 
-# Documentation
+The project has two halves that will run side by side for a long time. One patches the retail
+executable so the game you already own runs properly today. The other reconstructs the engine from
+scratch. The first is useful now; the second is where it ends up.
 
-For complete guides on installation, usage, and configuration, see the project [wiki](https://github.com/OpenPhantom/OpenPhantom/wiki) and use the menu on the right.
+## What is here right now
 
-[In Game Settings](https://github.com/OpenPhantom/OpenPhantom/wiki/In-Game-Settings) Will guide you through the New Additional Game settings that have been patched into the game with helpful visual cues and extra information.
+| | |
+|---|---|
+| [`legacy/`](legacy/) | **Working.** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. Twelve DLLs and a loader, built with CMake. See its [README](legacy/README.md) |
+| `engine/` | The reimplementation. Not started |
+| `editor/` | Tools for maps, assets and game content. Not started |
+| `architecture/` | How the original engine is put together, written down. Not started |
+| `installer/` | Packaging and setup. Not started |
 
-[Currently Working on Spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers) If you want to see what we are currently working on behind the scenes.
+If you want to play the game with the fixes, go to [`legacy/`](legacy/) and read the installation
+section, or take a release archive from the [releases page](../../releases).
 
-# Project Goals
+## Documentation
 
-The main objectives of OpenPhantom are:
+Full guides for installation, usage and configuration are in the
+[wiki](https://github.com/OpenPhantom/OpenPhantom/wiki):
 
-- Reconstruct the original game engine in clean and maintainable source code
+* [In game settings](https://github.com/OpenPhantom/OpenPhantom/wiki/Usage-Guide)
+* [Currently working on, with spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers)
 
-- Preserve original gameplay behavior as accurately as possible
+## Goals
 
-- Enable modern platform support including Windows, Linux, and 64 bit systems
+* Reconstruct the original engine as clean, maintainable source.
+* Keep the original gameplay behaviour. Where the 1999 look or feel was deliberate, it stays.
+* Run on modern systems, including Linux and 64 bit builds.
+* Improve stability, performance and extensibility without changing how the game plays.
+* Provide real tools for editing maps, assets and content.
+* Support community modding, and stay open to contributions.
 
-- Improve engine stability, performance, and extensibility
+## Getting involved
 
-- Provide a full set of development tools for editing maps, assets, and game content
+This is a community project and it moves through people digging into details nobody has looked at
+yet. Code, documentation, tests, tooling, research notes and good bug reports are all worth
+having, and you do not need to know the engine to start.
 
-- Support community driven modding and content creation
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has how we work: how to report something usefully, what a
+pull request needs, and the ground rules for working against a binary you do not have the source
+to. Each component adds its own rules on top; `legacy/CONTRIBUTING.md` is the one that exists so
+far.
 
-- Encourage open collaboration and welcome contributions from the community
+The most useful thing right now is testing. Almost everything in `legacy/` is verified offline and
+only three fixes have been confirmed in actual play, so a report saying what happened on your
+machine, with `engine_fixes.log` attached, is worth more than it sounds.
 
-# Community and Contributions
+## Discord
 
-OpenPhantom is intended to be a community driven project.
+The Phantom Discord is where the community talks: players, modders and developers sharing videos,
+mods and ideas. As OpenPhantom grows it is also where development updates, custom content and
+tools land.
 
-Contributions from developers, reverse engineers, modders, and enthusiasts are welcome and encouraged. The project benefits from shared knowledge, collaboration, and collective effort to better understand and preserve the original engine.
+**https://discord.gg/73UbZN2y7x**
 
-Anyone interested in contributing is welcome to participate through code, documentation, testing, tooling, or research.
+## You need your own copy of the game
 
-# Discord Server
+OpenPhantom ships no game data. No assets, no executables, no extracted files, nothing
+proprietary, in the repository or in a release. Everything here operates on files you already own,
+and you need a legally obtained copy of *Star Wars Episode I: The Phantom Menace* for PC to use
+any of it.
 
-Join the Phantom Discord community, a place for fans of Star Wars Episode I: The Phantom Menace to connect, discuss the game, share videos, showcase mods, and exchange ideas.
+## Legal
 
-The Discord is open to players, modders, developers, and anyone interested in preserving and expanding the game. As OpenPhantom develops, it will also become a hub for development updates, custom content, tools, and community projects.
+An independent fan project. Not affiliated with, endorsed by or sponsored by LucasArts, Lucasfilm
+Ltd or Disney. All trademarks, game titles and related intellectual property belong to their
+respective owners. OpenPhantom claims no ownership of any original game content and redistributes
+none of it.
 
-Join the community:
-https://discord.gg/73UbZN2y7x
+## Licence
 
-# Game Data Requirement
+MIT. The source here is free to use, modify and distribute under those terms, provided the licence
+notice travels with it. See [LICENSE](LICENSE).
 
-OpenPhantom does not include any original game data.
+The licence covers this source code only. It grants nothing regarding the original game, its
+assets, or anything else its rights holders own. Release archives may also contain third party
+components under their own licences, which are named in the release notes.
 
-To use this project, users must provide their own legally obtained copy of Star Wars Episode I: The Phantom Menace for PC. The engine and tools are designed to load and operate on user provided game files only.
+## Contact
 
-No game assets, binaries, or proprietary data are distributed with this project.
+General enquiries and feedback: **openphantom@proton.me**
 
-# Legal and Ownership Notice
-
-This project is an independent fan made reverse engineering effort.
-
-It is not affiliated with, endorsed by, or sponsored by LucasArts, Lucasfilm Ltd, or Disney.
-
-All trademarks, game titles, and related intellectual property belong to their respective owners.
-
-OpenPhantom does not claim ownership of any original game content and does not redistribute any copyrighted material.
-
-# License
-
-This project is licensed under the MIT License.
-
-This means the source code of OpenPhantom is free to use, modify, and distribute under the terms of the MIT License, provided that the license notice is included in all copies or substantial portions of the software.
-
-The MIT License applies only to the OpenPhantom source code and does not grant any rights to the original game or its assets.
-
-# Contact
-
-For general inquiries, feedback, or other matters related to OpenPhantom, please contact:
-
-openphantom@proton.me
-
-# Summary
-
-OpenPhantom aims to preserve and modernize the engine of Star Wars Episode I: The Phantom Menace while enabling new platforms, improved performance, community collaboration, and powerful development tools for editing and extending the game.
+For anything technical, an issue on this repository will reach more people and stays searchable.

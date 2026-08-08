@@ -26,7 +26,7 @@ section, or take a release archive from the [releases page](../../releases).
 Full guides for installation, usage and configuration are in the
 [wiki](https://github.com/OpenPhantom/OpenPhantom/wiki):
 
-* [In game settings](https://github.com/OpenPhantom/OpenPhantom/wiki/Usage-Guide)
+* [In game settings](https://github.com/OpenPhantom/OpenPhantom/wiki/In-Game-Settings)
 * [Currently working on, with spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers)
 
 ## Goals

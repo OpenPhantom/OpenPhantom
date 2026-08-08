@@ -6,7 +6,7 @@ OpenPhantom is a full decompilation and recompilation project for the PC version
 
 For complete guides on installation, usage, and configuration, see the project [wiki](https://github.com/OpenPhantom/OpenPhantom/wiki) and use the menu on the right.
 
-[In Game Settings](https://github.com/OpenPhantom/OpenPhantom/wiki/Usage-Guide) Will guide you through the Game settings with helpful visual cues and extra information.
+[In Game Settings](https://github.com/OpenPhantom/OpenPhantom/wiki/In-Game-Settings) Will guide you through the Game settings with helpful visual cues and extra information.
 
 [Currently Working on Spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers) If you want to see what we are currently working on behind the scenes.
 

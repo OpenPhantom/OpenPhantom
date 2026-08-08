@@ -1,24 +1,30 @@
 # OpenPhantom
 
-OpenPhantom is a full decompilation and recompilation project for the PC version of Star Wars Episode I: The Phantom Menace engine. The goal is to create a documented, maintainable, and modern source code base while preserving the original game’s behavior, enabling new platforms, engine improvements, and a complete suite of development and editing tools.
+OpenPhantom is a full decompilation and recompilation project for the PC version of Star Wars Episode I: The Phantom Menace engine. The goal is to create a documented, maintainable, and modern source code base while preserving the original game's behavior, enabling new platforms, engine improvements, and a complete suite of development and editing tools.
+
+# Documentation
+
+For complete guides on installation, usage, and configuration, see the project [wiki](https://github.com/OpenPhantom/OpenPhantom/wiki):
+
+[Usage Guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Usage-Guide)
 
 # Project Goals
 
 The main objectives of OpenPhantom are:
 
-• Reconstruct the original game engine in clean and maintainable source code
+- Reconstruct the original game engine in clean and maintainable source code
 
-• Preserve original gameplay behavior as accurately as possible
+- Preserve original gameplay behavior as accurately as possible
 
-• Enable modern platform support including Windows, Linux, and 64 bit systems
+- Enable modern platform support including Windows, Linux, and 64 bit systems
 
-• Improve engine stability, performance, and extensibility
+- Improve engine stability, performance, and extensibility
 
-• Provide a full set of development tools for editing maps, assets, and game content
+- Provide a full set of development tools for editing maps, assets, and game content
 
-• Support community driven modding and content creation
+- Support community driven modding and content creation
 
-• Encourage open collaboration and welcome contributions from the community
+- Encourage open collaboration and welcome contributions from the community
 
 # Community and Contributions
 

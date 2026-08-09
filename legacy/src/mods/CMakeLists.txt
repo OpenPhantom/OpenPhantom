@@ -33,6 +33,7 @@ add_engine_fix(variable_fov
 add_engine_fix(framerate_fix
     dll_main.c
     framerate_fix.c
+    face_latch.c
     camera_compensation.c
     draw_interpolation.c
     framerate_stats.c

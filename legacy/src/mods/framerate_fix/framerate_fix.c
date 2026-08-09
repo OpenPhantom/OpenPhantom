@@ -27,6 +27,7 @@
 #include "framerate_fix.h"
 
 #include "camera_compensation.h"
+#include "face_latch.h"
 #include "draw_interpolation.h"
 #include "framerate_stats.h"
 
@@ -167,6 +168,7 @@ typedef struct framerate_config {
     int  animation_clock_mode;  /* 0 = per frame (original), 1 = 30 Hz (authored rate) */
     bool interpolate_pitch_roll;
     bool pose_per_frame;
+    int  face_latch_yield;
     int  stats_frame_interval;
     int  stats_player_frames;
 } framerate_config_t;
@@ -200,6 +202,7 @@ static void load_config(void)
     config->animation_clock_mode   = ini_read_int (FRAMERATE_SECTION, "AnimationClockMode", 1);
     config->interpolate_pitch_roll = ini_read_bool(FRAMERATE_SECTION, "InterpolatePitchRoll", true);
     config->pose_per_frame         = ini_read_bool(FRAMERATE_SECTION, "PosePerFrame", true);
+    config->face_latch_yield       = ini_read_int (FRAMERATE_SECTION, "FaceLatchYield", 16);
     config->stats_frame_interval   = ini_read_int (FRAMERATE_SECTION, "StatsFrameInterval", 0);
     config->stats_player_frames    = ini_read_int (FRAMERATE_SECTION, "StatsPlayerFrames", 0);
 
@@ -208,6 +211,8 @@ static void load_config(void)
     if (config->animation_clock_mode < 0 || config->animation_clock_mode > 1) {
         config->animation_clock_mode = 1;
     }
+    if (config->face_latch_yield < 0)  { config->face_latch_yield = 0; }
+    if (config->face_latch_yield > 64) { config->face_latch_yield = 64; }
     if (config->stats_frame_interval < 0) { config->stats_frame_interval = 0; }
     if (config->stats_player_frames  < 0) { config->stats_player_frames  = 0; }
 }
@@ -478,6 +483,8 @@ void framerate_fix_install(void)
     } else {
         log_info("InterpolatePitchRoll=0, drawn pitch and roll keep stepping at 32 Hz");
     }
+    face_latch_install(framerate_state.config.face_latch_yield);
+
     if (framerate_state.config.pose_per_frame) {
         draw_interpolation_install_pose_throttle();
     } else {

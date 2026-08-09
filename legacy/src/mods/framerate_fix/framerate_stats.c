@@ -173,6 +173,14 @@ void framerate_stats_install(int frame_sample_interval, int player_frames)
     resolve_substep_globals();
     resolve_player_pointer();
 
+    /* The first window has no previous window to open it, so it is stamped here. Every later
+     * one is stamped by log_frame_window as it closes. */
+    stats_state.ticks_at_window_start =
+        (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
+    if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
+        stats_state.clock_at_window_start.QuadPart = 0;
+    }
+
     if (frame_sample_interval > 0) {
         log_info("frame statistics every %d frames (tickCounter=%08X substepAlpha=%08X)",
                  frame_sample_interval, (unsigned)(uintptr_t)stats_state.tick_counter,
@@ -239,6 +247,20 @@ static void log_frame_window(void)
              ticks, (real > 0.0) ? (double)ticks / real : 0.0,
              (double)((ticks != 0) ? (float)stats_state.frames_in_window / (float)ticks : 0.0f),
              (double)stats_state.alpha_minimum, (double)stats_state.alpha_maximum);
+
+    /* The next window starts here, not on its first sample.
+     *
+     * Stamping the marks when the first frame of a window arrives measures N-1 intervals while
+     * counting N frames, so everything derived from wall time came out N/(N-1) too high. At the
+     * shipped interval of 60 that is 1.7 percent, which is why every window in every log reported
+     * a frame rate just above the cap and a flat "1.02x real time". Closing one window and opening
+     * the next at the same instant makes the windows contiguous, makes the interval count match
+     * the frame count, and stops the substep total losing an interval as well. */
+    stats_state.ticks_at_window_start =
+        (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
+    if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
+        stats_state.clock_at_window_start.QuadPart = 0;
+    }
 }
 
 static void sample_frame_window(float frame_delta)
@@ -249,11 +271,9 @@ static void sample_frame_window(float frame_delta)
         stats_state.delta_sum     = 0.0f;
         stats_state.alpha_minimum = 1.0f;
         stats_state.alpha_maximum = 0.0f;
-        stats_state.ticks_at_window_start =
-            (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
-        if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
-            stats_state.clock_at_window_start.QuadPart = 0;
-        }
+        /* The wall clock and the substep mark were stamped when the previous window closed, so the
+         * measured interval count matches the frame count. The first window has no previous one,
+         * and its marks were stamped at install. */
     }
 
     if (frame_delta < stats_state.delta_minimum) { stats_state.delta_minimum = frame_delta; }

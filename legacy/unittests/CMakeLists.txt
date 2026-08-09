@@ -62,6 +62,11 @@ add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c)
 # the only one whose mistakes are invisible at run time.
 add_unit_test(camera_anchor framerate_fix framerate_fix/camera_compensation.c)
 
+# The predicate that decides whether the facing command's completion is withheld. It can be wrong
+# in either direction and neither shows up at run time: too rare and the scripted scene never
+# progresses, too often and a clip that is still moving is delayed.
+add_unit_test(face_latch framerate_fix framerate_fix/face_latch.c)
+
 # The one predicate that decides whether a call is let into the music DLL. Wrong in either
 # direction and the failure is silent.
 add_unit_test(imuse_guard imuse_fix imuse_fix/imuse_guard.c)

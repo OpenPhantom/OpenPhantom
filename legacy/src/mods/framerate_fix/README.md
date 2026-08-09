@@ -25,6 +25,7 @@ survives that recompile, which is why it does not share a gate with the rest of 
 | `PinSimulationRate` | `1` | nail the substep to 1/32 s |
 | `InterpolatePitchRoll` | `1` | interpolate the drawn pitch and roll like the drawn yaw |
 | `PosePerFrame` | `1` | rebuild the joint matrices every frame |
+| `FaceLatchYield` | `16` | hand the scripted facing command a "still turning" answer on one simulation step in N, for a clip that has already clamped at its last frame. 0 switches it off, range 2-64 |
 | `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames |
 | `StatsPlayerFrames` | `0` | >0: dump the player's draw interpolation for N frames |
 
@@ -44,6 +45,8 @@ survives that recompile, which is why it does not share a gate with the rest of 
 | the yaw deadband | `0x418715` | operand repointed at a scaled cell |
 | `bapobj_drawAll` euler | `0x4112D9` | 0x20 bytes replaced by a call |
 | `rdThing_Draw` pose gate | `0x410019` | `74 19` -> `90 90` |
+| facing completion test | `0x42E3AD` | detoured; one caller, the 0x202 handler |
+| substep counter increment | `0x4757DB` | operand read, address-free pattern |
 
 ## Why each correction exists
 
@@ -53,6 +56,14 @@ survives that recompile, which is why it does not share a gate with the rest of 
   the dt it is handed; five exponential dampers run 4.8 times as often at 144 fps.
 * **The animation clock is a per-frame counter.** Water waves and scrolling UVs read it as if it
   were a clock.
+* **The facing command's completion flag is a level, not an edge.** `bComplete` at
+  `track+0x140` is raised inside the draw once per rendered frame and read once per
+  simulation step. Below 32 fps some frames run two steps back to back and the second
+  still sees it clear, which is the only reason the shipped game ever took the
+  in-progress branch; the rate of that is 32 minus fps per second. At or above 32 fps
+  it never happens, and a scripted state whose only work sits on that branch stops for
+  good. In the swamp the opening scene runs its script on the player's own object, so
+  the player is suspended and never released.
 * **The pose throttle** compares against the SUBSTEP counter. At 30 fps there are 1.07 substeps per
   frame and the branch never fires, the shipped game never executes it. At 60 fps about 47 % of
   frames redraw the previous frame's joint matrices, freezing pose *and* placement together.
@@ -85,4 +96,11 @@ dormancy and both draw patches are already in place by then and stay in place.
 Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes on all five retail
 executables (EN, DE, the Fix Pack, and both install copies). One unit test, `camera_anchor`, the
 anchor encoder is the only isolated pure logic in this DLL, and the only place where a wrong byte
-produces no crash and no log line. **Not accepted in game.**
+produces no crash and no log line.
+
+`FaceLatchYield` was tested in the game. At an uncapped rate of about 90 fps the swamp opening
+released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the scene plays at
+its authored pace rather than merely failing to hang. The confirming step, setting the key to 0
+and checking that the freeze returns, has not been run yet.
+
+Everything else in this DLL is still only reviewed and built, not accepted in game.

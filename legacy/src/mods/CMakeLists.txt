@@ -134,20 +134,3 @@ add_engine_fix(diagnostics
     diag_flow.c
 )
 target_link_libraries(diagnostics PRIVATE winmm)
-
-# video_overlay.c finds the game's own window and plays into a borderless popup owned by it through
-# a 32-bit libVLC install found and loaded dynamically at runtime (vlc_playback.c - no libVLC SDK
-# linked here at all, on purpose, see its own header comment); fmv_player.c is the one
-# byte-evidenced detour that decides when to. This used to be Media Foundation/MFPlay running as a
-# separate process (fmv_player_host.exe, no longer in this tree); see video_overlay.c's header
-# comment for the full chronology of why both of those changed. advapi32 (RegOpenKeyExW etc., used
-# to find a non-default VLC install) is already one of MSVC's own default libraries, linked here
-# anyway for the same reason winmm/ole32 are explicit elsewhere in this tree: so the dependency is
-# visible at a glance instead of relying on an implicit default.
-add_engine_fix(fmv_player
-    dll_main.c
-    fmv_player.c
-    video_overlay.c
-    vlc_playback.c
-)
-target_link_libraries(fmv_player PRIVATE advapi32)

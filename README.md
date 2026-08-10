@@ -16,7 +16,7 @@ scratch. The first is useful now; the second is where it ends up.
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
 | `architecture/` | How the original engine is put together, written down. Not started |
-| `installer/` | Packaging and setup. Not started |
+| `installer/` | Packaging and setup. ** Working.** |
 
 If you want to play the game with the fixes, go to [`legacy/`](legacy/) and read the installation
 section, or take a release archive from the [releases page](../../releases).

@@ -123,6 +123,15 @@ add_engine_fix(decal_fix
     decal_fix.c
 )
 
+# Two independent bugs behind "the SFX slider resets to full on reload": the value saved came
+# from an unreliable AIL query instead of the engine's own volume mirror, and separately the
+# startup load-time apply is a guaranteed no-op because sfx_sound_init marks sound ready one
+# statement after it applies the loaded volume. See the DLL's own header comment and README.
+add_engine_fix(sfx_volume_save_fix
+    dll_main.c
+    sfx_volume_save_fix.c
+)
+
 add_engine_fix(diagnostics
     dll_main.c
     diagnostics.c

@@ -214,6 +214,49 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
 
     DestroyWindow(overlay_window);
 
+    /* The engine tracks its drawn menu cursor as a DELTA against a fixed anchor it constantly
+     * warps the real cursor back to: client (320, 240), the same ENGINE_CENTRE_X/Y this codebase
+     * already verifies byte-for-byte in enhanced_resolution.c's cursor_anchor.c. That warp only
+     * happens by processing the game window's own WM_MOUSEMOVE messages, and vlc_playback.c's
+     * message pump is scoped to the overlay's own window handle (see its header comment), so
+     * while a movie plays those messages are not eaten, they simply queue up, unprocessed, for as
+     * long as the movie runs. Handing that whole backlog to the engine's own recentre hook in one
+     * burst the moment the normal pump resumes computed one large, spurious delta against
+     * (320, 240) for however far the hand drifted during the movie, and threw the drawn menu
+     * cursor to a corner. None of that motion was meant to reach the menu - the engine's own menu
+     * message filter is not running while this overlay is up either.
+     *
+     * An explicit SetCursorPos() to that literal client (320, 240) - the first thing tried here -
+     * made it worse rather than better: the drawn menu cursor started appearing at exactly that
+     * raw anchor point instead of the menu's own on-screen centre, self-correcting on the next
+     * real mouse move. That was the wrong target, not a wrong idea: (320, 240) is client (640,
+     * 480)'s own midpoint, which is only the SCREEN centre too when the window is exactly 640x480,
+     * the engine's original design. This window is the size of the whole desktop (FitWindowToMode
+     * is off by default, see window_fit.h), and MenuKeepsResolution draws the menu centred in
+     * THAT with (W-640)/2, (H-480)/2 - so the real screen centre, at any resolution, is the
+     * window's own client centre, not the engine's hardcoded 640x480 one. Something in the menu's
+     * own first-frame setup reads the real cursor position to seed the drawn cursor's position,
+     * which is why where this warps it to matters and draining the backlog alone was not enough:
+     * without a warp the drawn cursor keeps whatever position it seeded from wherever the hand had
+     * drifted to during the movie, correct only by luck. */
+    {
+        MSG   stale;
+        RECT  client;
+
+        while (PeekMessageW(&stale, game_window, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
+            /* discarded - stale positions from while the overlay owned the screen */
+        }
+
+        if (GetClientRect(game_window, &client)) {
+            POINT centre;
+            centre.x = (client.right - client.left) / 2;
+            centre.y = (client.bottom - client.top) / 2;
+            if (ClientToScreen(game_window, &centre)) {
+                SetCursorPos(centre.x, centre.y);
+            }
+        }
+    }
+
     /* FIELD-CONFIRMED FIX for a stray OS "loading" cursor left on screen after the intro movies.
      * Not a hang: Task Manager showed the game's process as Running, not Not Responding, the whole
      * time the cursor was stuck, which ruled out Windows' own "still starting" shell heuristic

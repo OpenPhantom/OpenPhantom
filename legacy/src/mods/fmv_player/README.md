@@ -103,6 +103,28 @@ then whatever plays after it). This does not repair the underlying defect, which
 and is not inside this DLL; it replaces the accidental cure the retail path's flashing used to
 provide with a deliberate one, at the same point in the sequence.
 
+**A second, separate defect surfaced once the OS cursor fix above was in and visible: the drawn
+menu cursor itself, not the OS one, started appearing in the wrong place after the first two
+movies.** `vlc_playback.c`'s message pump is scoped to the overlay window's own handle (a fix
+covered above), so the game window's own `WM_MOUSEMOVE` messages are no longer eaten while a movie
+plays - they simply queue up, unprocessed, for as long as the movie runs. Delivering that whole
+backlog to the engine's own recentre hook (`cursor_anchor.c`) in one burst the moment the normal
+pump resumed computed one large, spurious delta against its `(320, 240)` anchor, throwing the
+drawn cursor off-screen. Draining that backlog (`PeekMessageW(..., WM_MOUSEFIRST, WM_MOUSELAST,
+PM_REMOVE)` for the game window, discarding rather than dispatching) fixed that, but left the real
+cursor wherever it had drifted to during the movie, which the menu's own first-frame setup reads
+to seed the drawn cursor's position - landing it in the wrong place, self-correcting on the very
+next real mouse move. A first attempt warped the real cursor to that same `(320, 240)` before
+resuming, reasoning it was the engine's own "centre" - and made it worse: the drawn cursor now
+reliably appeared at that literal point, the exact spot the earlier OS-cursor defect used to sit
+at. `(320, 240)` is client `(640, 480)`'s own midpoint, only the real screen centre too when the
+window is exactly that size, the engine's original 640x480 design; this window is the size of the
+whole desktop (`FitWindowToMode` is off by default), and `MenuKeepsResolution` draws the menu
+centred in *that* with `(W-640)/2, (H-480)/2`. The real screen centre, at any resolution, is the
+window's own client centre, not the engine's hardcoded one. **Field-confirmed fix:** compute that
+centre at runtime (`GetClientRect` + `ClientToScreen`) and warp there instead - correct at whatever
+resolution the game is actually running.
+
 A movie with no converted file falls straight through to the original Bink playback, unchanged.
 
 ## Configuration: `[fmv_player]`
@@ -290,12 +312,16 @@ manages that itself.
 **Live-tested on the reporting machine through design 4 above: no flicker, no minimize, movies play
 at full quality over the game window.** The message-pump fix was confirmed live to fix the
 pointer-confinement half of the stray-cursor symptom. `SetForegroundWindow()` plus `SetCursor(NULL)`
-after every movie (`video_overlay_play_blocking()`) is **field-confirmed live to fix the cursor
+after every movie (`video_overlay_play_blocking()`) is **field-confirmed live to fix the OS cursor
 itself.** Three attempts before it - lazy `libvlc_new()`, `WM_SETCURSOR` handling on the overlay
 window alone, and `dxwrapper`'s `EnableWindowMode=1` - were each compiled, installed and live-tested
 in turn, and each ruled out when the symptom did not change; `vlc_playback_init_async()` (loading
 libVLC on its own thread) also did not fix the cursor on its own, though it remains in place as a
-genuine improvement - the game's thread now never blocks on that load regardless.
+genuine improvement - the game's thread now never blocks on that load regardless. The follow-on
+drawn-cursor defect (see the design-history section above) is **also field-confirmed fixed**: the
+stale-message drain plus a real-time client-centre warp (`GetClientRect` + `ClientToScreen`, not
+the engine's hardcoded `(320, 240)`) puts the drawn cursor exactly where it should be after every
+movie, confirmed correct on the reporting machine's own resolution.
 
 What running down four wrong fixes established, worth keeping: the retail Bink path, not just this
 DLL's overlay, was ALSO masking the same underlying defect. Task Manager showed the game's process as

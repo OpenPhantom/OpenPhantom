@@ -21,29 +21,35 @@
  * installer's own registry key as a fallback for a non-default install location), loads
  * libvlccore.dll and libvlc.dll from it, resolves the handful of exports this file calls, points
  * VLC_PLUGIN_PATH at that install's plugins folder, and creates one shared libvlc_instance_t for
- * the process's lifetime. False on ANY failure - no 32-bit VLC found (a 64-bit-only install does
- * not count: a 32-bit process cannot load a 64-bit DLL at all), a required export missing, or
- * libvlc_new itself failing - in which case the caller has nothing to play through and should fall
- * back to the original playback path, the same as every other failure mode in this DLL. */
-bool vlc_playback_init(void);
+ * the process's lifetime - all of it on a background thread, started once and never joined by the
+ * caller. Call as early as possible (fmv_player_install() time), so it has the most time to
+ * finish before the first movie needs it. Idempotent; a second call is a no-op. */
+void vlc_playback_init_async(void);
+
+/* Non-blocking. True only once the background init above has both finished AND succeeded; false
+ * while it is still running, if it was never started, or if it finished with a failure (no 32-bit
+ * VLC found, a required export missing, or libvlc_new() itself failing). Never waits - a caller
+ * that sees false here has nothing to play through yet and should fall back to the original
+ * playback path for this one movie, the same as every other failure mode in this DLL. */
+bool vlc_playback_is_ready(void);
 
 /* Plays `file_path` into `window` (already created and positioned by the caller - this file has no
  * opinion on window management at all, only on what renders inside one) via
- * libvlc_media_player_set_hwnd, and blocks, pumping the calling thread's message queue, until the
- * file ends, Escape is pressed, or libVLC never actually starts decoding within a bounded timeout
+ * libvlc_media_player_set_hwnd, and blocks, pumping only `window`'s own messages, until the file
+ * ends, Escape is pressed, or libVLC never actually starts decoding within a bounded timeout
  * (protects against hanging forever on a file libVLC silently can't open). Returns false only when
  * libvlc_media_player_play itself refused the request or playback never started at all; anything
  * after playback genuinely begins - reaching the end, Escape, or even a rare mid-playback error this
  * file has no verified ABI to distinguish from a natural end - is treated as handled, matching how
  * the retail player itself just moves on regardless of why a movie stopped.
  *
- * `exclude_from_dispatch`, if not NULL, is a window whose own messages are drained from the queue
- * but never dispatched to its WndProc while this call blocks. Pass NULL when this call's own window
- * is the only thing on the calling thread (nothing else needs excluding). video_overlay.c passes the
- * game's own window here: this function runs in-process, on the game's own thread, synchronously
- * inside the call it replaced, so the game's thread is a UI thread with a live window that this loop
- * would otherwise be pumping (WM_PAINT, WM_ACTIVATEAPP, ...) to that window's own WndProc for the
- * whole length of a movie, which is exactly the risk this parameter exists to remove. */
-bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND exclude_from_dispatch);
+ * The pump is scoped to `window` (PeekMessageW's hWnd argument, not NULL): this runs in-process, on
+ * the game's own thread, so an unscoped peek would also retrieve the game window's own messages -
+ * WM_SETCURSOR, WM_ACTIVATE, WM_MOUSEMOVE - off the SAME queue. PM_REMOVE takes a message off the
+ * queue whether or not it is dispatched, so a caller that then chose not to dispatch those would not
+ * be deferring them, it would be discarding them, and the game window would come out of every movie
+ * having silently missed whichever activation and cursor messages happened to arrive during it. This
+ * function has no reason to touch that window's messages at all, so it no longer retrieves them. */
+bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path);
 
 #endif /* VLC_PLAYBACK_H */

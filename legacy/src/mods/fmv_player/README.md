@@ -49,12 +49,59 @@ design tried here, and each of the first three taught something the next one kep
    always was, regardless of `WS_EX_NOACTIVATE` (which governs keyboard activation, not process
    identity). Moving the overlay back in-process, now that libVLC rather than `MFPlay` is what
    actually renders into it, removes that signal at the root: Windows does not send
-   `WM_ACTIVATEAPP` for a window becoming topmost within its own process. As a second, independent
-   line of defense, cross-thread `SendMessage` delivery (how `WM_ACTIVATEAPP` reaches a window's
-   `WndProc`) requires the *target* thread to be pumping its queue, and the game's own thread is
-   frozen inside this exact call for as long as a movie plays - `vlc_playback_play_blocking()`
-   never dispatches the game window's own messages while it blocks, so even if Windows tries to
-   deliver that message here, it cannot actually reach the game's `WndProc` at all.
+   `WM_ACTIVATEAPP` for a window becoming topmost within its own process, and that is the only
+   defense needed. An earlier version of this file also had `vlc_playback_play_blocking()` pump with
+   `hWnd=NULL` and drop, unread, whatever arrived for the game window while a movie played - a
+   second, redundant guard against the same cross-process signal this in-process design already
+   cannot produce. It cost more than it bought: `PM_REMOVE` takes a message off the queue whether or
+   not it is dispatched, so every `WM_SETCURSOR`, `WM_ACTIVATE` and `WM_MOUSEMOVE` meant for the game
+   window during a movie was silently discarded rather than deferred. The pump is now scoped to the
+   overlay window's own handle, so the game window's queue is never touched here at all. This alone
+   was not the fix for the defect below - it is a real bug in its own right, fixed on its own
+   merits - see the note there for what actually was.
+
+**A field report reproduced a Windows "still starting" cursor stuck at a fixed point on screen,
+present before the first movie ever played, invisible while a movie was actually playing, and back
+once the movies were done - cleared only by an Alt-Tab.** The message-pump fix above improved a
+related symptom (the pointer confinement into the menu, driven by the same kind of message traffic,
+started working immediately instead of only after an Alt-Tab) but the stray cursor itself did not go
+away, and removing `fmv_player.dll` from `mods\` alone made it stop, 100% reproducible either way.
+Four more fixes were tried in sequence against the same field report, each compiled, installed and
+live-tested rather than assumed fixed. Three were ruled out outright: making `video_overlay_init()`'s
+libVLC load lazy instead of running unconditionally at install time (no change - this game's first
+movie plays immediately, so lazy loading bought no real delay); having `overlay_window_proc()`
+answer `WM_SETCURSOR` the same way the game's own window does (no change on its own); and
+reconfiguring `dxwrapper` (`EnableWindowMode=1`) to avoid requesting an exclusive-mode Direct3D9
+device at all (no change, then reverted). The fourth, moving the lazy load onto its own thread
+(`vlc_playback_init_async()`, `_beginthreadex`, never waited on - `vlc_playback_is_ready()` /
+`video_overlay_is_ready()` is a live, non-blocking poll, falling through to the retail Bink path for
+whichever movie wants to play before that comes back true) was reasoned from a stall theory that
+Task Manager then disproved directly: the game's process showed as Running, never Not Responding,
+for the whole time the cursor was stuck, which is not what a genuinely blocked thread looks like.
+That fix did not resolve the cursor either. It remains in place regardless, because it is a real
+improvement on its own terms - the game's thread is now never blocked by this DLL's libVLC load, at
+any point in a session, whatever else was or was not the actual cause here.
+
+What finally settled it was a field report of a DIFFERENT symptom: launching with `fmv_player`
+*disabled* (retail Bink movies) visibly flashes the screen several times before the game settles -
+real minimize/restore cycles, consistent with this game's exclusive-mode Direct3D9 device reacting
+to however Bink's own playback touches the display - while `fmv_player` *enabled* shows none of that
+flashing at all, which is this DLL doing exactly what it was built to do (no flicker, no minimize).
+Put together with the cursor's own timing - present before the first movie ever played, invisible
+while the overlay was actually presenting video, back once it stopped - the shape of the defect
+changed entirely: something early in startup, before either playback path ever runs, leaves the OS
+cursor undone, and the retail path's own incidental flashing was quietly re-triggering a full
+activation handshake a few times before the player ever reached the menu, curing it before it was
+ever seen. This DLL's smooth window removes that incidental cure along with the flicker, which is
+why the cursor problem only ever showed up with `fmv_player` installed even though its root cause was
+never inside this DLL's own code.
+
+**The actual fix, field-confirmed:** `SetForegroundWindow(game_window)` followed by
+`SetCursor(NULL)`, both called immediately after `DestroyWindow()` in
+`video_overlay_play_blocking()`, once per movie - at least twice in a typical session (the logo,
+then whatever plays after it). This does not repair the underlying defect, which is not identified
+and is not inside this DLL; it replaces the accidental cure the retail path's flashing used to
+provide with a deliberate one, at the same point in the sequence.
 
 A movie with no converted file falls straight through to the original Bink playback, unchanged.
 
@@ -241,7 +288,33 @@ manages that itself.
 ## Testing status
 
 **Live-tested on the reporting machine through design 4 above: no flicker, no minimize, movies play
-at full quality over the game window.** The detour signature is measured against the real retail
+at full quality over the game window.** The message-pump fix was confirmed live to fix the
+pointer-confinement half of the stray-cursor symptom. `SetForegroundWindow()` plus `SetCursor(NULL)`
+after every movie (`video_overlay_play_blocking()`) is **field-confirmed live to fix the cursor
+itself.** Three attempts before it - lazy `libvlc_new()`, `WM_SETCURSOR` handling on the overlay
+window alone, and `dxwrapper`'s `EnableWindowMode=1` - were each compiled, installed and live-tested
+in turn, and each ruled out when the symptom did not change; `vlc_playback_init_async()` (loading
+libVLC on its own thread) also did not fix the cursor on its own, though it remains in place as a
+genuine improvement - the game's thread now never blocks on that load regardless.
+
+What running down four wrong fixes established, worth keeping: the retail Bink path, not just this
+DLL's overlay, was ALSO masking the same underlying defect. Task Manager showed the game's process as
+Running throughout, never Not Responding, which ruled out Windows' shell "still starting" heuristic
+directly. And launching with `fmv_player` disabled (retail Bink movies) visibly flashes the screen
+several times before the game settles - real minimize/restore cycles, consistent with this game's
+exclusive-mode Direct3D9 device reacting to however Bink's own playback path touches the display -
+while `fmv_player` enabled shows none of that flashing at all, which is this DLL doing exactly what
+it was built to do. The two facts together explain the paradox: something early in startup, before
+either playback path ever runs, leaves the OS cursor undone, and the retail path's own incidental
+flashing was quietly re-triggering a full activation handshake a few times before the player ever
+reached the menu, curing it before it was ever seen. This DLL's smooth, flicker-free window removed
+that incidental cure along with the flicker, which is why the cursor problem only ever showed up
+with `fmv_player` installed even though its root cause was never inside this DLL's own code. The fix
+above does not repair that root cause - it replaces the accidental cure with a deliberate one, once
+per movie, which is already at least twice in every session (the logo, then whatever plays after
+it). Where the actual defect lives (most likely the base loader or the window's very first
+activation, well outside this DLL) is not identified and is not this DLL's problem to fix. The
+detour signature is measured against the real retail
 `WMAIN.EXE` (829,952 bytes), independently re-extracted from the executable's own `.text` section
 with a standalone PE parser and counted for uniqueness: one match, at the address this file names.
 `/W4 /WX` clean throughout. The window-management code in `video_overlay.c` and the libVLC-loading

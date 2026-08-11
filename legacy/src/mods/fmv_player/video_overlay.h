@@ -12,10 +12,16 @@
 #include <stdbool.h>
 #include <stddef.h>   /* wchar_t */
 
-/* Locates a 32-bit libVLC install and registers this file's window class. Call once, before the
- * first video_overlay_play_blocking(); safe to call from whichever thread ends up playing movies,
- * which for this engine is always the same thread that calls the retail movie player. */
-bool video_overlay_init(void);
+/* Registers this file's window class (cheap, synchronous) and starts loading libVLC on its own
+ * thread (vlc_playback_init_async() - see vlc_playback.h for why that is not synchronous here).
+ * Call once, as early as possible; returns false only if the window class itself could not be
+ * registered, which is checkable immediately. Whether libVLC is actually ready yet is a separate
+ * question - see video_overlay_is_ready(). */
+bool video_overlay_start_async_init(void);
+
+/* Non-blocking. True only once libVLC has finished loading in the background and is ready to play
+ * something. A caller that sees false has nothing to play through yet this call. */
+bool video_overlay_is_ready(void);
 
 /* Finds the game's own top-level window (EnumWindows, no engine signature needed), creates a
  * borderless popup owned by it and sized to its current client rect, plays `file_path` into that

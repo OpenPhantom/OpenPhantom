@@ -26,6 +26,9 @@
  */
 #include "vlc_playback.h"
 
+#include "common/logging.h"
+
+#include <process.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -69,6 +72,24 @@ typedef struct vlc_api {
 } vlc_api_t;
 
 static vlc_api_t vlc_api;
+
+/* ============================================================================================
+ * Loading libVLC and calling libvlc_new() is not fast: it initialises VLC's whole plugin system,
+ * and doing it on the game's own thread blocks that thread for however long that takes, with
+ * nothing pumping messages meanwhile. A field report traced a Windows "still starting" cursor to
+ * exactly that stall, landing right before the first movie, present until an Alt-Tab forced
+ * Windows to re-resolve activation. So this now runs on its own thread, started as early as
+ * possible (fmv_player_install() time) to give it the most time to finish before the first movie
+ * needs it, and nothing on the game's thread ever waits on it: vlc_playback_is_ready() is a
+ * non-blocking poll, and a movie that wants to play before it comes back true simply falls
+ * through to the retail Bink path for that one movie, the same fallback used when no converted
+ * file exists at all.
+ * ============================================================================================ */
+static HANDLE init_thread;
+static HANDLE init_done_event;   /* manual-reset; signalled once, after every vlc_api write below */
+static bool   init_succeeded;    /* written on the init thread before SetEvent, read only after a
+                                   * confirmed wait on init_done_event - that event is the entire
+                                   * synchronisation, no lock needed on top of it */
 
 /* ============================================================================================ */
 static bool probe_libvlc_at(const wchar_t *directory, wchar_t *out_dir, size_t out_capacity)
@@ -150,7 +171,7 @@ static bool resolve_exports(void)
 }
 
 /* ============================================================================================ */
-bool vlc_playback_init(void)
+static bool init_worker(void)
 {
     wchar_t vlc_dir[MAX_PATH];
     wchar_t core_path[MAX_PATH];
@@ -191,7 +212,61 @@ bool vlc_playback_init(void)
     return vlc_api.instance != NULL;
 }
 
-bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND exclude_from_dispatch)
+static unsigned __stdcall init_thread_proc(void *unused)
+{
+    (void)unused;
+    init_succeeded = init_worker();
+    if (!init_succeeded) {
+        log_warning("libVLC did not finish loading in the background (no 32-bit install found, or "
+                    "an export or libvlc_new() itself failed), every movie keeps using the retail "
+                    "Bink path");
+    }
+    SetEvent(init_done_event);
+    return 0;
+}
+
+void vlc_playback_init_async(void)
+{
+    uintptr_t handle;
+
+    if (init_thread != NULL) {
+        return;                                     /* already started, idempotent */
+    }
+
+    init_done_event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (init_done_event == NULL) {
+        log_error("libVLC: could not create the init-done event, every movie keeps using the "
+                  "retail Bink path");
+        return;
+    }
+
+    handle = _beginthreadex(NULL, 0, init_thread_proc, NULL, 0, NULL);
+    if (handle == 0) {
+        log_error("libVLC: the background init thread could not start, every movie keeps using "
+                  "the retail Bink path");
+        CloseHandle(init_done_event);
+        init_done_event = NULL;
+        return;
+    }
+    init_thread = (HANDLE)handle;
+
+    log_info("libVLC is loading on its own thread so the first movie never has to block the "
+             "game's own thread waiting for it; a movie that wants to play before this finishes "
+             "falls through to the retail Bink path instead of waiting.");
+}
+
+bool vlc_playback_is_ready(void)
+{
+    if (init_done_event == NULL) {
+        return false;                                /* never started, or failed to start */
+    }
+    if (WaitForSingleObject(init_done_event, 0) != WAIT_OBJECT_0) {
+        return false;                                /* still loading */
+    }
+    return init_succeeded;
+}
+
+bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path)
 {
     char                   utf8_path[MAX_PATH * 3];   /* worst-case UTF-8 expansion of MAX_PATH */
     libvlc_media_t         *media;
@@ -249,11 +324,15 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND excl
             return false;
         }
 
-        if (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
-            if (exclude_from_dispatch == NULL || message.hwnd != exclude_from_dispatch) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
-            }
+        /* Scoped to the overlay window itself, not NULL: an unscoped peek would retrieve every
+         * message on this thread's queue, including the game window's own WM_SETCURSOR,
+         * WM_ACTIVATE and WM_MOUSEMOVE, and PM_REMOVE takes a message off the queue whether or
+         * not it ends up dispatched below. A message meant for the game window has to stay on
+         * the queue for the game's own pump to find once this call returns; taking it and then
+         * not dispatching it does not defer it, it discards it. */
+        if (PeekMessageW(&message, window, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
         } else {
             Sleep(1);
         }

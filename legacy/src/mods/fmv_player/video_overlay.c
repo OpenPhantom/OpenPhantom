@@ -53,13 +53,17 @@
  * fmv_player_host.exe, a genuinely separate process, always was, regardless of WS_EX_NOACTIVATE
  * (which governs keyboard activation, not process identity). Moving the overlay back in-process,
  * now that libVLC rather than MFPlay is what actually renders into it, removes that signal at the
- * root: Windows does not send WM_ACTIVATEAPP for a window becoming topmost within its OWN process.
- * As a second, independent line of defense - cross-thread SendMessage delivery (which is how
- * WM_ACTIVATEAPP reaches a window's WndProc) requires the TARGET thread to be pumping its queue,
- * and the game's own thread is frozen inside this exact call for as long as a movie plays -
- * vlc_playback_play_blocking() is handed the game window as `exclude_from_dispatch`, so even if
- * Windows tries to deliver that message here, it is never actually dispatched to the game's WndProc
- * at all. Two independent reasons this should hold, not one.
+ * root: Windows does not send WM_ACTIVATEAPP for a window becoming topmost within its OWN process,
+ * and that is now the only line of defense needed. vlc_playback_play_blocking() used to also be
+ * handed the game window as `exclude_from_dispatch`, pumping with hWnd=NULL and dropping whatever
+ * arrived for the game window unread - a second, redundant guard against the same cross-process
+ * signal this in-process design already cannot produce. It cost more than it bought: PM_REMOVE
+ * takes a message off the queue whether or not it is then dispatched, so every WM_SETCURSOR,
+ * WM_ACTIVATE and WM_MOUSEMOVE that arrived for the game window during a movie was silently
+ * discarded rather than deferred - which is what a stray OS "loading" cursor left on screen after
+ * the intro movies turned out to be. vlc_playback_play_blocking() now pumps only the overlay
+ * window's own messages, so the game window's queue is untouched and whatever arrived for it is
+ * still there, in order, once this call returns.
  * ============================================================================================== */
 #include "video_overlay.h"
 
@@ -81,6 +85,16 @@ static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wp
          * session to find the first time. The one moment that needs a manual black fill is handled
          * once, directly, right after CreateWindowExW below. */
         return 1;
+    }
+    if (message == WM_SETCURSOR) {
+        /* The game's own window procedure answers this unconditionally with SetCursor(NULL) - see
+         * enhanced_resolution.c - because the front end draws its own cursor and there is no screen
+         * on which the OS pointer should show. This window sits on top of that same picture while a
+         * movie plays and was falling through to DefWindowProcW instead, which paints the class
+         * cursor (plain IDC_ARROW) any time the real pointer is over it. Matching the game's own
+         * rule here means the OS pointer is never visible over either window. */
+        SetCursor(NULL);
+        return TRUE;
     }
     return DefWindowProcW(window, message, wparam, lparam);
 }
@@ -130,9 +144,18 @@ static bool register_overlay_class_once(void)
 }
 
 /* ============================================================================================ */
-bool video_overlay_init(void)
+bool video_overlay_start_async_init(void)
 {
-    return register_overlay_class_once() && vlc_playback_init();
+    if (!register_overlay_class_once()) {
+        return false;
+    }
+    vlc_playback_init_async();
+    return true;
+}
+
+bool video_overlay_is_ready(void)
+{
+    return vlc_playback_is_ready();
 }
 
 bool video_overlay_play_blocking(const wchar_t *file_path)
@@ -187,9 +210,32 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
     ShowWindow(overlay_window, SW_SHOW);
     UpdateWindow(overlay_window);
 
-    played_without_error = vlc_playback_play_blocking(overlay_window, file_path, game_window);
+    played_without_error = vlc_playback_play_blocking(overlay_window, file_path);
 
     DestroyWindow(overlay_window);
+
+    /* FIELD-CONFIRMED FIX for a stray OS "loading" cursor left on screen after the intro movies.
+     * Not a hang: Task Manager showed the game's process as Running, not Not Responding, the whole
+     * time the cursor was stuck, which ruled out Windows' own "still starting" shell heuristic
+     * directly. What actually explained it: the RETAIL Bink path (this DLL disabled) visibly
+     * flashes the screen several times before the game settles - real minimize/restore cycles,
+     * consistent with this game's exclusive-mode Direct3D9 device reacting to however Bink touches
+     * the display - while this DLL enabled shows none of that flashing, which is it doing exactly
+     * what it was built to do (see the fmv_player README's "no flicker, no minimize" result).
+     * Something early in startup, before either playback path ever runs, leaves the OS cursor
+     * undone; the retail path's own incidental flashing was quietly re-triggering a full activation
+     * handshake a few times before the player ever reached the menu, curing it before it was ever
+     * seen. This DLL's smooth window removes that incidental cure along with the flicker it was
+     * curing a symptom of, which is why the cursor problem only ever showed up with this DLL
+     * installed even though its root cause is not in this file. This does not repair that root
+     * cause - it replaces the accidental cure with a deliberate one, once per movie (at least twice
+     * a session: the logo, then whatever plays after it). SetForegroundWindow() alone was tried
+     * first and was not enough on its own - it asks Windows to reconsider which window owns the
+     * foreground, but does not itself force a cursor update. SetCursor(NULL) does not wait on that:
+     * it hides the cursor immediately, on this same thread, the same call the game's own window
+     * procedure answers WM_SETCURSOR with. Both together are what field-testing confirmed fixed. */
+    SetForegroundWindow(game_window);
+    SetCursor(NULL);
 
     return played_without_error;
 }

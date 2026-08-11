@@ -112,7 +112,6 @@ typedef struct fmv_player_state {
     char      movie_directory[MAX_PATH];
     char      extension[16];
     detour_t  detour;
-    bool      overlay_ready;
 } fmv_player_state_t;
 
 static fmv_player_state_t fmv_player_state;
@@ -162,16 +161,27 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
     movie_play_fn_t original = (movie_play_fn_t)fmv_player_state.detour.original;
     wchar_t         modern_path[MAX_PATH];
 
-    if (fmv_player_state.overlay_ready && name != NULL &&
+    if (name != NULL &&
         build_modern_movie_path(name, modern_path, ARRAYSIZE(modern_path)) &&
         GetFileAttributesW(modern_path) != INVALID_FILE_ATTRIBUTES) {
 
-        log_info("playing \"%s\" through the video overlay", name);
-        if (video_overlay_play_blocking(modern_path)) {
-            return 1;
+        /* video_overlay_start_async_init() already ran once, back in fmv_player_install() - see
+         * the comment there for why it is a background thread and not a call made here. This is
+         * a live, non-blocking poll: if libVLC has not finished loading yet, this movie plays
+         * through the retail path, the same fallback used when no converted file exists at all,
+         * and the next movie that comes along checks again. */
+        if (video_overlay_is_ready()) {
+            log_info("playing \"%s\" through the video overlay", name);
+            if (video_overlay_play_blocking(modern_path)) {
+                return 1;
+            }
+            log_warning("modern playback of \"%s\" failed or was interrupted, falling back to the "
+                        "original Bink movie", name);
+        } else {
+            log_info("\"%s\" has a converted file but libVLC has not finished loading in the "
+                     "background yet, this one plays through the original Bink path instead of "
+                     "waiting for it", name);
         }
-        log_warning("modern playback of \"%s\" failed or was interrupted, falling back to the "
-                    "original Bink movie", name);
     }
 
     return original(name, param2, param3);
@@ -221,11 +231,14 @@ void fmv_player_install(void)
         return;
     }
 
-    fmv_player_state.overlay_ready = video_overlay_init();
-    if (!fmv_player_state.overlay_ready) {
-        log_error("the video overlay could not start (no 32-bit libVLC found, or the window class "
-                  "could not be registered), every movie keeps using the retail Bink path");
-        return;
+    /* Started here, as early as this DLL's own install runs, so the background thread (see
+     * vlc_playback.c) has the most possible time to finish before the first movie needs it. Not
+     * waited on: video_overlay_is_ready() in hook_play_movie() is a live, non-blocking poll, and a
+     * movie that wants to play before this finishes just falls through to the retail Bink path,
+     * the same fallback used when no converted file exists at all. */
+    if (!video_overlay_start_async_init()) {
+        log_error("the video overlay's window class could not be registered, every movie keeps "
+                  "using the retail Bink path");
     }
 
     signature_resolve_table(sites, SITE_COUNT);

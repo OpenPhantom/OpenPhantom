@@ -69,11 +69,85 @@
 
 #include "vlc_playback.h"
 
+#include "common/logging.h"
+#include "common/memory.h"
+#include "common/patch.h"
+
 #include <windows.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define OVERLAY_CLASS_NAME L"OpenPhantomFmvPlayerOverlay"
+
+/* ==============================================================================================
+ * THE DRAWN MENU CURSOR'S POSITION, VERIFIED LIVE IN GHIDRA AGAINST THE RUNNING RETAIL IMAGE
+ *
+ * modal_window_wndproc_handler's WM_MOUSEMOVE (0x200) case, at 0x00460BCC once
+ * control_recentreMouse (0x0046A115) has confirmed the message is a real movement, not the echo
+ * of the engine's own recentring warp:
+ *
+ *   00460BCC  0F BF 55 14           movsx edx, word ptr [ebp+0x14]     ; client x
+ *   00460BD0  8B 05 98 6C 4B 00     mov   eax,[004B6C98]               ; g_menuCursorX
+ *   00460BD5  8D 0C 10              lea   ecx,[eax+edx-0x140]          ; += client_x - 320
+ *   00460BDC  89 0D 98 6C 4B 00     mov   [004B6C98],ecx
+ *   ... the identical shape for Y, 004B6C9C, -0xF0 (240) ...
+ *   00460C04  A1 58 FD 6C 00        mov   eax,[006CFD58]               ; g_menuOriginX
+ *   00460C0C  ...                   clamp g_menuCursorX to [originX, originX+0x25F]
+ *   00460C41  A1 5C FD 6C 00        mov   eax,[006CFD5C]               ; g_menuOriginY
+ *   00460C4A  ...                   clamp g_menuCursorY to [originY, originY+0x1BF]
+ *
+ * g_menuCursorX/Y (0x004B6C98 / 0x004B6C9C) are an ACCUMULATOR, not an absolute position: every
+ * real WM_MOUSEMOVE ADDS (client_x - 320, client_y - 240) to whatever they already held, then
+ * clamps. g_menuOriginX/Y (0x006CFD58 / 0x006CFD5C) are the same cells pointer_cage.c already
+ * documents and repoints, cross-confirming both pairs of addresses.
+ *
+ * This is why warping the REAL OS cursor to any particular point and letting the resulting
+ * synthetic WM_MOUSEMOVE feed through this accumulator does NOT reliably put the drawn cursor
+ * anywhere in particular: the result depends on whatever g_menuCursorX/Y already held going in,
+ * which this file has no way to know. Two things were tried that way and neither was reliable
+ * for exactly that reason - see the design-history comment above and the fmv_player README.
+ *
+ * The fix writes g_menuCursorX/Y DIRECTLY instead, bypassing the accumulator entirely: no message
+ * has to arrive, no prior value matters, and the result is deterministic. Sanity-bounded before
+ * the write - a build where these cells hold something implausible is a build these addresses do
+ * not actually describe, and writing into it blind would be worse than doing nothing. */
+#define ENGINE_MENU_CURSOR_X 0x004B6C98u
+#define ENGINE_MENU_CURSOR_Y 0x004B6C9Cu
+#define ENGINE_MENU_ORIGIN_X 0x006CFD58u
+#define ENGINE_MENU_ORIGIN_Y 0x006CFD5Cu
+
+/* The 640x480 menu space's own half-extent, the same 0x140/0xF0 the accumulator above measures
+ * every delta from - the middle of the clamp range [origin, origin+0x25F]x[origin, origin+0x1BF]
+ * (607x447: 640/480 less the 33-pixel margin pointer_cage.c's own header explains), comfortably
+ * clear of either edge. */
+#define ENGINE_MENU_HALF_WIDTH  320
+#define ENGINE_MENU_HALF_HEIGHT 240
+
+/* Plausibility bound for an origin cell: (W-640)/2 for any display mode this engine will ever be
+ * handed. Not a real limit, just wide enough that a garbage read (a wrong build, a moved data
+ * section) cannot pass it by accident. */
+#define ENGINE_MENU_ORIGIN_MAX 8192
+
+static void recentre_drawn_menu_cursor(void)
+{
+    uint32_t origin_x = 0;
+    uint32_t origin_y = 0;
+
+    if (!memory_read_u32(ENGINE_MENU_ORIGIN_X, &origin_x) ||
+        !memory_read_u32(ENGINE_MENU_ORIGIN_Y, &origin_y)) {
+        return;                        /* not readable at all - say nothing, this is best-effort */
+    }
+    if (origin_x > ENGINE_MENU_ORIGIN_MAX || origin_y > ENGINE_MENU_ORIGIN_MAX) {
+        log_warning("the menu origin read back as %u,%u, outside any plausible display mode - not "
+                    "recentring the drawn menu cursor this time", (unsigned)origin_x,
+                    (unsigned)origin_y);
+        return;
+    }
+
+    (void)patch_write_u32(ENGINE_MENU_CURSOR_X, origin_x + ENGINE_MENU_HALF_WIDTH);
+    (void)patch_write_u32(ENGINE_MENU_CURSOR_Y, origin_y + ENGINE_MENU_HALF_HEIGHT);
+}
 
 /* ============================================================================================ */
 static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wparam,
@@ -213,6 +287,21 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
     played_without_error = vlc_playback_play_blocking(overlay_window, file_path);
 
     DestroyWindow(overlay_window);
+
+    /* vlc_playback.c's message pump is scoped to the overlay window's own handle (see its header
+     * comment), so the game window's own WM_MOUSEMOVE messages are not eaten while a movie plays,
+     * they simply queue up, unprocessed, for as long as the movie runs. Left alone, that whole
+     * backlog would be delivered to the engine's own accumulator (see recentre_drawn_menu_cursor()
+     * above) the moment the normal pump resumes, adding a burst of stale deltas on top of - and
+     * after - the deliberate write below. Draining it first means that write is the last thing
+     * that touches the drawn cursor's position before the player's own next real move does. */
+    {
+        MSG stale;
+        while (PeekMessageW(&stale, game_window, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
+            /* discarded - stale positions from while the overlay owned the screen */
+        }
+    }
+    recentre_drawn_menu_cursor();
 
     /* FIELD-CONFIRMED FIX for a stray OS "loading" cursor left on screen after the intro movies.
      * Not a hang: Task Manager showed the game's process as Running, not Not Responding, the whole

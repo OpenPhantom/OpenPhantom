@@ -103,6 +103,35 @@ then whatever plays after it). This does not repair the underlying defect, which
 and is not inside this DLL; it replaces the accidental cure the retail path's flashing used to
 provide with a deliberate one, at the same point in the sequence.
 
+**A second, separate defect surfaced once the OS cursor fix above made it visible: the drawn menu
+cursor itself, not the OS one, started appearing in the wrong place after the first two movies.**
+`vlc_playback.c`'s message pump is scoped to the overlay window's own handle (a fix covered
+above), so the game window's own `WM_MOUSEMOVE` messages are no longer eaten while a movie plays -
+they simply queue up, unprocessed, for as long as the movie runs. Two fixes were tried and both
+were field-tested wrong before the real mechanism was found. The first warped the real OS cursor
+to the engine's own `(320, 240)` client anchor before resuming; the drawn cursor then reliably
+appeared at that literal point instead of the menu's centre. The second warped to the game
+window's actual client-rect centre instead, computed at runtime - reasoning that `(320, 240)` is
+only the true centre when the window is exactly 640x480, the engine's original design, and this
+window is the size of the whole desktop. It worked once, live, then landed wrong on a later
+launch, and re-testing ruled out a resolution mismatch as the cause (game resolution matched the
+desktop both times).
+
+Decompiling `modal_window_wndproc_handler`'s `WM_MOUSEMOVE` case directly in Ghidra (rather than
+continuing to guess) settled why both attempts were unreliable: the drawn cursor's position,
+`g_menuCursorX`/`g_menuCursorY` (`0x004B6C98` / `0x004B6C9C`), is an **accumulator**, not an
+absolute value - every real mouse move does `g_menuCursorX += (client_x - 320)`, then clamps to
+`[g_menuOriginX, g_menuOriginX+0x25F]` (`g_menuOriginX`/`Y` at `0x006CFD58` / `0x006CFD5C`, the
+same cells `pointer_cage.c` already documents and repoints, cross-confirming all four addresses).
+Warping the real cursor and letting the resulting synthetic `WM_MOUSEMOVE` feed through that
+accumulator only ever adds a delta to whatever `g_menuCursorX`/`Y` already held going in - a value
+this file has no way to know - so the actual landing spot depended on session state neither fix
+accounted for. **Field-confirmed fix:** write `g_menuCursorX`/`Y` directly instead
+(`recentre_drawn_menu_cursor()` in `video_overlay.c`), bypassing the accumulator entirely - the
+centre of the clamp range, `g_menuOriginX + 320` / `g_menuOriginY + 240`, with no message, no
+prior state and no resolution-dependent arithmetic involved at all. Confirmed landing centre on
+every launch across repeated testing, where both earlier attempts were not.
+
 A movie with no converted file falls straight through to the original Bink playback, unchanged.
 
 ## Configuration: `[fmv_player]`
@@ -290,12 +319,19 @@ manages that itself.
 **Live-tested on the reporting machine through design 4 above: no flicker, no minimize, movies play
 at full quality over the game window.** The message-pump fix was confirmed live to fix the
 pointer-confinement half of the stray-cursor symptom. `SetForegroundWindow()` plus `SetCursor(NULL)`
-after every movie (`video_overlay_play_blocking()`) is **field-confirmed live to fix the cursor
+after every movie (`video_overlay_play_blocking()`) is **field-confirmed live to fix the OS cursor
 itself.** Three attempts before it - lazy `libvlc_new()`, `WM_SETCURSOR` handling on the overlay
 window alone, and `dxwrapper`'s `EnableWindowMode=1` - were each compiled, installed and live-tested
 in turn, and each ruled out when the symptom did not change; `vlc_playback_init_async()` (loading
 libVLC on its own thread) also did not fix the cursor on its own, though it remains in place as a
 genuine improvement - the game's thread now never blocks on that load regardless.
+
+The follow-on drawn-cursor defect (see the design-history section above) is **field-confirmed
+fixed across repeated launches**, after two earlier attempts each looked right once and then were
+not: writing `g_menuCursorX`/`Y` directly (`0x004B6C98` / `0x004B6C9C`), verified against a live
+Ghidra decompilation of the exact engine code that reads and clamps them, rather than warping the
+real OS cursor and hoping the engine's own accumulator landed it correctly. Confirmed landing
+centre on every launch tested, where the two attempts before it were not.
 
 What running down four wrong fixes established, worth keeping: the retail Bink path, not just this
 DLL's overlay, was ALSO masking the same underlying defect. Task Manager showed the game's process as

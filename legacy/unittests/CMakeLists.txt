@@ -56,6 +56,15 @@ add_unit_test(pointer_cage enhanced_resolution
     enhanced_resolution/window_fit.c
 )
 
+# The island clamp: the arithmetic that decides where a menu sprite may land. The case worth its
+# name reproduces the reported defect's own numbers: at 3840x2160 the hovered button's halo is cut
+# exactly at island x=1600 instead of stamping the border. window_fit.c comes along for the same
+# reason it does above: the hook asks it for the display mode.
+add_unit_test(menu_island_clip enhanced_resolution
+    enhanced_resolution/menu_island_clip.c
+    enhanced_resolution/window_fit.c
+)
+
 add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c)
 
 # The only encoder here that writes a whole instruction sequence rather than an operand, so it is

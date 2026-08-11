@@ -50,6 +50,7 @@ add_engine_fix(enhanced_resolution
     cursor_anchor.c
     pointer_cage.c
     focus_guard.c
+    menu_island_clip.c
 )
 
 add_engine_fix(hud_ratio_scaling

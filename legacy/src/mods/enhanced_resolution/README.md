@@ -32,7 +32,8 @@ the mode table that the aspect gate anchors.
 | `KeepCursorInWindow` | `1` | re-centre the mouse pointer in the window's client area instead of at screen (320,240) |
 | `ClipPointerToWindow` | `1` | hold the pointer inside the client area while the game window is in front, and let go the instant it is not |
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
-| `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole display mode instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself |
+| `WidenMenuCursorArea` | `0` | let the **drawn menu cursor** move over the whole display mode instead of the 607x447 island the engine clamps it to. **Off by default**: the pause screens repair themselves through damage rectangles clipped to the same hard-coded 640x480 canvas every blit in the menu toolkit clips to, so a cursor moved past the island's edge cannot be erased and stamps its blue glow onto the border for as long as the screen is open. The front end never shows it, because its 3-D room repaints every pixel every frame. Every clickable widget lives inside the island anyway |
+| `ClampMenuSpritesToIsland` | `1` | the erase-side companion of `MenuKeepsResolution`: clamp the menu toolkit's sprite draws to the 640x480 island, gated on the engine's own widget-pass flag so the HUD and the frozen pause backdrop pass through untouched. Closes the reported blue stamp the hovered button's halo left on the island's border (drawn against the screen, repaired against the canvas). Bit-identical for every sprite that fits the island |
 
 ## Engine locations
 
@@ -51,6 +52,8 @@ the mode table that the aspect gate anchors.
 | `stdControl_setFocus` | `0x48D719` | **called, never patched**. Acquire/Unacquire on the DirectInput keyboard and mouse |
 | `stdControl_resync` | `0x48D1CF` | **called, never patched**, drains both device buffers, releasing everything held |
 | `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten to `W-33`/`H-33` and two origin operands repointed at zero cells, **only** when `WidenMenuCursorArea=1`. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
+| `swmenu_render`, the widget-pass bracket | `0x45DC6F`..`0x45DCB9` | **read, never patched**: address-free masked pattern over `inc counter / mov [flag],1 / cmp [parent],1`; the flag cell is read out of the `C7 05` operand and cross-checked against the closing `mov [flag],0` at +0x41. The gate for the island clamp |
+| `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
 
 ## Why the gate alone is not enough
 

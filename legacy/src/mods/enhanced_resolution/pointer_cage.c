@@ -25,6 +25,24 @@
  * to the WIDGET, so widening this clamp needs no coordinate work at all: a cursor outside the
  * 640x480 island simply hits nothing, which is already true today for everything outside it.
  *
+ * ==============================================================================================
+ * Why this ships OFF by default: the engine's clamp was load-bearing after all
+ *
+ * The paragraph above is true and incomplete, and the missing half is the ERASE. The pause
+ * screens do not repaint every pixel every frame; they repair themselves through the menu
+ * toolkit's damage rectangles, which live in canvas coordinates and are clipped against the same
+ * hard-coded 640x480 every blit in that toolkit clips against. A cursor quad that sits partially
+ * or wholly outside the island therefore cannot be expressed as a damage rectangle at all: it is
+ * drawn (the draw is an absolute-coordinate textured quad and clips against the SCREEN), it is
+ * never erased, and every crossing of the island's edge leaves a permanent stamp of the cursor's
+ * blue glow on the border for as long as the screen is open. Reported from a 3840x2160 session
+ * as blue blobs bleeding out from behind the pause menu, following the mouse. The front end
+ * never shows it because its 3-D room repaints every pixel every frame; the pause subpages are
+ * exactly the screens that do not. So the shipped clamp is not a small-mindedness to correct but
+ * the guarantee that the cursor never goes where the erase cannot follow, and widening it is
+ * opt-in for whoever accepts the stamps. Every clickable widget lives inside the island either
+ * way.
+ *
  * The block, and every offset this file writes to, measured from the match base S:
  *
  *   S+0x00  A1 <originX>          mov eax,[g_menuOriginX]        <- operand at S+0x01
@@ -489,9 +507,10 @@ void pointer_cage_install(bool enabled)
     cage_state.installed = true;
 
     if (!enabled) {
-        log_info("WidenMenuCursorArea=0, the drawn menu cursor keeps the 640x480 island it "
-                 "shipped with, which on a larger display mode is a box in the middle of the "
-                 "screen that it cannot be moved out of");
+        log_info("WidenMenuCursorArea=0 (the default), the drawn menu cursor keeps the 640x480 "
+                 "island it shipped with, which is also the only area the menu toolkit's damage "
+                 "rectangles can erase it from. Widening the cage lets the cursor stamp its glow "
+                 "onto the island's border permanently; see the header of pointer_cage.c.");
         return;
     }
 
@@ -524,7 +543,10 @@ void pointer_cage_install(bool enabled)
              "screen origin instead of the menu's (patched at %08X). "
              "The menus themselves are NOT moved: the engine already centres them and adds that "
              "origin in both the draw path and the hit test, so a cursor outside the 640x480 "
-             "island simply hits nothing.",
+             "island simply hits nothing. KNOWN COST, and the reason this is opt-in: the pause "
+             "screens cannot erase a cursor outside that island (their damage rectangles clip to "
+             "640x480), so crossing the island's edge stamps the cursor's glow onto the border "
+             "until the screen closes.",
              (int)(cage_state.applied_width - CURSOR_MARGIN),
              (int)(cage_state.applied_height - CURSOR_MARGIN),
              (unsigned)site);

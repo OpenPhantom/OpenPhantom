@@ -42,6 +42,7 @@
 
 #include "cursor_anchor.h"
 #include "focus_guard.h"
+#include "menu_island_clip.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
 
@@ -175,6 +176,7 @@ typedef struct resolution_config {
     bool clip_pointer_to_window;
     bool reacquire_input_on_focus;
     bool widen_menu_cursor_area;
+    bool clamp_menu_sprites_to_island;
 } resolution_config_t;
 
 typedef struct resolution_state {
@@ -241,14 +243,32 @@ static void load_config(void)
     config->reacquire_input_on_focus =
         ini_read_bool(RESOLUTION_SECTION, "ReacquireInputOnFocus", true);
 
-    /* Default ON. The engine clamps the cursor it DRAWS for its own menus to a 607x447 box
-     * anchored at the menu origin, which is 640x480 minus the cursor quad, so at 1080p the
-     * pointer cannot be moved out of a small island in the middle of the screen. At 640x480 the
-     * widened clamp is arithmetically identical to the shipped one, so this can only change what
-     * happens on a mode the engine's own constant was never written for. It does not move or
-     * rescale any menu: the engine already centres those itself. */
+    /* Default OFF, and that is a reversal that needs its defect named. This used to default ON,
+     * on the reasoning that a pointer caged to a box in the middle of a 1080p screen is bad
+     * manners. What that reasoning missed is the ERASE: the pause screens repaint through the
+     * menu toolkit's damage rectangles, which live in canvas coordinates and are clipped against
+     * the same hard-coded 640x480 every blit in that toolkit clips against. A cursor quad drawn
+     * partially outside the 640x480 island therefore cannot be expressed as a damage rectangle,
+     * is never repaired, and every crossing of the island's edge leaves a permanent stamp of the
+     * cursor's blue glow on the border (reported as blue blobs bleeding out from behind the pause
+     * menu, following the mouse; the front end never shows it because its 3-D room repaints every
+     * pixel every frame). The engine's own clamp exists precisely so the cursor never goes where
+     * the erase cannot follow, every widget lives inside the island anyway, and at 640x480 the
+     * widened clamp was the identity. So the widening is cosmetic freedom paid for in permanent
+     * screen corruption, and it is now opt-in rather than default. */
     config->widen_menu_cursor_area =
-        ini_read_bool(RESOLUTION_SECTION, "WidenMenuCursorArea", true);
+        ini_read_bool(RESOLUTION_SECTION, "WidenMenuCursorArea", false);
+
+    /* Default ON. This is the other half of MenuKeepsResolution: with the menus running as a
+     * 640x480 island instead of bolting the mode down, a menu sprite can reach where the menu's
+     * own erase cannot (the toolkit repairs itself in canvas coordinates clipped to 640x480),
+     * and the hovered button's halo does exactly that, stamping the island's border blue for
+     * the life of the screen. The clamp is bit-identical for every sprite that fits the island,
+     * which is every authored widget, so there is no configuration in which it costs anything;
+     * the switch exists so the repair can be singled out while diagnosing, not because leaving
+     * it off is ever the better picture. */
+    config->clamp_menu_sprites_to_island =
+        ini_read_bool(RESOLUTION_SECTION, "ClampMenuSpritesToIsland", true);
 
     if (config->max_menu_modes > MAX_MENU_MODES_LIMIT) {
         config->max_menu_modes = MAX_MENU_MODES_LIMIT;
@@ -628,6 +648,11 @@ void enhanced_resolution_install(void)
          * The two are otherwise unrelated: this one is about the cursor the MENUS draw and is
          * useful whether or not the window is ever moved. */
         pointer_cage_install(resolution_state.config.widen_menu_cursor_area);
+
+        /* Same ordering constraint as the cage: the island's origin is derived from
+         * window_fit_current_mode_size(). This is the erase-side companion of
+         * MenuKeepsResolution, see menu_island_clip.c for the defect it closes. */
+        (void)menu_island_clip_install(resolution_state.config.clamp_menu_sprites_to_island);
     }
 }
 

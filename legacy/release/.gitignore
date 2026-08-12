@@ -11,10 +11,12 @@
 #     cmake -S . -B build -A Win32
 #     cmake --build build --config Release
 #     ctest --test-dir build -C Release
-#     copy build\dist\dinput.dll and build\dist\mods\*.dll here, plus dist\engine_fixes.ini and
-#     src\tools\ (every standalone script this project ships, not a mod DLL and nothing CMake
-#     builds - a .ps1/.bat pair is already its own shipped form - copied in as tools\; lives there
-#     in an installed copy too, alongside WMAIN.EXE)
+#     copy build\dist\ here, plus dist\engine_fixes.ini and dist\THIRD-PARTY-NOTICES.txt
+#
+# build\dist is already laid out the way an installation is: dinput.dll beside the executable,
+# mods\ and tools\ under it. tools\ holds the standalone scripts, which have no build step and are
+# copied there by CMake rather than by hand, because a release assembled partly automatically and
+# partly by remembering a folder is one that eventually ships without it.
 
 *
 !.gitignore

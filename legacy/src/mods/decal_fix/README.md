@@ -139,7 +139,7 @@ asks for on top is redundancy that a translation layer turns into poison.
 
 ## Historical status
 
-Built and linked, `/W4 /WX` clean. Offline verification passes on all five retail executables.
+Built and linked, `/W4 /WX` clean. Offline verification passes on both retail builds.
 
 **The mechanism is proven, the number is not.** That decals depend on `ZBIAS` was established by
 measurement, not inference: with `[diagnostics] Fx=3`, a session reported 1026 draw calls in which

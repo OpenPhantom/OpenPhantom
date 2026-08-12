@@ -64,4 +64,14 @@ int  input_slider_seed_notch(void);
 /* For the installation log: where it landed and what it reads. */
 const char *input_slider_caption(void);
 
+/* How many notches the mouse speed slider offers, and the two conversions between a notch and the
+ * setting behind it. The slider reads 1 to 100 in its caption, which is 0.001 to 0.100 degrees per
+ * count in steps of exactly 0.001, so the caption is the setting with the decimal point moved and
+ * every notch is a round number in that unit. The ini still accepts up to 1.0 for anyone who wants
+ * to go past the right-hand end. */
+#define MOUSE_SLIDER_NOTCH_COUNT 100
+
+float input_slider_degrees_from_notch(int notch);
+int   input_slider_notch_from_degrees(float degrees_per_count);
+
 #endif /* INPUT_SLIDER_H */

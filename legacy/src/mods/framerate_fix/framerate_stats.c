@@ -1,3 +1,16 @@
+/* framerate_stats.c: the two instruments that measure what this DLL does, and nothing else.
+ *
+ * SIZE NOTE: a little over six hundred lines. Almost all of the excess is evidence rather than
+ * code: a byte census that decides which cell a window may be judged on, the disassembly of the
+ * one cell that looks like the obvious source for the substep period and is not, and three
+ * refuted readings that each cost a field session. Deleting any of it would leave the arithmetic
+ * looking arbitrary. The seam, measured rather than guessed, is the player draw dump: the bapObj
+ * offset block, the Plr_CommitPose signature, its five state fields and its two dump functions
+ * come to roughly a third of the file and touch nothing the frame window touches, sharing only
+ * the substep alpha pointer and the state struct. It was not taken in this change because
+ * splitting it means adding a source file, and that belongs in a change of its own rather than in
+ * a port. Anything added here next should come out along that seam rather than onto it.
+ */
 #include "framerate_stats.h"
 
 #include "common/logging.h"
@@ -9,46 +22,121 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
-/* --- 0x004757DB  sys_runSubsteps tail: the two numbers a measurement needs ------------------- *
- * The signature below is the LOOP TAIL, 31 bytes, 0x004757DB..0x004757F9:
- *   A1 60884B00        mov  eax,[g_tickCounter]  -> address at +0x01   (one per SUBSTEP)
+/* --- 0x004757DB  the tail of the substep loop: the three numbers a measurement needs --------- *
+ * The signature is the loop tail, 31 bytes, 0x004757DB to 0x004757F9:
+ *   A1 60884B00        mov  eax,[g_tickCounter]   its address at +0x01, one tick per substep
  *   83 C0 01           add  eax,1
  *   A3 60884B00        mov  [g_tickCounter],eax
- *   D9 05 28878600     fld  [g_simTime]                                (0x00868728)
- *   D8 05 14878600     fadd [g_frameTime]                              (0x00868714 = the substep dt
- *                                                                       while the loop is running)
- *   D9 1D 28878600     fstp [g_simTime]          <- simTime += dt
+ *   D9 05 28878600     fld  [g_simTime]                              (0x00868728)
+ *   D8 05 14878600     fadd [g_frameTime]                            (0x00868714, which holds the
+ *                                                                     substep dt while the loop is
+ *                                                                     running, and not otherwise)
+ *   D9 1D 28878600     fstp [g_simTime]           simTime += dt
  *
- * +0x3E reaches PAST the signature, over the 5-byte `E9 jmp 0x00475756` at 0x004757FA and the four
- * x87 instructions of the loop EXIT arm, and lands on the disp32 of
- *   0x00475817  D9 1D 1C878600  fstp [g_substepAlpha]   -> its address at +0x3E   (0x0086871C)
- * The opcode is verified before the operand is read.
+ * +0x3E reaches past the signature, over the five byte `E9 jmp 0x00475756` at 0x004757FA and the
+ * four x87 instructions of the loop exit arm, and lands on the disp32 of
+ *   0x00475817  D9 1D 1C878600  fstp [g_substepAlpha]     its address at +0x3E   (0x0086871C)
+ * The opcode pair is verified before that operand is read, and the simulation clock's operand is
+ * verified the same way, because an operand is only worth believing when the instruction in front
+ * of it is the one that was expected.
  *
- * CORRECTED 2026-08-07 (control pass). The three x87 lines above previously read
+ * Corrected on 2026-08-07 by a control pass. The three x87 lines above previously read
  * `fld [g_simTarget] / fsub [g_simTime] / fstp [g_substepAlpha]`, which is not what these bytes
- * are; that is a garbled copy of the EXIT arm at 0x004757FF. The exit arm is actually
- *   alpha = (g_simTarget, g_simTime + dt) / dt
- * a four-instruction sequence (fld/fsub/fadd/fdiv), and it lives after the jmp, not inside the
- * signature. Consequence worth keeping: at loop exit the invariant is
- * 0 <= g_simTime, g_simTarget < dt, so alpha is always in (0,1] whenever sys_runSubsteps runs at
- * all. INCLUDING when the loop body iterated zero times. A window that reports alpha constant
- * 0.000 therefore does not mean "the substep loop did not iterate"; it means sys_runSubsteps was
- * never CALLED in that window (the only other writer of 0x0086871C is `mov [0x0086871C],0` at
- * 0x00475ACB, the msg-1 init arm of the time module 0x00475AB0). In the field log that is exactly
- * what a menu window looks like.                                                                */
+ * are; that was a garbled copy of the exit arm at 0x004757FF. The exit arm is really
+ * alpha = (g_simTarget - (g_simTime + dt)) / dt, a four instruction fld/fsub/fadd/fdiv sequence,
+ * and it lives after the jump rather than inside the signature.
+ *
+ * Reading the log correctly, which is the consequence worth keeping. At loop exit the invariant is
+ * that both g_simTime and g_simTarget are below the substep, so alpha is always in (0,1] whenever
+ * the substep driver runs at all, including when the loop body iterated zero times. A window that
+ * reports alpha constant 0.000 therefore does not mean the substep loop did not iterate. It means
+ * the driver was never called in that window, and the only other writer of 0x0086871C is
+ * `mov [0x0086871C],0` at 0x00475ACB, the message 1 init arm of the time module 0x00475AB0. In a
+ * field log that is exactly what a menu window looks like.                                      */
 static const uint8_t SIG_SUBSTEP_TAIL[] = {
     0xA1, 0x60, 0x88, 0x4B, 0x00, 0x83, 0xC0, 0x01, 0xA3, 0x60, 0x88, 0x4B, 0x00,
     0xD9, 0x05, 0x28, 0x87, 0x86, 0x00, 0xD8, 0x05, 0x14, 0x87, 0x86, 0x00,
     0xD9, 0x1D, 0x28, 0x87, 0x86, 0x00
 };
 #define OFFSET_TICK_COUNTER   0x01u
+#define OFFSET_SIM_TIME       0x0Fu   /* the fld's operand; the D9 05 opcode is verified first */
 #define OFFSET_SUBSTEP_ALPHA  0x3Eu   /* past the jmp; the opcode is verified before use */
 
-/* --- 0x0044C06B  Plr_CommitPose: the handle on the PLAYER RECORD ----------------------------- *
+/* The counter is shared, and that is why the simulation clock is read as well.
+ *
+ * An operand census over the text section, scanning for each cell's four byte little endian
+ * encoding at any alignment and classifying every hit by the opcode in front of it:
+ *
+ *   g_tickCounter  0x004B8860   23 references   written by the substep loop at 0x004757E3, by a
+ *                                               menu frame at 0x0045DC7A, and by a reset at
+ *                                               0x0048477B
+ *   g_simTime      0x00868728    7 references   written by the substep loop at 0x004757F4 and by
+ *                                               the time module's own reset at 0x0047562D
+ *   g_substepAlpha 0x0086871C    4 references   written by the loop exit arm at 0x00475817 and by
+ *                                               the init zero at 0x00475ACB
+ *
+ * The second line is the point of the census. Every one of g_simTime's seven references lies
+ * between 0x0047562D and 0x00475807, that is, inside the substep driver and its module reset.
+ * Nothing else in the image reads or writes it. So a menu frame ticks the counter once per
+ * rendered frame while the clock stands still, and a window taken in a menu used to be printed as
+ * though it were a measurement of the simulation, reporting roughly one substep per frame at the
+ * frame rate with an alpha that never moved. The clock is the cell that separates the two cases
+ * and it is what a window's verdict is now decided on.
+ *
+ * The period is not read out of the engine, and that is deliberate. g_frameTime [0x00868714] looks
+ * like the obvious source, because it is exactly what the loop adds to the clock, and the
+ * disassembly of the substep driver says why it is not:
+ *
+ *   004756FC  55 8B EC 51              prologue
+ *   00475700  D9 05 14878600           fld  [g_frameTime]       the FRAME delta arrives here
+ *   00475713  C7 05 14878600 CDCCCC3D  mov  [g_frameTime], 0.1f the clamp on the incoming dt
+ *   00475723  D8 05 14878600           fadd [g_frameTime]       target += the frame delta
+ *   0047572F  A1 14878600              mov  eax,[g_frameTime]
+ *   00475734  89 45 FC                 mov  [ebp-4], eax        the frame delta is SAVED
+ *   00475740  C7 05 14878600 0000003D  mov  [g_frameTime], 1/32 from here it is the PERIOD
+ *   0047574C  C7 05 14878600 0000803C  mov  [g_frameTime], 1/64 the cheat arm
+ *   ...       the loop: g_tickCounter++, g_simTime += g_frameTime ...
+ *   0047581D  8B 4D FC                 mov  ecx,[ebp-4]
+ *   00475820  89 0D 14878600           mov  [g_frameTime], ecx  the frame delta is PUT BACK
+ *   00475829  C3
+ *
+ * So the cell holds the substep period only between 0x00475740 and 0x00475820 and holds the frame
+ * delta everywhere else, including in the render frame end where this module's per frame hook
+ * runs. A window that read the period from that cell would read the frame delta and derive a
+ * substep count five times too large at 160 fps. This tree has already shipped one rate computed
+ * against the wrong clock and should not ship a second.
+ *
+ * The period is therefore not read at all. Within a window that nothing but the substep loop
+ * touched, the simulation advance divided by the tick delta is the period by construction, and
+ * whether that quotient lands on a rate the selector can actually choose is exactly the test for
+ * whether anything else ticked the counter.
+ *
+ * Known limitation, pinned by a unit test rather than left to be found. The two rates the selector
+ * can choose are a factor of two apart, so a 32 Hz window carrying exactly as many stray ticks as
+ * it has substeps is arithmetically indistinguishable from an honest 64 Hz window and is reported
+ * clean at half the true period. Defending against it would need this module to know whether the
+ * simulation rate pin actually succeeded, which is another module's answer, and the window would
+ * have to be long enough in real time to hold that much simulation, which at the shipped window
+ * length and a high frame rate it is not. */
+#define SUBSTEP_PERIOD_32_HZ    0.031250f
+#define SUBSTEP_PERIOD_64_HZ    0.015625f
+#define SUBSTEP_PERIOD_TOLERANCE 0.10f
+
+/* Two hundred times smaller than the shortest substep the selector can choose, so it separates
+ * "the clock stood still" from "one substep ran" with a wide margin, and it absorbs the rounding
+ * of a float clock that has been accumulating for a whole level. */
+#define SIMULATION_ADVANCE_EPSILON 0.0001f
+
+/* How long the player dump waits before it says out loud that it is still waiting. Ten seconds at
+ * 60 frames a second, which is longer than a level load and shorter than a player's patience. */
+#define PLAYER_DUMP_WAIT_REPORT_FRAMES 600u
+
+/* --- 0x0044C06B  Plr_CommitPose: the handle on the player record ----------------------------- *
  *   55 8B EC              prologue
- *   A1 20524B00           mov eax,[pPlayer]   <- the pointer's address at +0x04
- *   83 B8 A0000000 00     cmp [eax+0xA0], 0   (movedThisFrame)
+ *   A1 20524B00           mov eax,[pPlayer]   the pointer's address at +0x04
+ *   83 B8 A0000000 00     cmp [eax+0xA0], 0   movedThisFrame
  *   74 28                 je ...                                                                */
 static const uint8_t SIG_PLAYER_COMMIT_POSE[] = {
     0x55, 0x8B, 0xEC, 0xA1, 0x20, 0x52, 0x4B, 0x00,
@@ -87,14 +175,24 @@ static signature_t sites[SITE_COUNT] = {
 
 typedef struct framerate_stats_state {
     int              frame_interval;
+
+    /* The player dump keeps five fields rather than one because it has to be able to say why it
+     * produced nothing. Armed at install, but STARTED at the first frame that actually has a
+     * player record, which is much later: install runs from the host entry point. */
+    uint32_t         player_frames_requested;
     uint32_t         frames_left_for_player;
+    uint32_t         frames_waited_for_player;
+    bool             player_dump_started;
+    bool             player_dump_wait_reported;
 
     const uint32_t  *tick_counter;
+    const float     *sim_time;
     const float     *substep_alpha;
     uint8_t        **player_pointer;
 
     uint32_t         frames_in_window;
     uint32_t         ticks_at_window_start;
+    float            sim_time_at_window_start;
     float            delta_minimum;
     float            delta_maximum;
     float            delta_sum;
@@ -123,6 +221,16 @@ static void resolve_substep_globals(void)
     if (memory_read_u32(site + OFFSET_TICK_COUNTER, &address) &&
         memory_is_inside_image(address, sizeof(uint32_t))) {
         stats_state.tick_counter = (const uint32_t *)(uintptr_t)address;
+    }
+
+    /* The simulation clock, from the `fld dword [abs32]` that the loop tail adds the period to.
+     * Its opcode pair is verified for the same reason the alpha's is. */
+    if (memory_read_u8(site + OFFSET_SIM_TIME - 2, &opcode_high) &&
+        memory_read_u8(site + OFFSET_SIM_TIME - 1, &opcode_low) &&
+        opcode_high == 0xD9 && opcode_low == 0x05 &&
+        memory_read_u32(site + OFFSET_SIM_TIME, &address) &&
+        memory_is_inside_image(address, sizeof(float))) {
+        stats_state.sim_time = (const float *)(uintptr_t)address;
     }
 
     /* The alpha store sits past a rel32 jmp, so verify the `fstp dword [abs32]` opcode pair
@@ -158,6 +266,7 @@ void framerate_stats_install(int frame_sample_interval, int player_frames)
 
     stats_state.frame_interval = frame_sample_interval;
     stats_state.frames_left_for_player = (player_frames > 0) ? (uint32_t)player_frames : 0;
+    stats_state.player_frames_requested = stats_state.frames_left_for_player;
 
     if (!QueryPerformanceFrequency(&stats_state.clock_frequency)) {
         stats_state.clock_frequency.QuadPart = 0;
@@ -173,22 +282,44 @@ void framerate_stats_install(int frame_sample_interval, int player_frames)
     resolve_substep_globals();
     resolve_player_pointer();
 
-    /* The first window has no previous window to open it, so it is stamped here. Every later
-     * one is stamped by log_frame_window as it closes. */
+    /* The first window has no previous window to open it, so it is stamped here. Every later one
+     * is stamped by log_frame_window as it closes. */
     stats_state.ticks_at_window_start =
         (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
+    stats_state.sim_time_at_window_start =
+        (stats_state.sim_time != NULL) ? *stats_state.sim_time : 0.0f;
     if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
         stats_state.clock_at_window_start.QuadPart = 0;
     }
 
     if (frame_sample_interval > 0) {
-        log_info("frame statistics every %d frames (tickCounter=%08X substepAlpha=%08X)",
+        log_info("frame statistics every %d frames (tickCounter=%08X simTime=%08X "
+                 "substepAlpha=%08X)",
                  frame_sample_interval, (unsigned)(uintptr_t)stats_state.tick_counter,
+                 (unsigned)(uintptr_t)stats_state.sim_time,
                  (unsigned)(uintptr_t)stats_state.substep_alpha);
+        if (stats_state.sim_time == NULL) {
+            log_warning("the simulation clock did not resolve, so a window cannot tell gameplay "
+                        "from a menu and every substep figure below is the SHARED counter, which "
+                        "a menu frame also ticks");
+        }
     }
+
+    /* The dump is armed here and starts much later. Install runs from the host entry point, long
+     * before a player record exists, so the two events are reported separately: saying "armed" and
+     * then falling silent for a whole session is what this instrument used to do. */
     if (player_frames > 0) {
-        log_info("player draw dump armed for %d frames (pPlayer=%08X)",
-                 player_frames, (unsigned)(uintptr_t)stats_state.player_pointer);
+        if (stats_state.player_pointer == NULL || stats_state.substep_alpha == NULL) {
+            log_warning("the player draw dump cannot run: %s did not resolve. StatsPlayerFrames "
+                        "will produce nothing this session.",
+                        (stats_state.player_pointer == NULL) ? "the player record pointer"
+                                                             : "the substep alpha");
+            stats_state.frames_left_for_player = 0;
+        } else {
+            log_info("player draw dump armed for %d frames (pPlayer=%08X). It STARTS at the first "
+                     "frame that has a player record, not here.",
+                     player_frames, (unsigned)(uintptr_t)stats_state.player_pointer);
+        }
     }
 }
 
@@ -218,6 +349,87 @@ static double window_seconds_from_wall_clock(void)
          / (double)stats_state.clock_frequency.QuadPart;
 }
 
+/* Whether the counter delta and the simulation advance agree about what happened in this window.
+ * Pure arithmetic on purpose, so that the one judgement this instrument makes can be checked
+ * without a game. */
+window_verdict_t framerate_stats_classify_window(bool clock_available,
+                                                 float simulation_advance,
+                                                 uint32_t tick_delta)
+{
+    float period;
+
+    if (!clock_available) {
+        return WINDOW_VERDICT_UNAVAILABLE;
+    }
+    if (simulation_advance < -SIMULATION_ADVANCE_EPSILON) {
+        return WINDOW_VERDICT_RESET;
+    }
+    if (simulation_advance <= SIMULATION_ADVANCE_EPSILON) {
+        return WINDOW_VERDICT_IDLE;
+    }
+    if (tick_delta == 0) {
+        /* The clock only advances inside the loop that ticks the counter, so this pair cannot
+         * happen while both cells are the ones they are believed to be. */
+        return WINDOW_VERDICT_MIXED;
+    }
+
+    period = simulation_advance / (float)tick_delta;
+    if (period >= SUBSTEP_PERIOD_32_HZ * (1.0f - SUBSTEP_PERIOD_TOLERANCE) &&
+        period <= SUBSTEP_PERIOD_32_HZ * (1.0f + SUBSTEP_PERIOD_TOLERANCE)) {
+        return WINDOW_VERDICT_CLEAN;
+    }
+    if (period >= SUBSTEP_PERIOD_64_HZ * (1.0f - SUBSTEP_PERIOD_TOLERANCE) &&
+        period <= SUBSTEP_PERIOD_64_HZ * (1.0f + SUBSTEP_PERIOD_TOLERANCE)) {
+        return WINDOW_VERDICT_CLEAN;
+    }
+    return WINDOW_VERDICT_MIXED;
+}
+
+/* The substep clause of the window line, which is the part that used to lie in a menu. */
+static void format_simulation_clause(char *text, size_t size, uint32_t ticks, double real)
+{
+    float            advance  = (stats_state.sim_time != NULL)
+                              ? (*stats_state.sim_time - stats_state.sim_time_at_window_start)
+                              : 0.0f;
+    window_verdict_t verdict  = framerate_stats_classify_window(stats_state.sim_time != NULL,
+                                                                advance, ticks);
+
+    switch (verdict) {
+    case WINDOW_VERDICT_CLEAN:
+        _snprintf(text, size,
+                  "sim advanced %.3f s | substeps %u (%.1f Hz, %.2f frames/substep)",
+                  (double)advance, ticks, (real > 0.0) ? (double)ticks / real : 0.0,
+                  (double)((float)stats_state.frames_in_window / (float)ticks));
+        break;
+    case WINDOW_VERDICT_IDLE:
+        _snprintf(text, size,
+                  "the simulation did not advance at all and the shared counter still moved %u "
+                  "times, so this window is a menu or a load and says nothing about gameplay",
+                  ticks);
+        break;
+    case WINDOW_VERDICT_MIXED:
+        _snprintf(text, size,
+                  "sim advanced %.3f s but the shared counter moved %u times, which is not a whole "
+                  "number of substeps: this window straddles gameplay and a menu, so the substep "
+                  "rate is not reported",
+                  (double)advance, ticks);
+        break;
+    case WINDOW_VERDICT_RESET:
+        _snprintf(text, size,
+                  "the simulation clock went backwards by %.3f s, so a level was loaded inside "
+                  "this window and its figures are not comparable",
+                  (double)(-advance));
+        break;
+    case WINDOW_VERDICT_UNAVAILABLE:
+    default:
+        _snprintf(text, size,
+                  "substeps %u (unverified: the simulation clock did not resolve, and a menu frame "
+                  "ticks this counter too)", ticks);
+        break;
+    }
+    text[size - 1] = '\0';
+}
+
 static void log_frame_window(void)
 {
     uint32_t ticks = (stats_state.tick_counter != NULL)
@@ -226,10 +438,13 @@ static void log_frame_window(void)
     double   real  = window_seconds_from_wall_clock();
     double   rate  = (real > 0.0) ? (double)stats_state.frames_in_window / real : 0.0;
     float    simulated = stats_state.delta_sum;
+    char     simulation_clause[256];
+
+    format_simulation_clause(simulation_clause, sizeof(simulation_clause), ticks, real);
 
     log_info("%u frames in %.3f s REAL | fps %.1f | the engine believes %.3f s (%.2fx real time, "
              "so the game runs %s) | dt ms min %.3f avg %.3f max %.3f (jitter %.1fx)%s | "
-             "substeps %u (%.1f Hz, %.2f frames/substep) | alpha %.3f..%.3f",
+             "%s | alpha %.3f..%.3f",
              stats_state.frames_in_window, real, rate, (double)simulated,
              (real > 0.0) ? (double)simulated / real : 0.0,
              (real > 0.0 && (double)simulated < real * 0.95) ? "slower than real time"
@@ -243,21 +458,22 @@ static void log_frame_window(void)
               * window sits on it, the dt figures carry no information at all and saying so is the
               * whole point of printing them. */
              (stats_state.delta_minimum >= FRAME_DELTA_CLAMP_SECONDS)
-                 ? ". every sample is on the clamp, dt carries no information here" : "",
-             ticks, (real > 0.0) ? (double)ticks / real : 0.0,
-             (double)((ticks != 0) ? (float)stats_state.frames_in_window / (float)ticks : 0.0f),
+                 ? "; every sample is on the clamp, dt carries no information here" : "",
+             simulation_clause,
              (double)stats_state.alpha_minimum, (double)stats_state.alpha_maximum);
 
     /* The next window starts here, not on its first sample.
      *
      * Stamping the marks when the first frame of a window arrives measures N-1 intervals while
-     * counting N frames, so everything derived from wall time came out N/(N-1) too high. At the
-     * shipped interval of 60 that is 1.7 percent, which is why every window in every log reported
-     * a frame rate just above the cap and a flat "1.02x real time". Closing one window and opening
-     * the next at the same instant makes the windows contiguous, makes the interval count match
-     * the frame count, and stops the substep total losing an interval as well. */
+     * counting N frames, so every figure derived from wall time came out N/(N-1) too high: at the
+     * shipped interval of 60 that is 1.7 percent, which is why every window in every field log
+     * reported a frame rate just above the cap and a flat "1.02x real time". Closing one window
+     * and opening the next at the same instant makes the windows contiguous and the interval count
+     * match the frame count, and it stops the substep total losing an interval as well. */
     stats_state.ticks_at_window_start =
         (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
+    stats_state.sim_time_at_window_start =
+        (stats_state.sim_time != NULL) ? *stats_state.sim_time : 0.0f;
     if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
         stats_state.clock_at_window_start.QuadPart = 0;
     }
@@ -271,9 +487,9 @@ static void sample_frame_window(float frame_delta)
         stats_state.delta_sum     = 0.0f;
         stats_state.alpha_minimum = 1.0f;
         stats_state.alpha_maximum = 0.0f;
-        /* The wall clock and the substep mark were stamped when the previous window closed, so the
-         * measured interval count matches the frame count. The first window has no previous one,
-         * and its marks were stamped at install. */
+        /* The wall clock and the substep mark are stamped when the PREVIOUS window closed, so the
+         * measured interval count matches the frame count. The very first window has no previous
+         * one, and its marks were stamped at install. */
     }
 
     if (frame_delta < stats_state.delta_minimum) { stats_state.delta_minimum = frame_delta; }
@@ -310,7 +526,7 @@ static void dump_animation_clock(const uint8_t *object)
     const uint8_t *puppet;
     const uint8_t *track;
 
-    if (!memory_read(( uintptr_t)(object + OBJECT_THING), &thing, sizeof(thing)) ||
+    if (!memory_read((uintptr_t)(object + OBJECT_THING), &thing, sizeof(thing)) ||
         thing == NULL) {
         return;
     }
@@ -352,15 +568,39 @@ static void dump_player_draw(void)
     float          alpha;
 
     if (stats_state.player_pointer == NULL || stats_state.substep_alpha == NULL) {
-        stats_state.frames_left_for_player = 0;
+        stats_state.frames_left_for_player = 0;   /* install already said why */
         return;
     }
 
+    /* No player yet is not a reason to spend the budget, and it is a reason to say so once.
+     *
+     * This dump is armed from the DLL's install, which runs at the host entry point, so the first
+     * few thousand frames of a session have no player record at all: the front end, the language
+     * screen and the level load all come first. Counting those frames against the budget would
+     * spend it before the game starts. Staying silent about them is what made this instrument
+     * report nothing at all for a whole session and look installed. */
     record = *stats_state.player_pointer;
     if (record == NULL ||
         !memory_read((uintptr_t)(record + PLAYER_ACTOR_HANDLE), &object, sizeof(object)) ||
         object == NULL) {
+        ++stats_state.frames_waited_for_player;
+        if (!stats_state.player_dump_wait_reported &&
+            stats_state.frames_waited_for_player >= PLAYER_DUMP_WAIT_REPORT_FRAMES) {
+            stats_state.player_dump_wait_reported = true;
+            log_warning("the player draw dump has waited %u frames and %08X still holds no player "
+                        "record. It stays armed and starts at the first frame that has one.",
+                        (unsigned)stats_state.frames_waited_for_player,
+                        (unsigned)(uintptr_t)stats_state.player_pointer);
+        }
         return;
+    }
+
+    if (!stats_state.player_dump_started) {
+        stats_state.player_dump_started = true;
+        log_info("player draw dump STARTS here, %u frames, after %u frames without a player "
+                 "record.",
+                 (unsigned)stats_state.player_frames_requested,
+                 (unsigned)stats_state.frames_waited_for_player);
     }
 
     position          = (const float *)(object + OBJECT_POSITION);
@@ -384,6 +624,10 @@ static void dump_player_draw(void)
              (double)rotation[0], (double)rotation[2]);
 
     --stats_state.frames_left_for_player;
+    if (stats_state.frames_left_for_player == 0) {
+        log_info("player draw dump complete, %u frames.",
+                 (unsigned)stats_state.player_frames_requested);
+    }
 }
 
 void framerate_stats_sample(float frame_delta)

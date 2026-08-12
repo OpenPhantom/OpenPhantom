@@ -25,7 +25,7 @@
  * `case 8` and `case 9` leave the result at 2 ("not handled") where every other implemented case
  * sets it to 0, and a dispatcher pair in this engine gates its suspend/resume bookkeeping on
  * exactly that result. The reading of those two dispatchers is correct. They are also dead: in
- * all five shipped images, including the Edit Tool's recompile, where they have moved; there
+ * all three builds, including the Edit Tool's recompile, where they have moved; there
  * is no call to them, no jump to them and no stored pointer at them.
  *
  * The live pause path is the pause menu, and it uses the OTHER dispatcher: it walks the module

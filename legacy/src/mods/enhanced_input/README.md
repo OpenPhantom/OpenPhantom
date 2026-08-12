@@ -25,7 +25,13 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `MouseLook` | `0` | | the master switch |
 | `MouseDegreesPerCount` | `0.030` | 0.001-1.0 | degrees of view turn per **mouse count**; also settable from the controls screen, where the slider reads **1-100** in steps of one thousandth |
 | `MouseAccumulate` | `1` | | bank the axis once per rendered frame instead of reading it once per substep. `0` restores the old behaviour for an A/B comparison |
-| `MouseSmoothingMs` | `10` | 0-80 | how long the mouse takes to hand a movement over, in **real** milliseconds. Redistributes, never removes: the total turn is unchanged and the cost is exactly this much latency. `0` switches it off |
+| `MouseRawInput` | `1` | | read the device directly instead of through the engine's DirectInput axis. The engine's reader answers a sum, so nothing downstream can tell three device reports in a step from four; this one counts them. Falls back to the engine's reader, and says so in the log, if the registration fails |
+| `MenuCursorRawInput` | `1` | | move the menu pointer from the device as well. The engine moves it in whole screen pixels against a hard-coded centre, which loses everything under one pixel and loses travel at a screen edge |
+| `NewMouseInput` | `1` | | advance the **drawn** view angle once per rendered frame and hand the simulation the total afterwards. Needs `MouseAccumulate=1` and `MouseLookRigidCamera=1`; it refuses with a named reason in the log if either is off |
+| `NewMouseInputDump` | `0` | 0-400 | measurement: that many rendered frames of the drawn turn, one line each, once per session |
+| `MouseLookRigidCamera` | `1` | | force the camera's plain yaw arm. The engine's other arm eases toward its target and reads back the yaw it drew last frame, which would compound a per-frame correction instead of recomputing it |
+| `CameraJumpWatchDeg` | `0` | 0-180 | measurement: log a line whenever the drawn camera yaw moves more than this in one frame. `0` is off |
+| `KeyTurnRate` | `120` | 15-720 | degrees per second for the turn keys. The engine's own value is 120 and it is clamped there internally, so raising this also lifts that clamp |
 | `MouseSpikeLimitDegPerSec` | `3000` | 360-20000 | degrees per second. At **delivery** a step past it is held back and paid out on the next frame rather than deleted; at the **door** a single frame's sample past it is cut to it before it is banked at all. A guard against a broken device, not against your hand |
 | `MouseLog` | `0` | | one line per sample the door bolt had to cut. A healthy session cuts nothing and logs nothing |
 | `Strafe` | `0` | | requires `MouseLook=1`; also settable from the controls screen |
@@ -174,7 +180,7 @@ The camera does not appear here at all: in the follow state the camera direction
 direction, so turning `heading` has already turned the camera, with the authored damping and all
 176 authored camera regions intact. Auto-aim and the melee sweep hang off the same number.
 
-## The mouse: banked per frame, consumed per substep
+## The mouse: read from the device, banked per frame, drawn per frame
 
 `game_frame` runs the substeps **first** and polls the devices afterwards, and the substep driver is
 a fixed-step accumulator. So a substep only ever reads the previous frame's sample, and every frame
@@ -183,7 +189,11 @@ was being polled and overwritten unread, and the surviving fifth was modulated b
 boundaries fell.
 
 The axis is therefore banked in a `render_frameEnd` callback and consumed **whole and zeroed** in
-phase 2. The total turn over any interval becomes "degrees per count times the counts the hand actually
+phase 2. With `MouseRawInput` the sample comes from the device rather than from the engine's axis,
+which is what makes the count of reports in a frame knowable at all; and with `NewMouseInput` the
+drawn angle is advanced once per rendered frame and the simulation is handed the total one step
+later, so the camera turns by what the hand did on that frame instead of by a fifth of what it did
+over the last step. The body still owns the heading and receives every degree. The total turn over any interval becomes "degrees per count times the counts the hand actually
 produced", independent of frame rate and of how many substeps fell where. It costs no latency: the
 substeps already consumed the previous frame's input, and they still do; nothing is delayed that
 was not already delayed.
@@ -664,13 +674,23 @@ silently does nothing.
 
 ## Testing status
 
-Built and linked with the configured 32-bit MSVC toolchain, `/W4 /WX` clean. Offline signature
-every byte pattern resolves with the expected match count on all four retail executables;
-the failures on `obi.exe` are expected and are the point of the design; that build is a recompile.
-All six free-look patterns resolve uniquely on all four retail images, and, unusually, on
-`obi.exe` as well, because every one of them is address-free and masked.
+Built and linked with the configured 32-bit MSVC toolchain, `/W4 /WX` clean. Three builds of this
+engine ship inside one installation, and every byte pattern resolves with the expected match count
+on the two retail ones. The failures on `obi.exe` are expected and are the point of the design, that
+build being a recompile; the six free-look patterns resolve there as well, because every one of them
+is address-free and masked.
 
-Unit tests (`unittests/strafe_walk.c`, 128 checks) cover:
+The mouse path has been played. The raw device reader, the per-frame bank and the per-frame drawn
+angle were accepted in the game on a 240 Hz display, and the drawn turn was measured over more than
+two thousand rendered frames while that was done.
+
+Four test files cover this feature. `unittests/mouse_rate.c` drives the rate estimator and the
+bank; `unittests/view_lead.c` proves a property of a sequence rather than of one call, that the
+drawn angle advances by one frame of hand movement on every frame while the body turns once per
+step, and it carries the first design as a regression because that one turned the camera backwards
+once per step; `unittests/delivery_rates.c` asks whether the delivery survives a slow mouse, which
+a field test on one desk cannot answer. The fourth, `unittests/strafe_walk.c` with 128 checks,
+covers:
 
 * the travel angle including the backward family;
 * the damper, framerate independence across 1/32 and 1/64, the 90 % settle definition, the rate

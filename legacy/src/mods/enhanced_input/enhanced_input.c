@@ -4,7 +4,7 @@
  * Why this is two pointers and not a single line of patched code
  *
  * Plr_RunPhases does not call the player phases through a switch. It calls them through a pointer
- * table in .data:
+ * table in .data, indexed by the phase number:
  *
  *     0x4482E0   mov  ecx, [ebp-8]                     ; the phase index
  *                call dword ptr [ecx*4 + g_plrPhases]  ; INDIRECT, THROUGH .data
@@ -23,8 +23,8 @@
  *
  * ---- why the camera does not appear here -----------------------------------------------------
  * bapview_followYaw sets cam = interpHeading + yawOffset. In the follow state the camera
- * direction IS the player direction, so turning `heading` has already turned the camera, with
- * the authored damping and all 176 authored camera regions intact.
+ * direction IS the player direction, so turning `heading` has already turned the camera, with the
+ * authored damping and all 176 authored camera regions intact.
  *
  * ---- why aiming follows by itself ------------------------------------------------------------
  * Plr_AutoAim searches with Thing_FindNearestInCone(actor, 2, player->heading, 16.0f, ...), and
@@ -50,8 +50,8 @@
  * Plr_StandClipSelect (0x0044CD61, index 4 of the Stand descriptor) picks an IDLE clip. The player
  * slid sideways while standing still.
  *
- * So this file no longer moves the player at all. It tells the engine the player is WALKING, in
- * the engine's own two fields and with the engine's own arithmetic,
+ * So this file does not move the player at all. It tells the engine the player is WALKING, in the
+ * engine's own two fields and with the engine's own arithmetic,
  *
  *     moveInput |= 1                      the forward bit the clip selector branches on
  *     moveDrive  = dtScale30 * 0.6        exactly what Plr_Steer writes for a full forward axis
@@ -84,40 +84,50 @@
  * the same node for its hit reaction. That angle is DAMPED rather than stepped, and it is walked
  * back down whenever the walk stops being driven; both live in strafe_walk.c, with the reasons.
  *
- * ---- the mouse is banked per FRAME, not read per substep --------------------------------------
+ * ---- the mouse is collected per FRAME, not read per substep -----------------------------------
  * The engine polls the device once per rendered frame and does it after that frame's substeps
  * have already run, so most of the hand's movement was being overwritten unread. mouse_look.c
- * banks every frame's sample and hands the whole bank to one substep. This thunk only asks for the
- * step and applies it.
+ * collects every frame's sample and hands out a share per consumed interval. This thunk asks for
+ * the step and applies it; the drain is unconditional, because taking it is what tells the
+ * collector somebody is consuming.
  *
  * ---- and the upper body leans into the turn again --------------------------------------------
  * Plr_Steer ends by twisting chest and head about the model's up axis, turnWheel/12 and /10, from
  * the cell this file has to clear. Overwriting the cell afterwards is too late for that twist,
  * but the twist itself is two ABSOLUTE stores through bapobj_setNodeYaw, so steer_lean.c simply
  * re-issues them after the original with the turn the player actually made, through the engine's
- * own divisors and its own +-120 deg/s clamp. Nothing about movement, speed, the turn penalty or
- * collision is touched. The chest is skipped while the auto-aim claims it, because the weapon and
- * the blade hang off that node; the head has no other writer in the image.
+ * own divisors and its own 120 deg/s clamp in either direction. That clamp is on the CELL and not
+ * on the increment: the keyboard ramp's ceiling of 40 deg/s bounds only what is added, the cell
+ * accumulates it, and a held key therefore climbs 12, 26, 42, 60, 80, 102 and saturates at 120 in
+ * seven substeps. An earlier comment read the ramp ceiling as the cell's own and sized this whole
+ * feature at a third of the truth. Nothing about movement, speed, the turn penalty or collision is
+ * touched. The chest is skipped while the auto-aim claims it, because the weapon and the blade hang
+ * off that node; the head has no other writer in the image.
  *
- * SIZE NOTE (rule 9): 865 lines. The two phase thunks are short and their correctness rests
- * entirely on facts about the engine that no reader can see from them, which fields the clip
- * selector branches on, where sincos_deg is taken, which modes run which phase. Rule 8 requires
- * that evidence at the site, and rule 9 forbids deleting it to reach a limit.
- * NEXT SEAM, measured rather than guessed: the CONFIGURATION half, load_config, its defaults,
- * its clamps and the three cross-checks that switch features off when a dependency is missing,
- * is 150 lines that touch the engine at no point and share only the config struct with the rest.
- * The thunks are not the seam: they read eleven fields of input_state between them.
+ * SIZE NOTE: this file runs close to the nine hundred line hard limit. It installs the whole DLL:
+ * two phase thunks, the menu, the sites they all depend on, and the order in which they have to
+ * come up. The thunks themselves are short, and their correctness rests entirely on facts about
+ * the engine that no reader can see from them, which fields the clip selector branches on, where
+ * sincos_deg is taken, which modes run which phase. That evidence is the length.
+ * One seam has already been taken: the CONFIGURATION half, its defaults, its clamps and the retired
+ * keys, went into input_config.c, which touches the engine at no point. The next seam, measured
+ * rather than guessed, is the block of setters and availability queries the controls screen calls,
+ * about a hundred lines at the end that patch no byte and read no player record. The thunks are not
+ * the seam: they read eleven fields of input_state between them.
  */
 #include "enhanced_input.h"
 
 #include "free_look.h"
+#include "input_config.h"
 #include "input_menu.h"
+#include "input_gate.h"
 #include "mouse_look.h"
 #include "steer_lean.h"
 #include "steer_log.h"
 #include "player_record.h"
 #include "player_sites.h"
 #include "strafe_walk.h"
+#include "view_lead.h"
 
 #include "common/host_image.h"
 #include "common/ini.h"
@@ -126,60 +136,18 @@
 
 #include <windows.h>
 
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #define INPUT_SECTION "enhanced_input"
+#define MILLISECONDS_PER_SECOND 1000.0f
 
 typedef void (__cdecl *phase_fn_t)(void);
 
-/* The damper's own two numbers. 250 ms to close 90 % of a gap sits between the median authored
- * NPC's first turn stage and its full stage, and clear of the player's own 120 deg/s turn clamp,
- * which would need three quarters of a second for a right angle. 240 deg/s is twice that clamp
- * and exists so that a large gap cannot spike on its first substep. */
-#define DEFAULT_STRAFE_SETTLE_MS   250.0f
-#define MAX_STRAFE_SETTLE_MS      1000.0f
-/* The engine's own steady-state turn rate for a held key: its accumulator climbs to the 120 deg/s
- * clamp in seven substeps and stays there. Matching it rather than picking a taste value is what
- * makes "both features off" the original control scheme rather than an approximation of it. The one
- * difference is that ours is instant where the original ramps over about a fifth of a second. */
-#define DEFAULT_KEY_TURN_RATE 120.0f
-
-/* The engine's clamp on the turn cell, and BOTH input paths reach it. The keyboard ramp's ceiling
- * of 40 deg/s bounds the INCREMENT, not the cell: turnWheel += ramp * axis accumulates, so a held
- * key climbs 12, 26, 42, 60, 80, 102, 120 and saturates in seven substeps. An earlier comment read
- * that ceiling as the cell's own and sized this whole feature at a third of the truth. */
-#define ENGINE_TURN_CLAMP 120.0f
-#define MIN_KEY_TURN_RATE      15.0f
-#define MAX_KEY_TURN_RATE     720.0f
-
-#define DEFAULT_STRAFE_TURN_RATE   240.0f
-#define MIN_STRAFE_TURN_RATE        30.0f
-#define MAX_STRAFE_TURN_RATE      2000.0f
-#define MILLISECONDS_PER_SECOND   1000.0f
-
-typedef struct enhanced_input_config {
-    bool  mouse_look;
-    bool  strafe;
-    bool  strafe_invert;
-    bool  strafe_turns_body;
-    bool  steer_lean;
-    bool  restore_turn_rate;
-    int   steer_log;
-    float steer_lean_test_degrees;   /* whether the model is turned to face the way it travels */
-    float strafe_settle_seconds;
-    float strafe_turn_rate;    /* degrees per second, the damper's hard rate cap */
-
-    /* Degrees per second A and D turn the player while sideways walking is OFF. It exists because
-     * mouse look has to clear the engine's own turn cell; that cell carries the mouse too, so
-     * the keyboard's share has to be re-applied from here or the keys go dead. */
-    float key_turn_rate;
-} enhanced_input_config_t;
-
 typedef struct enhanced_input_state {
     bool                installed;
-    enhanced_input_config_t  config;
 
     player_sites_t      sites;
     phase_fn_t          original_steer;
@@ -215,53 +183,6 @@ static float clamp_float(float value, float minimum, float maximum)
     return value;
 }
 
-static void load_config(void)
-{
-    float settle_ms;
-
-    input_state.config.mouse_look        = ini_read_bool (INPUT_SECTION, "MouseLook", false);
-    input_state.config.strafe            = ini_read_bool (INPUT_SECTION, "Strafe", false);
-    input_state.config.strafe_invert     = ini_read_bool (INPUT_SECTION, "StrafeInvert", false);
-    input_state.config.strafe_turns_body = ini_read_bool (INPUT_SECTION, "StrafeTurnsBody", true);
-
-    /* Zero is a legitimate setting and means "no damping": the angle steps between 0, +-45 and
-     * +-90 the way it used to, which is what makes the two comparable in one build. */
-    settle_ms = ini_read_float(INPUT_SECTION, "StrafeSettleMs", DEFAULT_STRAFE_SETTLE_MS);
-    settle_ms = clamp_float(settle_ms, 0.0f, MAX_STRAFE_SETTLE_MS);
-    input_state.config.strafe_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
-
-    input_state.config.steer_lean = ini_read_bool(INPUT_SECTION, "SteerLean", true);
-    input_state.config.restore_turn_rate =
-        ini_read_bool(INPUT_SECTION, "RestoreTurnRate", true);
-    input_state.config.steer_lean_test_degrees =
-        clamp_float(ini_read_float(INPUT_SECTION, "SteerLeanTestDegrees", 0.0f), -90.0f, 90.0f);
-    input_state.config.steer_log = ini_read_int(INPUT_SECTION, "SteerLog", 0);
-    if (input_state.config.steer_log < 0)    { input_state.config.steer_log = 0; }
-    if (input_state.config.steer_log > 4000) { input_state.config.steer_log = 4000; }
-
-    input_state.config.strafe_turn_rate =
-        ini_read_float(INPUT_SECTION, "StrafeTurnRate", DEFAULT_STRAFE_TURN_RATE);
-    input_state.config.strafe_turn_rate = clamp_float(input_state.config.strafe_turn_rate,
-                                                      MIN_STRAFE_TURN_RATE, MAX_STRAFE_TURN_RATE);
-
-    input_state.config.key_turn_rate =
-        ini_read_float(INPUT_SECTION, "KeyTurnRate", DEFAULT_KEY_TURN_RATE);
-    input_state.config.key_turn_rate = clamp_float(input_state.config.key_turn_rate,
-                                                   MIN_KEY_TURN_RATE, MAX_KEY_TURN_RATE);
-
-    mouse_look_load_config();
-    free_look_load_config();
-
-    /* StrafeSpeed used to set a sideways speed in units per second, because the sidestep was a
-     * displacement this DLL pushed in itself. It is now the engine walking, so the speed is the
-     * gait the player is in and there is nothing left for the key to set. Saying so beats leaving
-     * a setting that quietly does nothing. */
-    if (ini_read_float(INPUT_SECTION, "StrafeSpeed", -1.0f) >= 0.0f) {
-        log_info("StrafeSpeed is no longer used and can be deleted. Sideways movement is now the "
-                 "engine's own walk or run, so it matches the gait exactly.");
-    }
-}
-
 static float read_field(const uint8_t *record, int offset)
 {
     return *(const float *)(record + offset);
@@ -282,13 +203,13 @@ static void write_field(uint8_t *record, int offset, float value)
  * the value is still ours to interpret.
  *
  * The view step does not come from a read at all any more. mouse_look.c banks the axis once per
- * rendered frame and hands the whole bank over here, and taking it is what marks a substep as
+ * rendered frame and hands a share of the bank over here, and taking it is what marks a substep as
  * having consumed, so it is done unconditionally, at the very top, before any gate can return.
  * ============================================================================================ */
 static void __cdecl steer_thunk(void)
 {
     uint8_t *record = player_sites_record(&input_state.sites);
-    float    mouse_step;
+    float    mouse_step = 0.0f;
     float    keyboard_axis = 0.0f;
     float    substep_seconds = 0.0f;
     float    axis;
@@ -298,10 +219,48 @@ static void __cdecl steer_thunk(void)
     bool     stand_mode = false;
     int      mode_for_log = -1;
 
-    /* The bank is consumed on EVERY run of this thunk, before any gate: a step left in it would be
+    /* First, and before any gate of ours. The engine only reaches this phase when it is running
+     * the player pipeline, which is the only state in which it reads input itself. A menu, a
+     * dialogue and a cutscene stop the pipeline, and that is the whole of the original's input
+     * lock. Everything this DLL turns on the render clock is gated on this stamp. */
+    input_gate_note_phase_ran();
+
+    /* The substep is read BEFORE the drain and outside every gate. The reconstruction underneath
+     * answers a RATE, so it has to be told the interval this consumer covers, and the drain itself
+     * has to stay unconditional, because taking it is what marks a substep as having consumed. A
+     * record that is not there yet answers zero, which the drain understands.
+     *
+     * The bank is consumed on EVERY run of this thunk, before any gate: a step left in it would be
      * applied later, in a state that did not earn it. The value is simply discarded below when the
      * gate is closed. */
-    mouse_step = mouse_look_take_step_degrees();
+    if (record != NULL) {
+        substep_seconds = read_field(record, PLAYER_FRAME_DELTA);
+    }
+    /* ONE CONSUMER, ONE CADENCE, and which one it is depends on the control mode.
+     *
+     * With the per-frame path live the bank belongs to the camera update, and this phase takes only
+     * what the rendered frames have already banked. Asking the bank for a substep's worth here as
+     * well was measurably wrong once the delivery filter was switched on: the two consumers cover
+     * different intervals, 31.25 ms against about 11, so the filter hands them different shares of
+     * the same movement, and the frames that run a substep are then drawn by a different rule from
+     * the frames that do not. In the field that showed up as the substep frames measuring half as
+     * rough again as the others, which is the very asymmetry the per-frame path exists to remove.
+     *
+     * Without the per-frame path this is unchanged: the substep is the only consumer, and taking
+     * is also what tells the collector somebody is consuming.
+     *
+     * The handover is called either way, because it is what marks a substep for the measurement,
+     * and it answers zero while the feature is off. The view lead is PASSED the step that has just
+     * been taken, and for two reasons of which only the first is obvious. The body owes the sum,
+     * because the bank can be drained on both clocks and each drain removes what it hands over. And
+     * the camera has to be TOLD the sum, because what it must stop drawing is the whole mouse turn
+     * this substep applies, not only the part that came through the per-frame path; leaving the
+     * engine's own per-step drain out of that total leaves its share to be drawn twice, which is the
+     * same double count the lead exists to remove, in miniature. */
+    if (!view_lead_is_active()) {
+        mouse_step = mouse_look_take_substep_degrees(substep_seconds);
+    }
+    mouse_step += view_lead_take_substep(mouse_step);
 
     if (!input_state.logged_steer) {
         input_state.logged_steer = true;
@@ -343,7 +302,6 @@ static void __cdecl steer_thunk(void)
     }
 
     if (phase_active) {
-        substep_seconds = read_field(record, PLAYER_FRAME_DELTA);
         /* Read whether or not sideways walking is on: with it OFF the same axis is what turns the
          * player, and this used to be the read that was skipped, which is why A and D went dead
          * rather than merely stopping strafing. Reading consumes nothing; the query API never
@@ -361,7 +319,10 @@ static void __cdecl steer_thunk(void)
     if (!phase_active) {
         /* The flag is deliberately left alone here: this substep did NOT step the body angle, so
          * phase 7 has to. That is the case of a launched sidestep or a scripted jump, where this
-         * phase runs and declines while phase 7 goes on running. */
+         * phase runs and declines while phase 7 goes on running. A substep that declines needs no
+         * signal of its own to the camera: the bank is empty either way, and the last step's mouse
+         * turn is paid back out by the engine's interpolation over the following step, so the
+         * camera glides onto the body rather than snapping onto it. */
         steer_log_substep(record, STEER_BRANCH_DECLINED, substep_seconds, 0.0f, 0.0f, mode_for_log);
         return;
     }
@@ -372,7 +333,7 @@ static void __cdecl steer_thunk(void)
      * right as positive. Treating the axis as if positive meant right sidestepped the wrong way
      * for every key bound to it. */
     axis   = -clamp_float(keyboard_axis, -1.0f, 1.0f);
-    strafe = input_state.config.strafe_invert ? -axis : axis;
+    strafe = input_config()->strafe_invert ? -axis : axis;
 
     /* The mutual exclusion between free look and the mouse-TO-BODY PATH, and it is the reason free
      * look lives in this DLL rather than beside it. Free look turns the CAMERA with the mouse and
@@ -380,40 +341,38 @@ static void __cdecl steer_thunk(void)
      * heading, the mouse would turn body and camera together, the decoupling would be exactly
      * zero, and every log line would still claim a working feature. So when free look takes the
      * substep, nothing else here writes a view yaw or a travel angle. */
-    if (free_look_steer(record, mouse_step, strafe, stand_mode, substep_seconds)) {
+    if (free_look_steer(record, mouse_step, strafe, stand_mode)) {
         /* The cell is zeroed AFTER the lean has read it, not before: free look turns the CAMERA
          * with the mouse, and a turn rate left standing would make the engine turn the BODY's
          * heading on top of it in phase 7, the very coupling free look exists to break. */
         input_state.turn_wheel_is_ours = false;
-        /* No lean under free look, and that is a decision rather than an omission. Here the mouse
-         * turns the CAMERA and the body turns toward where it travels, so a mouse-driven twist
-         * would be body language for a turn the body never made. The body's own turn already leans
-         * through the sideways walk's root rotation, which chest and head hang off. */
-        /* No twist under free look yet, and the reason is written down because the decision has
-         * now been made twice on two different grounds.
+        /* NOTHING IS WRITTEN INTO THE UPPER BODY HERE, and the empty line is the design rather than
+         * an omission. It has carried three different corrections, each removed for a different
+         * reason, and they are kept together because an empty line invites a fourth.
          *
-         * Reissuing the engine's own value here was tried and reverted before it shipped: on this
-         * branch that cell carries OUR MOUSE, because the engine's analog arm reads the very same
-         * device axis mouse_look.c does, and under free look the mouse is the CAMERA. Twisting
-         * the chest with it is body language for a turn the body never made, which is exactly what
-         * this comment used to claim it was avoiding while doing it.
+         * The first re-issued the engine's own upper body twist from the turn cell. On this branch
+         * that cell carries OUR MOUSE, because the engine's analog turn arm reads the same device
+         * axis mouse_look.c does, and under free look the mouse is the camera. Twisting the chest
+         * with it is body language for a turn the body never made.
          *
-         * The right input here is the BODY's own turn: the damped root angle the sideways walk
-         * drives toward the travel direction. That is separate work and is not faked meanwhile. */
-        /* Nothing twists the chest here any more, and the absence is the design rather than an
-         * omission. There used to be a correction re-issued on this line, because the original
-         * writes that node unconditionally a few instructions earlier and anything written in
-         * phase 1 or phase 6 is overwritten before it can be drawn. The correction was needed
-         * while free look pointed the body at its travel: the aim then sat at an angle to the
-         * body that changed on every direction change, and the pose never settled because it was
-         * being recomputed each substep against a body that was itself still turning. Pointing
-         * the body at the camera while the trigger is held removes the angle instead of damping
-         * it, so there is nothing left to re-issue. */
+         * The second corrected the aim. The original writes the chest node unconditionally a few
+         * instructions earlier, so anything written in phase 1 or phase 6 is overwritten before it
+         * can be drawn and had to be re-issued here. It was needed only while free look pointed the
+         * body at its travel, because the aim then sat at an angle to the body that changed with
+         * every direction change, and the pose could never settle: it was recomputed each substep
+         * against a body that was itself still turning. Pointing the body at the camera while the
+         * trigger is held removes the angle instead of damping it, so there is nothing left to
+         * re-issue.
+         *
+         * The third was a lean driven from the mouse step. The right input for a lean here would be
+         * the BODY's own turn, the damped root angle the sideways walk drives toward the travel
+         * direction, and the model root already carries chest and head with it, so that lean is
+         * there already without a second write. */
         /* While the trigger is held the feet belong to the sideways walk, not to free look's own
          * travel turn. The body is already facing the camera, so a sideways key is a real sidestep
          * and a backward key a real back-pedal, the same thing this DLL does with free look
          * switched off, which is what makes firing feel identical in both schemes. */
-        if (free_look_aim_stance() && stand_mode && input_state.config.strafe) {
+        if (free_look_aim_stance() && stand_mode && input_config()->strafe) {
             input_state.pending_travel_degrees =
                 strafe_walk_drive(record, strafe, substep_seconds);
         } else {
@@ -428,7 +387,7 @@ static void __cdecl steer_thunk(void)
         return;
     }
 
-    if (input_state.config.mouse_look) {
+    if (input_config()->mouse_look) {
         input_state.pending_yaw_degrees = mouse_step;
 
         /* ---- And the keys still turn, which this used to destroy -------------------------------
@@ -451,10 +410,10 @@ static void __cdecl steer_thunk(void)
          * digital turn axis is POSITIVE FOR LEFT, which is also the direction increasing heading
          * turns, so it is added unnegated. (The sideways walk negates it because THAT file counts
          * right as positive; this does not.) */
-        if (!input_state.config.strafe && keyboard_axis != 0.0f) {
+        if (!input_config()->strafe && keyboard_axis != 0.0f) {
             input_state.pending_yaw_degrees +=
                 clamp_float(keyboard_axis, -1.0f, 1.0f) *
-                input_state.config.key_turn_rate * substep_seconds;
+                input_config()->key_turn_rate * substep_seconds;
         }
 
         /* ---- The turn cell, and why it is no longer touched -----------------------------------
@@ -467,7 +426,7 @@ static void __cdecl steer_thunk(void)
          * upper-body twist. Two lines further down the cell stops holding it. */
         engine_rate = read_field(record, PLAYER_TURN_WHEEL);
 
-        if (input_state.config.restore_turn_rate) {
+        if (input_config()->restore_turn_rate) {
             /* NOTHING IS WRITTEN, and that is less than this used to do and more correct.
              *
              * Writing our own rate was the second mistake here. the cell is an accumulator: the
@@ -502,7 +461,7 @@ static void __cdecl steer_thunk(void)
         steer_lean_release();
     }
 
-    if (!input_state.config.strafe || !stand_mode) {
+    if (!input_config()->strafe || !stand_mode) {
         /* Not driving the walk this substep, so the model root has to come home rather than keep
          * the last angle Stand wrote into it. */
         strafe_walk_release(record, substep_seconds);
@@ -513,8 +472,8 @@ static void __cdecl steer_thunk(void)
     input_state.steer_ran_this_substep = true;
     input_state.pending_valid          = true;
 
-    steer_log_substep(record, input_state.config.mouse_look ? STEER_BRANCH_MOUSE_LOOK
-                                                            : STEER_BRANCH_PASSIVE,
+    steer_log_substep(record, input_config()->mouse_look ? STEER_BRANCH_MOUSE_LOOK
+                                                         : STEER_BRANCH_PASSIVE,
                       substep_seconds, input_state.pending_yaw_degrees,
                       input_state.pending_travel_degrees, mode_for_log);
 }
@@ -548,6 +507,10 @@ static void __cdecl integrate_thunk(void)
     float    frame_delta = 0.0f;
     bool     turning_travel = false;
 
+    /* The same stamp as the steer thunk. Two phases rather than one, because a mode that runs
+     * only one of them is still the engine reading input. */
+    input_gate_note_phase_ran();
+
     if (!input_state.logged_integrate) {
         input_state.logged_integrate = true;
         log_info("phase 7 ran for the first time (player record %08X)",
@@ -557,6 +520,22 @@ static void __cdecl integrate_thunk(void)
     if (record != NULL) {
         frame_delta = read_field(record, PLAYER_FRAME_DELTA);
     }
+
+    /* Free look's body turn goes FIRST, and the position of this line is the whole of a defect that
+     * shipped. Unlike the sideways walk's travel offset a few lines below, this write is NOT undone
+     * afterwards: the body has really turned, and the camera anchor, the vault probe and the
+     * model's own world yaw all have to see it. The travel offset, on the other hand, remembers the
+     * heading in order to put it back once the original has run, and the restore recomputes
+     * turnWheel * dt + heading_before. On the free-look branch phase 2 has zeroed the turn cell, so
+     * that restore is exactly heading_before: capturing it BEFORE this call, as it used to, deleted
+     * free look's body turn in full on every substep, while the aim stance went on recomputing the
+     * same step and losing it. That is a feature that runs and does nothing. Capturing it after the
+     * call makes the restore undo the offset alone.
+     *
+     * It still has to precede the original, for the reason it always did: the integrator takes the
+     * sine and cosine of the heading inside its own body, so a heading written afterwards would not
+     * reach this substep's displacement. */
+    free_look_integrate(record, frame_delta);
 
     if (record != NULL && input_state.pending_valid) {
         /* The view step, minus what the original is about to add by itself.
@@ -576,15 +555,25 @@ static void __cdecl integrate_thunk(void)
             applied -= read_field(record, PLAYER_TURN_WHEEL) *
                        read_field(record, PLAYER_FRAME_DELTA);
         }
-        if (applied != 0.0f) {
-            write_field(record, PLAYER_HEADING, read_field(record, PLAYER_HEADING) + applied);
+        /* Finite before non-zero, and that order is the point. A comparison against zero is TRUE
+         * for a value that is not a number, so the obvious guard passes exactly the value that must
+         * never reach the heading: once the heading is not a number, every consumer of it is, the
+         * facing vector the collision probe reads included, and nothing downstream can recover. */
+        if (isfinite(applied) && applied != 0.0f) {
+            float heading = read_field(record, PLAYER_HEADING);
+
+            if (isfinite(heading)) {
+                write_field(record, PLAYER_HEADING, heading + applied);
+            }
         }
 
         travel = input_state.pending_travel_degrees;
-        if (travel != 0.0f && frame_delta > 0.0f && frame_delta < 0.5f) {
-            turning_travel = true;
+        if (isfinite(travel) && travel != 0.0f && frame_delta > 0.0f && frame_delta < 0.5f) {
             heading_before = read_field(record, PLAYER_HEADING);
-            write_field(record, PLAYER_HEADING, heading_before + travel);
+            if (isfinite(heading_before)) {
+                turning_travel = true;
+                write_field(record, PLAYER_HEADING, heading_before + travel);
+            }
         }
 
         if (!input_state.logged_first_input &&
@@ -609,12 +598,6 @@ static void __cdecl integrate_thunk(void)
         strafe_walk_release(record, frame_delta);
     }
     input_state.steer_ran_this_substep = false;
-
-    /* Free look's body turn, and it goes in BEFORE the original for the same reason the view turn
-     * does: the integrator takes sincos of the heading inside its own body. Unlike the sideways
-     * walk's travel offset this write is NOT undone afterwards, the body has really turned, and
-     * the camera anchor, the vault probe and the model's own world yaw all have to see it. */
-    free_look_integrate(record, frame_delta);
 
     input_state.original_integrate();
 
@@ -658,19 +641,19 @@ void enhanced_input_install(void)
         return;
     }
 
-    load_config();
+    input_config_load();
 
     /* Strafe WITHOUT mouse look is impossible, and that is a byte finding rather than a taste:
      * turnWheel (+0x2A4) is the ONLY turn channel. Mouse and keyboard exclude each other in the
      * original, but both land there. Turning the keyboard axis into strafing means clearing
      * turnWheel, which clears the mouse with it. Without mouse look a character would be left
      * that cannot turn at all. */
-    if (input_state.config.strafe && !input_state.config.mouse_look) {
-        log_warning("Strafe=1 requires MouseLook=1 (turnWheel is the only turn channel) - "
+    if (input_config()->strafe && !input_config()->mouse_look) {
+        log_warning("Strafe=1 requires MouseLook=1, because turnWheel is the only turn channel, so "
                     "strafe is switched OFF");
-        input_state.config.strafe = false;
+        input_config_set_strafe(false);
     }
-    if (!input_state.config.mouse_look) {
+    if (!input_config()->mouse_look) {
         /* MouseLook is the master switch, so nothing below this line runs, including the check
          * boxes on the controls screen. Both of them drive settings that need this DLL's two phase
          * thunks, which are not installed here, so the screen is left exactly as it shipped rather
@@ -684,21 +667,24 @@ void enhanced_input_install(void)
     if (!player_sites_resolve(&input_state.sites)) {
         return;
     }
-    if (input_state.config.strafe && input_state.sites.read_absolute_axis == NULL) {
-        input_state.config.strafe = false;
+    if (input_config()->strafe && input_state.sites.read_absolute_axis == NULL) {
+        input_config_set_strafe(false);
     }
-    if (!input_state.config.strafe) {
-        log_warning("strafe is off, keyboard axis 0 (turn left/right in the original) therefore "
-                    "does nothing at all now, because the mouse has taken over turning");
+    if (!input_config()->strafe) {
+        log_info("strafe is off, so the keyboard turn axis still turns the player, at %.0f deg/s "
+                 "(KeyTurnRate). It is folded into the same view step the mouse uses rather than "
+                 "left in the engine's turn cell, because that cell has to be cleared to keep the "
+                 "mouse from being integrated twice.",
+                 (double)input_config()->key_turn_rate);
     }
 
     strafe_walk_bind(input_state.sites.set_node_yaw,
-                     input_state.config.strafe_turns_body,
-                     input_state.config.strafe_settle_seconds,
-                     input_state.config.strafe_turn_rate);
+                     input_config()->strafe_turns_body,
+                     input_config()->strafe_settle_seconds,
+                     input_config()->strafe_turn_rate);
 
-    steer_lean_bind(input_state.sites.set_node_yaw, input_state.config.steer_lean);
-    steer_lean_set_test_degrees(input_state.config.steer_lean_test_degrees);
+    steer_lean_bind(input_state.sites.set_node_yaw, input_config()->steer_lean);
+    steer_lean_set_test_degrees(input_config()->steer_lean_test_degrees);
 
     if (!swap_phase_pointers()) {
         return;
@@ -718,14 +704,28 @@ void enhanced_input_install(void)
      * until mouse_look_install has returned. Called the other way round the feature still installs
      * and still works one substep at a time, and says so, so a future reordering degrades rather
      * than doubling the turn. */
-    (void)free_look_install(&input_state.sites, input_state.config.strafe);
+    (void)free_look_install(&input_state.sites, input_config()->strafe);
 
-    if (input_state.sites.read_absolute_axis != NULL) {
-        input_menu_install();
-    } else {
-        log_warning("no check box on the controls screen, the keyboard axis reader did not "
-                    "resolve, so there is no key sideways walking could be driven from");
+    /* The delivery filter is a DEPENDENCY of the per-frame view path, not a taste setting, and it
+     * is wired here because this is the first point at which it is known that the path is really
+     * running. Without it that path is at the mercy of the device's report rate. */
+    if (view_lead_is_active()) {
+        mouse_look_use_frame_clock_smoothing();
     }
+
+    /* The controls screen is patched whatever the keyboard axis did, and that is a repair rather
+     * than a reordering. The screen carries three widgets: the mouse sensitivity slider, the free
+     * look check box and the sideways walking check box. Only the last of them has anything to do
+     * with the keyboard axis, and gating all three on it meant that a build where one signature
+     * missed lost the sensitivity slider and the free look switch as well, while the log blamed a
+     * key nobody had asked about. input_menu_install offers the sideways box only when the feature
+     * behind it is really there, which is the question it should have been asking. */
+    if (input_state.sites.read_absolute_axis == NULL) {
+        log_warning("the keyboard turn axis did not resolve, so sideways walking has no key to be "
+                    "driven from and its check box is left off the controls screen. The mouse "
+                    "sensitivity slider and the free look switch are not affected.");
+    }
+    input_menu_install();
 
     log_info("the live control mode is %s. Mouse look on (%.3f deg per mouse count, banked per "
              "frame=%d), strafe %s (inverted=%d, turns the body=%d, %.0f ms settle, %.0f deg/s "
@@ -736,25 +736,25 @@ void enhanced_input_install(void)
                                       "toward its travel)"
                                     : "MOUSE LOOK (the mouse turns the body, the camera follows)",
              (double)mouse_look_degrees_per_count(), mouse_look_is_accumulating() ? 1 : 0,
-             input_state.config.strafe ? "on" : "off",
-             input_state.config.strafe_invert ? 1 : 0,
-             input_state.config.strafe_turns_body ? 1 : 0,
-             (double)(input_state.config.strafe_settle_seconds * MILLISECONDS_PER_SECOND),
-             (double)input_state.config.strafe_turn_rate);
+             input_config()->strafe ? "on" : "off",
+             input_config()->strafe_invert ? 1 : 0,
+             input_config()->strafe_turns_body ? 1 : 0,
+             (double)(input_config()->strafe_settle_seconds * MILLISECONDS_PER_SECOND),
+             (double)input_config()->strafe_turn_rate);
     if (steer_lean_is_active()) {
         log_info("the upper body leans into the turn, from the ENGINE'S OWN number: the turn cell "
-                 "as the original just left it. That cell ACCUMULATES - a held key climbs 12, 26, "
-                 "42, 60, 80, 102 to the 120 deg/s clamp over seven substeps, which is 1.0 up to "
-                 "10.0 degrees of chest and is the engine's own ease-in. MOUSE LOOK ONLY: under "
+                 "as the original just left it. That cell ACCUMULATES, so a held key climbs 12, "
+                 "26, 42, 60, 80, 102 to the 120 deg/s clamp over seven substeps, which is 1.0 up "
+                 "to 10.0 degrees of chest and is the engine's own ease-in. MOUSE LOOK ONLY: under "
                  "free look that cell carries the mouse, and there the mouse is the camera. The "
                  "chest is skipped while the auto-aim claims it.");
     } else {
         log_info("SteerLean=0, chest and head keep whatever twist the original computed from a "
                  "turn cell this mode has to clear, so the upper body stays centred");
     }
-    steer_log_configure(input_state.config.steer_log);
+    steer_log_configure(input_config()->steer_log);
 
-    if (input_state.config.restore_turn_rate) {
+    if (input_config()->restore_turn_rate) {
         log_info("the engine's turn cell gets the real rate back (clamped to its own 120 deg/s) "
                  "instead of a zero, so the speed penalty on turning and the follow camera's own "
                  "eased arm are the engine's again. The view still turns as fast as the hand does; "
@@ -783,16 +783,24 @@ bool enhanced_input_is_active(void)
 
 bool enhanced_input_strafe_enabled(void)
 {
-    return input_state.config.strafe;
+    return input_config()->strafe;
+}
+
+/* Whether sideways walking could be switched on at all, which is a different question from whether
+ * it is on. The controls screen asks it before offering the box, for the same reason free look is
+ * asked: a switch that could never turn anything misleads rather than fails. */
+bool enhanced_input_strafe_available(void)
+{
+    return input_state.installed && input_state.sites.read_absolute_axis != NULL;
 }
 
 void enhanced_input_set_strafe(bool enabled)
 {
-    if (input_state.config.strafe == enabled) {
+    if (input_config()->strafe == enabled) {
         return;
     }
     if (enabled && !input_state.installed) {
-        log_warning("sideways walking was switched on, but the player phases are not hooked - "
+        log_warning("sideways walking was switched on, but the player phases are not hooked, so "
                     "the setting is not applied and not saved");
         return;
     }
@@ -803,7 +811,7 @@ void enhanced_input_set_strafe(bool enabled)
         return;
     }
 
-    input_state.config.strafe = enabled;
+    input_config_set_strafe(enabled);
 
     /* The angle latched in the model root belongs to the feature that is being switched off, and
      * nothing would come back to walk it down, so it is dropped here and the next driven substep

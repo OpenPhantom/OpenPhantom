@@ -35,4 +35,20 @@ bool memory_read(uintptr_t address, void *destination, size_t size);
 bool memory_read_u8 (uintptr_t address, uint8_t  *out);
 bool memory_read_u32(uintptr_t address, uint32_t *out);
 
+/* The same guarantee for code that runs once per drawn object rather than once at install.
+ *
+ * Everything above asks the operating system whether the range is readable, and that is a system
+ * call on every call. At install time nobody can measure it. On the drawing path it is the wrong
+ * shape entirely: a hook that runs for every emitter, every decal fan and every model in view pays
+ * a syscall per read, and the cost is fixed per frame, so it stays invisible while frames are long
+ * and becomes a material share of the frame as soon as they are short.
+ *
+ * These do the read directly and catch the fault instead of asking permission first. A bad pointer
+ * costs one exception, which is expensive but only happens when the alternative would have been a
+ * refusal anyway; a good pointer costs the read and nothing else. Use them where the pointer comes
+ * from the engine at run time and the code runs per object. Keep the asking form for install-time
+ * validation, where being told WHY a range is unusable is worth more than the nanoseconds. */
+bool memory_try_read(uintptr_t address, void *destination, size_t size);
+bool memory_try_readable(uintptr_t address, size_t size);
+
 #endif /* COMMON_MEMORY_H */

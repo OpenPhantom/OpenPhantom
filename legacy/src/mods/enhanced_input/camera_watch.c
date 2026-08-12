@@ -6,7 +6,10 @@
  *     0x00418F86   yaw    = wrap360(interp + cameraYawOffset)
  *     0x00418FAA   view->euler.y = yaw
  *
- * Two terms, so a jump has two possible authors and printing both settles it. The line also carries
+ * and this DLL adds a third term after that store, mouse look's per-frame view lead, which is
+ * reported here as itself.
+ *
+ * Three terms, so a jump has three possible authors and printing all of them settles it. The line also carries
  * the raw inputs of the first term, because "the interpolated heading moved" has three quite
  * different causes and they are distinguishable only from headPrevious, headCurrent and the alpha:
  *
@@ -61,6 +64,9 @@ typedef struct camera_watch_state {
     float in_head_current;
     float in_alpha;
     float in_offset;
+
+    /* Written AFTER the update, unlike the four above, because it is added after the update. */
+    float in_lead;
 } camera_watch_state_t;
 
 static camera_watch_state_t watch_state;
@@ -104,6 +110,11 @@ void camera_watch_before_update(void)
     watch_state.in_alpha         = *watch_state.sites->substep_alpha;
     watch_state.in_offset        = *watch_state.sites->camera_yaw_offset;
     watch_state.inputs_valid     = true;
+}
+
+void camera_watch_note_lead(float degrees)
+{
+    watch_state.in_lead = degrees;
 }
 
 void camera_watch_sample(void)
@@ -167,11 +178,11 @@ void camera_watch_sample(void)
      * itself: wrap360(interp + offset) must be the yaw. Where it is not, the reader is looking at a
      * third writer, and that is the finding. */
     log_warning("CAMERA JUMP %+.1f deg in one frame -> yaw %.1f. interp %.1f = prev %.1f + "
-                "wrap180(cur %.1f, prev) * alpha %.3f, offset %.1f. Region %08X flags %02X, "
-                "authored yaw %.1f. gOver %d, snap %d, camera state %d. Composed %.1f, offset "
-                "AFTER %.1f. Jump %u.",
+                "wrap180(cur %.1f, prev) * alpha %.3f, offset %.1f, view lead %+.2f. Region "
+                "%08X flags %02X, authored yaw %.1f. gOver %d, snap %d, camera state %d. Composed "
+                "%.1f, offset AFTER %.1f. Jump %u.",
                 (double)delta, (double)yaw, (double)interpolated, (double)head_previous,
-                (double)head_current, (double)alpha, (double)offset,
+                (double)head_current, (double)alpha, (double)offset, (double)watch_state.in_lead,
                 (unsigned)(uintptr_t)(watch_state.sites->current_region != NULL
                                       ? *watch_state.sites->current_region : NULL),
                 (unsigned)((watch_state.sites->current_region != NULL &&
@@ -181,7 +192,7 @@ void camera_watch_sample(void)
                 (int)*watch_state.sites->camera_override,
                 (int)*watch_state.sites->snap_countdown,
                 (int)*(const int32_t *)view,
-                (double)free_look_wrap360(interpolated + offset),
+                (double)free_look_wrap360(interpolated + offset + watch_state.in_lead),
                 (double)*watch_state.sites->camera_yaw_offset,
                 watch_state.jumps);
 

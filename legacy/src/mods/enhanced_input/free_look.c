@@ -37,7 +37,7 @@
  * there is nothing left to twist: the weapon points where the player looks by construction, and
  * firing feels the same in both control schemes.
  *
- * SIZE NOTE (rule 9): 625 lines. The code is a few dozen stores; the rest is the reasoning, and
+ * SIZE NOTE (rule 9): 641 lines. The code is a few dozen stores; the rest is the reasoning, and
  * every paragraph of it records a mistake that was made or nearly made, writing from the frame
  * hook, leashing the camera to the body, treating a cutscene and a floor polygon as the same
  * release, correcting a twist against a moving reference, and four rounds of building on an
@@ -63,6 +63,7 @@
 #include "player_record.h"
 #include "player_sites.h"
 #include "strafe_walk.h"
+#include "view_lead.h"
 
 #include "common/detour.h"
 #include "common/ini.h"
@@ -349,8 +350,7 @@ static int32_t __cdecl hook_auto_aim(int32_t kind)
     return result;
 }
 
-bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bool stand_mode,
-                     float substep_seconds)
+bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bool stand_mode)
 {
     uint32_t move_input;
     float    forward;
@@ -364,10 +364,11 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bo
     /* The mouse turns the camera here and nowhere else. */
     free_state.camera_yaw = free_look_wrap360(free_state.camera_yaw + mouse_step_degrees);
 
-    /* The model-root angle the sideways walk latches belongs to a body that faces the way it
-     * looks. This body faces the way it travels, so the latch has to come home and stay there,
-     * and it is a latch, so it has to be written down rather than merely forgotten. */
-    (void)strafe_walk_release(record, substep_seconds);
+    /* The model-root latch is NOT walked home here, and it used to be. The caller takes exactly one
+     * damper step per substep, either driving the walk or releasing it, and a release taken here as
+     * well made two: the latch came home at about twice the configured settle time, and in the aim
+     * stance one step toward zero was followed by one step toward the travel target from the
+     * already-moved value. One substep, one damper step, and the caller owns it. */
 
     free_state.body_target_valid = false;
 
@@ -519,7 +520,13 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
                     "look cannot be offered at all, not from the ini and not from the controls "
                     "screen. There is no honest half of it to run: writing the offset without "
                     "freezing the recentre gives a camera that slides home under the player's "
-                    "hand. Mouse look is untouched.");
+                    "hand. Mouse look still turns the body as it always did.");
+        if (view_lead_is_enabled()) {
+            log_warning("NewMouseInput=1 goes with it, for the same reason and not for one of its "
+                        "own: the per-frame view lead is applied from a detour on this camera's "
+                        "own update, so a camera that cannot be found is a camera whose drawn "
+                        "angle cannot be reached.");
+        }
         return false;
     }
 
@@ -547,6 +554,15 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
     /* Armed whether free look is on or off, because the swing it watches for has been reported in
      * BOTH control modes. The detour it is sampled from stands either way. */
     camera_watch_install(&free_state.camera);
+
+    /* The per-frame view lead belongs to MOUSE look, not to this feature, and it is armed from here
+     * because this is where its two dependencies are both known: the mouse bank, which was decided
+     * by mouse_look_install a moment ago, and the arm-select cell, which decides whether the drawn
+     * yaw can be adjusted at all without feeding back into the next frame. It writes nothing here
+     * and nothing later; it only answers a number of degrees that the camera detour above adds to
+     * the yaw the engine has composed. */
+    view_lead_install(free_state.drain_per_frame, free_state.config.rigid_mouse_look_camera &&
+                                                  free_state.camera.last_interp != NULL);
 
     log_info("%s Body turn %.0f ms settle and %.0f deg/s cap, aim snap %s, sideways input %s.",
              free_state.config.enabled

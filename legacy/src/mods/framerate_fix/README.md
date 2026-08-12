@@ -16,7 +16,8 @@ survives that recompile, which is why it does not share a gate with the rest of 
 | Key | Default | Meaning |
 |---|---|---|
 | `Enabled` | `1` | |
-| `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000 |
+| `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and nothing else: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
+| `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
 | `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. The only patch here that rewrites *instructions* rather than an operand, so it has its own switch |
 | `CompensateAnimation` | `1` | the animation clock and the emitter dormancy counter |
@@ -26,6 +27,11 @@ survives that recompile, which is why it does not share a gate with the rest of 
 | `InterpolatePitchRoll` | `1` | interpolate the drawn pitch and roll like the drawn yaw |
 | `PosePerFrame` | `1` | rebuild the joint matrices every frame |
 | `FaceLatchYield` | `16` | hand the scripted facing command a "still turning" answer on one simulation step in N, for a clip that has already clamped at its last frame. 0 switches it off, range 2-64 |
+| `PreciseFrameTime` | `1` | compute the frame delta in double instead of through the engine's float accumulator |
+| `RebaseSimClock` | `1` | take the same amount off both simulation clocks so their difference, which is the interpolation weight, keeps its precision on a long level |
+| `InterpolateParticles` | `1` | draw particles between simulation steps rather than on them |
+| `InterpolateMovers` | `1` | the same for movers: doors, lifts and platforms |
+| `MoverTravelLimitPerStep` | `64.0` | world units a mover may cross in one simulation step before the blend refuses it and snaps instead. Guards against a teleport being smeared into a slide |
 | `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames |
 | `StatsPlayerFrames` | `0` | >0: dump the player's draw interpolation for N frames |
 
@@ -93,7 +99,7 @@ dormancy and both draw patches are already in place by then and stay in place.
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes on all five retail
+Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes on both retail builds
 executables (EN, DE, the Fix Pack, and both install copies). One unit test, `camera_anchor`, the
 anchor encoder is the only isolated pure logic in this DLL, and the only place where a wrong byte
 produces no crash and no log line.
@@ -102,5 +108,11 @@ produces no crash and no log line.
 released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the scene plays at
 its authored pace rather than merely failing to hang. The confirming step, setting the key to 0
 and checking that the freeze returns, has not been run yet.
+
+`InterpolateMovers`, `InterpolateParticles`, `PreciseFrameTime` and `RebaseSimClock` were played
+and accepted by the maintainer, which is why they now default to on. That is a judgement about how
+they feel; the numbers in their own files are still a byte census and arithmetic rather than a
+measurement of a session, and `sim_clock` and `mover_blend` have unit tests covering the
+arithmetic alone.
 
 Everything else in this DLL is still only reviewed and built, not accepted in game.

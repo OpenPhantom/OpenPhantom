@@ -17,13 +17,16 @@
  *
  *     cameraYaw = wrap360( interp(headPrevious, headCurrent, substepAlpha) + cameraYawOffset )
  *
- * so a jump has exactly two possible sources, and one line printed at the instant it happens
+ * plus, on the frames mouse look leads the camera, a term this DLL adds after that composition.
+ * So a jump has exactly three possible sources, and one line printed at the instant it happens
  * separates them for good:
  *
  *   * the INTERPOLATED HEADING moved, the body turned, or the two-deep history is not two clean
  *     substep samples, or the alpha left (0,1] and the term extrapolated;
  *   * the OFFSET moved, something wrote the cell: free look, the engine's own recentre, or
- *     another mod.
+ *     another mod;
+ *   * the VIEW LEAD moved, which is the hand, and which is the only one of the three that is
+ *     supposed to move on an ordinary frame.
  *
  * It is quiet by construction. It prints only when a single frame moves the camera further than a
  * threshold no ordinary frame reaches, and it stops after a fixed number of lines, so a healthy
@@ -43,5 +46,13 @@ void camera_watch_install(const camera_sites_t *sites);
  * `wrap360(interp + offset) == yaw` is a check the reader can actually perform. */
 void camera_watch_before_update(void);
 void camera_watch_sample(void);
+
+/* The degrees mouse look's per-frame view lead added to the drawn yaw after the update composed it,
+ * or zero on a frame that added none.
+ *
+ * Without it this instrument would report its own colleague as the third writer it exists to catch:
+ * the composition it prints would be short by exactly the lead, on every frame the hand is moving,
+ * and the reader would be sent looking for a mod that is not there. */
+void camera_watch_note_lead(float degrees);
 
 #endif /* CAMERA_WATCH_H */

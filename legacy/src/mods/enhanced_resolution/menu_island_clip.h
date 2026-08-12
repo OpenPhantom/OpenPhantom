@@ -16,9 +16,9 @@
  * The repair clamps the sprite rectangle to the island, but only while the engine's own "the
  * menu's widgets are drawing" flag is up, so the gameplay HUD, the frozen pause backdrop and
  * everything else that shares the blitter passes through untouched. Details, byte evidence and
- * the honest limitation (a clamped sprite is squashed by the poked-out fraction where the retail
- * rasterizer cropped it; for the soft halos that actually poke out the difference is invisible)
- * are at the top of menu_island_clip.c.
+ * the honest limitations (a clamped sprite is squashed by the poked-out fraction where the retail
+ * rasterizer cropped it, and a partly drawn sprite is left alone entirely) are at the top of
+ * menu_island_clip.c.
  * ============================================================================================ */
 #ifndef MENU_ISLAND_CLIP_H
 #define MENU_ISLAND_CLIP_H
@@ -40,6 +40,11 @@
  * passed through untouched with a true return. */
 bool menu_island_clip_rect(float *left, float *right, float *top, float *bottom,
                            float island_left, float island_top);
+
+/* True when the blitter's `fill` argument means "draw all of it", which is the only case in which
+ * clamping the rectangle is the same operation the retail screen edge performed. Exposed for the
+ * test; menu_island_clip.c's header explains what the blitter does with any other value. */
+bool menu_island_clip_fill_is_whole(float fill);
 
 /* Resolves its two sites and installs the sprite-blitter detour. Returns true only when the
  * clamp is really in force. Call AFTER window_fit_install(): the island origin is derived from

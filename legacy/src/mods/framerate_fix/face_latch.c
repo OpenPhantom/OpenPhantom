@@ -54,8 +54,14 @@
  * ==============================================================================================
  * The repair
  *
- * The completion test 0x42E3AD has exactly one caller, 0x434109 inside the 0x202 handler, so a
- * detour there reaches the facing command and nothing else:
+ * The opcode jump table at 0x435331 maps 0x202 to the handler at 0x43408F. That handler stores the
+ * clip index, applies the heading only when rec+0x1BC differs from rec+0x1C0, and then at 0x434104
+ * pushes the opcode's third operand and the record, calls the completion test and stores the
+ * result at [ebp-0x18].
+ *
+ * The completion test 0x42E3AD has exactly one caller, that call at 0x434109. The claim rests on
+ * an E8 rel32 sweep of the whole .text, not on the call sites that were already known, and it is
+ * what bounds this module to the facing command and nothing else:
  *
  *     FIRST CALL   latches rec+0x1BC = rec+0x1C0, starts the clip, and when the opcode's third
  *                  operand is zero ORs RDMODE_HOLDEND into the track's mode flags at 0x42E456 and
@@ -74,8 +80,8 @@
  * returns and the next rendered frame raises it again. That is the defect itself.
  *
  * Two repairs that look cleaner and are worse. Setting RDTRACK_HELD on the track from the poll
- * suppresses completion permanently, and across the shipped levels only a few dozen of the 2288
- * facing nodes have the shape that stalls while the rest need the completion to arrive. Making
+ * suppresses completion permanently, and across the eleven levels 38 of the 2288 facing nodes have
+ * the shape that stalls, so the overwhelming majority need the completion to arrive. Making
  * bComplete edge triggered where it is written is a change on the shared path for every track of
  * every puppet, and the latch has at least three independent consumers: this one, the enemy tick
  * at 0x432EB6 with its consume at 0x432EDD, and opcode 0x20F at 0x4341A0 with its consume at
@@ -158,6 +164,7 @@ static signature_t sites[SITE_COUNT] = {
  *     puppet = [thing  + 0x18]
  *     slot   = [object + 0xEC]
  *     track  = puppet + 8 + slot * 0x14C
+ *     holdend = [track + 0x13C] & 1
  *
  * The stride and base agree with the track indexing inside the advance at 0x483D3A to 0x483D43,
  * which computes 83 * slot * 4 + 8, that is 0x14C * slot + 8. */

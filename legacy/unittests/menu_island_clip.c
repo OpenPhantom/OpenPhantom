@@ -8,7 +8,9 @@
  *     (1600,840), and a halo poking past its left border is cut exactly at 1600;
  *   * at real 640x480 the island IS the screen, so the clamp agrees with what the retail
  *     rasterizer did at the screen edge;
- *   * bounds the clamp has no business judging (reversed, NaN) pass through untouched.
+ *   * bounds the clamp has no business judging (reversed, NaN) pass through untouched;
+ *   * only a whole fill is a rectangle the clamp may touch at all, because the blitter recomputes
+ *     the right bound from the left one for any smaller value.
  */
 #include "unittest.h"
 
@@ -132,6 +134,26 @@ static void test_not_ours_to_judge(void)
     }
 }
 
+static void test_only_a_whole_fill_may_be_clamped(void)
+{
+    ut_section("a partial fill is not a rectangle the clamp may touch");
+
+    /* The blitter's first act is xRight = (xRight - xLeft) * fill + xLeft, so below 1 the right
+     * bound handed in is not the one drawn and moving either bound moves the picture. */
+    ut_check(menu_island_clip_fill_is_whole(1.0f),
+             "a whole fill is the case the clamp is defined for");
+    ut_check(!menu_island_clip_fill_is_whole(0.5f),
+             "a half-drawn bar is left to the engine");
+    ut_check(!menu_island_clip_fill_is_whole(0.0f),
+             "an empty bar is left to the engine");
+    ut_check(!menu_island_clip_fill_is_whole(0.999f),
+             "and so is a hair under whole, because the wipe still moves the right bound");
+
+    /* The blitter clamps fill above 1 back to 1, so anything larger is a whole draw. */
+    ut_check(menu_island_clip_fill_is_whole(1.5f),
+             "an over-full fill is clamped to whole by the engine and counts as whole");
+}
+
 int main(void)
 {
     test_identity_inside();
@@ -140,6 +162,7 @@ int main(void)
     test_outside_is_skipped();
     test_640x480_is_the_screen();
     test_not_ours_to_judge();
+    test_only_a_whole_fill_may_be_clamped();
 
     return ut_summary("menu island clip");
 }

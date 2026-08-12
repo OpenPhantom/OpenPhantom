@@ -37,6 +37,11 @@ add_engine_fix(framerate_fix
     camera_compensation.c
     draw_interpolation.c
     framerate_stats.c
+    frame_delta.c
+    sim_clock.c
+    particle_clock.c
+    mover_interpolation.c
+    mover_blend.c
 )
 target_link_libraries(framerate_fix PRIVATE winmm)
 
@@ -51,6 +56,7 @@ add_engine_fix(enhanced_resolution
     pointer_cage.c
     focus_guard.c
     menu_island_clip.c
+    mode_filter.c
 )
 
 add_engine_fix(hud_ratio_scaling
@@ -67,6 +73,7 @@ add_engine_fix(view_distance_fix
     cell_watchdog.c
     draw_table.c
     fog_regime.c
+    spawn_census.c
 )
 
 add_engine_fix(dismemberment
@@ -83,9 +90,15 @@ add_engine_fix(dismemberment
 add_engine_fix(enhanced_input
     dll_main.c
     enhanced_input.c
+    input_config.c
+    input_gate.c
     input_menu.c
     input_slider.c
     mouse_look.c
+    mouse_config.c
+    mouse_rate.c
+    raw_mouse.c
+    menu_cursor.c
     player_sites.c
     steer_lean.c
     steer_log.c
@@ -96,6 +109,7 @@ add_engine_fix(enhanced_input
     free_look_math.c
     camera_sites.c
     camera_watch.c
+    view_lead.c
 )
 
 # music_sites.c is the patterns and the cross-checks that decide whether to believe them;
@@ -124,10 +138,10 @@ add_engine_fix(decal_fix
     decal_fix.c
 )
 
-# Two independent bugs behind "the SFX slider resets to full on reload": the value saved came
-# from an unreliable AIL query instead of the engine's own volume mirror, and separately the
-# startup load-time apply is a guaranteed no-op because sfx_sound_init marks sound ready one
-# statement after it applies the loaded volume. See the DLL's own header comment and README.
+# Two independent bugs behind "the SFX slider resets to full on reload": the value saved came from
+# an unreliable AIL query instead of the engine's own volume mirror, and separately the startup
+# load-time apply is a guaranteed no-op because bapsound_moduleInit marks sound ready one statement
+# after it applies the loaded volume. See the DLL's own header comment and README.
 add_engine_fix(sfx_volume_save_fix
     dll_main.c
     sfx_volume_save_fix.c
@@ -142,22 +156,55 @@ add_engine_fix(diagnostics
     diag_audio.c
     diag_world.c
     diag_flow.c
+    diag_frame.c
+    diag_present.c
 )
-target_link_libraries(diagnostics PRIVATE winmm)
+target_link_libraries(diagnostics PRIVATE winmm psapi pdh)
 
-# video_overlay.c finds the game's own window and plays into a borderless popup owned by it through
-# a 32-bit libVLC install found and loaded dynamically at runtime (vlc_playback.c - no libVLC SDK
-# linked here at all, on purpose, see its own header comment); fmv_player.c is the one
-# byte-evidenced detour that decides when to. This used to be Media Foundation/MFPlay running as a
-# separate process (fmv_player_host.exe, no longer in this tree); see video_overlay.c's header
-# comment for the full chronology of why both of those changed. advapi32 (RegOpenKeyExW etc., used
-# to find a non-default VLC install) is already one of MSVC's own default libraries, linked here
-# anyway for the same reason winmm/ole32 are explicit elsewhere in this tree: so the dependency is
-# visible at a glance instead of relying on an implicit default.
+# Five files, and the seams are the four different ways this feature fails. fmv_player.c is the one
+# byte-evidenced detour and decides WHEN a movie is ours. vlc_locate.c answers "is there a 32-bit
+# libVLC on this machine at all", which is the question about somebody's registry and is kept apart
+# for the same reason player_sites.c and music_sites.c are. vlc_playback.c loads that libVLC and
+# drives it. video_overlay.c owns the window it draws into. movie_path.c is the arithmetic, kept
+# apart for the same reason fov_math.c and free_look_math.c are: it is the only part of this
+# feature a test can observe without the game, and unittests/movie_path.c links it on its own.
+# advapi32 (RegOpenKeyExW etc.) is already one of MSVC's own default libraries, linked here anyway
+# for the same reason winmm/ole32 are explicit elsewhere in this tree: so the dependency is visible
+# at a glance instead of relying on an implicit default.
 add_engine_fix(fmv_player
     dll_main.c
     fmv_player.c
+    movie_path.c
+    menu_cursor_cells.c
     video_overlay.c
+    vlc_locate.c
     vlc_playback.c
 )
 target_link_libraries(fmv_player PRIVATE advapi32)
+
+
+# Two unbounded writes in one engine function, so one DLL and one hook. Nothing here changes
+# what is drawn in a scene that stays inside the limits the artists worked to.
+add_engine_fix(render_guard
+    dll_main.c
+    render_guard.c
+    face_bounds.c
+)
+
+# An effect with no geometry state, re-rolled once per rendered frame because that is what 1999
+# meant by once in a while. It is put back on the engine's own substep clock, so it changes at
+# the rate it was authored for instead of at the frame rate.
+add_engine_fix(effect_clock
+    dll_main.c
+    effect_clock.c
+    substep_noise.c
+)
+
+# Not a fix but a capability. One immediate governs both texture axes, and on the original
+# artwork the patch is the identity, because no page the game ships is larger than 64 pixels.
+add_engine_fix(large_textures
+    dll_main.c
+    large_textures.c
+    texture_size.c
+)
+

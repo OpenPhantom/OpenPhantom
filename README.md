@@ -12,7 +12,7 @@ scratch. The first is useful now; the second is where it ends up.
 
 | | |
 |---|---|
-| [`legacy/`](legacy/) | **Working.** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. Twelve DLLs and a loader, built with CMake. See its [README](legacy/README.md) |
+| [`legacy/`](legacy/) | **Working.** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
 | `architecture/` | How the original engine is put together, written down. Not started |

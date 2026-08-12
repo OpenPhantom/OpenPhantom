@@ -1,4 +1,4 @@
-/* dll_main.c: entry point of sfx_volume_save_fix.dll. See ../common/mod_entry.h for the contract. */
+/* dll_main.c: entry point of sfx_volume_save_fix.dll. See common/mod_entry.h for the contract. */
 #include "sfx_volume_save_fix.h"
 
 #include "common/mod_entry.h"

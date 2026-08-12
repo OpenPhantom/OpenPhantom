@@ -64,8 +64,7 @@ bool free_look_set_enabled(bool enabled);
  *
  * `strafe` is +1 for right and -1 for left, already inverted per configuration.
  * `stand_mode` gates the forced walk exactly as the sideways walk gates it. */
-bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bool stand_mode,
-                     float substep_seconds);
+bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bool stand_mode);
 
 /* Phase 7, BEFORE the original: turn the body toward the direction phase 2 asked for. The write
  * is not undone afterwards, unlike the sideways walk's travel offset this heading change is

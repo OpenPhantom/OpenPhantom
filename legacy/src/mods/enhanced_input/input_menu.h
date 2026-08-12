@@ -12,8 +12,4 @@
  * parameters. Loader time satisfies that by construction. */
 void input_menu_install(void);
 
-/* True when at least one check box is on the screen AND its state is read back. Anything less than
- * both is not installed: a box nobody reads is worse than no box. */
-bool input_menu_is_installed(void);
-
 #endif /* INPUT_MENU_H */

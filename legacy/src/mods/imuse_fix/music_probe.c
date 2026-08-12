@@ -71,7 +71,7 @@
 #define TRACE_LINE_LIMIT 100000
 
 typedef struct probe_config {
-    bool    enabled;
+    bool    probe;               /* MusicProbe, the observer. A diagnostic, and off by default */
     int32_t report_seconds;      /* 0 = only report the anomaly, never the routine line */
     int32_t stress_hz;           /* 0 = off */
     bool    trace;               /* copy iMUSE's own commentary into our log */
@@ -124,7 +124,7 @@ static probe_state_t  state;
 /* ============================================================================================ */
 static void load_configuration(void)
 {
-    config.enabled = ini_read_bool(IMUSE_FIX_SECTION, "MusicProbe", false);
+    config.probe = ini_read_bool(IMUSE_FIX_SECTION, "MusicProbe", false);
     config.report_seconds = ini_read_int(IMUSE_FIX_SECTION, "MusicProbeSeconds", 10);
     config.stress_hz = ini_read_int(IMUSE_FIX_SECTION, "MusicStressHz", 0);
     config.trace = ini_read_bool(IMUSE_FIX_SECTION, "MusicTrace", false);
@@ -406,7 +406,9 @@ void music_probe_frame(void)
         state.stall_reported = false;
     }
 
-    if (config.report_seconds > 0 &&
+    /* The routine line is the probe's, not the watchdog's. A session that only asked for the
+     * repairs gets the stall and recovery lines, which report a fault, and nothing else. */
+    if (config.probe && config.report_seconds > 0 &&
         now - state.last_report_ms >= (DWORD)config.report_seconds * 1000u) {
         report_routine(ticks, gate, now - state.last_report_ms);
         state.last_report_ms = now;
@@ -427,13 +429,22 @@ bool music_probe_install(void)
     state.installed = true;
 
     load_configuration();
-    if (!config.enabled) {
+
+    /* The REPAIRS in this file are not part of the probe and must not be gated behind it. The
+     * lock fix defaults to on and the watchdog is switched on in the shipped ini, while the probe
+     * is a diagnostic that defaults to off, so a check on the probe alone left both repairs
+     * uninstalled in every ordinary session and said nothing about it in the log. Ask instead
+     * whether anything in this file is wanted at all. */
+    if (!config.probe && !config.lock_fix && !config.watchdog && !config.trace &&
+        config.stress_hz <= 0) {
+        log_info("MusicProbe, MusicLockFix, MusicHeartbeatWatchdog, MusicTrace and MusicStressHz "
+                 "are all off, so the music service is left exactly as the game shipped it");
         return false;
     }
 
     if (!imuse_sites_resolve(&state.sites)) {
-        log_warning("MusicProbe=1 but iMUSE.DLL could not be read, no heartbeat watch this "
-                    "session");
+        log_warning("iMUSE.DLL could not be read, so the music lock repair, the heartbeat "
+                    "watchdog and the probe are all off this session");
         return false;
     }
 
@@ -448,7 +459,11 @@ bool music_probe_install(void)
      * if a level does not define it the DLL simply ignores the cue, which still costs it the gate
      * round trip this is here to provoke. */
     state.stress_cue = 1;
-    state.active = true;
+
+    /* The per-frame tick carries the stall detection, the watchdog that acts on it, and the
+     * stress driver. The lock fix and the trace need none of it, so a session that only wants
+     * those two does not pay for a tick. */
+    state.active = config.probe || config.watchdog || config.stress_hz > 0;
 
     /* After state.active, so a line that arrives during installation already finds the two cells
      * readable. Nothing here can be reached before the sites resolved. */
@@ -478,11 +493,19 @@ bool music_probe_install(void)
                     "the gate brings the music back, not how often the gate gets stuck.",
                     (int)config.watchdog_ms);
     }
-    log_info("music heartbeat watch is live (routine report every %d s, 0 = only on a stall). "
-             "A stall is declared after %u ms in which no heartbeat BODY ran%s.",
-             (int)config.report_seconds, (unsigned)STALL_DECLARED_AFTER_MS,
-             state.sites.heartbeat_last_ms != NULL
-                 ? "" : ", the body stamp did not resolve, so this falls back to the weaker "
-                        "callback counter and cannot tell a refused body from a dead timer");
+    if (state.active) {
+        log_info("music heartbeat watch is live (%s). A stall is declared after %u ms in which no "
+                 "heartbeat BODY ran%s.",
+                 config.probe
+                     ? (config.report_seconds > 0 ? "routine report on" : "reports on a stall only")
+                     : "MusicProbe=0, so only a stall is reported",
+                 (unsigned)STALL_DECLARED_AFTER_MS,
+                 state.sites.heartbeat_last_ms != NULL
+                     ? "" : ", the body stamp did not resolve, so this falls back to the weaker "
+                            "callback counter and cannot tell a refused body from a dead timer");
+    } else {
+        log_info("the music lock repair is installed and nothing watches the heartbeat, which is "
+                 "what MusicProbe=0 with MusicHeartbeatWatchdog=0 asks for");
+    }
     return true;
 }

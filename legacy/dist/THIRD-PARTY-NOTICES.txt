@@ -23,11 +23,14 @@ archive: DxWrapper's licence requires its notice to travel with it.
              mods\dismemberment.dll
              mods\enhanced_input.dll
              mods\enhanced_resolution.dll
+             mods\fmv_player.dll
              mods\framerate_fix.dll
              mods\hud_ratio_scaling.dll
              mods\imuse_fix.dll
              mods\variable_fov.dll
              mods\view_distance_fix.dll
+             tools\convert_movies.ps1
+             tools\Convert Movies.bat
 
   Licence    MIT
   Source     https://github.com/OpenPhantom/OpenPhantom
@@ -101,7 +104,38 @@ archive: DxWrapper's licence requires its notice to travel with it.
 
 
 -------------------------------------------------------------------------------
-4. The game itself
+4. Not in this archive: what fmv_player uses
+-------------------------------------------------------------------------------
+
+  fmv_player.dll plays converted movies through libVLC, and tools\ converts
+  them with FFmpeg. Neither is in this archive and neither is redistributed
+  here. They are named anyway, because a player who ends up with them on disk
+  should be able to find out what they are and where they came from.
+
+    libVLC (libvlc.dll, libvlccore.dll and its plugins)
+      Licence    LGPL v2.1 or later
+      Source     https://github.com/videolan/vlc
+      Where      mods\fmv\, if the installer's media runtime component was
+                 chosen. The installer downloads VideoLAN's own 32-bit build,
+                 checks it against a published hash, and copies the unaltered
+                 files together with VideoLAN's own licence text as
+                 mods\fmv\vlc-License.txt. Nothing is modified, so the source
+                 duty is discharged by the repository above.
+                 fmv_player.dll loads it at run time and links against no part
+                 of it at build time; a machine without it falls back to the
+                 game's original Bink playback.
+
+    FFmpeg
+      Licence    GPL v3 for the build the conversion tool fetches
+      Source     https://ffmpeg.org/
+      Where      nowhere in an installation. tools\convert_movies.ps1 downloads
+                 a pinned build into the user's own local application data
+                 folder, on demand, and runs it there. It is a tool the player
+                 runs on files they already own, not a component of the patch.
+
+
+-------------------------------------------------------------------------------
+5. The game itself
 -------------------------------------------------------------------------------
 
   No game data, executables, assets or other proprietary files are included in

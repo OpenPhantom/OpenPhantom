@@ -31,14 +31,41 @@ add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
 # resolved sites.
 add_unit_test(strafe_walk enhanced_input
     enhanced_input/strafe_walk.c
-    enhanced_input/mouse_look.c
     enhanced_input/free_look_math.c
 )
 
 # The mouse step gets its own test rather than more cases in the one above, because it checks a
 # different kind of claim: not "this formula is right" but "no input is ever lost", which only
 # shows up over a run of drains with uneven frame times.
-add_unit_test(mouse_look enhanced_input enhanced_input/mouse_look.c)
+add_unit_test(mouse_look enhanced_input
+    enhanced_input/mouse_look.c
+    enhanced_input/input_gate.c
+    enhanced_input/mouse_config.c
+    enhanced_input/input_slider.c
+    enhanced_input/mouse_rate.c
+    enhanced_input/raw_mouse.c
+    enhanced_input/menu_cursor.c
+)
+
+# The rate estimator on its own: the boundary correction that divides by what the reports
+# REPRESENT rather than by how long they took to arrive.
+add_unit_test(mouse_rate enhanced_input enhanced_input/mouse_rate.c)
+
+# The per-frame view lead. What is proven here is a property of a SEQUENCE, not of one call: the
+# drawn angle must advance by one frame of hand movement on every frame while the body goes on
+# turning once per simulation step. It carries the first design as a regression, because that one
+# adds the bank without cancelling the interpolation and turns the camera backwards once per step.
+add_unit_test(view_lead enhanced_input
+    enhanced_input/view_lead.c
+    enhanced_input/free_look_math.c
+    enhanced_input/raw_mouse.c
+)
+
+# Whether the delivery survives a SLOW MOUSE, which is the question a field test on one desk
+# cannot answer: the per-frame path is at the mercy of how many device reports land in a frame.
+add_unit_test(delivery_rates enhanced_input
+    enhanced_input/mouse_rate.c
+)
 
 add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_anchor.c)
 add_unit_test(window_fit    enhanced_resolution enhanced_resolution/window_fit.c)
@@ -56,10 +83,11 @@ add_unit_test(pointer_cage enhanced_resolution
     enhanced_resolution/window_fit.c
 )
 
-# The island clamp: the arithmetic that decides where a menu sprite may land. The case worth its
-# name reproduces the reported defect's own numbers: at 3840x2160 the hovered button's halo is cut
-# exactly at island x=1600 instead of stamping the border. window_fit.c comes along for the same
-# reason it does above: the hook asks it for the display mode.
+# The island clamp: the arithmetic that decides where a menu sprite may land, and which sprites the
+# clamp is defined for at all. The case worth its name reproduces the reported defect's own numbers:
+# at 3840x2160 the hovered button's halo is cut exactly at island x=1600 instead of stamping the
+# border. window_fit.c comes along for the same reason it does above: the hook asks it for the
+# display mode.
 add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/menu_island_clip.c
     enhanced_resolution/window_fit.c
@@ -76,9 +104,31 @@ add_unit_test(camera_anchor framerate_fix framerate_fix/camera_compensation.c)
 # progresses, too often and a clip that is still moving is delayed.
 add_unit_test(face_latch framerate_fix framerate_fix/face_latch.c)
 
+# The verdict that separates a gameplay window from a menu window. The counter it reports on is
+# shared with the menu, so before this existed the instrument printed a frame rate as a substep
+# rate, and an open item was raised against the simulation on the strength of it.
+add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c)
+
+# What a moving door looks like between two simulation steps. Pure arithmetic, and every way it
+# can be wrong is silent in review and loud on screen: a destroyed scale flickers the model, a
+# guard measured on unnormalised rows either never smooths a shrunk subnode or never rejects a
+# jump on a grown one, and a skewed basis shears the geometry.
+add_unit_test(mover_blend framerate_fix framerate_fix/mover_blend.c)
+
+# The one claim the simulation clock rebase stands on: taking the same amount off both clocks must
+# leave their difference exactly, because that difference IS the interpolation alpha. A rebase that
+# rounds would inject a fresh error into the quantity it exists to protect, and nothing on screen
+# would say so.
+add_unit_test(sim_clock framerate_fix framerate_fix/sim_clock.c)
+
 # The one predicate that decides whether a call is let into the music DLL. Wrong in either
 # direction and the failure is silent.
 add_unit_test(imuse_guard imuse_fix imuse_fix/imuse_guard.c)
+
+# Which file on disk a movie name turns into. The only part of fmv_player with an answer a test can
+# check: the rest of it is a window, a decoder and a message loop. Both ways of getting it wrong
+# are silent, and one of them asks the file system about a file the player never named.
+add_unit_test(movie_path fmv_player fmv_player/movie_path.c)
 
 add_unit_test(menu_patcher "")
 
@@ -89,3 +139,18 @@ add_unit_test(detour "")
 
 # The pattern matcher every patch in the project stands on.
 add_unit_test(signature "")
+
+# Everything effect_clock answers the engine with in place of a random draw. Wrong in the range
+# and the engine's own scaling runs off the end; wrong in the mixing and either every flickering
+# object in a room goes dark together or an effect freezes instead of being paced.
+add_unit_test(substep_noise effect_clock effect_clock/substep_noise.c)
+
+# The two bounds that are the whole point of render_guard. Both are comparisons, and every way
+# they can be wrong is silent in review: too tight and authored geometry is refused, too loose
+# and the write that overruns still happens.
+add_unit_test(face_bounds render_guard render_guard/face_bounds.c)
+
+# Which requested texture ceiling is accepted, clamped or refused. The engine never asks the
+# device for its own maximum, so this validation is the only thing between a setting and a
+# surface creation that fails.
+add_unit_test(texture_size large_textures large_textures/texture_size.c)

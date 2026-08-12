@@ -43,6 +43,7 @@
 #include "cursor_anchor.h"
 #include "focus_guard.h"
 #include "menu_island_clip.h"
+#include "mode_filter.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
 
@@ -177,6 +178,7 @@ typedef struct resolution_config {
     bool reacquire_input_on_focus;
     bool widen_menu_cursor_area;
     bool clamp_menu_sprites_to_island;
+    bool filter_mode_enumeration;
 } resolution_config_t;
 
 typedef struct resolution_state {
@@ -206,10 +208,14 @@ static void load_config(void)
 
     config->enabled               = ini_read_bool(RESOLUTION_SECTION, "Enabled", true);
     config->widescreen_modes      = ini_read_bool(RESOLUTION_SECTION, "WidescreenModes", true);
-    config->max_menu_modes        = ini_read_int (RESOLUTION_SECTION, "MaxMenuModes", 40);
+    config->max_menu_modes        = ini_read_int (RESOLUTION_SECTION, "MaxMenuModes", 63);
     config->force_width           = ini_read_int (RESOLUTION_SECTION, "ForceWidth", 0);
     config->force_height          = ini_read_int (RESOLUTION_SECTION, "ForceHeight", 0);
-    config->log_mode_table        = ini_read_bool(RESOLUTION_SECTION, "LogModeTable", true);
+    /* Off, like every other diagnostic in this tree. A release ships nothing switched on that
+     * only writes to the log, so the default has to be off in the code as well as in the shipped
+     * ini: that ini invites deleting any line you do not want to change, and a diagnostic that
+     * comes back when its line is deleted is on by accident. */
+    config->log_mode_table        = ini_read_bool(RESOLUTION_SECTION, "LogModeTable", false);
     config->menu_keeps_resolution = ini_read_bool(RESOLUTION_SECTION, "MenuKeepsResolution", true);
 
     /* DEFAULT OFF, and it is the only setting in this file that defaults to leaving the engine
@@ -243,32 +249,45 @@ static void load_config(void)
     config->reacquire_input_on_focus =
         ini_read_bool(RESOLUTION_SECTION, "ReacquireInputOnFocus", true);
 
-    /* Default OFF, and that is a reversal that needs its defect named. This used to default ON,
-     * on the reasoning that a pointer caged to a box in the middle of a 1080p screen is bad
-     * manners. What that reasoning missed is the ERASE: the pause screens repaint through the
-     * menu toolkit's damage rectangles, which live in canvas coordinates and are clipped against
-     * the same hard-coded 640x480 every blit in that toolkit clips against. A cursor quad drawn
-     * partially outside the 640x480 island therefore cannot be expressed as a damage rectangle,
-     * is never repaired, and every crossing of the island's edge leaves a permanent stamp of the
-     * cursor's blue glow on the border (reported as blue blobs bleeding out from behind the pause
-     * menu, following the mouse; the front end never shows it because its 3-D room repaints every
-     * pixel every frame). The engine's own clamp exists precisely so the cursor never goes where
-     * the erase cannot follow, every widget lives inside the island anyway, and at 640x480 the
-     * widened clamp was the identity. So the widening is cosmetic freedom paid for in permanent
-     * screen corruption, and it is now opt-in rather than default. */
+    /* Default ON. The engine clamps the cursor it DRAWS for its own menus to a 607x447 box
+     * anchored at the menu origin, which is 640x480 minus the cursor quad, so at 1080p the
+     * pointer cannot be moved out of a small island in the middle of the screen. At 640x480 the
+     * widened clamp is arithmetically identical to the shipped one, so this can only change what
+     * happens on a mode the engine's own constant was never written for. It does not move or
+     * rescale any menu: the engine already centres those itself.
+     *
+     * KNOWN COST, not yet reproduced here, and the reason this default is under review: the pause
+     * screens repair themselves through the menu toolkit's damage rectangles, which live in canvas
+     * coordinates clipped to the same hard-coded 640x480 every blit in that toolkit clips to. A
+     * cursor quad drawn partly outside the island cannot be expressed as a damage rectangle, so it
+     * is never erased, and a 3840x2160 field report describes every crossing of the island's edge
+     * leaving a permanent stamp of the cursor's blue glow on the border until the screen closes.
+     * The front end never shows it because its 3-D room repaints every pixel every frame. Every
+     * clickable widget lives inside the island either way, so if that report reproduces here this
+     * default becomes OFF; see pointer_cage.c's header for the full mechanism. */
     config->widen_menu_cursor_area =
-        ini_read_bool(RESOLUTION_SECTION, "WidenMenuCursorArea", false);
+        ini_read_bool(RESOLUTION_SECTION, "WidenMenuCursorArea", true);
 
     /* Default ON. This is the other half of MenuKeepsResolution: with the menus running as a
      * 640x480 island instead of bolting the mode down, a menu sprite can reach where the menu's
-     * own erase cannot (the toolkit repairs itself in canvas coordinates clipped to 640x480),
-     * and the hovered button's halo does exactly that, stamping the island's border blue for
-     * the life of the screen. The clamp is bit-identical for every sprite that fits the island,
-     * which is every authored widget, so there is no configuration in which it costs anything;
-     * the switch exists so the repair can be singled out while diagnosing, not because leaving
-     * it off is ever the better picture. */
+     * own erase cannot (the toolkit repairs itself in canvas coordinates clipped to 640x480), and
+     * the hovered button's halo does exactly that, stamping the island's border blue for the life
+     * of the screen. The clamp is bit-identical for every sprite that fits the island, which is
+     * every authored widget, so there is no configuration in which it costs anything; the switch
+     * exists so the repair can be singled out while diagnosing, not because leaving it off is ever
+     * the better picture. Unlike the cursor cage above, this one is about the sprites the WIDGETS
+     * draw, and the two defects are independent: the reported smears survive WidenMenuCursorArea=0
+     * and track the hovered button rather than the pointer. */
     config->clamp_menu_sprites_to_island =
         ini_read_bool(RESOLUTION_SECTION, "ClampMenuSpritesToIsland", true);
+
+    /* Default ON. The engine records every bit depth the driver reports into a table of 64 and
+     * cancels the enumeration when it is full, then keeps only the 16-bit entries. Two thirds of
+     * those records are therefore spent on modes the options screen can never show, and which
+     * resolutions survive depends on the order the driver enumerated in. Filtering costs nothing
+     * on a driver that only reports 16 bit, because then there is nothing to filter. */
+    config->filter_mode_enumeration =
+        ini_read_bool(RESOLUTION_SECTION, "FilterModeEnumeration", true);
 
     if (config->max_menu_modes > MAX_MENU_MODES_LIMIT) {
         config->max_menu_modes = MAX_MENU_MODES_LIMIT;
@@ -410,6 +429,11 @@ static int32_t __cdecl hook_enum_modes(mode_label_t *out)
      * screen was actually handed, and the first field report, "the list only had 800x600",
      * arrived with no way to tell whether the enumerator or the filter was at fault, because this
      * used to sit behind a verbose flag. */
+    /* What the filter kept out of the enumeration, next to what the enumeration produced. The
+     * two numbers only mean something together: a short list with nothing filtered is a driver
+     * offering little, a short list with a lot filtered is the table having been full. */
+    mode_filter_log_summary();
+
     log_info("enumModes handed %d mode(s) to the options screen:", (int)kept);
     for (index = 0; index < kept; ++index) {
         log_info("   [%2d] index %-3d \"%s\"", (int)index, (int)out[index].index,
@@ -615,6 +639,12 @@ void enhanced_resolution_install(void)
     resolve_mode_table();
 
     resolution_state.installed = true;
+
+    /* FIRST of all the patches here, and that is an ordering constraint rather than a reading
+     * order. The display mode enumeration runs once, inside graphics startup, and the filter can
+     * only work on an enumeration that has not happened yet. Everything below acts on the list
+     * that enumeration produced. */
+    (void)mode_filter_install(resolution_state.config.filter_mode_enumeration);
 
     install_aspect_gate();
     install_enum_modes_cap();

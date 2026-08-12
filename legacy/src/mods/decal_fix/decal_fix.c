@@ -340,8 +340,8 @@ static int32_t __cdecl hook_decal_submit(void *stage, uint32_t render_state, flo
      * shape the engine's own buffer can hold, which would mean we are wrong about the arguments. */
     if (decal_state.enabled && decal_state.depth_bias > 0.0f && vertices != NULL &&
         count > 0u && count <= MAX_VERTICES &&
-        memory_is_readable_range((uintptr_t)vertices,
-                                 count * VERTEX_STRIDE_FLOATS * sizeof(float))) {
+        memory_try_readable((uintptr_t)vertices,
+                            count * VERTEX_STRIDE_FLOATS * sizeof(float))) {
         bool reversed = depth_test_is_reversed();
 
         if (!decal_state.reported_direction) {

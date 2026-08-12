@@ -1,5 +1,19 @@
 /* strafe_walk.c: walking sideways by driving the engine's own walk somewhere else.
  *
+ * SIZE NOTE: a little over six hundred lines, and the reason is that this file holds both halves
+ * of one
+ * quantity. The angle is damped on the simulation clock and drawn on the frame clock, and the
+ * two
+ * are not separable without putting the pair of floats they interpolate between on either side of a
+ * translation unit boundary. That is the same seam a previous split was rejected on elsewhere in
+ * this directory, for the same reason.
+ *
+ * The seam, if this ever needs one, is the DRAWN half at the bottom: its two signatures, its cell
+ * resolution and its detour share nothing with the simulation half except three fields of the state
+ * struct and the setter. That is a shared internal header away, and the file would come back to
+ * about four hundred lines. Do not cut anywhere else; the arithmetic above and the guard below are
+ * one argument.
+ *
  * ==============================================================================================
  * Why nothing here moves the player
  *
@@ -84,9 +98,19 @@
 
 #include "player_record.h"
 
+#include "common/detour.h"
+#include "common/logging.h"
+#include "common/memory.h"
+#include "common/signature.h"
+
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+/* One argument, cdecl, and a result in EAX. Read out of the call site rather than assumed: the
+ * caller pushes one dword and then does `add esp, 4`, which is the caller cleaning its own
+ * argument, and it stores the returned value. */
+typedef int32_t (__cdecl *object_draw_fn_t)(void *argument);
 
 #define PI_F 3.14159265358979323846f
 
@@ -125,9 +149,38 @@ typedef struct strafe_walk_state {
     /* The damped angle, and the only state this file keeps between substeps. Non-zero means the
      * model root is ours and has to be brought home before we stop writing it. */
     float             theta_degrees;
+
+    /* THE DRAWN HALF. The angle above is a simulation quantity, damped once per substep, and until
+     * this existed it was also what got drawn: the pose compositor multiplies the node euler in
+     * after the animation blend, so whatever stands in the node is exactly what appears. At 240
+     * frames a second that is one new orientation every seven or eight frames, and the quarter
+     * second ease into and out of a strafe arrives as a visible staircase.
+     *
+     * So the pair is kept and the drawn value is interpolated between them, on the engine's own
+     * weight, once per rendered frame. */
+    float             theta_previous;      /* what the angle was at the start of this substep */
+    bool              damped_this_substep; /* whether our damper actually ran in it            */
+    bool              owns_node;           /* whether the model root is ours to write at all   */
+    uint32_t          previous_tick;       /* the substep counter as of the last drawn frame   */
+    uint8_t          *record;              /* the player record, captured where it is known    */
+
+    /* Resolved once at install. Plain pointers rather than reads through the memory helper: this
+     * runs once per rendered frame and the cells are inside the host image, which is never
+     * unmapped, so one check at install is the whole check needed. */
+    bool                     installed;
+    detour_t                 draw;
+    object_draw_fn_t         draw_original;
+    const volatile uint32_t *substep_counter;
+    const volatile float    *alpha_global;
+    const volatile uint32_t *alpha_gate;
+    const volatile float    *alpha_latch;
+    const volatile uint16_t *throttle_bytes;
 } strafe_walk_state_t;
 
 static strafe_walk_state_t strafe_state;
+
+static void strafe_draw_install(void);
+static void open_substep(uint8_t *record);
 
 static float read_field(const uint8_t *record, int offset)
 {
@@ -150,6 +203,18 @@ static float clamp_float(float value, float minimum, float maximum)
     return value;
 }
 
+/* Called at the top of every substep in which our damper is about to run. It records the angle the
+ * substep starts from, which is one half of what the drawn frames interpolate between, and it says
+ * that the damper really ran. The second part is not bookkeeping, it is the guard described at the
+ * per-frame callback below. */
+static void open_substep(uint8_t *record)
+{
+    strafe_state.theta_previous      = strafe_state.theta_degrees;
+    strafe_state.damped_this_substep = true;
+    strafe_state.owns_node           = true;
+    strafe_state.record              = record;
+}
+
 void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, bool turns_body,
                       float settle_seconds, float max_rate_deg_per_second)
 {
@@ -157,11 +222,16 @@ void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, bool turns_body,
     strafe_state.turns_body              = turns_body;
     strafe_state.settle_seconds          = settle_seconds;
     strafe_state.max_rate_deg_per_second = max_rate_deg_per_second;
+
+    strafe_draw_install();
 }
 
 void strafe_walk_reset(void)
 {
-    strafe_state.theta_degrees = 0.0f;
+    strafe_state.theta_degrees       = 0.0f;
+    strafe_state.theta_previous      = 0.0f;
+    strafe_state.damped_this_substep = false;
+    strafe_state.owns_node           = false;
 }
 
 float strafe_walk_travel_offset(float strafe, float forward, float drive_sign)
@@ -291,6 +361,7 @@ float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds)
     target = strafe_walk_travel_offset(strafe, forward, drive_sign);
     target = clamp_float(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
 
+    open_substep(record);
     strafe_state.theta_degrees = strafe_walk_damp_step(
         strafe_state.theta_degrees, target, substep_seconds,
         strafe_state.settle_seconds, strafe_state.max_rate_deg_per_second);
@@ -309,6 +380,7 @@ bool strafe_walk_release(uint8_t *record, float substep_seconds)
         return false;
     }
 
+    open_substep(record);
     strafe_state.theta_degrees = strafe_walk_damp_step(
         strafe_state.theta_degrees, 0.0f, substep_seconds,
         strafe_state.settle_seconds, strafe_state.max_rate_deg_per_second);
@@ -351,4 +423,274 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
     radians = turned * (PI_F / 180.0f);
     write_field(record, PLAYER_FACING_X, -(float)sin((double)radians));
     write_field(record, PLAYER_FACING_Y,  (float)cos((double)radians));
+}
+
+/* ==============================================================================================
+ * THE DRAWN ANGLE
+ *
+ * Everything above runs on the simulation clock, once every 1/32 s, and that is right: a damper is
+ * a simulation quantity. What was wrong is that the damped value was also the DRAWN value. The pose
+ * compositor multiplies the node euler in after the animation blend, so whatever stands in the node
+ * is exactly what appears on screen, with nothing to smooth it. At 240 frames a second the body
+ * holds one orientation for seven or eight frames and then jumps, and the quarter second ease into
+ * and out of a strafe arrives as a staircase.
+ *
+ * The repair is the one the engine already applies to every object it draws: interpolate between
+ * the previous and the current simulation value, on the engine's own weight, once per rendered
+ * frame. The engine even hands us the weight, so nothing here has to invent a clock.
+ *
+ * WHERE. bapobj_drawAll, entered once per rendered frame before any pose is composed, which is what
+ * makes a write here land in the SAME frame. Writing at frame end instead would buy the smoothness
+ * and pay a frame of latency for it.
+ *
+ * THE EVIDENCE FOR THE HOOK POINT. bapobj_drawAll is reached once per rendered frame, and the
+ * argument shape is read out of its only call site rather than assumed:
+ *
+ *     00410908  mov eax, [ebp+0x10]
+ *     0041090B  push eax
+ *     0041090C  call 0x411028          bapobj_drawAll
+ *     00410911  add esp, 4             the caller cleans its own argument, so cdecl, one argument
+ *     00410914  mov [ebp-4], eax       and it returns a value
+ *
+ * The interpolation weight and the two cells that select between its live and frozen forms are
+ * read out of the operands inside that function, at +0x3C, +0x48 and +0x51 of the pattern below.
+ * The substep counter comes from a second site, inside the thing draw and deliberately not at its
+ * entry, because another feature detours that entry and a pattern anchored there would stop
+ * matching once it has. Both patterns resolve to exactly one match in each of the six shipped
+ * executables, including the recompiled one, where the functions sit at the same addresses but
+ * every cell has moved.
+ *
+ * THE GUARD THAT IS NOT OPTIONAL. Our damper runs inside the player phases, and three of the
+ * fourteen player modes skip both of those phases, and two more skip one of them, while the
+ * engine's substep counter and its
+ * interpolation weight keep running. Without the guard the pair stays frozen apart while the weight
+ * sweeps zero to one every 1/32 s, and the body sweeps the same few degrees thirty-two times a
+ * second, for as long as that mode lasts. That is worse than the staircase it replaces. Collapsing
+ * the pair on any substep our damper did not run in is what prevents it, and it has to happen
+ * before any early return, or a frame we decline to write still leaves the pair open.
+ * ============================================================================================== */
+
+/* bapobj_drawAll's own prologue and the first block of its frame set-up. The five absolute operands
+ * are wildcarded; three of them are what this file needs and are read back out. */
+static const uint8_t SIG_OBJECT_DRAW_ALL[] = {
+    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0xD8, 0x04, 0x00, 0x00,
+    0xC7, 0x85, 0xF0, 0xFB, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xC7, 0x85, 0xE4, 0xFB, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xC7, 0x85, 0xDC, 0xFB, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xC7, 0x85, 0xA8, 0xFB, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xC7, 0x85, 0xEC, 0xFB, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xA1, 0x00, 0x00, 0x00, 0x00,
+    0x89, 0x85, 0xE0, 0xFB, 0xFF, 0xFF,
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x74, 0x0C,
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x89, 0x8D, 0xE0, 0xFB, 0xFF, 0xFF,
+    0x8B, 0x95, 0xE0, 0xFB, 0xFF, 0xFF,
+    0x89, 0x15, 0x00, 0x00, 0x00, 0x00
+};
+static const uint8_t MSK_OBJECT_DRAW_ALL[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
+};
+#define OBJECT_DRAW_ALL_PROLOGUE   9u
+#define OFFSET_ALPHA_GLOBAL     0x3Cu    /* behind A1     mov eax,[abs32]   */
+#define OFFSET_ALPHA_GATE       0x48u    /* behind 83 3D  cmp dword [abs32] */
+#define OFFSET_ALPHA_LATCH      0x51u    /* behind 8B 0D  mov ecx,[abs32]   */
+
+/* The substep counter, and the two bytes that say whether the pose is still throttled. Both come
+ * from one site inside the thing draw, deliberately not from its entry: another feature detours
+ * that entry and a pattern starting there would stop matching once it has. The two throttle bytes
+ * are wildcarded so this resolves whether or not that patch is installed. */
+static const uint8_t SIG_POSE_CLOCK[] = {
+    0x8B, 0x3D, 0x00, 0x00, 0x00, 0x00,
+    0x8D, 0x4C, 0xCA, 0x24,
+    0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x48, 0x1C,
+    0x3B, 0xCF,
+    0x00, 0x00,
+    0x8D, 0x54, 0x24, 0x24,
+    0x52, 0x50,
+    0xE8, 0x00, 0x00, 0x00, 0x00
+};
+static const uint8_t MSK_POSE_CLOCK[] = {
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00
+};
+#define OFFSET_SUBSTEP_COUNTER  0x02u
+#define OFFSET_THROTTLE_BYTES   0x15u
+
+/* The two bytes stand as a conditional jump until the pose throttle is removed, and as two NOPs
+ * afterwards. Only in the second case does the compositor rebuild on every rendered frame, and only
+ * then is there anything for an interpolated angle to be drawn into. */
+#define THROTTLE_REMOVED        0x9090u
+
+static bool resolve_cell(uintptr_t site, unsigned offset, const void **out)
+{
+    uint32_t address = 0;
+
+    if (!memory_read_u32(site + offset, &address) ||
+        !memory_is_inside_image(address, sizeof(uint32_t))) {
+        return false;
+    }
+    *out = (const void *)(uintptr_t)address;
+    return true;
+}
+
+/* The engine's own choice, read exactly as it is about to make it a few instructions after we
+ * return: a frozen weight when the gate is set, the live one otherwise. Reading only the live one
+ * would be wrong on every frame the pause gate skipped the simulation while the draw kept
+ * running. */
+static float current_alpha(void)
+{
+    float alpha;
+
+    if (*strafe_state.throttle_bytes != THROTTLE_REMOVED) {
+        return 1.0f;                  /* the pose is still throttled: draw what we always drew */
+    }
+
+    alpha = (*strafe_state.alpha_gate != 0u) ? *strafe_state.alpha_latch
+                                             : *strafe_state.alpha_global;
+
+    /* The engine's own arithmetic keeps this inside (0, 1], so this is a bolt rather than a
+     * correction. It stays because the product is written straight into the drawn pose, and a NaN
+     * there is a character that silently disappears. The !(>) form catches NaN as well. */
+    if (!(alpha > 0.0f)) {
+        return 0.0f;
+    }
+    return (alpha > 1.0f) ? 1.0f : alpha;
+}
+
+static void draw_interpolated_angle(void)
+{
+    uint8_t *record;
+    void    *body;
+    uint32_t tick;
+    float    drawn;
+
+    if (!strafe_state.owns_node) {
+        return;
+    }
+
+    /* FIRST, before anything can return early. See the guard note above. */
+    tick = *strafe_state.substep_counter;
+    if (tick != strafe_state.previous_tick) {
+        if (!strafe_state.damped_this_substep) {
+            strafe_state.theta_previous = strafe_state.theta_degrees;
+        }
+        strafe_state.damped_this_substep = false;
+        strafe_state.previous_tick       = tick;
+    }
+
+    record = strafe_state.record;
+    if (record == NULL || strafe_state.set_node_yaw == NULL || !strafe_state.turns_body) {
+        return;
+    }
+    if (read_field(record, PLAYER_DROP_TIMER) != 0.0f) {
+        return;                        /* the flinch owns the root node while it runs */
+    }
+    body = *(void *const *)(record + PLAYER_ACTOR);
+    if (body == NULL) {
+        return;
+    }
+
+    drawn = strafe_state.theta_previous
+          + (strafe_state.theta_degrees - strafe_state.theta_previous) * current_alpha();
+    if (!isfinite(drawn)) {
+        return;
+    }
+
+    strafe_state.set_node_yaw(body, 0, drawn);
+
+    /* The claim is dropped only after an exact zero has been WRITTEN, which is one substep later
+     * than the angle reaching zero. Dropping it as soon as the angle is zero would stop the writing
+     * while the last frames were still interpolating toward it, and the body would stay a fraction
+     * of a degree off for good. */
+    if (strafe_state.theta_previous == 0.0f && strafe_state.theta_degrees == 0.0f) {
+        strafe_state.owns_node = false;
+    }
+}
+
+static int32_t __cdecl hook_object_draw(void *argument)
+{
+    draw_interpolated_angle();
+    return strafe_state.draw_original(argument);
+}
+
+static void strafe_draw_install(void)
+{
+    uintptr_t draw_site;
+    uintptr_t clock_site;
+    uint32_t  counter = 0;
+
+    if (strafe_state.installed) {
+        return;
+    }
+
+    draw_site = signature_find_detour_target(SIG_OBJECT_DRAW_ALL, MSK_OBJECT_DRAW_ALL,
+                                             sizeof SIG_OBJECT_DRAW_ALL, OBJECT_DRAW_ALL_PROLOGUE);
+    if (draw_site == 0) {
+        log_warning("the object draw did not resolve, so the strafe body angle keeps being drawn "
+                    "straight off the simulation clock and steps once per simulation step. "
+                    "Everything else about walking sideways is unaffected.");
+        return;
+    }
+
+    clock_site = signature_find_unique(SIG_POSE_CLOCK, MSK_POSE_CLOCK, sizeof SIG_POSE_CLOCK);
+    if (clock_site == 0) {
+        log_warning("the substep counter did not resolve, so the strafe body angle is left on the "
+                    "simulation clock. Interpolating without it would be worse than not "
+                    "interpolating: the guard against a frozen pair is built on that counter.");
+        return;
+    }
+
+    if (!memory_read_u32(clock_site + OFFSET_SUBSTEP_COUNTER, &counter) ||
+        !memory_is_inside_image(counter, sizeof(uint32_t)) ||
+        !resolve_cell(draw_site, OFFSET_ALPHA_GLOBAL, (const void **)&strafe_state.alpha_global) ||
+        !resolve_cell(draw_site, OFFSET_ALPHA_GATE,   (const void **)&strafe_state.alpha_gate) ||
+        !resolve_cell(draw_site, OFFSET_ALPHA_LATCH,  (const void **)&strafe_state.alpha_latch)) {
+        log_warning("a cell behind the object draw did not resolve, so the strafe body angle is "
+                    "left on the simulation clock");
+        return;
+    }
+    strafe_state.substep_counter = (const volatile uint32_t *)(uintptr_t)counter;
+    strafe_state.throttle_bytes  = (const volatile uint16_t *)(clock_site + OFFSET_THROTTLE_BYTES);
+
+    if (!detour_install(&strafe_state.draw, draw_site, (const void *)hook_object_draw,
+                        OBJECT_DRAW_ALL_PROLOGUE)) {
+        log_warning("the detour on the object draw at %08X failed, so the strafe body angle is "
+                    "left on the simulation clock", (unsigned)draw_site);
+        return;
+    }
+
+    strafe_state.draw_original = (object_draw_fn_t)strafe_state.draw.original;
+    strafe_state.installed     = true;
+
+    log_info("the strafe body angle is now DRAWN interpolated, at %08X, once per rendered frame on "
+             "the engine's own weight. It is still damped once per simulation step, which is where "
+             "a damper belongs; what changed is that the frames between two steps no longer all "
+             "show the same orientation. Above about 60 frames a second that was a visible "
+             "staircase on the quarter second ease into and out of walking sideways, because the "
+             "root node is multiplied in after the animation blend and nothing downstream smooths "
+             "it. The pair is collapsed on any simulation step our damper did not run in, which is "
+             "what keeps the three player modes that skip our phases from sweeping the same few "
+             "degrees thirty-two times a second.", (unsigned)draw_site);
 }

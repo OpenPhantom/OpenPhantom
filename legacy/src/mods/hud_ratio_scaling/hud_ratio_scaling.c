@@ -109,16 +109,44 @@ _Static_assert(sizeof(SIG_DRAW_HUD) == sizeof(MSK_DRAW_HUD),
 #define DRAW_HUD_PROLOGUE 9u
 
 /* --- 0x0042963B  texture_drawSprite(texture, xL, xR, yT, yB, colour, fill) -------------------- *
- *   55 8B EC 81 EC 94 00 00 00     prologue, 9 bytes
- *   8B 45 08 / 50 / E8 ...         the texture argument goes straight into a lookup
+ *   55 8B EC 81 EC 94 00 00 00     prologue, 9 bytes, which is what a detour overwrites
+ *   8B 45 08 / 50 / E8 <rel32>     the texture argument goes straight into a lookup
+ *   83 C4 04 / 89 45 F8            the page it returned
+ *   D9 45 20 / D8 1D <abs32>       fill compared against 1.0
+ *   DF E0 / F6 C4 41 / 75 09       and clamped to it
+ *   C7 45 20 00 00 80 3F
  *
  * The argument order was recovered from the HUD's own call sites: the two x bounds come before
  * the two y bounds, the colour is ARGB with the alpha in the top byte, and `fill` is the
  * fraction of the sprite that is drawn. The blitter CROPS to that fraction rather than squashing
- * to it, so resizing the rectangle does not change what is drawn inside it. */
+ * to it, so resizing the rectangle does not change what is drawn inside it.
+ *
+ * THE PATTERN REACHES WELL PAST THE PROLOGUE, AND THAT IS THE POINT. Another DLL in this tree
+ * wants the same function, and whichever installs first replaces those nine bytes with a branch.
+ * The second one then has to find the site by the bytes AFTER the prologue, which is what
+ * SIGNATURE_ENTRY_DETOUR falls back to. A short tail cannot carry that: `8B 45 08 50 E8` alone
+ * occurs 275 times in the image, and it only separated because exactly one of those had the
+ * authored prologue in front of it. Once other DLLs have detoured other functions, their branches
+ * make further candidates acceptable, the tail stops being unique and the fallback refuses. This
+ * tail is unique on its own in all six shipped images, so the load order stops mattering. */
 static const uint8_t SIG_DRAW_SPRITE[] = {
-    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x94, 0x00, 0x00, 0x00, 0x8B, 0x45, 0x08, 0x50, 0xE8
+    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x94, 0x00, 0x00, 0x00,   /* the overwritten prologue     */
+    0x8B, 0x45, 0x08, 0x50, 0xE8, 0x00, 0x00, 0x00, 0x00,   /* call, operand wildcarded     */
+    0x83, 0xC4, 0x04, 0x89, 0x45, 0xF8,
+    0xD9, 0x45, 0x20, 0xD8, 0x1D, 0x00, 0x00, 0x00, 0x00,   /* fcomp, operand wildcarded    */
+    0xDF, 0xE0, 0xF6, 0xC4, 0x41, 0x75, 0x09,
+    0xC7, 0x45, 0x20, 0x00, 0x00, 0x80, 0x3F
 };
+static const uint8_t MSK_DRAW_SPRITE[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof(SIG_DRAW_SPRITE) == sizeof(MSK_DRAW_SPRITE),
+               "the sprite pattern and its mask are different lengths");
 #define DRAW_SPRITE_PROLOGUE 9u
 
 /* --- 0x0046B3C0  font3d_draw(text, x, y) ------------------------------------------------------ *
@@ -186,7 +214,8 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY       ("current_mode_size",      SIG_CURRENT_MODE_SIZE),
     SIGNATURE_ENTRY_DETOUR_MASKED("status_draw_hud", SIG_DRAW_HUD, MSK_DRAW_HUD,
                                   DRAW_HUD_PROLOGUE),
-    SIGNATURE_ENTRY_DETOUR("texture_draw_sprite",    SIG_DRAW_SPRITE,  DRAW_SPRITE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("texture_draw_sprite", SIG_DRAW_SPRITE, MSK_DRAW_SPRITE,
+                                  DRAW_SPRITE_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR("font3d_draw",            SIG_FONT3D_DRAW,  FONT3D_DRAW_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR("graphics_set_mode",      SIG_GRAPHICS_SET_MODE,
                            GRAPHICS_SET_MODE_PROLOGUE)

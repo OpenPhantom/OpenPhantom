@@ -6,6 +6,9 @@
  * the script takes its in-progress branch. At or above 32 fps that never happens, the answer is
  * always "finished", and a scripted state whose only work hangs off the other branch stops making
  * progress for good.
+ *
+ * This hands the script an in-progress answer on one simulation step in every N, which is what the
+ * shipped frame rate produced by accident.
  */
 #ifndef FRAMERATE_FIX_FACE_LATCH_H
 #define FRAMERATE_FIX_FACE_LATCH_H

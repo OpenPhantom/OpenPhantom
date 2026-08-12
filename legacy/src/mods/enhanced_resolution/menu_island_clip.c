@@ -38,15 +38,21 @@
  * toolkit is the thing drawing. The gate is the engine's own bracket, not a guess of ours:
  * swmenu_render raises a flag around its widget pass and lowers it after,
  *
- *   0045DC6F  8B 0D 60 88 4B 00      mov  ecx,[g_menuFrameCounter]     ; the same counter the
- *   0045DC75  83 C1 01               add  ecx,1                        ; pose throttle reads
- *   0045DC78  89 0D 60 88 4B 00      mov  [g_menuFrameCounter],ecx
+ *   0045DC6F  8B 0D 60 88 4B 00      mov  ecx,[g_tickCounter]          ; 0x004B8860
+ *   0045DC75  83 C1 01               add  ecx,1
+ *   0045DC78  89 0D 60 88 4B 00      mov  [g_tickCounter],ecx
  *   0045DC7E  C7 05 A0 FB 8B 00 01.. mov  [g_menuDrawFlag],1           ; <- the bracket opens
  *   0045DC88  83 3D 74 FD 6C 00 01   cmp  [g_menuHasParent],1
  *   ...        two swmenu_sendToWidgets(screen, 0x15) draw passes ...
  *   0045DCB0  C7 05 A0 FB 8B 00 00.. mov  [g_menuDrawFlag],0           ; <- and closes
  *
- * and the engine itself treats that cell as "the menu is what is drawing now": the menu's own
+ * That counter is not a menu-private one. It is the same g_tickCounter the pose throttle reads,
+ * and framerate_fix's own operand census over the whole image already lists this exact store,
+ * 0x0045DC7A, as one of its three writers: the substep loop, a menu frame, and a reset. It is
+ * named here the way it is named there, because a cell with two names in one tree is how a wrong
+ * conclusion gets carried across a file boundary.
+ *
+ * The engine itself treats the flag cell as "the menu is what is drawing now": the menu's own
  * embedded 3-D preview raises and lowers it around its draws too, and the projection setup reads
  * it. Everything else that shares the blitter, the gameplay HUD above all, draws with the flag
  * down and passes through this hook untouched. The pause menu's TOP page draws the frozen world
@@ -57,22 +63,45 @@
  * address is READ out of the matched `C7 05` operand, then cross-checked three ways before it is
  * believed: the two counter operands must be the same cell, the flag cell must lie inside the
  * image, and the closing `mov [flag],0` must sit 0x41 bytes after the match with the SAME operand.
+ * Being address-free is not a formality here: measured across every shipped image, the block sits
+ * at 0x0045DC6F in retail and at 0x0045DC0F in the Edit Tool's own recompile, with the flag cell
+ * moving from 0x008BFBA0 to 0x008BFB40 with it. The cross-check passes in both.
  *
  * The island origin is not read from the engine's origin cells: pointer_cage may have repointed
  * the one instruction block that names them. It is recomputed the way the engine computes it,
  * ((W-640)/2, (H-480)/2) from the mode accessor window_fit already resolved, which is the same
- * "one owner per question" rule the cage follows.
+ * "one owner per question" rule the cage follows. It is recomputed per sprite rather than cached
+ * per widget pass, and that is deliberate: caching it needs the pass's rising edge, this hook only
+ * observes the flag on the sprites it happens to be handed, and a pass whose first sprite is
+ * missed would then run on a stale origin. The accessor reads two engine globals, which is not
+ * worth a correctness risk to avoid.
  *
  * ==============================================================================================
  * WHAT THIS IS NOT, stated honestly
  *
  * The retail rasterizer CROPPED a quad at the screen edge; clamping the rectangle SQUASHES the
- * texture into the remaining width instead, by the poked-out fraction. For the halos that
- * actually poke out (a soft radial gradient some twenty canvas pixels past the border of a
- * 250-pixel sprite) the compression is invisible, and a sprite that fits the island, which is
- * every authored widget, is passed through bit-identical. The cursor quad is drawn AFTER the
- * bracket closes and is not covered here; it does not need to be, because the engine's own cage
- * (and pointer_cage's default) keeps it inside the island, where its erase works.
+ * texture into the remaining width instead, by the poked-out fraction. The reason is in the
+ * blitter: it writes u = 0 at the left bound and u = fill at the right one, whatever those bounds
+ * are, so moving a bound moves the picture rather than cutting it. For the halos that actually
+ * poke out (a soft radial gradient some twenty canvas pixels past the border of a 250-pixel
+ * sprite) the compression is invisible, and a sprite that fits the island, which is every
+ * authored widget, is passed through bit-identical.
+ *
+ * A SPRITE DRAWN WITH fill < 1 IS LEFT ALONE ENTIRELY, and that is not caution but arithmetic.
+ * The blitter's first act is a left-anchored wipe,
+ *
+ *     0042967C  ...                    xRight = (xRight - xLeft) * fill + xLeft
+ *
+ * so for any fill below 1 the rectangle handed in is not the rectangle drawn: the right bound is
+ * recomputed FROM the left one. Clamping either bound would then move the drawn edge by a
+ * fraction of the correction rather than to the border, and the outside test would be judging an
+ * extent wider than the one on screen. Every sprite that has ever been seen to poke past the
+ * island is a widget halo at fill 1, so nothing that needs repairing is skipped by this; it is
+ * the partial-fill bars (the HUD's meters use the same call) that would be silently reshaped, and
+ * they are not this repair's business.
+ *
+ * The cursor quad is drawn AFTER the bracket closes and is not covered here; it does not need to
+ * be, because the engine's own cage keeps it inside the island, where its erase works.
  */
 #include "menu_island_clip.h"
 
@@ -123,12 +152,36 @@ static const uint8_t FLAG_CLEAR_TAIL[] = { 0x00, 0x00, 0x00, 0x00 };
 #define FLAG_CLEAR_TAIL_AT   0x06u
 
 /* --- 0x0042963B  texture_drawSprite(texture, xL, xR, yT, yB, colour, fill) -------------------- *
- * The same pattern hud_ratio_scaling anchors on, and the two DLLs may both detour it: the detour
- * layer chains, and the resolver accepts a site that already begins with a jmp. The 9-byte
- * prologue is plain `push ebp / mov ebp,esp / sub esp,imm32`, no relative operand in it. */
+ * The same pattern hud_ratio_scaling anchors on, and the two DLLs both detour it. The detour
+ * layer chains, so that part is fine whichever installs first; what has to hold is that the
+ * SECOND one can still FIND the site after the first replaced the nine prologue bytes with a
+ * branch. That is what SIGNATURE_ENTRY_DETOUR's fallback to the tail is for, and it needs a tail
+ * that carries the site on its own: `8B 45 08 50 E8` occurs 275 times in the image and only
+ * separated because one of them had the authored prologue in front of it, which stops being true
+ * as soon as other DLLs have branched away from other functions. So the pattern reaches to the
+ * fill clamp, and that tail is unique by itself in all six shipped images.
+ *
+ * Keep this pattern and hud_ratio_scaling's identical. They describe the same bytes, and a
+ * difference between them would show up as one DLL resolving and the other not, in a load order
+ * that nobody chose. */
 static const uint8_t SIG_DRAW_SPRITE[] = {
-    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x94, 0x00, 0x00, 0x00, 0x8B, 0x45, 0x08, 0x50, 0xE8
+    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x94, 0x00, 0x00, 0x00,   /* the overwritten prologue     */
+    0x8B, 0x45, 0x08, 0x50, 0xE8, 0x00, 0x00, 0x00, 0x00,   /* call, operand wildcarded     */
+    0x83, 0xC4, 0x04, 0x89, 0x45, 0xF8,
+    0xD9, 0x45, 0x20, 0xD8, 0x1D, 0x00, 0x00, 0x00, 0x00,   /* fcomp, operand wildcarded    */
+    0xDF, 0xE0, 0xF6, 0xC4, 0x41, 0x75, 0x09,
+    0xC7, 0x45, 0x20, 0x00, 0x00, 0x80, 0x3F
 };
+static const uint8_t MSK_DRAW_SPRITE[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof(SIG_DRAW_SPRITE) == sizeof(MSK_DRAW_SPRITE),
+               "the sprite pattern and its mask are different lengths");
 #define DRAW_SPRITE_PROLOGUE 9u
 
 enum {
@@ -139,7 +192,8 @@ enum {
 
 static signature_t sites[CLIP_SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("swmenu_widget_pass_bracket", SIG_MENU_DRAW_FLAG, MSK_MENU_DRAW_FLAG),
-    SIGNATURE_ENTRY_DETOUR("texture_draw_sprite", SIG_DRAW_SPRITE, DRAW_SPRITE_PROLOGUE)
+    SIGNATURE_ENTRY_DETOUR_MASKED("texture_draw_sprite", SIG_DRAW_SPRITE, MSK_DRAW_SPRITE,
+                                  DRAW_SPRITE_PROLOGUE)
 };
 
 typedef void (__cdecl *draw_sprite_fn_t)(void *texture, float left, float right, float top,
@@ -160,6 +214,14 @@ typedef struct menu_island_clip_state {
 static menu_island_clip_state_t clip_state;
 
 /* ============================================================================================ */
+bool menu_island_clip_fill_is_whole(float fill)
+{
+    /* Not a tolerance: the blitter clamps fill to [0,1] and then multiplies with it, so 1.0f is
+     * the one value for which the rectangle handed in survives to the screen unchanged. Anything
+     * else, including a hair under 1, moves the right bound. */
+    return fill >= 1.0f;
+}
+
 bool menu_island_clip_rect(float *left, float *right, float *top, float *bottom,
                            float island_left, float island_top)
 {
@@ -236,6 +298,13 @@ static void __cdecl hook_draw_sprite(void *texture, float left, float right, flo
     /* The gate is the engine's own bracket. Down = not the menu drawing = not our business. */
     if (!clip_state.active || clip_state.menu_draw_flag == NULL ||
         *clip_state.menu_draw_flag == 0) {
+        original(texture, left, right, top, bottom, colour, fill);
+        return;
+    }
+
+    /* A partial fill means the blitter recomputes the right bound from the left one, so the
+     * rectangle here is not the one that reaches the screen. See the header. */
+    if (!menu_island_clip_fill_is_whole(fill)) {
         original(texture, left, right, top, bottom, colour, fill);
         return;
     }
@@ -371,9 +440,10 @@ bool menu_island_clip_install(bool enabled)
     clip_state.active = true;
     log_info("menu sprites are clamped to the 640x480 island while the engine's own widget-pass "
              "flag [%08X] is up (blitter hooked at %08X). A sprite fully inside the island "
-             "passes through bit-identical; the hovered button's halo, which pokes past the "
-             "island's left border and used to stamp it blue for the life of the screen, is now "
-             "cut at the border the way real 640x480 cut it.",
+             "passes through bit-identical, and so does one drawn with a partial fill; the "
+             "hovered button's halo, which pokes past the island's left border and used to stamp "
+             "it blue for the life of the screen, is now cut at the border the way real 640x480 "
+             "cut it.",
              (unsigned)(uintptr_t)clip_state.menu_draw_flag,
              (unsigned)sites[CLIP_SITE_DRAW_SPRITE].address);
     return true;

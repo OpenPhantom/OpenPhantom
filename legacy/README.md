@@ -2,7 +2,7 @@
 
 Fixes for the original 1999 engine of *Star Wars Episode I: The Phantom Menace*, so the retail game
 runs properly on a current machine. This is not the OpenPhantom reimplementation and it does not
-replace it: it is a loader and twelve small DLLs that patch the retail executable in memory.
+replace it: it is a loader and a set of small DLLs that patch the retail executable in memory.
 
 Nothing on disk is modified. Drop the loader next to `WMAIN.EXE`, put the fixes you want in
 `mods\`, and each one patches the image as the game starts. Delete a DLL and its fix is gone.
@@ -11,9 +11,9 @@ Delete the loader and the game is exactly as it shipped.
 |  |  |
 |---|---|
 | Target | `WMAIN.EXE`, 829,952 bytes, MD5 `7c5af8428c19b17cca09ae3a49bd10ef` |
-| Form | a 32 bit `dinput.dll` loader plus one DLL per fix. No launcher, no injector, no admin rights |
+| Form | a 32 bit `dinput.dll` loader plus one DLL per feature. No launcher, no injector, no admin rights |
 | Build | CMake and the MSVC x86 toolset |
-| Tests | 14 programs, 700 checks, none of which needs the game |
+| Tests | console programs under `unittests/`, none of which needs the game |
 
 The English and German retail releases are byte identical, so that one MD5 covers both.
 
@@ -32,8 +32,13 @@ included here or distributed with this project.
 | `enhanced_input` | Mouse look, sideways walking and free look |
 | `dismemberment` | Lightsaber dismemberment: the limb the blade actually hit, and only on the killing blow |
 | `imuse_fix` | Pauses the music when the game loses focus, and stops the music thread locking itself up |
+| `sfx_volume_save_fix` | Keeps the SFX volume you set, which the original wrote back wrongly and then never applied on load |
 | `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops |
+| `fmv_player` | Plays the pre-rendered movies through a modern decoder in a window over the game, for any movie you have converted yourself |
 | `crt_copy_fix` | Repairs an inlined copy loop that reads four bytes before its source, in 40 places |
+| `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |
+| `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
+| `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
 | `diagnostics` | Observation only, per subsystem, off by default |
 
@@ -54,8 +59,9 @@ cmake --build build --config Release
 ctest --test-dir build -C Release
 ```
 
-That produces `build/dist/dinput.dll` and `build/dist/mods/*.dll`, one per fix. Nothing is
-installed for you, and no build output is tracked in this repository.
+That produces `build/dist/`, laid out the way an installation is: `dinput.dll` at the top, one DLL
+per feature in `mods/`, and the standalone scripts in `tools/`. Nothing is installed for you, and no
+build output is tracked in this repository.
 
 ## Installing
 
@@ -67,6 +73,9 @@ installed for you, and no build output is tracked in this repository.
 2. Copy the DLLs you want from `build/dist/mods/` into `<game>\mods\`.
 3. Copy `dist/engine_fixes.ini` next to `WMAIN.EXE`.
 4. Start the game.
+
+`build/dist/tools/` is only needed for `fmv_player`, which is the one fix that does nothing until
+you have converted something. Copy it to `<game>\tools\` and read that fix's own README.
 
 ## Configuration
 
@@ -82,10 +91,16 @@ exactly like the shipped one.
 changes the control scheme rather than fixing a fault. There is a check box for it on the game's
 own controls screen.
 
-**Nothing writes to disk while you play.** Every diagnostic channel is off. Each DLL logs a few
-lines to `engine_fixes.log` when it installs and then goes quiet, which is enough for a bug report
-and costs nothing during play. `[crash_report]` is on for the same reason: it does nothing at all
-until the process dies.
+**Almost nothing writes to disk while you play.** Every diagnostic channel is off. Each DLL logs a
+few lines to `engine_fixes.log` when it installs and then goes quiet, which is enough for a bug
+report and costs nothing during play. `[crash_report]` is on for the same reason: it does nothing at
+all until the process dies.
+
+The one exception is `fmv_player`, which writes one line per cutscene naming either the file it
+played or the file it looked for and did not find. That is deliberate rather than an oversight: this
+is the one fix whose most likely failure is to install correctly and then quietly do nothing, and a
+log that goes silent after installing is exactly what that failure looks like. A handful of lines
+per playthrough is the cost of being able to tell the two apart.
 
 When you upgrade, keep your own ini and copy across any keys the new version added. Nothing
 rewrites your file for you.
@@ -114,7 +129,7 @@ src/
   mods/
     variable_fov/      builds mods\variable_fov.dll
     enhanced_input/    builds mods\enhanced_input.dll
-    ...                one directory per fix, twelve of them
+    ...                one directory per feature DLL
 unittests/             pure logic, runs without the game
 ```
 
@@ -122,7 +137,7 @@ unittests/             pure logic, runs without the game
 
 **`src/common` is the shared layer.** It is a *static* library, so each DLL links its own copy.
 That is deliberate: there is no runtime library that everything else needs, no version to keep in
-step, and deleting one fix cannot break another. Ten small modules, one job each:
+step, and deleting one fix cannot break another. Small modules, one job each:
 
 | Module | Job |
 |---|---|
@@ -221,7 +236,7 @@ address table would have written silently into a different function. So every si
 byte pattern that has to match an expected number of times, usually exactly once. Anything else
 disables that one patch and says so in the log.
 
-**Chained detours.** Six of the twelve DLLs want the same engine function, the one that ends a
+**Chained detours.** Several of these DLLs want the same engine function, the one that ends a
 rendered frame. A conventional trampoline hook placed on an already hooked target copies the first
 hook's jump into its own trampoline and builds an infinite loop that reports success.
 `src/common/detour.c` instead detects the existing branch, keeps its destination as the caller's
@@ -236,11 +251,12 @@ the new bytes rather than the expected old ones, and declines.
 ## Status
 
 * Builds clean with MSVC x86 at `/W4 /WX`, no warnings.
-* 14 test programs, 700 checks, all passing, none of which needs the game.
+* Every test program passes, and none of them needs the game.
 * Every byte pattern resolves with its expected match count against the retail `WMAIN.EXE` and the
   shipped `IMUSE.DLL`, checked offline without running the game.
-* Three fixes have been accepted in actual play: the camera damper, the decal repair and the aim
-  stance. Everything else is verified offline only, and each feature README says so for itself.
+
+What has and has not been tried in the running game is a per fix question, so each feature's own
+`README.md` answers it rather than this page.
 
 ## Contributing
 

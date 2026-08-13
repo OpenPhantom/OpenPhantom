@@ -55,6 +55,9 @@ typedef void (__cdecl *libvlc_media_player_set_hwnd_fn)(libvlc_media_player_t *p
 typedef int (__cdecl *libvlc_media_player_play_fn)(libvlc_media_player_t *player);
 typedef void (__cdecl *libvlc_media_player_stop_fn)(libvlc_media_player_t *player);
 typedef int (__cdecl *libvlc_media_player_is_playing_fn)(libvlc_media_player_t *player);
+/* Takes a string like "16:9", or NULL to go back to the source's own shape. */
+typedef void (__cdecl *libvlc_video_set_aspect_ratio_fn)(libvlc_media_player_t *player,
+                                                          const char *aspect);
 
 typedef struct vlc_api {
     HMODULE                               core_module;
@@ -69,11 +72,21 @@ typedef struct vlc_api {
     libvlc_media_player_play_fn           player_play;
     libvlc_media_player_stop_fn           player_stop;
     libvlc_media_player_is_playing_fn     player_is_playing;
+    libvlc_video_set_aspect_ratio_fn      video_set_aspect_ratio;   /* optional, see resolve */
     libvlc_instance_t                    *instance;
     bool                                  plugin_path_set;
 } vlc_api_t;
 
 static vlc_api_t vlc_api;
+
+/* Set once from the ini before any movie plays. Kept here so this layer takes one input and has no
+ * opinion about where it came from. */
+static bool vlc_stretch_to_window;
+
+void vlc_playback_set_stretch(bool stretch)
+{
+    vlc_stretch_to_window = stretch;
+}
 
 /* ============================================================================================ */
 /* Resolves one export and says which one was missing rather than only that something was. A
@@ -103,6 +116,17 @@ static bool resolve_exports(void)
     vlc_api.player_stop = (libvlc_media_player_stop_fn)resolve("libvlc_media_player_stop");
     vlc_api.player_is_playing =
         (libvlc_media_player_is_playing_fn)resolve("libvlc_media_player_is_playing");
+
+    /* OPTIONAL, so not through resolve(), which would call a libVLC lacking it the wrong API. It
+     * only forces the picture to fill the window; without it every movie still plays letterboxed,
+     * and failing the whole load over a preference would be the worse trade. */
+    vlc_api.video_set_aspect_ratio =
+        (libvlc_video_set_aspect_ratio_fn)GetProcAddress(vlc_api.module,
+                                                         "libvlc_video_set_aspect_ratio");
+    if (vlc_api.video_set_aspect_ratio == NULL) {
+        log_warning("this libVLC has no libvlc_video_set_aspect_ratio, so movies always keep their "
+                    "own shape and Scaling=stretch cannot be honoured");
+    }
 
     return vlc_api.new_instance != NULL && vlc_api.release != NULL &&
            vlc_api.media_new_path != NULL && vlc_api.media_release != NULL &&
@@ -424,6 +448,36 @@ static bool pump_once(HWND window, HWND game_window)
     return true;
 }
 
+/* Letterbox needs no call: libVLC keeps the source's own shape by default, so doing nothing is
+ * already the conservative answer.
+ *
+ * Stretch is told the WINDOW's ratio rather than a fixed "16:9". The overlay covers the screen, so
+ * claiming the picture has the window's shape makes it fill the window exactly, and it stays exact
+ * on a 16:10, a 21:9 or a rotated panel where 16:9 would bar one axis and crop the other. A zero or
+ * negative client rectangle, which a minimised or not yet shown window reports, is left alone. */
+static void apply_scaling(libvlc_media_player_t *player, HWND window)
+{
+    RECT client;
+    char aspect[32];
+
+    if (!vlc_stretch_to_window || vlc_api.video_set_aspect_ratio == NULL) {
+        return;
+    }
+    if (!GetClientRect(window, &client)) {
+        return;
+    }
+    if (client.right - client.left <= 0 || client.bottom - client.top <= 0) {
+        return;
+    }
+
+    if (_snprintf_s(aspect, sizeof aspect, _TRUNCATE, "%ld:%ld",
+                    (long)(client.right - client.left),
+                    (long)(client.bottom - client.top)) < 0) {
+        return;
+    }
+    vlc_api.video_set_aspect_ratio(player, aspect);
+}
+
 bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window)
 {
     char                   utf8_path[MAX_PATH * 3];   /* worst-case UTF-8 expansion of MAX_PATH */
@@ -458,6 +512,7 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game
     }
 
     vlc_api.player_set_hwnd(player, (void *)window);
+    apply_scaling(player, window);
     if (vlc_api.player_play(player) != 0) {
         log_error("libVLC refused to start %ls", file_path);
         vlc_api.player_release(player);

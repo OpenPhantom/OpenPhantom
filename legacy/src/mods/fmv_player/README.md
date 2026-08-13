@@ -130,6 +130,14 @@ so does one that arrives before libVLC has finished loading.
 | `Enabled` | `1` | |
 | `MovieDirectory` | `movies_hd` | Where converted files live, relative to `WMAIN.EXE`. |
 | `Extension` | `mp4` | The file extension to look for. |
+| `Scaling` | `letterbox` | `letterbox` keeps the movie's own shape and puts black bars where the screen differs. `stretch` fills the screen exactly. Anything else reads as `letterbox`. |
+
+`Scaling` is applied when the movie plays, not when it is converted, so it works on files you
+already have and changing your mind costs nothing but a restart. Stretch is expressed as the
+overlay window's own ratio rather than a fixed 16:9, so it stays exact on a 16:10, a 21:9 or a
+rotated panel, where a hard-coded ratio would leave bars on one axis and crop on the other. The
+export it needs is resolved as an optional one: a libVLC without it stays on letterbox and says so
+once, rather than failing the whole load over a preference.
 
 For a movie named `movie\arena` (the retail engine's own relative name, no extension), this looks
 for `<game>\<MovieDirectory>\arena.<Extension>` - flat, no extra `movie\` subfolder beyond

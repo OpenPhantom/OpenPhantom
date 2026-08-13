@@ -57,6 +57,7 @@
 
 #include "movie_path.h"
 #include "video_overlay.h"
+#include "vlc_playback.h"
 
 #include "common/detour.h"
 #include "common/host_image.h"
@@ -70,6 +71,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define FMV_PLAYER_SECTION "fmv_player"
 
@@ -143,6 +145,7 @@ typedef struct fmv_player_state {
     bool            logged_no_libvlc;   /* said once: it cannot change within a session */
     char            movie_directory[MAX_PATH];
     char            extension[16];
+    bool            stretch_movies;     /* Scaling=stretch; letterbox otherwise */
     detour_t        detour;
 
     /* The engine's own two movie cells, both read out of the matched signature.
@@ -164,11 +167,23 @@ static fmv_player_state_t fmv_player_state;
 /* ============================================================================================ */
 static void load_config(void)
 {
+    char scaling[16];
+
     fmv_player_state.enabled = ini_read_bool(FMV_PLAYER_SECTION, "Enabled", true);
     ini_read_string(FMV_PLAYER_SECTION, "MovieDirectory", "movies_hd",
                     fmv_player_state.movie_directory, sizeof fmv_player_state.movie_directory);
     ini_read_string(FMV_PLAYER_SECTION, "Extension", "mp4",
                     fmv_player_state.extension, sizeof fmv_player_state.extension);
+
+    /* Letterbox unless the word is exactly "stretch". Anything else, including a typo, keeps the
+     * movie's own shape, because a misspelled setting should leave the picture undistorted rather
+     * than silently pick the more destructive of the two. */
+    ini_read_string(FMV_PLAYER_SECTION, "Scaling", "letterbox", scaling, sizeof scaling);
+    fmv_player_state.stretch_movies = (_stricmp(scaling, "stretch") == 0);
+    vlc_playback_set_stretch(fmv_player_state.stretch_movies);
+    log_info("movies are shown %s", fmv_player_state.stretch_movies
+                 ? "STRETCHED to fill the screen, so a roughly 4:3 source is pulled out of shape"
+                 : "LETTERBOXED, keeping their own shape with black bars where the screen differs");
 }
 
 /* True when the configured folder exists at all. Nothing else in this DLL is worth doing when it

@@ -36,6 +36,15 @@
  * before this DLL ran does not get it back. */
 void vlc_playback_init_async(void);
 
+/* Letterbox (false, and the default) keeps the movie's own shape and puts black bars wherever the
+ * screen does not match it. Stretch (true) pulls the picture out to fill the window exactly.
+ *
+ * The source movies are roughly 4:3 and almost no screen is, so one of the two has to happen and
+ * neither is right for everyone. Call it before the first movie. It applies to every movie after
+ * that and needs no re-encoding, so it also works on files converted before this setting existed.
+ * A libVLC without the export it needs stays on letterbox and says so once. */
+void vlc_playback_set_stretch(bool stretch);
+
 /* Non-blocking. True only once the background load above has both FINISHED and SUCCEEDED; false
  * while it is still running, if it was never started, and if it finished with a failure. A caller
  * that sees false has nothing to play through for this one movie and should use the original

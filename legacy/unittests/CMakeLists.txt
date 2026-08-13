@@ -154,3 +154,12 @@ add_unit_test(face_bounds render_guard render_guard/face_bounds.c)
 # device for its own maximum, so this validation is the only thing between a setting and a
 # surface creation that fails.
 add_unit_test(texture_size large_textures large_textures/texture_size.c)
+
+# The overlay's model: which rows are on screen, and the search that decides it. Built against the
+# real cheat sources rather than stubs, so the test also pins down what the panel looks like on an
+# executable neither of them could resolve.
+add_unit_test(overlay_model dev_overlay
+    dev_overlay/overlay_model.c
+    dev_overlay/cheats_original.c
+    dev_overlay/cheats_openphantom.c
+)

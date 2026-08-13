@@ -208,3 +208,20 @@ add_engine_fix(large_textures
     texture_size.c
 )
 
+
+# The panel over the running game, opened with the key below Escape. Named for what it is rather than for what is
+# in it: diagnostics and developer tools become groups inside the same panel, and a shipped DLL
+# cannot be renamed without breaking every configuration file that mentions it. It draws with the
+# engine's own two dimensional primitives, so there is no window and no second surface.
+add_engine_fix(dev_overlay
+    dll_main.c
+    dev_overlay.c
+    overlay_model.c
+    overlay_draw.c
+    overlay_sites.c
+    overlay_layout.c
+    overlay_input.c
+    input_freeze.c
+    cheats_original.c
+    cheats_openphantom.c
+)

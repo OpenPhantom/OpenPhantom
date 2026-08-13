@@ -39,6 +39,7 @@ included here or distributed with this project.
 | `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |
 | `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
+| `dev_overlay` | A panel over the running game, opened with the key below Escape: the game's own eleven cheat codes, two this project adds, and the ground the developer tools will stand on |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
 | `diagnostics` | Observation only, per subsystem, off by default |
 

@@ -22,11 +22,18 @@ deliberate, and both gates are needed.
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
 | `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below |
-| `NpcRangeScale` | `1.25` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR |
+| `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |
 | `RelocateDrawTable` | `1` | | move the cell table, raise its limit to 16384 |
 | `LowerCellLimit` | `1` | | lower it to 7168 instead; skipped when the relocation is active |
+
+One more switch lives in the `[diagnostics]` section rather than this one, because that is where
+every measurement in the shipped ini lives:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[diagnostics] Spawns` | `0` | count the NPC spawns the engine refuses because its actor or thing pool is full |
 
 ## Engine locations
 
@@ -38,7 +45,8 @@ deliberate, and both gates are needed.
 | table-fog capability query | `0x487B30` | 3 bytes -> `xor eax,eax ; ret` |
 | `FOGTABLEMODE` (state machine) | `0x4884B8` | `push 3` -> `push 0` (`D3DFOG_NONE`) |
 | `FOGTABLEMODE` (state commit) | `0x489B5B` | `push 3` -> `push 0` (`D3DFOG_NONE`) |
-| `enemy_activationScan` | `0x4371E4 + 0x18` | one call site redirected |
+| `enemy_activationScan` | `0x4371E4 + 0x18` | one call site redirected, and only when `NpcRangeScale` is above 1 |
+| `enemy_activationScan` spawn call | `0x4371E4 + 0x4A` | one call site redirected, **only** when `[diagnostics] Spawns=1`; the opcode and the three-argument cleanup behind it are checked first |
 | `rdMesh_draw` cull word | `0x40F3F7 - 4` | address read from the operand |
 | `rdThing_Draw` | `0x40FE70` | detoured; the cull word is always restored |
 | `rdCamera_BuildProjection` | `0x475FFA` | observed only, for the radius cap and the fog |
@@ -270,7 +278,7 @@ world in the fog colour.
 Built and linked, `/W4 /WX` clean. `fog_regime_test` covers the arithmetic: the eleven shipped
 bands come back bit-exact at the authored field of view, no band inverts over 30-170 degrees and every cut
 edge 2-64, the authored profile survives every ratio, the easing agrees between 30 and 120 fps, and
-repeated evaluation is bit-identical. Offline verification passes on all four retail executables,
+repeated evaluation is bit-identical. Offline verification passes on both retail builds,
 including the table/bucket cross-check and the three-hit count on the ecx append blocks.
 
 **Not accepted in game; nothing here has been run.** The fog-regime change in particular has been

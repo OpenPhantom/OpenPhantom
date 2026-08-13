@@ -28,17 +28,22 @@
 #define LEAN_CHEST_DIVISOR             12.0f
 #define LEAN_HEAD_DIVISOR              10.0f
 
-/* There is no damper here any more, and its absence is the fix.
+/* There is no damper here, and its absence is still right. What was wrong was believing the same
+ * argument covers a mouse.
  *
  * An earlier version added a 150 ms exponential damper because the twist looked like it would slam
  * between the extremes. It was solving a problem the engine had already solved: the turn cell is an
  * ACCUMULATOR, and a held key climbs 12, 26, 42, 60, 80, 102, 120 over seven substeps, so the
  * value handed to the divisors already eases in over about a fifth of a second and already falls
- * to zero on release. Damping it a second time only delayed it. Worse, the damper's own cap is expressed in
- * degrees per second while the value passed to it IS a rate, so it limited the change of a rate to
- * 3.75 units per substep; eleven substeps to reach a number the ramp reaches by itself.
+ * to zero on release. Damping it a second time only delayed it. Worse, the damper's own cap was
+ * expressed in degrees per second while the value passed to it IS a rate, so it limited the change
+ * of a rate to 3.75 units per substep; eleven substeps to reach a number the ramp reaches by
+ * itself.
  *
- * The engine's number is taken as it is.                                                        */
+ * Both halves of that are about a KEY. Neither is true of a mouse, which reaches the same cell
+ * through a different arm with no ramp and no decay. The branch in steer_lean_apply carries the
+ * disassembly. The answer there is not to damp the engine's number but to stop asking it, because
+ * a smoothed number for the same substep already exists.                                        */
 
 /* Long enough that a hitch cannot produce a rate no hand could have made, short enough that both
  * shipped substep lengths (1/32 and 1/64 s) pass. */
@@ -47,6 +52,7 @@
 typedef struct steer_lean_state {
     set_node_yaw_fn_t set_node_yaw;
     bool              enabled;
+    bool              prefer_hand_rate;  /* SteerLeanFromHand */
     float             test_degrees;      /* != 0: force this angle, ignore the turn entirely */
     bool              warned_about_rig;
 } steer_lean_state_t;
@@ -92,10 +98,11 @@ void steer_lean_set_test_degrees(float degrees)
     }
 }
 
-void steer_lean_bind(set_node_yaw_fn_t set_node_yaw, bool enabled)
+void steer_lean_bind(set_node_yaw_fn_t set_node_yaw, bool enabled, bool prefer_hand_rate)
 {
-    lean_state.set_node_yaw = set_node_yaw;
-    lean_state.enabled      = enabled && (set_node_yaw != NULL);
+    lean_state.set_node_yaw    = set_node_yaw;
+    lean_state.enabled         = enabled && (set_node_yaw != NULL);
+    lean_state.prefer_hand_rate = prefer_hand_rate;
 
     if (enabled && set_node_yaw == NULL) {
         log_warning("the node setter did not resolve, the upper body will not lean into a turn. "
@@ -152,8 +159,8 @@ bool steer_lean_aim(const uint8_t *record, float degrees)
     return true;
 }
 
-bool steer_lean_apply(const uint8_t *record, float engine_rate, float fallback_rate,
-                      float substep_seconds)
+bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
+                      bool keyboard_is_turning, float substep_seconds)
 {
     void    *body;
     uint32_t chest_node;
@@ -177,7 +184,7 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float fallback_r
     if (!(substep_seconds > 0.0f) || substep_seconds > MAX_TRUSTED_SUBSTEP_SECONDS) {
         return report("bad-dt");
     }
-    if (!isfinite(engine_rate) || !isfinite(fallback_rate)) {
+    if (!isfinite(engine_rate) || !isfinite(hand_rate)) {
         return report("bad-angle");
     }
 
@@ -217,21 +224,39 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float fallback_r
         return true;
     }
 
-    /* The engine's own number wins, and ours is only a fallback that may never fire.
+    /* THE ENGINE'S NUMBER, OR THE HAND'S. It used to be the engine's always, because that value is
+     * authentic by construction. True of a key, false of a mouse, and the difference is one branch:
      *
-     * `engine_rate` is what the original just computed and is authentic by construction, the
-     * accumulated keyboard climb or the accumulated mouse. Where it is non-zero there is nothing
-     * to improve on and nothing to invent.
+     *   00449F9C  E8 ..                    call the relative axis reader   ; the mouse turn
+     *   00449FA7  D8 1D A4864A00           fcomp 0.0
+     *   0044A068  D8 0D DC864A00           fmul  6.0                       ; THE MOUSE ARM:
+     *   0044A077  D8 81 A4020000           fadd  turnWheel                 ;   turnWheel += ax * 6
+     *   0044A08E  6A 00 / E8 ..            call the absolute axis reader   ; then the keys
+     *   0044A0A6  0F 85 42 01 00 00        jne  0x0044A1EE                 ; neither axis moved
+     *   0044A223  C781 A4020000 00000000   turnWheel = 0                   ; an OUTRIGHT store
      *
-     * The fallback was written for "the substeps the engine's once-per-frame poll missed". That
-     * case is now believed NOT to exist: the axis reader is non-consuming, so every substep of a
-     * frame sees the same device delta. It is kept because it costs one comparison and because a
-     * zero here is exactly the release arm, where zero is also the right answer. The log
-     * distinguishes the two, so if "filled" never appears the branch can be deleted on evidence. */
-    rate = (engine_rate != 0.0f) ? engine_rate : clamp_rate(fallback_rate);
-    last_report.raw_rate    = rate;
+     * The mouse arm has no decay term anywhere in the image, so that store is the only thing that
+     * lowers the cell, and the axis it branches on is refilled once per RENDERED FRAME. A frame
+     * that carried no report leaves the axis at zero and the next substep takes the store, so under
+     * a mouse the cell is a sawtooth that visits zero rather than a rate. Ten degrees of chest
+     * collapse to none and climb back, several times a second, more often the faster we draw.
+     *
+     * A held key has no such gap: while the digital axis is non-zero the store is unreachable, and
+     * the climb 12, 26, 42, 60, 80, 102, 120 is itself the ease-in this twist exists to show. So a
+     * substep that saw a key keeps the engine's number, and so does one our own reconstruction has
+     * nothing to say about.
+     *
+     * `hand_rate` is the same movement read on the clock it was made on, already smoothed. Nothing
+     * is damped here and no new constant is introduced. */
+    if (lean_state.prefer_hand_rate && !keyboard_is_turning && hand_rate != 0.0f) {
+        rate = clamp_rate(hand_rate);
+        last_report.status = "hand";
+    } else {
+        rate = (engine_rate != 0.0f) ? engine_rate : clamp_rate(hand_rate);
+        last_report.status = (engine_rate != 0.0f) ? "engine" : "filled";
+    }
+    last_report.raw_rate     = rate;
     last_report.applied_rate = rate;
-    last_report.status      = (engine_rate != 0.0f) ? "engine" : "filled";
 
     /* The head first, because it is the one write that is certainly ours: it is the only writer of
      * that node in the whole image. */

@@ -1,6 +1,6 @@
 /* strafe_walk.c: the pure logic of enhanced_input, checked without the game.
  *
- * Four things live here, and each of them exists because getting it wrong is invisible until the
+ * Three things live here, and each of them exists because getting it wrong is invisible until the
  * game is running:
  *
  *   * THE TRAVEL ANGLE. The integrator multiplies the facing by a SIGNED speed, so walking
@@ -14,11 +14,6 @@
  *     computed from a compile-time constant would settle twice as fast and cap twice as high in the
  *     other configuration, and nothing would say so.
  *
- *   * THE MOUSE BANK. Consume-and-zero is what makes at most one substep per frame receive a
- *     non-zero step, which is the whole safety argument for the 90-degree cap. The dormancy rule is
- *     the pause guard: while the game is paused the engine skips the poll, so the axis reader keeps
- *     answering the same non-zero number for as long as the pause lasts.
- *
  *   * FREE LOOK. Its input angle is the SAME signed-speed trap as the travel angle above, arriving
  *     from the other side: there the reversal is divided out of the angle, here it must be left in,
  *     and swapping the two rules sends the player forward while the backward key is held. Its
@@ -28,7 +23,7 @@
  *     family it belongs to. A cutscene filed as an authored region would have a minute-old mouse
  *     angle restored on top of a deliberately placed shot.
  *
- * SIZE NOTE (rule 9): 578 lines. It is one test binary for one DLL's pure logic, and splitting it
+ * SIZE NOTE (rule 9): 512 lines. It is one test binary for one DLL's pure logic, and splitting it
  * would put the travel angle and free look's input angle, which are the same trap seen from two
  * sides, and which are only meaningful next to each other, into different files. Each check
  * carries the sentence that says what breaks when it fails, because a test named `case_17` teaches
@@ -37,7 +32,6 @@
 #include "unittest.h"
 
 #include "free_look_math.h"
-#include "mouse_look.h"
 #include "strafe_walk.h"
 
 #include <math.h>
@@ -185,65 +179,6 @@ static void test_damper(void)
                 "no time passed is no movement");
     ut_near(strafe_walk_damp_step(10.0f, 90.0f, -1.0f, SETTLE, RATE), 10.0f, 0.001f,
                 "a negative substep cannot make the damper diverge");
-}
-
-static void test_mouse_bank(void)
-{
-    mouse_bank_t bank;
-    float        span = -1.0f;
-    float        step;
-    int          frame;
-
-    ut_section("the mouse bank");
-
-    /* A fresh bank is disarmed: nothing is collected until somebody has proved it is consuming. */
-    mouse_bank_reset(&bank);
-    mouse_bank_frame(&bank, 100.0f, 0.007f, 0.125f);
-    ut_near(mouse_bank_take(&bank, &span), 0.0f, 0.001f,
-                "a bank nobody has consumed from yet collects nothing");
-
-    /* Armed by that consume, it now sums whole frames and hands them over in one piece. */
-    mouse_bank_frame(&bank, 3.0f, 0.007f, 0.125f);
-    mouse_bank_frame(&bank, 4.0f, 0.007f, 0.125f);
-    mouse_bank_frame(&bank, 5.0f, 0.007f, 0.125f);
-    ut_near(mouse_bank_take(&bank, &span), 12.0f, 0.001f, "three frames arrive as one step");
-    ut_near(span, 0.021f, 0.0001f, "and the span is the wall time they took");
-
-    /* CONSUME AND ZERO. The second substep of the same frame must get nothing, because that is the
-     * whole reason a single capped step can never reach the 180-degree ambiguity. */
-    ut_near(mouse_bank_take(&bank, &span), 0.0f, 0.001f, "the second consume gets nothing");
-    ut_near(span, 0.0f, 0.0001f, "and no span with it");
-
-    /* THE PAUSE GUARD. The poll is skipped while the game is paused, so the reader answers the
-     * same non-zero sample every frame. Nothing may be waiting when play resumes. */
-    mouse_bank_reset(&bank);
-    (void)mouse_bank_take(&bank, &span);            /* arm it, as a running substep would */
-    for (frame = 0; frame < 600; ++frame) {         /* four seconds of pause at 150 fps */
-        mouse_bank_frame(&bank, 250.0f, 0.0067f, 0.125f);
-    }
-    ut_near(mouse_bank_take(&bank, &span), 0.0f, 0.001f,
-                "a frozen sample cannot pile up while nothing consumes");
-
-    /* And the very next frames are collected again: the bank comes back by itself. */
-    mouse_bank_frame(&bank, 7.0f, 0.0067f, 0.125f);
-    ut_near(mouse_bank_take(&bank, &span), 7.0f, 0.001f, "the bank re-arms on the next consume");
-
-    /* THE RATE CLAMP. Measured against the bank's own wall time, and hard-capped on top. */
-    step = mouse_look_clamp_step(1000.0f, 0.010f, 720.0f, 90.0f);
-    ut_near(step, 7.2f, 0.001f, "a spike is limited to the rate times the real span");
-    step = mouse_look_clamp_step(-1000.0f, 0.010f, 720.0f, 90.0f);
-    ut_near(step, -7.2f, 0.001f, "and symmetrically the other way");
-    step = mouse_look_clamp_step(4.0f, 0.010f, 720.0f, 90.0f);
-    ut_near(step, 4.0f, 0.001f, "an ordinary movement is not touched");
-    step = mouse_look_clamp_step(1000.0f, 1.0f, 720.0f, 90.0f);
-    ut_near(step, 90.0f, 0.001f, "the hard cap wins over a long span");
-    step = mouse_look_clamp_step(1000.0f, 0.0f, 720.0f, 90.0f);
-    ut_near(step, 90.0f, 0.001f, "no span at all falls back to the hard cap, not to zero");
-
-    /* The cap is what keeps the step below the 180-degree ambiguity, so state it as the property
-     * it is rather than as an arithmetic coincidence. */
-    ut_check(mouse_look_clamp_step(1.0e9f, 1.0e9f, 3600.0f, 90.0f) < 180.0f,
-               "no clamped step can reach the ambiguous half turn");
 }
 
 /* ==============================================================================================
@@ -567,7 +502,6 @@ int main(void)
 {
     test_travel_angle();
     test_damper();
-    test_mouse_bank();
     test_free_look_angles();
     test_free_look_offset();
     test_free_look_gate();

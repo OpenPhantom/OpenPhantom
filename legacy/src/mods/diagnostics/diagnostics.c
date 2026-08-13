@@ -1,12 +1,14 @@
-/* diagnostics.c: configuration and orchestration. The observers themselves live in
- * diag_audio.c, diag_world.c and diag_flow.c, the throttled stream in diag_log.c, the name
- * tables in diag_names.c.
+/* diagnostics.c: configuration and orchestration. The observers themselves live in diag_audio.c,
+ * diag_world.c, diag_flow.c, diag_frame.c and diag_present.c, the throttled stream in diag_log.c,
+ * the name tables in diag_names.c.
  */
 #include "diagnostics.h"
 
 #include "diag_audio.h"
 #include "diag_flow.h"
+#include "diag_frame.h"
 #include "diag_log.h"
+#include "diag_present.h"
 #include "diag_world.h"
 
 #include "common/host_image.h"
@@ -29,7 +31,8 @@ const diagnostics_config_t *diagnostics_config(void)
 
 /* The ceiling is per AREA and not a shared constant, because a clamp that silently truncates a
  * level the caller does understand is indistinguishable from a level nobody implemented. Fx has a
- * third level (the decal DRAW census); everything else stops at two. */
+ * third level, the decal DRAW census, and Trigger has one, the mover call-site census; everything
+ * else stops at two. */
 static int read_level_max(const char *key, int maximum)
 {
     int level = ini_read_int(DIAGNOSTICS_SECTION, key, 0);
@@ -53,12 +56,16 @@ static void load_config(void)
     diagnostics_state.enabled  = ini_read_bool(DIAGNOSTICS_SECTION, "Enabled", false);
     diagnostics_state.audio    = read_level("Audio");
     diagnostics_state.music    = read_level("Music");
-    diagnostics_state.trigger  = read_level("Trigger");
+    diagnostics_state.trigger  = read_level_max("Trigger", 3);
     diagnostics_state.fsm      = read_level("Fsm");
     diagnostics_state.level    = read_level("Level");
     diagnostics_state.player   = read_level("Player");
     diagnostics_state.dialogue = read_level("Dialogue");
     diagnostics_state.fx       = read_level_max("Fx", 3);
+    diagnostics_state.frame    = read_level("Frame");
+    diagnostics_state.present  = read_level("Present");
+    diagnostics_state.frame_hitch_percent =
+        ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
     diagnostics_state.audio_census_ms =
         ini_read_int(DIAGNOSTICS_SECTION, "AudioCensusMilliseconds", 0);
@@ -79,13 +86,22 @@ static void load_config(void)
     }
 }
 
+/* Adding an area means adding it in four places, and this is the fourth.
+ *
+ * A new observer needs a field in the config struct, a read in load_config, an install call at the
+ * bottom of this file, and a term here. Miss this one and the DLL declines before it installs
+ * anything, with a line that says "Enabled=0 or no area switched on" while the ini plainly says
+ * otherwise. It shipped that way once, with the frame observer, and the field log caught it on the
+ * first run only because the refusal names its own reason rather than merely saying "off". A gate
+ * that only said "off" would have cost a whole test round. */
 static bool any_area_enabled(void)
 {
     return diagnostics_state.enabled &&
            (diagnostics_state.audio    != 0 || diagnostics_state.music    != 0 ||
             diagnostics_state.trigger  != 0 || diagnostics_state.fsm      != 0 ||
             diagnostics_state.level    != 0 || diagnostics_state.player   != 0 ||
-            diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0);
+            diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
+            diagnostics_state.frame    != 0 || diagnostics_state.present  != 0);
 }
 
 void diagnostics_install(void)
@@ -115,10 +131,11 @@ void diagnostics_install(void)
     diagnostics_installed = true;
 
     log_info("areas audio=%d music=%d trigger=%d fsm=%d level=%d player=%d dialogue=%d fx=%d "
-             "| census=%dms max=%d lines/s",
+             "frame=%d present=%d | census=%dms max=%d lines/s",
              diagnostics_state.audio, diagnostics_state.music, diagnostics_state.trigger,
              diagnostics_state.fsm, diagnostics_state.level, diagnostics_state.player,
-             diagnostics_state.dialogue, diagnostics_state.fx,
+             diagnostics_state.dialogue, diagnostics_state.fx, diagnostics_state.frame,
+             diagnostics_state.present,
              diagnostics_state.audio_census_ms, diagnostics_state.max_lines_per_second);
 
     observers += diag_audio_install(diagnostics_state.audio, diagnostics_state.audio_census_ms);
@@ -129,6 +146,9 @@ void diagnostics_install(void)
     observers += diag_player_install(diagnostics_state.player);
     observers += diag_dialogue_install(diagnostics_state.dialogue);
     observers += diag_fx_install(diagnostics_state.fx);
+    observers += diag_frame_install(diagnostics_state.frame,
+                                    diagnostics_state.frame_hitch_percent);
+    observers += diag_present_install(diagnostics_state.present);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

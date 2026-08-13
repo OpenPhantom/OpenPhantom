@@ -135,7 +135,7 @@
 /* --- 0x0048D719  stdControl_setFocus ---------------------------------------------------------
  * The four absolute .data operands are wildcarded, so the pattern survives a rebased image; what
  * carries it is the shape, the bOpen gate, the three short branches 4F/1D/14 and the two
- * `call [edx+0x1C]` slots. Unique in all four retail images and in the recompiled obi.exe, where
+ * `call [edx+0x1C]` slots. Unique in both retail builds and in the recompiled obi.exe, where
  * it sits 0x60 lower at 0x0048D6B9. */
 static const uint8_t SIG_CONTROL_SET_FOCUS[] = {
     0x55, 0x8B, 0xEC, 0x51,
@@ -176,7 +176,7 @@ _Static_assert(sizeof(SIG_CONTROL_SET_FOCUS) == sizeof(MSK_CONTROL_SET_FOCUS),
 
 /* --- 0x0048D1CF  stdControl_resync -----------------------------------------------------------
  * `now = timer(); if (keyboard) flushKeyboard(); if (mouse) flushMouse();`; three calls and two
- * absolute reads, all five operands wildcarded. Also unique in all five images (0x0048D16F on
+ * absolute reads, all five operands wildcarded. Also unique in all three builds (0x0048D16F on
  * obi.exe). It is what the engine's own case 0x13 runs after setFocus(1), and it is why a key held
  * across an Alt-Tab does not come back as a fresh press. */
 static const uint8_t SIG_CONTROL_RESYNC[] = {

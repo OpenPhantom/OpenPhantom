@@ -84,7 +84,7 @@ that *could* produce the symptom is not a cause; only a measurement that sees it
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. Offline verification passes on all four retail executables.
+Built and linked, `/W4 /WX` clean. Offline verification passes on both retail builds.
 **Not accepted in game**, the `prevRot` fix in particular is unverified.
 
 To check in game: decapitate an enemy and watch without moving. The piece must fall, tumble briefly,

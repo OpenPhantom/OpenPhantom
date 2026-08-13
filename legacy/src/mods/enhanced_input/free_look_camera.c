@@ -120,6 +120,7 @@
 #include "mouse_look.h"
 #include "player_record.h"
 #include "player_sites.h"
+#include "view_lead.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -286,8 +287,13 @@ static void build_gate(free_look_gate_t *gate, uint8_t **out_record, const uint8
     *out_region = region;
 }
 
-/* Runs once per rendered frame, immediately before the camera update reads the two cells. */
-static void update_camera_yaw(void)
+/* Runs once per rendered frame, immediately before the camera update reads the two cells.
+ *
+ * Returns the degrees the DRAWN yaw is to be advanced by once the original has composed it, which
+ * is mouse look's per-frame view lead and is zero on every other path. That number is deliberately
+ * carried out of here as a return value rather than left in a field: it lives for the length of one
+ * call, and a field would invite a second writer. */
+static float update_camera_yaw(void)
 {
     free_look_gate_t     gate;
     free_look_release_t  reason;
@@ -333,23 +339,46 @@ static void update_camera_yaw(void)
         if (!free_state->config.rigid_mouse_look_camera ||
             free_state->camera.last_interp == NULL ||
             !enhanced_input_is_active() || free_look_is_enabled()) {
-            return;
+            view_lead_release();
+            return 0.0f;
         }
 
         build_gate(&gate, &record, &region);
         gate.enabled = true;                    /* ask every question except "is free look on" */
         if (free_look_gate_refusal(&gate) != FREE_LOOK_ARMED) {
-            return;
+            view_lead_release();
+            return 0.0f;
         }
 
         interpolated = free_look_interpolated_heading(*free_state->camera.head_previous,
                                                       *free_state->camera.head_current,
                                                       *free_state->camera.substep_alpha);
-        if (isfinite(interpolated)) {
-            *free_state->camera.last_interp = interpolated;
+        if (!isfinite(interpolated)) {
+            view_lead_release();
+            return 0.0f;
         }
-        return;
+        *free_state->camera.last_interp = interpolated;
+
+        /* ---- and the mouse gets a clock of its own --------------------------------------------
+         *
+         * Everything above this line leaves the view angle where the engine put it, once per
+         * simulation step. The bank is drained here rather than in a callback of our own for the
+         * same reason the offset is written here: this is the one instant between the step that
+         * consumed and the frame end that refills, so the two drains cannot be reordered against
+         * each other by an edit of ours. The lead itself is applied after the original, because it
+         * is added to the yaw the original composes. */
+        if (!view_lead_is_active()) {
+            /* The drain must not happen at all here, not merely be discarded: it CONSUMES, and a
+             * take nobody applies is hand movement the body never receives. */
+            return 0.0f;
+        }
+        view_lead_add_frame(mouse_look_take_frame_degrees());
+        return view_lead_current(*free_state->camera.substep_alpha);
     }
+
+    /* Free look owns the mouse and the camera outright on this path, so the lead has no part in it
+     * and anything banked belongs to the scheme that is no longer running. */
+    view_lead_release();
 
     build_gate(&gate, &record, &region);
     reason = free_look_gate_refusal(&gate);
@@ -357,7 +386,7 @@ static void update_camera_yaw(void)
         /* Logged BEFORE the release, so the line can still say what is being given up. */
         log_gate(false, reason, "", &gate, region);
         release_for(reason);
-        return;
+        return 0.0f;
     }
 
     interpolated = free_look_interpolated_heading(*free_state->camera.head_previous,
@@ -365,7 +394,7 @@ static void update_camera_yaw(void)
                                                   *free_state->camera.substep_alpha);
     if (!isfinite(interpolated)) {
         refuse_this_frame("the camera's interpolated heading", &gate, region);
-        return;
+        return 0.0f;
     }
 
     if (!free_state->camera_yaw_valid) {
@@ -376,7 +405,7 @@ static void update_camera_yaw(void)
          * a yaw from before the last release. */
         if (!free_state->camera_yaw_valid) {
             refuse_this_frame("the camera object's own yaw", &gate, region);
-            return;
+            return 0.0f;
         }
     }
 
@@ -396,7 +425,7 @@ static void update_camera_yaw(void)
      * live and unzeroed, both readers would receive the same sample, and this is switched off. */
     if (free_state->drain_per_frame) {
         free_state->camera_yaw =
-            free_look_wrap360(free_state->camera_yaw + mouse_look_take_step_degrees());
+            free_look_wrap360(free_state->camera_yaw + mouse_look_take_frame_degrees());
     }
 
     /* Nothing clamps the camera against the body here, and nothing may.
@@ -416,7 +445,7 @@ static void update_camera_yaw(void)
     offset = free_look_offset(free_state->camera_yaw, interpolated);
     if (!isfinite(offset) || !isfinite(free_state->camera_yaw)) {
         refuse_this_frame("the camera yaw offset", &gate, region);
-        return;
+        return 0.0f;
     }
 
     /* Logged before the stores, so the "camera yaw" it quotes is still the engine's own and the
@@ -445,19 +474,77 @@ static void update_camera_yaw(void)
     *free_state->camera.camera_yaw_offset = offset;
     *free_state->camera.yaw_lag           = RECENTRE_FROZEN;
     free_state->armed                     = true;
+    return 0.0f;
+}
+
+/* Mouse look's per-frame view lead, added to the yaw the original has just composed.
+ *
+ * The engine writes that field twice per call and only the second write carries a value; the first
+ * stores back exactly what it read a few instructions earlier. What it writes is the interpolated
+ * heading plus its own offset.
+ *
+ * IT IS NOT READ BACK IN THIS FRAME AT ALL. The camera transform is composed by a different
+ * function, early in the next frame, before the simulation steps and before this one runs, and that
+ * function builds the rotation and the eye together from a single read of this field. So the value
+ * written here is the camera the NEXT frame is drawn with, and a frame is always drawn through a
+ * camera composed one frame earlier. That is the engine's own structure and not something this
+ * feature introduces, but anything reasoning about latency here has to start from it.
+ *
+ * Nothing else writes the field in between, and that took two exclusions that are not obvious: the
+ * composing function normalises the euler triple into [0, 360) after it has already built the
+ * matrix, so those writes cannot change the angle, and the debug free-fly camera that also writes
+ * it is unreachable in this build, with no call, no jump and no stored pointer anywhere in the
+ * image. Both had to be established before adding to the field could be called safe.
+ *
+ * Adding here is therefore stateless: a frame that adds nothing is a frame drawn exactly as the
+ * engine composed it, so switching the feature off is immediate and there is nothing left behind
+ * to restore.
+ *
+ * It must not run on the engine's EASED yaw arm, which reads this same field back from the previous
+ * frame; the arm is forced to the plain one on every frame the lead is non-zero, and the feature
+ * refuses to arm at all where it cannot be. */
+static void finish_view_lead(float lead)
+{
+    uint8_t *view = (uint8_t *)*free_state->camera.view;
+    float    yaw;
+    float    adjusted;
+
+    if (view == NULL || !memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+        /* No camera object this frame, a load or the front end. Whatever is banked belongs to a
+         * camera that no longer exists, and the measurement must not reach across the gap. */
+        view_lead_release();
+        return;
+    }
+
+    yaw = *(float *)(view + BAPVIEW_EULER_YAW_OFFSET);
+    if (lead != 0.0f && isfinite(yaw)) {
+        adjusted = free_look_wrap360(yaw + lead);
+        if (isfinite(adjusted)) {
+            *(float *)(view + BAPVIEW_EULER_YAW_OFFSET) = adjusted;
+            yaw = adjusted;
+        }
+    }
+    view_lead_census_sample(yaw);
 }
 
 static int32_t __cdecl hook_update_cam(void)
 {
     update_cam_fn_t original = (update_cam_fn_t)free_state->update_detour.original;
     int32_t         result;
+    float           lead;
 
-    update_camera_yaw();
+    lead = update_camera_yaw();
 
     /* The inputs are recorded here, before the original: it rewrites the yaw offset at its own
      * tail, so a value read afterwards is not the one the yaw was built from. */
     camera_watch_before_update();
     result = original();
+
+    /* The lead goes on BEFORE the watch samples, because what the watch is for is what ends up on
+     * screen. It is handed to the watch as well, so that the watch's own check of the engine's
+     * arithmetic, interpolated heading plus offset equals the yaw, still composes. */
+    finish_view_lead(lead);
+    camera_watch_note_lead(lead);
 
     /* AFTER the original, because the yaw this watches is written inside it. It is deliberately
      * outside every gate above: a camera that swings while free look is RELEASED is exactly the

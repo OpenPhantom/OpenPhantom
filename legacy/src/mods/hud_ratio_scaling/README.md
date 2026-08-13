@@ -157,7 +157,7 @@ engine's size.
   uniquely at every mode; both numbers landing on the exact centre of their own block at every
   mode; and the two identities, measured as a **bit-exact deviation of 0.0**, `SquareHud=0` with
   `HudScale=1.0` at every mode, and both `SquareHud` values at every 4:3 mode.
-* **Every byte pattern verified offline** against all four retail `WMAIN.EXE` with
+* **Every byte pattern verified offline** against both retail builds with
   All six patterns resolve uniquely on each.
 * **NOT accepted in game.** No screen has been looked at. Nothing here is a statement about how it
   looks or behaves while playing.

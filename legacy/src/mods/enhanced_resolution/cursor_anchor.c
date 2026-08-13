@@ -118,7 +118,7 @@ _Static_assert(sizeof(void *) == 4, "cursor_anchor reads 32-bit engine pointers 
 
 /* --- 0x0046A115  control_recentreMouse -------------------------------------------------------
  * Address-free: every byte of this pattern is an opcode, a register field or an immediate, and it
- * stops before the SetCursorPos import slot. Unique in all five shipped images including the
+ * stops before the SetCursorPos import slot. Unique in all three builds including the
  * recompiled obi.exe, where it sits 0x60 lower. */
 static const uint8_t SIG_CURSOR_RECENTRE[] = {
     0x55, 0x8B, 0xEC,
@@ -142,7 +142,7 @@ static const uint8_t SIG_CURSOR_RECENTRE[] = {
 
 /* --- 0x0046A155  control_captureMouse --------------------------------------------------------
  * The three import slots and the rel32 are wildcarded, so the pattern survives a rebased import
- * table. Also unique in all five images, the identical tail also occurs at the end of the input
+ * table. Also unique in all three builds, the identical tail also occurs at the end of the input
  * startup routine, and the `55 8B EC` in front is what tells the two apart. */
 static const uint8_t SIG_CURSOR_CAPTURE[] = {
     0x55, 0x8B, 0xEC,

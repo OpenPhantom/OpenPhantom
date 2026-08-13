@@ -116,7 +116,7 @@ static const uint8_t SIG_SET_MODE_ENTRY[] = {
  * test, the `imul eax,0x54` stride and the two loads either side of it, and not where the mode
  * table happens to live. That keeps it resolving under forced ASLR and on the recompiled build,
  * where the same three instructions sit 0x60 lower and the operands have moved with them. It stays
- * unique in all five shipped images, which is what makes wildcarding them safe here. */
+ * unique in all three builds, which is what makes wildcarding them safe here. */
 static const uint8_t SIG_MODE_SIZE_ACCESSOR[] = {
     0x55, 0x8B, 0xEC, 0x83, 0x7D, 0x08, 0x00, 0x74, 0x13,
     0xA1, 0x00, 0x00, 0x00, 0x00, 0x6B, 0xC0, 0x54, 0x8B, 0x4D, 0x08,

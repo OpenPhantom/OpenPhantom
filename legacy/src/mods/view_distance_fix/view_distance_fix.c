@@ -32,7 +32,14 @@
  * activation radius SMALLER than their level's draw distance, the enemy only comes into being
  * once it is well inside the visible picture. That is the pop-in, and it exists at 60 degrees
  * too. This is the ONE change here that touches GAME BEHAVIOUR: an actor created earlier thinks
- * earlier. Hence a default of 1.25 and a cap of 2.0.
+ * earlier. It therefore ships at 1.0, the engine's own value, and installs nothing.
+ *
+ * Creating them earlier is not free, and that is why the default came back down. The engine draws
+ * actors from two pools fixed at start-up, 128 actors and 255 things, and the activation test is
+ * a SPHERE, so a radius multiplied by k multiplies the activated volume by k cubed: 1.25 was very
+ * nearly twice as many actors alive at once. A full pool makes the spawn return zero silently,
+ * the placement is skipped, and an enemy that should be standing in front of the player is not
+ * there at all. spawn_census.c counts exactly that.
  *
  * SIZE NOTE (rule 9): this file is over 600 lines because rule 8 wants the byte evidence at the
  * site rather than only in a document; the code itself is well inside the normal band.
@@ -42,6 +49,7 @@
 #include "cell_watchdog.h"
 #include "draw_table.h"
 #include "fog_regime.h"
+#include "spawn_census.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -60,6 +68,11 @@
 #include <stdint.h>
 
 #define VIEW_DISTANCE_SECTION "view_distance_fix"
+
+/* The measurement switch below lives in the diagnostics section, where every other
+ * measurement in this ini lives. Declaring the name here rather than including another
+ * feature's header keeps this DLL standing on its own. */
+#define DIAGNOSTICS_SECTION   "diagnostics"
 
 /* --- 0x0040E42A  bapmat_viewDistance: THE DRAW DISTANCE --------------------------------------- *
  *   55 / 8B EC / 51 / 8B 45 08        prologue, 7 bytes, clean boundary
@@ -189,6 +202,7 @@ typedef struct view_distance_config {
     int   two_sided_max;
     bool  relocate_draw_table;
     bool  lower_cell_limit;
+    bool  spawn_census;
 } view_distance_config_t;
 
 typedef struct view_distance_state {
@@ -236,11 +250,30 @@ static void load_config(void)
     config->vertex_fog          = ini_read_bool (VIEW_DISTANCE_SECTION, "VertexFog", true);
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
-    config->npc_range_scale     = ini_read_float(VIEW_DISTANCE_SECTION, "NpcRangeScale", 1.25f);
+    /* 1.0, which is the engine's own activation distance and installs no patch at all.
+     *
+     * The test this would scale is a plain squared distance in three dimensions (0x00428EB3:
+     * three subtractions, three multiplies, one compare against radius*radius). There is no view
+     * direction in it. A scale above 1 therefore does not open the picture sideways, it creates
+     * every actor earlier in EVERY direction, straight ahead included, which is a change to how
+     * the game plays.
+     *
+     * What made the pop-in visible is that this project widens the field of view: 60 degrees
+     * horizontal at 4:3 becomes 75.2 at 16:9, so the picture reaches sideways into ground the
+     * original could never show, and placements there are in view while their authored activation
+     * distance has not been reached. The engine is not behaving differently, it is being watched
+     * from further round the corner. Hiding that by creating actors early trades a cosmetic
+     * problem for a behavioural one, and the original rule wins. */
+    config->npc_range_scale     = ini_read_float(VIEW_DISTANCE_SECTION, "NpcRangeScale", 1.0f);
     config->two_sided_severed   = ini_read_bool (VIEW_DISTANCE_SECTION, "TwoSidedSevered", true);
     config->two_sided_max       = ini_read_int  (VIEW_DISTANCE_SECTION, "TwoSidedMax", 8);
     config->relocate_draw_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateDrawTable", true);
     config->lower_cell_limit    = ini_read_bool (VIEW_DISTANCE_SECTION, "LowerCellLimit", true);
+    /* Read out of the diagnostics section rather than this one, because that is where every
+     * measurement switch in this file lives and a reader looking for one should find them
+     * together. It is only an ini key: this DLL still has no run-time dependency on the
+     * diagnostics DLL, and it works whether or not that DLL is installed at all. */
+    config->spawn_census        = ini_read_bool (DIAGNOSTICS_SECTION, "Spawns", false);
 
     /* Cap from the control review: above 2.0 the 8192-entry collector gets tight and the
      * 128-slot character pool gets short. */
@@ -405,30 +438,35 @@ static bool thing_has_hole(const void *thing)
     uint32_t    node_count;
     uint32_t    index;
 
+    /* Every read below is the faulting form rather than the asking one, and that is a performance
+     * decision with a measurable size. This function runs for every thing the engine draws, and it
+     * makes six of these reads each time; at three dozen actors that is a couple of hundred system
+     * calls per frame for nothing but permission to look. The guarantee is unchanged: a bad pointer
+     * still refuses rather than killing the process. */
     if (record == NULL) {
         return false;
     }
-    if (!memory_read((uintptr_t)(record + THING_MODEL3), &model, sizeof(model)) ||
+    if (!memory_try_read((uintptr_t)(record + THING_MODEL3), &model, sizeof(model)) ||
         model == NULL) {
         return false;
     }
-    if (!memory_read((uintptr_t)(model + MODEL3_NODE_COUNT), &node_count, sizeof(node_count)) ||
+    if (!memory_try_read((uintptr_t)(model + MODEL3_NODE_COUNT), &node_count, sizeof(node_count)) ||
         node_count > MAX_PLAUSIBLE_NODES) {
         return false;                              /* plausibility, never read blind */
     }
 
-    if (memory_read((uintptr_t)(record + THING_NODE_HIDDEN), &hidden, sizeof(hidden)) &&
+    if (memory_try_read((uintptr_t)(record + THING_NODE_HIDDEN), &hidden, sizeof(hidden)) &&
         hidden != NULL &&
-        memory_is_readable_range((uintptr_t)hidden, node_count * sizeof(uint32_t))) {
+        memory_try_readable((uintptr_t)hidden, node_count * sizeof(uint32_t))) {
         for (index = 0; index < node_count; ++index) {
             if (((const uint32_t *)hidden)[index] != 0) {
                 return true;
             }
         }
     }
-    if (memory_read((uintptr_t)(record + THING_MESH_HIDDEN), &hidden, sizeof(hidden)) &&
+    if (memory_try_read((uintptr_t)(record + THING_MESH_HIDDEN), &hidden, sizeof(hidden)) &&
         hidden != NULL &&
-        memory_is_readable_range((uintptr_t)hidden, node_count * sizeof(uint32_t))) {
+        memory_try_readable((uintptr_t)hidden, node_count * sizeof(uint32_t))) {
         for (index = 0; index < node_count; ++index) {
             if (((const uint32_t *)hidden)[index] != 0) {
                 return true;
@@ -672,6 +710,11 @@ void view_distance_fix_install(void)
     install_fog_regime();
     install_npc_range();
     install_two_sided();
+
+    /* Last, and on the same resolved site the range test uses. It is the only observer of a
+     * failure the engine reports nowhere: a spawn the pools were too full to satisfy. */
+    (void)spawn_census_install(sites[SITE_ACTIVATION_SCAN].address,
+                               view_state.config.spawn_census);
 }
 
 void view_distance_fix_shutdown(void)

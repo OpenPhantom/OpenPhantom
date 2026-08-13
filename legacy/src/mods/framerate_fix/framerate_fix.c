@@ -1,5 +1,17 @@
 /* framerate_fix.c: lift the render cap, and pay for everything that lifting it costs.
  *
+ * SIZE NOTE: a little over six hundred lines. This file is the DLL's entry point and it also owns
+ * the two engine sites that are frame COUNTERS used as clocks, the animation tick and the emitter
+ * dormancy limit, because both are corrected in the same way and from the same argument. The bulk
+ * is not code: it is the byte census that decides which readers of the animation counter are
+ * affected, and a correction to that census that stood wrong in this file for a while. The seam,
+ * measured rather than guessed, is those two counter patches together with the per frame tick that
+ * drives one of them, which is roughly a third of the file and shares only the config struct with
+ * the rest. It was not taken here because it means adding a source file, which belongs in a change
+ * of its own. Everything else has already been moved out: the camera, the drawn euler and pose,
+ * the facing latch, the frame delta, the particle clock, the simulation clock rebase, the movers
+ * and the statistics each own a file.
+ *
  * ==============================================================================================
  * The simulation is already free
  *
@@ -20,15 +32,26 @@
  *   (3) the pose throttle and the drawn euler -> draw_interpolation.c
  *   (4) the emitter dormancy counter       -> here
  *
- * What is proven not to need compensation: movers (they derive dt from the world clock, which
- * only the substep loop advances), the LOD cross-fade (a real seconds delta), the input latch and
- * the pause gate.
+ * What is not a compensation but a choice, each behind its own switch and each off unless the ini
+ * says otherwise: measuring the frame period more precisely (frame_delta.c), drawing particles at
+ * the instant the frame shows (particle_clock.c), rebasing the world clock so the drawn instant
+ * and the simulation agree (sim_clock.c), and interpolating movers (mover_interpolation.c).
+ *
+ * What is proven not to need compensation: the LOD cross-fade (a real seconds delta), the input
+ * latch and the pause gate. Movers were on that list and are not any more: they derive their dt
+ * from the world clock, which only the substep loop advances, so they are correct rather than
+ * smooth, and smoothing them is the separate opt-in above.
  */
 #include "framerate_fix.h"
 
 #include "camera_compensation.h"
 #include "draw_interpolation.h"
+#include "face_latch.h"
+#include "frame_delta.h"
 #include "framerate_stats.h"
+#include "mover_interpolation.h"
+#include "particle_clock.h"
+#include "sim_clock.h"
 
 #include "common/frame_hook.h"
 #include "common/host_image.h"
@@ -128,12 +151,19 @@ static const uint8_t SIG_CLOCK_TICKS_INCREMENT[] = {
 };
 #define OFFSET_CLOCK_TICKS_ADDRESS 0x02u
 
-/* --- 0x0042238D  emitter_renderAll: the 30-CULLED-FRAMES dormancy counter -------------------- *
+/* --- 0x0042238D  emitter_renderAll: the thirty-culled-frames dormancy counter ---------------- *
  *   83 B8 14010000 1E   cmp [eax+0x114], 0x1E      <- imm8 at +0x06
  *   7C 46               jl  ...
- * An emitter that fails both culls for THIRTY CONSECUTIVE FRAMES goes dormant. That is a FRAME
- * COUNT used as a clock: at 144 fps an off-screen emitter sleeps after 0.21 s instead of 1.0 s.
- * The compare is `83 /7 ib`, a SIGN-EXTENDED imm8, so the largest value we can write is 127. */
+ * An emitter that has failed both culls thirty times goes dormant. That is a FRAME COUNT used as a
+ * clock: at 144 fps an off-screen emitter sleeps after 0.21 s instead of 1.0 s. The compare is
+ * `83 /7 ib`, a SIGN-EXTENDED imm8, so the largest value we can write is 127.
+ *
+ * The count is CUMULATIVE and not consecutive, which this comment used to get wrong. Across the
+ * whole particle band the counter field at +0x114 has exactly two writers: the increment at
+ * 0x00422384 and a zero inside emitter_rebaseClocks 0x00422427, which is the wake-up path. Neither
+ * is on the draw path, so a frame that does draw the emitter does not reset it. That does not
+ * change the patch, which corrects the same quantity either way; it changes what the number means,
+ * because an emitter that is culled intermittently still reaches the limit eventually. */
 static const uint8_t SIG_EMITTER_DORMANCY[] = {
     0x83, 0xB8, 0x14, 0x01, 0x00, 0x00, 0x1E, 0x7C, 0x46, 0x8B, 0x4D
 };
@@ -150,25 +180,36 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("wait_for_frame",        SIG_WAIT_FOR_FRAME),
+    /* A detour target since frame_delta.c took it, so it has to use the detour form: this pattern
+     * begins with the very bytes that detour overwrites, and without the fallback this entry would
+     * resolve on a run where frame_delta is off and silently stop resolving on one where it is on,
+     * taking the render cap with it. */
+    SIGNATURE_ENTRY_DETOUR("wait_for_frame",  SIG_WAIT_FOR_FRAME, 11u),
     SIGNATURE_ENTRY("substep_select",        SIG_SUBSTEP_SELECT),
     SIGNATURE_ENTRY("clock_ticks_increment", SIG_CLOCK_TICKS_INCREMENT),
     SIGNATURE_ENTRY("emitter_dormancy",      SIG_EMITTER_DORMANCY)
 };
 
 typedef struct framerate_config {
-    bool enabled;
-    int  target_fps;            /* 0 = uncapped (clears g_frameLimiterOn) */
-    bool compensate_camera;
-    bool compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
-    bool compensate_animation;
-    bool spin_sleep;
-    bool pin_simulation_rate;
-    int  animation_clock_mode;  /* 0 = per frame (original), 1 = 30 Hz (authored rate) */
-    bool interpolate_pitch_roll;
-    bool pose_per_frame;
-    int  stats_frame_interval;
-    int  stats_player_frames;
+    bool  enabled;
+    int   target_fps;            /* 0 = uncapped (clears g_frameLimiterOn) */
+    bool  compensate_camera;
+    bool  compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
+    bool  compensate_animation;
+    bool  spin_sleep;
+    bool  pin_simulation_rate;
+    int   animation_clock_mode;  /* 0 = per frame (original), 1 = 30 Hz (authored rate) */
+    bool  interpolate_pitch_roll;
+    bool  pose_per_frame;
+    int   face_latch_yield;
+    bool  precise_frame_time;
+    bool  interpolate_particles;
+    bool  rebase_sim_clock;
+    bool  interpolate_movers;
+    float mover_travel_limit;    /* world units a mover may cross in one simulation step */
+    int   process_priority;      /* 0 = leave it alone, 1 = above normal, 2 = high */
+    int   stats_frame_interval;
+    int   stats_player_frames;
 } framerate_config_t;
 
 typedef struct framerate_state {
@@ -200,6 +241,15 @@ static void load_config(void)
     config->animation_clock_mode   = ini_read_int (FRAMERATE_SECTION, "AnimationClockMode", 1);
     config->interpolate_pitch_roll = ini_read_bool(FRAMERATE_SECTION, "InterpolatePitchRoll", true);
     config->pose_per_frame         = ini_read_bool(FRAMERATE_SECTION, "PosePerFrame", true);
+    config->face_latch_yield       = ini_read_int (FRAMERATE_SECTION, "FaceLatchYield", 16);
+    config->precise_frame_time     = ini_read_bool(FRAMERATE_SECTION, "PreciseFrameTime", true);
+    config->process_priority       = ini_read_int (FRAMERATE_SECTION, "ProcessPriority", 0);
+    config->interpolate_particles  =
+        ini_read_bool(FRAMERATE_SECTION, "InterpolateParticles", true);
+    config->rebase_sim_clock       = ini_read_bool(FRAMERATE_SECTION, "RebaseSimClock", true);
+    config->interpolate_movers     = ini_read_bool(FRAMERATE_SECTION, "InterpolateMovers", true);
+    config->mover_travel_limit     =
+        ini_read_float(FRAMERATE_SECTION, "MoverTravelLimitPerStep", 64.0f);
     config->stats_frame_interval   = ini_read_int (FRAMERATE_SECTION, "StatsFrameInterval", 0);
     config->stats_player_frames    = ini_read_int (FRAMERATE_SECTION, "StatsPlayerFrames", 0);
 
@@ -208,11 +258,26 @@ static void load_config(void)
     if (config->animation_clock_mode < 0 || config->animation_clock_mode > 1) {
         config->animation_clock_mode = 1;
     }
+    if (config->face_latch_yield < 0)  { config->face_latch_yield = 0; }
+    if (config->face_latch_yield > 64) { config->face_latch_yield = 64; }
+    if (!(config->mover_travel_limit > 0.0f)) { config->mover_travel_limit = 0.0f; }
     if (config->stats_frame_interval < 0) { config->stats_frame_interval = 0; }
     if (config->stats_player_frames  < 0) { config->stats_player_frames  = 0; }
 }
 
 /* ============================================================================================ */
+/* The frame delta cell holds two different quantities, and which one this DLL reads is decided by
+ * WHERE it reads it.
+ *
+ * A whole-image census of the dword [0x868714] finds five writers and 65 readers. The writers are
+ * the clamp on the incoming dt at 0x00475713, the substep at 0x00475740, the substep-with-cheat at
+ * 0x0047574C, a restore at 0x00475820 and the measured frame period at 0x00475BA8. sys_runSubsteps
+ * saves the frame period into a local at 0x00475734, pins the cell to the substep for the duration
+ * of its loop, and puts the frame period back at 0x00475820 on its way out.
+ * So a reader inside the loop gets the substep and a reader outside it gets the frame
+ * period. The per-frame hook below runs at render_frameEnd, which is outside, so what it reads is
+ * the frame period. Reading only the first half of that sentence leads to the opposite conclusion,
+ * which was drawn once here and cost a round. */
 static void resolve_globals(void)
 {
     uintptr_t frame_end = frame_hook_site();
@@ -264,8 +329,8 @@ static void patch_render_cap(void)
          * the opcode pair is checked before the operand is believed. */
         if (!memory_read(site + OFFSET_LIMITER_CMP, cmp_opcode, sizeof(cmp_opcode)) ||
             cmp_opcode[0] != 0x83 || cmp_opcode[1] != 0x3D) {
-            log_warning("the limiter `cmp [imm32],0` shape is not at %08X - the cap is left alone",
-                        (unsigned)(site + OFFSET_LIMITER_CMP));
+            log_warning("the limiter `cmp [imm32],0` shape is not at %08X, so the cap is left "
+                        "alone", (unsigned)(site + OFFSET_LIMITER_CMP));
             return;
         }
         if (!memory_read_u32(site + OFFSET_LIMITER_ADDRESS, &limiter_address) ||
@@ -275,7 +340,7 @@ static void patch_render_cap(void)
             return;
         }
         patch_write_u32(limiter_address, 0);
-        log_info("UNCAPPED - g_frameLimiterOn [%08X] cleared", (unsigned)limiter_address);
+        log_info("UNCAPPED, g_frameLimiterOn [%08X] cleared", (unsigned)limiter_address);
     }
 
     if (framerate_state.config.spin_sleep) {
@@ -289,7 +354,7 @@ static void patch_render_cap(void)
         if (patch_validate_bytes(push_site, expected_push, sizeof(expected_push))) {
             timeBeginPeriod(1);
             patch_write_u8(push_site + 1, 1);
-            log_info("SpinSleep on - Sleep(0) -> Sleep(1) at %08X, timer resolution 1 ms",
+            log_info("SpinSleep on, Sleep(0) becomes Sleep(1) at %08X, timer resolution 1 ms",
                      (unsigned)push_site);
         } else {
             log_warning("SpinSleep, no `push 0` at %08X, left alone", (unsigned)push_site);
@@ -319,7 +384,7 @@ static void pin_simulation_rate(void)
         return;
     }
     if (immediate_32 != SUBSTEP_32_BITS || immediate_64 != SUBSTEP_64_BITS) {
-        log_warning("the substep immediates are %08X / %08X, expected %08X / %08X - refused",
+        log_warning("the substep immediates are %08X / %08X, expected %08X / %08X, refused",
                     (unsigned)immediate_32, (unsigned)immediate_64,
                     (unsigned)SUBSTEP_32_BITS, (unsigned)SUBSTEP_64_BITS);
         return;
@@ -364,10 +429,33 @@ static void patch_emitter_dormancy(void)
     if (frames > DORMANCY_MAX_FRAMES)    { frames = DORMANCY_MAX_FRAMES; }
 
     patch_write_u8(immediate, (uint8_t)frames);
-    log_info("emitter dormancy %u -> %u frames at %08X (%.2f s)",
-             DORMANCY_RETAIL_FRAMES, frames, (unsigned)immediate,
-             (framerate_state.config.target_fps > 0)
-                 ? (double)frames / framerate_state.config.target_fps : 0.0);
+
+    /* The seconds are reported against the rate the count was DERIVED from, and when there is no
+     * such rate the line says so instead of printing a number. It used to divide by the
+     * configured rate unconditionally, so with the limiter removed it printed "0.00 s", which
+     * reads as a measurement of zero rather than as the absence of one. */
+    if (framerate_state.config.target_fps > 0) {
+        log_info("emitter dormancy %u -> %u frames at %08X, which is %.2f s at the configured "
+                 "%d fps", DORMANCY_RETAIL_FRAMES, frames, (unsigned)immediate,
+                 (double)frames / framerate_state.config.target_fps,
+                 framerate_state.config.target_fps);
+        return;
+    }
+
+    /* Uncapped, so the count cannot be turned into a time in advance, and the ceiling is not
+     * ours to choose: the engine compares against a sign extended byte immediate, 83 B8 14 01 00
+     * 00 1E, so 127 is the largest value those bytes can hold at all. The dormancy therefore
+     * shortens as the frame rate rises, and above about 127 frames a second it is shorter than
+     * the second the original intended. That is a real regression toward the defect this patch
+     * exists to remove, and removing it properly means counting something other than rendered
+     * frames here, which needs the counter's own increment site rather than this comparison.
+     * Until then it is named rather than hidden. */
+    log_info("emitter dormancy %u -> %u frames at %08X. The engine compares against a byte "
+             "immediate, so 127 frames is the hard ceiling. With no configured frame rate that "
+             "is one second only while the game runs at 127 frames a second; at 240 it is 0.53 s "
+             "and at 450 it is 0.28 s, so an off-screen emitter sleeps earlier than the original "
+             "intended. Set TargetFps to a real cap if that matters more than the frame rate.",
+             DORMANCY_RETAIL_FRAMES, frames, (unsigned)immediate);
 }
 
 /* ============================================================================================
@@ -426,7 +514,11 @@ static void on_frame(void)
      * (Not the UV scroll: see the corrected census at SIG_CLOCK_TICKS_INCREMENT. The surface UV
      * animation runs on world+0x50, the per-substep simulation clock, and is already correct.)
      *   mode 1 (default): ticks = elapsed * 30. The AUTHORED speed at any frame rate, but the
-     *                     phase visibly advances 30 times a second.
+     *                     phase visibly advances 30 times a second. It also pins the engine's own
+     *                     frame-rate readout at exactly 30.0, because that readout divides this
+     *                     counter's movement by real seconds and the counter is now synthetic. The
+     *                     debug page is therefore not a second opinion on the frame rate while
+     *                     this mode is on; the statistics window is.
      *   mode 0:           leave the engine's per-frame increment alone. Smooth, but the water and
      *                     the scrolling textures run at fps/30 times their authored speed.
      * There is no third option: the consumer truncates to uint32 before it converts to float, so
@@ -439,9 +531,62 @@ static void on_frame(void)
     }
 
     framerate_stats_sample(frame_delta);
+    mover_interpolation_sample();
+    sim_clock_sample();
 }
 
 /* ============================================================================================ */
+/* Lifts the whole process above ordinary background work.
+ *
+ * A scheduling repair rather than a performance one, and it treats a symptom the engine cannot
+ * defend against itself. The game is single threaded and saturates one core: measurements put it
+ * between 92 and 103 per cent of a core while drawing. On a machine with many cores that shows in
+ * the task manager as a low total, so a second process busy on the same core looks harmless while
+ * it is in fact taking the game's time slice away. Every slice the drawing thread loses is a
+ * frame delivered late, and with vertical sync a late frame does not arrive late by the amount it
+ * was delayed, it misses the refresh and arrives a whole refresh interval late instead.
+ *
+ * Off by default, because raising a process above normal is a decision about the whole machine.
+ * High is offered; real time deliberately is not, because that would starve the very drivers
+ * that deliver the input this is meant to protect.
+ *
+ * It has NOT been shown to repair anything. A deliberate load test, twenty eight busy workers on
+ * a twenty eight processor machine with this switched off, produced a measurable rise in late
+ * frames and nothing a player could see. Treat it as a precaution, not as a fix. */
+static void apply_process_priority(void)
+{
+    DWORD       priority;
+    const char *name;
+
+    switch (framerate_state.config.process_priority) {
+    case 0:
+        return;
+    case 1:
+        priority = ABOVE_NORMAL_PRIORITY_CLASS;
+        name     = "above normal";
+        break;
+    case 2:
+        priority = HIGH_PRIORITY_CLASS;
+        name     = "high";
+        break;
+    default:
+        log_warning("ProcessPriority=%d is not one of 0, 1 or 2, so the priority is left alone",
+                    framerate_state.config.process_priority);
+        return;
+    }
+
+    if (!SetPriorityClass(GetCurrentProcess(), priority)) {
+        log_warning("the process priority could not be raised to %s, so it stays at normal and a "
+                    "busy machine can still take the drawing thread's time slice away", name);
+        return;
+    }
+    log_info("process priority raised to %s. The game is single threaded and saturates one core, "
+             "so an equally ranked background process competes with it directly even while the "
+             "task manager shows a low total across all cores. A lost time slice is a late frame, "
+             "and with vertical sync a late frame costs a whole refresh interval rather than the "
+             "delay itself.", name);
+}
+
 void framerate_fix_install(void)
 {
     log_init("framerate_fix", false);
@@ -459,6 +604,10 @@ void framerate_fix_install(void)
         log_info("Enabled=0, the 30 Hz cap and every compensation stay off");
         return;
     }
+
+    /* Before any patching, because it touches no engine memory and a failure here must not
+     * leave a half patched image behind. */
+    apply_process_priority();
 
     signature_resolve_table(sites, SITE_COUNT);
 
@@ -478,6 +627,17 @@ void framerate_fix_install(void)
     } else {
         log_info("InterpolatePitchRoll=0, drawn pitch and roll keep stepping at 32 Hz");
     }
+    face_latch_install(framerate_state.config.face_latch_yield);
+
+    /* The frame delta detour goes on before the particle and mover work, because both of those
+     * publish a value derived from the substep alpha and the alpha is only as good as the period
+     * the wait measured. */
+    frame_delta_install(framerate_state.config.precise_frame_time);
+    particle_clock_install(framerate_state.config.interpolate_particles);
+    sim_clock_install(framerate_state.config.rebase_sim_clock);
+    mover_interpolation_install(framerate_state.config.interpolate_movers,
+                                framerate_state.config.mover_travel_limit);
+
     if (framerate_state.config.pose_per_frame) {
         draw_interpolation_install_pose_throttle();
     } else {

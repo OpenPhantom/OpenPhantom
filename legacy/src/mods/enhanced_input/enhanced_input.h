@@ -15,6 +15,10 @@ bool enhanced_input_is_active(void);
 /* The live setting, which the check box on the controls screen both seeds from and writes to. */
 bool enhanced_input_strafe_enabled(void);
 
+/* Whether sideways walking could be switched on at all in this build. It is a different question
+ * from whether it is on, and the controls screen has to ask it before offering the box. */
+bool enhanced_input_strafe_available(void);
+
 /* Takes effect at once and is saved at once. Refuses, and says so, when sideways walking
  * cannot run in this session, so a switch can never claim more than the DLL can deliver. */
 void enhanced_input_set_strafe(bool enabled);

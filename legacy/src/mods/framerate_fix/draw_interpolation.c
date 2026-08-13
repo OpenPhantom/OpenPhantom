@@ -20,7 +20,7 @@
  *   E8 <rel32>            call angle_diff            ; <- at +0x2E, its rel32 at +0x2F
  *
  * Only the yaw is interpolated. Position (0x41125B..0x4112D3) and yaw (0x4112F9..0x411321) track
- * the substep alpha at [ebp-0x420]; pitch and roll are taken straight from the CURRENT substep,
+ * the substep alpha at [ebp-0x420]; pitch and roll are taken straight from the current substep,
  * so they step at 32 Hz while everything around them moves at the render rate. On a
  * slope-following NPC that is visible judder above 30 fps: aiext.c rewrites actualPitch every
  * substep as new*0.25 + old*0.75.
@@ -45,7 +45,7 @@ static const uint8_t SIG_OBJECT_DRAW_EULER[] = {
 #define OFFSET_ANGLE_DIFF_REL32 0x2Fu
 #define EULER_PATCH_LENGTH      0x20u
 
-/* --- 0x00410019  rdThing_Draw: THE POSE THROTTLE --------------------------------------------- *
+/* --- 0x00410019  rdThing_Draw: the pose throttle --------------------------------------------- *
  *   8B 3D 60884B00     mov edi,[g_tickCounter]     ; the SUBSTEP counter, not a frame counter
  *   8D 4C CA 24        lea ecx,[edx+ecx*8+0x24]
  *   89 0D E05F5B00     mov [g_thingCurGeoSet],ecx
@@ -57,25 +57,25 @@ static const uint8_t SIG_OBJECT_DRAW_EULER[] = {
  * and the stamp is written at the end of the compositor:
  *   0x4846A6  mov [esi+0x1C], edx                  ; poseStamp = g_tickCounter
  *
- * This is why every animation looks like 30 fps ABOVE 32 fps: the joint matrices are rebuilt only
+ * This is why every animation looks like 30 fps above 32 fps: the joint matrices are rebuilt only
  * when the SUBSTEP counter has moved.
  *   at  30 fps: 1.07 substeps per frame -> the counter changes every frame and the `je` never
  *               fires. the shipped game never executes this branch.
  *   at  60 fps: 0.53 substeps per frame -> about 47 % of frames redraw the previous matrices.
  *   at 144 fps: 78 %.
  * And because rdModel3_concatHierarchy bakes the world matrix into pNodeMatrix, a skipped frame
- * freezes POSE AND PLACEMENT together.
+ * freezes pose and placement together.
  *
  * g_tickCounter [0x4B8860] has two increment sites in the whole image: sys_runSubsteps (per
  * SUBSTEP) and swmenu_render (per MENU frame), which is why the 3-D inventory model already
  * animated smoothly while the world did not.
  *
- * ONE SHARED-STATE NOTE, and it is a RETURN to the original rather than a new coupling.
+ * One shared-state note, and it is a return to the original rather than a new coupling.
  * poseStamp is shared: the draw path builds the pose from the INTERPOLATED transform, the
  * simulation's node queries (hit spheres, muzzle and auto-aim via rdThing_GetNodeMatrix) build it
  * from the RAW substep transform, and whoever runs first stamps it. At 30 fps the draw rebuilt
- * essentially always, so the sim always inherited the draw's pose. Uncapped, that inheritance is
- * intermittent; NOPing the branch makes it constant again. */
+ * essentially always, so the simulation always inherited the draw's pose. Uncapped, that
+ * inheritance is intermittent; NOPing the branch makes it constant again. */
 static const uint8_t SIG_POSE_THROTTLE[] = {
     0x8B, 0x3D, 0x60, 0x88, 0x4B, 0x00, 0x8D, 0x4C, 0xCA, 0x24,
     0x89, 0x0D, 0xE0, 0x5F, 0x5B, 0x00, 0x8B, 0x48, 0x1C, 0x3B, 0xCF,
@@ -180,19 +180,19 @@ void draw_interpolation_install_pose_throttle(void)
 
     site = signature_find_unique(SIG_POSE_THROTTLE, NULL, sizeof(SIG_POSE_THROTTLE));
     if (site == 0) {
-        log_warning("pose_throttle did not resolve, animation WILL step at 32 Hz above 32 fps");
+        log_warning("pose_throttle did not resolve, animation will step at 32 Hz above 32 fps");
         return;
     }
 
     branch = site + OFFSET_POSE_THROTTLE_JE;
     if (!patch_validate_bytes(branch, expected_branch, sizeof(expected_branch))) {
-        log_error("expected `74 19` at %08X - refused", (unsigned)branch);
+        log_error("expected `74 19` at %08X, refused", (unsigned)branch);
         return;
     }
 
     if (patch_write_bytes(branch, nop_pair, sizeof(nop_pair)) == PATCH_RESULT_OK) {
-        log_info("THROTTLE REMOVED at %08X (74 19 -> 90 90). Joint matrices are rebuilt every "
-                 "FRAME instead of only when g_tickCounter moved.", (unsigned)branch);
+        log_info("pose throttle removed at %08X (74 19 -> 90 90), the joint matrices are rebuilt "
+                 "every frame instead of only when g_tickCounter moved.", (unsigned)branch);
     } else {
         log_error("the throttle patch at %08X could not be written", (unsigned)branch);
     }

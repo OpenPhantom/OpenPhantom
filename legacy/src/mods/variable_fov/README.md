@@ -149,7 +149,7 @@ honest answer.
 Built and linked, `/W4 /WX` clean. `unittests/fov_math.c`, 43 checks, all passing, including two
 cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000 degrees,
 and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded 3-D menu constant.
-Offline verification of every pattern passes on all four retail executables. **Not accepted in
+Offline verification of every pattern passes on both retail builds. **Not accepted in
 game.**
 
 To check in game: open Options -> Video, confirm the slider is under the check boxes, that dragging

@@ -112,7 +112,7 @@ bool input_slider_append(menu_patch_context_t *patch, sw_widget_t *widgets,
     }
 
     slider_state.widgets    = widgets;
-    slider_state.seed_notch = mouse_look_notch_from_degrees_per_count(
+    slider_state.seed_notch = input_slider_notch_from_degrees(
                                   mouse_look_degrees_per_count());
     slider_state.last_notch = slider_state.seed_notch;
     update_caption();
@@ -153,7 +153,7 @@ void input_slider_seed(void)
     if (!slider_state.present) {
         return;
     }
-    notch = mouse_look_notch_from_degrees_per_count(mouse_look_degrees_per_count());
+    notch = input_slider_notch_from_degrees(mouse_look_degrees_per_count());
 
     slider_state.seed_notch = notch;
     slider_state.last_notch = notch;
@@ -178,7 +178,7 @@ void input_slider_apply(bool force)
     /* Saved on every change rather than once on leaving the screen: a crash or a hung graphics
      * wrapper must not swallow a setting the player has just made. The field-of-view slider saves
      * per change for the same reason, and for the same reason it is not measurable work. */
-    (void)mouse_look_set_degrees_per_count(mouse_look_degrees_per_count_from_notch(notch));
+    (void)mouse_look_set_degrees_per_count(input_slider_degrees_from_notch(notch));
 
     /* AFTER the setter, never before: the caption quotes the value the setter really put in force,
      * which is not necessarily the one the notch asked for. */
@@ -203,4 +203,66 @@ int input_slider_seed_notch(void)
 const char *input_slider_caption(void)
 {
     return slider_state.caption;
+}
+
+/* The setting a value that is not a number falls back to. It is the ini's own default, repeated
+ * here rather than shared, because the alternative is a header dependency in the wrong direction:
+ * the slider is a consumer of the sensitivity, not its owner. */
+#define SLIDER_FALLBACK_DEGREES_PER_COUNT 0.030f
+
+/* The band the slider on the controls screen spans: 1 to 100 as the caption shows it, which is
+ * 0.001 to 0.100 degrees per count in steps of exactly 0.001.
+ *
+ * The first version spanned 0.010 to 0.060, the band a shooter is usually TUNED in, on the
+ * reasoning that a slider has to be usable along its whole length. That is a real argument and it
+ * was still the wrong call: it silently decided for the player that the ends were not worth having,
+ * and the two things it excluded are exactly the two a person is most likely to want. The bottom is
+ * for a high-DPI mouse, where 0.010 is still fast; the top is for someone who wants to spin on a
+ * mousepad the size of a beer mat. Neither is a misconfiguration.
+ *
+ * So the slider now spans the ini's own minimum to a hundred steps above it, the step is a round
+ * number in the unit the caption displays, and the default 0.030 lands exactly on notch 29. The ini
+ * still accepts up to 1.0 for anyone who wants past the right-hand end. */
+#define SLIDER_MIN_DEGREES_PER_COUNT 0.001f
+#define SLIDER_MAX_DEGREES_PER_COUNT 0.100f
+
+/* ==============================================================================================
+ * The slider's arithmetic. Both directions are pure, so both are unit-tested: a notch that does not
+ * survive the round trip is a slider that jumps under the hand the first time it is opened.
+ * ============================================================================================ */
+float input_slider_degrees_from_notch(int notch)
+{
+    const float step = (SLIDER_MAX_DEGREES_PER_COUNT - SLIDER_MIN_DEGREES_PER_COUNT)
+                     / (float)(MOUSE_SLIDER_NOTCH_COUNT - 1);
+
+    if (notch < 0) {
+        notch = 0;
+    }
+    if (notch > MOUSE_SLIDER_NOTCH_COUNT - 1) {
+        notch = MOUSE_SLIDER_NOTCH_COUNT - 1;
+    }
+    return SLIDER_MIN_DEGREES_PER_COUNT + (float)notch * step;
+}
+
+int input_slider_notch_from_degrees(float degrees_per_count)
+{
+    const float step = (SLIDER_MAX_DEGREES_PER_COUNT - SLIDER_MIN_DEGREES_PER_COUNT)
+                     / (float)(MOUSE_SLIDER_NOTCH_COUNT - 1);
+    float       notch;
+
+    /* NaN lands on the nearest notch to the default rather than at an end of the slider, because
+     * the seed runs before anything has validated what came out of the ini. */
+    if (!(degrees_per_count == degrees_per_count)) {
+        degrees_per_count = SLIDER_FALLBACK_DEGREES_PER_COUNT;
+    }
+
+    notch = (degrees_per_count - SLIDER_MIN_DEGREES_PER_COUNT) / step;
+    /* Rounded to the NEAREST notch, so a setting typed into the ini between two notches is shown
+     * as the closer one instead of always the lower one. */
+    notch = (notch >= 0.0f) ? (notch + 0.5f) : 0.0f;
+
+    if ((int)notch > MOUSE_SLIDER_NOTCH_COUNT - 1) {
+        return MOUSE_SLIDER_NOTCH_COUNT - 1;
+    }
+    return (int)notch;
 }

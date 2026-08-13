@@ -16,7 +16,7 @@
  * doing it this way. */
 typedef struct music_sites {
     /* void __cdecl bapMusicPause(void) / bapMusicResume(void). Neither takes an argument and
-     * neither caller cleans up any, in all five shipped images. */
+     * neither caller cleans up any, in all three builds. */
     uintptr_t pause_function;
     uintptr_t resume_function;
 

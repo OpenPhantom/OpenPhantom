@@ -101,10 +101,9 @@
  * DLL offers is appended to that same copy. A widget whose append fails is simply absent, the
  * others are unaffected, because each one's value is read back through its own recorded index.
  *
- * SIZE NOTE (rule 9): 884 lines, of which 490 are code. The excess is the byte evidence above: the
- * authored widget table, the shared bitmap table, the check-box record, the unchecked table read
- * that decides the order the installer runs in, and the account of why this group is drawn with no
- * plate after three attempts that used one. A reader who cannot see why the string getter is hooked
+ * SIZE NOTE (rule 9): over 800 lines. It appends a whole widget group to a screen the engine
+ * authored, which means the widget records, the string ids, the check-box plumbing and the install
+ * order all live here. A reader who cannot see why the string getter is hooked
  * BEFORE a widget exists cannot review this file at all, and that fact lives nowhere in the code.
  *
  * The slider moved to input_slider.c when this file reached 920 lines, past the hard limit, along
@@ -138,17 +137,10 @@
 #include <stdio.h>
 #include <string.h>
 
-/* --- 0x00442A98  options_controls: the controls screen and the pointer to its widget table ---- *
- *   55 8B EC 83 EC 1C            prologue, 6 bytes, clean boundary
- *   C7 45 F8 FFFFFFFF            result = -1
- *   C7 45 F4 00000000
- *   6A 00                        push selInit = 0
- *   68 <widgets>                 push pWidgets       <- the table, opcode at +22, operand at +23
- *   68 <fontNames>               push pFontNames
- *   6A 00                        push field18 = 0
- *   68 <bmpNames>                push pBmpNames
- *   68 <menu>                    push pMenu = g_menuScreen[8]
- *   E8 <rel32>                   call swmenu_build                                              */
+/* 0x00442A98, options_controls: the controls screen, and the push in its head that names its
+ * widget table. The opcode is checked before the operand is believed.
+ * The screen is built by one call at the end of that head, which takes the widget table, the
+ * bitmap names and the screen record. */
 static const uint8_t SIG_OPTIONS_CONTROLS[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x1C,
     0xC7, 0x45, 0xF8, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -182,10 +174,9 @@ static const uint8_t MSK_OPTIONS_CONTROLS[] = {
 #define OPTIONS_CONTROLS_BMP_TABLE_OFFSET 35u
 #define OPCODE_PUSH_IMM32           0x68u
 
-/* --- 0x0045EB7B  swmenu_getString(stringId, destination) ------------------------------------- *
- *   55 8B EC 56 57               prologue, 5 bytes, clean boundary
- *   8B 45 0C / C6 00 00          the destination is cleared first
- *   8B 4D 08 / 8B 15 <table>     then indexed with NO bounds check                              */
+/* 0x0045EB7B, swmenu_getString(stringId, destination). It clears the destination first and then
+ * indexes its table with NO BOUNDS CHECK, which is why every id handed to it has to be one this
+ * module owns. */
 static const uint8_t SIG_GET_STRING[] = {
     0x55, 0x8B, 0xEC, 0x56, 0x57,
     0x8B, 0x45, 0x0C,
@@ -430,7 +421,6 @@ static const char *const MOUSE_SPEED_CAPTION[MENU_LANGUAGE_COUNT] = {
     "VELOCITA MOUSE %d",
     "VELOCIDAD RATON %d"
 };
-#define DEGREES_PER_COUNT_DISPLAY_SCALE 1000.0f
 
 /* The primary language identifier of a LANGID, per the Windows LANGID layout. */
 #define PRIMARY_LANGUAGE_MASK 0x3FFu
@@ -764,7 +754,16 @@ static bool build_widgets(uintptr_t site)
      * the plate that used to be here drew the wrong 290 columns of the audio screen over this
      * screen's own furniture. What backs these widgets is splashol.bmp, showing through the 73 %
      * of controls.bmp that is transparent. */
-    appended += append_checkbox(BOX_STRAFE) ? 1u : 0u;
+    /* Sideways walking gets a box only when there is a key it could be driven from. The keyboard
+     * axis reader is what supplies that key, and on a build where its signature missed, the switch
+     * would refuse every time it was clicked. */
+    if (enhanced_input_strafe_available()) {
+        appended += append_checkbox(BOX_STRAFE) ? 1u : 0u;
+    } else {
+        log_warning("no sideways walking check box: the keyboard turn axis was not recognised in "
+                    "this build, so there is no key the walk could be driven from. The mouse "
+                    "sensitivity slider is not affected.");
+    }
 
     /* Free look gets a box only when its camera machinery stands. It is installed whether the
      * feature is on or off, so this asks whether the follow camera in this build was recognised at
@@ -773,7 +772,7 @@ static bool build_widgets(uintptr_t site)
         appended += append_checkbox(BOX_FREE_LOOK) ? 1u : 0u;
     } else {
         log_warning("no free look check box: the follow camera in this build was not recognised, "
-                    "so the box could never turn anything. Sideways walking still gets its box.");
+                    "so the box could never turn anything.");
     }
 
     {
@@ -865,8 +864,8 @@ void input_menu_install(void)
                  "and it is seeded at notch %d",
                  WIDGET_ID_MOUSE_SLIDER, MOUSE_SLIDER_NOTCH_COUNT, SLIDER_X, SLIDER_Y,
                  input_slider_caption(), SLIDER_X, SLIDER_LABEL_Y,
-                 (double)mouse_look_degrees_per_count_from_notch(0),
-                 (double)mouse_look_degrees_per_count_from_notch(MOUSE_SLIDER_NOTCH_COUNT - 1),
+                 (double)input_slider_degrees_from_notch(0),
+                 (double)input_slider_degrees_from_notch(MOUSE_SLIDER_NOTCH_COUNT - 1),
                  input_slider_seed_notch());
     }
 
@@ -876,9 +875,4 @@ void input_menu_install(void)
                     "screen closes rather than on the click. It is still read, applied and "
                     "saved.");
     }
-}
-
-bool input_menu_is_installed(void)
-{
-    return menu_state.armed;
 }

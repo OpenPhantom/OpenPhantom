@@ -138,3 +138,52 @@ bool memory_read_u32(uintptr_t address, uint32_t *out)
 {
     return memory_read(address, out, sizeof(*out));
 }
+
+/* The structured exception handler is the whole point of these two, so they must not be folded back
+ * into the functions above: a __try frame around a memcpy is a few instructions of setup on x86,
+ * while VirtualQuery is a system call, and the difference only matters where these are used.
+ *
+ * EXCEPTION_EXECUTE_HANDLER rather than a filter that inspects the record, because the only reason
+ * to be here is a read that would have been refused anyway. Nothing else in this process is allowed
+ * to be swallowed: the range is one caller's read of one structure, so a fault inside it cannot be
+ * anybody else's fault being hidden. */
+bool memory_try_read(uintptr_t address, void *destination, size_t size)
+{
+    if (destination == NULL || size == 0) {
+        return false;
+    }
+    if (address + size < address) {
+        return false;                              /* wrapped: the caller computed nonsense */
+    }
+
+    __try {
+        memcpy(destination, (const void *)address, size);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+/* Touching the first and the last byte is the whole range for this purpose. A range that spans a
+ * hole would have to be committed at both ends and not in the middle, which no allocator this
+ * engine uses produces, and the caller is about to read the whole thing anyway, so a fault in the
+ * middle lands in ITS handler rather than here. That is a deliberate difference from the asking
+ * form above, which walks every region because it is used to validate patch sites where a hole is a
+ * real possibility and a fault is not acceptable. */
+bool memory_try_readable(uintptr_t address, size_t size)
+{
+    volatile uint8_t sink;
+
+    if (size == 0 || address + size < address) {
+        return false;
+    }
+
+    __try {
+        sink = *(const volatile uint8_t *)address;
+        sink = *(const volatile uint8_t *)(address + size - 1u);
+        (void)sink;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}

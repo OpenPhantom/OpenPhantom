@@ -168,7 +168,7 @@ static const uint8_t MSK_GATHER_GATE[] = {
 #define EXPECTED_APPEND_ECX 3u
 #define EXPECTED_GATHER_GATE 1u
 
-/* Expected raw census over .text, counted in all four retail images and cross-checked against the
+/* Expected raw census over .text, counted in both retail builds and cross-checked against the
  * PE relocation table:
  *   base   `0x8A4880`  10 = 4 dead (bapdrawOld_*) + 4 live appenders + 2 baplight
  *   base+4 `0x8A4884`   5 = 1 dead + 4 live

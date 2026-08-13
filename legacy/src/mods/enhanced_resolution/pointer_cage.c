@@ -25,6 +25,29 @@
  * to the WIDGET, so widening this clamp needs no coordinate work at all: a cursor outside the
  * 640x480 island simply hits nothing, which is already true today for everything outside it.
  *
+ * ==============================================================================================
+ * The known cost, reported but not yet reproduced here: the engine's clamp may be load-bearing
+ *
+ * The paragraph above is true and possibly incomplete, and the missing half would be the ERASE.
+ * The pause screens do not repaint every pixel every frame; they repair themselves through the
+ * menu toolkit's damage rectangles, which live in canvas coordinates and are clipped against the
+ * same hard-coded 640x480 every blit in that toolkit clips against. A cursor quad that sits
+ * partially or wholly outside the island therefore cannot be expressed as a damage rectangle at
+ * all: it is drawn (the draw is an absolute-coordinate textured quad and clips against the
+ * SCREEN), it is never erased, and every crossing of the island's edge would leave a permanent
+ * stamp of the cursor's blue glow on the border for as long as the screen is open. Reported from
+ * a 3840x2160 session as blue blobs bleeding out from behind the pause menu, following the mouse.
+ * The front end would never show it, because its 3-D room repaints every pixel every frame; the
+ * pause subpages are exactly the screens that do not.
+ *
+ * If that reproduces, the shipped clamp is not a small-mindedness to correct but the guarantee
+ * that the cursor never goes where the erase cannot follow, and this setting becomes opt-in for
+ * whoever accepts the stamps. Every clickable widget lives inside the island either way, so
+ * nothing is lost by turning it off. It is still ON here because the report has not been
+ * reproduced on this tree yet, and a default is not flipped on a symptom nobody here has seen.
+ * menu_island_clip.c repairs the same class of defect for the sprites the WIDGETS draw; that one
+ * IS reproduced, and the two are independent - the widget smears survive WidenMenuCursorArea=0.
+ *
  * The block, and every offset this file writes to, measured from the match base S:
  *
  *   S+0x00  A1 <originX>          mov eax,[g_menuOriginX]        <- operand at S+0x01
@@ -127,7 +150,7 @@
  *
  * 121 bytes. The ten absolute operands are wildcarded; two origin cells and eight references to
  * the two cursor cells, and the four immediates are NOT, because they are what identifies this as
- * the 640x480 cage. Unique in all five shipped images, and in the recompiled obi.exe it sits at
+ * the 640x480 cage. Unique in all three builds, and in the recompiled obi.exe it sits at
  * 0x00460BA4 instead: an address table would have written 0x60 into the middle of another
  * function, which is the whole reason nothing here is written down. */
 static const uint8_t SIG_CURSOR_CAGE[] = {
@@ -524,7 +547,10 @@ void pointer_cage_install(bool enabled)
              "screen origin instead of the menu's (patched at %08X). "
              "The menus themselves are NOT moved: the engine already centres them and adds that "
              "origin in both the draw path and the hit test, so a cursor outside the 640x480 "
-             "island simply hits nothing.",
+             "island simply hits nothing. REPORTED COST, not reproduced here yet: the pause "
+             "screens cannot erase a cursor outside that island, their damage rectangles clip to "
+             "640x480, so crossing the island's edge may stamp the cursor's glow onto the border "
+             "until the screen closes. Set WidenMenuCursorArea=0 if you see that.",
              (int)(cage_state.applied_width - CURSOR_MARGIN),
              (int)(cage_state.applied_height - CURSOR_MARGIN),
              (unsigned)site);

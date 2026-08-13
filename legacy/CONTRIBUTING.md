@@ -130,9 +130,18 @@ Every hard coded address, offset, opcode, structure field and unusual constant n
 explanation next to it. That is why several files here are long: the code is short and the byte
 level evidence is not. Do not delete that evidence to get a file under a limit.
 
-**No document references in comments.** No section numbers, no file paths into a research
-directory. A comment has to stand on its own, because a reference is a promise that the reader has
-the other file open, and it rots the moment something is renumbered.
+**The evidence lives in the comments, and there is no `notes/` directory.** The disassembly, the
+census counts and the approaches that were tried and refuted belong in the file itself, next to
+the code they explain. A source file whose evidence was left somewhere else arrives here looking
+finished and is not, and nothing will tell you it happened.
+
+The reverse also matters. A file here may already hold evidence you are about to overwrite, so
+read it first. Keep what is still true and correct what is not: a claim that has since been
+refuted and is carried forward out of caution is worse than one deleted on purpose.
+
+**No document references in comments.** No section numbers, no paths to files outside this
+repository. A comment has to stand on its own, because a reference is a promise that the reader
+has the other file open, and it rots the moment something is renumbered.
 
 **A comment that no longer matches the code is a bug.** Fix it or delete it in the same change.
 

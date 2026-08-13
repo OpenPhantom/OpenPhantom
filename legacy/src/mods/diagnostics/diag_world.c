@@ -1,3 +1,23 @@
+/* diag_world.c: the world's own traffic, movers and the AI state machine.
+ *
+ * ==================================== SIZE NOTE ===============================================
+ *
+ * This file is over 600 lines. It crossed the limit when the mover call-site census was added, and
+ * the census is the reason: about a third of the file is now one measurement, its side state and
+ * the reporting that makes it readable, while the six observers around it are a few stores each.
+ * Most of the rest is the reasoning behind two things a reader cannot see in the code, why the
+ * opcode hook may detour into the middle of a function, and why the integrator has two early
+ * returns that have to be told apart.
+ *
+ * The next seam is the census, and it is a clean one. mover_census_* touches no other state in this
+ * file, shares only the tick detour that feeds it, and would move to a file of its own with one
+ * function exported and one call added where hook_mover_tick already calls it. That is the cut to
+ * make when this file next grows.
+ *
+ * It is not the mover-versus-AI split, which looks obvious and was measured and rejected: both
+ * halves share resolve_sites_once, the signature table and diag_install_observer, so cutting there
+ * puts one table behind a translation unit boundary from half its users and buys nothing.
+ */
 #include "diag_world.h"
 
 #include "diag_install.h"
@@ -5,8 +25,13 @@
 #include "diag_names.h"
 
 #include "common/detour.h"
+#include "common/frame_hook.h"
+#include "common/host_image.h"
 #include "common/logging.h"
+#include "common/memory.h"
 #include "common/signature.h"
+
+#include <intrin.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -37,14 +62,49 @@ static const uint8_t SIG_MOVER_CLOSE[] = {
 #define MOVER_CLOSE_PROLOGUE 8u
 
 /* --- bapmap_tickMover 0x00409170 -------------------------------------------------------------- *
- * The integrator, once per active mover and frame. It is the only place a mover advances by
- * itself (a door closing after its dwell, a one-shot latching, a push button entering its wait
- * phase). Level 2, debounced on `dir`. */
+ * The integrator. It is the only place a mover advances by itself (a door closing after its dwell,
+ * a one-shot latching, a push button entering its wait phase). Level 2, debounced on `dir`.
+ *
+ * It is NOT called once per frame from one place. It has nine call sites, one of which is reached
+ * from inside the world draw, so which one reaches a given mover first decides where that mover
+ * actually integrates. Measured, it is the per-frame one that does essentially all of it. That is
+ * the question level 3 exists to answer, and it is why the pattern's gate cell matters: the opening
+ * run of the function, read as bytes on retail WMAIN.EXE, contains two independent early returns.
+ *
+ *   00409170  55 8B EC 83 EC 2C       prologue
+ *   00409176  83 3D CC5F5B00 00       cmp  dword [0x005B5FCC], 0
+ *   0040917D  0F 85 C7040000          jne  0x0040964A          return
+ *   00409183  8B 45 08                mov  eax,[ebp+8]         the mover
+ *   00409186  D9 45 0C                fld  dword [ebp+0xC]     `now`
+ *   00409189  D8 58 30                fcomp dword [eax+0x30]   mover->timeBase
+ *   0040918C  DF E0                   fnstsw ax
+ *   0040918E  F6 C4 40                test ah, 0x40
+ *   00409191  0F 85 B3040000          jne  0x0040964A          return
+ *   ...
+ *   0040964C  5D C3                   pop ebp / ret
+ *
+ * The second branch really is "equal, return", and it reads like the opposite if the fnstsw and the
+ * test are skipped over. fcomp puts its answer in the x87 status word, fnstsw moves it into ah, and
+ * bit 6 of ah is C3, which is set when the operands were equal. `test ah,0x40` therefore clears ZF
+ * exactly when they were equal, so the jne is taken on equality. This is the branch that produces a
+ * freeze: the world clock is written only inside the substep loop, so on a frame with no substep
+ * every mover sees the time it has already integrated to and returns.
+ *
+ * The first branch is a second, independent early return and it is easy to miss entirely.
+ * [0x005B5FCC] has exactly one reference in the whole image, this read, and no instruction anywhere
+ * writes it, so on this build the gate is never taken. That is a census over one binary rather than
+ * a proof about every path, because a bulk write reaching the cell as part of a larger structure
+ * would not show up in an operand scan. The census below counts the case instead of assuming it
+ * away, which costs one comparison per call.
+ *
+ * The gate cell's operand sits at +0x08 and is read out of the matched pattern rather than being
+ * written down, so the census works on any build the pattern resolves on. */
 static const uint8_t SIG_MOVER_TICK[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x2C, 0x83, 0x3D, 0xCC, 0x5F, 0x5B, 0x00,
     0x00, 0x0F, 0x85, 0xC7, 0x04, 0x00, 0x00, 0x8B
 };
 #define MOVER_TICK_PROLOGUE 6u
+#define OFFSET_MOVER_GATE_CELL 0x08u
 
 /* --- ai_setMode 0x004335A5 / ai_returnMode 0x00433634 ----------------------------------------- *
  * Opcode 0x400 "Set AI Mode" = PUSH, opcode 0x401 "Return Mode" = POP of the FOUR-DEEP stack,
@@ -98,13 +158,24 @@ enum {
     SITE_COUNT
 };
 
+/* Every one of these is a detour target, so every one uses the detour form of the macro.
+ *
+ * All six patterns begin with the bytes the detour overwrites. Registered with the plain macro,
+ * whichever DLL resolves second finds a `jmp` where it expected the prologue, matches zero times,
+ * and switches itself off with a message naming the wrong cause. The chaining in common/detour.c
+ * handles the sharing correctly and never gets the chance to run.
+ *
+ * That is not hypothetical here: the mover integrator is wanted by a second feature, and the silent
+ * loser would be whichever of the two loaded later, including the census this file provides. The
+ * detour form falls back to the pattern's tail and proves the head is either the authored prologue
+ * or a branch, so both owners resolve. */
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("mover_open",     SIG_MOVER_OPEN),
-    SIGNATURE_ENTRY("mover_close",    SIG_MOVER_CLOSE),
-    SIGNATURE_ENTRY("mover_tick",     SIG_MOVER_TICK),
-    SIGNATURE_ENTRY("ai_set_mode",    SIG_AI_SET_MODE),
-    SIGNATURE_ENTRY("ai_return_mode", SIG_AI_RETURN_MODE),
-    SIGNATURE_ENTRY("ai_opcode",      SIG_AI_OPCODE)
+    SIGNATURE_ENTRY_DETOUR("mover_open",     SIG_MOVER_OPEN,     MOVER_OPEN_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("mover_close",    SIG_MOVER_CLOSE,    MOVER_CLOSE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("mover_tick",     SIG_MOVER_TICK,     MOVER_TICK_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("ai_set_mode",    SIG_AI_SET_MODE,    AI_SET_MODE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("ai_return_mode", SIG_AI_RETURN_MODE, AI_RETURN_MODE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("ai_opcode",      SIG_AI_OPCODE,      AI_OPCODE_PROLOGUE)
 };
 
 #define WORLD_MOVER_COUNT 0x620
@@ -113,6 +184,7 @@ static signature_t sites[SITE_COUNT] = {
 #define MOVER_TYPE        0x04
 #define MOVER_ID          0x08
 #define MOVER_POSE        0x2C
+#define MOVER_TIME_BASE   0x30
 #define MOVER_DIRECTION   0x34
 
 #define CHARACTER_NAME       0x04   /* char[12] */
@@ -224,12 +296,203 @@ static void __cdecl hook_mover_close(void *world, int32_t index)
     }
 }
 
+/* ============================================================================================
+ * The mover call-site census. Level 3, and it patches nothing.
+ *
+ * The design for interpolating movers assumed the integrator runs once per frame from the per-frame
+ * message, so that a bracket around the world draw would contain a mover's pose but not its
+ * advance. A reading of the call graph says otherwise: of the nine callers, two are reached from
+ * the draw, and if either of those reaches a mover first then the mover integrates inside the
+ * proposed bracket and the whole design is unbuildable. Both ways it can fail present as "the fix
+ * did nothing", which is the worst possible symptom to debug.
+ *
+ * So this measures it instead of arguing about it. Per call site: how often it is reached, and how
+ * often the mover it was handed had a clock older than the time being passed in, which is exactly
+ * the condition under which the function does anything at all.
+ *
+ * The call sites are discovered, not written down. The tick's own address comes from the pattern,
+ * and every `call rel32` in the host's code section that targets it is a call site. The census then
+ * reports the count it found, which is itself a finding on any build other than the one this was
+ * derived from, and no address in this file has to be right for it to work.
+ *
+ * What that scan found on retail WMAIN.EXE, kept here as evidence rather than as data the code
+ * reads. Nine `call rel32` sites target 0x00409170 and no absolute reference to that address exists
+ * anywhere, so there is no call through a pointer to miss. The return addresses are
+ *
+ *   00408B44  00409799  0040A33D  0040A849  0040AF2F  0040AFE8  0040C3F7
+ *   004194EC  00419B31
+ *
+ * and the last two are the ones the whole question turns on. 0x004194E7 sits inside
+ * bapmap_polyToWorld 0x00419490 and 0x00419B2C inside bapvrt_transformWorld 0x004199B0, which
+ * render_prepareFrame calls at 0x0043F5AC. If either of those reaches a mover before the per-frame
+ * message does, that mover integrates inside the draw. Writing those nine addresses into the code
+ * would have bought nothing and would have tied the census to one build.
+ * ============================================================================================ */
+#define MOVER_CALL_SITES_MAX 16u
+#define MOVER_CENSUS_FRAMES  200u
+
+typedef struct mover_census {
+    bool            armed;
+    bool            per_frame;
+    const uint32_t *gate_cell;
+
+    size_t          site_count;
+    uintptr_t       site_return[MOVER_CALL_SITES_MAX];
+    uint32_t        site_calls[MOVER_CALL_SITES_MAX];
+    uint32_t        site_stale_clock[MOVER_CALL_SITES_MAX];
+
+    uint32_t        calls_from_nowhere;
+    uint32_t        gate_closed;
+    uint32_t        frames;
+    uint32_t        calls;
+} mover_census_t;
+
+static mover_census_t mover_census;
+
+static void mover_census_find_call_sites(uintptr_t tick_address)
+{
+    uintptr_t text = host_image_text();
+    size_t    size = host_image_text_size();
+    size_t    index;
+
+    if (text == 0 || size < 5 || !memory_is_readable_range(text, size)) {
+        return;
+    }
+
+    for (index = 0; index + 5u <= size; ++index) {
+        const uint8_t *at = (const uint8_t *)(text + index);
+        int32_t        displacement;
+
+        if (*at != 0xE8) {
+            continue;
+        }
+        memcpy(&displacement, at + 1, sizeof(displacement));
+        if ((uintptr_t)((intptr_t)(text + index) + 5 + displacement) != tick_address) {
+            continue;
+        }
+        if (mover_census.site_count < MOVER_CALL_SITES_MAX) {
+            mover_census.site_return[mover_census.site_count] = text + index + 5u;
+            ++mover_census.site_count;
+        }
+    }
+}
+
+static void mover_census_record(const void *return_address, const uint8_t *mover, float now)
+{
+    size_t index;
+
+    if (!mover_census.armed) {
+        return;
+    }
+    ++mover_census.calls;
+
+    if (mover_census.gate_cell != NULL && *mover_census.gate_cell != 0) {
+        ++mover_census.gate_closed;
+    }
+
+    for (index = 0; index < mover_census.site_count; ++index) {
+        if (mover_census.site_return[index] != (uintptr_t)return_address) {
+            continue;
+        }
+        ++mover_census.site_calls[index];
+        /* The condition the function's second early return is decided on, read before the call
+         * because the call is what changes it. Equal means the mover has already integrated to
+         * this time and the call will do nothing. */
+        if (mover != NULL && *(const float *)(mover + MOVER_TIME_BASE) != now) {
+            ++mover_census.site_stale_clock[index];
+        }
+        return;
+    }
+    ++mover_census.calls_from_nowhere;
+}
+
+static void mover_census_report(void)
+{
+    uintptr_t base = host_image_base();
+    size_t    index;
+
+    if (!mover_census.armed) {
+        return;
+    }
+    ++mover_census.frames;
+    if (mover_census.frames < MOVER_CENSUS_FRAMES) {
+        return;
+    }
+
+    diag_log_write("mvr  census over %u frames: %u calls, %.2f per frame, %u through a closed "
+                   "gate, %u from an unrecognised return address",
+                   (unsigned)mover_census.frames, (unsigned)mover_census.calls,
+                   (double)mover_census.calls / (double)mover_census.frames,
+                   (unsigned)mover_census.gate_closed,
+                   (unsigned)mover_census.calls_from_nowhere);
+
+    for (index = 0; index < mover_census.site_count; ++index) {
+        if (mover_census.site_calls[index] == 0) {
+            continue;
+        }
+        diag_log_write("mvr    site %u return +%06X: %u calls, %u with a clock older than the "
+                       "time passed in (%.2f calls per frame)",
+                       (unsigned)index,
+                       (unsigned)(mover_census.site_return[index] - base),
+                       (unsigned)mover_census.site_calls[index],
+                       (unsigned)mover_census.site_stale_clock[index],
+                       (double)mover_census.site_calls[index] / (double)mover_census.frames);
+    }
+
+    mover_census.frames             = 0;
+    mover_census.calls              = 0;
+    mover_census.gate_closed        = 0;
+    mover_census.calls_from_nowhere = 0;
+    for (index = 0; index < mover_census.site_count; ++index) {
+        mover_census.site_calls[index]       = 0;
+        mover_census.site_stale_clock[index] = 0;
+    }
+}
+
+static void mover_census_install(uintptr_t tick_address)
+{
+    uint32_t gate;
+
+    if (tick_address == 0) {
+        return;
+    }
+
+    mover_census_find_call_sites(tick_address);
+    if (mover_census.site_count == 0) {
+        log_warning("the mover census found no call site for the integrator at %08X, so there is "
+                    "nothing to bucket against and it stays off",
+                    (unsigned)tick_address);
+        return;
+    }
+
+    if (memory_read_u32(tick_address + OFFSET_MOVER_GATE_CELL, &gate) &&
+        memory_is_inside_image(gate, sizeof(uint32_t))) {
+        mover_census.gate_cell = (const uint32_t *)(uintptr_t)gate;
+    }
+
+    mover_census.per_frame = frame_hook_add(mover_census_report);
+    mover_census.armed     = true;
+
+    log_info("mover census armed: %u call sites for the integrator at %08X, gate cell %08X, "
+             "reporting every %u frames%s",
+             (unsigned)mover_census.site_count, (unsigned)tick_address,
+             (unsigned)(uintptr_t)mover_census.gate_cell, (unsigned)MOVER_CENSUS_FRAMES,
+             mover_census.per_frame
+                 ? ""
+                 : ". The per-frame hook is NOT available, so nothing will ever be reported");
+}
+
 static void __cdecl hook_mover_tick(void *mover, float now)
 {
     mover_tick_fn_t original = (mover_tick_fn_t)world_state.mover_tick.original;
     uint8_t *record = (uint8_t *)mover;
     int32_t  direction_before = (record != NULL)
                               ? *(const int32_t *)(record + MOVER_DIRECTION) : -1;
+
+    /* Taken first, and before the original runs, because both of the function's early returns are
+     * decided on state the call itself may change. The detour replaced the prologue with a branch,
+     * so the engine's own `call` pushed this address and it names the call site. */
+    mover_census_record(_ReturnAddress(), record, now);
 
     original(mover, now);
 
@@ -358,6 +621,11 @@ int diag_trigger_install(int trigger_level)
                                            (const void *)hook_mover_tick, MOVER_TICK_PROLOGUE,
                                            "phase changes of the mover integrator (a door closing "
                                            "by itself and so on)") ? 1 : 0;
+    }
+    /* Level 3 rides on level 2's detour rather than installing a second one, so the census cannot
+     * be armed without the hook that feeds it. */
+    if (trigger_level >= 3 && world_state.mover_tick.original != NULL) {
+        mover_census_install(sites[SITE_MOVER_TICK].address);
     }
     return installed;
 }

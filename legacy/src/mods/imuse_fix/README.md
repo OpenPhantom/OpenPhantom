@@ -29,7 +29,7 @@ handler returned 0, and resume skips any module whose bit is clear. The chain is
 reading of those two dispatchers is correct.
 
 **Those two dispatchers are never called.** No `call`, no `jmp`, and no stored pointer at either of
-them anywhere in any shipped image, checked on all four retail `WMAIN.EXE` and on the Edit Tool's
+them anywhere in any shipped image, checked on both retail builds and on the Edit Tool's
 recompiled `obi.exe`, where both functions have moved and are still unreferenced.
 
 The live pause path is the pause menu. It uses the *other* dispatcher, which walks the module list,
@@ -63,7 +63,7 @@ cannot see and this DLL cannot repair.
 ## Supported executables
 
 Retail `WMAIN.EXE` (EN/DE), the Fix Pack build, and the Edit Tool's recompile. Every one of the five
-patterns resolves uniquely in all five images. In `obi.exe` all five engine cells have **moved**,the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latch from `006CCFE0` to
+patterns resolves uniquely in all three builds. In `obi.exe` all five engine cells have **moved**,the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latch from `006CCFE0` to
 `006CCF90`, which is exactly why every address here is read out of a matched operand and none is
 written down.
 
@@ -122,8 +122,7 @@ exactly `1`, which is the same test the engine's own per-frame service uses.
 
 ## Testing status
 
-Built with `/W4 /WX`, zero warnings. All five patterns verified offline against all five shipped
-executables: every pattern resolves with the expected match count on the four retail images.
+Built with `/W4 /WX`, zero warnings. All five patterns verified offline against all three builds: every pattern resolves with the expected match count on both retail builds.
 
 **Seen in the game once, and it did nothing.** The first build reached the game and reported
 *"NOT RESOLVED (0 matches)"* for all five sites, because `imuse_fix_install` did not call

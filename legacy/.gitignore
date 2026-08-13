@@ -16,3 +16,7 @@ engine_fixes_diag.log
 # A tuned copy someone dropped in the checkout. The one that ships is dist/engine_fixes.ini
 # and is tracked; this only matches the repository root.
 /engine_fixes.ini
+
+# Working notes for splitting a branch into commits. Useful while the work is in progress and
+# meaningless afterwards, so it stays out of the history rather than being deleted by hand.
+/COMMIT-MESSAGES.txt

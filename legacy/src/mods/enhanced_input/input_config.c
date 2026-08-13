@@ -92,6 +92,8 @@ void input_config_load(void)
     config.strafe_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
 
     config.steer_lean = ini_read_bool(INPUT_SECTION, "SteerLean", true);
+    config.steer_lean_from_hand =
+        ini_read_bool(INPUT_SECTION, "SteerLeanFromHand", true);
     config.restore_turn_rate =
         ini_read_bool(INPUT_SECTION, "RestoreTurnRate", true);
     config.steer_lean_test_degrees =

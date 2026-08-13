@@ -454,7 +454,7 @@ static void __cdecl steer_thunk(void)
         steer_lean_apply(record, engine_rate,
                          (substep_seconds > 0.0f)
                              ? input_state.pending_yaw_degrees / substep_seconds : 0.0f,
-                         substep_seconds);
+                         keyboard_axis != 0.0f, substep_seconds);
     } else {
         /* Not our turn to drive it: the original's own twist is standing and is correct, so the
          * only thing to drop is the damper's memory. */
@@ -683,7 +683,19 @@ void enhanced_input_install(void)
                      input_config()->strafe_settle_seconds,
                      input_config()->strafe_turn_rate);
 
-    steer_lean_bind(input_state.sites.set_node_yaw, input_config()->steer_lean);
+    /* The hand rate may only take over on substeps where no turn KEY is held, and the only way to
+     * know that is the absolute axis reader. If it did not resolve, the axis reads zero forever and
+     * every held key would be mistaken for a mouse substep, which would flatten the engine's own
+     * ease-in on the one input that never needed this. So a missing reader takes the feature away
+     * rather than letting it run on an answer it cannot get. */
+    if (input_config()->steer_lean_from_hand && input_state.sites.read_absolute_axis == NULL) {
+        log_warning("the keyboard turn axis did not resolve, so the upper body keeps following the "
+                    "engine's own turn cell. A held key cannot be told from a mouse substep "
+                    "without that reader, and guessing would flatten the keyboard's ease-in.");
+    }
+    steer_lean_bind(input_state.sites.set_node_yaw, input_config()->steer_lean,
+                    input_config()->steer_lean_from_hand &&
+                        input_state.sites.read_absolute_axis != NULL);
     steer_lean_set_test_degrees(input_config()->steer_lean_test_degrees);
 
     if (!swap_phase_pointers()) {
@@ -742,22 +754,29 @@ void enhanced_input_install(void)
              (double)(input_config()->strafe_settle_seconds * MILLISECONDS_PER_SECOND),
              (double)input_config()->strafe_turn_rate);
     if (steer_lean_is_active()) {
-        log_info("the upper body leans into the turn, from the ENGINE'S OWN number: the turn cell "
-                 "as the original just left it. That cell ACCUMULATES, so a held key climbs 12, "
-                 "26, 42, 60, 80, 102 to the 120 deg/s clamp over seven substeps, which is 1.0 up "
-                 "to 10.0 degrees of chest and is the engine's own ease-in. MOUSE LOOK ONLY: under "
-                 "free look that cell carries the mouse, and there the mouse is the camera. The "
-                 "chest is skipped while the auto-aim claims it.");
+        log_info("the upper body leans into the turn. A held KEY uses the ENGINE'S OWN number: "
+                 "that cell ACCUMULATES, so a key climbs 12, 26, 42, 60, 80, 102 to the 120 deg/s "
+                 "clamp over seven substeps, which is 1.0 up to 10.0 degrees of chest and is the "
+                 "engine's own ease-in. Under the MOUSE the same cell is not a rate: its only way "
+                 "down is an outright store of zero, taken on any substep whose frame carried no "
+                 "report from the device, so the twist collapses to centre and climbs back many "
+                 "times a second. SteerLeanFromHand=%d decides which of the two drives the pose. "
+                 "The chest is skipped while the auto-aim claims it.",
+                 (int)(input_config()->steer_lean_from_hand ? 1 : 0));
     } else {
-        log_info("SteerLean=0, chest and head keep whatever twist the original computed from a "
-                 "turn cell this mode has to clear, so the upper body stays centred");
+        log_info("SteerLean=0, so neither node is written here and the twist the ORIGINAL computed "
+                 "for this substep stands. With RestoreTurnRate=1 that cell is not cleared, so the "
+                 "upper body is not centred: it still carries the engine's own turn, mouse "
+                 "included.");
     }
     steer_log_configure(input_config()->steer_log);
 
     if (input_config()->restore_turn_rate) {
         log_info("the engine's turn cell gets the real rate back (clamped to its own 120 deg/s) "
-                 "instead of a zero, so the speed penalty on turning and the follow camera's own "
-                 "eased arm are the engine's again. The view still turns as fast as the hand does; "
+                 "instead of a zero, so the speed penalty on turning is the engine's again. It "
+                 "does NOT reach the follow camera: bapview_updateCam overwrites that cell with "
+                 "its own wrap difference before either of its tests, so the penalty ladder is "
+                 "what this buys and nothing else. The view still turns as fast as the hand does; "
                  "the double integration is taken out in phase 7. RestoreTurnRate=0 reverts it.");
     } else {
         log_info("RestoreTurnRate=0, the turn cell is zeroed as before, so turning costs no speed "

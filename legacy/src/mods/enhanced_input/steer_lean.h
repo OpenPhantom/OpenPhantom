@@ -39,20 +39,27 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-void steer_lean_bind(set_node_yaw_fn_t set_node_yaw, bool enabled);
+/* `prefer_hand_rate` is SteerLeanFromHand. It decides which of two numbers drives the pose while
+ * the mouse is turning, and the branch that explains why the obvious answer is the wrong one is in
+ * steer_lean.c with the disassembly beside it. */
+void steer_lean_bind(set_node_yaw_fn_t set_node_yaw, bool enabled, bool prefer_hand_rate);
 
 /* Re-issues both node writes and reports whether anything was written. Must be called AFTER the
  * original phase 2 and BEFORE the turn cell is overwritten, because `engine_rate` has to be the
  * value the ENGINE just computed.
  *
- *   engine_rate   [pPlr+0x2A4] as the original left it: the ramped keyboard turn (0..40 deg/s) or
- *                 the clamped mouse turn (up to 120), whichever the engine saw. AUTHENTIC.
- *   fallback_rate our own view rate for this substep, used only where the engine saw nothing,
- *                 the substeps its once-per-frame device poll missed.
+ *   engine_rate         [pPlr+0x2A4] as the original left it: the ramped keyboard turn
+ *                       (0..40 deg/s) or the accumulated mouse turn (up to 120), whichever the
+ *                       engine saw. Authentic for a key. Under a mouse it is a sawtooth that
+ *                       drops to zero on any substep whose frame carried no device report.
+ *   hand_rate           our own reconstructed view rate for this substep, in degrees per second,
+ *                       built on the device's report clock and already smoothed.
+ *   keyboard_is_turning the caller saw a non-zero digital turn axis this substep. Where that is
+ *                       true the engine's own climb is the authored pose and is used unchanged.
  *
  * Refuses silently on a substep length it cannot believe; the engine's own twist then stands. */
-bool steer_lean_apply(const uint8_t *record, float engine_rate, float fallback_rate,
-                      float substep_seconds);
+bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
+                      bool keyboard_is_turning, float substep_seconds);
 
 /* Forgets the damper state. No node is written: whichever substep stops calling apply() has
  * already taken the engine's own twist from the original, so there is nothing to hand back. */
@@ -72,6 +79,7 @@ bool steer_lean_is_active(void);
  * substep would be worse than the defect; this is how those silences are read back. */
 typedef struct steer_lean_report {
     const char *status;        /* "engine"  the engine's own value was reissued
+                                * "hand"    the reconstructed hand rate drove the pose
                                 * "filled"  ours was used because the cell held zero
                                 * "FORCED"  the diagnostic angle
                                 * "released" / "off" / "no-record" / "bad-dt" / "bad-angle" /

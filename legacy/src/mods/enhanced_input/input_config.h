@@ -21,6 +21,7 @@ typedef struct input_config {
     bool  strafe_invert;
     bool  strafe_turns_body;
     bool  steer_lean;
+    bool  steer_lean_from_hand;      /* the pose follows the hand, not the engine's sawtooth cell */
     bool  restore_turn_rate;
     int   steer_log;
     float steer_lean_test_degrees;   /* whether the model is turned to face the way it travels */

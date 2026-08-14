@@ -21,8 +21,8 @@
 #define PatchTag           "0.2.1"
 #define PatchVersion       "v0.2.1"
 #define PatchUrl           "https://github.com/OpenPhantom/OpenPhantom/releases/download/" + PatchTag + "/OpenPhantom-patch-" + PatchVersion + ".zip"
-#define PatchSha256        "06c56f6dd15a4c3f0dc1887c295f3029b0372eeb7c4e77c04c919c17c6ab7124"
-#define PatchUnpackedSize  11352181
+#define PatchSha256        "6bf30e1f9e3b931bbe31ae804c7f765927a22f1b7985c66f5e24eabf66063c4f"
+#define PatchUnpackedSize  11473349
 
 ; Every row below reads out of here and none of them names the download, so a version bump stays in
 ; the lines above. Inno removes the folder when the installer finishes.

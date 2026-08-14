@@ -9,12 +9,19 @@ ruleset for patching a running binary, and nothing here places a detour or resol
 
 The expensive rules, and the reason for most of the code in `[Code]`.
 
-**Identify before replacing, and identify by content rather than by file name.** Four of the names
+**Identify before replacing, and identify by content rather than by file name.** Three of the names
 this installer writes are contested, because another project may already be using them in the same
-folder: `dinput.dll`, `ddraw.dll`, `winmm.dll` and `dsound.dll`. Our own files carry a marker string,
-so a file in one of those slots that does not carry it belongs to somebody else and is moved aside,
-never overwritten. Our loader chains to whatever held `dinput.dll` before, so overwriting that one
-would destroy the thing the chain needs.
+folder: `dinput.dll`, `ddraw.dll` and `dsound.dll`. Our own files carry a marker string, so a file in
+one of those slots that does not carry it belongs to somebody else and is moved aside, never
+overwritten. Our loader chains to whatever held `dinput.dll` before, so overwriting that one would
+destroy the thing the chain needs.
+
+**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, and the controller wrapper is
+now installed as `xidi_winmm.dll` instead, with a patch DLL pointing the game's three joystick
+imports at it. That was forced rather than chosen, because Windows hands this executable the system
+`winmm.dll` whatever sits beside it, but it is the better arrangement anyway: no contest with other
+projects, no file moved aside, and a wrapper that answers three calls instead of standing in front
+of the whole audio engine. Where a system name can be avoided, avoid it.
 
 **A configuration file is never silently replaced.** `obi.ini` is the player's, so it is merged key
 by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini`, `Xidi.ini` and `alsoft.ini` are

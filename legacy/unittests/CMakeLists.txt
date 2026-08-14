@@ -130,6 +130,12 @@ add_unit_test(imuse_guard imuse_fix imuse_fix/imuse_guard.c)
 # are silent, and one of them asks the file system about a file the player never named.
 add_unit_test(movie_path fmv_player fmv_player/movie_path.c)
 
+# The two path answers xidi_bridge stands on. Both are wrong silently: the first decides whether
+# the fix has anything to do at all, and a plain prefix test would call C:\Gamedata a file inside
+# C:\Game; the second refuses a path that does not fit instead of truncating it into the name of
+# some other file.
+add_unit_test(wrapper_path xidi_bridge xidi_bridge/wrapper_path.c)
+
 add_unit_test(menu_patcher "")
 
 # The chained detours actually get installed and called through here, on a page of machine code the

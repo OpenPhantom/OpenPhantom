@@ -1,0 +1,17 @@
+# Nothing built ever goes in. The installer is produced from openphantom_installer.iss with
+# Inno Setup and the extractor from src/is3_extract with CMake; see README.md.
+build/
+*.obj
+*.pdb
+*.exp
+*.lib
+*.ilk
+*.exe
+
+# Inno Setup writes these beside a script while it works.
+*.iss.bak
+*.tmp
+
+# A release archive dropped in the checkout to test a pinned build against. The one that counts is on
+# the releases page and the script downloads it.
+*.zip

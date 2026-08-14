@@ -1,0 +1,16 @@
+# Build output. Nothing in this directory is ever committed.
+#
+# The installer here is produced from openphantom_installer.iss with Inno Setup, and it belongs
+# on a GitHub release as an attached file rather than in the history: a binary in a commit
+# outlives the source it was built from, and nobody can tell afterwards which revision made it.
+#
+# This file is the only thing in here that git tracks, so the directory survives a clone and says
+# what it is for.
+#
+# To fill it, build the extractor first and then the script:
+#     cmake -S src/is3_extract -B src/is3_extract/build -A Win32
+#     cmake --build src/is3_extract/build --config Release
+#     ISCC openphantom_installer.iss
+
+*
+!.gitignore

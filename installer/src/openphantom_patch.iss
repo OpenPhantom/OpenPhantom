@@ -40,7 +40,7 @@
 
 ; libVLC finds a plugin by scanning the tree, so the folder under mods\fmv\plugins has to be the same
 ; word as the folder in the archive. Deriving the destination from the source is what stops the two
-; drifting apart across twenty-eight rows; a plugin one folder over is not found and the only symptom
+; drifting apart across thirty rows; a plugin one folder over is not found and the only symptom
 ; is libvlc_new refusing.
 ;
 ; This is the only generated row set here. Everywhere else a literal row is checked when this file is
@@ -185,8 +185,8 @@ Source: "{#VlcUrl}"; DestDir: "{#VlcTmp}"; DestName: "vlc-win32.zip"; \
     Components: patch\fmv_player\runtime; \
     Flags: external download extractarchive recursesubdirs ignoreversion
 
-; The archive unpacks to about 177 MB; what follows is the 23.3 MB of it that playing one H.264 and
-; AAC file into a window needs. All 30 paths were read out of vlc-3.0.23-win32.zip, which has to be
+; The archive unpacks to about 177 MB; what follows is the 23.4 MB of it that playing one H.264 and
+; AAC file into a window needs. All 33 paths were read out of vlc-3.0.23-win32.zip, which has to be
 ; done again when VlcVersion changes: these are external, so a name wrong by one letter compiles and
 ; fails at the end of a 78 MB download.
 ;
@@ -208,7 +208,7 @@ Source: "{#VlcRoot}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-Lice
 #emit VlcPlugin("demux", "libmp4_plugin.dll")
 #emit VlcPlugin("demux", "libes_plugin.dll")
 
-; Decoding. libavcodec_plugin.dll is 16.9 MB of the 23.3 MB installed here. The two beside it hand
+; Decoding. libavcodec_plugin.dll is 16.9 MB of the 23.4 MB installed here. The two beside it hand
 ; H.264 to the GPU when the driver offers to take it.
 #emit VlcPlugin("codec", "libavcodec_plugin.dll")
 #emit VlcPlugin("codec", "libdxva2_plugin.dll")
@@ -219,6 +219,13 @@ Source: "{#VlcRoot}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-Lice
 #emit VlcPlugin("packetizer", "libpacketizer_mpeg4audio_plugin.dll")
 #emit VlcPlugin("packetizer", "libpacketizer_copy_plugin.dll")
 
+; drawable is the module that accepts a window handle from outside libVLC, which is what
+; libvlc_media_player_set_hwnd hands over. Without it the handle reaches nothing and libVLC opens a
+; window of its own instead: the movie plays, in a bordered window in the middle of the screen,
+; rather than in the borderless monitor-sized overlay. It fails silently because a machine with VLC
+; installed has this plugin anyway, so only a machine relying on the bundled set ever sees it.
+#emit VlcPlugin("video_output", "libdrawable_plugin.dll")
+
 ; Direct3D 11, then Direct3D 9, then GDI as the one that works everywhere.
 ;
 ; libdirectdraw_plugin.dll is in the archive and is not copied. With it present libVLC may pick a
@@ -227,6 +234,10 @@ Source: "{#VlcRoot}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-Lice
 #emit VlcPlugin("video_output", "libdirect3d11_plugin.dll")
 #emit VlcPlugin("video_output", "libdirect3d9_plugin.dll")
 #emit VlcPlugin("video_output", "libwingdi_plugin.dll")
+
+; Keeps the screen saver and the display timeout away for the length of a movie, which can be several
+; minutes with no input at all.
+#emit VlcPlugin("video_output", "libwinhibit_plugin.dll")
 
 ; The filter halves of the two Direct3D outputs, in folders of their own because the folder name is
 ; part of how they are found.

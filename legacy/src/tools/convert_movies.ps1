@@ -20,9 +20,10 @@
     fmv_player.c looks them up: for a retail movie name like "movie\arena" it checks
     <MovieDirectory>\arena.<Extension>, no subfolder beyond MovieDirectory itself.
 
-    What this tool is for is getting out of Bink, not out of 1999. The source is roughly 640x405,
-    and the overlay window scales whatever it is given to fill the screen anyway, so the defaults
-    hand the picture over at its own size and its own frame rate and change nothing else.
+    What this tool is for is getting out of Bink, not out of 1999. The source is 640x405, and the
+    overlay window scales whatever it is given to fill the screen anyway, so the defaults hand the
+    picture over at its own size and its own frame rate. The one thing they do change is a single
+    row: ten of the eleven movies are an odd number of lines tall and H.264 cannot encode that.
 
 .PARAMETER GameDirectory
     The folder WMAIN.EXE lives in. Movies are read from <GameDirectory>\GAMEDATA\MOVIE\*.BIK. If
@@ -55,12 +56,15 @@
 
 .PARAMETER TargetHeight
     Scale the picture to this many lines, with the width following the source's own shape by
-    itself. Defaults to 0, which keeps the source resolution untouched, and that is the honest
-    default: the source is roughly 640x405, Lanczos cannot put back detail that was never encoded,
-    and most of the extra bitrate goes into rendering 1999 compression artefacts larger and
-    sharper. The overlay scales whatever it is handed to fill the window either way, so upscaling
-    here mostly buys file size. An odd value is rounded down to the next even one, because H.264
-    4:2:0 cannot encode an odd dimension.
+    itself. Defaults to 0, which keeps the source resolution, and that is the honest default: the
+    source is 640x405, Lanczos cannot put back detail that was never encoded, and most of the extra
+    bitrate goes into rendering 1999 compression artefacts larger and sharper. The overlay scales
+    whatever it is handed to fill the window either way, so upscaling here mostly buys file size.
+
+    At the source resolution the picture loses at most one row and one column, because ten of the
+    eleven retail movies have an odd height and H.264 4:2:0 cannot encode an odd dimension. Without
+    that trim x264 refuses those ten outright. An odd value given here is rounded down to the next
+    even one for the same reason.
 
 .PARAMETER TargetFps
     Force this frame rate. Defaults to 0, which keeps the source's own rate. Worth being honest
@@ -473,8 +477,8 @@ if (-not $ffmpegExe) {
     exit 2
 }
 
-# Building the -vf chain: only scale if a height was asked for, only force fps if a rate was. An
-# empty filter list is valid and means "copy the source's own video geometry as is".
+# Building the -vf chain: scale if a height was asked for, make the size encodable if not, and
+# force fps only if a rate was given.
 #
 # scale=-2:<height> deliberately has no pad after it, and re-adding one would undo the point. The
 # black bars a pad writes are real pixels in the file, which is a second, permanent aspect ratio
@@ -483,20 +487,34 @@ if (-not $ffmpegExe) {
 # box the picture ends up in a small island in the middle of the screen. Handing over the source's
 # own shape lets exactly one fit happen, at playback, against the window that is actually there.
 # The -2 lets the width follow that shape while staying even, which H.264 4:2:0 requires.
+#
+# That same requirement is why the other branch is not empty, which it used to be. These movies are
+# not a size H.264 can encode. Read out of the Bink headers of a retail pressing:
+#
+#     ARENA.BIK        640x405     SCENE1..SCENE8.BIK   640x405
+#     BIGAPE.BIK       640x469     LOGO.BIK             640x272
+#
+# Ten of the eleven have an odd height, so at the source's own size x264 refuses ten of them and
+# only the logo comes through. Asking for any target height hid it, because scale=-2 makes both
+# sides even, which is exactly why this was reported as "conversion fails at the original size".
+#
+# crop rather than scale or pad: it drops at most one row and one column and leaves every remaining
+# pixel exactly as it was decoded, where scaling 405 lines to 404 would resample the whole frame,
+# and padding to 406 would bake in the black row this chain avoids everywhere else. The aspect
+# ratio moves by a quarter of a percent, which is under a pixel across the width of any window.
+# The expressions carry no comma on purpose, because the filters are joined with one.
 $videoFilters = @()
 if ($TargetHeight -gt 0) {
     $videoFilters += "scale=-2:${TargetHeight}:flags=lanczos"
+} else {
+    $videoFilters += "crop=trunc(iw/2)*2:trunc(ih/2)*2"
 }
 if ($TargetFps -gt 0) {
     $videoFilters += "fps=$TargetFps"
 }
 
 Write-Note "Converting $($bikFiles.Count) movie(s) from '$movieSource' to '$OutputDirectory'..."
-if ($videoFilters.Count -gt 0) {
-    Write-Note "  filters: $($videoFilters -join ',')"
-} else {
-    Write-Note "  filters: none (source resolution and frame rate kept as is)"
-}
+Write-Note "  filters: $($videoFilters -join ',')"
 
 $converted = 0
 $skipped = 0

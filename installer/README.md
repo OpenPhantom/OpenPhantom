@@ -9,7 +9,7 @@ player's own disc and then whichever parts of the OpenPhantom patch were ticked.
 | Input | the original PC disc, or a mounted image of it |
 | Output | `output/OpenPhantom_Installer.exe` |
 | Carries | the extractor and one configuration file. No game data, no patch binaries, no third party libraries |
-| Fetches | the patch, libVLC, Xidi, DSOAL and the saved games, each pinned by hash |
+| Fetches | the patch, libVLC, Xidi, DSOAL and the saved games, each pinned by hash, plus the Microsoft Visual C++ runtime when controller support is ticked and it is absent |
 
 **You need your own copy of the game.** No game data, no executable and no patched binary is included
 here or distributed with this project.
@@ -91,8 +91,14 @@ to the pinned value. The extractor is verified against a retail pressing, where 
 **Not verified in a real installation.** These are the newest paths here and none has been watched
 happening on a machine: detecting a graphics wrapper that belongs to somebody else, replacing the
 configuration files while keeping the previous ones, the confirmation before a folder is deleted, the
-saved games, controller support, and the sound provider being written into `obi.ini`. Each stops
-rather than continuing optimistically, but a branch nobody has taken is a branch nobody has watched.
+saved games, the Visual C++ runtime being fetched when it is absent, retiring a controller wrapper
+an older version of this installer left under the name `winmm.dll`, and the sound provider being
+written into `obi.ini`. Each stops rather than continuing optimistically, but a branch nobody has
+taken is a branch nobody has watched.
+
+Controller support itself has been confirmed in the game, but by hand rather than through this
+installer: the wrapper renamed, the bridge DLL placed in `mods\` and its section added to
+`engine_fixes.ini`, which is the state this installer produces.
 
 If you exercise one, say which, and say what the folder looked like beforehand.
 

@@ -138,6 +138,15 @@ add_engine_fix(decal_fix
     decal_fix.c
 )
 
+# Three pointers in the executable's import address table, and the reason they have to be rewritten
+# at all is in the file's own header: Windows hands this executable the system winmm.dll even though
+# a stand-in sits beside it, which is not true of any other library the game folder carries.
+add_engine_fix(xidi_bridge
+    dll_main.c
+    xidi_bridge.c
+    wrapper_path.c
+)
+
 # Two independent bugs behind "the SFX slider resets to full on reload": the value saved came from
 # an unreliable AIL query instead of the engine's own volume mirror, and separately the startup
 # load-time apply is a guaranteed no-op because bapsound_moduleInit marks sound ready one statement

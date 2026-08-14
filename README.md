@@ -13,7 +13,7 @@ scratch. The first is useful now; the second is where it ends up.
 | | |
 |---|---|
 | [`legacy/`](legacy/) | **Working.** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
-| [`installer/`](installer/) | **In progress.** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data: the disc archive is expanded on your machine and the patch is downloaded from the releases page. See its [README](installer/README.md) |
+| [`installer/`](installer/) | **Working.** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data: the disc archive is expanded on your machine and the patch is downloaded from the releases page. See its [README](installer/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
 | `architecture/` | How the original engine is put together, written down. Not started |

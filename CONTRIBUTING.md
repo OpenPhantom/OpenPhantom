@@ -43,18 +43,28 @@ architecture/    How the original engine is put together, written down.
 installer/       Packaging and setup.
 ```
 
-Only `legacy/` has anything in it so far. The rest are placeholders, and that is worth knowing
-before you plan a large contribution: if you want to start one of them, open an issue first so the
-shape can be agreed before anybody writes a thousand lines.
+`legacy/` and `installer/` have something in them. The rest are placeholders, and that is worth
+knowing before you plan a large contribution: if you want to start one of them, open an issue first
+so the shape can be agreed before anybody writes a thousand lines.
+
+Both components that exist are laid out the same way: an entry point and the documents at the top,
+sources under `src/`, and an output directory that git keeps but never fills.
 
 Each component owns its build, its tests and its coding rules. Where a component has a
 `CONTRIBUTING.md` of its own, that one wins for anything inside it, and the document you are
 reading covers what holds everywhere.
 
-`legacy/CONTRIBUTING.md` is the one that exists today. It is the C ruleset for the engine fixes:
-file sizes, how engine code is located, what a hook may and may not do, and how comments carry the
-byte level evidence. It is also a reasonable model for a new component, because most of it is
-about working safely against a binary you do not have the source to.
+Two exist today, and they are deliberately not versions of each other:
+
+* `legacy/CONTRIBUTING.md` is the C ruleset for the engine fixes: file sizes, how engine code is
+  located, what a hook may and may not do, and how comments carry the byte level evidence.
+* `installer/CONTRIBUTING.md` is about writing into a folder that belongs to somebody else: what may
+  be replaced and on what evidence, what is never deleted, and why every external result is checked.
+
+Read the one that covers what you are touching. A component ruleset answers the questions that
+component actually raises, so do not carry a rule across from the other because it sounds strict.
+Most of the C rules have no subject in an installer script, and the installer's rules about a
+player's existing files have none in a DLL.
 
 ## How we work with the engine
 

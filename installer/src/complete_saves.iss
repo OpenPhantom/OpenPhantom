@@ -21,6 +21,6 @@ Name: "complete_saves"; Description: "{cm:CompSaves}"; Types: custom
 ; Download only. The copy into Save\ runs from [Code] after the carry-over has put the player's own
 ; saves back, otherwise the restore would overwrite it. See InstallCompleteSaves.
 Source: "{#SavesUrl}"; DestDir: "{#SavesTmp}"; DestName: "complete_saves.7z"; \
-    Hash: "{#SavesSha256}"; ExternalSize: {#SavesUnpackedSize}; \
+    {#HashParam(SavesSha256)}ExternalSize: {#SavesUnpackedSize}; \
     Components: complete_saves; \
     Flags: external download extractarchive recursesubdirs ignoreversion

@@ -88,17 +88,19 @@ file row is declared, both languages carry every message, and the pinned patch U
 to the pinned value. The extractor is verified against a retail pressing, where `BIG.Z` produces a
 `big.lab` of 120,859,357 bytes, byte identical to a known good copy.
 
-**Not verified in a real installation.** These are the newest paths here and none has been watched
-happening on a machine: detecting a graphics wrapper that belongs to somebody else, replacing the
-configuration files while keeping the previous ones, the confirmation before a folder is deleted, the
-saved games, the Visual C++ runtime being fetched when it is absent, retiring a controller wrapper
-an older version of this installer left under the name `winmm.dll`, and the sound provider being
-written into `obi.ini`. Each stops rather than continuing optimistically, but a branch nobody has
-taken is a branch nobody has watched.
+**Installed and played once.** A full installation has been run on a machine and the game started
+from it. What that run covered, read off the folder it left behind: the game came off the disc, the
+configuration files were replaced with the previous ones kept beside them, the saved games went in,
+the sound provider was written into `obi.ini`, and controller support worked from the installation
+rather than from files placed by hand.
 
-Controller support itself has been confirmed in the game, but by hand rather than through this
-installer: the wrapper renamed, the bridge DLL placed in `mods\` and its section added to
-`engine_fixes.ini`, which is the state this installer produces.
+**Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
+were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation
+before a folder is deleted and the carrying out and back that goes with it, and retiring a
+controller wrapper an older version of this installer left under the name `winmm.dll`. The Visual
+C++ runtime was already on that machine, so that path was skipped rather than tested, which is the
+same as untested. Each of them stops rather than continuing optimistically, but a branch nobody has
+taken is a branch nobody has watched.
 
 If you exercise one, say which, and say what the folder looked like beforehand.
 

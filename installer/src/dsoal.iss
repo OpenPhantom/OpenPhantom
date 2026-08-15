@@ -23,14 +23,17 @@
 ;
 ; To move to a newer build take its revision out of the archive tag, then measure the hash and both
 ; sizes again.
+;
+; An archived revision is not immutable either. r694 was replaced under its own name, same
+; address and different bytes, which fails every download until the hash here is measured again.
 #define DsoalRevision       "r694"
 #define DsoalUrl            "https://github.com/kcat/dsoal/releases/download/archive/DSOAL_" + DsoalRevision + ".zip"
-#define DsoalSha256         "5f355e59d4be049b968c79f47484677438846da25d4ed0b98092234a283f3f1f"
+#define DsoalSha256         "fd622130cbc4c1f8bb876f9f4a940fe7f6f40bfa4a807e28dda1a9bae8899799"
 
 ; The download is a zip holding one file, which is another zip. Each extracting row has to declare
 ; what it expands to, so both numbers are needed.
-#define DsoalOuterSize      9981105
-#define DsoalInnerSize      9972695
+#define DsoalOuterSize      4877130
+#define DsoalInnerSize      9981105
 
 #define DsoalTmp            "{tmp}\dsoal"
 #define DsoalFiles          DsoalTmp + "\files"
@@ -46,7 +49,7 @@ Name: "patch\dsoal"; Description: "{cm:CompDsoal}"; Types: custom
 
 [Files]
 Source: "{#DsoalUrl}"; DestDir: "{#DsoalTmp}"; DestName: "dsoal-outer.zip"; \
-    Hash: "{#DsoalSha256}"; ExternalSize: {#DsoalOuterSize}; \
+    {#HashParam(DsoalSha256)}ExternalSize: {#DsoalOuterSize}; \
     Components: patch\dsoal; \
     Flags: external download extractarchive recursesubdirs ignoreversion
 

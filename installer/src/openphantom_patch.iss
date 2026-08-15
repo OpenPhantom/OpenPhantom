@@ -99,7 +99,7 @@ Name: "patch\fmv_player\runtime";  Description: "{cm:CompFmvRuntime}";  Types: c
 ; Rows are processed in the order listed, so this has to come before everything that reads out of the
 ; unpacked folder.
 Source: "{#PatchUrl}"; DestDir: "{#PatchTmp}"; DestName: "openphantom-patch.zip"; \
-    Hash: "{#PatchSha256}"; ExternalSize: {#PatchUnpackedSize}; \
+    {#HashParam(PatchSha256)}ExternalSize: {#PatchUnpackedSize}; \
     Components: patch; Flags: external download extractarchive recursesubdirs ignoreversion
 
 ; A stranger holding the dinput.dll name is moved aside in [Code] before this row runs.
@@ -181,7 +181,7 @@ Source: "{#PatchTmp}\tools\Convert Movies.bat"; DestDir: "{app}\tools"; \
 
 ; ExternalSize is what the archive expands to, not the 78 MB that comes down the wire.
 Source: "{#VlcUrl}"; DestDir: "{#VlcTmp}"; DestName: "vlc-win32.zip"; \
-    Hash: "{#VlcSha256}"; ExternalSize: {#VlcUnpackedSize}; \
+    {#HashParam(VlcSha256)}ExternalSize: {#VlcUnpackedSize}; \
     Components: patch\fmv_player\runtime; \
     Flags: external download extractarchive recursesubdirs ignoreversion
 

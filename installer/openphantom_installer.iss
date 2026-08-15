@@ -199,6 +199,19 @@ Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{
 ; games, settings and anything a player added afterwards are not ours to delete. The folder stays
 ; behind with those in it, and that is the intended outcome.
 
+; Download hash checks, in one switch for all of them.
+;
+; Off while the DSOAL archive question is open: that tag replaces a revision under its own name,
+; so a pinned hash stops every install until someone measures it again. The hashes stay below,
+; as the record of what was tested.
+#define IgnoreDownloadHashes 1
+
+#if IgnoreDownloadHashes
+  #define HashParam(str Sha) ""
+#else
+  #define HashParam(str Sha) "Hash: """ + Sha + """; "
+#endif
+
 ; One include per subject. Xidi and DSOAL hang off the patch component, so they come before the
 ; saves, which does not, and the patch keeps one unbroken subtree in the component list.
 #include "src\openphantom_patch.iss"

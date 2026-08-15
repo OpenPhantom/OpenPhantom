@@ -43,7 +43,7 @@ Name: "patch\xidi"; Description: "{cm:CompXidi}"; Types: custom
 
 [Files]
 Source: "{#XidiUrl}"; DestDir: "{#XidiTmp}"; DestName: "xidi.zip"; \
-    Hash: "{#XidiSha256}"; ExternalSize: {#XidiUnpackedSize}; \
+    {#HashParam(XidiSha256)}ExternalSize: {#XidiUnpackedSize}; \
     Components: patch\xidi; \
     Flags: external download extractarchive recursesubdirs ignoreversion
 

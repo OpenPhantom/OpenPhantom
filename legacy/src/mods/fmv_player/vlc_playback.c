@@ -172,7 +172,24 @@ static bool init_worker(void)
     wchar_t core_path[MAX_PATH];
     wchar_t main_path[MAX_PATH];
     wchar_t plugin_path[MAX_PATH];
-    static const char *const instance_args[] = { "--quiet", "--no-video-title-show" };
+    static const char *const instance_args[] = { "--no-video-title-show", "--aout=waveout" };
+    /* CONFIRMED FIELD FIX for a ROG Ally X that reported silent movies with DSOAL installed.
+     *
+     * --aout=mmdevice (forcing WASAPI) was the first fix tried, on the theory that libVLC's own
+     * auto-probe was falling back to DirectSound and DSOAL (a DirectSound-to-OpenAL layer for the
+     * retail game's own EAX effects) was swallowing the audio from there. FIELD-TESTED and it did
+     * NOT fix it: the movies stayed silent even with WASAPI forced and DirectSound removed from
+     * the path entirely, which ruled out DirectSound/DSOAL as the actual cause.
+     *
+     * --aout=waveout (winmm) is what's forced now, and IT FIXED THE REPORTED SYSTEM: the oldest
+     * Windows audio output there is, older than DirectSound and WASAPI both, with no exclusive-
+     * mode negotiation, no audio session machinery and no device enumeration through the MMDevice
+     * COM API that WASAPI and mmdevice both depend on. Whatever was actually wrong on that system
+     * - handheld audio middleware, a spatial audio APO, a COM initialisation quirk from running
+     * inside an injected DLL - never got the chance to interfere with winmm's much smaller
+     * surface. The specific mechanism was never pinned down beyond that, and does not need to be:
+     * the fix is confirmed on the machine that reported the bug, which is the bar every other
+     * field-tested fix in this project is held to. */
 
     if (!vlc_locate_directory(vlc_dir, ARRAYSIZE(vlc_dir))) {
         return false;   /* vlc_locate.c has already said which places it looked in */
@@ -229,7 +246,8 @@ static bool init_worker(void)
         return false;
     }
 
-    log_info("libVLC ready, plugins from %ls", plugin_path);
+    log_info("libVLC ready, plugins from %ls, audio output forced to waveout (confirmed field fix "
+             "for silent movies on at least one system)", plugin_path);
     return true;
 }
 

@@ -40,4 +40,9 @@ void overlay_input_update_pointer(void);
 /* Where that pointer is, in the screen pixels the panel is laid out in. */
 void overlay_input_pointer(float *out_x, float *out_y);
 
+/* Whether the search box is the thing typing reaches right now. False the moment the panel opens
+ * and after every close, true only once a click has landed inside the field itself. The painter
+ * asks this to show which state the field is in. */
+bool overlay_input_search_focused(void);
+
 #endif /* OVERLAY_INPUT_H */

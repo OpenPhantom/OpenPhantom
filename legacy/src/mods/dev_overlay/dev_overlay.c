@@ -13,6 +13,7 @@
 
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
+#include "cheats_original_actions.h"
 #include "input_freeze.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
@@ -151,6 +152,7 @@ void dev_overlay_install(void)
     /* Either half is worth having on its own, so both are attempted and neither decides the
      * outcome. What decides it is whether anything at all can be offered. */
     cheats_ready = cheats_original_resolve();
+    cheats_ready = cheats_original_actions_resolve() || cheats_ready;
     cheats_ready = cheats_openphantom_install() || cheats_ready;
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "

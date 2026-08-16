@@ -40,6 +40,11 @@ int32_t overlay_draw_row_at(float x, float y);
 /* Which tab the pointer is over, or -1. */
 int32_t overlay_draw_tab_at(float x, float y);
 
+/* True when the pointer is over the search field's own box, the same rectangle overlay_draw.c
+ * fills and outlines. What a click here focuses, so typing goes into the box only once it has
+ * been clicked into rather than the moment the panel opens. */
+bool overlay_draw_search_at(float x, float y);
+
 /* The panel's left and top edge in authored units, so a caller can keep a pointer inside it. */
 /* What the engine thinks the screen is, which is the space the panel and the pointer share. False
  * before a display mode has been chosen, and then neither is written. */

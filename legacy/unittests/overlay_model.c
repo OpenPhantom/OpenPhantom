@@ -6,14 +6,16 @@
  * crash, none of them log, and all of them are only visible to somebody who already knows what the
  * list should have said.
  *
- * The two cheat sources are deliberately not stubbed. Neither has resolved anything in a test
- * process, so the game's own tab is empty and this project's tab holds its two rows with no site
- * behind them, which is exactly the state a player sees on an unsupported executable. That is
- * worth pinning down: it is the case where the panel must still open and still be usable.
+ * The three cheat sources are deliberately not stubbed. None has resolved anything in a test
+ * process, so the game's own toggles and one-shot actions are both empty and this project's tab
+ * holds its two rows with no site behind them, which is exactly the state a player sees on an
+ * unsupported executable. That is worth pinning down: it is the case where the panel must still
+ * open and still be usable.
  */
 #include "unittest.h"
 
 #include "cheats_openphantom.h"
+#include "cheats_original_actions.h"
 #include "overlay_model.h"
 
 #include <string.h>
@@ -57,17 +59,21 @@ int main(void)
     overlay_model_reset();
     overlay_model_rebuild();
     ut_check(overlay_model_tab() == OVERLAY_TAB_ORIGINAL, "it opens on the game's own cheats");
-    ut_check(overlay_model_row_count() == 1u,
-             "every group starts folded, so only the heading shows");
-    ut_check(first_row_is_group(), "and that one row is the heading");
+    ut_check(overlay_model_row_count() == 2u,
+             "every group starts folded, so only the two Original headings show: the toggles and "
+             "the one-shot actions, as two separate groups");
+    ut_check(first_row_is_group(), "and the first of those rows is a heading");
+    ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_GROUP,
+             "so is the second: two groups, not one, on the Original tab");
     ut_check(overlay_model_search()[0] == '\0', "with nothing typed");
 
     ut_section("folding");
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u, "the second tab starts folded too");
-    overlay_model_toggle_group((uint32_t)OVERLAY_TAB_OPENPHANTOM);
+    ut_check(overlay_model_row_count() == 1u,
+             "the OpenPhantom tab holds one group, and it starts folded too");
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT,
              "unfolding shows the heading and both of this project's cheats");
@@ -79,9 +85,33 @@ int main(void)
              "switching an unavailable cheat is refused instead of quietly doing nothing");
 
     ut_section("a group folds back exactly as it was");
-    overlay_model_toggle_group((uint32_t)OVERLAY_TAB_OPENPHANTOM);
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == 1u, "folding it again leaves the heading alone");
+
+    ut_section("the Original tab's second group: one-shot actions, not toggles");
+    overlay_model_reset();
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_ORIGINAL_ACTIONS);
+    overlay_model_rebuild();
+    ut_check(overlay_model_row_count() == 2u + (uint32_t)CHEATS_ACTION_COUNT,
+             "both Original headings plus every one-shot action, the toggle group left folded");
+    ut_check(overlay_model_row(2, &row) && row.kind == OVERLAY_ROW_ACTION,
+             "a row under the actions heading is an action, not a cheat");
+    ut_check(!row.available,
+             "and with no engine behind it, unavailable rather than offered and inert");
+    ut_check(!overlay_model_activate(2),
+             "running an unavailable action is refused instead of quietly doing nothing");
+
+    ut_section("a queued play-as swap, before anything has resolved");
+    ut_check(!cheats_original_actions_is_pending(CHEATS_ACTION_PLAY_OBI),
+             "nothing is pending on an executable nothing resolved against - character 0 (Obi-Wan) "
+             "must not read as queued just because it shares its index with an unresolved struct's "
+             "own zero-initialised default");
+    ut_check(cheats_original_actions_pending_label() == NULL,
+             "and there is no label for a swap that was never queued");
+    ut_check(overlay_model_row(5, &row) && row.id == (uint32_t)CHEATS_ACTION_PLAY_OBI,
+             "row 5 under the actions heading is Play as Obi-Wan, by index");
+    ut_check(!row.pending, "and it does not show as queued either");
 
     ut_section("typing opens the group that has hits, and clearing puts it back");
     overlay_model_reset();

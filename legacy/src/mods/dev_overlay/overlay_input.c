@@ -51,6 +51,7 @@
  * ============================================================================================ */
 #include "overlay_input.h"
 
+#include "cheats_original_actions.h"
 #include "input_freeze.h"
 #include "overlay_draw.h"
 #include "overlay_model.h"
@@ -176,6 +177,7 @@ typedef struct overlay_input_state {
     bool              installed;
     bool              open;
     bool              saw_a_message;
+    bool              search_focused;    /* whether a click has landed in the search field yet */
     detour_t          detour;
     key_hook_fn_t     original;
     HWND              window;
@@ -211,8 +213,15 @@ static overlay_input_state_t input_state;
 static void set_open(bool open)
 {
     input_state.open = open;
+    input_state.search_focused = false;   /* every open starts unfocused; see the header comment
+                                            * on overlay_input_search_focused() for why */
     input_freeze_set(open);
     if (!open) {
+        /* AFTER input_freeze_set(false), not before: a queued play-as swap has its own precondition
+         * that reads as unmet while the player is suspended, which is exactly what closing this
+         * call just ended. See cheats_original_actions.h's note on invoke() for why the swap is
+         * queued rather than run the moment its row is pressed. */
+        cheats_original_actions_apply_pending();
         overlay_model_reset();
         return;
     }
@@ -284,13 +293,28 @@ void overlay_input_pointer(float *out_x, float *out_y)
     if (out_y != NULL) { *out_y = input_state.pointer_y; }
 }
 
+bool overlay_input_search_focused(void)
+{
+    return input_state.search_focused;
+}
+
 /* ============================================================================================ */
 
 static void click(float x, float y)
 {
-    int32_t tab = overlay_draw_tab_at(x, y);
+    int32_t tab;
     int32_t row;
 
+    /* A click anywhere ends the search box's focus except a click ON it, which is what starts it.
+     * That is the whole of the click-to-type rule: typing goes into the box only between these two
+     * moments, never just because the panel is open. */
+    if (overlay_draw_search_at(x, y)) {
+        input_state.search_focused = true;
+        return;
+    }
+    input_state.search_focused = false;
+
+    tab = overlay_draw_tab_at(x, y);
     if (tab >= 0) {
         overlay_model_set_tab((overlay_tab_t)tab);
         overlay_model_rebuild();
@@ -325,7 +349,7 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
             set_open(false);
             return true;
         }
-        if (wparam == KEY_BACKSPACE) {
+        if (wparam == KEY_BACKSPACE && input_state.search_focused) {
             overlay_model_search_backspace();
             overlay_model_rebuild();
             return true;
@@ -335,8 +359,13 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
 
     switch (message) {
     case MSG_CHAR:
-        /* Backspace also arrives as a character and would otherwise be appended as one. */
-        if (wparam != KEY_BACKSPACE) {
+        /* Backspace also arrives as a character and would otherwise be appended as one. Typing
+         * reaches the box only once a click has landed on it - see click() - which is also what
+         * stops the open key itself leaking in as a character the instant the panel opens: the
+         * key-down that opens the panel is handled above and never reaches here, but Windows still
+         * queues the matching WM_CHAR right behind it, and without the focus gate that character
+         * had nowhere else to go but into a box nobody had clicked on yet. */
+        if (wparam != KEY_BACKSPACE && input_state.search_focused) {
             overlay_model_search_append((char)wparam);
             overlay_model_rebuild();
         }

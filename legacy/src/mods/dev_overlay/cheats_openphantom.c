@@ -1,4 +1,6 @@
-/* cheats_openphantom.c: unlimited ammunition and unlimited health.
+/* cheats_openphantom.c: unlimited ammunition and unlimited health. The third cheat this project
+ * adds, no fog, is a different enough shape - see cheats_no_fog.h - that it lives in its own file
+ * and this one only dispatches CHEATS_OWN_NO_FOG's queries to it.
  *
  * ==============================================================================================
  * THE TWO SITES, READ OUT OF THE RETAIL EXECUTABLE
@@ -70,6 +72,8 @@
  * and the console's own "kill me now" both go elsewhere and are not blocked here.
  * ============================================================================================ */
 #include "cheats_openphantom.h"
+
+#include "cheats_no_fog.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -220,6 +224,7 @@ bool cheats_openphantom_install(void)
 
     own_state.cheats[CHEATS_OWN_UNLIMITED_AMMO].name = "Unlimited ammunition";
     own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].name = "Unlimited health";
+    own_state.cheats[CHEATS_OWN_NO_FOG].name = "No fog";
 
     if (install_one(SIG_USE_AMMO, MSK_USE_AMMO, sizeof SIG_USE_AMMO,
                     (const void *)&hook_use_ammo, &own_state.ammo_detour,
@@ -235,14 +240,18 @@ bool cheats_openphantom_install(void)
         own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].available = true;
     }
 
+    /* A different shape - see cheats_no_fog.h - so it owns its own state and this only asks it. */
+    (void)cheats_no_fog_install();
+
     own_state.installed = true;
 
-    /* Both detours stand for the life of the process whether the cheats are used or not, and both
-     * cost one comparison per call while they are off. That is the price of being able to switch
-     * them from the panel at any moment, and it is the same bargain every other feature here makes.
-     * If neither resolved there is nothing to switch, and the caller says so once. */
+    /* All three stand for the life of the process whether used or not: the two detours each cost
+     * one comparison per call while off, and the fog tick costs one comparison per frame while off.
+     * That is the price of being able to switch any of them from the panel at any moment. If none
+     * resolved there is nothing to switch, and the caller says so once. */
     return own_state.cheats[CHEATS_OWN_UNLIMITED_AMMO].available ||
-           own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].available;
+           own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].available ||
+           cheats_no_fog_is_available();
 }
 
 const char *cheats_openphantom_name(cheats_own_id_t id)
@@ -255,6 +264,9 @@ const char *cheats_openphantom_name(cheats_own_id_t id)
 
 bool cheats_openphantom_is_available(cheats_own_id_t id)
 {
+    if (id == CHEATS_OWN_NO_FOG) {
+        return cheats_no_fog_is_available();
+    }
     if ((unsigned)id >= (unsigned)CHEATS_OWN_COUNT) {
         return false;
     }
@@ -263,6 +275,9 @@ bool cheats_openphantom_is_available(cheats_own_id_t id)
 
 bool cheats_openphantom_is_on(cheats_own_id_t id)
 {
+    if (id == CHEATS_OWN_NO_FOG) {
+        return cheats_no_fog_is_on();
+    }
     if ((unsigned)id >= (unsigned)CHEATS_OWN_COUNT) {
         return false;
     }
@@ -271,6 +286,9 @@ bool cheats_openphantom_is_on(cheats_own_id_t id)
 
 bool cheats_openphantom_toggle(cheats_own_id_t id)
 {
+    if (id == CHEATS_OWN_NO_FOG) {
+        return cheats_no_fog_toggle();
+    }
     if ((unsigned)id >= (unsigned)CHEATS_OWN_COUNT ||
         !own_state.cheats[id].available) {
         return false;

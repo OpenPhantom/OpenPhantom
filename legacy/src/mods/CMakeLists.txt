@@ -232,5 +232,7 @@ add_engine_fix(dev_overlay
     overlay_input.c
     input_freeze.c
     cheats_original.c
+    cheats_original_actions.c
     cheats_openphantom.c
+    cheats_no_fog.c
 )

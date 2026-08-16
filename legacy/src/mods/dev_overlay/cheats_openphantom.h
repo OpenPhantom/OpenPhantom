@@ -1,13 +1,20 @@
-/* cheats_openphantom.h: the two codes this project adds, unlimited ammunition and unlimited health.
+/* cheats_openphantom.h: the three codes this project adds - unlimited ammunition, unlimited
+ * health, and no fog.
  *
- * Both work the same way and it is the smallest way there is. The engine spends ammunition and
- * applies damage through one short function each, and while a cheat is on its detour returns
- * without calling the original. Nothing is written into the player's record, no counter is topped
- * up and no timer is held, so switching a cheat off leaves the game in a state it could have
- * reached by itself.
+ * The first two work the same way and it is the smallest way there is. The engine spends
+ * ammunition and applies damage through one short function each, and while a cheat is on its
+ * detour returns without calling the original. Nothing is written into the player's record, no
+ * counter is topped up and no timer is held, so switching a cheat off leaves the game in a state
+ * it could have reached by itself.
  *
  * That matters more than it sounds. Refilling ammunition every frame would fight the pickup code,
  * change what the HUD flashes and survive a save; declining to subtract does none of those.
+ *
+ * No fog is a different shape, because there is nothing to decline: fog is not spent, it is a bit
+ * in the loaded level's own record, read fresh every frame by the renderer rather than cached
+ * anywhere this project could detour instead. See cheats_no_fog.c for why it is a per-frame force
+ * rather than a single write, and why turning it back off does not try to restore what a level
+ * authored.
  */
 #ifndef CHEATS_OPENPHANTOM_H
 #define CHEATS_OPENPHANTOM_H
@@ -18,6 +25,7 @@
 typedef enum cheats_own_id {
     CHEATS_OWN_UNLIMITED_AMMO = 0,
     CHEATS_OWN_UNLIMITED_HEALTH,
+    CHEATS_OWN_NO_FOG,
     CHEATS_OWN_COUNT
 } cheats_own_id_t;
 

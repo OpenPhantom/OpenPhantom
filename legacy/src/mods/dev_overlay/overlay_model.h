@@ -30,9 +30,20 @@ typedef enum overlay_tab {
     OVERLAY_TAB_COUNT
 } overlay_tab_t;
 
+/* One entry per group, and a group belongs to exactly one tab. The Original tab holds two: the
+ * eleven codes that are real toggles, and the sixteen that run once. Splitting them is what lets a
+ * fire-once row and a switched row sit in the same tab without either pretending to be the other. */
+typedef enum overlay_group {
+    OVERLAY_GROUP_ORIGINAL_TOGGLES = 0,
+    OVERLAY_GROUP_ORIGINAL_ACTIONS,
+    OVERLAY_GROUP_OPENPHANTOM,
+    OVERLAY_GROUP_COUNT
+} overlay_group_t;
+
 typedef enum overlay_row_kind {
     OVERLAY_ROW_GROUP = 0,      /* a foldable heading */
-    OVERLAY_ROW_CHEAT           /* something that can be switched */
+    OVERLAY_ROW_CHEAT,          /* something that can be switched, shown ON / OFF */
+    OVERLAY_ROW_ACTION          /* something that runs once, shown as a plain button */
 } overlay_row_kind_t;
 
 typedef struct overlay_row {
@@ -40,8 +51,14 @@ typedef struct overlay_row {
     char               label[OVERLAY_LABEL_MAX];
     bool               expanded;    /* groups: whether their children follow */
     bool               on;          /* cheats: whether it is active right now */
-    bool               available;   /* cheats: false when its site never resolved */
-    uint32_t           group;       /* which group this belongs to, groups included */
+    bool               available;   /* cheats and actions: false when its site never resolved,
+                                      * or when it is gated safe and running it now would not be */
+    bool               pending;     /* actions only: queued to run when the panel closes, not yet
+                                      * run - see cheats_original_actions.h for why the four
+                                      * play-as codes work this way and nothing else does */
+    char               value[8];    /* actions only, and only for the one that has a number worth
+                                      * showing on its own chip instead of RUN - empty otherwise */
+    uint32_t           group;       /* an overlay_group_t value, groups included */
     uint32_t           id;          /* index within that group's own source */
 } overlay_row_t;
 

@@ -120,6 +120,7 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define MSG_CHAR            0x0102
 #define MSG_MOUSE_MOVE      0x0200
 #define MSG_LEFT_BUTTON     0x0201
+#define MSG_MOUSE_WHEEL     0x020A
 #define KEY_ESCAPE          0x1B
 #define KEY_BACKSPACE       0x08
 
@@ -397,6 +398,36 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
     return false;
 }
 
+/* Notches scrolled since the last take, positive away from the player. Free camera's own fly
+ * speed (see cheats_openphantom.c) is the one consumer, and it needs the wheel while FLYING, which
+ * is exactly when the panel is closed - unlike everything else in this file, gated on
+ * input_state.open, this has to be observed unconditionally, in hook_key() itself rather than in
+ * handle() below. It is never consumed: the message still reaches input_state.original()
+ * afterwards exactly as if this were not here, since nothing here is known to need the wheel for
+ * anything of its own and there is no reason to find out by swallowing it.
+ *
+ * No locking: hook_key() and the consumer both run on the single game thread (a chained window-
+ * message dispatch and a chained per-frame camera update respectively), never concurrently, the
+ * same reasoning that lets the rest of this file's state go unguarded too. */
+static int32_t wheel_delta_accum;
+
+static void observe_wheel(int32_t message, int32_t wparam)
+{
+    if (message != MSG_MOUSE_WHEEL) {
+        return;
+    }
+    /* WHEEL_DELTA notches live in the high word of wParam, signed. */
+    wheel_delta_accum += (int32_t)(int16_t)((uint32_t)wparam >> 16);
+}
+
+int32_t overlay_input_take_wheel_delta(void)
+{
+    int32_t delta = wheel_delta_accum;
+
+    wheel_delta_accum = 0;
+    return delta;
+}
+
 static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam, uint32_t lparam)
 {
     /* The game's own window, taken from the first message rather than searched for. */
@@ -412,6 +443,8 @@ static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam
         log_info("the message hook is live, first message %04X. Reported once.",
                  (unsigned)message);
     }
+
+    observe_wheel(message, wparam);
 
     if (is_key_down(message) && is_open_key(wparam)) {
         log_info("the overlay was %s with key %02X",

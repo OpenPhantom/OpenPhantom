@@ -1,8 +1,10 @@
-/* cheats_openphantom.c: unlimited ammunition, unlimited health, no fog, and free camera. The third
- * cheat this project adds, no fog, is a different enough shape - see cheats_no_fog.h - that it
- * lives in its own file and this one only dispatches CHEATS_OWN_NO_FOG's queries to it. Free
- * camera is documented next to its own two signatures below rather than up here, the two sites it
- * needs each carrying their own byte evidence at the point they are used.
+/* cheats_openphantom.c: unlimited ammunition, unlimited health, no fog, invincible NPCs, one-shot
+ * NPCs, and free camera. The third cheat this project adds, no fog, is a different enough shape -
+ * see cheats_no_fog.h - that it lives in its own file and this one only dispatches
+ * CHEATS_OWN_NO_FOG's queries to it. Free camera is documented next to its own two signatures
+ * below rather than up here, the two sites it needs each carrying their own byte evidence at the
+ * point they are used - invincible NPCs and one-shot NPCs are the same, documented next to
+ * SIG_NPC_DAMAGE_APPLY.
  *
  * ==============================================================================================
  * THE TWO SITES, READ OUT OF THE RETAIL EXECUTABLE
@@ -160,6 +162,47 @@ _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
  * where the cheat is OFF, so the game would have died on the first shot fired and the first hit
  * taken. Ten is the first boundary at or past the five bytes a jump needs. */
 #define STATUS_PROLOGUE_SIZE 10u
+
+/* --- 0x004338EC  enemy_receiveDamage: the NPC health write ----------------------------------- *
+ * Found hunting for the enemy-side counterpart to unlimited health, starting from dismemberment.c's
+ * own DEATH GATE (0x0043707D), which is reached only when an NPC's health, at character record
+ * +0x38, has fallen to zero or below - established there by the retail compare at 0x437070. That
+ * pinned the FIELD; this pins the WRITE. Decompiling enemy_receiveDamage (0x00433803, named for the
+ * six call sites Ghidra's own xrefs find into it, all message-dispatch arms) shows exactly one line
+ * that ever changes it: `*(int*)(param_1+0x38) = *(int*)(param_1+0x38) - local_18;` - local_18 is
+ * the damage this call computed (a flat 3, doubled to 6 for a severable-limb hit - the same doubling
+ * dismemberment.c's own header already documents at 0x4338B3, a few instructions earlier in this
+ * same function). Disassembled, that line is five back-to-back three-byte instructions, an exact
+ * 15-byte block with no rel32 and nothing environment-dependent in it:
+ *
+ *   004338EC  8B 55 08     mov edx,[ebp+8]      victim (character*), this function's own param_1
+ *   004338EF  8B 42 38     mov eax,[edx+0x38]   health
+ *   004338F2  2B 45 EC     sub eax,[ebp-0x14]   minus local_18, the computed damage
+ *   004338F5  8B 4D 08     mov ecx,[ebp+8]
+ *   004338F8  89 41 38     mov [ecx+0x38],eax   health -= damage, written back
+ *
+ * Traced forward to the end of the function (0x00433985), NOTHING after this block ever reads EAX,
+ * ECX or EDX left over from it - every later use of the victim record reloads it fresh from
+ * [ebp+8], and the first flag-testing instruction after it (FCOMP/FNSTSW at 0x004338FE) sets its
+ * own flags rather than reading the SUB's. That is what makes this block safe to detour as a whole
+ * and either skip entirely or replace outright, rather than needing to preserve anything about how
+ * it executed - unlike updateCam's chained detour above, which must run the original underneath
+ * every time, this site's own hook is free to decide whether the trampoline runs at all. */
+static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
+    0x8B, 0x55, 0x08,             /* mov edx,[ebp+8]      victim (character*)            */
+    0x8B, 0x42, 0x38,             /* mov eax,[edx+0x38]   health                         */
+    0x2B, 0x45, 0xEC,             /* sub eax,[ebp-0x14]   minus the computed damage      */
+    0x8B, 0x4D, 0x08,             /* mov ecx,[ebp+8]                                     */
+    0x89, 0x41, 0x38,             /* mov [ecx+0x38],eax   health -= damage, written back */
+    0xD9, 0x45, 0xF8               /* fld [ebp-8]  the next instruction, kept only for the extra
+                                     * uniqueness/chaining margin every other detour site in this
+                                     * file also carries past its own prologue - never read for a
+                                     * value */
+};
+/* Fifteen, not eighteen: the trampoline may only copy what the detour target's own site comment
+ * proves is safe to relocate, and the three FLD bytes above are trailing context for
+ * signature_find_detour_target's own chaining check, not part of what gets overwritten. */
+#define NPC_DAMAGE_PROLOGUE_SIZE 15u
 
 /* Free camera, site one of two: the simulation pause flag.
  *
@@ -321,11 +364,30 @@ _Static_assert(sizeof(SIG_CAMERA_UPDATE) == sizeof(MSK_CAMERA_UPDATE),
 #define CAMERA_EULER_PITCH_OFFSET 0x34u
 #define CAMERA_EULER_YAW_OFFSET   0x38u
 
+/* eyeX/Y/Z, view+0x24/0x28/0x2c: eyeX = anchorX + (the local rig offset, view+0x04/0x08, rotated
+ * by the current euler); eyeZ = anchorZ + offsetZ(view+0x0c), unrotated. Confirmed directly by
+ * decompiling FUN_004181b9, the function that builds these every rendered frame from the anchor
+ * and the euler updateCam just wrote - not taken on the strength of an earlier report alone.
+ * Read only once, at free camera's own rising edge, to compute a look-at rather than to drive
+ * anything ongoing - see that site's own comment for why. */
+#define CAMERA_EYE_X_OFFSET      0x24u
+#define CAMERA_EYE_Y_OFFSET      0x28u
+#define CAMERA_EYE_Z_OFFSET      0x2Cu
+
 #define DEG_TO_RAD               0.017453293f
-#define FREECAM_MOVE_SPEED       12.0f    /* world units/second, a first guess like every other
-                                            * tuned number in this project, pending a field round */
+#define RAD_TO_DEG               57.295780f
+#define FREECAM_MOVE_SPEED       12.0f    /* world units/second, only the STARTING value now that
+                                            * the wheel adjusts it at runtime (see freecam_speed) -
+                                            * still a first guess, pending a field round, for what
+                                            * the wheel then tunes away from */
 #define FREECAM_MOUSE_DEGREES_PER_COUNT 0.15f   /* degrees of turn per pixel of cursor delta */
 #define FREECAM_PITCH_LIMIT      89.0f    /* degrees; kept short of vertical to avoid a gimbal flip */
+#define FREECAM_MIN_SPEED        0.5f     /* world units/second */
+#define FREECAM_MAX_SPEED        200.0f   /* world units/second */
+#define FREECAM_SPEED_PER_NOTCH  1.1f     /* multiplicative, Blender's own fly-mode feel: constant
+                                            * ratio per notch reads as even control at both the slow
+                                            * and the fast end, where a constant per-notch ADD would
+                                            * feel enormous down low and glacial up high */
 
 typedef void (__cdecl *use_ammo_fn_t)(int32_t weapon_id, int32_t amount);
 typedef void (__cdecl *damage_fn_t)(int32_t amount);
@@ -342,6 +404,7 @@ typedef struct cheats_own_state {
     own_cheat_t             cheats[CHEATS_OWN_COUNT];
     detour_t                ammo_detour;
     detour_t                damage_detour;
+    detour_t                npc_damage_detour;
     detour_t                camera_update_detour;
     use_ammo_fn_t           ammo_original;
     damage_fn_t             damage_original;
@@ -373,6 +436,70 @@ static void __cdecl hook_damage(int32_t amount)
     own_state.damage_original(amount);
 }
 
+/* Invincible NPCs and one-shot NPCs, sharing SIG_NPC_DAMAGE_APPLY's own site rather than needing
+ * one signature each: both are decisions about the same fifteen bytes, "does the write happen, and
+ * with what value", so one detour answers both. Where hook_camera_update above must always run the
+ * original underneath it (that site is chained, other DLLs' features depend on it happening), this
+ * one is not chained by anything and its own site comment already proves nothing downstream reads
+ * EAX/ECX/EDX or the SUB's flags - so this hook is free to skip the original three-instruction
+ * write outright rather than only being able to run alongside it.
+ *
+ * A naked trampoline rather than a call-site redirect like hook_use_ammo/hook_damage above: those
+ * two detour a CALL instruction, so the hook can simply BE the function and choose whether to call
+ * `original`. This site is a straight-line block in the middle of enemy_receiveDamage's own body,
+ * not a call, so what gets overwritten is regular code and the hook must be entered by JMP with the
+ * surrounding registers intact - the same shape dismemberment.c's own death-gate hook already uses,
+ * extended here with a choice of WHERE to resume: normal play calls the trampoline (the original
+ * three instructions, unmodified); either cheat sets npc_damage_skip and resumes at
+ * npc_damage_continue instead, immediately past the write, having already decided the outcome
+ * itself. on_npc_damage() communicates that choice through the static flag rather than a return
+ * value in EAX, because popad below would overwrite EAX with whatever it held before the call and
+ * erase any answer left in a register. */
+static void  *npc_damage_trampoline;   /* the original 15 bytes, replayed when neither cheat is on */
+static void  *npc_damage_continue;     /* site + NPC_DAMAGE_PROLOGUE_SIZE, resumed when one skips it */
+static bool   npc_damage_skip;
+
+static void __cdecl on_npc_damage(char *frame_pointer)
+{
+    void *victim = *(void **)(frame_pointer + 0x08);   /* [ebp+8], enemy_receiveDamage's param_1 */
+
+    npc_damage_skip = false;
+    if (victim == NULL) {
+        return;
+    }
+    /* Invincible wins if both happen to be on at once: refusing the hit outright is the more
+     * obviously correct answer than a hit that is simultaneously "took no damage" and "died". */
+    if (own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].on) {
+        npc_damage_skip = true;      /* the write below never runs at all; health is untouched */
+        return;
+    }
+    if (own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].on) {
+        /* <=0 is exactly what the death gate this function feeds (0x00437070, see dismemberment.c's
+         * own DEATH GATE comment) tests for, so this is indistinguishable to the rest of the engine
+         * from a hit that happened to deal lethal damage the ordinary way. */
+        *(int32_t *)((char *)victim + 0x38) = 0;
+        npc_damage_skip = true;
+    }
+}
+
+static void __declspec(naked) hook_npc_damage(void)
+{
+    __asm {
+        pushad
+        pushfd
+        push ebp
+        call on_npc_damage
+        add  esp, 4
+        popfd
+        popad
+        cmp  byte ptr npc_damage_skip, 0
+        jnz  npc_damage_resume_after
+        jmp  dword ptr [npc_damage_trampoline]
+    npc_damage_resume_after:
+        jmp  dword ptr [npc_damage_continue]
+    }
+}
+
 /* GetAsyncKeyState reads the physical key regardless of which window has it, so without this the
  * player would drift while the game sits alt-tabbed in the background and something else entirely
  * is holding E or Q. Compares the foreground window's owning process to this one instead of
@@ -389,12 +516,28 @@ static bool is_game_foreground(void)
     return owner_pid == GetCurrentProcessId();
 }
 
+/* NULL until dev_overlay.c wires it in - see this pointer's own type, declared in
+ * cheats_openphantom.h, for why it is a pointer rather than a direct call. */
+static cheats_openphantom_wheel_source_fn_t wheel_source;
+
+void cheats_openphantom_set_wheel_source(cheats_openphantom_wheel_source_fn_t fn)
+{
+    wheel_source = fn;
+}
+
 /* Free camera. Owned entirely by this file, seeded from wherever the camera already is the moment
  * the cheat switches on: nothing else may be trusted to hold still. */
 static float freecam_x, freecam_y, freecam_z;
 static float freecam_yaw, freecam_pitch;   /* degrees */
 static bool  freecam_valid = false;
 static bool  freecam_cursor_hidden = false;   /* true while THIS cheat owns the OS cursor */
+
+/* The scroll wheel adjusts this, Blender-fly-mode style, rather than it being the fixed
+ * FREECAM_MOVE_SPEED constant every other tuned number in this file starts as. Deliberately a
+ * file-level static rather than reseeded at the rising edge alongside position/orientation: a
+ * speed dialled in once is worth keeping across a toggle off and back on, the same way Blender
+ * itself remembers it walk speed between uses rather than resetting it every time. */
+static float freecam_speed = FREECAM_MOVE_SPEED;
 
 static LARGE_INTEGER freecam_perf_frequency;
 static LONGLONG      freecam_last_tick;
@@ -458,15 +601,51 @@ static void __cdecl hook_camera_update(void)
     }
 
     if (!freecam_valid) {
-        /* Rising edge: seed from wherever the camera already is, so switching on never snaps the
-         * view, and pause the simulation - see SIG_SIM_PAUSE_GATE's own comment for why this one
-         * flag is enough to stop the player and the whole world simulating out from under a
-         * camera that is no longer looking through the player's own eyes. */
-        freecam_x     = *(float *)((uint8_t *)view + CAMERA_ANCHOR_X_OFFSET);
-        freecam_y     = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Y_OFFSET);
-        freecam_z     = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Z_OFFSET);
-        freecam_pitch = *(float *)((uint8_t *)view + CAMERA_EULER_PITCH_OFFSET);
-        freecam_yaw   = *(float *)((uint8_t *)view + CAMERA_EULER_YAW_OFFSET);
+        /* Rising edge: seed POSITION from wherever the camera already is, so switching on never
+         * snaps the view, and pause the simulation - see SIG_SIM_PAUSE_GATE's own comment for why
+         * this one flag is enough to stop the player and the whole world simulating out from
+         * under a camera that is no longer looking through the player's own eyes. */
+        freecam_x = *(float *)((uint8_t *)view + CAMERA_ANCHOR_X_OFFSET);
+        freecam_y = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Y_OFFSET);
+        freecam_z = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Z_OFFSET);
+
+        /* ORIENTATION is computed fresh - a look-at from the retail camera's own eye position
+         * toward its anchor (which tracks the player every frame; see updateCam's own site
+         * comment above) - rather than copied from the raw euler fields the way position is.
+         * Field-reported: switching free camera on could start it pointing "at the sky". The raw
+         * pitch is periodic (FUN_004181b9 wraps it every frame, confirmed by decompiling it) so
+         * that alone should not have caused it - sin/cos already handle any wrap correctly - which
+         * points instead at the retail camera's own momentary rotation (lag catching up, a look at
+         * something tall) simply not being a sensible starting orientation for a DIFFERENT
+         * camera's use. Anchor and eye are both positions, immune to whatever the retail camera's
+         * rotation happened to be doing, so a look-at from one to the other is deterministic
+         * regardless of the cause. */
+        {
+            float eye_x = *(float *)((uint8_t *)view + CAMERA_EYE_X_OFFSET);
+            float eye_y = *(float *)((uint8_t *)view + CAMERA_EYE_Y_OFFSET);
+            float eye_z = *(float *)((uint8_t *)view + CAMERA_EYE_Z_OFFSET);
+            float dx = freecam_x - eye_x;
+            float dy = freecam_y - eye_y;
+            float dz = freecam_z - eye_z;
+            float horiz = sqrtf(dx * dx + dy * dy);
+
+            if (horiz > 0.0001f || fabsf(dz) > 0.0001f) {
+                freecam_yaw   = atan2f(-dx, dy) * RAD_TO_DEG;
+                freecam_pitch = atan2f(dz, horiz) * RAD_TO_DEG;
+            } else {
+                /* Degenerate: eye and anchor coincide (a fixed or world-locked camera, most
+                 * likely). Nothing to look at from nowhere away, so this falls back to whatever
+                 * the raw fields hold, at least clamped into this file's own range. */
+                freecam_yaw   = *(float *)((uint8_t *)view + CAMERA_EULER_YAW_OFFSET);
+                freecam_pitch = *(float *)((uint8_t *)view + CAMERA_EULER_PITCH_OFFSET);
+            }
+            if (freecam_pitch > FREECAM_PITCH_LIMIT) {
+                freecam_pitch = FREECAM_PITCH_LIMIT;
+            }
+            if (freecam_pitch < -FREECAM_PITCH_LIMIT) {
+                freecam_pitch = -FREECAM_PITCH_LIMIT;
+            }
+        }
         if (own_state.sim_pause_flag_address != 0) {
             *(int32_t *)own_state.sim_pause_flag_address = 1;
         }
@@ -479,6 +658,12 @@ static void __cdecl hook_camera_update(void)
         GetCursorPos(&freecam_cursor_anchor);
         ShowCursor(FALSE);
         freecam_cursor_hidden = true;
+        /* Discard whatever the wheel accumulated while this cheat was off - overlay_input.c
+         * observes it unconditionally, panel open or closed, cheat on or off, so without this a
+         * scroll from minutes ago would show up as a sudden speed jump on the very first frame. */
+        if (wheel_source != NULL) {
+            (void)wheel_source();
+        }
         freecam_valid = true;
     }
 
@@ -553,6 +738,32 @@ static void __cdecl hook_camera_update(void)
             }
         }
 
+        /* Scroll wheel adjusts fly speed, the same feel Blender's own fly/walk navigation uses.
+         * overlay_input.c observes WM_MOUSEWHEEL unconditionally (panel open or closed) precisely
+         * because this needs it while FLYING, which is exactly when the panel is closed - see that
+         * file's own comment for how it confirmed the message actually reaches its hook (the
+         * engine's top-level window procedure special-cases only four message types and falls
+         * through to the same registered-handler chain for everything else, wheel included).
+         * Multiplicative per notch rather than additive, so the same scroll feels proportionate
+         * whether the current speed is barely-crawling or already fast. wheel_source is NULL if
+         * dev_overlay.c never wired it in (its own site did not resolve) - then this simply never
+         * fires, the same as every other optional site in this file failing quietly. */
+        if (wheel_source != NULL) {
+            int32_t wheel = wheel_source();
+
+            if (wheel != 0) {
+                float notches = (float)wheel / (float)WHEEL_DELTA;
+
+                freecam_speed *= powf(FREECAM_SPEED_PER_NOTCH, notches);
+                if (freecam_speed < FREECAM_MIN_SPEED) {
+                    freecam_speed = FREECAM_MIN_SPEED;
+                }
+                if (freecam_speed > FREECAM_MAX_SPEED) {
+                    freecam_speed = FREECAM_MAX_SPEED;
+                }
+            }
+        }
+
         /* WASD along the full 3D view direction (so looking up while holding W climbs, exactly
          * the free-fly feel the pitch-redirect attempt on the PLAYER tried and failed at - the
          * difference is that nothing here is fighting a third-person camera's own resting angle,
@@ -604,7 +815,7 @@ static void __cdecl hook_camera_update(void)
                 float right_y   = sin_yaw;
                 float planar    = sqrtf(forward * forward + strafe * strafe);
                 float scale     = (planar > 1.0f) ? (1.0f / planar) : 1.0f;   /* no diagonal boost */
-                float speed     = FREECAM_MOVE_SPEED * dt;
+                float speed     = freecam_speed * dt;
 
                 freecam_x += (fwd_x * forward + right_x * strafe) * scale * speed;
                 freecam_y += (fwd_y * forward + right_y * strafe) * scale * speed;
@@ -640,6 +851,21 @@ static bool install_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
     }
     log_info("%s hooked at %08X", what, (unsigned)site);
     return true;
+}
+
+/* Both NPC cheats live behind this one detour - see on_npc_damage's own comment for why one site
+ * answers both. */
+static void install_npc_damage(void)
+{
+    if (!install_one(SIG_NPC_DAMAGE_APPLY, NULL, sizeof SIG_NPC_DAMAGE_APPLY,
+                     (const void *)&hook_npc_damage, &own_state.npc_damage_detour,
+                     NPC_DAMAGE_PROLOGUE_SIZE, "the NPC health write")) {
+        return;
+    }
+    npc_damage_trampoline = own_state.npc_damage_detour.original;
+    npc_damage_continue   = (void *)(own_state.npc_damage_detour.target + NPC_DAMAGE_PROLOGUE_SIZE);
+    own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].available = true;
+    own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].available   = true;
 }
 
 /* Free camera needs both sites - the pause flag and the camera object pointer - to mean anything:
@@ -706,6 +932,8 @@ bool cheats_openphantom_install(void)
     own_state.cheats[CHEATS_OWN_UNLIMITED_AMMO].name = "Unlimited ammunition";
     own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].name = "Unlimited health";
     own_state.cheats[CHEATS_OWN_NO_FOG].name = "No fog";
+    own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].name = "Invincible NPCs";
+    own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].name = "One-shot NPCs";
     own_state.cheats[CHEATS_OWN_FREECAM].name = "Free camera";
 
     if (install_one(SIG_USE_AMMO, MSK_USE_AMMO, sizeof SIG_USE_AMMO,
@@ -722,6 +950,8 @@ bool cheats_openphantom_install(void)
         own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].available = true;
     }
 
+    install_npc_damage();
+
     if (install_freecam()) {
         own_state.cheats[CHEATS_OWN_FREECAM].available = true;
     }
@@ -731,12 +961,14 @@ bool cheats_openphantom_install(void)
 
     own_state.installed = true;
 
-    /* All four stand for the life of the process whether used or not: each detour costs one
+    /* All six stand for the life of the process whether used or not: each detour costs one
      * comparison per call while off, and the fog tick costs one comparison per frame while off.
      * That is the price of being able to switch any of them from the panel at any moment. If none
      * resolved there is nothing to switch, and the caller says so once. */
     return own_state.cheats[CHEATS_OWN_UNLIMITED_AMMO].available ||
            own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].available ||
+           own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].available ||
+           own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].available ||
            own_state.cheats[CHEATS_OWN_FREECAM].available ||
            cheats_no_fog_is_available();
 }

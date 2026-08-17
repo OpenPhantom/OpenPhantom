@@ -1,5 +1,5 @@
-/* cheats_openphantom.h: the four codes this project adds - unlimited ammunition, unlimited
- * health, no fog, and free camera.
+/* cheats_openphantom.h: the six codes this project adds - unlimited ammunition, unlimited
+ * health, no fog, invincible NPCs, one-shot NPCs, and free camera.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -15,6 +15,16 @@
  * anywhere this project could detour instead. See cheats_no_fog.c for why it is a per-frame force
  * rather than a single write, and why turning it back off does not try to restore what a level
  * authored.
+ *
+ * Invincible NPCs and one-shot NPCs are the enemy-side counterpart to unlimited health, and share
+ * one site rather than getting one each: enemy_receiveDamage (0x00433803) is the single function
+ * every NPC's health, at character record +0x38, is ever subtracted through. Invincible NPCs
+ * declines that subtraction outright, the same "decline, don't top up" shape as the player's own
+ * unlimited health. One-shot NPCs cannot decline the same way - the point is to change the outcome,
+ * not skip it - so it forces the write to zero instead, which is exactly what the death gate this
+ * function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0) already treats
+ * as lethal. See cheats_openphantom.c's own site comment for the byte evidence, and for why both
+ * cheats can share one detour instead of needing their own like ammunition and player health do.
  *
  * Free camera is a different shape again, and does not move the player at all: it freezes the
  * whole simulation (one flag the engine's own fixed-timestep driver already checks every frame,
@@ -46,7 +56,10 @@ typedef enum cheats_own_id {
     CHEATS_OWN_UNLIMITED_AMMO = 0,
     CHEATS_OWN_UNLIMITED_HEALTH,
     CHEATS_OWN_NO_FOG,
-    CHEATS_OWN_FREECAM,
+    CHEATS_OWN_INVINCIBLE_NPCS,
+    CHEATS_OWN_ONE_SHOT_NPCS,
+    CHEATS_OWN_FREECAM,   /* MUST stay last - overlay_model.c's row layout relies on it, and its
+                            * own _Static_assert fails the build if this ever stops being true */
     CHEATS_OWN_COUNT
 } cheats_own_id_t;
 
@@ -72,5 +85,18 @@ bool cheats_openphantom_toggle(cheats_own_id_t id);
  * cheats_openphantom_toggle() refuses to turn CHEATS_OWN_FREECAM on at all. */
 int32_t cheats_openphantom_freecam_hotkey(void);
 void cheats_openphantom_freecam_set_hotkey(int32_t virtual_key);
+
+/* Notches scrolled since the last take, positive away from the player - the exact contract
+ * overlay_input_take_wheel_delta() keeps. A function pointer rather than calling that function by
+ * name: the wheel is only observable through window messages, which is overlay_input.c's own
+ * domain and not something this file can poll for itself the way it already does for keys and the
+ * cursor, but linking straight to that file would drag its whole message-hook subsystem into
+ * anything that links this one, including the unit test built against the real cheat sources (see
+ * unittests/CMakeLists.txt's own "never a stub" rule) - a wheel source it would then have no way
+ * to provide. NULL until dev_overlay.c wires the real one in once both cheats_openphantom_install()
+ * and overlay_input_install() have run, and free camera treats "no source" exactly like "no
+ * scrolling happened yet", which is what it already was for every DLL build before this existed. */
+typedef int32_t (*cheats_openphantom_wheel_source_fn_t)(void);
+void cheats_openphantom_set_wheel_source(cheats_openphantom_wheel_source_fn_t fn);
 
 #endif /* CHEATS_OPENPHANTOM_H */

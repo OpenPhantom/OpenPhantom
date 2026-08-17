@@ -175,6 +175,14 @@ void dev_overlay_install(void)
         return;
     }
 
+    /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
+     * window messages - overlay_input.c's own domain. Wired here, after both installs have run,
+     * rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name, so that
+     * linking cheats_openphantom.c on its own (the unit test built against the real cheat
+     * sources, see unittests/CMakeLists.txt) never has to drag in the whole message-hook
+     * subsystem just to satisfy one symbol it never exercises. */
+    cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);
+
     log_info("The key below Escape opens the Cheatmenu. The panel is drawn into the "
              "game's own frame, so it needs "
              "no window and cannot take the focus. %s",

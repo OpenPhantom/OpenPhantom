@@ -45,4 +45,10 @@ void overlay_input_pointer(float *out_x, float *out_y);
  * asks this to show which state the field is in. */
 bool overlay_input_search_focused(void);
 
+/* Notches scrolled since the last take, positive away from the player, negative towards. Observed
+ * from every message this DLL's hook sees, whether or not the panel is open - unlike everything
+ * else here, which only runs while it is. Consumes: what it returns has been taken out of the
+ * accumulator. */
+int32_t overlay_input_take_wheel_delta(void);
+
 #endif /* OVERLAY_INPUT_H */

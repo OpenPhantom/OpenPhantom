@@ -450,6 +450,18 @@ bool overlay_draw_paint(void)
             continue;
         }
 
+        if (row.kind == OVERLAY_ROW_INFO) {
+            /* Full row width, no chip and no hover fill - it is a note attached to the row above
+             * it, not a control of its own, and dimmed the same way an unavailable row's name is
+             * so it reads as secondary at a glance rather than as another cheat to look for. */
+            const float name_x = left + NAME_X * lay.text_h;
+            const float room = right - EDGE_PAD * lay.text_h - name_x;
+            const char *label = fit(row.label, room, scratch, sizeof scratch);
+
+            write_in(label, name_x, y, lay.row_h, C_ROW_TEXT_DIM);
+            continue;
+        }
+
         if (is_hot) {
             fill(left + lay.rule, y, right - lay.rule, y + lay.row_h, C_ROW_HOT);
             fill(left + lay.rule, y, left + lay.rule * 4.0f, y + lay.row_h, C_ACCENT);

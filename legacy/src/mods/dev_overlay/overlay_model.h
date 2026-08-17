@@ -44,8 +44,10 @@ typedef enum overlay_row_kind {
     OVERLAY_ROW_GROUP = 0,      /* a foldable heading */
     OVERLAY_ROW_CHEAT,          /* something that can be switched, shown ON / OFF */
     OVERLAY_ROW_ACTION,         /* something that runs once, shown as a plain button */
-    OVERLAY_ROW_HOTKEY          /* a key binding, shown as a button that captures the next keypress -
+    OVERLAY_ROW_HOTKEY,         /* a key binding, shown as a button that captures the next keypress -
                                   * see overlay_model_is_capturing_hotkey() */
+    OVERLAY_ROW_INFO            /* plain text, no chip, not clickable - a note attached to the row
+                                  * above it rather than a cheat of its own */
 } overlay_row_kind_t;
 
 typedef struct overlay_row {

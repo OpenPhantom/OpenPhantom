@@ -75,14 +75,30 @@ int main(void)
              "the OpenPhantom tab holds one group, and it starts folded too");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT,
-             "unfolding shows the heading and both of this project's cheats");
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 1u,
+             "unfolding shows the heading, this project's cheats, and the free-camera exit "
+             "hotkey row appended after them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
              "and with no engine behind it the row reports itself unavailable rather than ticking");
     ut_check(!overlay_model_activate(1),
              "switching an unavailable cheat is refused instead of quietly doing nothing");
+
+    ut_section("the free-camera exit hotkey row, the last one in the group");
+    /* Row 0 is the heading, rows 1..CHEATS_OWN_COUNT are the cheats themselves, and the hotkey row
+     * follows immediately after the last of those - one past CHEATS_OWN_COUNT, not at it. */
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 1u, &row) &&
+                 row.kind == OVERLAY_ROW_HOTKEY,
+             "the row after the last cheat is the hotkey row");
+    ut_check(!row.available,
+             "unavailable too - it follows free camera's own site, which resolved nothing here");
+    ut_check(strcmp(row.value, "Set") == 0,
+             "unbound shows as an instruction to set one, not a blank chip or a stray ON/OFF");
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 1u),
+             "starting a capture on an unavailable row is refused the same as any other cheat");
+    ut_check(!overlay_model_is_capturing_hotkey(),
+             "and refusing it must not have left a capture armed with nothing behind it");
 
     ut_section("a group folds back exactly as it was");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);

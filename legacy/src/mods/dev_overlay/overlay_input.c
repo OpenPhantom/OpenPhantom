@@ -345,6 +345,16 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         if (message == MSG_SYS_KEY_DOWN && !is_open_key(wparam)) {
             return false;
         }
+        /* A hotkey row is waiting for exactly this. Checked before Escape and everything else
+         * below, on purpose: whatever key arrives while capturing IS the binding, including
+         * Escape itself, rather than closing the panel or being swallowed as ordinary navigation.
+         * Predictable this way - no separate list of keys a capture refuses to accept - and a
+         * player who binds something inconvenient can simply click the row again to rebind it. */
+        if (overlay_model_is_capturing_hotkey()) {
+            overlay_model_capture_hotkey(wparam);
+            overlay_model_rebuild();
+            return true;
+        }
         if (wparam == KEY_ESCAPE) {
             set_open(false);
             return true;

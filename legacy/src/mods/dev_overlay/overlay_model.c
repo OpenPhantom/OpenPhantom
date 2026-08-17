@@ -10,6 +10,8 @@
 #include "cheats_original.h"
 #include "cheats_original_actions.h"
 
+#include <windows.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -35,9 +37,43 @@ typedef struct overlay_model_state {
     group_state_t groups[OVERLAY_GROUP_COUNT];
     overlay_row_t rows[OVERLAY_ROWS_MAX];
     uint32_t      row_count;
+    bool          capturing_hotkey;   /* the free-camera exit hotkey row is waiting for a keypress */
 } overlay_model_state_t;
 
 static overlay_model_state_t model;
+
+/* The id one past the real cheats in OVERLAY_GROUP_OPENPHANTOM's own source, standing for the
+ * free-camera exit hotkey row appended after them - see source_count()/source_row() below. Not a
+ * cheats_own_id_t, and deliberately outside that enum's range instead of extending it: the hotkey
+ * is a row this panel adds, not a cheat cheats_openphantom.c itself offers a name or an on/off for. */
+#define HOTKEY_ROW_ID ((uint32_t)CHEATS_OWN_COUNT)
+
+/* Short enough for value[8]. Letters and digits already match their own virtual-key codes; function
+ * keys and the handful of others worth naming get their own case; anything else prints as hex
+ * rather than silently showing nothing, since a key that was bound has to be identifiable if
+ * something else on the system also happens to be using it. */
+static void key_name(int32_t vk, char *out, size_t out_size)
+{
+    if (vk >= 'A' && vk <= 'Z') {
+        _snprintf(out, out_size, "%c", (char)vk);
+    } else if (vk >= '0' && vk <= '9') {
+        _snprintf(out, out_size, "%c", (char)vk);
+    } else if (vk >= VK_F1 && vk <= VK_F12) {
+        _snprintf(out, out_size, "F%d", (int)(vk - VK_F1 + 1));
+    } else {
+        switch (vk) {
+        case VK_SPACE:   _snprintf(out, out_size, "Space");  break;
+        case VK_TAB:     _snprintf(out, out_size, "Tab");    break;
+        case VK_RETURN:  _snprintf(out, out_size, "Enter");  break;
+        case VK_ESCAPE:  _snprintf(out, out_size, "Esc");    break;
+        case VK_CONTROL: _snprintf(out, out_size, "Ctrl");   break;
+        case VK_SHIFT:   _snprintf(out, out_size, "Shift");  break;
+        case VK_MENU:    _snprintf(out, out_size, "Alt");    break;
+        default:         _snprintf(out, out_size, "%02X", (unsigned)vk); break;
+        }
+    }
+    out[out_size - 1] = '\0';
+}
 
 /* ============================================================================================ */
 
@@ -96,6 +132,7 @@ void overlay_model_reset(void)
     model.tab = OVERLAY_TAB_ORIGINAL;
     model.search[0] = '\0';
     model.row_count = 0;
+    model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
 
     model.groups[OVERLAY_GROUP_ORIGINAL_TOGGLES].title = "Original cheats";
     model.groups[OVERLAY_GROUP_ORIGINAL_ACTIONS].title = "Original cheats (one-time effects)";
@@ -186,7 +223,9 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        return (uint32_t)CHEATS_OWN_COUNT;
+        /* +1: the free-camera exit hotkey row, appended after the cheats themselves - see
+         * HOTKEY_ROW_ID and its own handling in source_row() below. */
+        return (uint32_t)CHEATS_OWN_COUNT + 1u;
     }
 }
 
@@ -225,10 +264,40 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         return;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
+        if (id == HOTKEY_ROW_ID) {
+            out->kind = OVERLAY_ROW_HOTKEY;
+            copy_label(out->label, "Free camera exit key");
+            out->on = false;        /* meaningless for a hotkey row; never read by the drawer */
+            out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
+            /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
+             * guess at - "RUN" and "OFF" are both wrong for a key binding. */
+            if (model.capturing_hotkey) {
+                _snprintf(out->value, sizeof out->value, "...");
+            } else {
+                int32_t vk = cheats_openphantom_freecam_hotkey();
+                if (vk != 0) {
+                    key_name(vk, out->value, sizeof out->value);
+                } else {
+                    _snprintf(out->value, sizeof out->value, "Set");
+                }
+            }
+            out->value[sizeof out->value - 1] = '\0';
+            return;
+        }
         out->kind = OVERLAY_ROW_CHEAT;
         copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
         out->on = cheats_openphantom_is_on((cheats_own_id_t)id);
         out->available = cheats_openphantom_is_available((cheats_own_id_t)id);
+        /* Free camera specifically also needs an exit hotkey bound before it can be switched ON -
+         * cheats_openphantom_toggle() enforces this too, so this is display honesty rather than
+         * the only gate: a row that looked clickable but silently refused every click would be
+         * worse than one that shows why. Once it IS on, availability no longer depends on this -
+         * the row is unreachable anyway with the mouse claimed, and the exit hotkey is how it
+         * actually turns back off. */
+        if ((cheats_own_id_t)id == CHEATS_OWN_FREECAM && !out->on &&
+            cheats_openphantom_freecam_hotkey() == 0) {
+            out->available = false;
+        }
         return;
     }
 }
@@ -321,6 +390,13 @@ bool overlay_model_activate(uint32_t index)
     if (!row.available) {
         return false;
     }
+    if (row.kind == OVERLAY_ROW_HOTKEY) {
+        /* Starts a capture; does not bind anything itself. overlay_input.c routes the next
+         * key-down to overlay_model_capture_hotkey() while this is true, rather than that key
+         * reaching its usual handling. */
+        model.capturing_hotkey = true;
+        return true;
+    }
     switch ((overlay_group_t)row.group) {
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
@@ -332,4 +408,18 @@ bool overlay_model_activate(uint32_t index)
         (void)cheats_openphantom_toggle((cheats_own_id_t)row.id);
         return true;
     }
+}
+
+bool overlay_model_is_capturing_hotkey(void)
+{
+    return model.capturing_hotkey;
+}
+
+void overlay_model_capture_hotkey(int32_t virtual_key)
+{
+    if (!model.capturing_hotkey) {
+        return;
+    }
+    model.capturing_hotkey = false;
+    cheats_openphantom_freecam_set_hotkey(virtual_key);
 }

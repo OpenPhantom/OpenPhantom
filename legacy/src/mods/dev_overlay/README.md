@@ -324,3 +324,18 @@ toggling the cheat back off) - rewritten to push the fog band out instead of tou
 second version fixed that but declined to restore the band on the way back off, so fog could be
 turned off but not back on short of a level reload - rewritten again to remember and restore the
 authored band. Confirmed off now works cleanly; back-on has not yet had its own field round.
+
+**Free camera has had several field rounds.** Pausing the simulation and driving the camera object
+directly through a chained detour on `updateCam` both confirmed working; the WASD-along-view-
+direction formula was field-tested wrong once (a sign error in the yaw-to-world-axis conversion,
+found by comparing against the engine's own render-eye builder and its built-in debug free-cam
+rather than guessed a second time) and is now confirmed correct; the mouse axes were field-tested
+inverted and corrected (yaw's flip stuck, pitch's did not - it was already right and got reverted
+back). The line to look for:
+```
+[dev_overlay] free camera: pause flag at 006CCFD8, camera object pointer at 008A011C, update chained at 00418544 - WASD moves along the view, mouse looks, E/Q move vertically
+```
+Its absence, or a "did not resolve" warning next to it naming which of the two sites failed, means
+free camera declined entirely and is shown in the panel as unavailable. An earlier attempt at this
+feature, noclip - letting the player walk through walls and fly - was removed after free camera
+replaced it outright; see `cheats_openphantom.h`'s own header comment for why.

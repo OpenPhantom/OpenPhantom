@@ -43,7 +43,9 @@ typedef enum overlay_group {
 typedef enum overlay_row_kind {
     OVERLAY_ROW_GROUP = 0,      /* a foldable heading */
     OVERLAY_ROW_CHEAT,          /* something that can be switched, shown ON / OFF */
-    OVERLAY_ROW_ACTION          /* something that runs once, shown as a plain button */
+    OVERLAY_ROW_ACTION,         /* something that runs once, shown as a plain button */
+    OVERLAY_ROW_HOTKEY          /* a key binding, shown as a button that captures the next keypress -
+                                  * see overlay_model_is_capturing_hotkey() */
 } overlay_row_kind_t;
 
 typedef struct overlay_row {
@@ -56,8 +58,10 @@ typedef struct overlay_row {
     bool               pending;     /* actions only: queued to run when the panel closes, not yet
                                       * run - see cheats_original_actions.h for why the four
                                       * play-as codes work this way and nothing else does */
-    char               value[8];    /* actions only, and only for the one that has a number worth
-                                      * showing on its own chip instead of RUN - empty otherwise */
+    char               value[8];    /* actions: only for the one that has a number worth showing on
+                                      * its own chip instead of RUN. hotkeys: the bound key's short
+                                      * name, "..." while capturing, or empty when unbound. Empty
+                                      * otherwise. */
     uint32_t           group;       /* an overlay_group_t value, groups included */
     uint32_t           id;          /* index within that group's own source */
 } overlay_row_t;
@@ -89,12 +93,22 @@ uint32_t overlay_model_row_count(void);
 /* Copies one row out. False for an index past the end, and then `out` is untouched. */
 bool overlay_model_row(uint32_t index, overlay_row_t *out);
 
-/* Acts on a row: folds a group, switches a cheat. Answers false when the row cannot act, which is
- * a cheat whose site never resolved. The visible list is rebuilt by the caller afterwards. */
+/* Acts on a row: folds a group, switches a cheat, starts capturing a hotkey. Answers false when the
+ * row cannot act, which is a cheat whose site never resolved. The visible list is rebuilt by the
+ * caller afterwards. */
 bool overlay_model_activate(uint32_t index);
 
 /* Case insensitive substring test, exposed because it is the one piece of the search worth testing
  * on its own. True when `needle` is empty. */
 bool overlay_model_matches(const char *label, const char *needle);
+
+/* Whether a hotkey row is waiting for its next keypress. While true, overlay_input.c routes the
+ * very next key-down here instead of its usual handling (Escape, typing, and so on), including
+ * Escape itself and system key combinations - the capture is unconditional by design, so binding
+ * is predictable rather than needing its own list of exceptions. */
+bool overlay_model_is_capturing_hotkey(void);
+
+/* Ends a capture in progress with this key. A no-op if nothing is capturing. */
+void overlay_model_capture_hotkey(int32_t virtual_key);
 
 #endif /* OVERLAY_MODEL_H */

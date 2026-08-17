@@ -456,7 +456,11 @@ bool overlay_draw_paint(void)
         }
 
         {
-            const bool  is_action = (row.kind == OVERLAY_ROW_ACTION);
+            /* A hotkey row gets the action's own chip styling - it is a button, not a switch, the
+             * same as ACTION - but never falls through to "RUN": source_row() always populates
+             * value for it ("Set", "...", or the bound key's name), so that arm of the word choice
+             * below is dead for this kind and kept only because ACTION still needs it. */
+            const bool  is_action = (row.kind == OVERLAY_ROW_ACTION || row.kind == OVERLAY_ROW_HOTKEY);
             const char *word = !row.available    ? "n/a"
                              : row.pending        ? "QUEUED"
                              : row.value[0] != 0  ? row.value    /* e.g. the graphics detail level */

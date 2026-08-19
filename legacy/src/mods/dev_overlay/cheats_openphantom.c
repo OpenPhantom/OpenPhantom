@@ -1,10 +1,10 @@
 /* cheats_openphantom.c: unlimited ammunition, unlimited health, no fog, invincible NPCs, one-shot
- * NPCs, and free camera. The third cheat this project adds, no fog, is a different enough shape -
- * see cheats_no_fog.h - that it lives in its own file and this one only dispatches
- * CHEATS_OWN_NO_FOG's queries to it. Free camera is documented next to its own two signatures
- * below rather than up here, the two sites it needs each carrying their own byte evidence at the
- * point they are used - invincible NPCs and one-shot NPCs are the same, documented next to
- * SIG_NPC_DAMAGE_APPLY.
+ * NPCs, giant player, tiny player, and free camera. The third cheat this project adds, no fog, is
+ * a different enough shape - see cheats_no_fog.h - that it lives in its own file and this one only
+ * dispatches CHEATS_OWN_NO_FOG's queries to it. Free camera is documented next to its own two
+ * signatures below rather than up here, the two sites it needs each carrying their own byte
+ * evidence at the point they are used - invincible NPCs and one-shot NPCs are the same, documented
+ * next to SIG_NPC_DAMAGE_APPLY, and giant/tiny player next to SIG_THING_DRAW.
  *
  * ==============================================================================================
  * THE TWO SITES, READ OUT OF THE RETAIL EXECUTABLE
@@ -204,6 +204,66 @@ static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
  * signature_find_detour_target's own chaining check, not part of what gets overwritten. */
 #define NPC_DAMAGE_PROLOGUE_SIZE 15u
 
+/* --- 0x0040FE70  rdThing_Draw: every drawn object's own render call, including the player ------
+ * SUB ESP,0x48 / MOV ECX,0xC / PUSH EBP / MOV EBP,[ESP+0x50] - no push-ebp;mov-ebp,esp frame at
+ * all: this is one of the frame-pointer-omitted /O2 translation units this game's own toolchain
+ * analysis (see engine/engine-identification.md) already found this build mixes with /Od per
+ * source file. Still plain __cdecl(thing*, matrix[12]) at the ABI boundary regardless of how the
+ * callee itself addresses its own params internally - the caller pushes two dwords and cleans its
+ * own stack afterward (ADD ESP,8), the same shape hook_use_ammo/hook_damage above already detour,
+ * so a normally-typed hook works here too, no naked-asm trick needed.
+ *
+ * Confirmed via xrefs to have exactly two callers: FUN_00417930's own switch(kind==1) arm - the
+ * path every ordinary object takes, the player included - and emitter_drawParticles, for particle
+ * sprites. Detouring the function's own entry rather than either call site catches both without
+ * needing two patches; the particle path is untouched regardless, since this hook only ever acts
+ * when the incoming thing is the player's own (see hook_thing_draw below).
+ *
+ * THE SCALE TRICK IS ALREADY IN THE RETAIL GAME. A few instructions past this prologue, gated
+ * behind a specific cheat-flag slot and a hardcoded four-character model-name match - neither of
+ * which this feature depends on, touches, or needs to fully identify - retail applies a flat 3.0x
+ * scale to this exact incoming matrix, via a small, self-contained "compose a diagonal scale into
+ * this transform" utility that this file calls directly rather than reimplementing: not something
+ * built for this feature, something the shipped game already trusts to do this correctly for its
+ * own reasons. See THING_DRAW_TO_SCALE_CALL_OFFSET below for how its address is found - not its
+ * own independent signature, deliberately. */
+static const uint8_t SIG_THING_DRAW[] = {
+    0x83, 0xEC, 0x48,                    /* sub esp,0x48                */
+    0xB9, 0x0C, 0x00, 0x00, 0x00,        /* mov ecx,0xC                 */
+    0x55,                                /* push ebp                    */
+    0x8B, 0x6C, 0x24, 0x50               /* mov ebp,[esp+0x50]          */
+};
+#define THING_DRAW_PROLOGUE_SIZE 8u
+
+/* The matrix-scale composer at 0x0047E185, found as a CALL rel32 operand rather than matched by
+ * its own signature. A hand-transcribed byte pattern for a thirteen-instruction function, derived
+ * from disassembly text rather than raw bytes, is exactly the kind of thing that fails silently -
+ * signature_find_unique just answers zero, indistinguishable from "this build does not have it" -
+ * and a first attempt at exactly that here did fail silently. This is lower-risk: the CALL sits at
+ * a fixed, confirmed offset from rdThing_Draw's own entry (0x67 bytes - measured directly off two
+ * addresses already trusted for the detour above: entry 0x0040FE70, call instruction 0x0040FED7),
+ * well past the eight bytes this file's own detour ever overwrites, so it reads correctly whether
+ * this file's detour installed first or chained onto an existing one. The opcode byte is checked
+ * before the operand is trusted, rather than assuming the offset is still right on some future
+ * build - a wrong offset landing on a non-CALL byte would read a plausible but meaningless address,
+ * and calling through that blind would be worse than refusing outright. */
+#define THING_DRAW_TO_SCALE_CALL_OFFSET 0x67u
+
+/* The player record pointer's own global cell - cross-confirmed by input_freeze.c/
+ * framerate_stats.c as pPlayer, and independently here by disassembling Plr_AutoAim, which reads
+ * [0x4B5220] then [that+0xC] and passes the result straight into bapobj_setNodeYaw's own bapObj
+ * argument with no further resolution - so despite the "hActor" name at that offset, it is already
+ * a raw bapObj pointer, not a handle needing translation through some pool lookup first. */
+#define PLAYER_RECORD_PTR_ADDR 0x004B5220u
+#define PLAYER_ACTOR_OFFSET    0x0Cu   /* bapObj*, confirmed via Plr_AutoAim as above            */
+#define THING_OBJECT_OFFSET    0x9Cu   /* bapObj -> rdThing*, same OBJECT_THING dismemberment.c
+                                        * already confirmed; redefined locally rather than shared,
+                                        * this file does not otherwise depend on that one */
+
+#define GIANT_PLAYER_SCALE 3.0f    /* the exact factor retail's own hardcoded special case uses */
+#define TINY_PLAYER_SCALE  0.35f   /* a first guess for "small but still visible and playable" -
+                                    * no retail precedent for this direction, unlike giant */
+
 /* Free camera, site one of two: the simulation pause flag.
  *
  * Every fly-mode attempt above fought the player's own state machine one function at a time
@@ -392,6 +452,8 @@ _Static_assert(sizeof(SIG_CAMERA_UPDATE) == sizeof(MSK_CAMERA_UPDATE),
 typedef void (__cdecl *use_ammo_fn_t)(int32_t weapon_id, int32_t amount);
 typedef void (__cdecl *damage_fn_t)(int32_t amount);
 typedef void (__cdecl *camera_update_fn_t)(void);
+typedef int32_t (__cdecl *thing_draw_fn_t)(void *thing, float *matrix);
+typedef void (__cdecl *scale_matrix_fn_t)(float *matrix, const float *scale_vec3);
 
 typedef struct own_cheat {
     const char *name;
@@ -405,10 +467,15 @@ typedef struct cheats_own_state {
     detour_t                ammo_detour;
     detour_t                damage_detour;
     detour_t                npc_damage_detour;
+    detour_t                thing_draw_detour;
     detour_t                camera_update_detour;
     use_ammo_fn_t           ammo_original;
     damage_fn_t             damage_original;
+    thing_draw_fn_t         thing_draw_original;
     camera_update_fn_t      camera_update_original;
+    scale_matrix_fn_t       scale_matrix_compose;      /* the retail matrix-scale composer, called
+                                                          * directly rather than detoured; NULL if
+                                                          * its own site did not resolve */
     uintptr_t               camera_view_address;       /* address OF the camera object pointer;
                                                           * 0 = unresolved, free camera unavailable */
     uintptr_t               sim_pause_flag_address;     /* address of the sim-freeze cell; 0 =
@@ -498,6 +565,52 @@ static void __declspec(naked) hook_npc_damage(void)
     npc_damage_resume_after:
         jmp  dword ptr [npc_damage_continue]
     }
+}
+
+/* Giant player and tiny player, sharing one detour on rdThing_Draw rather than needing one each -
+ * both are the same decision, "does the player's own render matrix get scaled, and by how much",
+ * answered before the real draw runs. A plain typed hook, not a naked one: rdThing_Draw is a
+ * regular __cdecl(thing*, matrix[12]) at the ABI boundary regardless of its own frame-pointer-
+ * omitted body (see SIG_THING_DRAW's own comment), so there is nothing here that needs pushad/
+ * pushfd the way the mid-function NPC-damage site above does.
+ *
+ * The player's own thing is chased fresh off the player-record global on every single call rather
+ * than cached anywhere - this needs no rising-edge bookkeeping the way free camera's own seeding
+ * does, because there is nothing here that persists between frames to begin with: the incoming
+ * matrix is already a full rebuild of the player's real position and orientation for this frame,
+ * every frame, so scaling it is inherently transient and switching either cheat off needs no
+ * un-write, the next call simply stops scaling.
+ *
+ * FIELD-TESTED: scaling `matrix` in place - the caller's own working buffer for this object, not
+ * something owned by this call - also scales the force-push ability's own reach and power, because
+ * bapobj_drawAll reads that same buffer again right after this call returns for something that has
+ * nothing to do with rendering. A local-copy version that left the caller's own numbers untouched
+ * was tried and worked, but was reverted: combat is not meaningfully usable at either scale anyway,
+ * so the extra copy bought correctness nothing was actually asking for. Swap back to a local copy
+ * (see git history) if that ever stops being true. */
+static int32_t __cdecl hook_thing_draw(void *thing, float *matrix)
+{
+    if (own_state.scale_matrix_compose != NULL && thing != NULL) {
+        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+
+        if (player_record != NULL) {
+            void *player_actor = *(void **)((char *)player_record + PLAYER_ACTOR_OFFSET);
+
+            if (player_actor != NULL &&
+                *(void **)((char *)player_actor + THING_OBJECT_OFFSET) == thing) {
+                float scale_vec[3];
+
+                if (own_state.cheats[CHEATS_OWN_GIANT_PLAYER].on) {
+                    scale_vec[0] = scale_vec[1] = scale_vec[2] = GIANT_PLAYER_SCALE;
+                    own_state.scale_matrix_compose(matrix, scale_vec);
+                } else if (own_state.cheats[CHEATS_OWN_TINY_PLAYER].on) {
+                    scale_vec[0] = scale_vec[1] = scale_vec[2] = TINY_PLAYER_SCALE;
+                    own_state.scale_matrix_compose(matrix, scale_vec);
+                }
+            }
+        }
+    }
+    return own_state.thing_draw_original(thing, matrix);
 }
 
 /* GetAsyncKeyState reads the physical key regardless of which window has it, so without this the
@@ -868,6 +981,45 @@ static void install_npc_damage(void)
     own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].available   = true;
 }
 
+/* Both player-scale cheats live behind this one detour - see hook_thing_draw's own comment for why
+ * one site answers both. Needs its own matrix-scale composer resolved first: a cheat that could
+ * intercept the draw call but had nothing to scale with would not be half a feature, it would be a
+ * detour doing nothing, so this refuses the whole thing rather than offering that. */
+static void install_player_scale(void)
+{
+    uintptr_t call_site;
+    uint8_t   opcode;
+    uint32_t  rel32;
+    uintptr_t scale_target;
+
+    if (!install_one(SIG_THING_DRAW, NULL, sizeof SIG_THING_DRAW, (const void *)&hook_thing_draw,
+                     &own_state.thing_draw_detour, THING_DRAW_PROLOGUE_SIZE,
+                     "the object render call")) {
+        return;
+    }
+
+    call_site = own_state.thing_draw_detour.target + THING_DRAW_TO_SCALE_CALL_OFFSET;
+    if (!memory_read_u8(call_site, &opcode) || opcode != 0xE8 ||
+        !memory_read_u32(call_site + 1, &rel32)) {
+        log_warning("the matrix-scale composer's own call site at %08X did not check out, "
+                    "giant/tiny player stay unavailable", (unsigned)call_site);
+        return;
+    }
+    scale_target = call_site + 5 + rel32;
+    if (!memory_is_executable_range(scale_target, 1)) {
+        log_warning("the matrix-scale composer resolved to %08X, which is not executable, "
+                    "refused", (unsigned)scale_target);
+        return;
+    }
+
+    own_state.scale_matrix_compose = (scale_matrix_fn_t)scale_target;
+    own_state.thing_draw_original  = (thing_draw_fn_t)own_state.thing_draw_detour.original;
+    own_state.cheats[CHEATS_OWN_GIANT_PLAYER].available = true;
+    own_state.cheats[CHEATS_OWN_TINY_PLAYER].available  = true;
+    log_info("giant/tiny player: object render call hooked at %08X, matrix-scale composer at "
+             "%08X", (unsigned)own_state.thing_draw_detour.target, (unsigned)scale_target);
+}
+
 /* Free camera needs both sites - the pause flag and the camera object pointer - to mean anything:
  * a camera that could roam but never stopped the world moving underneath it is not this feature,
  * and neither is a pause with nothing to look through. A partial resolve here is not offered as
@@ -934,6 +1086,8 @@ bool cheats_openphantom_install(void)
     own_state.cheats[CHEATS_OWN_NO_FOG].name = "No fog";
     own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].name = "Invincible NPCs";
     own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].name = "One-shot NPCs";
+    own_state.cheats[CHEATS_OWN_GIANT_PLAYER].name = "Giant player";
+    own_state.cheats[CHEATS_OWN_TINY_PLAYER].name = "Tiny player";
     own_state.cheats[CHEATS_OWN_FREECAM].name = "Free camera";
 
     if (install_one(SIG_USE_AMMO, MSK_USE_AMMO, sizeof SIG_USE_AMMO,
@@ -951,6 +1105,7 @@ bool cheats_openphantom_install(void)
     }
 
     install_npc_damage();
+    install_player_scale();
 
     if (install_freecam()) {
         own_state.cheats[CHEATS_OWN_FREECAM].available = true;
@@ -969,6 +1124,8 @@ bool cheats_openphantom_install(void)
            own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].available ||
            own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].available ||
            own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].available ||
+           own_state.cheats[CHEATS_OWN_GIANT_PLAYER].available ||
+           own_state.cheats[CHEATS_OWN_TINY_PLAYER].available ||
            own_state.cheats[CHEATS_OWN_FREECAM].available ||
            cheats_no_fog_is_available();
 }
@@ -1020,5 +1177,15 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
         return false;
     }
     own_state.cheats[id].on = !own_state.cheats[id].on;
+    /* Giant and tiny player are mutually exclusive: turning one on turns the other off, rather
+     * than leaving a row reading ON that has no visible effect because hook_thing_draw's own
+     * precedence (giant checked first) is the one actually deciding what gets applied. */
+    if (own_state.cheats[id].on) {
+        if (id == CHEATS_OWN_GIANT_PLAYER) {
+            own_state.cheats[CHEATS_OWN_TINY_PLAYER].on = false;
+        } else if (id == CHEATS_OWN_TINY_PLAYER) {
+            own_state.cheats[CHEATS_OWN_GIANT_PLAYER].on = false;
+        }
+    }
     return own_state.cheats[id].on;
 }

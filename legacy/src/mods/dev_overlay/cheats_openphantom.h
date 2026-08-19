@@ -1,5 +1,5 @@
-/* cheats_openphantom.h: the six codes this project adds - unlimited ammunition, unlimited
- * health, no fog, invincible NPCs, one-shot NPCs, and free camera.
+/* cheats_openphantom.h: the eight codes this project adds - unlimited ammunition, unlimited
+ * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, and free camera.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -25,6 +25,22 @@
  * function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0) already treats
  * as lethal. See cheats_openphantom.c's own site comment for the byte evidence, and for why both
  * cheats can share one detour instead of needing their own like ammunition and player health do.
+ *
+ * Giant player and tiny player share one detour on rdThing_Draw, the function that renders any
+ * object at all - the player included, called through exactly one of its two callers for ordinary
+ * (non-particle) things. Before letting the original run, this file compares the thing being drawn
+ * against the player's own (chased fresh off the player-record global each call, not cached, so
+ * this needs no rising-edge bookkeeping of its own the way free camera does) and, only for that one
+ * thing, calls a small existing engine function that composes a diagonal scale into a transform
+ * matrix - the SAME function retail's own shipped code already calls, elsewhere in this exact
+ * function, to apply a permanent 3.0x scale to one specific hardcoded model under a specific cheat-
+ * flag condition neither of these two cheats touches or depends on. Nothing here reimplements that
+ * math; it calls the engine's own routine with this project's own scale instead of retail's fixed
+ * one. Purely visual - the render matrix is rebuilt from the player's real position every frame
+ * regardless, so nothing needs restoring when either cheat switches off, and neither touches the
+ * player's own collision size, which lives elsewhere entirely. Mutually exclusive by construction -
+ * see cheats_openphantom_toggle() - so the panel is never showing one as on while the other's own
+ * scale is silently the one being applied.
  *
  * Free camera is a different shape again, and does not move the player at all: it freezes the
  * whole simulation (one flag the engine's own fixed-timestep driver already checks every frame,
@@ -58,6 +74,8 @@ typedef enum cheats_own_id {
     CHEATS_OWN_NO_FOG,
     CHEATS_OWN_INVINCIBLE_NPCS,
     CHEATS_OWN_ONE_SHOT_NPCS,
+    CHEATS_OWN_GIANT_PLAYER,
+    CHEATS_OWN_TINY_PLAYER,
     CHEATS_OWN_FREECAM,   /* MUST stay last - overlay_model.c's row layout relies on it, and its
                             * own _Static_assert fails the build if this ever stops being true */
     CHEATS_OWN_COUNT

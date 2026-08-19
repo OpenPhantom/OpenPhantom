@@ -75,9 +75,9 @@ int main(void)
              "the OpenPhantom tab holds one group, and it starts folded too");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 2u,
-             "unfolding shows the heading, this project's cheats, the free-camera exit hotkey "
-             "row, and the fly-controls note appended after them");
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 3u,
+             "unfolding shows the heading, this project's cheats, the jump-boost scale row, the "
+             "free-camera exit hotkey row, and the fly-controls note appended after them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
@@ -85,32 +85,82 @@ int main(void)
     ut_check(!overlay_model_activate(1),
              "switching an unavailable cheat is refused instead of quietly doing nothing");
 
-    ut_section("the free-camera exit hotkey row, now right before free camera itself");
-    /* Row 0 is the heading, rows 1..CHEATS_OWN_COUNT-1 are the three cheats that come before free
-     * camera in the enum, and the hotkey row takes over free camera's own old slot - id
-     * CHEATS_OWN_COUNT-1, row CHEATS_OWN_COUNT - so reading top to bottom hits the hotkey row
-     * immediately before the toggle it gates, rather than after it. */
+    ut_section("the jump-boost scale row, right after jump boost's own toggle");
+    /* Row 0 is the heading, rows 1..7 are the seven cheats ahead of jump boost in the enum, row 8
+     * is jump boost's own toggle (id 7), and the scale row takes over free camera's OLD slot - id
+     * CHEATS_OWN_COUNT-1, row CHEATS_OWN_COUNT - one level further out than the hotkey row used to
+     * sit before this row was inserted ahead of it. */
+    cheats_openphantom_jump_boost_set_scale(2.5f);
+    overlay_model_rebuild();
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT, &row) &&
+                 row.kind == OVERLAY_ROW_VALUE,
+             "the row at free camera's old slot is now the jump-boost scale row");
+    ut_check(strcmp(row.label, "Jump boost scale") == 0, "named for what it edits");
+    ut_check(!row.available,
+             "unavailable too - it follows jump boost's own site, which resolved nothing here");
+    ut_check(strcmp(row.value, "2.50x") == 0,
+             "shows the current scale even though the cheat itself never armed - the number is "
+             "real regardless of whether anything is hooked to multiply by it yet");
+
+    ut_section("the scale getter and setter clamp on their own, with no panel involved");
+    cheats_openphantom_jump_boost_set_scale(0.1f);
+    ut_check(cheats_openphantom_jump_boost_scale() > 0.49f &&
+                 cheats_openphantom_jump_boost_scale() < 0.51f,
+             "a value below the floor is clamped up to it rather than accepted as typed");
+    cheats_openphantom_jump_boost_set_scale(99.0f);
+    ut_check(cheats_openphantom_jump_boost_scale() > 4.99f &&
+                 cheats_openphantom_jump_boost_scale() < 5.01f,
+             "a value above the ceiling is clamped down to it the same way");
+    cheats_openphantom_jump_boost_set_scale(1.3f);   /* restored for the sections below */
+
+    ut_section("the scale row is gated behind availability the same as the hotkey row");
+    /* Exactly the shape overlay_model_capture_hotkey()'s own row already has, and for the same
+     * reason: a row that looked clickable but could never mean anything (nothing is hooked up to
+     * read the number this would produce) would be worse than one that shows why it cannot be
+     * touched yet, same as this file's own header comment already argues for the hotkey row. */
+    ut_check(!overlay_model_is_editing_jump_scale(), "nothing is being edited yet");
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT),
+             "starting an edit on an unavailable row is refused the same as any other cheat");
+    ut_check(!overlay_model_is_editing_jump_scale(),
+             "and refusing it must not have left an edit armed with nothing behind it");
+
+    ut_section("the edit functions are harmless no-ops outside of a capture");
+    /* Reachable directly without a resolved site - unlike overlay_model_activate() above, none of
+     * these four check availability, only whether a capture is actually running, so this is the
+     * same "safe when called out of order" property overlay_model_search_backspace() already has
+     * on an empty box. */
+    cheats_openphantom_jump_boost_set_scale(1.3f);
+    overlay_model_jump_scale_append('9');
+    overlay_model_jump_scale_backspace();
+    overlay_model_jump_scale_commit();
+    overlay_model_jump_scale_cancel();
+    ut_check(!overlay_model_is_editing_jump_scale(), "still nothing being edited");
+    ut_check(cheats_openphantom_jump_boost_scale() > 1.29f &&
+                 cheats_openphantom_jump_boost_scale() < 1.31f,
+             "and the stored scale never moved, since none of the four had a capture to act on");
+
+    ut_section("the free-camera exit hotkey row, now two slots after jump boost's toggle");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 1u, &row) &&
                  row.kind == OVERLAY_ROW_HOTKEY,
-             "the row at free camera's old slot is now the hotkey row");
+             "one slot further out than the scale row above it");
     ut_check(!row.available,
              "unavailable too - it follows free camera's own site, which resolved nothing here");
     ut_check(strcmp(row.value, "Set") == 0,
              "unbound shows as an instruction to set one, not a blank chip or a stray ON/OFF");
-    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT),
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 1u),
              "starting a capture on an unavailable row is refused the same as any other cheat");
     ut_check(!overlay_model_is_capturing_hotkey(),
              "and refusing it must not have left a capture armed with nothing behind it");
 
     ut_section("free camera's own row, one after its exit hotkey");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 1u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 2u, &row) &&
                  row.kind == OVERLAY_ROW_CHEAT,
              "free camera itself now sits one row after the hotkey that gates it");
     ut_check(!row.available,
              "and still unavailable with no exit hotkey bound, same as before the reorder");
 
     ut_section("the fly-controls note, one past free camera's own row");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 2u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  row.kind == OVERLAY_ROW_INFO,
              "the last row in the group is the how-to-fly fold");
     ut_check(row.available, "always available - it is a note, not gated behind any site");
@@ -118,31 +168,31 @@ int main(void)
              "closed by default, marked with a plus the same way a group would be");
 
     ut_section("opening the how-to-fly fold");
-    ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 2u),
+    ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 1u + (uint32_t)CHEATS_OWN_COUNT + 2u + 6u,
-             "open, the heading, the cheats, the hotkey row, free camera's own row, the fold's "
-             "own summary and its six lines are all on screen");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 2u, &row) &&
+                 1u + (uint32_t)CHEATS_OWN_COUNT + 3u + 6u,
+             "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
+             "the fold's own summary and its six lines are all on screen");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 4u, &row) &&
                  row.kind == OVERLAY_ROW_INFO &&
                  strcmp(row.label, "    Needs an exit key set first") == 0,
              "the first line spells out in words the same ordering the row layout already shows");
-    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 4u),
              "but a line itself does nothing when clicked - only the summary is interactive");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 8u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 9u, &row) &&
                  strcmp(row.label, "    Press your exit key to exit free camera") == 0,
              "and the sixth, last line spells out the way back out too");
 
     ut_section("closing the how-to-fly fold again");
-    ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 2u),
+    ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 2u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 3u,
              "its six lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");

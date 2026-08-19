@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* One entry per group. Which tab a group belongs to is fixed by GROUP_TAB below, not stored here:
@@ -40,6 +41,11 @@ typedef struct overlay_model_state {
     bool          capturing_hotkey;   /* the free-camera exit hotkey row is waiting for a keypress */
     bool          freecam_info_expanded;   /* the "how to fly" row is showing its lines */
     bool          freecam_was_on;     /* last-seen CHEATS_OWN_FREECAM state, to catch the edge */
+    bool          editing_jump_scale;      /* the jump-boost scale row is waiting for typed digits */
+    char          jump_scale_edit_buf[7];  /* what has been typed so far; six usable characters plus
+                                             * the terminator, sized so "<buf>_" (the display's own
+                                             * cursor, see source_row() below) still fits inside the
+                                             * row's own value[8] with room for ITS terminator too */
 } overlay_model_state_t;
 
 static overlay_model_state_t model;
@@ -58,8 +64,20 @@ static overlay_model_state_t model;
 _Static_assert((uint32_t)CHEATS_OWN_FREECAM == (uint32_t)CHEATS_OWN_COUNT - 1u,
                "free camera must stay the last cheat in cheats_own_id_t for HOTKEY_ROW_ID/"
                "FREECAM_ROW_ID below to still put the hotkey row right before it");
-#define HOTKEY_ROW_ID  ((uint32_t)CHEATS_OWN_FREECAM)
-#define FREECAM_ROW_ID ((uint32_t)CHEATS_OWN_FREECAM + 1u)
+
+/* The jump-boost scale row takes the same approach one slot earlier: inserted directly after jump
+ * boost's own toggle row rather than appended at the end, so a player reads "Jump boost: ON" and
+ * the number it is currently multiplying by in the very next row, not somewhere else in the list.
+ * Everything from here down (the hotkey row, free camera itself, the info fold) shifts one slot
+ * later than before to make room, which is transparent to all three - none of them are numbered by
+ * anything other than these macros. Same guard as above, one enum slot earlier: this only lines up
+ * because jump boost sits directly before free camera with nothing else between them. */
+_Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREECAM,
+               "jump boost must sit directly before free camera in cheats_own_id_t for "
+               "JUMP_SCALE_ROW_ID below to still land right after its own toggle row");
+#define JUMP_SCALE_ROW_ID ((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u)
+#define HOTKEY_ROW_ID  (JUMP_SCALE_ROW_ID + 1u)
+#define FREECAM_ROW_ID (HOTKEY_ROW_ID + 1u)
 
 /* One past free camera's own row: a fold, the same shape as a group's own expand/collapse but
  * scoped to one row rather than a whole section - clicking it toggles model.freecam_info_expanded,
@@ -173,6 +191,8 @@ void overlay_model_reset(void)
     model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
     model.freecam_info_expanded = false;   /* folds closed on every open, same as the groups do */
     model.freecam_was_on = false;   /* re-synced against the real state on the very next rebuild */
+    model.editing_jump_scale = false;   /* same reasoning as capturing_hotkey just above */
+    model.jump_scale_edit_buf[0] = '\0';
 
     model.groups[OVERLAY_GROUP_ORIGINAL_TOGGLES].title = "Original cheats";
     model.groups[OVERLAY_GROUP_ORIGINAL_ACTIONS].title = "Original cheats (one-time effects)";
@@ -263,14 +283,13 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +2: the free-camera exit hotkey row, which takes over free camera's own numeric slot,
-         * and the "how to fly" fold, one past where free camera itself now sits - see
-         * HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID and their own handling in source_row() below.
-         * The total id count is unchanged either way: repurposing one existing slot and adding one
-         * new one nets the same +2 as before. The fold's own lines add FREECAM_INFO_LINE_COUNT
-         * more only while it is open, the same shape a group's own child count already uses in
-         * append_group() below. */
-        return (uint32_t)CHEATS_OWN_COUNT + 2u +
+        /* +3: the jump-boost scale row, inserted right after jump boost's own toggle row; the
+         * free-camera exit hotkey row, which takes over free camera's own (now shifted) numeric
+         * slot; and the "how to fly" fold, one past where free camera itself now sits - see
+         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID and their own handling in
+         * source_row() below. The fold's own lines add FREECAM_INFO_LINE_COUNT more only while it
+         * is open, the same shape a group's own child count already uses in append_group() below. */
+        return (uint32_t)CHEATS_OWN_COUNT + 3u +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
 }
@@ -310,6 +329,24 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         return;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
+        if (id == JUMP_SCALE_ROW_ID) {
+            out->kind = OVERLAY_ROW_VALUE;
+            copy_label(out->label, "Jump boost scale");
+            out->on = false;        /* meaningless for a value row; never read by the drawer */
+            out->available = cheats_openphantom_is_available(CHEATS_OWN_JUMP_BOOST);
+            /* Read live either way, same reasoning as the hotkey row just below: mid-edit shows
+             * exactly what has been typed with a trailing cursor, otherwise the value this cheat
+             * would multiply by right now if switched on, formatted the same "1.30x" way its own
+             * chip is meant to be typed back in. */
+            if (model.editing_jump_scale) {
+                _snprintf(out->value, sizeof out->value, "%s_", model.jump_scale_edit_buf);
+            } else {
+                _snprintf(out->value, sizeof out->value, "%.2fx",
+                         (double)cheats_openphantom_jump_boost_scale());
+            }
+            out->value[sizeof out->value - 1] = '\0';
+            return;
+        }
         if (id == HOTKEY_ROW_ID) {
             out->kind = OVERLAY_ROW_HOTKEY;
             copy_label(out->label, "Free camera exit key");
@@ -374,9 +411,10 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->available = true;   /* a nested line, not a gate; never clicked either way */
             return;
         }
-        /* Everything left is one of the other five cheats (ammunition, health, no fog, invincible
-         * NPCs, one-shot NPCs), whose ids still line up 1:1 with cheats_own_id_t - only free
-         * camera's own slot was repurposed above. */
+        /* Everything left is one of the other cheats (ammunition, health, no fog, invincible NPCs,
+         * one-shot NPCs, giant player, tiny player, jump boost's own toggle), whose ids still line
+         * up 1:1 with cheats_own_id_t - only free camera's own slot was repurposed above, and jump
+         * boost's toggle keeps its own plain id even though the row right after it does not. */
         out->kind = OVERLAY_ROW_CHEAT;
         copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
         out->on = cheats_openphantom_is_on((cheats_own_id_t)id);
@@ -504,6 +542,14 @@ bool overlay_model_activate(uint32_t index)
         model.capturing_hotkey = true;
         return true;
     }
+    if (row.kind == OVERLAY_ROW_VALUE) {
+        /* Starts a fresh typed value, discarding anything left over from a previous edit that was
+         * never committed - the same "click it again to redo it" shape the hotkey row above has.
+         * Does not touch the stored scale itself; only overlay_model_jump_scale_commit() does. */
+        model.editing_jump_scale = true;
+        model.jump_scale_edit_buf[0] = '\0';
+        return true;
+    }
     switch ((overlay_group_t)row.group) {
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
@@ -536,4 +582,73 @@ void overlay_model_capture_hotkey(int32_t virtual_key)
     }
     model.capturing_hotkey = false;
     cheats_openphantom_freecam_set_hotkey(virtual_key);
+}
+
+bool overlay_model_is_editing_jump_scale(void)
+{
+    return model.editing_jump_scale;
+}
+
+void overlay_model_jump_scale_append(char digit)
+{
+    size_t length;
+
+    if (!model.editing_jump_scale) {
+        return;
+    }
+    /* Only what a positive decimal number can contain, and only one point - anything else is
+     * refused outright rather than accepted and left to fail atof() later, the same "do not accept
+     * what cannot mean anything" reasoning overlay_model_search_append() above applies to its own,
+     * much wider, set of allowed characters. */
+    if (digit != '.' && (digit < '0' || digit > '9')) {
+        return;
+    }
+    if (digit == '.' && strchr(model.jump_scale_edit_buf, '.') != NULL) {
+        return;
+    }
+    length = strlen(model.jump_scale_edit_buf);
+    if (length + 1u >= sizeof model.jump_scale_edit_buf) {
+        return;
+    }
+    model.jump_scale_edit_buf[length] = digit;
+    model.jump_scale_edit_buf[length + 1u] = '\0';
+}
+
+void overlay_model_jump_scale_backspace(void)
+{
+    size_t length;
+
+    if (!model.editing_jump_scale) {
+        return;
+    }
+    length = strlen(model.jump_scale_edit_buf);
+    if (length > 0u) {
+        model.jump_scale_edit_buf[length - 1u] = '\0';
+    }
+}
+
+void overlay_model_jump_scale_commit(void)
+{
+    float parsed;
+
+    if (!model.editing_jump_scale) {
+        return;
+    }
+    model.editing_jump_scale = false;
+    if (model.jump_scale_edit_buf[0] == '\0') {
+        return;      /* nothing was typed - leave whatever scale was already set alone */
+    }
+    /* atof() answers 0 for text that fails to parse at all (a lone "."), which this refuses the
+     * same as a typed 0 or negative would be - cheats_openphantom_jump_boost_set_scale()'s own
+     * clamp would otherwise silently turn either into JUMP_BOOST_SCALE_MIN, which is a value the
+     * player never actually asked for. */
+    parsed = (float)atof(model.jump_scale_edit_buf);
+    if (parsed > 0.0f) {
+        cheats_openphantom_jump_boost_set_scale(parsed);
+    }
+}
+
+void overlay_model_jump_scale_cancel(void)
+{
+    model.editing_jump_scale = false;
 }

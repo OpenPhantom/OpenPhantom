@@ -1,5 +1,6 @@
-/* cheats_openphantom.h: the eight codes this project adds - unlimited ammunition, unlimited
- * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, and free camera.
+/* cheats_openphantom.h: the nine codes this project adds - unlimited ammunition, unlimited
+ * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, jump boost, and free
+ * camera.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -42,6 +43,46 @@
  * see cheats_openphantom_toggle() - so the panel is never showing one as on while the other's own
  * scale is silently the one being applied.
  *
+ * Jump boost multiplies the vertical velocity the engine's own jump-entry code writes, rather than
+ * reimplementing a jump. There are two sites, not one: mode 6 ("Jump") and mode 7 ("Jedi Jump")
+ * each have their own entry function, and both write the same player-record field (+0xB4, right
+ * after the already-confirmed +0xB0 ramped-speed field) with the same flat velocity value read
+ * from a per-character table - the difference is only which characters route through which
+ * function (Obi-Wan and Qui-Gon go through Jedi Jump for an ORDINARY jump, everyone else through
+ * plain Jump; see cheats_openphantom.c's own site comments for the byte evidence). Both hooks call
+ * the original unconditionally first - the jump must still happen exactly as retail built it -
+ * then, only while this cheat is on, read the velocity the original just wrote and scale it up in
+ * place. Gravity integration afterward is untouched and needs no separate handling: a bigger launch
+ * velocity fed into the same linear decay simply produces a higher arc. Either site resolving is
+ * enough to offer the cheat; if only one does, whichever characters route through the other
+ * function jump at their normal height, and the log says which half is covered - the same
+ * "half a feature is still worth having" reasoning this file already documents for install().
+ *
+ * The scale itself is a number, not just a switch, and the dev panel's own row for it (see
+ * overlay_model.c) shows the value it would multiply by right now and lets a player click in and
+ * type a different one - cheats_openphantom_jump_boost_scale()/_set_scale() below are that row's
+ * whole connection to this file, read and written fresh on every panel rebuild the same way every
+ * other live value this panel shows already is, never cached anywhere else.
+ *
+ * A higher jump is also a longer fall, so this cheat also suppresses two things retail's own
+ * ground-contact code can do to a long fall, for exactly as long as it is switched on - neither is
+ * a cheat of its own, no row, no separate toggle. The first is the fixed ten-point landing damage
+ * every ordinary hard landing already risks; it goes through this file's own damage hook rather
+ * than around it, so Unlimited health still wins if both happen to be on at once, the same as it
+ * already does against everything else that can hurt the player. The second, found only after a
+ * field report that a high enough boosted jump was ending in a death screen and a level reload
+ * rather than a damage tick: retail ALSO force-kills the player outright, unconditionally and with
+ * no health check anywhere in the path, either after two seconds airborne or after falling farther
+ * than a second, larger distance ceiling - both fixed thresholds a sufficiently boosted jump's
+ * longer, higher fall reaches on its own. A third, found the same way after death stopped and the
+ * camera turned out to be the next thing a survived big fall exposed: retail's own dramatic-fall
+ * camera, which pitches down to watch the player from above and - because nothing in its own
+ * landing path ever expected a fall this big to be survived - never lets go afterward. All three
+ * fire from the same "this fall just became significant" transition, all three are suppressed the
+ * same way, and all three stop mattering the instant jump boost switches back off. See
+ * cheats_openphantom.c's own site comment next to SIG_PLAYER_GROUND_CONTACT for the full
+ * mechanism and every call site.
+ *
  * Free camera is a different shape again, and does not move the player at all: it freezes the
  * whole simulation (one flag the engine's own fixed-timestep driver already checks every frame,
  * found rather than added) and drives the camera object directly through a chained detour on its
@@ -76,6 +117,7 @@ typedef enum cheats_own_id {
     CHEATS_OWN_ONE_SHOT_NPCS,
     CHEATS_OWN_GIANT_PLAYER,
     CHEATS_OWN_TINY_PLAYER,
+    CHEATS_OWN_JUMP_BOOST,
     CHEATS_OWN_FREECAM,   /* MUST stay last - overlay_model.c's row layout relies on it, and its
                             * own _Static_assert fails the build if this ever stops being true */
     CHEATS_OWN_COUNT
@@ -94,6 +136,13 @@ const char *cheats_openphantom_name(cheats_own_id_t id);
 bool cheats_openphantom_is_available(cheats_own_id_t id);
 
 bool cheats_openphantom_is_on(cheats_own_id_t id);
+
+/* Jump boost's own multiplier - see this file's own header comment above for what it is applied
+ * to. The getter always answers something usable, even before the cheat's own sites have resolved
+ * or if they never do; the setter clamps into a fixed sane range rather than trusting whatever a
+ * player typed, since this is fed straight into a real physics quantity rather than merely stored. */
+float cheats_openphantom_jump_boost_scale(void);
+void cheats_openphantom_jump_boost_set_scale(float scale);
 
 /* Flips one and answers the new state. A cheat whose site did not resolve stays off, and free
  * camera specifically also stays off with no exit hotkey bound - see cheats_openphantom.c. */

@@ -123,6 +123,7 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define MSG_MOUSE_WHEEL     0x020A
 #define KEY_ESCAPE          0x1B
 #define KEY_BACKSPACE       0x08
+#define KEY_RETURN          0x0D
 
 /* THE KEY THAT OPENS THE PANEL, AND WHY TWO OF THEM ARE ACCEPTED BY DEFAULT.
  *
@@ -308,12 +309,17 @@ static void click(float x, float y)
 
     /* A click anywhere ends the search box's focus except a click ON it, which is what starts it.
      * That is the whole of the click-to-type rule: typing goes into the box only between these two
-     * moments, never just because the panel is open. */
+     * moments, never just because the panel is open. The jump-scale edit follows the same rule via
+     * the unconditional cancel below - it is cancelled on every click, then immediately re-armed by
+     * overlay_model_activate() a few lines down if and only if the click actually landed back on
+     * its own row, which is exactly the "click it again to redo it" shape that row already has. */
     if (overlay_draw_search_at(x, y)) {
         input_state.search_focused = true;
+        overlay_model_jump_scale_cancel();
         return;
     }
     input_state.search_focused = false;
+    overlay_model_jump_scale_cancel();
 
     tab = overlay_draw_tab_at(x, y);
     if (tab >= 0) {
@@ -356,6 +362,28 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
             overlay_model_rebuild();
             return true;
         }
+        /* Checked before Escape and everything else below, same priority as the hotkey capture
+         * just above and for the same reason: while a value is being typed, Enter/Escape/Backspace
+         * belong to THAT field (commit/cancel/delete a digit), not to the panel (close) or the
+         * search box (whose own backspace arm is further down and gated on a focus this is not). */
+        if (overlay_model_is_editing_jump_scale()) {
+            if (wparam == KEY_RETURN) {
+                overlay_model_jump_scale_commit();
+                overlay_model_rebuild();
+                return true;
+            }
+            if (wparam == KEY_ESCAPE) {
+                overlay_model_jump_scale_cancel();
+                overlay_model_rebuild();
+                return true;
+            }
+            if (wparam == KEY_BACKSPACE) {
+                overlay_model_jump_scale_backspace();
+                overlay_model_rebuild();
+                return true;
+            }
+            return true;      /* everything else is swallowed, same as the panel-wide lock below */
+        }
         if (wparam == KEY_ESCAPE) {
             set_open(false);
             return true;
@@ -370,15 +398,23 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
 
     switch (message) {
     case MSG_CHAR:
-        /* Backspace also arrives as a character and would otherwise be appended as one. Typing
-         * reaches the box only once a click has landed on it - see click() - which is also what
-         * stops the open key itself leaking in as a character the instant the panel opens: the
+        /* Backspace also arrives as a character and would otherwise be appended as one - it is
+         * handled above, as a key-down, for both fields, so it is only ever excluded here. Typing
+         * reaches either field only once a click has landed on it - see click() - which is also
+         * what stops the open key itself leaking in as a character the instant the panel opens: the
          * key-down that opens the panel is handled above and never reaches here, but Windows still
          * queues the matching WM_CHAR right behind it, and without the focus gate that character
-         * had nowhere else to go but into a box nobody had clicked on yet. */
-        if (wparam != KEY_BACKSPACE && input_state.search_focused) {
-            overlay_model_search_append((char)wparam);
-            overlay_model_rebuild();
+         * had nowhere else to go but into a box nobody had clicked on yet. The value row is checked
+         * first because a click that starts editing it also leaves search_focused false, never
+         * both true at once, so the order between these two only matters for readability. */
+        if (wparam != KEY_BACKSPACE) {
+            if (overlay_model_is_editing_jump_scale()) {
+                overlay_model_jump_scale_append((char)wparam);
+                overlay_model_rebuild();
+            } else if (input_state.search_focused) {
+                overlay_model_search_append((char)wparam);
+                overlay_model_rebuild();
+            }
         }
         return true;
 

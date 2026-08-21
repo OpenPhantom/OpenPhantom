@@ -218,6 +218,15 @@ add_engine_fix(large_textures
 )
 
 
+# A resolution nobody enumerated, added as one more record in the engine's own mode table rather
+# than a second code path: see the DLL's own header comment for why that is enough to make it
+# behave exactly like a real one everywhere from the options screen down to device creation.
+add_engine_fix(custom_resolution
+    dll_main.c
+    custom_resolution.c
+    mode_table_sites.c
+)
+
 # The panel over the running game, opened with the key below Escape. Named for what it is rather than for what is
 # in it: diagnostics and developer tools become groups inside the same panel, and a shipped DLL
 # cannot be renamed without breaking every configuration file that mentions it. It draws with the

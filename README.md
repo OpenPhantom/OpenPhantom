@@ -34,6 +34,7 @@ Full guides for installation, usage and configuration are in the
 * [In game settings](https://github.com/OpenPhantom/OpenPhantom/wiki/In-Game-Settings)
 * [Reporting Issues with the OpenPhantom Patches](https://github.com/OpenPhantom/OpenPhantom/wiki/Issues)
 * [Currently working on, with spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers)
+* [Known Issues](https://github.com/OpenPhantom/OpenPhantom/wiki/Known-Issues)
 
 
 ## Goals

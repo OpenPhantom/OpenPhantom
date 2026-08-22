@@ -138,6 +138,17 @@ add_engine_fix(decal_fix
     decal_fix.c
 )
 
+# A freshly created object's own render-interpolation "previous" position starts at the world
+# origin until something reaches it again to seed it from "current" - invisible in ordinary play,
+# where that happens within a frame or two, and visible exactly once: the player's own body, right
+# as the opening cutscene locks control after fmv_player's faster movie transition, which does not
+# leave the extra frame retail's own resolution switch incidentally bought for that repair to land
+# in before the first real draw.
+add_engine_fix(cutscene_pose_sync
+    dll_main.c
+    cutscene_pose_sync.c
+)
+
 # Three pointers in the executable's import address table, and the reason they have to be rewritten
 # at all is in the file's own header: Windows hands this executable the system winmm.dll even though
 # a stand-in sits beside it, which is not true of any other library the game folder carries.
@@ -186,10 +197,12 @@ add_engine_fix(fmv_player
     movie_path.c
     menu_cursor_cells.c
     video_overlay.c
+    sfx_mute.c
+    render_curtain.c
     vlc_locate.c
     vlc_playback.c
 )
-target_link_libraries(fmv_player PRIVATE advapi32)
+target_link_libraries(fmv_player PRIVATE advapi32 winmm)
 
 
 # Two unbounded writes in one engine function, so one DLL and one hook. Nothing here changes

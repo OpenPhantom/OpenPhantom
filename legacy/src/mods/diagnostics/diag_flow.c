@@ -186,7 +186,12 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("level_load",        SIG_LEVEL_LOAD),
-    SIGNATURE_ENTRY("lock_enter",        SIG_LOCK_ENTER),
+    /* cutscene_pose_sync.dll and sfx_mute.c (fmv_player.dll) both hook or read from sites near this
+     * one, and depending on load order this exact site may already be patched by the time this
+     * DLL's own resolver looks - a plain SIGNATURE_ENTRY searches for the PRISTINE bytes and finds
+     * zero matches once that has happened, exactly the render_frameEnd lesson signature.h's own
+     * header documents. The detour-aware form finds it either way. */
+    SIGNATURE_ENTRY_DETOUR("lock_enter", SIG_LOCK_ENTER, LOCK_ENTER_PROLOGUE),
     SIGNATURE_ENTRY("lock_leave",        SIG_LOCK_LEAVE),
     SIGNATURE_ENTRY("player_run_phases", SIG_PLAYER_RUN_PHASES),
     SIGNATURE_ENTRY("player_mode_table", SIG_PLAYER_MODE_TABLE),

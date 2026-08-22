@@ -222,6 +222,18 @@ add_engine_fix(large_textures
 # in it: diagnostics and developer tools become groups inside the same panel, and a shipped DLL
 # cannot be renamed without breaking every configuration file that mentions it. It draws with the
 # engine's own two dimensional primitives, so there is no window and no second surface.
+# A talking NPC's own script sets its head/face animation target once per line and only ever
+# resets it as a side effect of that same actor's own NEXT line starting, never when a different
+# actor's line supersedes it. Invisible whenever the previous speaker is off camera, which is most
+# of the game; visible the moment a shot holds on two actors while one keeps talking. This calls
+# the engine's own animation debounce/trigger function the instant a different actor's dialogue
+# trigger fires, exactly what a correctly authored "Animation: idle" node would do.
+add_engine_fix(dialogue_anim_fix
+    dll_main.c
+    dialogue_anim_fix.c
+)
+target_link_libraries(dialogue_anim_fix PRIVATE winmm)
+
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c

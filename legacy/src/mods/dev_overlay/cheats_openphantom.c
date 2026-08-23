@@ -78,6 +78,7 @@
 #include "cheats_openphantom.h"
 
 #include "cheats_no_fog.h"
+#include "cheats_original_actions.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -1924,4 +1925,48 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
         }
     }
     return own_state.cheats[id].on;
+}
+
+/* --- "Skip to next level": the same signal a level's own exit trigger sends -------------------- *
+ *
+ * main_game_movie_sequencer_loop (0x0043EC42) is the campaign driver: it loads each level by name
+ * off its own per-level table, keyed by an index at DAT_0088136c, then busy-polls
+ * `while (DAT_00881368 == 2) sys_frame();` for as long as that level is actually running. When that
+ * loop exits it reads DAT_00881368 again and, if it is 3, treats it as "level complete": broadcasts
+ * task 6, increments its own level index, and loads the next entry off its own table - exactly the
+ * housekeeping a real level exit needs, done by the driver itself.
+ *
+ * DAT_00881368 is written to 3 from exactly one place in the whole binary: FUN_00429880, case
+ * (param_2 == 1). FUN_00429880 has exactly one caller anywhere: the level script interpreter
+ * (FUN_00433d0b, dialogue_anim_fix.c's own "opcode 0x202" function), script opcode 0x606,
+ * sub-command 1 - `FUN_00429880(param_1, *local_c, local_c[1], local_c[2])` when `*local_c == 1`.
+ * That is almost certainly the literal command a level's own exit trigger/volume issues.
+ *
+ * This writes DAT_00881368 = 3 directly - the same value that one script command produces - rather
+ * than calling FUN_00429880 (which needs a live script-context pointer this panel does not have) or
+ * campaign_loadLevel (which needs the NEXT level's own path string, something
+ * main_game_movie_sequencer_loop already works out for itself from its own table). The cell itself
+ * is cheats_original_actions.c's own OP_CREDITS_VAR, exposed read-only from there rather than
+ * re-resolved here: it is genuinely the same single global cell "gurshick" already found, not a
+ * second one that happens to share a value.
+ *
+ * FIELD-UNTESTED. "gurshick" (the SAME cell, value 1) is confirmed to misbehave when triggered from
+ * this panel rather than the retail console's own blocking loop - see
+ * cheats_original_actions.c's own resolve_credits() comment. Value 3 takes a structurally different
+ * path with no credits-sequence startup involved, so that specific failure mode should not apply,
+ * but that is reasoning, not a field result. */
+bool cheats_openphantom_end_level_is_available(void)
+{
+    return cheats_original_actions_level_status_cell() != NULL;
+}
+
+bool cheats_openphantom_end_level_invoke(void)
+{
+    volatile int32_t *cell = cheats_original_actions_level_status_cell();
+
+    if (cell == NULL) {
+        return false;
+    }
+    *cell = 3;
+    return true;
 }

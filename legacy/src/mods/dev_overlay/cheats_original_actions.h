@@ -86,4 +86,12 @@ void cheats_original_actions_apply_pending(void);
  * by forgetting to check first. */
 int32_t cheats_original_actions_graphics_level(void);
 
+/* DAT_00881368, the level-status cell "gurshick"/"where is gurshick" (CHEATS_ACTION_VIEW_CREDITS)
+ * already resolves for its own, held-back row. Exposed read-only for cheats_openphantom.c's "Skip
+ * to next level" action, which writes the SAME cell to a different value - the literal signal a
+ * level's own exit trigger sends, not the credits one - so both features share the one resolution
+ * rather than each finding their own copy of what is genuinely a single global cell. NULL until
+ * cheats_original_actions_resolve() has run and that one cell actually resolved. */
+volatile int32_t *cheats_original_actions_level_status_cell(void);
+
 #endif /* CHEATS_ORIGINAL_ACTIONS_H */

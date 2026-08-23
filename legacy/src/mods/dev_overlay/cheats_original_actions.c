@@ -716,3 +716,8 @@ int32_t cheats_original_actions_graphics_level(void)
     }
     return *st.graphics_level_var;
 }
+
+volatile int32_t *cheats_original_actions_level_status_cell(void)
+{
+    return st.credits_var;
+}

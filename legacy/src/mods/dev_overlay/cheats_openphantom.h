@@ -102,6 +102,14 @@
  * overlay_model.c) for how it gets bound. Free camera refuses to turn on at all until one is
  * bound - see cheats_openphantom_toggle()'s own gate - because turning it on without one is a
  * door with no handle on the inside.
+ *
+ * "Skip to next level" is not a toggle either, and not one of the nine cheats above: a debug-only
+ * action row, for iterating on a specific level without replaying everything before it. It writes
+ * DAT_00881368 (cheats_original_actions.c's own OP_CREDITS_VAR, exposed read-only from there) to
+ * the SAME value the level's own exit trigger writes - script opcode 0x606, sub-command 1 - which
+ * is what main_game_movie_sequencer_loop (the campaign driver) reads as "level complete" and acts
+ * on: broadcast, advance its own level index, load the next entry off its own table. See
+ * cheats_openphantom.c's own site comment for the full call chain this was traced through.
  */
 #ifndef CHEATS_OPENPHANTOM_H
 #define CHEATS_OPENPHANTOM_H
@@ -165,5 +173,13 @@ void cheats_openphantom_freecam_set_hotkey(int32_t virtual_key);
  * scrolling happened yet", which is what it already was for every DLL build before this existed. */
 typedef int32_t (*cheats_openphantom_wheel_source_fn_t)(void);
 void cheats_openphantom_set_wheel_source(cheats_openphantom_wheel_source_fn_t fn);
+
+/* "Skip to next level" - see this file's own header comment above for the mechanism. False until
+ * cheats_original_actions.c's own DAT_00881368 resolution has run and succeeded; this feature
+ * resolves nothing of its own. */
+bool cheats_openphantom_end_level_is_available(void);
+
+/* Fires it once. False when unavailable; never fails silently the way a straight write would. */
+bool cheats_openphantom_end_level_invoke(void);
 
 #endif /* CHEATS_OPENPHANTOM_H */

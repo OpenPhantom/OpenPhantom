@@ -104,6 +104,13 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
     "Press your exit key to exit free camera"
 };
 
+/* "Skip to next level" - one slot after the free-camera info fold's own SUMMARY row (INFO_ROW_ID)
+ * but before its child lines, which is what keeps this row's own id fixed regardless of whether
+ * that fold happens to be open: the child lines are only sometimes present in the count, so
+ * anything placed after them would move every time the fold opens or closes. Nothing about this
+ * row depends on free camera at all; it only needs a slot that will not move. */
+#define END_LEVEL_ROW_ID (INFO_ROW_ID + 1u)
+
 /* Short enough for value[8]. Letters and digits already match their own virtual-key codes; function
  * keys and the handful of others worth naming get their own case; anything else prints as hex
  * rather than silently showing nothing, since a key that was bound has to be identifiable if
@@ -283,13 +290,14 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +3: the jump-boost scale row, inserted right after jump boost's own toggle row; the
+        /* +4: the jump-boost scale row, inserted right after jump boost's own toggle row; the
          * free-camera exit hotkey row, which takes over free camera's own (now shifted) numeric
-         * slot; and the "how to fly" fold, one past where free camera itself now sits - see
-         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID and their own handling in
-         * source_row() below. The fold's own lines add FREECAM_INFO_LINE_COUNT more only while it
-         * is open, the same shape a group's own child count already uses in append_group() below. */
-        return (uint32_t)CHEATS_OWN_COUNT + 3u +
+         * slot; the "how to fly" fold, one past where free camera itself now sits; and "Skip to
+         * next level", one past that - see JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/
+         * INFO_ROW_ID/END_LEVEL_ROW_ID and their own handling in source_row() below. The fold's
+         * own lines add FREECAM_INFO_LINE_COUNT more only while it is open, the same shape a
+         * group's own child count already uses in append_group() below. */
+        return (uint32_t)CHEATS_OWN_COUNT + 4u +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
 }
@@ -399,12 +407,19 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->available = true;
             return;
         }
-        if (model.freecam_info_expanded && id > INFO_ROW_ID &&
-            id <= INFO_ROW_ID + FREECAM_INFO_LINE_COUNT) {
+        if (id == END_LEVEL_ROW_ID) {
+            out->kind = OVERLAY_ROW_ACTION;
+            copy_label(out->label, "Skip to next level (debug, field-untested)");
+            out->on = false;         /* meaningless for an action; never read by the drawer */
+            out->available = cheats_openphantom_end_level_is_available();
+            return;
+        }
+        if (model.freecam_info_expanded && id > END_LEVEL_ROW_ID &&
+            id <= END_LEVEL_ROW_ID + FREECAM_INFO_LINE_COUNT) {
             char line[OVERLAY_LABEL_MAX];
 
             out->kind = OVERLAY_ROW_INFO;
-            _snprintf(line, sizeof line, "    %s", FREECAM_INFO_LINES[id - INFO_ROW_ID - 1u]);
+            _snprintf(line, sizeof line, "    %s", FREECAM_INFO_LINES[id - END_LEVEL_ROW_ID - 1u]);
             line[sizeof line - 1] = '\0';
             copy_label(out->label, line);
             out->on = false;
@@ -549,6 +564,12 @@ bool overlay_model_activate(uint32_t index)
         model.editing_jump_scale = true;
         model.jump_scale_edit_buf[0] = '\0';
         return true;
+    }
+    if (row.kind == OVERLAY_ROW_ACTION && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
+        /* The only OpenPhantom row that is an action rather than a toggle - checked here, before
+         * the switch below, for the same reason HOTKEY/VALUE are: cheats_openphantom_toggle()
+         * would otherwise be asked for an id it was never given a name or an on/off for. */
+        return cheats_openphantom_end_level_invoke();
     }
     switch ((overlay_group_t)row.group) {
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:

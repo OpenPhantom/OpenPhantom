@@ -296,12 +296,20 @@ That same live capture (`[diagnostics] Audio=1`, every sound played from level l
 first two spoken lines) shows exactly one candidate: `FSMJCON1.wav`, playing once, 2-D, right in the
 gap between the level becoming visible and Obi-Wan's own first line - nothing else plays in that
 window that is not an ambient loop already rejected for being out of range, or a menu sound from
-well before the level even loads. `sfx_mute.c` now detours `bapsound_play` itself
-(`0x0041681F`, byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips
-exactly the one call whose sound record's own name matches `FSMJCON1.wav` while suppression is
-armed - every other sound, both spoken lines included, passes through untouched - tracking
-`pPlayer+0xA0` directly so suppression ends the moment the transient it exists for actually
-finishes, or the curtain's own timer as a fallback cap.
+well before the level even loads.
+
+**Not one sound - a family, one per playable character.** The transient itself is not unique to
+fedship.b3d either: a second live capture, playing as Qui-Gon (`iamquigon`), catches the same
+transient at a DIFFERENT level's own opening (race.b3d) playing `FSUJSND1.wav` instead. Both share
+the same shape - `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
+sound-specific suffix - which is what `sfx_mute.c` matches on now rather than either exact name, so
+Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having to
+catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
+byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips every call whose
+sound record's own name matches `FS?J*` (case-insensitive, third character a wildcard) while
+suppression is armed - every other sound, both spoken lines included, passes through untouched -
+tracking `pPlayer+0xA0` directly so suppression ends the moment the transient it exists for
+actually finishes, or the curtain's own timer as a fallback cap.
 
 ## Why a separate window instead of drawing into the game's own surface
 

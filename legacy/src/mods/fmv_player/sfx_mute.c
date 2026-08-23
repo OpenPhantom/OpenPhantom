@@ -22,16 +22,26 @@
  * for being out of range, or a menu sound from well before the level even loads. Named for whatever
  * put it there, not for what it is; the timing is the evidence.
  *
+ * THIS IS NOT ONE SOUND, IT IS A FAMILY, ONE PER PLAYABLE CHARACTER. Field-confirmed with a second
+ * live capture: playing as Qui-Gon (cheats_original_actions.c's own "iamquigon"), the same transient
+ * at a DIFFERENT level's own opening (race.b3d, not fedship.b3d - so the transient itself is not
+ * unique to the one level this was first found on either) plays `FSUJSND1.wav` instead. Both share
+ * the same shape - `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
+ * sound-specific suffix - which is what this file matches on rather than either exact name, so
+ * Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having to
+ * catch each one individually first.
+ *
  * ==============================================================================================
  * WHAT THIS DOES
  *
  * Detours bapsound_play (0x0041681F, byte-identical to diagnostics/diag_audio.c's own
- * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the call whose sound record's own
- * name matches `FSMJCON1.wav` - every other sound, including both spoken lines, passes through
- * untouched. Armed and disarmed exactly like the two earlier attempts were: begin() when the
- * curtain arms, watching pPlayer+0xA0 (the position-override flag video_overlay.c's own header
- * documents) so end() can fire the instant that transient actually finishes, with the curtain's own
- * timer as a fallback cap if the flag is never seen.
+ * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the calls whose sound record's own
+ * name matches the shared `FS?J*` shape (case-insensitive; the third character is a wildcard, the
+ * rest of the name after `J` is not checked) - every other sound, including both spoken lines,
+ * passes through untouched. Armed and disarmed exactly like the two earlier, replaced attempts
+ * were: begin() when the curtain arms, watching pPlayer+0xA0 (the position-override flag
+ * video_overlay.c's own header documents) so end() can fire the instant that transient actually
+ * finishes, with the curtain's own timer as a fallback cap if the flag is never seen.
  */
 #include "sfx_mute.h"
 
@@ -44,7 +54,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 
 /* --- bapsound_play 0x0041681F, byte-identical to diagnostics/diag_audio.c's own SIG_SOUND_PLAY -- */
 static const uint8_t SIG_SOUND_PLAY[] = {
@@ -58,7 +67,23 @@ static const uint8_t SIG_SOUND_PLAY[] = {
 #define SCAL_NAME_OFFSET 0x00u
 #define SCAL_NAME_LENGTH 0x18u
 
-#define SUPPRESSED_SOUND_NAME "FSMJCON1.wav"
+/* The shared shape both confirmed names have: `FS`, one character-specific letter (`M` for
+ * Obi-Wan, `U` for Qui-Gon - see this file's own header for both captures), then `J`. Nothing
+ * after that is checked, since the two confirmed suffixes ("JCON1", "JSND1") already disagree and
+ * a third or fourth character's own suffix has no reason to match either. */
+#define SUPPRESSED_SOUND_PREFIX_LENGTH 4u   /* "FS_J", the third character a wildcard */
+
+static bool name_has_suppressed_prefix(const char *name)
+{
+    if (name[0] != 'F' && name[0] != 'f') {
+        return false;
+    }
+    if (name[1] != 'S' && name[1] != 's') {
+        return false;
+    }
+    /* name[2] is the character letter - deliberately unchecked, that is the whole point */
+    return name[3] == 'J' || name[3] == 'j';
+}
 
 /* --- Plr_RunPhases 0x00448297, used only to derive pPlayer's own pointer slot; never detoured.
  * Byte-identical to diag_flow.c's, cutscene_pose_sync.c's and video_overlay.c's own reasoning for
@@ -106,16 +131,14 @@ static sfx_mute_state_t mute_state;
 static bool is_suppressed_sound(const void *sound)
 {
     const char *name = (const char *)sound + SCAL_NAME_OFFSET;
-    size_t      length;
 
+    /* SCAL_NAME_LENGTH is a fixed char[0x18] field on the record itself, so reading its first
+     * four bytes needs no length scan first - unlike the exact-match version this replaced, which
+     * had to measure the string before it could compare the whole thing. */
     if (sound == NULL) {
         return false;
     }
-    for (length = 0; length < SCAL_NAME_LENGTH && name[length] != '\0'; ++length) {
-        /* just measuring, strnicmp below does the real comparison */
-    }
-    return length == (sizeof(SUPPRESSED_SOUND_NAME) - 1) &&
-           _strnicmp(name, SUPPRESSED_SOUND_NAME, sizeof(SUPPRESSED_SOUND_NAME) - 1) == 0;
+    return name_has_suppressed_prefix(name);
 }
 
 static int32_t __cdecl hook_sound_play(const void *sound, int32_t *handle, const float *pos)
@@ -203,10 +226,11 @@ void sfx_mute_install(void)
                     "moment the transient it exists for actually finishes");
     }
 
-    log_info("sfx_mute: bapsound_play at %08X is watched for \"%s\", suppressed for exactly as "
+    log_info("sfx_mute: bapsound_play at %08X is watched for names matching \"FS?J*\" (the shared "
+             "shape of every confirmed per-character landing sound), suppressed for exactly as "
              "long as the post-movie curtain's own transient actually runs - every other sound, "
              "including both spoken lines, is untouched",
-             (unsigned)sites[SITE_SOUND_PLAY].address, SUPPRESSED_SOUND_NAME);
+             (unsigned)sites[SITE_SOUND_PLAY].address);
 }
 
 void sfx_mute_begin(void)
@@ -225,8 +249,8 @@ void sfx_mute_end(void)
     }
     mute_state.suppressing = false;
     if (mute_state.suppressed_count > 0) {
-        log_info("sfx_mute: suppressed %u call(s) to \"%s\" behind the curtain",
-                 (unsigned)mute_state.suppressed_count, SUPPRESSED_SOUND_NAME);
+        log_info("sfx_mute: suppressed %u call(s) matching \"FS?J*\" behind the curtain",
+                 (unsigned)mute_state.suppressed_count);
         mute_state.suppressed_count = 0;
     }
 }

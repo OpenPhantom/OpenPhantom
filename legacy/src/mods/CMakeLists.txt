@@ -273,3 +273,15 @@ add_engine_fix(dev_overlay
     cheats_openphantom.c
     cheats_no_fog.c
 )
+
+# A field investigation found that Xidi, a third-party wrapper this project used to install to
+# expose an Xbox-style pad to this game's own WinMM joystick calls, produces rare but large
+# single-frame stalls while being actively polled. The only two things it was used for here,
+# right-stick look and Start pausing, are reproduced without it: XInputGetState reads the pad
+# directly, SendInput feeds the same synthetic mouse/keyboard input any external tool would. No
+# wrapper DLL and no dependency on enhanced_input.
+add_engine_fix(controller_input
+    dll_main.c
+    controller_input.c
+)
+target_link_libraries(controller_input PRIVATE xinput)

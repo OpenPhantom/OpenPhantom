@@ -36,6 +36,7 @@ included here or distributed with this project.
 | `sfx_volume_save_fix` | Keeps the SFX volume you set, which the original wrote back wrongly and then never applied on load |
 | `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops |
 | `xidi_bridge` | Controller support: points the three WinMM joystick imports at the wrapper, which Windows otherwise never lets the game reach |
+| `controller_input` | Right stick looks around, Start pauses, the triggers roll, reading the pad directly with no wrapper DLL of any kind |
 | `fmv_player` | Plays the pre-rendered movies through a modern decoder in a window over the game, for any movie you have converted yourself |
 | `crt_copy_fix` | Repairs an inlined copy loop that reads four bytes before its source, in 40 places |
 | `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |

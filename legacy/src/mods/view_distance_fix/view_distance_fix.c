@@ -203,6 +203,7 @@ typedef struct view_distance_config {
     bool  relocate_draw_table;
     bool  lower_cell_limit;
     bool  spawn_census;
+    bool  log_player_position;
 } view_distance_config_t;
 
 typedef struct view_distance_state {
@@ -274,6 +275,9 @@ static void load_config(void)
      * together. It is only an ini key: this DLL still has no run-time dependency on the
      * diagnostics DLL, and it works whether or not that DLL is installed at all. */
     config->spawn_census        = ini_read_bool (DIAGNOSTICS_SECTION, "Spawns", false);
+
+    config->log_player_position =
+        ini_read_bool (VIEW_DISTANCE_SECTION, "LogPlayerPosition", false);
 
     /* Cap from the control review: above 2.0 the 8192-entry collector gets tight and the
      * 128-slot character pool gets short. */
@@ -715,6 +719,13 @@ void view_distance_fix_install(void)
      * failure the engine reports nowhere: a spawn the pools were too full to satisfy. */
     (void)spawn_census_install(sites[SITE_ACTIVATION_SCAN].address,
                                view_state.config.spawn_census);
+
+    /* The destroy side of the same investigation. Self-resolves its own site, independent of
+     * activation_scan. lift_droid_fix.dll's own activation_race_fix.c independently chains onto
+     * the same engine function, from its own DLL - see spawn_census.h's own comment. */
+    (void)spawn_census_install_destroy_observer(view_state.config.spawn_census);
+
+    spawn_census_log_player_position(view_state.config.log_player_position);
 }
 
 void view_distance_fix_shutdown(void)

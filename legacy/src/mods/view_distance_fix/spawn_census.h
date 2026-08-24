@@ -28,4 +28,24 @@
  * same in the log. */
 bool spawn_census_install(uintptr_t activation_scan, bool enabled);
 
+/* The destroy side of the same investigation. Detours the actor-teardown function directly (self-
+ * resolves its own site, independent of activation_scan) and logs its reason code plus the same
+ * name/position spawn_census already reads, so the two logs read as one story. Same `enabled` flag
+ * as spawn_census_install; observation only.
+ *
+ * lift_droid_fix.dll's own activation_race_fix.c independently detours this same engine function
+ * (its own signature, its own chained detour, per common/detour.h's chaining contract) to refuse
+ * one specific destroy reason for five known placements - that fix used to live here, alongside
+ * this observer, before being moved out into its own DLL per this project's "one DLL per
+ * independent fix" rule. Nothing here depends on whether that DLL is loaded. */
+bool spawn_census_install_destroy_observer(bool enabled);
+
+/* TEMPORARY: logs the player's own current position and camera yaw/pitch roughly once a second,
+ * plus every active placement within a short radius of it. Built after two guesses at which
+ * placement was one of the field report's droids, by loose position matching against a list of
+ * everything that happened to fire a "created" log, were both wrong - actors already active before
+ * the capture window started never emit one. This says directly where the player is and what is
+ * actually near them, which is how the five placements lift_droid_fix.dll now handles were found. */
+void spawn_census_log_player_position(bool enabled);
+
 #endif /* SPAWN_CENSUS_H */

@@ -76,6 +76,17 @@ add_engine_fix(view_distance_fix
     spawn_census.c
 )
 
+# Two independent bugs behind a field-reported single-digit-fps stall at two specific lift
+# platforms: an activation/deactivation race that thrashes five known droid actors, and settled
+# debris/spark physics entries that never get cleaned up while resting on a platform that keeps
+# moving. See the DLL's own README and lift_droid_fix.h.
+add_engine_fix(lift_droid_fix
+    dll_main.c
+    lift_droid_fix.c
+    activation_race_fix.c
+    projectile_cleanup_fix.c
+)
+
 add_engine_fix(dismemberment
     dll_main.c
     dismemberment.c
@@ -178,6 +189,7 @@ add_engine_fix(diagnostics
     diag_flow.c
     diag_frame.c
     diag_present.c
+    diag_projectiles.c
 )
 target_link_libraries(diagnostics PRIVATE winmm psapi pdh)
 

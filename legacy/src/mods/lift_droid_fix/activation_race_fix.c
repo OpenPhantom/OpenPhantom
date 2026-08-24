@@ -7,7 +7,7 @@
  * to load second becomes the outer wrapper and calls the other's hook as its own "original", which
  * is exactly what common/detour.c is designed to do and needs no coordination between the two.
  *
- * TWO EARLIER SUPPRESSION ATTEMPTS, kept as history:
+ * FOUR EARLIER DESIGNS, kept as history:
  *
  * 1. Re-check "is the player still within the placement's own activation radius" from inside this
  *    hook, right before forwarding a reason-0 destroy. Field-tested at zero suppressions: this
@@ -22,14 +22,30 @@
  *    measured against two placements a later, more careful capture proved were never actually part
  *    of either stalling encounter at all. That verdict was measured on the wrong target.
  *
- * THE FIX ACTUALLY HERE: full suppression (never letting the five spawn at all) was tried first,
- * one placement and then all five, and measured to fully account for both field-reported stalls:
- * zero of the five present, zero frame drop, at either lift. That is a bigger change than the bug
- * calls for, though; it removes the encounter rather than fixing it. This keeps the same five-
- * placement match but drops the removal, every one of them still spawns and fights normally, and
- * instead refuses to forward ONLY a reason-0 destroy for one of them, unconditionally, no timing
- * window to tune or expire.
- */
+ * 3. Full suppression (never letting the five spawn at all) was tried next, one placement and then
+ *    all five, and measured to fully account for both field-reported stalls: zero of the five
+ *    present, zero frame drop, at either lift. That is a bigger change than the bug calls for,
+ *    though; it removes the encounter rather than fixing it.
+ *
+ * 4. A general fix: a deeper investigation found that the actor structure carries a persistent,
+ *    per-tick-refreshed field (actor+0x108) that appeared, from decompiled evidence, to hold a
+ *    pointer to whichever mover the actor is currently riding, refreshed by FUN_00435c67/
+ *    FUN_0040be00 ahead of the deactivation check every tick. Refusing the reason-0 destroy
+ *    whenever that field was non-null, instead of matching the actor's placement against five
+ *    known positions, would have covered any actor on any mover, anywhere in the game, not just
+ *    the two known lifts. It shipped, built and reviewed clean, but FIELD-TESTED AT ZERO
+ *    SUPPRESSIONS: a played session that reached the known encounters logged 2,014 reason-0
+ *    destroys for the five known placements (view_distance_fix.dll's own observer confirms this)
+ *    and this fix refused none of them. Whatever actor+0x108 actually is, or whatever ordering
+ *    assumption was wrong, it did not hold for these actors in practice. Reverted in favour of the
+ *    fix below, which IS field-confirmed; the mover-field question is left for a future,
+ *    dedicated investigation rather than blocking a working build on it.
+ *
+ * THE FIX ACTUALLY HERE: matches the actor's own placement (actor+0x10, the pointer FUN_00437250
+ * stores there at creation) against the five known positions, and refuses the reason-0 destroy
+ * only for those five, unconditionally. This is design 4's own immediate predecessor; it is the
+ * version that was field-tested and confirmed working in-game, both on its own and again after
+ * this DLL's extraction from view_distance_fix.dll. */
 #include "activation_race_fix.h"
 #include "known_placements.h"
 
@@ -38,7 +54,6 @@
 #include "common/memory.h"
 #include "common/signature.h"
 
-#include <stddef.h>
 #include <stdint.h>
 
 /* The placement's own name (a reused archetype label, logged for context only) and world position,

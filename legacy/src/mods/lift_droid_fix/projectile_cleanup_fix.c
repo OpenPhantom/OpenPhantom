@@ -11,7 +11,6 @@
  * is wildcarded and read back at runtime.
  */
 #include "projectile_cleanup_fix.h"
-#include "known_placements.h"
 
 #include "common/frame_hook.h"
 #include "common/logging.h"
@@ -68,6 +67,8 @@ _Static_assert(sizeof(SIG_PROJECTILE_LIST_TICK) == sizeof(MSK_PROJECTILE_LIST_TI
 #define PROJECTILE_POSITION_OFFSET   0x04u   /* float[3], world x/y/z */
 #define PROJECTILE_AGE_OFFSET        0x14u   /* float, seconds alive, counts UP from creation */
 #define PROJECTILE_FLAGS_OFFSET      0x84u   /* the word FUN_004524b9 itself tests/sets throughout */
+#define PROJECTILE_PERSIST_FLAG_BIT  0x2u    /* set => bounces/persists on impact instead of
+                                               * vanishing on its first hit; see below */
 #define PROJECTILE_REMOVE_FLAG_BIT   0x40000000u   /* set => the engine's own next pass removes it */
 
 #define PROJECTILE_WALK_MAX 8192u
@@ -91,10 +92,15 @@ _Static_assert(sizeof(SIG_PROJECTILE_LIST_TICK) == sizeof(MSK_PROJECTILE_LIST_TI
  * (was 3-12 before either fix), peak list size 9 (was 44-57), draining to 0 between fights. */
 #define STALE_AGE_SECONDS 0.1f
 
-/* Same five placements activation_race_fix.c matches, wider on purpose: this is not matching one
- * placement's exact spawn point, it is covering the platform area debris from a fight there can
- * actually land on. */
-#define NEAR_PLACEMENT_RADIUS 12.0f
+/* This threshold was field-tuned, and safe, only while cleanup was also gated by position: a live
+ * blaster bolt travels well outside a 12-unit radius in far less than 0.1s, so back then "old and
+ * still nearby" already meant "settled debris", never a bolt still in flight. Widening cleanup to
+ * the whole list without also adding this check force-removed every projectile 0.1s after
+ * creation, live blaster bolts included, and was field-reported as enemies unable to hit the
+ * player because their own shots vanished just past the muzzle. The actual defect (see
+ * projectile_cleanup_fix.h) only ever affects an entry that persists/bounces on impact; an
+ * ordinary bolt does not carry that flag and is already correctly removed on its first hit by
+ * FUN_004524b9 itself, so it was never the bug and must never be matched here. */
 
 typedef struct cleanup_state {
     bool      armed;
@@ -164,14 +170,15 @@ static void cleanup_tick(void)
         if (memory_read((uintptr_t)entry + PROJECTILE_POSITION_OFFSET, position,
                         sizeof(position)) &&
             memory_read((uintptr_t)entry + PROJECTILE_AGE_OFFSET, &age, sizeof(age)) &&
-            age > STALE_AGE_SECONDS && known_placement_is_near(position, NEAR_PLACEMENT_RADIUS) &&
+            age > STALE_AGE_SECONDS &&
             memory_read((uintptr_t)entry + PROJECTILE_FLAGS_OFFSET, &flags, sizeof(flags)) &&
+            (flags & PROJECTILE_PERSIST_FLAG_BIT) != 0 &&
             (flags & PROJECTILE_REMOVE_FLAG_BIT) == 0) {
             *(uint32_t *)((uintptr_t)entry + PROJECTILE_FLAGS_OFFSET) =
                 flags | PROJECTILE_REMOVE_FLAG_BIT;
             ++cleanup_state.total_forced;
             log_info("projectile cleanup fix: forced removal of a %.1fs-old entry at (%.1f, "
-                     "%.1f, %.1f) near a known placement (%u total this session)", (double)age,
+                     "%.1f, %.1f) (%u total this session)", (double)age,
                      (double)position[0], (double)position[1], (double)position[2],
                      (unsigned)cleanup_state.total_forced);
         }
@@ -200,8 +207,8 @@ void projectile_cleanup_fix_install(bool enabled)
     }
     cleanup_state.armed = true;
 
-    log_info("projectile cleanup fix armed at %08X: entries older than %.1fs within %.1f units of "
-             "one of five known placements are force-removed on the engine's own next pass",
-             (unsigned)cleanup_state.list_head_address, (double)STALE_AGE_SECONDS,
-             (double)NEAR_PLACEMENT_RADIUS);
+    log_info("projectile cleanup fix armed at %08X: persisting entries older than %.1fs anywhere "
+             "on the list are force-removed on the engine's own next pass; ordinary, "
+             "non-persisting projectiles like blaster bolts are never touched",
+             (unsigned)cleanup_state.list_head_address, (double)STALE_AGE_SECONDS);
 }

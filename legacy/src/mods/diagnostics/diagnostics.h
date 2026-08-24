@@ -42,6 +42,11 @@ typedef struct diagnostics_config {
      * window through GDI. */
     int  present;             /* 1 = the live path, 2 = plus the addresses it resolved to       */
 
+    /* The engine's own generic ballistic-physics list (blaster bolts, confirmed; whatever else
+     * shares it, unconfirmed): a live count every 30 frames, plus a position sample of the first
+     * few once the count passes a threshold. See diag_projectiles.c's own header. */
+    int  projectiles;         /* 1 = on, no further levels                                      */
+
     int  audio_census_ms;     /* >0: list the occupied sound channels every N ms                */
     int  max_lines_per_second;
     bool also_to_main_log;

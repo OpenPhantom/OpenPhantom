@@ -9,6 +9,7 @@
 #include "diag_frame.h"
 #include "diag_log.h"
 #include "diag_present.h"
+#include "diag_projectiles.h"
 #include "diag_world.h"
 
 #include "common/host_image.h"
@@ -31,8 +32,12 @@ const diagnostics_config_t *diagnostics_config(void)
 
 /* The ceiling is per AREA and not a shared constant, because a clamp that silently truncates a
  * level the caller does understand is indistinguishable from a level nobody implemented. Fx has a
- * third level, the decal DRAW census, and Trigger has one, the mover call-site census; everything
- * else stops at two. */
+ * third level, the decal DRAW census, and Trigger has four beyond the base pair: 3 is the mover
+ * call-site census, 4 adds the render-path census (entries to bapmap_polyToWorld and
+ * bapvrt_transformWorld themselves), 5 adds a call-site census for bapmap_polyToWorld itself, the
+ * same technique as 3 pointed the other way, 6 adds the same again one level further out, on the
+ * two traces that are bapmap_polyToWorld's own reason for running in the render path at all;
+ * everything else stops at two. */
 static int read_level_max(const char *key, int maximum)
 {
     int level = ini_read_int(DIAGNOSTICS_SECTION, key, 0);
@@ -56,7 +61,7 @@ static void load_config(void)
     diagnostics_state.enabled  = ini_read_bool(DIAGNOSTICS_SECTION, "Enabled", false);
     diagnostics_state.audio    = read_level("Audio");
     diagnostics_state.music    = read_level("Music");
-    diagnostics_state.trigger  = read_level_max("Trigger", 3);
+    diagnostics_state.trigger  = read_level_max("Trigger", 6);
     diagnostics_state.fsm      = read_level("Fsm");
     diagnostics_state.level    = read_level("Level");
     diagnostics_state.player   = read_level("Player");
@@ -64,6 +69,8 @@ static void load_config(void)
     diagnostics_state.fx       = read_level_max("Fx", 3);
     diagnostics_state.frame    = read_level("Frame");
     diagnostics_state.present  = read_level("Present");
+    diagnostics_state.projectiles = ini_read_bool(DIAGNOSTICS_SECTION, "Projectiles", false) ? 1
+                                                                                              : 0;
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
@@ -101,7 +108,8 @@ static bool any_area_enabled(void)
             diagnostics_state.trigger  != 0 || diagnostics_state.fsm      != 0 ||
             diagnostics_state.level    != 0 || diagnostics_state.player   != 0 ||
             diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
-            diagnostics_state.frame    != 0 || diagnostics_state.present  != 0);
+            diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
+            diagnostics_state.projectiles != 0);
 }
 
 void diagnostics_install(void)
@@ -131,11 +139,11 @@ void diagnostics_install(void)
     diagnostics_installed = true;
 
     log_info("areas audio=%d music=%d trigger=%d fsm=%d level=%d player=%d dialogue=%d fx=%d "
-             "frame=%d present=%d | census=%dms max=%d lines/s",
+             "frame=%d present=%d projectiles=%d | census=%dms max=%d lines/s",
              diagnostics_state.audio, diagnostics_state.music, diagnostics_state.trigger,
              diagnostics_state.fsm, diagnostics_state.level, diagnostics_state.player,
              diagnostics_state.dialogue, diagnostics_state.fx, diagnostics_state.frame,
-             diagnostics_state.present,
+             diagnostics_state.present, diagnostics_state.projectiles,
              diagnostics_state.audio_census_ms, diagnostics_state.max_lines_per_second);
 
     observers += diag_audio_install(diagnostics_state.audio, diagnostics_state.audio_census_ms);
@@ -149,6 +157,7 @@ void diagnostics_install(void)
     observers += diag_frame_install(diagnostics_state.frame,
                                     diagnostics_state.frame_hitch_percent);
     observers += diag_present_install(diagnostics_state.present);
+    observers += diag_projectiles_install(diagnostics_state.projectiles);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

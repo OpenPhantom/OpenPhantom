@@ -22,7 +22,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Enabled` | `0` | the master switch |
 | `Audio` | `0` | 1 play/stop/volume/zones, 2 plus the channel allocation |
 | `Music` | `0` | 1 state/sequence/volume, with the muscript symbol names |
-| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change, 3 plus the per-step detail |
+| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change, 3 plus the mover call-site census, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
 | `Fsm` | `0` | 1 AI mode changes, 2 plus **every executed opcode** |
 | `Level` | `0` | 1 level loading and the cutscene lock |
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |

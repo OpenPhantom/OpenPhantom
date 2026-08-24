@@ -9,7 +9,7 @@ player's own disc and then whichever parts of the OpenPhantom patch were ticked.
 | Input | the original PC disc, or a mounted image of it |
 | Output | `output/OpenPhantom_Installer.exe` |
 | Carries | the extractor and one configuration file. No game data, no patch binaries, no third party libraries |
-| Fetches | the patch, libVLC, Xidi, DSOAL and the saved games, each pinned by hash, plus the Microsoft Visual C++ runtime when controller support is ticked and it is absent |
+| Fetches | the patch, libVLC, DSOAL and the saved games, each pinned by hash |
 
 **You need your own copy of the game.** No game data, no executable and no patched binary is included
 here or distributed with this project.
@@ -28,15 +28,15 @@ The registry entry the game reads for its CD path is pointed at the installation
 removes the need for the disc in the drive.
 
 Everything else is downloaded while the installer runs: the OpenPhantom patch from this project's
-releases page, and libVLC, Xidi and DSOAL from their own authors.
+releases page, and libVLC and DSOAL from their own authors.
 
 ## Components
 
 Three tiers. Part of the patch and not unpickable: the graphics wrapper, the two crash repairs, the
 crash reporter and the two audio repairs. Recommended, so a full installation takes them: resolution,
 frame rate, field of view, HUD scaling, decals and view distance. Offered but not ticked: large
-textures, input, controller support, sound, the movie player, dismemberment, the developer overlay,
-the diagnostics, and a set of finished saved games.
+textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics, and
+a set of finished saved games.
 
 What each fix does is in [`legacy/README.md`](../legacy/README.md), and each has a `README.md` beside
 its own source. This directory does not repeat those.
@@ -59,10 +59,9 @@ Built with Inno Setup 7. The floor is whichever version first offered the `downl
 
 ```
 openphantom_installer.iss  the entry point: the disc, the registry, the shortcuts, the wizard
-dist/                      configuration this installer ships, currently Xidi.ini
+dist/                      configuration this installer ships
 src/
   openphantom_patch.iss    the patch and the libVLC runtime
-  xidi.iss                 the controller wrapper
   dsoal.iss                the audio wrapper
   complete_saves.iss       the optional saved games
   is3_extract/             the extractor, a small C project of its own
@@ -91,16 +90,16 @@ to the pinned value. The extractor is verified against a retail pressing, where 
 **Installed and played once.** A full installation has been run on a machine and the game started
 from it. What that run covered, read off the folder it left behind: the game came off the disc, the
 configuration files were replaced with the previous ones kept beside them, the saved games went in,
-the sound provider was written into `obi.ini`, and controller support worked from the installation
-rather than from files placed by hand.
+and the sound provider was written into `obi.ini`. This installer no longer offers a controller
+component at all, so there is nothing left to say about controller support here; retiring an older
+installer's leftover wrapper is covered separately below.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation
 before a folder is deleted and the carrying out and back that goes with it, and retiring a
-controller wrapper an older version of this installer left under the name `winmm.dll`. The Visual
-C++ runtime was already on that machine, so that path was skipped rather than tested, which is the
-same as untested. Each of them stops rather than continuing optimistically, but a branch nobody has
-taken is a branch nobody has watched.
+controller wrapper an older version of this installer left under the name `winmm.dll`. Each of them
+stops rather than continuing optimistically, but a branch nobody has taken is a branch nobody has
+watched.
 
 If you exercise one, say which, and say what the folder looked like beforehand.
 

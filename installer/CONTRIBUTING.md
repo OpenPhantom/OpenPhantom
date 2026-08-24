@@ -16,18 +16,16 @@ one of those slots that does not carry it belongs to somebody else and is moved 
 overwritten. Our loader chains to whatever held `dinput.dll` before, so overwriting that one would
 destroy the thing the chain needs.
 
-**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, and the controller wrapper is
-now installed as `xidi_winmm.dll` instead, with a patch DLL pointing the game's three joystick
-imports at it. That was forced rather than chosen, because Windows hands this executable the system
-`winmm.dll` whatever sits beside it, but it is the better arrangement anyway: no contest with other
-projects, no file moved aside, and a wrapper that answers three calls instead of standing in front
-of the whole audio engine. Where a system name can be avoided, avoid it.
+**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, back when this installer offered
+a controller wrapper installed under that name. This installer no longer installs a controller
+wrapper of any kind, so that fourth name is gone rather than merely avoided. Where a system name can
+be avoided, avoid it; not needing the name at all is better still.
 
 **A configuration file is never silently replaced.** `obi.ini` is the player's, so it is merged key
-by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini`, `Xidi.ini` and `alsoft.ini` are
-ours and are replaced, with the previous file kept beside them under a `.previous` name. Those four
-are not preference files: each names one section per component, and components are renamed between
-releases, so an old file looks configured and behaves like defaults.
+by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini` and `alsoft.ini` are ours and are
+replaced, with the previous file kept beside them under a `.previous` name. Those three are not
+preference files: each names one section per component, and components are renamed between releases,
+so an old file looks configured and behaves like defaults.
 
 `dist/` holds configuration this installer ships itself. Everything else it writes is downloaded, so
 a file only belongs in `dist/` when no download owns it.

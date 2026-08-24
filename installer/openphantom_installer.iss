@@ -212,10 +212,9 @@ Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{
   #define HashParam(str Sha) "Hash: """ + Sha + """; "
 #endif
 
-; One include per subject. Xidi and DSOAL hang off the patch component, so they come before the
-; saves, which does not, and the patch keeps one unbroken subtree in the component list.
+; One include per subject. DSOAL hangs off the patch component, so it comes before the saves, which
+; does not, and the patch keeps one unbroken subtree in the component list.
 #include "src\openphantom_patch.iss"
-#include "src\xidi.iss"
 #include "src\dsoal.iss"
 #include "src\complete_saves.iss"
 
@@ -250,9 +249,7 @@ english.CompCrashRep=Writes a crash report
 english.CompDiag=Logs for fault finding. Everything off until you switch it on
 english.CompDsoal=Restores the 3D sound audio option
 english.DsoundTaken=A different dsound.dll is already in the game folder and could not be moved aside:%n%n      %1%n%nNothing was installed. Sound support needs that exact name, and this installer never deletes a file it did not put there.%n%nUsually the game is still running. Close it and start again, or go back and untick sound support.
-english.CompXidi=Modern controller support via Xidi
 english.OldWrapperFailed=An earlier version of this installer put the controller wrapper here, and it could not be moved aside:%n%n      %1%n%nEverything is installed and the game runs. On most machines that old file is never loaded and nothing is wrong.%n%nUsually the game is still running. If your controller behaves oddly, close the game and rename that file yourself.
-english.VcRuntimeFailed=Controller support needs the Microsoft Visual C++ runtime, and it could not be installed. The installer stopped with code %1.%n%nEverything else is installed and the game runs normally. Only the controller will not work, and engine_fixes.log next to the game says so on every start.%n%nInstall "Microsoft Visual C++ Redistributable (x86)" from Microsoft yourself and it starts working, without reinstalling anything here.
 english.CompSaves=100% saved games (one per chapter)
 english.SavesFailed=Not all of the saved games could be copied into:%n%n      %1%n%nEverything else is installed and the game runs. Your own saved games were not touched.%n%nUsually the folder is write protected or the game is still running.
 english.ReinstallCaption=The game is already installed here
@@ -331,9 +328,7 @@ german.CompCrashRep=Schreibt einen Absturzbericht
 german.CompDiag=Protokolle zur Fehlersuche. Alles aus, bis Sie es einschalten
 german.CompDsoal=Wiederherstellung der 3D-Klang-Audio-Option
 german.DsoundTaken=Im Spielverzeichnis liegt bereits eine fremde dsound.dll, die nicht beiseitegelegt werden konnte:%n%n      %1%n%nEs wurde nichts installiert. Die Klang-Unterstützung braucht genau diesen Namen, und dieses Installationsprogramm löscht keine Datei, die es nicht selbst angelegt hat.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut, oder gehen Sie zurück und wählen Sie die Klang-Unterstützung ab.
-german.CompXidi=Moderner Controller-Support via Xidi
 german.OldWrapperFailed=Eine frühere Fassung dieses Installationsprogramms hat den Controller-Wrapper hier abgelegt, und er konnte nicht beiseitegelegt werden:%n%n      %1%n%nAlles ist installiert und das Spiel läuft. Auf den meisten Rechnern wird diese alte Datei nie geladen und es ist nichts kaputt.%n%nMeist läuft das Spiel noch. Falls sich Ihr Controller seltsam verhält, beenden Sie das Spiel und benennen Sie die Datei selbst um.
-german.VcRuntimeFailed=Die Controller-Unterstützung braucht die Microsoft-Visual-C++-Laufzeit, und die konnte nicht installiert werden. Das Installationsprogramm endete mit Code %1.%n%nAlles Übrige ist installiert und das Spiel läuft normal. Nur der Controller funktioniert nicht, und die engine_fixes.log neben dem Spiel sagt das bei jedem Start.%n%nInstallieren Sie „Microsoft Visual C++ Redistributable (x86)" selbst, dann funktioniert es, ohne dass hier etwas neu installiert werden muss.
 german.CompSaves=100% Spielstände (einer pro Kapitel)
 german.SavesFailed=Es konnten nicht alle Spielstände kopiert werden nach:%n%n      %1%n%nAlles Übrige ist installiert und das Spiel läuft. Ihre eigenen Spielstände wurden nicht angetastet.%n%nMeist ist das Verzeichnis schreibgeschützt oder das Spiel läuft noch.
 german.ReinstallCaption=Das Spiel ist hier bereits installiert
@@ -670,10 +665,11 @@ end;
     ddraw.dll     dxwrapper       the graphics wrapper
     dsound.dll    DSOAL           the audio wrapper
 
-  winmm.dll is deliberately not among them any more. The controller wrapper used to be installed
-  under that name and is now installed as xidi_winmm.dll, because Windows hands this executable the
-  system winmm.dll whatever sits beside it, so the name bought a contest with other projects and
-  never bought the wrapper.
+  winmm.dll is deliberately not among them. A controller wrapper (Xidi) used to be installed under
+  that name; this installer no longer installs a controller wrapper at all (controller_input.dll,
+  part of the patch, reads a pad directly and needs no wrapper). RetireOldControllerWrapper below
+  still moves aside a leftover from a much older release of this installer, which really did use
+  that name, checked by its own literal marker string rather than through SlotMarker.
 
   Do not turn this round into a search for other projects' names: our own dxwrapper.dll contains the
   strings dgVoodoo and DDrawCompat because it recognises them at run time.
@@ -1052,7 +1048,6 @@ begin
 
   CopyOptionalFile(AppDir + 'engine_fixes.ini', AppDir + 'engine_fixes.ini.previous', Preserved, Result);
   CopyOptionalFile(AppDir + 'dxwrapper.ini',    AppDir + 'dxwrapper.ini.previous',    Preserved, Result);
-  CopyOptionalFile(AppDir + 'Xidi.ini',         AppDir + 'Xidi.ini.previous',         Preserved, Result);
   CopyOptionalFile(AppDir + 'alsoft.ini',       AppDir + 'alsoft.ini.previous',       Preserved, Result);
 end;
 
@@ -1273,67 +1268,6 @@ begin
     MsgBox(UserMessage('SettingsFailed', '[options] Sound 3D Driver' + #13#10), mbError, MB_OK);
 end;
 
-{ True when the 32-bit Visual C++ 2015-2022 runtime is not on this machine.
-
-  Both files of the controller wrapper import MSVCP140 and VCRUNTIME140. The files are the test
-  rather than the runtime's registry key, because the files are what the loader looks for: a machine
-  can carry the key from a repair that left nothing behind, and can carry the DLLs without the key
-  when something else brought them.
-
-  The installer stays in 32-bit mode, so the system directory constant below expands to the 32-bit
-  one, which is where a 32-bit wrapper's imports are resolved from. Note for anyone editing this
-  comment: a setup constant in braces cannot be written inside a brace comment, because the closing
-  brace ends the comment there.
-
-  Also used as the Check on the row that downloads the runtime, so nothing is fetched on a machine
-  that already has it. }
-function VcRuntimeMissing: Boolean;
-begin
-  Result := (not FileExists(ExpandConstant('{sys}\MSVCP140.dll'))) or
-            (not FileExists(ExpandConstant('{sys}\VCRUNTIME140.dll')));
-end;
-
-{ Runs Microsoft's own installer, only when controller support was ticked and the runtime is
-  genuinely absent.
-
-  Reported rather than fatal, and that is a change from what this used to cost. The wrapper is no
-  longer a static import of the game: xidi_bridge.dll loads it with LoadLibrary, so a missing
-  runtime now fails that one call and the game starts and plays exactly as it would without
-  controller support. It used to mean the game did not start at all. }
-procedure InstallVcRuntime;
-var
-  Installer: String;
-  ResultCode: Integer;
-begin
-  if not WizardIsComponentSelected('patch\xidi') then
-    Exit;
-  if not VcRuntimeMissing then
-    Exit;
-
-  Installer := ExpandConstant('{tmp}\vc_redist.x86.exe');
-  if not FileExists(Installer) then begin
-    { The download did not happen, so there is nothing to run and the code to report is its
-      absence rather than an exit code nobody produced. }
-    MsgBox(UserMessage('VcRuntimeFailed', 'no download'), mbError, MB_OK);
-    Exit;
-  end;
-
-  if not Exec(Installer, '/install /quiet /norestart', '', SW_SHOW,
-              ewWaitUntilTerminated, ResultCode) then
-    ResultCode := -1;
-
-  { 0 is success; 3010 is success asking for a restart, which is not ours to force. }
-  if (ResultCode = 0) or (ResultCode = 3010) then
-    Exit;
-
-  { The files decide rather than the exit code alone: a non-zero code from a runtime installer
-    often means it declined because a newer build is already present. }
-  if not VcRuntimeMissing then
-    Exit;
-
-  MsgBox(UserMessage('VcRuntimeFailed', IntToStr(ResultCode)), mbError, MB_OK);
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
@@ -1344,7 +1278,6 @@ begin
 
   ApplyChosenSettings;
   ApplySoundProvider;
-  InstallVcRuntime;
   InstallCompleteSaves;
   ConvertMovies;
 end;
@@ -1450,10 +1383,9 @@ begin
       Exit;
   end;
 
-  { Controller support needs no room made for it. Its wrapper is installed as xidi_winmm.dll, a name
-    nothing else in a game folder uses, and the bridge DLL loads that file by full path. What an
-    older release of this installer left under the old name does have to go, though, and whether
-    controller support is ticked this time does not change that: the name is no longer ours. }
+  { This installer no longer installs any controller wrapper at all, so there is no slot of its own
+    needing room. What a much older release left under the name winmm.dll still has to go, though,
+    the same as it always did: the name is not ours and never answers to a controller any more. }
   RetireOldControllerWrapper;
 
   if WizardIsComponentSelected('patch\dsoal') then begin

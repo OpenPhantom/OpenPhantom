@@ -1,7 +1,7 @@
 /* activation_race_fix.c: see activation_race_fix.h and lift_droid_fix.h for the field investigation
  * this closes out.
  *
- * Independent, chained detour on FUN_00437850 (0x00437850, the actor-teardown function) - see
+ * Independent, chained detour on FUN_00437850 (0x00437850, the actor-teardown function). See
  * common/detour.h's own chaining contract. view_distance_fix.dll's spawn_census.c also detours this
  * same function, for an unrelated "destroying X, reason N" observation log; whichever DLL happens
  * to load second becomes the outer wrapper and calls the other's hook as its own "original", which
@@ -18,15 +18,15 @@
  *
  * 2. A time-based grace period, applied to every placement: record every successful creation with
  *    the tick it happened on, suppress a reason-0 destroy within a few ticks of that. Worked
- *    exactly as designed and was field-tested as making no difference to the frame rate - but
+ *    exactly as designed and was field-tested as making no difference to the frame rate, but
  *    measured against two placements a later, more careful capture proved were never actually part
  *    of either stalling encounter at all. That verdict was measured on the wrong target.
  *
  * THE FIX ACTUALLY HERE: full suppression (never letting the five spawn at all) was tried first,
- * one placement and then all five, and measured to fully account for both field-reported stalls -
+ * one placement and then all five, and measured to fully account for both field-reported stalls:
  * zero of the five present, zero frame drop, at either lift. That is a bigger change than the bug
- * calls for, though: it removes the encounter rather than fixing it. This keeps the same five-
- * placement match but drops the removal - every one of them still spawns and fights normally - and
+ * calls for, though; it removes the encounter rather than fixing it. This keeps the same five-
+ * placement match but drops the removal, every one of them still spawns and fights normally, and
  * instead refuses to forward ONLY a reason-0 destroy for one of them, unconditionally, no timing
  * window to tune or expire.
  */
@@ -42,7 +42,7 @@
 #include <stdint.h>
 
 /* The placement's own name (a reused archetype label, logged for context only) and world position,
- * the same offsets view_distance_fix's spawn_census.c reads for the same reasons - see that file's
+ * the same offsets view_distance_fix's spawn_census.c reads for the same reasons. See that file's
  * own header for how 0xB8 and 0xAC were derived and cross-checked. */
 #define PLACEMENT_NAME_OFFSET     0xB8u
 #define PLACEMENT_NAME_MAX        32u
@@ -51,11 +51,11 @@
                                            * projectile_cleanup_fix.c uses the same table for */
 
 /* FUN_00437850(actor, reason): tears an actor down and, for every reason except 3, writes back to
- * its own placement (actor+0x10, the pointer FUN_00437250 stores there at creation) - reason 1 or
+ * its own placement (actor+0x10, the pointer FUN_00437250 stores there at creation). Reason 1 or
  * 14 sets placement+0xC8 to 2 (blocks re-creation for good), anything else sets it to 0 unless the
  * actor's own state field (actor+0x20) reads 14, in which case that too is immediately overwritten
  * back to 2. Zero is also the activation scan's own "not yet created" gate, so a reason-0 destroy
- * is recreated on the very next scan tick - the mechanism this fix is for. Byte-identical to
+ * is recreated on the very next scan tick, the mechanism this fix is for. Byte-identical to
  * view_distance_fix's own spawn_census.c copy of this pattern: two independent DLLs detouring the
  * same function each carry their own copy of the site they resolve, per this project's "feature
  * DLLs never depend on each other" rule. */

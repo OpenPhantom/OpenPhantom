@@ -1,5 +1,5 @@
 /* known_placements.h: the five droid placements this whole DLL exists for, found live rather than
- * guessed at - see lift_droid_fix.h for the field investigation that produced them.
+ * guessed at. See lift_droid_fix.h for the field investigation that produced them.
  *
  * enemy045 (127.1, 80.5, 23.1), enemy046 (126.5, 79.7, 23.1) and enemy048 (126.3, 80.9, 23.1) ride
  * one lift; enemy076 (122.4, 64.0, 23.0) and enemy077 (122.5, 64.5, 23.0) ride a second. Names are

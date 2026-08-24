@@ -2,11 +2,11 @@
  * out and why.
  *
  * The list head DAT_00872fb8 is resolved by signature rather than hardcoded, per this project's
- * "signatures, never addresses" rule - a real, shipped fix does not get to take the shortcut
+ * "signatures, never addresses" rule; a real, shipped fix does not get to take the shortcut
  * diag_projectiles.c documents for itself as a one-off diagnostic. FUN_004524b9 (the list's own
  * per-tick update loop) reads it as a literal `mov eax,[0x00872fb8]` at 0x004524e7, reached by a
- * `jnz` a few instructions earlier that converges two control-flow paths onto this exact point - a
- * stable anchor. The surrounding block (three reads of a second global, 0x00868724, in a short,
+ * `jnz` a few instructions earlier that converges two control-flow paths onto this exact point,
+ * a stable anchor. The surrounding block (three reads of a second global, 0x00868724, in a short,
  * distinctive lazy-init idiom) is what makes the pattern unique; only the list-head operand itself
  * is wildcarded and read back at runtime.
  */
@@ -74,10 +74,10 @@ _Static_assert(sizeof(SIG_PROJECTILE_LIST_TICK) == sizeof(MSK_PROJECTILE_LIST_TI
 
 /* Field-tested at 15 and 5. 15 (a quarter second of frames) was too slow outright: the pile-up to
  * 57 entries measured live happened inside about three real seconds, and at the low frame rates
- * that pile-up itself causes, 15 frames stretches to a second and a half of wall clock - most of
- * the whole event passes between checks. 5 was faster but still coarse enough, relative to the
+ * that pile-up itself causes, 15 frames stretches to a second and a half of wall clock, most of
+ * the whole event passing between checks. 5 was faster but still coarse enough, relative to the
  * 0.1s age threshold below, to be the cause of debris being field-reported as vanishing "faster or
- * slower" rather than consistently - a five-frame gap between checks is a large fraction of a 0.1s
+ * slower" rather than consistently: a five-frame gap between checks is a large fraction of a 0.1s
  * budget, so exactly when in an entry's life it gets caught could jitter by nearly as much as the
  * threshold itself. Every frame removes that jitter rather than trying to out-guess it, and the
  * walk itself is cheap (a few field reads per entry, no collision trace). */
@@ -86,7 +86,7 @@ _Static_assert(sizeof(SIG_PROJECTILE_LIST_TICK) == sizeof(MSK_PROJECTILE_LIST_TI
 /* Field-tested at four values. 4.0s safe but too generous to touch the peak at all. 1.5s cut the
  * peak (57 -> 44 entries) and the recovery time (never -> ~8s) but barely moved the worst fps
  * (~10 -> ~12). 0.5s field-tested worse than 0.1s. 0.1s gave the best measured result but was
- * field-reported as visibly inconsistent with 5-frame polling - see CLEANUP_EVERY_FRAMES above for
+ * field-reported as visibly inconsistent with 5-frame polling; see CLEANUP_EVERY_FRAMES above for
  * the fix tried alongside this same value. Confirmed together: worst fps in a long session 41.9
  * (was 3-12 before either fix), peak list size 9 (was 44-57), draining to 0 between fights. */
 #define STALE_AGE_SECONDS 0.1f

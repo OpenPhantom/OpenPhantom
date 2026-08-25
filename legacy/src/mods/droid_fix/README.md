@@ -1,13 +1,15 @@
-# lift_droid_fix
+# droid_fix
 
-**Produces:** `lift_droid_fix.dll` -> `mods\`
+**Produces:** `droid_fix.dll` -> `mods\`
 
 A field report of a severe, reproducible frame-rate stall (down to single-digit fps) at two
 specific lift/elevator platforms, each carrying a small cluster of droids. Traced to five known
-placements and two independent engine bugs. Bug 1 stays scoped to those five placements; a general,
+placements and two independent engine bugs. Named droid_fix rather than lift_droid_fix because only
+one of the two is still lift-specific: bug 1 stays scoped to those five placements, a general,
 game-wide version of its fix was tried and reverted, see "Bug 1" below. Bug 2 shipped scoped to the
 same five placements too, on a plausible-but-unconfirmed assumption, and a later full playthrough
-proved that assumption wrong: it now covers the whole list, see "Bug 2" below.
+proved that assumption wrong: it now covers the whole level, not just those two lifts, see "Bug 2"
+below.
 
 ## Supported executables
 
@@ -17,7 +19,7 @@ Any build whose code matches the retail sites this resolves by pattern:
 (`projectile_cleanup_fix.c`). If either does not resolve, that half of the DLL changes nothing and
 says so in the log; the two fixes are otherwise fully independent of each other.
 
-## Configuration: `[lift_droid_fix]`
+## Configuration: `[droid_fix]`
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -216,8 +218,13 @@ alongside already excluded every live, flying projectile (a bolt leaves a 12-uni
 less than 0.1s), so the age check alone had never actually been exercised against a live shot until
 the position gate was removed. Fixed by restricting cleanup to entries with the persist/bounce flag
 set, the same flag that is the actual reason an entry can get stuck, which ordinary blaster bolts
-never carry; see "the persist check is not optional" in Bug 2 above. **This second fix has not
-itself been played yet.**
+never carry; see "the persist check is not optional" in Bug 2 above.
+
+**This persist-flag fix has since been played and confirmed working.** A full playthrough of the
+first level, both fixes enabled the whole time, measured 42 small hitches over five minutes, 396
+successful debris cleanups, and a ballistic-list size that stayed capped at 8-21 entries throughout
+rather than piling up; no further report of enemy fire vanishing. The user's own words: "plays
+beautifully."
 
 The log lines to look for: `activation-race fix armed at`, `projectile cleanup fix armed at`, and
 during play, `activation race fix: refused a reason-0 destroy` / `projectile cleanup fix: forced

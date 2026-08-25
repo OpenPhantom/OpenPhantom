@@ -1,5 +1,5 @@
-/* dll_main.c: entry point of lift_droid_fix.dll. See common/mod_entry.h for the contract. */
-#include "lift_droid_fix.h"
+/* dll_main.c: entry point of droid_fix.dll. See common/mod_entry.h for the contract. */
+#include "droid_fix.h"
 
 #include "common/mod_entry.h"
 
@@ -18,5 +18,5 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 
 ENGINE_FIX_ENTRY
 {
-    lift_droid_fix_install();
+    droid_fix_install();
 }

@@ -6,7 +6,7 @@
  * the two never disagree; on the two lift platforms this fix is for, which spawn low and carry
  * their riders upward once the player is close, they can disagree fast enough underfoot to tear an
  * actor down that FUN_00437850's own reason-0 branch immediately re-arms for creation, forever, for
- * as long as the disagreement holds. See lift_droid_fix.h for the full field investigation and
+ * as long as the disagreement holds. See droid_fix.h for the full field investigation and
  * activation_race_fix.c for the mechanism, this fix's own field confirmation, and a general,
  * mover-based version that was tried, shipped, and reverted after a played session showed it
  * refusing zero of over two thousand reason-0 destroys it should have caught.

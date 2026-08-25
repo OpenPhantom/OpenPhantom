@@ -492,12 +492,12 @@ static destroy_census_state_t destroy_census;
  * ACTIVATION radius at +0x28 the scan itself uses against the placement's own STATIC position at
  * +0xAC. Measured live: for the placements that got caught in this, the two radii and the two
  * positions all agreed (deactivation radius wider than activation, proper hysteresis, position
- * identical to the placement's own) - so the level data is not at fault, and reason 0 is the only
+ * identical to the placement's own), so the level data is not at fault, and reason 0 is the only
  * reason this mechanism ever produces.
  *
  * TWO SUPPRESSION ATTEMPTS AND THE FIX THAT REPLACED THEM were built and field-tested against this
- * mechanism from this hook, before being extracted into lift_droid_fix.dll's own activation_race_
- * fix.c as an independent, chained detour on this same function - see that file's own header for
+ * mechanism from this hook, before being extracted into droid_fix.dll's own activation_race_
+ * fix.c as an independent, chained detour on this same function; see that file's own header for
  * the full account, including the two earlier designs that were tried and rejected. This hook now
  * only observes; it no longer refuses anything itself. */
 static void __cdecl hook_actor_destroy(void *actor, int32_t reason)

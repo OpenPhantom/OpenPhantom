@@ -1,8 +1,9 @@
-/* lift_droid_fix.h: closes out a field-reported frame-rate stall (down to single-digit fps) that
- * started as a report about two specific lift/elevator platforms, each carrying a small cluster of
- * droids, and turned out to have one general cause and one that stayed local to those two lifts.
+/* droid_fix.h: closes out a field-reported frame-rate stall (down to single-digit fps) that started
+ * as a report about two specific lift/elevator platforms, each carrying a small cluster of droids,
+ * and turned out to have one cause that stayed local to those two lifts and one that did not; named
+ * droid_fix rather than lift_droid_fix because only the first of the two still is lift-specific.
  *
- * Produces: lift_droid_fix.dll
+ * Produces: droid_fix.dll
  *
  * ==============================================================================================
  * THE FIELD REPORT, and what it actually was
@@ -40,9 +41,9 @@
  * project's "one DLL per independent fix" rule: the two mechanisms are independent of each other
  * and of view_distance_fix's own actual view-distance work, and neither depends on the other at
  * run time (each resolves its own signature and installs its own hook/detour). */
-#ifndef LIFT_DROID_FIX_H
-#define LIFT_DROID_FIX_H
+#ifndef DROID_FIX_H
+#define DROID_FIX_H
 
-void lift_droid_fix_install(void);
+void droid_fix_install(void);
 
-#endif /* LIFT_DROID_FIX_H */
+#endif /* DROID_FIX_H */

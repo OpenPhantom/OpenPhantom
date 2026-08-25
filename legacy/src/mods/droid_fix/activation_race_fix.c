@@ -1,4 +1,4 @@
-/* activation_race_fix.c: see activation_race_fix.h and lift_droid_fix.h for the field investigation
+/* activation_race_fix.c: see activation_race_fix.h and droid_fix.h for the field investigation
  * this closes out.
  *
  * Independent, chained detour on FUN_00437850 (0x00437850, the actor-teardown function). See
@@ -62,8 +62,10 @@
 #define PLACEMENT_NAME_OFFSET     0xB8u
 #define PLACEMENT_NAME_MAX        32u
 #define PLACEMENT_POSITION_OFFSET 0xACu
-#define KNOWN_RACE_TOLERANCE      0.5f   /* exact-placement identity, not the platform-area match
-                                           * projectile_cleanup_fix.c uses the same table for */
+#define KNOWN_RACE_TOLERANCE      0.5f   /* exact-placement identity; projectile_cleanup_fix.c used
+                                           * to match this same table at a wider, platform-area
+                                           * tolerance, before its own fix dropped the position gate
+                                           * entirely in favour of covering the whole ballistic list */
 
 /* FUN_00437850(actor, reason): tears an actor down and, for every reason except 3, writes back to
  * its own placement (actor+0x10, the pointer FUN_00437250 stores there at creation). Reason 1 or

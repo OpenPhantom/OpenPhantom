@@ -1,5 +1,5 @@
-/* known_placements.h: the five droid placements this whole DLL exists for, found live rather than
- * guessed at. See lift_droid_fix.h for the field investigation that produced them.
+/* known_placements.h: the five droid placements activation_race_fix.c exists for, found live rather
+ * than guessed at. See droid_fix.h for the field investigation that produced them.
  *
  * enemy045 (127.1, 80.5, 23.1), enemy046 (126.5, 79.7, 23.1) and enemy048 (126.3, 80.9, 23.1) ride
  * one lift; enemy076 (122.4, 64.0, 23.0) and enemy077 (122.5, 64.5, 23.0) ride a second. Names are
@@ -7,11 +7,11 @@
  * the whole level in the capture that found these); position is what actually distinguishes these
  * five from everything else.
  *
- * A `static const` array in a header, included separately by each of this DLL's two fix files,
- * rather than a shared .c/.o: both files want the SAME five points matched against two different
- * tolerances (activation_race_fix.c a tight one, for exact-placement identity; projectile_cleanup_
- * fix.c a wide one, for "somewhere on this lift's platform"), and neither needs anything else about
- * the other. */
+ * A `static const` array in a header, kept apart from a shared .c/.o since only one file needs it
+ * any more: activation_race_fix.c matches an actor's placement against these five points to decide
+ * whether to refuse a reason-0 destroy. projectile_cleanup_fix.c used to match against this same
+ * table too, before its own fix was widened to the whole ballistic list; see that file's own header
+ * for why the position gate came out entirely rather than merely widening the tolerance. */
 #ifndef KNOWN_PLACEMENTS_H
 #define KNOWN_PLACEMENTS_H
 

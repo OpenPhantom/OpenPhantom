@@ -494,11 +494,38 @@ static destroy_census_state_t destroy_census;
  * identical to the placement's own), so the level data is not at fault, and reason 0 is the only
  * reason this mechanism ever produces.
  *
- * TWO SUPPRESSION ATTEMPTS AND THE FIX THAT REPLACED THEM were built and field-tested against this
- * mechanism from this hook, before being extracted into droid_fix.dll's own activation_race_
- * fix.c as an independent, chained detour on this same function; see that file's own header for
- * the full account, including the two earlier designs that were tried and rejected. This hook now
- * only observes; it no longer refuses anything itself. */
+ * SUPPRESSION WAS TRIED FOUR WAYS FROM THIS HOOK AND ALL OF IT IS GONE NOW. The account is kept
+ * because the mechanism above is still real and someone will find it again.
+ *
+ *   1. Re-check the activation radius before forwarding a reason-0 destroy. Field-tested at zero
+ *      suppressions: this hook reads the player position a handful of instructions after the
+ *      engine's own read that just produced the verdict, with nothing moving in between, so the
+ *      identical test on identical data can never disagree.
+ *   2. A time-based grace period after each creation. Worked as designed, measured as making no
+ *      difference, but measured against two placements a later capture proved were never part of
+ *      either stalling encounter. The verdict was taken on the wrong target.
+ *   3. Full suppression of five known placements, which did remove the stall and is a bigger change
+ *      than the bug called for.
+ *   4. A general version keyed on actor+0x108, a per-tick-refreshed field that decompiled as a
+ *      pointer to whichever mover an actor is riding, refreshed by FUN_00435c67/FUN_0040be00 ahead
+ *      of the deactivation check. Refusing the destroy whenever it was non-null would have covered
+ *      any actor on any mover. It shipped, reviewed clean, and FIELD-TESTED AT ZERO SUPPRESSIONS:
+ *      a played session logged 2,014 reason-0 destroys for the five known placements and it refused
+ *      none of them. Whatever that field is, it did not behave as the decompile suggested. Do not
+ *      re-attempt it on the strength of the decompile alone.
+ *
+ * The five placements this was all aimed at, found live through this census rather than guessed
+ * (two earlier guesses by name matching were both wrong, because the name is a reused archetype
+ * label): enemy045 (127.1, 80.5, 23.1), enemy046 (126.5, 79.7, 23.1) and enemy048 (126.3, 80.9,
+ * 23.1) on one lift; enemy076 (122.4, 64.0, 23.0) and enemy077 (122.5, 64.5, 23.0) on a second.
+ *
+ * WHY NONE OF IT SURVIVES. The stall it was built for was never this race. It was a VirtualQuery
+ * guard on a hook in framerate_fix, since repaired. With that fixed, a session with no suppression
+ * at all logged 128 reason-0 destroys across those five placements and held a flat 60 fps through
+ * both lifts, with each of the five dying once, properly, by reason 1. The thrashing is real and
+ * costs nothing observable. If it is ever suppressed again, measure what it costs first.
+ *
+ * This hook only observes; it no longer refuses anything itself. */
 static void __cdecl hook_actor_destroy(void *actor, int32_t reason)
 {
     destroy_fn_t original = (destroy_fn_t)destroy_census.detour.original;

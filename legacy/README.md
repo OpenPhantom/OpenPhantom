@@ -29,7 +29,6 @@ included here or distributed with this project.
 | `framerate_fix` | A free render rate that does not change how the game plays |
 | `hud_ratio_scaling` | One size knob for the HUD, and text that is not stretched on a wide screen |
 | `view_distance_fix` | Draw distance and fog, coupled so that raising one is not wasted, with a watchdog on the limits they run into |
-| `droid_fix` | Two independent fps-stall bugs: an activation race scoped to five known droids, and a debris/spark cleanup bug that covers the whole level |
 | `enhanced_input` | Mouse look, sideways walking and free look |
 | `dismemberment` | Lightsaber dismemberment: the limb the blade actually hit, and only on the killing blow |
 | `imuse_fix` | Pauses the music when the game loses focus, and stops the music thread locking itself up |

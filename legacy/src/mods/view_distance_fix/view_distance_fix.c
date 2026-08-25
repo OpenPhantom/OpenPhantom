@@ -721,8 +721,8 @@ void view_distance_fix_install(void)
                                view_state.config.spawn_census);
 
     /* The destroy side of the same investigation. Self-resolves its own site, independent of
-     * activation_scan. droid_fix.dll's own activation_race_fix.c independently chains onto
-     * the same engine function, from its own DLL; see spawn_census.h's own comment. */
+     * activation_scan. Nothing else in this project detours that function any more; see
+     * spawn_census.h's own comment. */
     (void)spawn_census_install_destroy_observer(view_state.config.spawn_census);
 
     spawn_census_log_player_position(view_state.config.log_player_position);

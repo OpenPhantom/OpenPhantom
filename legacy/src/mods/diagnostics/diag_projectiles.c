@@ -17,7 +17,45 @@
  *
  * No detour, no signature: DAT_00872fb8 is a fixed global this build's own FUN_004524b9 reads as a
  * literal absolute operand, not a relocatable target, and this is a plain periodic read, nothing
- * hooked. */
+ * hooked.
+ *
+ * ============================== What this census established, and what it refuted ==============
+ *
+ * Kept here because it is the only file left that reads this list. A DLL called droid_fix used to
+ * force-remove entries from it and was deleted once these measurements were in; this is the
+ * evidence it was built on and the evidence that removed it.
+ *
+ * HOW AN ENTRY GETS STUCK, confirmed by decompiling the removal path rather than inferred from the
+ * counts. FUN_004524b9 removes an entry one of two ways: an external flag (bit 0x40000000 of the
+ * flags word at entry+0x84), or immediately on first contact, but only for an entry that does NOT
+ * persist on impact (flag bit 0x2 clear). Bit 0x40000000 is set from exactly one place outside that
+ * function, FUN_00454aa1 (0x00454aa1), an event-driven on-contact handler that only ever runs in
+ * response to a real collision. A persisting entry that collides has a probabilistic stick outcome
+ * (a random roll at 0x00452c8c against a threshold at 0x004a8790); on a stick, FUN_004524b9 zeroes
+ * BOTH the entry's velocity (+0x2c/+0x30/+0x34) and its acceleration (+0x38/+0x3c/+0x40). Next-tick
+ * position is computed purely from those two, so the entry never moves again, never collides again,
+ * and never generates the one event that could flag it for removal. It is event starvation, not a
+ * position-staleness check: nothing in the traced call graph compares a remembered position against
+ * a current one, and nothing treats a moving surface differently from a static one.
+ *
+ * That mechanism is real and is still present. Measured live: the list climbs during a fight and
+ * then holds, in one session at exactly 57 entries for nine consecutive censuses, in another
+ * settling at 38 and holding it for eighteen, clearing only when the level unloads. An entry with
+ * the persist bit is the only kind that can reach this state; an ordinary blaster bolt never
+ * carries that flag and is removed correctly on its own first hit.
+ *
+ * WHAT IT COSTS: nothing measurable, and this is the part that was got wrong for a long time. The
+ * pileup was believed to cause a severe frame-rate stall at two lift platforms, and a fix that
+ * force-removed stuck entries did make the stall smaller, which is why it was believed. It was
+ * removing collision traces that were hammering a hook in another DLL. With that hook repaired
+ * (see framerate_fix's mover_interpolation.c), holding a full pileup costs nothing at all: 57
+ * entries at a flat 30 fps with no mods loaded, 57 entries at a flat 60 fps with the whole mod set
+ * loaded and no cleanup running. Do not reintroduce a cleanup for this list on frame-rate grounds
+ * without measuring the list against the frame rate first, the way these lines were.
+ *
+ * A count on its own never answered the question either way. What answered it was correlating the
+ * count against per-second frame timing BY TIMESTAMP, which is why this census and diag_frame.c are
+ * worth switching on together. */
 #include "diag_projectiles.h"
 
 #include "diag_install.h"

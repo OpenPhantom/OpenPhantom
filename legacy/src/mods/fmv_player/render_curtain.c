@@ -1,8 +1,8 @@
 /* render_curtain.c: see render_curtain.h.
  *
  * Three sites, all byte-identical to ones already proven elsewhere in this tree - resolved a
- * second time rather than shared, the same way diag_flow.c and cutscene_pose_sync.c each carry
- * their own copy of Dialog_EnterInputLock's signature:
+ * second time rather than shared, the same way sfx_mute.c, spawn_census.c and video_overlay.c each
+ * carry their own copy of Plr_RunPhases' signature:
  *
  *   - the call that closes the scene, identical to dev_overlay.c's own SIG_SCENE_END. Redirected
  *     the same way it is there: read whatever is CURRENTLY at this call site as `original` (the

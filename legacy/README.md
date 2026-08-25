@@ -37,7 +37,6 @@ included here or distributed with this project.
 | `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops |
 | `controller_input` | Right stick looks around, Start pauses, the triggers roll, reading the pad directly with no wrapper DLL of any kind |
 | `fmv_player` | Plays the pre-rendered movies through a modern decoder in a window over the game, for any movie you have converted yourself |
-| `cutscene_pose_sync` | Keeps a freshly spawned player body from being drawn blending from the world origin as a cutscene begins |
 | `dialogue_anim_fix` | Stops a talking NPC's leftover head animation once the other speaker's line takes over, scoped to the one confirmed conversation |
 | `crt_copy_fix` | Repairs an inlined copy loop that reads four bytes before its source, in 40 places |
 | `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |

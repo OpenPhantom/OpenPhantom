@@ -88,8 +88,7 @@
  * says directly where the lift actually is and what is actually near it, rather than inferring it.
  *
  * --- Plr_RunPhases 0x00448297, used only to derive the player pointer slot; never detoured. Byte-
- * identical to diag_flow.c's, cutscene_pose_sync.c's, video_overlay.c's and sfx_mute.c's own
- * reasoning for this site.
+ * identical to diag_flow.c's, video_overlay.c's and sfx_mute.c's own reasoning for this site.
  *   +0x27 : &pPlayer [0x4B5220] */
 static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,

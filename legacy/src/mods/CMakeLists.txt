@@ -150,17 +150,6 @@ add_engine_fix(decal_fix
     decal_fix.c
 )
 
-# A freshly created object's own render-interpolation "previous" position starts at the world
-# origin until something reaches it again to seed it from "current" - invisible in ordinary play,
-# where that happens within a frame or two, and visible exactly once: the player's own body, right
-# as the opening cutscene locks control after fmv_player's faster movie transition, which does not
-# leave the extra frame retail's own resolution switch incidentally bought for that repair to land
-# in before the first real draw.
-add_engine_fix(cutscene_pose_sync
-    dll_main.c
-    cutscene_pose_sync.c
-)
-
 # Two independent bugs behind "the SFX slider resets to full on reload": the value saved came from
 # an unreliable AIL query instead of the engine's own volume mirror, and separately the startup
 # load-time apply is a guaranteed no-op because bapsound_moduleInit marks sound ready one statement

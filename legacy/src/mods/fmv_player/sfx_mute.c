@@ -86,8 +86,7 @@ static bool name_has_suppressed_prefix(const char *name)
 }
 
 /* --- Plr_RunPhases 0x00448297, used only to derive pPlayer's own pointer slot; never detoured.
- * Byte-identical to diag_flow.c's, cutscene_pose_sync.c's and video_overlay.c's own reasoning for
- * this site.
+ * Byte-identical to diag_flow.c's and video_overlay.c's own reasoning for this site.
  *   +0x27 : &pPlayer [0x4B5220] */
 static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,
@@ -153,7 +152,7 @@ static int32_t __cdecl hook_sound_play(const void *sound, int32_t *handle, const
 }
 
 /* Reads the operand behind Plr_RunPhases' own `mov ecx,[pPlayer]`, the same technique
- * cutscene_pose_sync.c's resolve_player_pointer_slot uses, inlined here for the same reason. */
+ * diag_flow.c's diag_derive_address uses, inlined here since that helper is diagnostics-only. */
 static uint32_t *resolve_player_pointer_slot(void)
 {
     uintptr_t site = sites[SITE_PLAYER_RUN_PHASES].address;

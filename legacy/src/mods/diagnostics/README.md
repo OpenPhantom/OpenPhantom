@@ -32,6 +32,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `FrameHitchPercent` | `0` | how far past the median counts as a hitch. 0 uses the built-in default |
 | `FrameGpuCounter` | the graphics counter path | the performance counter the graphics load is read from. Windows localises these names, which is the only reason this is a setting |
 | `Present` | `0` | 1 names which output path is live, 2 also times the flip and says whether it blocks in the driver or spins |
+| `Projectiles` | `0` | 1 counts the engine's own ballistic-physics list every 30 frames, and past 10 live entries also names the first few by position, so a pileup reads as stacked or spread at a glance |
 | `AudioCensusMilliseconds` | `0` | >0 lists the occupied channels every N ms (minimum 100) |
 | `MaxLinesPerSecond` | `60` | 0 = unlimited |
 | `AlsoToMainLog` | `0` | mirror into `engine_fixes.log` as well |

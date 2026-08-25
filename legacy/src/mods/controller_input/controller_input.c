@@ -368,7 +368,7 @@ static DWORD WINAPI poll_thread_proc(LPVOID unused_parameter)
 
 static void load_config(controller_input_config_t *config)
 {
-    config->enabled          = ini_read_bool (CONTROLLER_SECTION, "Enabled", false);
+    config->enabled          = ini_read_bool (CONTROLLER_SECTION, "Enabled", true);
     config->look_enabled     = ini_read_bool (CONTROLLER_SECTION, "LookEnabled", true);
     config->pause_enabled    = ini_read_bool (CONTROLLER_SECTION, "PauseEnabled", true);
     config->roll_enabled     = ini_read_bool (CONTROLLER_SECTION, "RollEnabled", true);

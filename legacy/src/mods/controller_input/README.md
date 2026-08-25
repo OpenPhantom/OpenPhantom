@@ -30,7 +30,7 @@ itself, not in how it gets loaded.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `0` | Master switch. Off by default: this is a brand new, field-untested feature. |
+| `Enabled` | `1` | Master switch. On by default: played and confirmed working across several sessions. |
 | `LookEnabled` | `1` | Right stick drives the camera. |
 | `PauseEnabled` | `1` | Start opens the pause menu. |
 | `RollEnabled` | `1` | Left/right trigger holds Alt+Left / Alt+Right. |
@@ -77,11 +77,11 @@ matter what the game's own thread is doing.
 `enhanced_input.dll`'s own raw mouse reader (`raw_mouse.c`) accepts a `WM_INPUT` relative mouse
 report checking only its type field (`RIM_TYPEMOUSE`) and its relative/absolute flag; nothing in
 that code, or in the `RAWMOUSE` structure Windows hands it, can tell a real device from an
-injected one. `SendInput`-synthesized movement reaches it exactly like a real mouse would. This
-was confirmed by reading that code directly this session, not assumed; the one thing not yet
-confirmed is that it holds true in an actual play session on this specific executable, which has
-its own history of raw-input quirks under Windows' application compatibility shims (see
-`raw_mouse.c`'s own header comment). Treat this as reviewed, not yet field-tested.
+injected one. `SendInput`-synthesized movement reaches it exactly like a real mouse would. This was
+confirmed by reading that code directly, and confirmed again live across several play sessions on
+this specific executable, which has its own history of raw-input quirks under Windows' application
+compatibility shims (see `raw_mouse.c`'s own header comment) that a reading of the code alone could
+not have ruled out.
 
 ### Why Escape is the right key for Start
 
@@ -118,15 +118,18 @@ Alt is shared between both triggers rather than pressed once per trigger, held f
 trigger to engage and released only once the last one disengages, so pulling both at once does not
 send two Alt-down events.
 
-What is not confirmed: whether this game's own reading of movement/roll keys goes through
-`WM_KEYDOWN`, `GetAsyncKeyState` polling, or DirectInput's own polled keyboard state. Escape was
-proven, this session, to reach the first two and (very likely, per the reasoning above) the third
-of those. This project's own loader exists specifically because this game already uses DirectInput
-for at least some of its input (that is the whole reason a `dinput.dll` loader was needed here in
-the first place), which makes DirectInput a real candidate for how roll is read, not just a
-theoretical one, and DirectInput in exclusive acquisition mode has a documented history elsewhere
-of not always seeing `SendInput`-synthesized keys the way non-exclusive raw input and message-based
-reads do. The tap-shaped fix has not itself been played yet; field-test before trusting this.
+Still not confirmed by reading code alone: whether this game's own reading of movement/roll keys
+goes through `WM_KEYDOWN`, `GetAsyncKeyState` polling, or DirectInput's own polled keyboard state.
+Escape was proven, by decompile, to reach the first two and (very likely, per the reasoning above)
+the third of those. This project's own loader exists specifically because this game already uses
+DirectInput for at least some of its input (that is the whole reason a `dinput.dll` loader was
+needed here in the first place), which makes DirectInput a real candidate for how roll is read, not
+just a theoretical one, and DirectInput in exclusive acquisition mode has a documented history
+elsewhere of not always seeing `SendInput`-synthesized keys the way non-exclusive raw input and
+message-based reads do. Whichever mechanism it actually is, the tap-shaped fix has since been played
+and confirmed working (see Testing status below), so this is now a known-working path rather than
+an open question about whether it works at all, just an open question about which of the three it
+goes through.
 
 ### Why the recheck interval exists
 

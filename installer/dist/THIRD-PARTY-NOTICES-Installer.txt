@@ -1,0 +1,106 @@
+THIRD PARTY NOTICES
+OpenPhantom installer
+===============================================================================
+
+Read this together with THIRD-PARTY-NOTICES.txt beside it. That file came out
+of the OpenPhantom patch archive and describes what is in that archive: the
+patch itself and DxWrapper. This file describes everything else the installer
+put on your machine.
+
+Two files rather than one because each is accurate about what it covers, and
+neither would stay accurate if it were made to describe the other.
+
+
+-------------------------------------------------------------------------------
+1. A correction to the other file
+-------------------------------------------------------------------------------
+
+  Section 4 of THIRD-PARTY-NOTICES.txt is headed "Not in this archive: what
+  fmv_player uses", and says of libVLC and FFmpeg that "neither is in this
+  archive and neither is redistributed here", that the installer downloads
+  libVLC during installation, and that FFmpeg is downloaded on demand and lives
+  "nowhere in an installation".
+
+  That is still true of the patch archive. It is no longer true of this
+  installer, which carries both and downloads nothing:
+
+    libVLC     installed from inside the installer, not downloaded
+    FFmpeg     installed beside libVLC, not downloaded on first conversion
+
+  The rest of that section, on what these components are and how fmv_player
+  uses them, still holds.
+
+
+-------------------------------------------------------------------------------
+2. What the installer adds
+-------------------------------------------------------------------------------
+
+  libVLC                                                  GPL v2
+    Files      mods\fmv\libvlc.dll, libvlccore.dll and mods\fmv\plugins\
+    Copyright  VideoLAN and its contributors
+    Source     https://www.videolan.org/vlc/
+    Licence    mods\fmv\vlc-License.txt
+    Unaltered. 33 of the 851 files in VideoLAN's own 32-bit build, being the
+    ones needed to play one H.264 and AAC file into a window.
+
+  FFmpeg                                                  GPL v3
+    Files      mods\fmv\ffmpeg.exe
+    Copyright  the FFmpeg developers
+    Source     https://github.com/FFmpeg/FFmpeg
+    Licence    mods\fmv\ffmpeg-License.txt
+    The build convert_movies.ps1 pins, gyan.dev's "essentials" build of FFmpeg
+    9.0. It is GPL v3 rather than LGPL because it links x264 statically, so
+    x264's source is part of the corresponding source for it.
+
+  DSOAL                                                   LGPL v2.1
+  OpenAL Soft                                             LGPL v2
+    Files      dsound.dll, dsoal-aldrv.dll, alsoft.ini
+    Copyright  Chris Robinson and contributors
+    Source     https://github.com/kcat/dsoal
+               https://github.com/kcat/openal-soft
+    Licence    DSOAL-Licenses\, which holds DSOAL's licence and the four
+               OpenAL Soft licence files
+    Unaltered, from DSOAL's own archived build r694.
+
+  Saved games
+    Files      Save\ZANZI01.SAV to ZANZI11.SAV, if you chose them
+    Made for this project by playing the game. Not taken from anywhere else,
+    and covered by the project's own licence.
+
+  dxwrapper.ini
+    One setting differs from what DxWrapper ships: AntiAliasing is 0 rather
+    than 4, because 4 produced visible bugs in this game. The DxWrapper
+    binaries themselves are unaltered. See THIRD-PARTY-NOTICES.txt for
+    DxWrapper's own terms.
+
+
+-------------------------------------------------------------------------------
+3. Getting the source
+-------------------------------------------------------------------------------
+
+  libVLC, DSOAL and OpenAL Soft are under the GPL and the LGPL, which require
+  that the source accompany the binaries rather than merely be linked to. The
+  release this installer came from carries all of it, pinned to the exact
+  revisions these binaries were built from:
+
+    vlc-3.0.23.tar.xz
+    dsoal-r694-5c65e5fe.tar.gz
+    openal-soft-r10633-2dc741b5.tar.gz
+    ffmpeg-9.0-d32b387f2b.tar.gz
+    x264-v0.165.3223-0480cb05.tar.gz
+
+  If you received this installer without them, they are on the project's
+  releases page, and the revisions and checksums are recorded in
+  THIRD-PARTY-NOTICES.md in the installer's source repository.
+
+
+-------------------------------------------------------------------------------
+4. The game itself
+-------------------------------------------------------------------------------
+
+  No game data, executables, assets or other proprietary files are included in
+  this installer. The game is copied from your own disc.
+
+  This is an independent fan project. It is not affiliated with, endorsed by or
+  sponsored by LucasArts, Lucasfilm Ltd or Disney. All trademarks and related
+  intellectual property belong to their respective owners.

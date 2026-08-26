@@ -16,19 +16,26 @@ one of those slots that does not carry it belongs to somebody else and is moved 
 overwritten. Our loader chains to whatever held `dinput.dll` before, so overwriting that one would
 destroy the thing the chain needs.
 
-**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, back when this installer offered
-a controller wrapper installed under that name. This installer no longer installs a controller
-wrapper of any kind, so that fourth name is gone rather than merely avoided. Where a system name can
-be avoided, avoid it; not needing the name at all is better still.
+**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, back when this installer
+offered a controller wrapper installed under that name. It no longer installs a controller wrapper
+of any kind, so that fourth name is gone rather than merely avoided: controller support reads a pad
+directly and needs no DLL standing in front of another subsystem. Where a system name can be
+avoided, avoid it; not needing the name at all is better still.
 
 **A configuration file is never silently replaced.** `obi.ini` is the player's, so it is merged key
-by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini` and `alsoft.ini` are ours and are
-replaced, with the previous file kept beside them under a `.previous` name. Those three are not
-preference files: each names one section per component, and components are renamed between releases,
-so an old file looks configured and behaves like defaults.
+by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini` and `alsoft.ini` are ours and
+are replaced, with the previous file kept beside them under a `.previous` name. Those three
+are not preference files: each names one section per component, and components are renamed between
+releases, so an old file looks configured and behaves like defaults.
 
-`dist/` holds configuration this installer ships itself. Everything else it writes is downloaded, so
-a file only belongs in `dist/` when no download owns it.
+`dist/` holds everything the installer carries, which is everything it writes except the game. It
+downloads nothing, during installation or afterwards. A component is added by putting its files in
+`dist/<component>/` and pointing rows at them, never by fetching at run time: a download that works
+today is a download that fails for somebody in five years, and this is a preservation project.
+
+Keep each upstream component in a folder of its own, even where its files would otherwise sit beside
+another's. `dist/patch/` is refreshed wholesale from a patch release, so anything else kept in it is
+destroyed on the next bump; that is why DxWrapper has a folder to itself.
 
 **Saved games are never deleted**, including by the uninstaller. Where the folder has to be laid down
 fresh, the player's files are copied out first, copied back last, and counted both ways.
@@ -39,7 +46,7 @@ uninstaller removes exactly those.
 ## Every external result is checked
 
 * A helper process reports an exit code and the installer reads it.
-* A download is verified by size and by hash before it is used.
+* Nothing is downloaded. What ships is in `dist/`, and Inno's own integrity check covers it.
 * A copy that had to succeed and did not stops the installation with a message naming the file.
 * Work that can leave the machine half done happens before the first file is written, where stopping
   still costs nothing.
@@ -61,10 +68,12 @@ and local sources at compile time and a half finished rename then cannot ship. N
 `skipifsourcedoesntexist` on a file that is supposed to be there; the flag is right only for a file
 that genuinely varies between pressings, which is `VOICE.LAB` and the disc's `INSTALL` folder.
 
-The exception is rows Inno cannot check anyway. A source that is `external` and lives inside an
-archive that does not exist until the installer runs buys no compile time check, so the libVLC plugin
-rows are generated from one macro that derives each destination folder from its source folder. That
-is the only generated row set here.
+The one generated row set is the libVLC plugins. It was generated originally because the sources
+lived inside an archive that did not exist until the installer ran, so there was no compile time
+check to lose. That stopped being true when they moved into `dist/`, and the macro stays for the
+reason that outlived it: libVLC finds a plugin by scanning, so each destination folder has to match
+its source folder exactly, and deriving one from the other is what keeps thirty rows from drifting.
+A plugin one folder over is not found, and the only symptom is `libvlc_new` refusing.
 
 Otherwise: three occurrences of the same shape is the threshold, and consolidate when doing so makes
 a property true rather than promised. Language idiom is not repetition; `ExpandConstant('{app}')`
@@ -91,11 +100,12 @@ to stand on its own.
 ## What must not appear
 
 * Absolute paths belonging to anyone's machine.
-* A download that is not pinned by hash. Where the host is not the file's author, say so at the pin,
-  because there is then no upstream checksum to compare against.
-* A binary fetched from a mirror when its author publishes it themselves.
+* A download at install time or after it, for any reason.
+* A binary in `dist/` taken from a mirror when its author publishes one themselves. Where no such
+  build exists, say so where the component is defined and name who built the one that ships.
 * Loosening file system permissions beyond what the game needs to write its saves.
-* A shipped binary that is not either built from this repository or downloaded from its author.
+* A binary in `dist/` whose licence, version and upstream are not recorded in the third party
+  notices, and whose corresponding source is not pinned there where its licence asks for it.
 * Game data of any kind, in any form, for any reason.
 * Silent failure of any kind.
 

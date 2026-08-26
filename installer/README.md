@@ -8,8 +8,8 @@ player's own disc and then whichever parts of the OpenPhantom patch were ticked.
 | Form | Inno Setup script plus one small C helper, `is3_extract` |
 | Input | the original PC disc, or a mounted image of it |
 | Output | `output/OpenPhantom_Installer.exe` |
-| Carries | the extractor and one configuration file. No game data, no patch binaries, no third party libraries |
-| Fetches | the patch, libVLC, DSOAL and the saved games, each pinned by hash |
+| Carries | everything it installs: the extractor, the patch, libVLC, FFmpeg, DSOAL, dxwrapper and the saved games. No game data |
+| Fetches | nothing, during installation or afterwards |
 
 **You need your own copy of the game.** No game data, no executable and no patched binary is included
 here or distributed with this project.
@@ -27,8 +27,9 @@ it and stops short of the archive's end, so nothing can read it.
 The registry entry the game reads for its CD path is pointed at the installation folder, which
 removes the need for the disc in the drive.
 
-Everything else is downloaded while the installer runs: the OpenPhantom patch from this project's
-releases page, and libVLC and DSOAL from their own authors.
+Everything else ships inside the installer, in `dist/`. Nothing is downloaded at any point, which
+is what makes an installation reproducible years from now rather than dependent on somebody else's
+hosting.
 
 ## Components
 
@@ -52,14 +53,23 @@ ISCC openphantom_installer.iss
 `-A Win32` is not optional; the game is 32 bit and so is everything this project ships. The result is
 `output/OpenPhantom_Installer.exe`, and no build output is tracked here.
 
-Built with Inno Setup 7. The floor is whichever version first offered the `download` and
+Built with Inno Setup 6.6. The floor is whichever version first offered the `download` and
 `extractarchive` file flags together with the `ArchiveExtraction` directive.
 
 ## Structure
 
 ```
 openphantom_installer.iss  the entry point: the disc, the registry, the shortcuts, the wizard
-dist/                      configuration this installer ships
+dist/                      everything the installer carries; nothing is downloaded at install time
+  patch/                   the OpenPhantom patch, unpacked from its release archive
+  dxwrapper/               DirectDraw-to-Direct3D translation (ini edited, see the notices)
+  vlc/                     33 files of libVLC, for the cutscene player
+  ffmpeg/                  FFmpeg, for converting the cutscenes; installed beside libVLC
+  dsoal/                   DSOAL and OpenAL Soft, for 3D sound
+  saves/                   a save at the start of each chapter
+source/                    corresponding source for the GPL and LGPL parts of dist/, pinned to
+                           the revisions they were built from; ships with every release
+THIRD-PARTY-NOTICES.md     what is in dist/, under what licence, and what a release must ship
 src/
   openphantom_patch.iss    the patch and the libVLC runtime
   dsoal.iss                the audio wrapper
@@ -71,14 +81,19 @@ output/                    the built installer, ignored
 One subject per file, so a new patch release touches one of them and a new download touches one of
 them.
 
-## Updating a pinned download
+## Updating a carried component
 
-Each download names its version, its hash and its unpacked size at the top of its own file. The
-unpacked size is the total of the files inside the archive rather than the size of the archive: a row
-that extracts has to declare what it expands to.
+Replace its folder under `dist/`, then update its row in `THIRD-PARTY-NOTICES.md` and in
+`dist/THIRD-PARTY-NOTICES-Installer.txt` with the new version, and refresh the corresponding source
+archive under `source/` where the licence asks for it.
 
-The OpenPhantom pin needs two strings instead of one, because the release tag and the version in the
-file name are not always the same word. Read both off the release page.
+`dist/patch/` is refreshed wholesale from a build of `legacy/`, so anything else kept in that folder
+is destroyed on the next refresh; that is why dxwrapper has a folder of its own.
+
+Two things do not survive a refresh on their own and have to be re-applied: `dxwrapper.ini`'s
+`AntiAliasing=0`, which upstream ships as 4 and which causes visible bugs in this game, and any
+component whose destination folders are derived rather than written out, currently the libVLC
+plugins.
 
 ## Testing status
 
@@ -91,8 +106,7 @@ to the pinned value. The extractor is verified against a retail pressing, where 
 from it. What that run covered, read off the folder it left behind: the game came off the disc, the
 configuration files were replaced with the previous ones kept beside them, the saved games went in,
 and the sound provider was written into `obi.ini`. This installer no longer offers a controller
-component at all, so there is nothing left to say about controller support here; retiring an older
-installer's leftover wrapper is covered separately below.
+component at all, so there is nothing left to say about controller support here.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

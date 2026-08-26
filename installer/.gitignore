@@ -8,6 +8,11 @@ build/
 *.ilk
 *.exe
 
+# ...but dist/ is shipped content, not build output. Everything the installer carries lives
+# there and is tracked on purpose, including Microsoft's redistributable, which the rule above
+# would otherwise swallow without saying so.
+!dist/**
+
 # Inno Setup writes these beside a script while it works.
 *.iss.bak
 *.tmp

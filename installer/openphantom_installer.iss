@@ -3,9 +3,13 @@
 ; The disc: finding it, reading it, expanding its archive, the registry entries and the shortcuts.
 ; Everything optional is in the includes at the bottom.
 ;
-; No game data and no third-party binary is compiled in. The game comes off the disc, the patch and
-; the media runtime are downloaded and hash checked, and the only executable carried here is the
-; archive extractor built from src\is3_extract\.
+; No game data is compiled in; the game comes off the player's own disc. Everything else this
+; installs is carried inside it, in dist\, and nothing is fetched while it runs or afterwards. That
+; includes FFmpeg, which the cutscene converter would otherwise download on first use.
+;
+; Executables carried here: the archive extractor built from src\is3_extract\, FFmpeg for the
+; cutscene converter, and Microsoft's Visual C++ redistributable, which is run only when the
+; runtime it installs is genuinely absent.
 ;
 ; The disc is copied with Flags: external rather than by a helper process, which is what lets Inno
 ; record every file it wrote. The uninstaller then removes exactly those and leaves the rest, so it
@@ -34,6 +38,17 @@ AppPublisherURL=https://github.com/OpenPhantom/OpenPhantom
 AppSupportURL=https://github.com/OpenPhantom/OpenPhantom/issues
 AppUpdatesURL=https://github.com/OpenPhantom/OpenPhantom/releases
 DefaultDirName={commonpf32}\LucasArts\The Phantom Menace
+
+; Always ask where to install, even on a reinstall.
+;
+; The default is auto, which hides the page whenever Setup finds a previous installation of this
+; AppId and silently reuses the folder recorded in its uninstall key. That is the wrong default
+; here for the same reason UsePreviousSetupType is: somebody rerunning this to update a patch gets
+; no say in where it lands, and no indication that a folder was chosen for them.
+;
+; UsePreviousAppDir is left alone, so the page still opens on the previous folder. It is offered
+; rather than imposed.
+DisableDirPage=no
 DefaultGroupName=LucasArts\The Phantom Menace
 OutputBaseFilename=OpenPhantom_Installer
 
@@ -48,9 +63,18 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 
-; Without this a downloaded archive arrives and is never unpacked, and every row reading out of it
-; fails on a file that was never there.
-ArchiveExtraction=auto
+; Reinstalling starts from the first type again rather than from what was chosen last time.
+;
+; The default is yes, and it restores both the type and the ticked components out of the registry.
+; That is the safer behaviour in general and it is being given up deliberately: this installer is
+; how the patch is updated, so the same person runs it again after components have been added, and
+; a restored selection silently leaves every new one unticked. Starting from "everything" each time
+; is what makes an update install the whole patch.
+;
+; The cost is that somebody who deliberately took less than everything is offered everything again,
+; including the cutscene player and its converter. They are still on the
+; Back button, and nothing installs before the ready page.
+UsePreviousSetupType=no
 
 ; The installer stays in 32-bit mode. Windows then redirects its HKLM\SOFTWARE writes into
 ; WOW6432Node by itself, which is where the 32-bit game looks for them.
@@ -67,6 +91,9 @@ german.WelcomeLabel1=Das OpenPhantom Installationsprogramm
 german.WelcomeLabel2=Es installiert Star Wars Episode I: Die dunkle Bedrohung von Ihrer eigenen CD und danach die OpenPhantom-Patches, mit denen es auf einem heutigen Rechner sauber läuft.%n%nVon J0nny und Chip-Biscuit.
 
 [Types]
+; Listed first, so it is the preselected one. Every component row carries "everything", so
+; this type is the one that leaves nothing unticked.
+Name: "everything"; Description: "{cm:TypeEverything}"
 Name: "full";   Description: "{cm:TypeFull}"
 Name: "base";   Description: "{cm:TypeBase}"
 Name: "custom"; Description: "{cm:TypeCustom}"; Flags: iscustom
@@ -199,21 +226,11 @@ Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{
 ; games, settings and anything a player added afterwards are not ours to delete. The folder stays
 ; behind with those in it, and that is the intended outcome.
 
-; Download hash checks, in one switch for all of them.
-;
-; Off while the DSOAL archive question is open: that tag replaces a revision under its own name,
-; so a pinned hash stops every install until someone measures it again. The hashes stay below,
-; as the record of what was tested.
-#define IgnoreDownloadHashes 1
+; Nothing is downloaded during installation, so there is no download hash to check. Everything the
+; installer places is compiled into it out of dist and is covered by Setup's own integrity check.
 
-#if IgnoreDownloadHashes
-  #define HashParam(str Sha) ""
-#else
-  #define HashParam(str Sha) "Hash: """ + Sha + """; "
-#endif
-
-; One include per subject. DSOAL hangs off the patch component, so it comes before the saves, which
-; does not, and the patch keeps one unbroken subtree in the component list.
+; One include per subject. DSOAL hangs off the patch component, so it comes before the saves,
+; which does not, and the patch keeps one unbroken subtree in the component list.
 #include "src\openphantom_patch.iss"
 #include "src\dsoal.iss"
 #include "src\complete_saves.iss"
@@ -224,7 +241,8 @@ english.DiscPageDescription=This installer contains no game data
 english.DiscPageText=You need your own disc of Star Wars Episode I: The Phantom Menace, or an image of it.%n%nPick the top folder of the disc. That is the one holding TPM.EXE and GAMEDATA.
 english.DiscPageLabel=Disc or mounted image:
 english.NotADisc=This folder is not the game disc.%n%nThese are missing:%n%n%1%nPick the top folder of the disc, not a folder inside it.
-english.TypeFull=Full installation, with the recommended patches
+english.TypeEverything=Full installation, everything
+english.TypeFull=The patched game, without the extras
 english.TypeBase=The original game only, without patches
 english.TypeCustom=Choose what to install
 english.CompPatch=The following OpenPhantom patches are installed
@@ -235,6 +253,8 @@ english.CompFramerate=Frees the frame rate from 30, with camera, animation and e
 english.CompFov=Adjustable field of view, with a slider in the video options
 english.CompHud=Display and text are no longer stretched on wide screens
 english.CompInput=New input options, for example free look and sideways movement
+english.CompController=Controller support: right stick looks, Start pauses, the triggers roll
+english.CompDialogueAnim=Stops a talking character's head animation carrying into the next line
 english.CompAudio=Audio bugfix
 english.CompSfxVolume=Fixes the audio settings not being saved correctly
 english.CompDecal=Brings back shadows, scorch marks and footprints
@@ -242,7 +262,7 @@ english.CompRenderGuard=Extra memory protection while rendering
 english.CompLargeTex=Allows larger textures (only matters for later mods)
 english.CompDevOverlay=New developer panel with the cheats
 english.CompFmvPlayer=Plays the cutscenes as MP4 and installs the tools for it
-english.CompFmvRuntime=The player needed for that. About 78 MB to download
+english.CompFmvRuntime=The player needed for that. Carried in this installer
 english.CompViewDist=Fog now hides the draw distance (nicer at a higher FOV)
 english.CompDismember=Lightsaber dismemberment (mod)
 english.CompCrashRep=Writes a crash report
@@ -250,13 +270,15 @@ english.CompDiag=Logs for fault finding. Everything off until you switch it on
 english.CompDsoal=Restores the 3D sound audio option
 english.DsoundTaken=A different dsound.dll is already in the game folder and could not be moved aside:%n%n      %1%n%nNothing was installed. Sound support needs that exact name, and this installer never deletes a file it did not put there.%n%nUsually the game is still running. Close it and start again, or go back and untick sound support.
 english.OldWrapperFailed=An earlier version of this installer put the controller wrapper here, and it could not be moved aside:%n%n      %1%n%nEverything is installed and the game runs. On most machines that old file is never loaded and nothing is wrong.%n%nUsually the game is still running. If your controller behaves oddly, close the game and rename that file yourself.
-english.CompSaves=100% saved games (one per chapter)
+english.CompSaves=Saved games, one at the start of each chapter
 english.SavesFailed=Not all of the saved games could be copied into:%n%n      %1%n%nEverything else is installed and the game runs. Your own saved games were not touched.%n%nUsually the folder is write protected or the game is still running.
 english.ReinstallCaption=The game is already installed here
 english.ReinstallDescription=What should happen to it?
 english.ReinstallText=There is already an installation in:%n%n      %1%n%nIt may hold patches from elsewhere. Those often use the same file names as ours. Then ours are installed but never run.%n%nA fresh folder is the only one where you know what is in it. Your saved games and settings are kept either way.
 english.ReinstallClean=Delete it first, then install fresh (recommended)
 english.ReinstallOver=Install over it and keep what is already there
+english.ReinstallElsewhere=Install into a different folder instead
+english.ReinstallBrowse=Choose the folder to install into
 english.RemoveFailed=The installation in %1 could not be deleted.%n%nNothing was installed and your saved games are untouched.%n%nUsually the game is still running. Close it and start again.
 english.ConfirmClean=Everything in this folder will be deleted:%n%n      %1%n%nKept and put back afterwards: your saved games, your settings in obi.ini, your converted cutscenes, and your current ini files under the ending .previous.%n%nEverything else is gone, including files other patches left there. This cannot be undone.%n%nDelete the folder and install fresh?
 english.WrapperFound=The game folder already has a different graphics wrapper:%n%n%1%nTwo wrappers cannot work side by side. They use the same file names, so the game reaches only one of them and the other is never asked. Nothing reports this. You simply get settings that do nothing.%n%nDelete the installation first and install fresh? Your saved games, settings and converted cutscenes are kept.%n%nIf you choose No, nothing changes and our graphics wrapper cannot be installed. Untick it on the next page to keep yours.
@@ -264,7 +286,7 @@ english.WrapperBlocks=Our graphics wrapper cannot be installed over the one that
 english.PreserveFailed=Your current ini files could not be backed up in:%n%n      %1%n%nNothing was installed. This version replaces them with its own and keeps yours under the ending .previous, so it stops rather than overwrite a file it could not back up first.%n%nUsually the folder is write protected or the game is still running.
 english.MoviePageCaption=Cutscene quality
 english.MoviePageDescription=How the cutscenes should be converted
-english.MoviePageText=The cutscenes are stored in a video format from 1999. They are converted once, now, into a modern one that plays smoothly today.%n%nThe original size is recommended. The films never had more detail than that, so a larger size mostly costs disc space and shows you nothing extra.%n%nConverting needs a download of about 110 MB and takes a few minutes.
+english.MoviePageText=The cutscenes are stored in a video format from 1999. They are converted once, now, into a modern one that plays smoothly today.%n%nThe original size is recommended. The films never had more detail than that, so a larger size mostly costs disc space and shows you nothing extra.%n%nConverting takes a few minutes and needs no internet connection.
 english.MovieOptOriginal=Keep the original size (recommended, smallest files)
 english.MovieOpt1080=Enlarge to 1080p
 english.MovieOpt1440=Enlarge to 1440p
@@ -285,11 +307,13 @@ english.FpsBadValue=That is not a valid frame rate.%n%nEnter a whole number from
 english.SettingsFailed=These settings could not be written into engine_fixes.ini:%n%n%1%nEverything is installed and the game runs. Every setting has a sensible default, so nothing is broken.%n%nYou can set them yourself in engine_fixes.ini next to WMAIN.EXE.
 english.ConvertPageCaption=Converting the cutscenes
 english.ConvertPageDescription=This happens once. After that the game plays the converted films.
-english.ConvertPreparing=Getting ready, and downloading the converter if it is not here yet...
+english.ConvertPreparing=Getting ready...
 english.ConvertWorking=Converting the cutscenes...
 english.ConvertDone=The cutscenes were converted.%n%n%1%n%nNothing else is needed. The game uses them from now on.
+english.ConvertKept=The cutscenes were left as they were.%n%n%1%n%nConverted films were already in the game folder, so nothing was encoded and the size you chose was not applied to them.%n%nTo redo them at that size, delete the movies_hd folder beside the game and run tools\Convert Movies.bat.
+english.ConvertNoFilms=There were no cutscenes to convert.%n%n%1%n%nNo .BIK files were found beside the game, so nothing was encoded.%n%nThe game is installed and runs. If you expected films, check that GAMEDATA\MOVIE has them.
 english.ConvertPartly=Not all cutscenes were converted.%n%n%1%n%nThe game is installed and runs. Films that were not converted play as before.%n%nYou can try again any time with tools\Convert Movies.bat in the game folder.
-english.ConvertFailed=The cutscenes could not be converted. The converter stopped with code %1.%n%nThe game is installed and runs, and all films play as before.%n%nUsually there is no internet connection for the download of the converter. You can try again any time with tools\Convert Movies.bat in the game folder.
+english.ConvertFailed=The cutscenes could not be converted. The converter stopped with code %1.%n%nThe game is installed and runs, and all films play as before.%n%nYou can try again any time with tools\Convert Movies.bat in the game folder.
 english.ConvertNoScript=The conversion tool was not found:%n%n      %1%n%nThe game is installed and runs, and the films play as before.
 english.RestoreFailed=Your saved games and settings were backed up, but not all of them could be copied back.%n%nThey are still here, and they are deleted when this window closes:%n%n      %1%n%nCopy the contents of that folder into the game folder before you close Setup.
 english.CarryOverFailed=Your saved games, settings and converted films could not all be backed up to:%n%n      %1%n%nNothing was installed and nothing was deleted. Your installation is exactly as it was.%n%nUsually the drive with the temporary folder is full. Converted films are video and need space.%n%nFree some space, or choose to install over the existing files instead.
@@ -303,7 +327,8 @@ german.DiscPageDescription=Dieses Installationsprogramm enthält keine Spieldate
 german.DiscPageText=Sie brauchen Ihre eigene CD von Star Wars Episode I: Die dunkle Bedrohung oder ein Abbild davon.%n%nWählen Sie das oberste Verzeichnis der CD. Das ist das mit TPM.EXE und GAMEDATA darin.
 german.DiscPageLabel=CD oder eingebundenes Abbild:
 german.NotADisc=Dieses Verzeichnis ist nicht die Spiel-CD.%n%nDas fehlt:%n%n%1%nWählen Sie das oberste Verzeichnis der CD, nicht eines darin.
-german.TypeFull=Vollständige Installation, mit den empfohlenen Patches
+german.TypeEverything=Vollständige Installation, alles
+german.TypeFull=Das gepatchte Spiel, ohne die Extras
 german.TypeBase=Nur das Originalspiel, ohne Patches
 german.TypeCustom=Auswählen, was installiert wird
 german.CompPatch=Folgende OpenPhantom-Patches werden installiert
@@ -314,6 +339,8 @@ german.CompFramerate=Löst die Bildrate von 30, mit angepasster Kamera, Animatio
 german.CompFov=Einstellbares Sichtfeld, mit einem Regler in den Videooptionen
 german.CompHud=Anzeige und Schrift werden auf breiten Bildschirmen nicht mehr verzerrt
 german.CompInput=Neue Eingabeoptionen, z. B. freie Sicht und Seitwärtsbewegungen
+german.CompController=Controller-Unterstützung: rechter Stick blickt, Start pausiert, die Trigger rollen
+german.CompDialogueAnim=Beendet die Sprechanimation einer Figur, sobald die nächste Zeile beginnt
 german.CompAudio=Audio-Bugfix
 german.CompSfxVolume=Bugfix für die korrekte Speicherung der Audio-Einstellungen
 german.CompDecal=Holt Schatten, Brandflecken und Fußspuren zurück
@@ -321,7 +348,7 @@ german.CompRenderGuard=Zusätzlicher Speicherschutz beim Rendern
 german.CompLargeTex=Erlaubt größere Texturen (nur für spätere Mods wichtig)
 german.CompDevOverlay=Neues Entwicklerfenster mit den Cheats
 german.CompFmvPlayer=Spielt die Zwischensequenzen als MP4 und installiert die Werkzeuge dafür
-german.CompFmvRuntime=Der Abspieler, der dafür nötig ist. Rund 78 MB Download
+german.CompFmvRuntime=Der dafür nötige Abspieler. In diesem Installationsprogramm enthalten
 german.CompViewDist=Nebel verdeckt jetzt die Draw-Distance (bei höherem FOV schöner)
 german.CompDismember=Lichtschwert-Amputation (Mod)
 german.CompCrashRep=Schreibt einen Absturzbericht
@@ -329,13 +356,15 @@ german.CompDiag=Protokolle zur Fehlersuche. Alles aus, bis Sie es einschalten
 german.CompDsoal=Wiederherstellung der 3D-Klang-Audio-Option
 german.DsoundTaken=Im Spielverzeichnis liegt bereits eine fremde dsound.dll, die nicht beiseitegelegt werden konnte:%n%n      %1%n%nEs wurde nichts installiert. Die Klang-Unterstützung braucht genau diesen Namen, und dieses Installationsprogramm löscht keine Datei, die es nicht selbst angelegt hat.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut, oder gehen Sie zurück und wählen Sie die Klang-Unterstützung ab.
 german.OldWrapperFailed=Eine frühere Fassung dieses Installationsprogramms hat den Controller-Wrapper hier abgelegt, und er konnte nicht beiseitegelegt werden:%n%n      %1%n%nAlles ist installiert und das Spiel läuft. Auf den meisten Rechnern wird diese alte Datei nie geladen und es ist nichts kaputt.%n%nMeist läuft das Spiel noch. Falls sich Ihr Controller seltsam verhält, beenden Sie das Spiel und benennen Sie die Datei selbst um.
-german.CompSaves=100% Spielstände (einer pro Kapitel)
+german.CompSaves=Spielstände, je einer zu Beginn jedes Kapitels
 german.SavesFailed=Es konnten nicht alle Spielstände kopiert werden nach:%n%n      %1%n%nAlles Übrige ist installiert und das Spiel läuft. Ihre eigenen Spielstände wurden nicht angetastet.%n%nMeist ist das Verzeichnis schreibgeschützt oder das Spiel läuft noch.
 german.ReinstallCaption=Das Spiel ist hier bereits installiert
 german.ReinstallDescription=Was soll damit geschehen?
 german.ReinstallText=In diesem Verzeichnis liegt bereits eine Installation:%n%n      %1%n%nDort können Patches aus anderer Quelle liegen. Die benutzen oft dieselben Dateinamen wie unsere. Dann werden unsere zwar installiert, laufen aber nie.%n%nNur bei einem frischen Verzeichnis wissen Sie, was darin ist. Ihre Spielstände und Einstellungen bleiben in beiden Fällen erhalten.
 german.ReinstallClean=Zuerst löschen, dann frisch installieren (empfohlen)
 german.ReinstallOver=Darüber installieren und alles Vorhandene stehen lassen
+german.ReinstallElsewhere=Stattdessen in ein anderes Verzeichnis installieren
+german.ReinstallBrowse=Wählen Sie das Verzeichnis, in das installiert werden soll
 german.RemoveFailed=Die Installation in %1 konnte nicht gelöscht werden.%n%nEs wurde nichts installiert und Ihre Spielstände sind unberührt.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut.
 german.ConfirmClean=Der gesamte Inhalt dieses Verzeichnisses wird gelöscht:%n%n      %1%n%nAufbewahrt und danach zurückgelegt: Ihre Spielstände, Ihre Einstellungen in der obi.ini, Ihre umgewandelten Zwischensequenzen und Ihre jetzigen ini-Dateien mit der Endung .previous.%n%nAlles Übrige ist weg, auch was andere Patches dort abgelegt haben. Das lässt sich nicht rückgängig machen.%n%nVerzeichnis löschen und frisch installieren?
 german.WrapperFound=Im Spielverzeichnis liegt bereits ein anderer Grafik-Wrapper:%n%n%1%nZwei Wrapper können nicht nebeneinander arbeiten. Sie benutzen dieselben Dateinamen, das Spiel erreicht also nur einen von beiden und der andere wird nie gefragt. Gemeldet wird das nirgends. Sie bekommen einfach Einstellungen, die nichts bewirken.%n%nDie Installation zuerst löschen und frisch installieren? Ihre Spielstände, Einstellungen und umgewandelten Filme bleiben erhalten.%n%nBei Nein bleibt alles wie es ist, und unser Grafik-Wrapper kann nicht installiert werden. Wählen Sie ihn auf der nächsten Seite ab, um Ihren zu behalten.
@@ -343,7 +372,7 @@ german.WrapperBlocks=Unser Grafik-Wrapper kann nicht über den vorhandenen insta
 german.PreserveFailed=Ihre jetzigen ini-Dateien konnten nicht gesichert werden in:%n%n      %1%n%nEs wurde nichts installiert. Diese Fassung ersetzt sie durch ihre eigenen und legt Ihre mit der Endung .previous daneben. Deshalb bricht sie ab, statt eine Datei zu überschreiben, die sie vorher nicht sichern konnte.%n%nMeist ist das Verzeichnis schreibgeschützt oder das Spiel läuft noch.
 german.MoviePageCaption=Qualität der Zwischensequenzen
 german.MoviePageDescription=Wie die Zwischensequenzen umgewandelt werden sollen
-german.MoviePageText=Die Zwischensequenzen liegen in einem Videoformat von 1999 vor. Sie werden jetzt einmalig in ein modernes umgewandelt, das heute flüssig läuft.%n%nEmpfohlen ist die Originalgröße. Mehr Details als diese hatten die Filme nie. Eine größere Auflösung kostet also vor allem Speicherplatz und zeigt Ihnen nichts Zusätzliches.%n%nDas Umwandeln lädt rund 110 MB und dauert einige Minuten.
+german.MoviePageText=Die Zwischensequenzen liegen in einem Videoformat von 1999 vor. Sie werden jetzt einmalig in ein modernes umgewandelt, das heute flüssig läuft.%n%nEmpfohlen ist die Originalgröße. Mehr Details als diese hatten die Filme nie. Eine größere Auflösung kostet also vor allem Speicherplatz und zeigt Ihnen nichts Zusätzliches.%n%nDas Umwandeln dauert einige Minuten und braucht keine Internetverbindung.
 german.MovieOptOriginal=Originalgröße behalten (empfohlen, kleinste Dateien)
 german.MovieOpt1080=Auf 1080p vergrößern
 german.MovieOpt1440=Auf 1440p vergrößern
@@ -364,11 +393,13 @@ german.FpsBadValue=Das ist keine gültige Bildrate.%n%nGeben Sie eine ganze Zahl
 german.SettingsFailed=Diese Einstellungen konnten nicht in die engine_fixes.ini geschrieben werden:%n%n%1%nAlles ist installiert und das Spiel läuft. Jede Einstellung hat einen sinnvollen Standardwert, es ist also nichts kaputt.%n%nSie können sie selbst in der engine_fixes.ini neben der WMAIN.EXE setzen.
 german.ConvertPageCaption=Zwischensequenzen werden umgewandelt
 german.ConvertPageDescription=Das geschieht einmalig. Danach spielt das Spiel die umgewandelten Filme.
-german.ConvertPreparing=Vorbereitung, und der Umwandler wird geladen, falls er noch fehlt...
+german.ConvertPreparing=Vorbereitung...
 german.ConvertWorking=Zwischensequenzen werden umgewandelt...
 german.ConvertDone=Die Zwischensequenzen wurden umgewandelt.%n%n%1%n%nMehr ist nicht nötig. Das Spiel verwendet sie ab sofort.
+german.ConvertKept=Die Zwischensequenzen wurden unverändert gelassen.%n%n%1%n%nIm Spielverzeichnis lagen bereits umgewandelte Filme, es wurde also nichts kodiert und die gewählte Größe wurde nicht auf sie angewendet.%n%nUm sie in dieser Größe neu zu erzeugen, löschen Sie den Ordner movies_hd neben dem Spiel und führen Sie tools\Convert Movies.bat aus.
+german.ConvertNoFilms=Es gab keine Zwischensequenzen zum Umwandeln.%n%n%1%n%nNeben dem Spiel wurden keine .BIK-Dateien gefunden, es wurde also nichts kodiert.%n%nDas Spiel ist installiert und läuft. Falls Sie Filme erwartet haben, prüfen Sie, ob GAMEDATA\MOVIE sie enthält.
 german.ConvertPartly=Es wurden nicht alle Zwischensequenzen umgewandelt.%n%n%1%n%nDas Spiel ist installiert und läuft. Nicht umgewandelte Filme laufen wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Movies.bat im Spielverzeichnis.
-german.ConvertFailed=Die Zwischensequenzen konnten nicht umgewandelt werden. Der Umwandler endete mit Code %1.%n%nDas Spiel ist installiert und läuft, alle Filme laufen wie bisher.%n%nMeist fehlt die Internetverbindung für das Laden des Umwandlers. Sie können es jederzeit erneut versuchen mit tools\Convert Movies.bat im Spielverzeichnis.
+german.ConvertFailed=Die Zwischensequenzen konnten nicht umgewandelt werden. Der Umwandler endete mit Code %1.%n%nDas Spiel ist installiert und läuft, alle Filme laufen wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Movies.bat im Spielverzeichnis.
 german.ConvertNoScript=Das Umwandlungswerkzeug wurde nicht gefunden:%n%n      %1%n%nDas Spiel ist installiert und läuft, die Filme laufen wie bisher.
 german.RestoreFailed=Ihre Spielstände und Einstellungen wurden gesichert, konnten aber nicht vollständig zurückkopiert werden.%n%nSie liegen noch hier und werden gelöscht, sobald dieses Fenster geschlossen wird:%n%n      %1%n%nKopieren Sie den Inhalt dieses Verzeichnisses ins Spielverzeichnis, bevor Sie die Installation beenden.
 german.CarryOverFailed=Ihre Spielstände, Einstellungen und umgewandelten Filme konnten nicht vollständig gesichert werden nach:%n%n      %1%n%nEs wurde nichts installiert und nichts gelöscht. Ihre Installation ist genau wie vorher.%n%nMeist ist das Laufwerk mit dem temporären Verzeichnis voll. Umgewandelte Filme sind Videodateien und brauchen Platz.%n%nSchaffen Sie Platz, oder installieren Sie stattdessen über die vorhandenen Dateien.
@@ -389,6 +420,9 @@ function GetDriveType(lpRootPathName: String): Cardinal;
   to write to those slots. Same W suffix, same reason. }
 function SetFileAttributes(lpFileName: String; dwFileAttributes: Cardinal): Boolean;
   external 'SetFileAttributesW@kernel32.dll stdcall';
+
+function SetEnvironmentVariable(lpName, lpValue: String): Boolean;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
 const
   DRIVE_REMOVABLE = 2;
@@ -538,6 +572,7 @@ begin
     False);
   ReinstallPage.Add(ExpandConstant('{cm:ReinstallClean}'));
   ReinstallPage.Add(ExpandConstant('{cm:ReinstallOver}'));
+  ReinstallPage.Add(ExpandConstant('{cm:ReinstallElsewhere}'));
   ReinstallPage.SelectedValueIndex := 0;
 
   { The original size is preselected because upscaling a 1999 Bink source adds no detail and spends
@@ -665,11 +700,11 @@ end;
     ddraw.dll     dxwrapper       the graphics wrapper
     dsound.dll    DSOAL           the audio wrapper
 
-  winmm.dll is deliberately not among them. A controller wrapper (Xidi) used to be installed under
-  that name; this installer no longer installs a controller wrapper at all (controller_input.dll,
-  part of the patch, reads a pad directly and needs no wrapper). RetireOldControllerWrapper below
-  still moves aside a leftover from a much older release of this installer, which really did use
-  that name, checked by its own literal marker string rather than through SlotMarker.
+  winmm.dll is deliberately not among them. A controller wrapper used to be installed under that
+  name; this installer no longer installs a controller wrapper at all, because controller_input.dll,
+  part of the patch, reads a pad directly and needs no wrapper. RetireOldControllerWrapper below
+  still moves aside what a much older release left under that name, checked by its own literal
+  marker string rather than through SlotMarker.
 
   Do not turn this round into a search for other projects' names: our own dxwrapper.dll contains the
   strings dgVoodoo and DDrawCompat because it recognises them at run time.
@@ -804,6 +839,35 @@ begin
     MsgBox(ExpandConstant('{cm:FpsBadValue}'), mbError, MB_OK);
 end;
 
+{ The third option. Picks a new target folder and writes it back into the directory page's edit,
+  which is where the app constant is read from for the rest of the wizard, so nothing else has to
+  know the folder changed.
+
+  Cancelling the browser leaves the page up rather than falling through to one of the other two: the
+  player asked to install somewhere else and has not said where yet.
+
+  A folder that also holds a game puts the same question again about that folder, which is why the
+  page is left up and the caption refreshed. Otherwise the choice is reset to the recommended one,
+  so a later pass over this page does not start on an option that has already been acted on. }
+function ChooseDifferentFolder: Boolean;
+var
+  Dir: String;
+begin
+  Dir := ExpandConstant('{app}');
+  Result := BrowseForFolder(ExpandConstant('{cm:ReinstallBrowse}'), Dir, True);
+  if not Result then
+    Exit;
+
+  WizardForm.DirEdit.Text := RemoveBackslashUnlessRoot(Dir);
+
+  if GameIsInstalledAt(Dir) then begin
+    ReinstallPage.SubCaptionLabel.Caption := UserMessage('ReinstallText', Dir);
+    Result := False;
+  end
+  else
+    ReinstallPage.SelectedValueIndex := 0;
+end;
+
 { Leaving the reinstall page. The foreign wrapper is raised here because this is where the reinstall
   decision is made, so answering the question changes it. Only asked of somebody installing over the
   existing files; a clean reinstall removes the stranger anyway.
@@ -815,6 +879,12 @@ var
   Foreign: String;
 begin
   Result := True;
+
+  if ReinstallPage.SelectedValueIndex = 2 then begin
+    Result := ChooseDifferentFolder;
+    Exit;
+  end;
+
   if ReinstallPage.SelectedValueIndex = 0 then
     Exit;
 
@@ -1120,9 +1190,34 @@ end;
 
   The script is the one in the patch's unpacked folder, not the copy just installed: the game folder
   is writable by ordinary users on purpose, and this runs with Setup's rights. }
+{ One field out of the converter's summary line, which is "converted=n skipped=n failed=n".
+  Returns -1 when the field is not there, so a summary in some future shape reads as unknown rather
+  than as zero. }
+function SummaryCount(const Summary, Field: String): Integer;
+var
+  P: Integer;
+  Digits: String;
+begin
+  Result := -1;
+  P := Pos(Field + '=', Summary);
+  if P = 0 then
+    Exit;
+
+  P := P + Length(Field) + 1;
+  Digits := '';
+  while (P <= Length(Summary)) and (Summary[P] >= '0') and (Summary[P] <= '9') do begin
+    Digits := Digits + Summary[P];
+    P := P + 1;
+  end;
+
+  if Digits <> '' then
+    Result := StrToIntDef(Digits, -1);
+end;
+
 procedure ConvertMovies;
 var
   Height, ResultCode: Integer;
+  Converted, Skipped: Integer;
   Script, Params: String;
 begin
   Height := ChosenMovieHeight;
@@ -1138,6 +1233,16 @@ begin
   MovieTotal := CountMovies(ExpandConstant('{app}\GAMEDATA\MOVIE'));
   MovieDone := 0;
   MovieResult := '';
+
+  { convert_movies.ps1 looks for FFmpeg in its own cache, then on PATH, then downloads one. The
+    copy installed under mods\fmv is put on PATH here so it is found at the second step and the
+    third never happens. This changes the environment of this process only, which the converter
+    inherits; nothing is written to the machine's environment.
+
+    "Convert Movies.bat" does the same for itself, so a conversion the player starts later finds it
+    too. Both are needed: this one runs the script directly and never goes through the batch file. }
+  SetEnvironmentVariable('PATH',
+    ExpandConstant('{app}\mods\fmv') + ';' + GetEnv('PATH'));
 
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
             ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
@@ -1158,8 +1263,27 @@ begin
   { The summary line is what the message reports, because "it stopped" and "it converted eleven of
     them" are different things to be told. An exit code with no summary means it never got as far as
     converting anything, which is its own answer. }
-  if (ResultCode = 0) and (MovieResult <> '') then
-    MsgBox(UserMessage('ConvertDone', MovieResult), mbInformation, MB_OK)
+  if (ResultCode = 0) and (MovieResult <> '') then begin
+    { A successful run can still have encoded nothing, in two different ways, and the difference is
+      the whole of what the player needs to know. The converter reports success for all of them, so
+      testing the exit code alone said "the cutscenes were converted" whether it did eleven films
+      or none.
+
+      Either count reads as -1 when the summary line is not in the shape expected. That is not
+      evidence of nothing having happened, so it falls to the general message rather than to a
+      claim about films that were or were not found. }
+    Converted := SummaryCount(MovieResult, 'converted');
+    Skipped   := SummaryCount(MovieResult, 'skipped');
+
+    if (Converted = 0) and (Skipped > 0) then
+      { Every film already had an mp4 beside it, so the size just chosen was applied to none. }
+      MsgBox(UserMessage('ConvertKept', MovieResult), mbInformation, MB_OK)
+    else if (Converted = 0) and (Skipped = 0) then
+      { Nothing encoded and nothing skipped: there were no .BIK files there to begin with. }
+      MsgBox(UserMessage('ConvertNoFilms', MovieResult), mbInformation, MB_OK)
+    else
+      MsgBox(UserMessage('ConvertDone', MovieResult), mbInformation, MB_OK)
+  end
   else if MovieResult <> '' then
     MsgBox(UserMessage('ConvertPartly', MovieResult), mbError, MB_OK)
   else
@@ -1169,7 +1293,7 @@ end;
 { Everything here runs after the last file is written, so nothing a row installs can overwrite it.
   The carry-over goes back first, so movies converted before an earlier installation are in place
   when the converter looks and it skips them instead of producing them again. }
-{ Copies the downloaded saves into Save\.
+{ Copies the bundled saves into Save\.
 
   After the carry-over, which is why this is not a file row: rows are written first and the restore
   would copy the player's own folder straight over them.
@@ -1177,9 +1301,9 @@ end;
   Collisions are overwritten and everything else is left alone. The game numbers its slots with two
   digits, so these eleven occupy 1 to 11.
 
-  The archive's saves carry the read-only attribute, and a slot the game cannot write back to looks
-  like a broken game, so that one bit is taken off. The advertising shortcut beside them is deleted
-  rather than installed. }
+  The read-only bit is taken off everything in Save\ afterwards. Nothing here sets it, but a folder
+  restored from a backup or off a CD can carry it, and a slot the game cannot write back to looks
+  like a broken game. }
 procedure InstallCompleteSaves;
 var
   Rec: TFindRec;
@@ -1188,8 +1312,6 @@ var
 begin
   if not WizardIsComponentSelected('complete_saves') then
     Exit;
-
-  DeleteFile(ExpandConstant('{#SavesTmp}\SaveGame.Pro.url'));
 
   SaveDir := AddBackslash(ExpandConstant('{app}\Save'));
   Copied := CopyFilesInFolder(ExpandConstant('{#SavesTmp}\Save'),
@@ -1383,9 +1505,9 @@ begin
       Exit;
   end;
 
-  { This installer no longer installs any controller wrapper at all, so there is no slot of its own
-    needing room. What a much older release left under the name winmm.dll still has to go, though,
-    the same as it always did: the name is not ours and never answers to a controller any more. }
+  { This installer no longer installs a controller wrapper at all, so there is no slot of its own
+    needing room. What a much older release left under the name winmm.dll still has to go, the same
+    as it always did: the name is not ours and never answers to a controller any more. }
   RetireOldControllerWrapper;
 
   if WizardIsComponentSelected('patch\dsoal') then begin

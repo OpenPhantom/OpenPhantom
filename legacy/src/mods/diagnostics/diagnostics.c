@@ -9,6 +9,7 @@
 #include "diag_frame.h"
 #include "diag_log.h"
 #include "diag_present.h"
+#include "diag_characters.h"
 #include "diag_projectiles.h"
 #include "diag_world.h"
 
@@ -21,6 +22,10 @@
 
 #define DIAGNOSTICS_SECTION      "diagnostics"
 #define MIN_CENSUS_MILLISECONDS  100
+
+/* World units. Wide enough to take in the character you walked up to and the ones beside them,
+   narrow enough that a busy street does not fill the report. */
+#define DEFAULT_CHARACTERS_RADIUS 12
 
 static diagnostics_config_t diagnostics_state;
 static bool                 diagnostics_installed;
@@ -71,6 +76,14 @@ static void load_config(void)
     diagnostics_state.present  = read_level("Present");
     diagnostics_state.projectiles = ini_read_bool(DIAGNOSTICS_SECTION, "Projectiles", false) ? 1
                                                                                               : 0;
+    diagnostics_state.characters = read_level_max("Characters", 2);
+    diagnostics_state.characters_radius =
+        ini_read_int(DIAGNOSTICS_SECTION, "CharactersRadius", DEFAULT_CHARACTERS_RADIUS);
+    (void)ini_read_string(DIAGNOSTICS_SECTION, "CharacterWatch", "",
+                          diagnostics_state.characters_watch,
+                          sizeof(diagnostics_state.characters_watch));
+    diagnostics_state.characters_watch_velocity =
+        ini_read_bool(DIAGNOSTICS_SECTION, "CharacterWatchVelocity", false) ? 1 : 0;
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
@@ -81,6 +94,11 @@ static void load_config(void)
     diagnostics_state.also_to_main_log =
         ini_read_bool(DIAGNOSTICS_SECTION, "AlsoToMainLog", false);
 
+    /* A radius of zero would report nothing while the ini plainly asks for a census, which is the
+       silent-off shape this file's own comment below warns about. Clamp rather than accept it. */
+    if (diagnostics_state.characters_radius < 1) {
+        diagnostics_state.characters_radius = DEFAULT_CHARACTERS_RADIUS;
+    }
     if (diagnostics_state.max_lines_per_second < 0) {
         diagnostics_state.max_lines_per_second = 0;
     }
@@ -109,7 +127,7 @@ static bool any_area_enabled(void)
             diagnostics_state.level    != 0 || diagnostics_state.player   != 0 ||
             diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
             diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
-            diagnostics_state.projectiles != 0);
+            diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0);
 }
 
 void diagnostics_install(void)
@@ -158,6 +176,10 @@ void diagnostics_install(void)
                                     diagnostics_state.frame_hitch_percent);
     observers += diag_present_install(diagnostics_state.present);
     observers += diag_projectiles_install(diagnostics_state.projectiles);
+    observers += diag_characters_install(diagnostics_state.characters,
+                                         diagnostics_state.characters_radius,
+                                         diagnostics_state.characters_watch,
+                                         diagnostics_state.characters_watch_velocity);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

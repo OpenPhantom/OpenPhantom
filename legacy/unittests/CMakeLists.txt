@@ -165,3 +165,13 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/cheats_openphantom.c
     dev_overlay/cheats_no_fog.c
 )
+
+# The character census reads a live process, so what can be tested without the game is the
+# arithmetic underneath it: the pool slot walk, the radius test, the vertical classification and
+# the fixed width name field. character_scan.c holds exactly that and nothing else.
+add_unit_test(character_scan diagnostics diagnostics/character_scan.c)
+
+# The debug register bit packing. Getting a condition or a length wrong does not fail loudly, it
+# arms a watch that never fires, which reads as "nothing writes this field". Worth pinning to the
+# values the manual specifies.
+add_unit_test(debug_register diagnostics diagnostics/debug_register.c)

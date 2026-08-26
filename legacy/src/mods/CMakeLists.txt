@@ -159,6 +159,10 @@ add_engine_fix(diagnostics
     diag_frame.c
     diag_present.c
     diag_projectiles.c
+    diag_characters.c
+    character_scan.c
+    debug_register.c
+    diag_write_watch.c
 )
 target_link_libraries(diagnostics PRIVATE winmm psapi pdh)
 

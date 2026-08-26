@@ -17,7 +17,12 @@ static const uint8_t SIG_RENDER_FRAME_END[] = {
 };
 #define RENDER_FRAME_END_PROLOGUE_SIZE 9u
 
-#define MAX_FRAME_CALLBACKS 4
+/* Every DLL links its own copy of this library, so this is a per DLL ceiling and each slot costs
+ * one pointer. It was 4, which the diagnostics DLL reached exactly: the frame summary, the present
+ * timing, the projectile census and the world censuses. A fifth observer there would have been
+ * refused, and the refusal is a log line rather than a crash, which is the kind of failure that
+ * gets read as "the feature does nothing" instead of "the feature never installed". */
+#define MAX_FRAME_CALLBACKS 8
 
 typedef void (__cdecl *frame_end_fn_t)(void);
 

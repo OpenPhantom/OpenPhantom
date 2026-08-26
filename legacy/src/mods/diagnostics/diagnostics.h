@@ -47,6 +47,13 @@ typedef struct diagnostics_config {
      * few once the count passes a threshold. See diag_projectiles.c's own header. */
     int  projectiles;         /* 1 = on, no further levels                                      */
 
+    /* The engine's own character pool, walked read only: who is standing near the player, what the
+     * engine calls them, and whether they are gaining or losing height. See diag_characters.c. */
+    int  characters;          /* 1 = the ones near the player, 2 = every live one               */
+    int  characters_radius;   /* world units around the player that level 1 reports             */
+    char characters_watch[16];/* a character name: put a hardware write watch on it              */
+    int  characters_watch_velocity; /* 1 = watch its velocity Z, 0 = its position Z             */
+
     int  audio_census_ms;     /* >0: list the occupied sound channels every N ms                */
     int  max_lines_per_second;
     bool also_to_main_log;

@@ -111,6 +111,15 @@ carries no section for a component this project no longer ships. FFmpeg is besid
 the one download that outlived installation is gone as well. This installer no longer offers a
 controller component at all, so there is nothing left to say about controller support here.
 
+**Verified with the network disconnected**, which is the claim this version exists to support and
+the only way to make it properly. A second full installation was run with no network at all, on a
+different target folder, and completed without pausing for anything. Its folder was read back the
+same way: twenty DLLs, all twenty-one patch files hash equal to the build, no section for a removed
+component, and libVLC, FFmpeg, DSOAL, dxwrapper and the tools all in place. The game was started
+from it afterwards and its own log shows all twenty DLLs loading and arming. One site does not
+resolve, `view_distance_fix`'s `thing_draw`, and that is a pre-existing fault of the patch on every
+install rather than anything the installer did.
+
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation
 before a folder is deleted and the carrying out and back that goes with it, and retiring a

@@ -36,8 +36,8 @@ hosting.
 Three tiers. Part of the patch and not unpickable: the graphics wrapper, the two crash repairs, the
 crash reporter and the two audio repairs. Recommended, so a full installation takes them: resolution,
 frame rate, field of view, HUD scaling, decals and view distance. Offered but not ticked: large
-textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics, and
-a set of finished saved games.
+textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics, a
+set of finished saved games, and a starting controller layout and display mode.
 
 What each fix does is in [`legacy/README.md`](../legacy/README.md), and each has a `README.md` beside
 its own source. This directory does not repeat those.
@@ -53,8 +53,8 @@ ISCC openphantom_installer.iss
 `-A Win32` is not optional; the game is 32 bit and so is everything this project ships. The result is
 `output/OpenPhantom_Installer.exe`, and no build output is tracked here.
 
-Built with Inno Setup 6.6. The floor is whichever version first offered the `download` and
-`extractarchive` file flags together with the `ArchiveExtraction` directive.
+Built with Inno Setup 6.6. Nothing here needs a recent feature any more now that the download
+and archive-extraction flags are gone, but that is the version it is compiled and tested with.
 
 ## Structure
 
@@ -74,12 +74,13 @@ src/
   openphantom_patch.iss    the patch and the libVLC runtime
   dsoal.iss                the audio wrapper
   complete_saves.iss       the optional saved games
+  game_defaults.iss        the optional starting settings written into obi.ini
   is3_extract/             the extractor, a small C project of its own
 output/                    the built installer, ignored
 ```
 
-One subject per file, so a new patch release touches one of them and a new download touches one of
-them.
+One subject per file, so a new patch release touches one of them and a new carried component
+touches one of them.
 
 ## Updating a carried component
 
@@ -119,6 +120,10 @@ component, and libVLC, FFmpeg, DSOAL, dxwrapper and the tools all in place. The 
 from it afterwards and its own log shows all twenty DLLs loading and arming. One site does not
 resolve, `view_distance_fix`'s `thing_draw`, and that is a pre-existing fault of the patch on every
 install rather than anything the installer did.
+
+**The starting settings component has not been installed with.** It compiles, and the layout it
+writes was read off a working installation rather than invented, but no installation has yet been
+run with it ticked, so neither the writes nor the backup beside them have been watched happening.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

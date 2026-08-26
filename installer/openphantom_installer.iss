@@ -234,6 +234,7 @@ Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{
 #include "src\openphantom_patch.iss"
 #include "src\dsoal.iss"
 #include "src\complete_saves.iss"
+#include "src\game_defaults.iss"
 
 [CustomMessages]
 english.DiscPageCaption=Find your game disc
@@ -271,6 +272,7 @@ english.CompDsoal=Restores the 3D sound audio option
 english.DsoundTaken=A different dsound.dll is already in the game folder and could not be moved aside:%n%n      %1%n%nNothing was installed. Sound support needs that exact name, and this installer never deletes a file it did not put there.%n%nUsually the game is still running. Close it and start again, or go back and untick sound support.
 english.OldWrapperFailed=An earlier version of this installer put the controller wrapper here, and it could not be moved aside:%n%n      %1%n%nEverything is installed and the game runs. On most machines that old file is never loaded and nothing is wrong.%n%nUsually the game is still running. If your controller behaves oddly, close the game and rename that file yourself.
 english.CompSaves=Saved games, one at the start of each chapter
+english.CompGameDefaults=Starting settings: a PlayStation-style controller layout and 1920x1080. Overwrites your own bindings if you have any
 english.SavesFailed=Not all of the saved games could be copied into:%n%n      %1%n%nEverything else is installed and the game runs. Your own saved games were not touched.%n%nUsually the folder is write protected or the game is still running.
 english.ReinstallCaption=The game is already installed here
 english.ReinstallDescription=What should happen to it?
@@ -357,6 +359,7 @@ german.CompDsoal=Wiederherstellung der 3D-Klang-Audio-Option
 german.DsoundTaken=Im Spielverzeichnis liegt bereits eine fremde dsound.dll, die nicht beiseitegelegt werden konnte:%n%n      %1%n%nEs wurde nichts installiert. Die Klang-Unterstützung braucht genau diesen Namen, und dieses Installationsprogramm löscht keine Datei, die es nicht selbst angelegt hat.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut, oder gehen Sie zurück und wählen Sie die Klang-Unterstützung ab.
 german.OldWrapperFailed=Eine frühere Fassung dieses Installationsprogramms hat den Controller-Wrapper hier abgelegt, und er konnte nicht beiseitegelegt werden:%n%n      %1%n%nAlles ist installiert und das Spiel läuft. Auf den meisten Rechnern wird diese alte Datei nie geladen und es ist nichts kaputt.%n%nMeist läuft das Spiel noch. Falls sich Ihr Controller seltsam verhält, beenden Sie das Spiel und benennen Sie die Datei selbst um.
 german.CompSaves=Spielstände, je einer zu Beginn jedes Kapitels
+german.CompGameDefaults=Startwerte: eine Controller-Belegung im PlayStation-Stil und 1920x1080. Überschreibt vorhandene eigene Belegungen
 german.SavesFailed=Es konnten nicht alle Spielstände kopiert werden nach:%n%n      %1%n%nAlles Übrige ist installiert und das Spiel läuft. Ihre eigenen Spielstände wurden nicht angetastet.%n%nMeist ist das Verzeichnis schreibgeschützt oder das Spiel läuft noch.
 german.ReinstallCaption=Das Spiel ist hier bereits installiert
 german.ReinstallDescription=Was soll damit geschehen?
@@ -1390,6 +1393,98 @@ begin
     MsgBox(UserMessage('SettingsFailed', '[options] Sound 3D Driver' + #13#10), mbError, MB_OK);
 end;
 
+{ A controller layout and a display mode, written into the player's own obi.ini one key at a time.
+
+  Sixty writes rather than a file copy, for the reason the sound provider above gives: obi.ini holds
+  the player's gamma, their sound choice and anything else they have set, so it is merged and never
+  replaced. The previous file is copied beside itself first, the same as there.
+
+  The bindings are the PlayStation release's arrangement, read off a working installation rather
+  than derived: the engine stores each one as a packed integer whose meaning is not documented
+  anywhere in this project, so they are carried as the numbers they are. JOYENABLE is among them
+  because a layout with the pad switched off is the state this component exists to save people from.
+
+  1920x1080 replaces the engine's own 640x480, which is what a fresh obi.ini carries. It is a
+  starting value and not a limit: enhanced_resolution offers the full mode list, and the video
+  options screen still writes whatever the player picks.
+
+  Values are written even where the key already exists, which is the whole point when somebody ticks
+  this, and is why the caption says so in both languages. }
+{ One semicolon-separated string rather than an array, because Inno's Pascal Script has no typed
+  constants and cannot initialise an array where it is declared. Broken on key boundaries so a line
+  never splits a binding in half. }
+const
+  GameDefaultBindings =
+    'X0JOY=258;X1JOY=513;Y0JOY=772;Y1JOY=1027;' +
+    'Z0JOY=261;Z1JOY=518;R0JOY=775;R1JOY=2560;' +
+    'R2JOY=1032;U0JOY=5129;U1JOY=5130;P0JOY=781;' +
+    'P1JOY=1038;P2JOY=4623;K0JOY=1553;K1JOY=2322;' +
+    'K2JOY=1299;K3JOY=1812;K4JOY=2069;K8JOY=2072;' +
+    'K9JOY=3097;K10JOY=1306;K11JOY=1307;K12JOY=3100;' +
+    'K13JOY=3357;K14JOY=3614;K15JOY=3871;K16JOY=4128;' +
+    'K17JOY=4385;K18JOY=1314;K19JOY=1315;K20JOY=1316;' +
+    'K21JOY=293;K22JOY=2048;K23JOY=550;K24JOY=2048;' +
+    'K25JOY=807;K26JOY=2560;K27JOY=1064;K28JOY=2560;' +
+    'K29JOY=297;K30JOY=1280;K31JOY=554;K32JOY=1280;' +
+    'K33JOY=811;K34JOY=1280;K35JOY=1068;K36JOY=1280;' +
+    'K37JOY=2605;K38JOY=2606;K39JOY=2607;K40JOY=2608;' +
+    'K41JOY=65535;K42JOY=65535;JOYENABLE=1;R3JOY=2560;' +
+    'P3JOY=4880;K5JOY=2582;K6JOY=2071;K7JOY=256';
+
+procedure ApplyGameDefaults;
+var
+  Ini, Rest, Entry, Failed: String;
+  Backed, Split, Written: Integer;
+  Ok: Boolean;
+begin
+  if not WizardIsComponentSelected('game_defaults') then
+    Exit;
+
+  Ini := ExpandConstant('{app}\obi.ini');
+  Backed := 0;
+  Ok := True;
+  CopyOptionalFile(Ini, ExpandConstant('{app}\obi.ini.previous'), Backed, Ok);
+
+  Failed := '';
+  Written := 0;
+  Rest := GameDefaultBindings + ';';
+  while Rest <> '' do begin
+    Split := Pos(';', Rest);
+    if Split = 0 then begin
+      Entry := Rest;
+      Rest := '';
+    end else begin
+      Entry := Copy(Rest, 1, Split - 1);
+      Rest := Copy(Rest, Split + 1, Length(Rest) - Split);
+    end;
+
+    Split := Pos('=', Entry);
+    { Every entry is written as KEY=VALUE above, so a missing separator is an edit to that table
+      rather than anything the machine can produce. Skipped rather than guessed at. }
+    if Split > 1 then begin
+      if SetIniString('options', Copy(Entry, 1, Split - 1),
+                      Copy(Entry, Split + 1, Length(Entry) - Split), Ini) then
+        Written := Written + 1
+      else
+        Failed := Failed + '[options] ' + Copy(Entry, 1, Split - 1) + #13#10;
+    end;
+  end;
+
+  if not SetIniString('options', 'screen_width', '1920', Ini) then
+    Failed := Failed + '[options] screen_width' + #13#10;
+  if not SetIniString('options', 'screen_height', '1080', Ini) then
+    Failed := Failed + '[options] screen_height' + #13#10;
+
+  { A count rather than a decoration. Every write above reports its own failure, but a table that
+    parsed into nothing would report nothing at all and leave this component looking as though it
+    had worked, which is the one way this can fail silently. }
+  if (Written = 0) and (Failed = '') then
+    Failed := 'the controller layout table parsed into no entries' + #13#10;
+
+  if Failed <> '' then
+    MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
@@ -1400,6 +1495,7 @@ begin
 
   ApplyChosenSettings;
   ApplySoundProvider;
+  ApplyGameDefaults;
   InstallCompleteSaves;
   ConvertMovies;
 end;

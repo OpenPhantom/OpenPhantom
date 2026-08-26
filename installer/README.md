@@ -97,16 +97,19 @@ plugins.
 
 ## Testing status
 
-Checked without installing anything: the script compiles with no warnings, every component named by a
-file row is declared, both languages carry every message, and the pinned patch URL answers and hashes
-to the pinned value. The extractor is verified against a retail pressing, where `BIG.Z` produces a
-`big.lab` of 120,859,357 bytes, byte identical to a known good copy.
+Checked without installing anything: the script compiles with no warnings under Inno Setup 6.6.0,
+every component named by a file row is declared, every file row has a file and every file in
+`dist/patch/mods` has a row, and both languages carry every message. The extractor is verified
+against a retail pressing, where `BIG.Z` produces a `big.lab` of 120,859,357 bytes, byte identical
+to a known good copy.
 
-**Installed and played once.** A full installation has been run on a machine and the game started
-from it. What that run covered, read off the folder it left behind: the game came off the disc, the
-configuration files were replaced with the previous ones kept beside them, the saved games went in,
-and the sound provider was written into `obi.ini`. This installer no longer offers a controller
-component at all, so there is nothing left to say about controller support here.
+**Installed from, in this offline form.** A full installation has been run and the folder it left
+behind was read back rather than taken on trust: all 21 patch files hash equal to the build they
+were carried from, `mods\` holds exactly the twenty DLLs that build produces, and `engine_fixes.ini`
+carries no section for a component this project no longer ships. FFmpeg is beside libVLC in
+`mods\fmv`, which is the part that used to be fetched the first time the cutscene converter ran, so
+the one download that outlived installation is gone as well. This installer no longer offers a
+controller component at all, so there is nothing left to say about controller support here.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

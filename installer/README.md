@@ -52,14 +52,26 @@ ISCC openphantom_installer.iss
 `-A Win32` is not optional; the game is 32 bit and so is everything this project ships. The result is
 `output/OpenPhantom_Installer.exe`, and no build output is tracked here.
 
-Built with Inno Setup 7. The floor is whichever version first offered the `download` and
+Built with Inno Setup 6.6. The floor is whichever version first offered the `download` and
 `extractarchive` file flags together with the `ArchiveExtraction` directive.
 
 ## Structure
 
 ```
 openphantom_installer.iss  the entry point: the disc, the registry, the shortcuts, the wizard
-dist/                      configuration this installer ships, currently Xidi.ini
+dist/                      everything the installer carries; nothing is downloaded at install time
+  patch/                   the OpenPhantom patch, unpacked from its release archive
+  dxwrapper/               DirectDraw-to-Direct3D translation (ini edited, see the notices)
+  vlc/                     33 files of libVLC, for the cutscene player
+  ffmpeg/                  FFmpeg, for converting the cutscenes; installed beside libVLC
+  dsoal/                   DSOAL and OpenAL Soft, for 3D sound
+  xidi/                    the controller wrapper
+  saves/                   a save at the start of each chapter
+  vc_redist.x86.exe        Microsoft's runtime, run only when it is missing
+  Xidi.ini                 configuration this project wrote
+source/                    corresponding source for the GPL and LGPL parts of dist/, pinned to
+                           the revisions they were built from; ships with every release
+THIRD-PARTY-NOTICES.md     what is in dist/, under what licence, and what a release must ship
 src/
   openphantom_patch.iss    the patch and the libVLC runtime
   xidi.iss                 the controller wrapper

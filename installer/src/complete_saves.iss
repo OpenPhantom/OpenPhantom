@@ -1,26 +1,27 @@
-; An optional set of saved games, one per chapter, downloaded on request.
+; An optional set of saved games, one at the start of each chapter, compiled into Setup.
 
-; The page hands the URL out with a &refresh= token that changes on every page load. Without the
-; token the same bytes come back, so the plain form is what is pinned.
+; These were recorded for this project rather than taken from a third party, so there is no URL, no
+; hash and no download step: the files sit in dist\saves and Setup carries them. That is the whole
+; reason they are here. The set that used to be downloaded came from an aggregator site that
+; published it without making it, so nothing in the chain granted a licence and none could be named
+; in the release notes the way every other component's is.
 ;
-; There is no upstream checksum for this one: the site publishes the file, it did not build it. The
-; hash below was measured from the download itself, so re-measure it when bumping rather than
-; carrying a number forward.
-#define SavesUrl           "https://savegame.pro/download/pc-star-wars-episode-i-the-phantom-menace-savegame/?wpdmdl=9106"
-#define SavesSha256        "c352c097fcd153cce08a24221ccf7d6b2c34abaa5ea2772f259e1c9058abd851"
+; They cost 188 KB in the compiled installer, against 857 KB on disk, because [Setup] already
+; compresses everything with lzma2. That is small enough that carrying them beats a download that
+; can fail: the old one went through four redirects onto a hostname minted per request, and Inno's
+; downloader could not always follow it.
 
-; Unpacked total including the advertising shortcut, which Setup unpacks even though nothing
-; installs it.
-#define SavesUnpackedSize  866915
+; Slot N holds the START of level N+1, so the set is a chapter select and not a completed game.
+; ZANZI11 is the Darth Maul duel. The name the game shows in its load menu is inside each save,
+; 32 bytes at offset 0x20, not derived from the filename.
 #define SavesTmp           "{tmp}\complete_saves"
 
 [Components]
-Name: "complete_saves"; Description: "{cm:CompSaves}"; Types: custom
+Name: "complete_saves"; Description: "{cm:CompSaves}"; Types: everything custom
 
 [Files]
-; Download only. The copy into Save\ runs from [Code] after the carry-over has put the player's own
-; saves back, otherwise the restore would overwrite it. See InstallCompleteSaves.
-Source: "{#SavesUrl}"; DestDir: "{#SavesTmp}"; DestName: "complete_saves.7z"; \
-    {#HashParam(SavesSha256)}ExternalSize: {#SavesUnpackedSize}; \
-    Components: complete_saves; \
-    Flags: external download extractarchive recursesubdirs ignoreversion
+; Laid down in {tmp} rather than straight into Save\. The copy into Save\ runs from [Code] after the
+; carry-over has put the player's own saves back, otherwise the restore would overwrite it. See
+; InstallCompleteSaves.
+Source: "dist\saves\*.SAV"; DestDir: "{#SavesTmp}\Save"; \
+    Components: complete_saves; Flags: ignoreversion

@@ -87,7 +87,12 @@ none of it.
 MIT. The source here is free to use, modify and distribute under those terms, provided the licence
 notice travels with it. See [LICENSE](LICENSE).
 
-The licence covers this source code only. It grants nothing regarding the original game, its
+The licence covers this source code only, and not the third-party binaries the installer carries
+in `installer/dist/`, which are each under their own terms and include GPL and proprietary
+components. See [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md), which also
+records what a release has to ship alongside the installer to satisfy them.
+
+It grants nothing regarding the original game, its
 assets, or anything else its rights holders own. Release archives may also contain third party
 components under their own licences, which are named in the release notes.
 

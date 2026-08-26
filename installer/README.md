@@ -35,7 +35,7 @@ hosting.
 
 Three tiers. Part of the patch and not unpickable: the graphics wrapper, the two crash repairs, the
 crash reporter and the two audio repairs. Recommended, so a full installation takes them: resolution,
-frame rate, field of view, HUD scaling, decals and view distance. Offered but not ticked: large
+frame rate, field of view, HUD scaling, decals, view distance and the ground clip repair. Offered but not ticked: large
 textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics, a
 set of finished saved games, and a starting controller layout and display mode.
 
@@ -134,6 +134,12 @@ anyway.
 
 The resolution is a starting value and not a limit, which the same run demonstrated by accident: the
 player changed it in the game's own video options afterwards and the new mode stuck.
+
+**The DLL counts recorded above are of the build tested at the time.** A twenty first fix,
+`ground_clip_fix`, has been added since those two installations were run and carries its own
+component and file row. Neither recorded run installed it, so the counts are left as they were
+observed rather than raised to match the current build, and an installation test that covers the
+new component has not been done.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

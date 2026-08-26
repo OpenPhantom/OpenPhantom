@@ -147,6 +147,12 @@ add_engine_fix(sfx_volume_save_fix
     sfx_volume_save_fix.c
 )
 
+add_engine_fix(ground_clip_fix
+    dll_main.c
+    ground_clip_fix.c
+    move_mode.c
+)
+
 add_engine_fix(diagnostics
     dll_main.c
     diagnostics.c

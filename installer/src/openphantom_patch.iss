@@ -83,6 +83,7 @@ Name: "patch\imuse_fix";           Description: "{cm:CompAudio}";       Types: e
 Name: "patch\sfx_volume_save_fix"; Description: "{cm:CompSfxVolume}";   Types: everything full custom; Flags: fixed
 
 ; ---- recommended -----------------------------------------------------------------------------------
+Name: "patch\ground_clip_fix";    Description: "{cm:CompGroundClip}";  Types: everything full custom
 Name: "patch\enhanced_resolution"; Description: "{cm:CompResolution}";  Types: everything full custom
 Name: "patch\framerate_fix";       Description: "{cm:CompFramerate}";   Types: everything full custom
 Name: "patch\variable_fov";        Description: "{cm:CompFov}";         Types: everything full custom
@@ -153,6 +154,8 @@ Source: "{#DxWrapperSrc}\dxwrapper.ini"; DestDir: "{app}"; \
 ; are independent of each other, which is why there is no dependency between the rows.
 Source: "{#PatchSrc}\mods\crt_copy_fix.dll";        DestDir: "{app}\mods"; \
     Components: patch\crt_copy_fix;        Flags: ignoreversion
+Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
+    Components: patch\ground_clip_fix;     Flags: ignoreversion
 Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 Source: "{#PatchSrc}\mods\framerate_fix.dll";       DestDir: "{app}\mods"; \

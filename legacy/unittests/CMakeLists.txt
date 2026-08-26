@@ -175,3 +175,8 @@ add_unit_test(character_scan diagnostics diagnostics/character_scan.c)
 # arms a watch that never fires, which reads as "nothing writes this field". Worth pinning to the
 # values the manual specifies.
 add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
+
+# The one decision the ground clip fix makes. The modes it is checked against were read out of a
+# live level rather than invented, and the case that must NOT change, a collision tested character
+# keeping its velocity, matters as much as the case that must.
+add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)

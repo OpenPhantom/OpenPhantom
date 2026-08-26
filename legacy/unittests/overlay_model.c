@@ -75,9 +75,10 @@ int main(void)
              "the OpenPhantom tab holds one group, and it starts folded too");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 3u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 4u,
              "unfolding shows the heading, this project's cheats, the jump-boost scale row, the "
-             "free-camera exit hotkey row, and the fly-controls note appended after them");
+             "free-camera exit hotkey row, the fly-controls note, and the skip-to-next-level "
+             "action appended after them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
@@ -167,24 +168,36 @@ int main(void)
     ut_check(strcmp(row.label, "+ How free camera flies") == 0,
              "closed by default, marked with a plus the same way a group would be");
 
+    ut_section("skip to next level, the one action row in this group");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 4u, &row) &&
+                 row.kind == OVERLAY_ROW_ACTION,
+             "an action rather than a toggle, and the last row the group holds while folded shut");
+    ut_check(!row.available,
+             "unavailable here, since the cell it writes is resolved by the original cheat table "
+             "and nothing resolved in this test");
+
     ut_section("opening the how-to-fly fold");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 1u + (uint32_t)CHEATS_OWN_COUNT + 3u + 6u,
+                 1u + (uint32_t)CHEATS_OWN_COUNT + 4u + 6u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary and its six lines are all on screen");
+             "the fold's own summary, the skip-to-next-level action and its six lines are all on "
+             "screen");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 4u, &row) &&
+    /* The lines are appended after the skip-to-next-level action rather than directly under the
+       summary they belong to, because that action's own id has to stay put whether the fold is
+       open or shut. So the first line is two rows past the summary, not one. */
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 5u, &row) &&
                  row.kind == OVERLAY_ROW_INFO &&
                  strcmp(row.label, "    Needs an exit key set first") == 0,
              "the first line spells out in words the same ordering the row layout already shows");
-    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 4u),
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 5u),
              "but a line itself does nothing when clicked - only the summary is interactive");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 9u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 10u, &row) &&
                  strcmp(row.label, "    Press your exit key to exit free camera") == 0,
              "and the sixth, last line spells out the way back out too");
 
@@ -192,7 +205,7 @@ int main(void)
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 3u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 4u,
              "its six lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");

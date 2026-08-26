@@ -157,6 +157,11 @@ static signature_t sites[SITE_COUNT] = {
  * to 1 at the top of every step, so it reads 1 at frame end whether or not any individual move was
  * refused: a column that looks like an answer and is not one. */
 #define CHARACTER_VELOCITY_OFFSET 0xDCu
+/* The movement mode FUN_004362c8 consults BEFORE any collision test. Bit 0 set makes it jump
+ * straight past the test at 0x004363EA and commit whatever the integrator produced, because the
+ * allow flag was already reset to permitted at the top of the step. Reported because a character
+ * that is never collision tested cannot be fixed by correcting the collision test. */
+#define CHARACTER_MOVE_MODE_OFFSET 0x98u
 
 #define OBJECT_POSITION_OFFSET          0x18u
 #define OBJECT_PREVIOUS_POSITION_OFFSET 0x54u
@@ -233,6 +238,7 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     uint32_t owner = 0;
     int32_t  state = 0;
     int32_t  ai_mode = 0;
+    int32_t  move_mode = 0;
     float    position[3];
     float    previous[3];
     float    velocity[3] = { 0.0f, 0.0f, 0.0f };
@@ -261,6 +267,7 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     character_scan_copy_name(raw_name, sizeof(raw_name), name, sizeof(name));
     (void)memory_try_read(record + CHARACTER_STATE_OFFSET, &state, sizeof(state));
     (void)memory_try_read(record + CHARACTER_AI_MODE_OFFSET, &ai_mode, sizeof(ai_mode));
+    (void)memory_try_read(record + CHARACTER_MOVE_MODE_OFFSET, &move_mode, sizeof(move_mode));
     (void)memory_try_read((uintptr_t)body + OBJECT_OWNER_OFFSET, &owner, sizeof(owner));
     (void)memory_try_read(record + CHARACTER_VELOCITY_OFFSET, velocity, sizeof(velocity));
 
@@ -279,20 +286,22 @@ static bool report_character(uintptr_t record, const float player_position[3], b
 
     if (known) {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
-                       "since=%+.3f %s  v=(%.2f, %.2f, %.2f)%s",
+                       "since=%+.3f %s  v=(%.2f, %.2f, %.2f) mode=%d%s%s",
                        name, (double)position[0], (double)position[1], (double)position[2],
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical, (double)since,
                        character_scan_motion_text(character_scan_classify(since)),
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
+                       (int)move_mode, (move_mode & 1) ? " NOT COLLISION TESTED" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     } else {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
-                       "first sighting  v=(%.2f, %.2f, %.2f)%s",
+                       "first sighting  v=(%.2f, %.2f, %.2f) mode=%d%s%s",
                        name, (double)position[0], (double)position[1], (double)position[2],
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical,
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
+                       (int)move_mode, (move_mode & 1) ? " NOT COLLISION TESTED" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     }
     /* Arming on the Z rather than the whole position: the field this bug moves is the only one

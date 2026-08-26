@@ -135,11 +135,13 @@ anyway.
 The resolution is a starting value and not a limit, which the same run demonstrated by accident: the
 player changed it in the game's own video options afterwards and the new mode stuck.
 
-**The DLL counts recorded above are of the build tested at the time.** A twenty first fix,
-`ground_clip_fix`, has been added since those two installations were run and carries its own
-component and file row. Neither recorded run installed it, so the counts are left as they were
-observed rather than raised to match the current build, and an installation test that covers the
-new component has not been done.
+**The DLL counts recorded above are of the build tested at the time, and are left as they were
+observed rather than raised.** The patch now carries twenty one fixes: `ground_clip_fix` was added
+after both of those installations were run. `dist/patch/` has since been refreshed from a build
+that includes it, the script compiles with no warnings, all twenty one file rows have a file and
+all twenty one staged files have a row. **No installation has been run from this bundle.** The two
+runs recorded above installed the twenty DLL build and nothing has been installed since, so those
+paragraphs describe a bundle that is no longer the one in the tree.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

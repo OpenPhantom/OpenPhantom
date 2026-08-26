@@ -121,9 +121,19 @@ from it afterwards and its own log shows all twenty DLLs loading and arming. One
 resolve, `view_distance_fix`'s `thing_draw`, and that is a pre-existing fault of the patch on every
 install rather than anything the installer did.
 
-**The starting settings component has not been installed with.** It compiles, and the layout it
-writes was read off a working installation rather than invented, but no installation has yet been
-run with it ticked, so neither the writes nor the backup beside them have been watched happening.
+**The starting settings component has been installed with, on a fresh installation.** The folder was
+read back afterwards: all fifty-nine bindings are byte for byte the layout they were taken from,
+`JOYENABLE` is on, and the game started at 1920x1080 rather than the engine's own 640x480.
+
+The backup beside it is the part worth recording, because it shows the merge rather than merely the
+result. `obi.ini.previous` came out at 79 bytes holding two lines, `[options]` and the sound driver
+key, which is exactly the state the file was in at that moment: the sound provider had created it a
+step earlier, and this component then backed that up and merged sixty more keys into it. On a fresh
+installation there is no player file to preserve yet, and this is what preserving it looks like
+anyway.
+
+The resolution is a starting value and not a limit, which the same run demonstrated by accident: the
+player changed it in the game's own video options afterwards and the new mode stuck.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

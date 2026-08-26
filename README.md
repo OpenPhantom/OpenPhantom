@@ -1,4 +1,4 @@
-# OpenPhantom — Star Wars Episode I: The Phantom Menace PC fixes and modding tools
+# OpenPhantom - Star Wars Episode I: The Phantom Menace PC fixes and modding tools
 
 OpenPhantom makes the 1999 PC version of *Star Wars Episode I: The Phantom Menace* run properly on
 modern hardware: widescreen resolutions, uncapped frame rate, a corrected field of view, mouse

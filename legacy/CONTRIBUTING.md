@@ -100,6 +100,26 @@ rejects something, it must say so rather than skip quietly.
 **Compute from the remembered original, never from the current value.** `baplight_applyLevelFog`
 has two callers, and without a remembered original the scale squares itself on the second run.
 
+**`memory_read_*` and `memory_is_readable_range` belong in installation code and in code that runs
+at human rates, never in a path the engine drives per object or per frame.** They call
+`VirtualQuery`, which is a system call, and `memory_read` validates the range again underneath, so
+a guarded pointer read costs two of them rather than one. Use `memory_try_read` or
+`memory_try_readable` on any path the engine drives; a structured-exception frame is a few
+instructions of setup on x86, and it is also stricter, since it catches a fault anywhere in the
+range rather than trusting a walk done a moment earlier.
+
+This rule is written down because breaking it cost real time twice. A guard on
+`bapmap_tickMover`, which looks like draw-path frequency, was measured at 3,400 calls per frame
+during combat near a lift and took the game from 60 fps to 8.5; the stall was attributed to the
+engine for weeks and had an entire DLL built to compensate for it. `face_latch.c` had the same
+defect more mildly. `render_guard.c` had already stated the rule in a struct comment and was the
+only file that got it right, which is the argument for it living here instead.
+
+**Ask the cheap question first.** If an expensive walk feeds a test that will reject on a counter
+or a flag, do that test before the walk rather than after. `face_latch.c` walked four engine
+structures on every poll to answer a question its own throttle then discarded fifteen times out of
+sixteen.
+
 ## Hooks
 
 Hooks stay small: check whether the feature is active, prepare state, call the original, finalise,

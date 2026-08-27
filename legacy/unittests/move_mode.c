@@ -35,77 +35,99 @@ static void test_which_modes_skip_collision(void)
     ut_check(!move_mode_skips_collision(6), "and so is 6");
 }
 
-static void test_when_a_move_is_uncontested(void)
+static void test_a_ship_keeps_flying(void)
+{
+    const float flying[3] = { 4.0f, 0.0f, 0.5f };
+    const float pushed[3] = { 4.0f, 0.0f, -0.21f };
+
+    ut_section("the regression this design exists to avoid");
+
+    /* A ship, a bird or a droid on a flying platform is exempt from collision PRECISELY because it
+       flies, and it moves by velocity like anything else. The first version of this fix cleared
+       the velocity of every exempt character and froze all of them, which is why the test for it
+       comes before the test for the bug. */
+    ut_check(!move_mode_contact_pushed(MODE_SEATED, flying, flying),
+             "a character whose velocity is the same before and after the contact handler was not "
+             "pushed by it, so a ship holding its course is left alone even though nothing will "
+             "collision test it");
+    ut_check(!move_mode_contact_pushed(MODE_PROP, flying, flying),
+             "and the same for any other exempt mode");
+    ut_check(move_mode_contact_pushed(MODE_SEATED, flying, pushed),
+             "but a ship whose velocity the handler CHANGED was pushed, and that push is undone: "
+             "it keeps the course it arrived with rather than being stopped dead");
+}
+
+static void test_the_push_this_fix_exists_for(void)
 {
     const float still[3]   = { 0.0f, 0.0f, 0.0f };
-    const float sinking[3] = { 0.0f, 0.0f, -0.51f };
+    const float shoved[3]  = { -0.01f, 0.0f, -0.71f };
     const float walking[3] = { 1.2f, 0.4f, 0.0f };
 
-    ut_section("when there is something to clear");
+    ut_section("the seated character being walked through the floor");
 
-    ut_check(move_mode_move_is_uncontested(MODE_SEATED, sinking),
-             "an untested character carrying a downward velocity is about to move with nothing "
-             "able to stop it, which is the whole bug in one sentence");
-    ut_check(!move_mode_move_is_uncontested(MODE_SEATED, still),
-             "an untested character that is not moving needs nothing done to it, which is almost "
-             "every character on almost every step");
-    ut_check(!move_mode_move_is_uncontested(MODE_ORDINARY_NPC, walking),
-             "a collision tested character is never touched no matter how fast it is going, "
-             "because the engine will stop it properly");
-    ut_check(!move_mode_move_is_uncontested(MODE_ORDINARY_NPC, sinking),
-             "including one that is falling, which must keep its velocity to land");
-    ut_check(move_mode_move_is_uncontested(MODE_PROP, walking),
-             "and a prop shoved sideways is caught too, not just a downward push");
+    ut_check(move_mode_contact_pushed(MODE_SEATED, still, shoved),
+             "a character that was stationary and now carries a downward velocity was pushed by "
+             "the contact, and nothing will collision test the move that follows");
+    ut_check(!move_mode_contact_pushed(MODE_ORDINARY_NPC, still, shoved),
+             "the identical push on a collision tested character is left alone, because the engine "
+             "will stop it properly and this fix has no business there");
+    ut_check(!move_mode_contact_pushed(MODE_ORDINARY_NPC, still, walking),
+             "and a tested character being shoved sideways keeps it too");
+    ut_check(!move_mode_contact_pushed(MODE_SEATED, still, still),
+             "a contact that changed nothing needs nothing undone, which is almost every contact");
 }
 
 static void test_the_threshold(void)
 {
-    float velocity[3] = { 0.0f, 0.0f, 0.0f };
+    const float zero[3] = { 0.0f, 0.0f, 0.0f };
+    float       velocity[3] = { 0.0f, 0.0f, 0.0f };
 
     ut_section("what counts as moving");
 
     velocity[2] = MOVE_MODE_VELOCITY_EPSILON * 0.5f;
-    ut_check(!move_mode_move_is_uncontested(MODE_SEATED, velocity),
+    ut_check(!move_mode_contact_pushed(MODE_SEATED, zero, velocity),
              "a velocity smaller than the epsilon is rounding, not motion, and is left alone");
 
     velocity[2] = -MOVE_MODE_VELOCITY_EPSILON * 0.5f;
-    ut_check(!move_mode_move_is_uncontested(MODE_SEATED, velocity),
+    ut_check(!move_mode_contact_pushed(MODE_SEATED, zero, velocity),
              "in either direction");
 
     velocity[2] = MOVE_MODE_VELOCITY_EPSILON * 2.0f;
-    ut_check(move_mode_move_is_uncontested(MODE_SEATED, velocity),
+    ut_check(move_mode_contact_pushed(MODE_SEATED, zero, velocity),
              "past the epsilon it counts, so the threshold has no silent gap above it");
 
     velocity[0] = 0.0f;
     velocity[1] = MOVE_MODE_VELOCITY_EPSILON * 2.0f;
     velocity[2] = 0.0f;
-    ut_check(move_mode_move_is_uncontested(MODE_SEATED, velocity),
+    ut_check(move_mode_contact_pushed(MODE_SEATED, zero, velocity),
              "any one axis is enough: a sideways shove needs stopping as much as a downward one");
 }
 
 static void test_numbers_that_cannot_be_compared(void)
 {
-    float velocity[3] = { 0.0f, 0.0f, 0.0f };
+    const float zero[3] = { 0.0f, 0.0f, 0.0f };
+    float       velocity[3] = { 0.0f, 0.0f, 0.0f };
 
     ut_section("a velocity that is not a number");
 
     velocity[2] = (float)NAN;
-    ut_check(move_mode_move_is_uncontested(MODE_SEATED, velocity),
+    ut_check(move_mode_contact_pushed(MODE_SEATED, zero, velocity),
              "a NaN velocity on an untested character counts as motion and is cleared, because a "
              "NaN reaching a move that nothing will test is the worst case available and clearing "
              "it is the safe answer");
-    ut_check(!move_mode_move_is_uncontested(MODE_ORDINARY_NPC, velocity),
+    ut_check(!move_mode_contact_pushed(MODE_ORDINARY_NPC, zero, velocity),
              "but a collision tested character is still left alone, since this fix has no business "
              "in a move the engine is going to resolve properly");
 
-    ut_check(!move_mode_move_is_uncontested(MODE_SEATED, NULL),
+    ut_check(!move_mode_contact_pushed(MODE_SEATED, zero, NULL),
              "a null velocity is not read through, it simply means there is nothing to do");
 }
 
 int main(void)
 {
     test_which_modes_skip_collision();
-    test_when_a_move_is_uncontested();
+    test_a_ship_keeps_flying();
+    test_the_push_this_fix_exists_for();
     test_the_threshold();
     test_numbers_that_cannot_be_compared();
 

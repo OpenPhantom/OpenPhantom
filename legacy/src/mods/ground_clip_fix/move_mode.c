@@ -8,22 +8,24 @@ bool move_mode_skips_collision(int32_t move_mode)
     return (move_mode & MOVE_MODE_SKIPS_COLLISION_BIT) != 0;
 }
 
-/* True when this component would move the character. Written as the negation of "definitely small"
- * rather than as "definitely large", so a NaN answers true: a NaN velocity reaching a move that
- * nothing will test is the worst case available, and clearing it is the safe answer. */
-static bool component_moves(float value)
+/* True when these two differ by more than rounding. Written as the negation of "definitely the
+ * same" rather than as "definitely different", so a NaN on either side answers true and the caller
+ * restores the value it knows. */
+static bool component_changed(float before, float after)
 {
-    return !(value > -MOVE_MODE_VELOCITY_EPSILON && value < MOVE_MODE_VELOCITY_EPSILON);
+    float delta = after - before;
+
+    return !(delta > -MOVE_MODE_VELOCITY_EPSILON && delta < MOVE_MODE_VELOCITY_EPSILON);
 }
 
-bool move_mode_move_is_uncontested(int32_t move_mode, const float velocity[3])
+bool move_mode_contact_pushed(int32_t move_mode, const float before[3], const float after[3])
 {
-    if (velocity == NULL) {
+    if (before == NULL || after == NULL) {
         return false;
     }
     if (!move_mode_skips_collision(move_mode)) {
         return false;
     }
-    return component_moves(velocity[0]) || component_moves(velocity[1]) ||
-           component_moves(velocity[2]);
+    return component_changed(before[0], after[0]) || component_changed(before[1], after[1]) ||
+           component_changed(before[2], after[2]);
 }

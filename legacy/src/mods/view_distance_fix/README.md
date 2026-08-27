@@ -16,7 +16,7 @@ deliberate, and both gates are needed.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `ViewRangeScale` | `1.0` | 1.0-2.0 | the watchdog only ever lowers this |
+| `ViewRangeScale` | `1.0` | 1.0-2.5 | the watchdog only ever lowers this |
 | `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view |
 | `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
@@ -25,8 +25,9 @@ deliberate, and both gates are needed.
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |
-| `RelocateDrawTable` | `1` | | move the cell table, raise its limit to 16384 |
+| `RelocateDrawTable` | `1` | | move the cell table, raise its limit to 32768 (raised again from 16384; see `draw_table.c` section 2) |
 | `LowerCellLimit` | `1` | | lower it to 7168 instead; skipped when the relocation is active |
+| `RelocateVertexCache` | `1` | | move the vertex cache, raise its limit to 32768 |
 
 One more switch lives in the `[diagnostics]` section rather than this one, because that is where
 every measurement in the shipped ini lives:
@@ -53,7 +54,10 @@ every measurement in the shipped ini lives:
 | `bapdraw_gatherCell` limit | `0x4064B8` | the whole dword, never one byte |
 | `bapdraw_gatherCell` append | `0x4067CF` | table, bucket and counter read and cross-checked |
 | `bapvrt_transformWorld` gate | `0x41A0DF` | the vertex-cache counter |
-| the nine relocation words | 4 append blocks + the limit | all-or-nothing, with rollback |
+| the nine cell-table relocation words | 4 append blocks + the limit | all-or-nothing, with rollback |
+| vertex cache, 3 producer/consumer functions | `0x4199B0`, `0x41B070`, `0x41BAF0` | 12 address operands, byte-confirmed against the running image |
+| vertex cache, 3 capacity gates | `0x41A0DF`, `0x41B6CC`, `0x41C0D5` | all three abort clean (no unchecked overshoot), see `vertex_table.c` |
+| the fifteen vertex-cache relocation words | 12 address operands + 3 gates | all-or-nothing, with rollback |
 
 ## The two things you must know before turning a number here
 
@@ -224,12 +228,64 @@ it runs from `std3D_open`, from `graphics_setMode` itself (`0x0046BD8B`: `getRen
   entry 8193 landed on `g_bucket[3]`, and the values the renderer then read as a pointer are
   byte-exactly the corner indices of GARDEN cell 7406, slots 5 and 7; each of which occurs exactly
   **once** in all 334,396 faces of the game.
-* **The vertex cache.** 16384 slots of 0x40 bytes. It aborts *cleanly* but leaves torn geometry
-  **until the level reloads**, because gate 2 jumps behind the `touched` reset loop. It is therefore
-  braked earlier and harder than the cells.
+* **The vertex cache.** 16384 slots of 0x40 bytes, retail. It aborts *cleanly* but leaves torn
+  geometry **until the level reloads**, because gate 2 jumps behind the `touched` reset loop. It is
+  therefore braked earlier and harder than the cells. Unlike the cell table, all three of its own
+  gates check BEFORE writing, so there is no unchecked-overshoot reserve to size against; a plain
+  capacity increase is safe on its own terms. `RelocateVertexCache=1` (default) moves it to a
+  32768-slot buffer with a guard page behind it, exactly the shape `draw_table.c` already gave the
+  cell table, in `vertex_table.c`. Both relocations are independent and either can be turned off
+  without the other.
 
-Both counters are watched per frame. The effective scale is only ever lowered, never raised again:
-better a permanently shorter view than a crash ten minutes later.
+Both counters are watched per frame, and the watchdog adopts whichever limit is actually in force -
+16384 or 32768, matching whether `RelocateVertexCache` ran. The effective scale is only ever
+lowered, never raised again: better a permanently shorter view than a crash ten minutes later.
+
+### `ViewRangeScale` was raised to 4.0 once. Field testing put it back at 2.0, and the reasoning why is worth keeping.
+
+The argument for raising it: the original 2.0 cap was set against the **retail** cell table, 8192
+entries. With `RelocateDrawTable=1` (the default) that table is 16384 entries with an
+arithmetically proven 1.93x reserve over the worst possible single-frame overshoot, and
+`cell_watchdog_budget()` already folds that doubled budget into the radius cap on its own. The wall
+left once relocated is the vertex cache above, which this file's own watchdog already backs off
+from *earlier* than the cells (75% against 90%), because its failure is a frame of torn geometry
+rather than the cell table's proven crash. All of that is true, and it was raised to 4.0 on the
+strength of it - matching `FogScale`'s own existing range.
+
+**Field testing at 3.0 and 4.0 showed exactly the failure the watchdog was supposed to prevent**:
+torn, stretched geometry that did not correct itself, matching this file's own description of a
+vertex-cache overshoot to the letter. What the argument above missed is that these counters do not
+climb, they **jump** - the cell watchdog's own comments already document a jump from under 7680 to
+8189 in ONE frame, "the gentle back-off never got its turn, only the emergency brake" - and the
+same is true of the vertex cache on entering open geometry. The watchdog's backoff protects the
+*next* frame; it cannot undo the frame that already overshot, and unlike the cell table, a
+vertex-cache overshoot does not clear itself. A larger `ViewRangeScale` does not make that jump
+safer. It makes the jump bigger, which is the opposite of what real-time coverage needed.
+
+Reverted to 2.0, the value that is actually field-confirmed. `NpcRangeScale` was never raised: the
+128-actor pool it presses against has no relocation fix behind it at all, and it is the one number
+in this file that changes how the game plays rather than how far it is drawn.
+
+**The vertex cache itself was relocated afterwards** (`vertex_table.c`, `RelocateVertexCache=1`),
+doubling it to 32768 slots the same way the cell table was already doubled - a straight capacity
+increase, not a reserve against overshoot, because all three of the vertex cache's own gates check
+before every write. That removes the specific wall the 4.0 field test hit. `ViewRangeScale`'s
+ceiling was deliberately left at 2.0 regardless: raising it again on the strength of a code-level
+argument is exactly the mistake this section exists to remember. If it is revisited, it needs its
+own field test against a build that actually carries this relocation, not a reasoned guess.
+
+**That field test happened, and it raised a different wall.** With the vertex cache relocated,
+`ViewRangeScale` was stepped to 2.5 (not back to 4.0) and field-tested: no torn geometry, but the
+**cell** watchdog braked hard in a dense scene (QUEEN palace gardens, 120 degree FOV) - peak 13616
+of the cell table's 16384-slot limit, and the effective scale was walked all the way down to 1.00
+for the rest of the session, exactly as designed ("better a permanently shorter view than a crash
+ten minutes later"). That is not the vertex-cache failure mode; it is the watchdog correctly
+protecting a table that is, again, too small for what this configuration asks of it. The cell
+table was therefore doubled a second time, 16384 -> 32768 (`draw_table.c` section 2), leaving that
+measured peak at 41% of the new limit instead of 83% of the old one. `ViewRangeScale`'s ceiling
+moved to 2.5 to match. **Neither raise moves `MAX_DRAW_RANGE` (64 world units, view_distance_fix.c)
+- both are about the watchdog reliably delivering the range the formula already allows in a dense
+scene, not about seeing further than that ceiling.**
 
 ## Known limitations
 
@@ -239,8 +295,9 @@ better a permanently shorter view than a crash ten minutes later.
   not a cut mesh, `bapobj_detachNode` only hides a node, there is no cap and no cut geometry.
 * Without the per-frame hook there is no watchdog, and the range is then **held at 1.0** rather than
   trusted.
-* The relocated buffer is never freed, not even at detach: the bucket heads can still point into it,
-  and a stale pointer into valid memory is harmless where one into freed address space is not.
+* Both relocated buffers are never freed, not even at detach: the cell table's bucket heads and any
+  frame already under way for the vertex cache can still hold pointers into them, and a stale
+  pointer into valid memory is harmless where one into freed address space is not.
 * The no-pop-in limit uses the **horizontal** field of view only. The cut test is two-dimensional
   (`dx^2 + dz^2`), so a camera with a lot of pitch sees geometry at a depth this does not model.
 * The cut edge is taken from the level's current cell, which is what `bapmat_viewDistance` returns.
@@ -296,3 +353,20 @@ visible on screen can only be established by running the game. The lines to look
 The last one appears once per level load and is the one to read the numbers off. Its absence, or a
 "the fog regime is NOT changed" / "no per-frame fog tick" warning next to it, means that part
 declined.
+
+### `RelocateVertexCache`, added later
+
+Built and linked, `/W4 /WX` clean, full solution and all 28 existing unit tests still pass.
+**Not yet run in game.** The twelve address operands and the three gate immediates were confirmed
+byte-for-byte against the running retail image rather than assumed from a disassembly view's
+mnemonics (the `ADD EAX,imm32` short-form encoding in particular would have been guessed wrong),
+but whether the relocation actually resolves and activates on a live launch can only be established
+by running the game. The line to look for:
+
+```
+[view_distance_fix] vertex table relocated to ........ (32768 slots of 64 B = 2097152 B), guard page ........ (PAGE_NOACCESS), gates 16384 -> 32768, 15/15 operands written.
+```
+
+Its absence, or a "NOT ONE BYTE patched" / "unexpected match count, unknown image" warning next to
+it, means the relocation declined and the vertex cache stays at its retail 16384-slot limit -
+everything else in this DLL keeps working exactly as it did before this feature existed.

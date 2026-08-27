@@ -72,6 +72,7 @@ add_engine_fix(view_distance_fix
     view_distance_fix.c
     cell_watchdog.c
     draw_table.c
+    vertex_table.c
     fog_regime.c
     spawn_census.c
 )

@@ -50,6 +50,7 @@
 #include "draw_table.h"
 #include "fog_regime.h"
 #include "spawn_census.h"
+#include "vertex_table.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -202,6 +203,7 @@ typedef struct view_distance_config {
     int   two_sided_max;
     bool  relocate_draw_table;
     bool  lower_cell_limit;
+    bool  relocate_vertex_table;
     bool  spawn_census;
     bool  log_player_position;
 } view_distance_config_t;
@@ -270,6 +272,12 @@ static void load_config(void)
     config->two_sided_max       = ini_read_int  (VIEW_DISTANCE_SECTION, "TwoSidedMax", 8);
     config->relocate_draw_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateDrawTable", true);
     config->lower_cell_limit    = ini_read_bool (VIEW_DISTANCE_SECTION, "LowerCellLimit", true);
+    /* WALL 2 in cell_watchdog.h: the vertex cache. Doubling it the same ratio draw_table.c already
+     * field-proved for the cell table (16384 -> 32768 slots, 1 MiB -> 2 MiB) so the three gates
+     * that abort cleanly today have real headroom before ANY of the 132 authored range=64 cells or
+     * a wider field of view can trip them. */
+    config->relocate_vertex_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateVertexCache",
+                                                    true);
     /* Read out of the diagnostics section rather than this one, because that is where every
      * measurement switch in this file lives and a reader looking for one should find them
      * together. It is only an ini key: this DLL still has no run-time dependency on the
@@ -279,9 +287,35 @@ static void load_config(void)
     config->log_player_position =
         ini_read_bool (VIEW_DISTANCE_SECTION, "LogPlayerPosition", false);
 
-    /* Cap from the control review: above 2.0 the 8192-entry collector gets tight and the
-     * 128-slot character pool gets short. */
-    config->view_range_scale = clamp_float(config->view_range_scale, 1.0f, 2.0f);
+    /* THIS WAS RAISED TO 4.0 ONCE, ON REASONING THAT FIELD TESTING THEN DISPROVED. Kept here
+     * rather than quietly reverted, because the reasoning was wrong in a way worth remembering.
+     *
+     * The argument was: RelocateDrawTable makes the 16384-entry cell table safe with a proven
+     * 1.93x reserve, cell_watchdog_budget() already folds that into the radius cap, and the
+     * remaining wall - the 16384-slot vertex cache - is watched in real time with an alarm at 75%,
+     * earlier than the cells' 90%. All of that is true and none of it was enough: at 3.0 and 4.0
+     * the game showed exactly the failure cell_watchdog.c's own comments already named -
+     * "torn geometry until the level reloads" - and it did not self-correct.
+     *
+     * What the argument missed: the counters do not climb, they JUMP. cell_watchdog.c documents
+     * this for cells - "the counter jumped from under 7680 to 8189 in ONE frame, the gentle
+     * back-off never got its turn, only the emergency brake" - and the same is true of the vertex
+     * cache, turning a corner into open geometry. The watchdog's backoff helps the NEXT frame; it
+     * cannot undo the frame that already overshot, and a vertex-cache overshoot does not clear
+     * itself the way a cell-table one does. A larger ViewRangeScale does not make that jump safer,
+     * it makes the jump BIGGER, which is the opposite of what real-time coverage alone could fix.
+     *
+     * SECOND ATTEMPT, and the difference from the first is not more reasoning about the existing
+     * wall, it is that the wall itself moved. RelocateVertexCache=1 (default, vertex_table.c) is
+     * no longer a real-time watch on a fixed 16384-slot ceiling; it is a relocated 32768-slot
+     * buffer, and a field session confirmed the relocation itself: engine_fixes.log shows all
+     * 15/15 operands written and the watchdog's alarm rescaled to 24576, then a played session
+     * with a widened FOV, thousands of decals and nearly 4800 mover poses produced not one
+     * VERTEX CACHE FULL line. That is evidence the relocation WORKS, not evidence 2.5 is safe -
+     * the counter still jumps rather than climbs, and this ceiling has been wrong once already on
+     * an argument that sounded just as sound. So: one step, to 2.5, not back to 4.0, and it stays
+     * here pending its own field test rather than being trusted on the strength of this one. */
+    config->view_range_scale = clamp_float(config->view_range_scale, 1.0f, 2.5f);
     config->npc_range_scale  = clamp_float(config->npc_range_scale, 1.0f, 2.0f);
     if (config->fog_scale <= 0.0f) {
         config->fog_scale = config->view_range_scale;
@@ -708,6 +742,16 @@ void view_distance_fix_install(void)
         }
     }
 
+    /* Same ordering rule as the draw table just above, and for the identical reason: the watchdog
+     * has already resolved the vertex counter by this point, and this relocation touches none of
+     * the operands that resolution reads. */
+    if (view_state.config.relocate_vertex_table) {
+        vertex_table_relocate();
+        if (vertex_table_is_active()) {
+            cell_watchdog_set_vertex_limit(vertex_table_limit());
+        }
+    }
+
     /* ORDER: the fog reads the cut edge the draw-distance detour reports, so that detour has to be
      * standing before the first frame the fog ticks on. */
     install_view_distance();
@@ -731,4 +775,5 @@ void view_distance_fix_install(void)
 void view_distance_fix_shutdown(void)
 {
     draw_table_restore();
+    vertex_table_restore();
 }

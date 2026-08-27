@@ -8,8 +8,8 @@ player's own disc and then whichever parts of the OpenPhantom patch were ticked.
 | Form | Inno Setup script plus one small C helper, `is3_extract` |
 | Input | the original PC disc, or a mounted image of it |
 | Output | `output/OpenPhantom_Installer.exe` |
-| Carries | the extractor and one configuration file. No game data, no patch binaries, no third party libraries |
-| Fetches | the patch, libVLC, Xidi, DSOAL and the saved games, each pinned by hash, plus the Microsoft Visual C++ runtime when controller support is ticked and it is absent |
+| Carries | everything it installs: the extractor, the patch, libVLC, Xidi, DSOAL and the saved games. No game data |
+| Fetches | nothing, during installation or afterwards |
 
 **You need your own copy of the game.** No game data, no executable and no patched binary is included
 here or distributed with this project.
@@ -27,8 +27,9 @@ it and stops short of the archive's end, so nothing can read it.
 The registry entry the game reads for its CD path is pointed at the installation folder, which
 removes the need for the disc in the drive.
 
-Everything else is downloaded while the installer runs: the OpenPhantom patch from this project's
-releases page, and libVLC, Xidi and DSOAL from their own authors.
+Everything else ships inside the installer, in `dist/`. Nothing is downloaded at any point, which is
+what makes an installation reproducible years from now rather than dependent on somebody else's
+hosting still being there.
 
 ## Components
 
@@ -52,8 +53,8 @@ ISCC openphantom_installer.iss
 `-A Win32` is not optional; the game is 32 bit and so is everything this project ships. The result is
 `output/OpenPhantom_Installer.exe`, and no build output is tracked here.
 
-Built with Inno Setup 6.6. The floor is whichever version first offered the `download` and
-`extractarchive` file flags together with the `ArchiveExtraction` directive.
+Built with Inno Setup 6.6. Nothing here needs a recent feature any more now that the download and
+archive-extraction flags are gone, but that is the version it is compiled and tested with.
 
 ## Structure
 
@@ -81,17 +82,17 @@ src/
 output/                    the built installer, ignored
 ```
 
-One subject per file, so a new patch release touches one of them and a new download touches one of
-them.
+One subject per file, so a new patch release touches one of them and a new carried component touches
+one of them.
 
-## Updating a pinned download
+## Updating a carried component
 
-Each download names its version, its hash and its unpacked size at the top of its own file. The
-unpacked size is the total of the files inside the archive rather than the size of the archive: a row
-that extracts has to declare what it expands to.
+Replace its folder under `dist/`, then update its row in `THIRD-PARTY-NOTICES.md` and in
+`dist/THIRD-PARTY-NOTICES-Installer.txt` with the new version, and refresh the corresponding source
+archive under `source/` where the licence asks for it.
 
-The OpenPhantom pin needs two strings instead of one, because the release tag and the version in the
-file name are not always the same word. Read both off the release page.
+`dist/patch/` is refreshed wholesale from a build of `legacy/`, so anything else kept in that folder
+is destroyed on the next refresh; that is why dxwrapper has a folder of its own.
 
 ## Testing status
 

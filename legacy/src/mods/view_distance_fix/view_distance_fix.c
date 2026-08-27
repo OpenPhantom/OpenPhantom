@@ -539,9 +539,50 @@ static int32_t __cdecl hook_thing_draw(void *thing, void *matrix)
 }
 
 /* ============================================================================================ */
+/* How often the ViewRangeScale key is re-read, in frames. The developer overlay writes that key
+ * when its draw distance row is committed, and this is how the change reaches a running game.
+ *
+ * WHY A POLL AND NOT A CALL. The overlay lives in its own DLL, and feature DLLs in this project
+ * never depend on each other at run time: any one of them can be deleted from mods\ without
+ * breaking the others. The ini is a channel both already have and neither owns.
+ *
+ * WHAT IT COSTS. One profile read a second. That is a file the operating system has cached and is
+ * measured in tens of microseconds, so amortised across sixty frames it is well under a microsecond
+ * each. Worth stating rather than assuming, since this project has already been caught once by a
+ * cheap looking call inside a per-frame path, but a once-a-second read is a different order of
+ * thing from a per-object syscall. */
+#define SCALE_POLL_FRAMES 60u
+
+/* Re-reads the setting and adopts it when it has changed. Assigning the config value is not enough
+ * on its own: effective_view_scale is what the range hook actually multiplies by, and the watchdog
+ * only ever lowers it, so a raise has to reset it. Lowering the setting resets it too, which hands
+ * the watchdog a fresh start rather than leaving it braked from a scale that is no longer set. */
+static void poll_view_range_scale(void)
+{
+    static uint32_t frames;
+    float           requested;
+
+    if (++frames < SCALE_POLL_FRAMES) {
+        return;
+    }
+    frames = 0;
+
+    requested = clamp_float(ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale",
+                                           view_state.config.view_range_scale), 1.0f, 2.5f);
+    if (requested == view_state.config.view_range_scale) {
+        return;
+    }
+
+    log_info("ViewRangeScale changed on disk, %.2f -> %.2f, adopting it",
+             (double)view_state.config.view_range_scale, (double)requested);
+    view_state.config.view_range_scale = requested;
+    view_state.effective_view_scale = requested;
+}
+
 static void on_frame(void)
 {
     view_state.two_sided_this_frame = 0;
+    poll_view_range_scale();
     cell_watchdog_on_frame(&view_state.effective_view_scale);
 
     /* AFTER the watchdog, deliberately. When the watchdog lowers the scale it moves the cut edge,

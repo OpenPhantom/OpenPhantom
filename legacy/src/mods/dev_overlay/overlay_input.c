@@ -53,6 +53,7 @@
 
 #include "cheats_original_actions.h"
 #include "input_freeze.h"
+#include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_model.h"
 
@@ -218,6 +219,10 @@ static void set_open(bool open)
     input_state.search_focused = false;   /* every open starts unfocused; see the header comment
                                             * on overlay_input_search_focused() for why */
     input_freeze_set(open);
+    /* The freeze stops the player being given orders; this stops the world carrying on regardless.
+       Both, because either alone leaves half the game running: without the freeze the player moves
+       behind the panel, and without this the NPCs, movers and timers do. */
+    sim_pause_set(open);
     if (!open) {
         /* AFTER input_freeze_set(false), not before: a queued play-as swap has its own precondition
          * that reads as unmet while the player is suspended, which is exactly what closing this
@@ -315,11 +320,11 @@ static void click(float x, float y)
      * its own row, which is exactly the "click it again to redo it" shape that row already has. */
     if (overlay_draw_search_at(x, y)) {
         input_state.search_focused = true;
-        overlay_model_jump_scale_cancel();
+        overlay_model_value_cancel();
         return;
     }
     input_state.search_focused = false;
-    overlay_model_jump_scale_cancel();
+    overlay_model_value_cancel();
 
     tab = overlay_draw_tab_at(x, y);
     if (tab >= 0) {
@@ -366,19 +371,19 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
          * just above and for the same reason: while a value is being typed, Enter/Escape/Backspace
          * belong to THAT field (commit/cancel/delete a digit), not to the panel (close) or the
          * search box (whose own backspace arm is further down and gated on a focus this is not). */
-        if (overlay_model_is_editing_jump_scale()) {
+        if (overlay_model_is_editing_value()) {
             if (wparam == KEY_RETURN) {
-                overlay_model_jump_scale_commit();
+                overlay_model_value_commit();
                 overlay_model_rebuild();
                 return true;
             }
             if (wparam == KEY_ESCAPE) {
-                overlay_model_jump_scale_cancel();
+                overlay_model_value_cancel();
                 overlay_model_rebuild();
                 return true;
             }
             if (wparam == KEY_BACKSPACE) {
-                overlay_model_jump_scale_backspace();
+                overlay_model_value_backspace();
                 overlay_model_rebuild();
                 return true;
             }
@@ -408,8 +413,8 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
          * first because a click that starts editing it also leaves search_focused false, never
          * both true at once, so the order between these two only matters for readability. */
         if (wparam != KEY_BACKSPACE) {
-            if (overlay_model_is_editing_jump_scale()) {
-                overlay_model_jump_scale_append((char)wparam);
+            if (overlay_model_is_editing_value()) {
+                overlay_model_value_append((char)wparam);
                 overlay_model_rebuild();
             } else if (input_state.search_focused) {
                 overlay_model_search_append((char)wparam);

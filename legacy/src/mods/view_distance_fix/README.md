@@ -11,6 +11,19 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. `obiold.exe` is rejected by t
 match count (four instead of three) and `netobi.exe` by the table/bucket cross-check; that is
 deliberate, and both gates are needed.
 
+## Changing the scale while the game runs
+
+`ViewRangeScale` is re-read once a second and adopted when it changes, which is how the developer
+overlay's draw distance row reaches a running game. Adopting it resets the effective scale as well
+as the configured one: the watchdog only ever lowers the effective value, so a raise that did not
+reset it would be ignored, and a lowering that did not would leave the watchdog braked from a scale
+no longer set.
+
+The cost is one profile read a second, a file the operating system has cached, which amortises to
+well under a microsecond a frame. Worth stating rather than assuming, given this project has been
+caught once by a cheap looking call inside a per-frame path, but a once-a-second read is a different
+order of thing from a per-object syscall.
+
 ## Configuration: `[view_distance_fix]`
 
 | Key | Default | Range | Meaning |

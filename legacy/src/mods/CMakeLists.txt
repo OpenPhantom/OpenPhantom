@@ -242,12 +242,14 @@ target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
+    view_range_row.c
     overlay_model.c
     overlay_draw.c
     overlay_sites.c
     overlay_layout.c
     overlay_input.c
     input_freeze.c
+    sim_pause.c
     cheats_original.c
     cheats_original_actions.c
     cheats_openphantom.c

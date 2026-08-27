@@ -47,7 +47,7 @@ typedef enum overlay_row_kind {
     OVERLAY_ROW_HOTKEY,         /* a key binding, shown as a button that captures the next keypress -
                                   * see overlay_model_is_capturing_hotkey() */
     OVERLAY_ROW_VALUE,          /* a typed-in number, shown as a chip that starts free text entry on
-                                  * click - see overlay_model_is_editing_jump_scale() */
+                                  * click; see overlay_model_is_editing_value() */
     OVERLAY_ROW_INFO            /* plain text, no chip, not clickable - a note attached to the row
                                   * above it rather than a cheat of its own */
 } overlay_row_kind_t;
@@ -116,27 +116,27 @@ bool overlay_model_is_capturing_hotkey(void);
 void overlay_model_capture_hotkey(int32_t virtual_key);
 
 /* Whether the jump-boost scale row is waiting for typed digits. While true, overlay_input.c routes
- * WM_CHAR here (via overlay_model_jump_scale_append()) instead of the search box, and gives Enter/
+ * WM_CHAR here (via overlay_model_value_append()) instead of the search box, and gives Enter/
  * Escape/Backspace their own meaning (commit/cancel/delete) instead of their usual one - the same
  * kind of unconditional redirect overlay_model_is_capturing_hotkey() above already gets, for the
  * same reason: predictable is better than a second list of keys this refuses. */
-bool overlay_model_is_editing_jump_scale(void);
+bool overlay_model_is_editing_value(void);
 
 /* Appends one character if it could plausibly be part of a positive decimal number (a digit, or a
  * single '.'); anything else, and a second '.', are silently refused rather than accepted and
  * later failing to parse. No-op unless a capture is in progress. */
-void overlay_model_jump_scale_append(char digit);
-void overlay_model_jump_scale_backspace(void);
+void overlay_model_value_append(char digit);
+void overlay_model_value_backspace(void);
 
 /* Parses what has been typed and, if it is a usable positive number, hands it to
  * cheats_openphantom_jump_boost_set_scale() - which clamps it - and ends the capture either way.
  * An empty field commits nothing, leaving whatever scale was already set untouched rather than
  * zeroing it out. */
-void overlay_model_jump_scale_commit(void);
+void overlay_model_value_commit(void);
 
 /* Ends a capture in progress, discarding what has been typed. A no-op if nothing is capturing;
  * also called on every click that does not land back on the value row, so at most one field in
  * this panel is ever mid-edit at a time. */
-void overlay_model_jump_scale_cancel(void);
+void overlay_model_value_cancel(void);
 
 #endif /* OVERLAY_MODEL_H */

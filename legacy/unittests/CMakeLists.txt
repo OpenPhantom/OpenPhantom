@@ -160,6 +160,7 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 # executable neither of them could resolve.
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
+    dev_overlay/view_range_row.c
     dev_overlay/cheats_original.c
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
@@ -180,3 +181,7 @@ add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
 # live level rather than invented, and the case that must NOT change, a collision tested character
 # keeping its velocity, matters as much as the case that must.
 add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
+
+# The draw distance row's own arithmetic: the clamp, and the hand written parser that exists
+# because strtof would read a decimal point only where the locale agrees it is one.
+add_unit_test(view_range_row dev_overlay dev_overlay/view_range_row.c)

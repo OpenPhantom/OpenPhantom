@@ -69,10 +69,25 @@ expensive defect: the panel was sized from a number that did not describe the te
 
 ## What the panel takes, and what it does not
 
-While it is open the player's phases are stopped. That is how this engine holds still: it has no
+While it is open, two separate things are held, and it needs both.
+
+The player's phases are stopped, which is how this engine stops a character taking orders: it has no
 input switch, it simply does not run the phases in a menu, a dialogue or a cutscene, which is also
-what the mouse look in `enhanced_input` already watches for. So one field does the whole job and no
-other DLL had to change.
+what the mouse look in `enhanced_input` already watches for.
+
+**That alone was never a pause, and this file used to claim it was.** The player stopped and the
+world did not: NPCs kept walking, movers kept moving and timers kept running behind the panel, which
+is exactly what a player notices opening the overlay mid fight. So the simulation is now held as
+well, on the engine's own flag. `sys_frame` gates its own substep loop on it and the retail pause
+menu sets the same one, so nothing here is invented and nothing had to be hooked; `render_frameEnd`
+runs below that gate, which is why the picture keeps being drawn.
+
+**Sound and music keep playing behind the panel, deliberately.** The retail pause menu also
+broadcasts task command 8 on the way in and 9 on the way out, which is what silences audio. That
+pair is not borrowed, because the pause broadcast only marks a task paused when its handler returns
+0 and iMUSE's returns 2, so the mark is never set and the matching resume never fires `ImResume`.
+Copying it would risk leaving the music stopped with nothing to start it again, and audio that keeps
+going is a smaller wrong than silence that does not come back.
 
 Window messages are answered here rather than passed on, which covers the pause and the menu keys.
 **Alt combinations are handed back untouched**, so Alt+F4 and Alt+Tab still work: a modal panel that
@@ -280,6 +295,25 @@ answers unavailable once it stops being under ten - the same point retail's own 
 anything, for either code, since they share the one counter. A row that greys out here greyed out
 because that shared budget ran out, not because a resolve failed; the panel does not need to say
 which.
+
+## The draw distance row
+
+The OpenPhantom tab's last row edits `[view_distance_fix] ViewRangeScale`, the draw distance, typed
+in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`, so it
+is learned from the row rather than by having a number refused.
+
+**It writes the ini rather than calling `view_distance_fix`.** Feature DLLs here never depend on
+each other at run time, which is what lets any one of them be deleted from the `mods` folder without breaking
+the rest. The ini is a channel both already have and neither owns, `view_distance_fix` re-reads the
+key once a second and adopts it, and the setting survives a restart for free because it is written
+where the setting already lived. The cost is a fraction of a second between committing the row and
+the world changing.
+
+**The row shows the setting, not necessarily what the game is drawing at.** The cell watchdog lowers
+the scale on its own when a dense scene fills its buffers, so in a heavy area the row can honestly
+read `2.50x` while the game is really drawing at `1.00x`. Reporting the live value would mean asking
+`view_distance_fix` for it, which is the dependency above. The watchdog announces itself in
+`engine_fixes.log` when it brakes, which is where that answer lives instead.
 
 ## Configuration: `[dev_overlay]`
 

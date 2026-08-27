@@ -75,10 +75,10 @@ int main(void)
              "the OpenPhantom tab holds one group, and it starts folded too");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 4u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 5u,
              "unfolding shows the heading, this project's cheats, the jump-boost scale row, the "
-             "free-camera exit hotkey row, the fly-controls note, and the skip-to-next-level "
-             "action appended after them");
+             "free-camera exit hotkey row, the fly-controls note, the skip-to-next-level action "
+             "and the draw distance row appended after them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
@@ -119,10 +119,10 @@ int main(void)
      * reason: a row that looked clickable but could never mean anything (nothing is hooked up to
      * read the number this would produce) would be worse than one that shows why it cannot be
      * touched yet, same as this file's own header comment already argues for the hotkey row. */
-    ut_check(!overlay_model_is_editing_jump_scale(), "nothing is being edited yet");
+    ut_check(!overlay_model_is_editing_value(), "nothing is being edited yet");
     ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT),
              "starting an edit on an unavailable row is refused the same as any other cheat");
-    ut_check(!overlay_model_is_editing_jump_scale(),
+    ut_check(!overlay_model_is_editing_value(),
              "and refusing it must not have left an edit armed with nothing behind it");
 
     ut_section("the edit functions are harmless no-ops outside of a capture");
@@ -131,11 +131,11 @@ int main(void)
      * same "safe when called out of order" property overlay_model_search_backspace() already has
      * on an empty box. */
     cheats_openphantom_jump_boost_set_scale(1.3f);
-    overlay_model_jump_scale_append('9');
-    overlay_model_jump_scale_backspace();
-    overlay_model_jump_scale_commit();
-    overlay_model_jump_scale_cancel();
-    ut_check(!overlay_model_is_editing_jump_scale(), "still nothing being edited");
+    overlay_model_value_append('9');
+    overlay_model_value_backspace();
+    overlay_model_value_commit();
+    overlay_model_value_cancel();
+    ut_check(!overlay_model_is_editing_value(), "still nothing being edited");
     ut_check(cheats_openphantom_jump_boost_scale() > 1.29f &&
                  cheats_openphantom_jump_boost_scale() < 1.31f,
              "and the stored scale never moved, since none of the four had a capture to act on");
@@ -176,28 +176,42 @@ int main(void)
              "unavailable here, since the cell it writes is resolved by the original cheat table "
              "and nothing resolved in this test");
 
+    ut_section("the draw distance row, appended after the action");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 5u, &row) &&
+                 row.kind == OVERLAY_ROW_VALUE,
+             "a typed value row, the second one this group holds, sitting last while folded shut");
+    ut_check(strcmp(row.label, "Draw distance (1.0 to 2.5)") == 0,
+             "named for what it edits, and carrying the accepted range so a player learns it "
+             "from the row rather than from having a number refused");
+    ut_check(row.available,
+             "available with nothing resolved, unlike every other row here: it edits a setting "
+             "file rather than the running game, so it works with no level loaded and even with "
+             "view_distance_fix not installed at all");
+    ut_check(row.value[0] != '\0',
+             "and it always shows a number, read from the ini rather than from the game");
+
     ut_section("opening the how-to-fly fold");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 1u + (uint32_t)CHEATS_OWN_COUNT + 4u + 6u,
+                 1u + (uint32_t)CHEATS_OWN_COUNT + 5u + 6u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary, the skip-to-next-level action and its six lines are all on "
-             "screen");
+             "the fold's own summary, the skip-to-next-level action, the draw distance row and its "
+             "six lines are all on screen");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
     /* The lines are appended after the skip-to-next-level action rather than directly under the
        summary they belong to, because that action's own id has to stay put whether the fold is
        open or shut. So the first line is two rows past the summary, not one. */
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 5u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 6u, &row) &&
                  row.kind == OVERLAY_ROW_INFO &&
                  strcmp(row.label, "    Needs an exit key set first") == 0,
              "the first line spells out in words the same ordering the row layout already shows");
-    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 5u),
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 6u),
              "but a line itself does nothing when clicked - only the summary is interactive");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 10u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
                  strcmp(row.label, "    Press your exit key to exit free camera") == 0,
              "and the sixth, last line spells out the way back out too");
 
@@ -205,7 +219,7 @@ int main(void)
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 4u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 5u,
              "its six lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");

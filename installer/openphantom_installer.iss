@@ -1312,29 +1312,64 @@ end;
 procedure InstallCompleteSaves;
 var
   Rec: TFindRec;
-  SaveDir: String;
-  Found, Copied: Integer;
+  SaveDir, SrcDir, Target: String;
+  Found, Copied, Kept: Integer;
 begin
   if not WizardIsComponentSelected('complete_saves') then
     Exit;
 
   SaveDir := AddBackslash(ExpandConstant('{app}\Save'));
-  Copied := CopyFilesInFolder(ExpandConstant('{#SavesTmp}\Save'),
-                              RemoveBackslashUnlessRoot(SaveDir), Found);
-  if Copied <> Found then
-    MsgBox(UserMessage('SavesFailed', ExpandConstant('{app}\Save')), mbError, MB_OK);
+  SrcDir := AddBackslash(ExpandConstant('{#SavesTmp}\Save'));
+  Found := 0;
+  Copied := 0;
+  Kept := 0;
 
-  if not FindFirst(SaveDir + '*.sav', Rec) then
+  if not DirExists(SrcDir) then
     Exit;
 
-  try
-    repeat
-      if (Rec.Attributes and FILE_ATTRIBUTE_READONLY) <> 0 then
-        SetFileAttributes(SaveDir + Rec.Name, Rec.Attributes and not FILE_ATTRIBUTE_READONLY);
-    until not FindNext(Rec);
-  finally
-    FindClose(Rec);
+  { A SLOT THAT ALREADY HOLDS A SAVE IS NEVER WRITTEN. This used to hand the whole set to
+    CopyFilesInFolder, which copies with FailIfExists false because that is what the carry-over
+    restore needs, and the restore is putting the player's own files back. Here it meant a returning
+    player who reran Setup to update a patch lost slots 1 to 11: complete_saves is part of the
+    default install type, UsePreviousSetupType is off so a rerun returns to that default, and the
+    error text on this very procedure promises their saved games were not touched. It now is.
+
+    The component is deliberately still offered by default. On a fresh installation nothing
+    collides, so all eleven arrive; on a rerun the player keeps every slot they have used and gets
+    only the chapters they never started. }
+  if FindFirst(SrcDir + '*', Rec) then begin
+    try
+      repeat
+        if (Rec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then begin
+          Found := Found + 1;
+          Target := SaveDir + Rec.Name;
+          if FileExists(Target) then
+            Kept := Kept + 1
+          else begin
+            if ForceDirectories(RemoveBackslashUnlessRoot(SaveDir)) then begin
+              if CopyFile(SrcDir + Rec.Name, Target, True) then begin
+                Copied := Copied + 1;
+                { Read-only cleared only on what was just written, never on a file the player
+                  already had: the media these were compiled from can carry the attribute and the
+                  game cannot write a slot that has it. }
+                if (Rec.Attributes and FILE_ATTRIBUTE_READONLY) <> 0 then
+                  SetFileAttributes(Target, Rec.Attributes and not FILE_ATTRIBUTE_READONLY);
+              end;
+            end;
+          end;
+        end;
+      until not FindNext(Rec);
+    finally
+      FindClose(Rec);
+    end;
   end;
+
+  Log('complete_saves: ' + IntToStr(Found) + ' carried, ' + IntToStr(Copied) + ' written, ' +
+      IntToStr(Kept) + ' slots left alone because the player already had a save there');
+
+  { Only a genuine failure is worth a dialog. A slot kept is the feature working. }
+  if (Copied + Kept) <> Found then
+    MsgBox(UserMessage('SavesFailed', ExpandConstant('{app}\Save')), mbError, MB_OK);
 end;
 
 { The answers that are keys rather than files. After the install, because the row that installs

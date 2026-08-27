@@ -143,6 +143,14 @@ all twenty one staged files have a row. **No installation has been run from this
 runs recorded above installed the twenty DLL build and nothing has been installed since, so those
 paragraphs describe a bundle that is no longer the one in the tree.
 
+**The bundled saved games never overwrite a slot the player already has.** They used to: the copy
+went through the same helper the carry-over restore uses, which overwrites because that is what
+restoring somebody's own files back needs. Combined with the component sitting in the default
+install type and a rerun returning to that default, a returning player updating a patch lost slots
+1 to 11, while the error text on that very copy promised their saved games were not touched. The
+component is still offered by default, because with collisions skipped a fresh installation still
+gets all eleven and a rerun keeps what the player has used.
+
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation
 before a folder is deleted and the carrying out and back that goes with it, and retiring a

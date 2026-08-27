@@ -139,6 +139,27 @@ an empty slot at the ordinary 125Hz cadence would reintroduce a smaller version 
 polling cost this DLL exists to remove. While no pad has been seen, this checks once every 500ms
 instead; once one is found, the ordinary cadence begins and stays on for the rest of the session.
 
+## Nothing is injected unless the game has focus
+
+`SendInput` does not aim at a window. It goes to whatever has focus, which is the whole reason this
+mod works at all without the game cooperating, and it is also how a controller mod ends up typing
+into somebody else's application.
+
+Every injection is therefore gated on this process owning the foreground window. Without that gate,
+a stick pushed while the game is alt tabbed moved the mouse in the player's browser, a held trigger
+fired Alt chords into it, and Start sent it an Escape. The check compares the foreground window's
+owning process to this one, which is byte for byte what `dev_overlay` already does before it reads
+a held key, so the pattern was in the tree and this code simply was not using it.
+
+**One thing deliberately still happens while unfocused: releasing.** A synthetic Alt left held down
+belongs to whichever window has focus now, so losing the foreground releases it rather than
+returning early. The button and trigger edges are recorded at the same moment rather than cleared,
+so coming back to the game with Start or a trigger already held does not fire a press the player
+made somewhere else.
+
+The poll itself keeps running while unfocused, so the pad stays tracked and a return to the game is
+immediate.
+
 ## Limitations
 
 * Only the right stick, Start and the two triggers are handled. Movement, face buttons and the

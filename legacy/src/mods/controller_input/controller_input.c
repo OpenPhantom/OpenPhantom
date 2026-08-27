@@ -310,6 +310,48 @@ static void handle_roll_triggers(const XINPUT_GAMEPAD *pad, int threshold)
     }
 }
 
+/* Whether this game owns the foreground.
+ *
+ * WHY EVERY INJECTION IS GATED ON THIS. SendInput does not aim at a window, it goes to whatever has
+ * focus. Without this check, a stick pushed while the game is alt tabbed moves the mouse in the
+ * player's browser, a trigger fires Alt chords into it, and Start sends it an Escape. That is not a
+ * quirk, it is this DLL typing into somebody else's application, and it shipped enabled by default.
+ *
+ * The foreground window's owning process is compared to this one rather than a HWND of our own
+ * being tracked, which needs nothing set up anywhere else here. Byte for byte the same check
+ * cheats_openphantom.c already makes before it reads a held key, so the pattern was in the tree and
+ * this code simply did not use it. */
+static bool is_game_foreground(void)
+{
+    HWND  foreground = GetForegroundWindow();
+    DWORD owner_pid = 0;
+
+    if (foreground == NULL) {
+        return false;
+    }
+    GetWindowThreadProcessId(foreground, &owner_pid);
+    return owner_pid == GetCurrentProcessId();
+}
+
+/* Everything this thread might be holding down, released, and every edge it tracks reset.
+ *
+ * Called when the game does not own the foreground. RELEASING HAS TO HAPPEN ANYWAY, which is why
+ * this is not simply an early return: a synthetic Alt left down belongs to whichever window has
+ * focus now, and leaving it there is worse than anything the gate prevents. The audit that found
+ * the missing gate found this alongside it, and it is the half that outlives the alt tab.
+ *
+ * The edges are recorded rather than cleared so that returning to the game with Start or a trigger
+ * already held does not fire a press the player made somewhere else. */
+static void release_everything_held(const XINPUT_GAMEPAD *pad, int threshold)
+{
+    set_alt_held(false);
+    ci_state.start_was_down = (pad->wButtons & XINPUT_GAMEPAD_START) != 0;
+    ci_state.roll_left_was_engaged  = (int)pad->bLeftTrigger  > threshold;
+    ci_state.roll_right_was_engaged = (int)pad->bRightTrigger > threshold;
+    ci_state.remainder_x = 0.0;
+    ci_state.remainder_y = 0.0;
+}
+
 static void poll_once(void)
 {
     XINPUT_STATE state;
@@ -332,6 +374,13 @@ static void poll_once(void)
     ci_state.pad_connected = true;
 
     dt = seconds_since_last_poll();
+
+    /* Nothing is injected unless this game is the window the player is actually looking at. The
+       poll itself keeps running, so the pad stays tracked and a return to the game is instant. */
+    if (!is_game_foreground()) {
+        release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
+        return;
+    }
 
     if (ci_state.config.look_enabled) {
         float x, y;

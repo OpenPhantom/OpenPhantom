@@ -76,6 +76,17 @@ PrivilegesRequired=admin
 ; Back button, and nothing installs before the ready page.
 UsePreviousSetupType=no
 
+; A LOG IS WRITTEN, ALWAYS, to the user's temp folder. This installer writes into a folder that
+; belongs to somebody else, and two of the things it decides there are invisible afterwards: which
+; saved games it carried out and back around a clean reinstall, and which of the bundled chapter
+; saves it skipped because a slot was already in use. Both are recorded, and neither leaves any
+; other trace, so without a log the only way to answer "did it touch my saves" is to have watched.
+;
+; Found the hard way: the skip decision was given a log line and the first installation that
+; exercised it produced no log to read it in, which left a save handling change unverifiable by
+; anything short of running it twice with a hex editor.
+SetupLogging=yes
+
 ; The installer stays in 32-bit mode. Windows then redirects its HKLM\SOFTWARE writes into
 ; WOW6432Node by itself, which is where the 32-bit game looks for them.
 

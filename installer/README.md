@@ -151,6 +151,19 @@ install type and a rerun returning to that default, a returning player updating 
 component is still offered by default, because with collisions skipped a fresh installation still
 gets all eleven and a rerun keeps what the player has used.
 
+**Installed from twice, and the saved games were verified rather than assumed.** A second run over
+a folder that already held all eleven slots reported `complete_saves: 11 carried, 0 written, 11
+slots left alone because the player already had a save there`. Zero written is the whole claim: the
+same run before the skip was added would have replaced every one of them. Confirmed in the game
+afterwards as well, which is the check the log cannot make: the saves loaded were the player's own
+progress from before the installation, not the bundled chapter starts. The carry-over is visible
+in the same log putting the player's saves, obi.ini and converted cutscenes back around the
+installation.
+
+That log exists because of this. `SetupLogging` was off, so the first installation to exercise the
+skip produced nothing to read the decision in, and a save handling change is not something to take
+on trust.
+
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation
 before a folder is deleted and the carrying out and back that goes with it, and retiring a

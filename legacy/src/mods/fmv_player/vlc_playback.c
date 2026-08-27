@@ -366,22 +366,33 @@ static bool escape_pressed_now(bool *was_down)
     return fresh;
 }
 
-/* True for the two posted messages that BEGIN a close, as opposed to WM_QUIT, which is what a close
- * has already turned into.
+/* True for the posted message that BEGINS a close by mouse, as opposed to WM_QUIT, which is what a
+ * close has already turned into.
  *
- * This distinction is the whole reason this function exists. Alt+F4 arrives as WM_SYSKEYDOWN with
- * VK_F4, and the close box as WM_NCLBUTTONDOWN on hit-test area HTCLOSE. Neither is a close yet:
- * DefWindowProc is what turns them into WM_SYSCOMMAND, then WM_CLOSE, then eventually
+ * The close box arrives as WM_NCLBUTTONDOWN on hit-test area HTCLOSE, and it is not a close yet:
+ * DefWindowProc is what turns it into WM_SYSCOMMAND, then WM_CLOSE, then eventually
  * PostQuitMessage. The overlay never takes activation, so the focus window during a movie is the
- * game's, so both of these are addressed to exactly the window whose messages this loop drops -
- * which means DefWindowProc never runs and no WM_QUIT is ever produced for the branch below to
- * catch. Handling only WM_QUIT preserves a quit somebody else raised and loses every quit the
- * player raises, which is the wrong half. */
+ * game's, so it is addressed to exactly the window whose messages this loop drops, which means
+ * DefWindowProc never runs and no WM_QUIT is ever produced. Handling only WM_QUIT would preserve a
+ * quit somebody else raised and lose every quit the player raises, which is the wrong half.
+ *
+ * ALT+F4 IS NOT HANDLED HERE, AND COULD NOT USEFULLY BE. WM_SYSKEYDOWN with VK_F4 used to be in
+ * the range list above and could never fire: a filtered peek returns the FIRST message in its
+ * range, Alt+F4 queues VK_MENU before VK_F4, and holding Alt autorepeats more behind it, so the F4
+ * was never examined. An external audit found that and was right about the code.
+ *
+ * It was wrong about the consequence. THE GAME IGNORES WM_CLOSE AT ALL TIMES: its window procedure
+ * at 0x0049905E takes case 0x10 in the switch, sets the result to zero and breaks, so DefWindowProcA
+ * never runs and the default destroy never happens, and the chained handlers never see it either.
+ * Only WM_DESTROY calls PostQuitMessage, raised by the game's own quit path. Confirmed in play:
+ * Alt+F4 does nothing during ordinary gameplay with no movie involved.
+ *
+ * So there was no close being lost here to restore. Detecting the combination properly was tried,
+ * and it ended the movie and then posted a close the engine discarded. Making Alt+F4 genuinely
+ * close the game would override a decision the engine took for itself, which is a behaviour change
+ * rather than a repair and does not belong in the movie player. */
 static bool is_close_request(const MSG *message)
 {
-    if (message->message == WM_SYSKEYDOWN && message->wParam == VK_F4) {
-        return true;
-    }
     return message->message == WM_NCLBUTTONDOWN && message->wParam == HTCLOSE;
 }
 
@@ -404,7 +415,6 @@ static bool is_close_request(const MSG *message)
 static bool close_was_requested(HWND game_window)
 {
     static const struct { UINT first; UINT last; } ranges[] = {
-        { WM_SYSKEYDOWN,     WM_SYSKEYDOWN     },
         { WM_NCLBUTTONDOWN,  WM_NCLBUTTONDOWN  }
     };
     MSG    message;

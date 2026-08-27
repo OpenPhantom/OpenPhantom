@@ -400,6 +400,30 @@ its load and its store, the Y cells must sit four bytes past the X cells in both
 pair must be reachable at a fixed distance with the expected opcode, and every cell must lie inside
 the host image.
 
+## Closing the game during a movie
+
+**This game cannot be closed with Alt+F4 at any time, and that is the engine's own decision.** Its
+window procedure at `0x0049905E` takes `WM_CLOSE` in the switch and returns zero without reaching
+`DefWindowProcA`, so the default destroy never happens, and because the switch takes it the message
+never reaches the chained handlers either. Only `WM_DESTROY` calls `PostQuitMessage`, and the game's
+own quit path is what raises that. Confirmed in play with no movie involved.
+
+The close box is still read off the game's queue here, because a close request that the engine
+chooses to discard is still a request this loop should not eat on the way past.
+
+**What was actually wrong here**, and an external audit found it: `WM_SYSKEYDOWN` with `VK_F4` was in
+the peeked range and could never match. A filtered peek returns the first message in its range,
+Alt+F4 queues `VK_MENU` before `VK_F4`, and holding Alt autorepeats more `VK_MENU` behind it, so the
+F4 was never examined. That dead branch is gone, along with the comment that described the mechanism
+at length without it being able to work.
+
+The audit's stated consequence, that a player could not close the game for the length of a movie,
+does not follow: they cannot close it during ordinary gameplay either. Detecting the combination
+properly was tried and did exactly nothing useful, ending the movie and then posting a close the
+engine discarded. Making Alt+F4 genuinely close the game would be overriding a decision the engine
+took for itself, which is a behaviour change rather than a repair and does not belong in the movie
+player.
+
 ## Known limitations
 
 * **`[0086a43c]` is not reproduced.** The retail function latches it on entry; the hook does not.

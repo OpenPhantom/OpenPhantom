@@ -39,7 +39,7 @@ survives that recompile, which is why it does not share a gate with the rest of 
 
 | Site | Retail VA | What |
 |---|---|---|
-| `sys_waitForFrame` | `0x475B75` | both cap immediates, the limiter flag, the Sleep push |
+| `sys_waitForFrame` | `0x475B75` | both cap immediates, the limiter flag, the Sleep push. The 1/30 immediate sits inside the matched pattern; the 1/60 one does not, so the instruction holding it is validated before either is written and the cap declines as a whole if it disagrees |
 | `sys_runSubsteps` selector | `0x475737` | the 1/64 arm is overwritten with 1/32 |
 | `render_frameEnd` | `0x46C139` | detoured for the per-frame tick |
 | `g_clockTicks++` | `0x46C1B5` | operand read; the counter is driven from elapsed time |

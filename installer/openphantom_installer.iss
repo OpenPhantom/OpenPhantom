@@ -1245,6 +1245,7 @@ var
   Height, ResultCode: Integer;
   Converted, Skipped: Integer;
   Script, Params: String;
+  InstalledFFmpeg, FFmpegExe: String;
 begin
   Height := ChosenMovieHeight;
   if Height < 0 then
@@ -1277,10 +1278,37 @@ begin
     run must not reach the network on its own initiative, however well pinned the fetch is.
     Both are unnecessary for the player-started "Convert Movies.bat", which is neither
     elevated nor silent, and it passes neither. }
+  // RUN IT FROM {tmp}, NOT FROM WHERE IT WAS JUST INSTALLED. [Dirs] grants users-modify on {app},
+  // because the game keeps its settings and saves inside its own folder and cannot run otherwise,
+  // and Windows passes that grant down by inheritance to everything created underneath it, which
+  // includes mods\fmv\ffmpeg.exe. This step runs inside an elevated process, so running a file
+  // out of a directory every user of the machine can write to is the wrong way round.
+  //
+  // Setup rewrites ffmpeg.exe on every installation, so the file copied here is its own rather than
+  // whatever happened to be there. What that does not cover is the gap between the file copy stage
+  // and this step, which is seconds rather than instants. {tmp} belongs to Setup, and copying into
+  // it closes that gap.
+  //
+  // A failed copy falls back to the installed path, with the reason in the log, rather than
+  // abandoning the conversion. That fallback is exactly what this did before the staging existed,
+  // so it cannot be worse than not having tried, and it is recorded rather than silent.
+  //
+  // The deeper fix is to stop mods\ inheriting the grant at all, which would also stop anyone
+  // swapping a feature DLL under the game between runs. That changes what a player may do with
+  // their own installation, so it is not folded in here.
+  InstalledFFmpeg := ExpandConstant('{app}\mods\fmv\ffmpeg.exe');
+  FFmpegExe := ExpandConstant('{tmp}\ffmpeg.exe');
+  if FileCopy(InstalledFFmpeg, FFmpegExe, False) then begin
+    Log('convert_movies: staged FFmpeg into ' + FFmpegExe + ', running it from there');
+  end else begin
+    Log('convert_movies: could not stage FFmpeg into {tmp}, running the installed copy at ' +
+        InstalledFFmpeg);
+    FFmpegExe := InstalledFFmpeg;
+  end;
+
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
             ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
-            ' -NoDownload -FFmpegPath "' +
-                ExpandConstant('{app}\mods\fmv\ffmpeg.exe') + '"' +
+            ' -NoDownload -FFmpegPath "' + FFmpegExe + '"' +
             ' -TargetHeight ' + IntToStr(Height);
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');

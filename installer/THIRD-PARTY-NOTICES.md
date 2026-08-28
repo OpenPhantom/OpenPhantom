@@ -71,6 +71,28 @@ wants them.
 downloads on a page. Releases get re-uploaded elsewhere, and a mirror carrying only the
 installer strands whoever takes it from there.
 
+## The binaries themselves
+
+The archives above are the *source*. `THIRD-PARTY-BINARIES.sha256` beside this file records the
+sha256 of every third-party binary the installer ships, 37 of them, in the format `sha256sum -c`
+reads. From `installer/`:
+
+    sha256sum -c THIRD-PARTY-BINARIES.sha256
+
+This existed as a gap rather than a decision: the source archives have been pinned and hashed
+since they were added, and the binaries built from them never were, which is the wrong way round
+for anyone asking what they are about to run. A licence file says what the terms are; it does not
+say that the DLL beside it is the one the project meant to ship.
+
+Only third-party binaries are listed. The project builds its own DLLs from the source in this
+repository and they change with every build, so recording their hashes in a checked-in file would
+be stale before it was committed. The point of this manifest is the code that came from somewhere
+else, which is exactly the code the repository cannot otherwise account for.
+
+Regenerate it whenever a component is refreshed, in the same commit as the refresh. A manifest
+that lags the binaries it describes is worse than none, because it reads as verification.
+
+
 ## Refreshing a component
 
 The version above and the files in `dist/` have to move together, and so does the source

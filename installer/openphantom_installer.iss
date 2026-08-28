@@ -1193,6 +1193,16 @@ begin
     Exit;
   end;
 
+  { Written to the setup log and nowhere else. The converter's own notes go to stderr under
+    -Quiet and this procedure discards stderr, so without this record the log could say the
+    cutscenes were converted and never say which FFmpeg converted them. The installer
+    carries its own copy and names it on the command line above; this is the line that
+    shows the one it named is the one that ran. }
+  if Copy(Line, 1, 7) = 'FFMPEG ' then begin
+    Log('convert_movies: ' + Line);
+    Exit;
+  end;
+
   if (Copy(Line, 1, 3) = 'OK ') or (Copy(Line, 1, 5) = 'SKIP ') or
      (Copy(Line, 1, 5) = 'FAIL ') then begin
     MovieDone := MovieDone + 1;
@@ -1260,8 +1270,17 @@ begin
   SetEnvironmentVariable('PATH',
     ExpandConstant('{app}\mods\fmv') + ';' + GetEnv('PATH'));
 
+  { -FFmpegPath names the copy this installer carried, instead of letting the script search.
+    The search consults its %LOCALAPPDATA% cache BEFORE PATH, so without this a copy left by
+    an earlier run would be preferred over the version-pinned one just installed, and run by
+    this elevated process. -NoDownload closes the other end of the same seam: an elevated
+    run must not reach the network on its own initiative, however well pinned the fetch is.
+    Both are unnecessary for the player-started "Convert Movies.bat", which is neither
+    elevated nor silent, and it passes neither. }
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
             ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
+            ' -NoDownload -FFmpegPath "' +
+                ExpandConstant('{app}\mods\fmv\ffmpeg.exe') + '"' +
             ' -TargetHeight ' + IntToStr(Height);
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');

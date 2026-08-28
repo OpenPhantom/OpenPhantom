@@ -112,6 +112,11 @@
       FAIL <source file> <code>   ffmpeg's exit code, or -1 when ffmpeg reported success but the
                                   finished file could not be put in place
       DONE converted=<n> skipped=<n> failed=<n>
+      and, ahead of all of those, exactly one line naming the binary that will do the work:
+        FFMPEG <full path>
+      That line exists because a caller reading stdout cannot otherwise find out what it
+      just ran. The installer writes it into its own log, so "the cutscenes came out wrong"
+      can be answered with which FFmpeg produced them instead of a guess.
     Progress notes, warnings and errors go to stderr in that mode, so a caller reading stdout gets
     the transcript above and only that.
 #>
@@ -146,7 +151,15 @@ param(
 
     [int]$Crf = 18,
 
-    [switch]$Force
+    [switch]$Force,
+
+    # The exact ffmpeg.exe to use, bypassing the search in Resolve-FFmpegExecutable entirely.
+    # The installer passes the copy it carried; see that function for why naming it matters.
+    [string]$FFmpegPath = "",
+
+    # Forbids the download branch. The installer passes this because it runs this script from
+    # its own elevated process.
+    [switch]$NoDownload
 )
 
 $ErrorActionPreference = "Stop"
@@ -232,6 +245,22 @@ function Write-Fatal {
 # version convenience is worth that, so that candidate does not exist. %LOCALAPPDATA% belongs to
 # one user and is not writable by another.
 function Resolve-FFmpegExecutable {
+    # An explicit path beats every search below, and it is how the installer names the copy it
+    # carried. It matters because the cache is consulted FIRST: without this, a copy left by an
+    # earlier run is preferred over the version-pinned binary the installer shipped and just put
+    # on PATH for exactly this purpose, and preferred inside an elevated process at that.
+    #
+    # Named but missing is an error and not a reason to go looking. The caller said which binary
+    # it meant, and silently running a different one is precisely the outcome this prevents.
+    if (-not [string]::IsNullOrWhiteSpace($FFmpegPath)) {
+        if (Test-Path -LiteralPath $FFmpegPath -PathType Leaf) {
+            Write-Note "FFmpeg: $FFmpegPath (named by the caller)"
+            return $FFmpegPath
+        }
+        Write-Problem "The FFmpeg named on the command line does not exist: $FFmpegPath"
+        return $null
+    }
+
     $localAppData = $env:LOCALAPPDATA
     if ([string]::IsNullOrWhiteSpace($localAppData)) {
         $localAppData = [System.IO.Path]::GetTempPath()
@@ -255,6 +284,16 @@ function Resolve-FFmpegExecutable {
         Write-Note "        This script does not know which version that is. If it is older than"
         Write-Note "        the Bink decoder, or was built without libx264, every file will fail."
         return $onPath.Source
+    }
+
+    # Refused rather than fetched. The pin and the SHA256 further down make the download itself
+    # sound, so this is about WHEN it is allowed to happen rather than whether the file can be
+    # trusted: an unattended run that holds administrator rights should not reach the network on
+    # its own initiative. A player running the tool themselves afterwards still gets the download.
+    if ($NoDownload) {
+        Write-Problem "FFmpeg was not found, and this run is not permitted to download one."
+        Write-Problem "Install the cutscene component, or put ffmpeg.exe on PATH, and run again."
+        return $null
     }
 
     Write-Note "FFmpeg was not found, so this will download a portable copy (about 106 MB, once"
@@ -475,6 +514,14 @@ $ffmpegExe = Resolve-FFmpegExecutable
 if (-not $ffmpegExe) {
     Write-Fatal "No usable FFmpeg, so nothing can be converted."
     exit 2
+}
+
+# Announced on stdout under -Quiet, where the notes above went to stderr and a caller
+# reading stdout would otherwise never learn which binary ran. Emitted here rather than at
+# the four returns inside the resolver, so every route reports in one shape and none can be
+# added later that forgets to.
+if ($Quiet) {
+    Write-Output "FFMPEG $ffmpegExe"
 }
 
 # Building the -vf chain: scale if a height was asked for, make the size encodable if not, and

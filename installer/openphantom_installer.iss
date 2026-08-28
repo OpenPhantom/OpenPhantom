@@ -17,6 +17,13 @@
 
 #define GameName "Star Wars Episode I: The Phantom Menace"
 
+; OUR version, not the game's. Written once because it reaches three places that must agree: the
+; version the wizard shows, the version resource of the built executable, and the file name. It was
+; three separate literals and they drifted, so a build shipped as one version announced itself as
+; another. Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the
+; v1.0 in the PowerShell path is Windows own, neither of them moves when this does.
+#define AppVer "1.1"
+
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
 
@@ -29,7 +36,7 @@
 ; rather than a second copy of it.
 AppId={{7C5AF842-8C19-4B17-CCA0-9AE3A49BD10E}
 AppName={#GameName}
-AppVersion=1.0
+AppVersion={#AppVer}
 
 ; AppName is the game, so these are the only place the installer says where it came from. All three
 ; links go to the project rather than to a personal page.
@@ -50,11 +57,11 @@ DefaultDirName={commonpf32}\LucasArts\The Phantom Menace
 ; rather than imposed.
 DisableDirPage=no
 DefaultGroupName=LucasArts\The Phantom Menace
-OutputBaseFilename=OpenPhantom_Installer
+OutputBaseFilename=OpenPhantom_Installer_{#AppVer}
 
 ; The version resource of the produced installer. Without this Inno stamps its own compiler version
 ; on it, so the file properties would name Inno's release rather than ours.
-VersionInfoVersion=1.0
+VersionInfoVersion={#AppVer}
 ; Built installers are kept out of the repository; they are rebuilt from this script.
 OutputDir=output
 UninstallDisplayIcon={app}\WMAIN.EXE

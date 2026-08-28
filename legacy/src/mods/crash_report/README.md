@@ -54,8 +54,22 @@ arranged deliberately rather than left to chance.
   build, which does not exist. The raw stack is swept for values landing in `WMAIN`'s `.text`, which
   yields *candidates* for the call chain, stale ones included. That is why the stack offset is
   printed with each: the lowest offsets are the youngest frames and the most believable.
-* At most four reports per process; beyond that nothing new is said and a flood would bury the one
-  entry that matters.
+* At most four full reports per process; beyond that nothing new is said and a flood would bury
+  the one entry that matters.
+* **A first-chance access violation is not a report.** This project reads engine memory through
+  the guarded readers in `common/memory.c`, which are SEH: they provoke access violations on
+  purpose across 47 call sites and answer `false`. A vectored handler installed first sees every
+  one of them, and the exception code is the same code a real crash carries, so filtering by code
+  cannot tell them apart. Four recovered probes used to spend the whole budget above, leaving the
+  reporter silent for the crash it exists to catch.
+
+  Access violations therefore get one compact line per distinct faulting site, then a count, from
+  a budget of their own; the full report for one comes from the unhandled filter, which runs only
+  when nothing else took it. Every other fatal code still gets its report at first chance, because
+  a `memcpy` cannot raise an illegal instruction or a divide by zero. The cost is that an access
+  violation swallowed further out, while the process then hangs rather than dying, is one line
+  instead of a report; that line still names the faulting address, what it touched and what it was
+  doing, and the registers and stack sweep are what is given up.
 * Only genuinely fatal codes are reported. Breakpoints, C++ throws (`0xE06D7363`) and the
   thread-naming exception are control flow, not crashes.
 * On `EXCEPTION_STACK_OVERFLOW` the report itself needs stack, and it has only the single page

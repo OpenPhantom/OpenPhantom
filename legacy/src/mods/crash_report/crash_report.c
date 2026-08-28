@@ -39,7 +39,10 @@
 #include <string.h>
 
 #define CRASH_SECTION      "crash_report"
-#define MAX_REPORTS        4       /* more than four reports say nothing new */
+#define MAX_REPORTS        4       /* full reports; more than four say nothing new */
+/* Distinct first-chance access violations named in the log. One compact line each rather than a
+ * report, drawn from a budget of their own so they cannot starve the four above. */
+#define MAX_AV_SITES       8
 #define STACK_SCAN_BYTES   3072    /* about 768 pointers; deeper only gets blurrier */
 /* On a stack overflow the sweep is kept but shortened: the repeating pattern IS the bug, so a
  * few frames already show it, and every line logged costs a kilobyte of the single page that
@@ -53,6 +56,13 @@ typedef struct crash_report_state {
     bool                            installed;
     LONG                            reports;
     LONG                            busy;    /* held across write_report, see its own note */
+    LONG                            av_total;      /* every first-chance AV, new or repeated */
+    unsigned                        av_site_count;
+    struct {
+        uint32_t eip;
+        uint32_t fault;
+        unsigned hits;
+    }                               av_sites[MAX_AV_SITES];
     PVOID                           vectored_handler;
     LPTOP_LEVEL_EXCEPTION_FILTER    previous_filter;
 } crash_report_state_t;
@@ -189,6 +199,101 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
     }
 }
 
+/* ==============================================================================================
+ * WHY A FIRST-CHANCE ACCESS VIOLATION IS NOT A CRASH REPORT.
+ *
+ * This project reads engine memory through the guarded readers in common/memory.c, and those are
+ * SEH: memory_try_read wraps a memcpy in __try and __except and answers false when it faults.
+ * Forty seven call sites use them, on per object and per frame paths, because that is what
+ * CONTRIBUTING asks for. Every one of those probes that touches an unmapped page raises a real
+ * access violation.
+ *
+ * A vectored handler installed first sees all of them, ahead of the __except that is about to
+ * swallow them. Filtering by exception code does not help, because the code is exactly the code a
+ * real crash carries. So this was writing a full CRASH block for routine probe faults, and at four
+ * reports the budget was gone: four recovered probes and the reporter was finished, silent for the
+ * crash it exists to catch. It did not merely add noise to the log, it spent itself on noise.
+ *
+ * Identifying the probe is not available from in here. common/ is a static library, so each of the
+ * twenty one DLLs carries its own copy of memory_try_read, and a handler living in this one would
+ * need every one of their address ranges; a thread local depth counter has the same problem from
+ * the other end. What IS available is that a probe can raise only an access violation. A memcpy
+ * cannot raise an illegal instruction, a divide by zero or a privileged instruction, so every
+ * other fatal code still gets its report at first chance, exactly as it did before.
+ *
+ * Access violations therefore get one compact line per distinct site and a count for the rest,
+ * and the full report for one comes from the unhandled filter, which runs only when nothing else
+ * took it. The line is deliberately cheap: no module lookup, because that takes the loader lock
+ * and this runs often.
+ *
+ * WHAT THIS COSTS. An access violation that something further out swallows, while the process then
+ * hangs rather than dying, is now one line instead of a report. That line still names the faulting
+ * address, the address it touched and what it was doing, which is the part worth having; the
+ * registers and the stack sweep are what is given up. That is the right way round: a report never
+ * written because four probes spent the budget is worth less than a line that always is.
+ * ============================================================================================ */
+static void note_first_chance_av(const EXCEPTION_RECORD *record, const CONTEXT *context)
+{
+    uint32_t eip   = (uint32_t)context->Eip;
+    uint32_t fault = (record->NumberParameters >= 2)
+                   ? (uint32_t)record->ExceptionInformation[1] : 0u;
+    unsigned index;
+
+    /* The same latch write_report holds, so the table cannot be raced and a note cannot land in
+     * the middle of a report. Dropping the note while a report is in progress is correct: the
+     * report is the more important of the two and it says what it is reporting. */
+    if (InterlockedCompareExchange(&crash_state.busy, 1, 0) != 0) {
+        return;
+    }
+
+    crash_state.av_total++;
+
+    for (index = 0; index < crash_state.av_site_count; ++index) {
+        if (crash_state.av_sites[index].eip == eip &&
+            crash_state.av_sites[index].fault == fault) {
+            crash_state.av_sites[index].hits++;   /* seen before: counted, not printed again */
+            InterlockedExchange(&crash_state.busy, 0);
+            return;
+        }
+    }
+
+    if (crash_state.av_site_count < MAX_AV_SITES) {
+        const char *operation = (record->NumberParameters < 2) ? "?"
+                              : (record->ExceptionInformation[0] == 0) ? "READ"
+                              : (record->ExceptionInformation[0] == 1) ? "WRITE" : "EXECUTE";
+
+        crash_state.av_sites[crash_state.av_site_count].eip   = eip;
+        crash_state.av_sites[crash_state.av_site_count].fault = fault;
+        crash_state.av_sites[crash_state.av_site_count].hits  = 1;
+        crash_state.av_site_count++;
+
+        log_info("first-chance AV at %08X, %s %08X. Not a crash in itself: the guarded readers "
+                 "provoke these deliberately and answer false. Named once, then counted.",
+                 (unsigned)eip, operation, (unsigned)fault);
+    }
+
+    InterlockedExchange(&crash_state.busy, 0);
+}
+
+/* Written into a real report, so the recovered faults leading up to a crash sit beside it rather
+ * than being the reason there is no report at all. */
+static void report_first_chance_summary(void)
+{
+    unsigned index;
+
+    if (crash_state.av_total == 0) {
+        return;
+    }
+    log_info("--- %ld first-chance access violations before this, %u distinct ---",
+             (long)crash_state.av_total, crash_state.av_site_count);
+    for (index = 0; index < crash_state.av_site_count; ++index) {
+        log_info("  %08X touched %08X, %u time(s)",
+                 (unsigned)crash_state.av_sites[index].eip,
+                 (unsigned)crash_state.av_sites[index].fault,
+                 crash_state.av_sites[index].hits);
+    }
+}
+
 static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *context)
 {
     /* Static, for the same reason describe_module's own buffer is: the guard below makes this
@@ -255,6 +360,8 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
         report_engine_frames((uintptr_t)context->Esp, STACK_SCAN_BYTES);
     }
 
+    report_first_chance_summary();
+
     log_info("WMAIN .text %08X + %08X",
              (unsigned)host_image_text(), (unsigned)host_image_text_size());
     log_info("################ END ################");
@@ -264,10 +371,19 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
 
 static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *pointers)
 {
-    if (pointers != NULL && pointers->ExceptionRecord != NULL && pointers->ContextRecord != NULL &&
-        is_fatal(pointers->ExceptionRecord->ExceptionCode)) {
-        write_report("first hand", pointers->ExceptionRecord, pointers->ContextRecord);
+    if (pointers == NULL || pointers->ExceptionRecord == NULL ||
+        pointers->ContextRecord == NULL ||
+        !is_fatal(pointers->ExceptionRecord->ExceptionCode)) {
+        return EXCEPTION_CONTINUE_SEARCH;          /* bend nothing */
     }
+
+    if (pointers->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        /* The one code the guarded readers can raise. See the essay above. */
+        note_first_chance_av(pointers->ExceptionRecord, pointers->ContextRecord);
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    write_report("first hand", pointers->ExceptionRecord, pointers->ContextRecord);
     return EXCEPTION_CONTINUE_SEARCH;              /* bend nothing */
 }
 

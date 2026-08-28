@@ -853,14 +853,41 @@ static void __cdecl on_npc_damage(char *frame_pointer)
     }
 }
 
+/* WHY EVERY NAKED DETOUR BELOW SAVES THE x87 STACK.
+ *
+ * pushad saves the eight general purpose registers and pushfd saves EFLAGS. Neither touches the
+ * FPU, and this is a 1999 build with no SSE: every float the engine holds lives in the eight deep
+ * x87 register stack. All six detours in this section cut into the MIDDLE of engine functions, so
+ * the engine has live x87 values at the moment we take control, and the C handler we call is
+ * compiled by a modern MSVC that is free to use the FPU for whatever it likes.
+ *
+ * The danger is not an unbalanced handler, compiler output balances itself. It is that x87 has
+ * only eight registers and no spill. If the engine is holding six values here and the handler
+ * pushes three more, the ninth push does not fault: it marks the register indefinite. The engine
+ * then carries on with a NaN where a coordinate used to be, and it surfaces somewhere else
+ * entirely, frames later, as a camera that snaps to nowhere or a fall that never registers. Two
+ * of these six sit in camera code and three in ground contact, which is exactly where the engine
+ * is most likely to be holding a full stack.
+ *
+ * fnsave writes the whole x87 state out and reinitialises the unit, so the handler starts on a
+ * clean FPU; frstor puts the engine's stack, tags and control word back exactly. 112 rather than
+ * the 108 the state needs keeps esp on a 16 byte boundary. Every one of these is an edge rather
+ * than per frame traffic, so the cost is irrelevant. diagnostics/diag_world.c's hook_ai_opcode
+ * has done this since it was written; these six had not, which was an oversight rather than a
+ * decision.
+ */
 static void __declspec(naked) hook_npc_damage(void)
 {
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         push ebp
         call on_npc_damage
         add  esp, 4
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         cmp  byte ptr npc_damage_skip, 0
@@ -984,7 +1011,11 @@ static void __declspec(naked) hook_fall_damage(void)
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         call on_fall_damage
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         jmp dword ptr [fall_damage_continue]
@@ -1011,7 +1042,11 @@ static void __declspec(naked) hook_time_death(void)
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         call on_time_death
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         jmp dword ptr [time_death_continue]
@@ -1043,7 +1078,11 @@ static void __declspec(naked) hook_distance_death(void)
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         call on_distance_death
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         cmp byte ptr distance_death_skip, 0
@@ -1074,7 +1113,11 @@ static void __declspec(naked) hook_camera_lock(void)
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         call on_camera_lock
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         jmp dword ptr [camera_lock_continue]
@@ -1111,7 +1154,11 @@ static void __declspec(naked) hook_camera_freeze(void)
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         call on_camera_freeze
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         jmp dword ptr [camera_freeze_continue]

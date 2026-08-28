@@ -516,14 +516,26 @@ static void __cdecl on_death_gate(char *frame_pointer)
 
 static void *death_gate_trampoline;
 
+/* NAKED. Saves the GP registers, the flags AND the complete x87 state. This cuts into the middle
+ * of enemy_onContact, so the engine holds live floats in the eight deep x87 register stack when we
+ * take control, and on_death_gate below is free to use the FPU. Without fnsave/frstor a handler
+ * that pushes past the eighth register does not fault, it marks the register indefinite, and the
+ * engine carries on with a NaN where a coordinate was. ebp still holds enemy_onContact's frame
+ * pointer after the save: neither pushad nor the sub touches it. The long version of this reason
+ * is in dev_overlay/cheats_openphantom.c, above its own naked detours.
+ */
 static void __declspec(naked) hook_death_gate(void)
 {
     __asm {
         pushad
         pushfd
+        sub    esp, 112
+        fnsave [esp]
         push ebp                 /* enemy_onContact's frame pointer */
         call on_death_gate
         add  esp, 4
+        frstor [esp]
+        add    esp, 112
         popfd
         popad
         jmp  dword ptr [death_gate_trampoline]

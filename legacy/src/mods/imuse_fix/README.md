@@ -110,6 +110,27 @@ exactly `1`, which is the same test the engine's own per-frame service uses.
 | two patterns disagree about a cell | nothing installs, and the log names the two values |
 | the frame hook cannot be installed | nothing installs. There is no degraded mode: both halves are decisions taken from state that only means anything when sampled every frame |
 
+## Patching code another thread may be running
+
+iMUSE runs its heartbeat from a WINMM timer thread, and that thread calls `ImLock`. The atomic
+increment is written over code that thread may be executing. Installing before audio starts was
+the assumption that made this safe, and until now it was only an assumption: nothing checked it
+and nothing said it.
+
+It matters for `ImLock` specifically because the patch **moves an instruction boundary**. The
+`lock` prefix costs a byte, so `ret` shifts from `+6` to `+7`; a thread parked at `+6`, about to
+return, would resume inside the address operand and run whatever it decoded as. Every other
+thread is therefore suspended and asked where its instruction pointer is, and the write happens
+only when none of them is inside the function. If one is, they are resumed and it is retried;
+after eight attempts the patch declines, and a declined lock is rolled back exactly as any other
+failure is.
+
+Nothing is allocated while threads are suspended, which is why the `ImUnlock` detour is installed
+outside that window: `detour_install` builds a trampoline with `VirtualAlloc`, and taking the
+address space lock while holding threads still is a worse trade than what it would buy. `ImUnlock`
+does not need the window anyway, because its patch puts a five byte `jmp` where a five byte `mov`
+was and no boundary moves.
+
 ## Known limitations
 
 * **The pause is the engine's own, so it is as coarse as the engine's own.** There is no fade and no

@@ -58,6 +58,7 @@
 #include "common/patch.h"
 
 #include <windows.h>
+#include <tlhelp32.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -157,10 +158,137 @@ static void __cdecl hook_im_unlock(void)
     }
 }
 
+/* ==============================================================================================
+ * QUIESCING THE OTHER THREADS, AND WHY ONLY THIS ONE WRITE NEEDS IT.
+ *
+ * iMUSE runs its heartbeat from a WINMM timer thread, and that thread calls ImLock. This patch is
+ * therefore written over code another thread may be executing at that instant. Installing before
+ * audio starts was the assumption that made it safe, and it was only ever an assumption: nothing
+ * checked it and nothing wrote it down.
+ *
+ * IT MATTERS HERE BECAUSE THE INSTRUCTION BOUNDARIES MOVE. Before the patch the body is
+ *
+ *     +0  FF 05 <abs32>   inc dword ptr [gate]     six bytes
+ *     +6  C3              ret
+ *
+ * and after it, one byte longer for the prefix,
+ *
+ *     +0  F0 FF 05 <abs32>  lock inc dword ptr [gate]   seven bytes
+ *     +7  C3                ret
+ *
+ * A thread parked at +0 is fine either way: it resumes into the new instruction and the increment
+ * happens once, atomically. A thread parked at +6, which is to say about to execute the ret,
+ * resumes into the last byte of the address operand and runs whatever that decodes as. That is not
+ * a torn read that a careful write order avoids, it is an instruction boundary that no longer
+ * exists, and the only way to be sure of it is to look.
+ *
+ * So every other thread in the process is suspended, each one asked where its instruction pointer
+ * is, and the write happens only when none of them is inside the function. If one is, they are all
+ * resumed and it is tried again a moment later; after eight attempts the patch declines, and
+ * declining is handled by the caller exactly as any other failure to make the lock atomic is.
+ *
+ * NOTHING IS ALLOCATED WHILE THEY ARE SUSPENDED. patch_write_bytes reaches VirtualProtect, memcpy
+ * and FlushInstructionCache and no further; if a suspended thread held a lock this one then
+ * wanted, the process would stop there and never start again. That is also why the ImUnlock detour
+ * is installed outside this window rather than inside it: detour_install builds a trampoline with
+ * VirtualAlloc, and taking the address space lock while holding threads still is a worse trade
+ * than the thing it would buy.
+ *
+ * WHAT ImUnlock DOES NOT NEED. Its patch puts a five byte jmp where a five byte mov was, so no
+ * boundary moves: an instruction pointer in that function is either at +0, which is valid before
+ * and after, or already past +5. What is left there is the ordinary cross modifying code window,
+ * which is narrow and which every detour in this project already lives with.
+ * ============================================================================================ */
+#define QUIESCE_MAX_THREADS 128u
+#define QUIESCE_ATTEMPTS    8u
+
+typedef struct quiesce {
+    HANDLE   threads[QUIESCE_MAX_THREADS];
+    unsigned count;
+} quiesce_t;
+
+static void quiesce_release(quiesce_t *held)
+{
+    unsigned index;
+
+    for (index = 0; index < held->count; ++index) {
+        ResumeThread(held->threads[index]);
+        CloseHandle(held->threads[index]);
+    }
+    held->count = 0;
+}
+
+/* Suspends every other thread in this process and answers whether the range is clear of all of
+ * them. The caller releases either way: a false answer still leaves threads suspended, because
+ * stopping the walk early is the point of it. Anything that cannot be established, a thread that
+ * will not open, a suspend that fails, more threads than there is room for, counts as not clear;
+ * a thread this cannot vouch for is exactly the thread that might be standing on the bytes. */
+static bool quiesce_take(quiesce_t *held, uintptr_t low, uintptr_t high)
+{
+    HANDLE        snapshot;
+    THREADENTRY32 entry;
+    DWORD         self = GetCurrentThreadId();
+    DWORD         own_process = GetCurrentProcessId();
+    bool          clear = true;
+
+    held->count = 0;
+
+    snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    entry.dwSize = sizeof(entry);
+    if (!Thread32First(snapshot, &entry)) {
+        CloseHandle(snapshot);
+        return false;
+    }
+
+    do {
+        HANDLE  thread;
+        CONTEXT context;
+
+        if (entry.th32OwnerProcessID != own_process || entry.th32ThreadID == self) {
+            continue;
+        }
+        if (held->count >= QUIESCE_MAX_THREADS) {
+            clear = false;
+            break;
+        }
+
+        thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE,
+                            entry.th32ThreadID);
+        if (thread == NULL) {
+            clear = false;
+            break;
+        }
+        if (SuspendThread(thread) == (DWORD)-1) {
+            CloseHandle(thread);
+            clear = false;
+            break;
+        }
+        held->threads[held->count++] = thread;
+
+        context.ContextFlags = CONTEXT_CONTROL;
+        if (!GetThreadContext(thread, &context)) {
+            clear = false;
+            break;
+        }
+        if ((uintptr_t)context.Eip >= low && (uintptr_t)context.Eip < high) {
+            clear = false;                 /* parked on the bytes about to be rewritten */
+            break;
+        }
+    } while (Thread32Next(snapshot, &entry));
+
+    CloseHandle(snapshot);
+    return clear;
+}
+
 /* ============================================================================================ */
 /* ImLock is `inc [gate]` followed by `ret`, and the compiler left nine bytes of padding after it.
  * A `lock` prefix makes the increment atomic and costs one byte, so the whole repair fits inside
- * the function's own paragraph. */
+ * the function's own paragraph. See the essay above for why the write waits for the other
+ * threads to be somewhere else. */
 static bool make_lock_atomic(uintptr_t im_lock)
 {
     uint8_t  atomic_increment[8];
@@ -195,8 +323,32 @@ static bool make_lock_atomic(uintptr_t im_lock)
     memcpy(atomic_increment + 3, &gate_operand, sizeof(gate_operand));
     atomic_increment[7] = 0xC3;          /* ret                          */
 
-    return patch_write_bytes(im_lock, atomic_increment, sizeof(atomic_increment))
-           == PATCH_RESULT_OK;
+    {
+        quiesce_t held;
+        unsigned  attempt;
+
+        for (attempt = 0; attempt < QUIESCE_ATTEMPTS; ++attempt) {
+            bool clear = quiesce_take(&held, im_lock, im_lock + sizeof(atomic_increment));
+            bool written = false;
+
+            if (clear) {
+                written = (patch_write_bytes(im_lock, atomic_increment,
+                                             sizeof(atomic_increment)) == PATCH_RESULT_OK);
+            }
+            quiesce_release(&held);
+
+            if (clear) {
+                return written;            /* logged by the caller either way */
+            }
+            Sleep(2);                      /* outside the suspension, on purpose */
+        }
+
+        log_warning("ImLock at %08X had another thread standing on it every time this looked, so "
+                    "the atomic increment is NOT written. The music lock stays as the game "
+                    "shipped it, which is the state this fix improves on rather than depends on.",
+                    (unsigned)im_lock);
+        return false;
+    }
 }
 
 bool imuse_guard_install(const imuse_sites_t *sites)

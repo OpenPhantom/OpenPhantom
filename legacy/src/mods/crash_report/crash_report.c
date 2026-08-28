@@ -41,6 +41,10 @@
 #define CRASH_SECTION      "crash_report"
 #define MAX_REPORTS        4       /* more than four reports say nothing new */
 #define STACK_SCAN_BYTES   3072    /* about 768 pointers; deeper only gets blurrier */
+/* On a stack overflow the sweep is kept but shortened: the repeating pattern IS the bug, so a
+ * few frames already show it, and every line logged costs a kilobyte of the single page that
+ * is left to work with. */
+#define STACK_SCAN_BYTES_OVERFLOW 512
 #define MAX_FRAMES_SHOWN   24
 #define BYTES_BEFORE_EIP   16
 #define BYTES_AROUND_EIP   32
@@ -48,6 +52,7 @@
 typedef struct crash_report_state {
     bool                            installed;
     LONG                            reports;
+    LONG                            busy;    /* held across write_report, see its own note */
     PVOID                           vectored_handler;
     LPTOP_LEVEL_EXCEPTION_FILTER    previous_filter;
 } crash_report_state_t;
@@ -85,7 +90,10 @@ static bool is_fatal(DWORD code)
 static void describe_module(uintptr_t address, char *out, size_t size)
 {
     HMODULE  module = NULL;
-    char     path[MAX_PATH];
+    /* Static, not automatic. write_report holds a guard that makes this single threaded for
+     * its whole body, so there is nothing here to race, and 260 bytes kept off the stack are
+     * 260 bytes that still exist on the one path where the stack is what ran out. */
+    static char path[MAX_PATH];
     char    *file_name;
 
     out[0] = '\0';
@@ -128,8 +136,18 @@ static void report_faulting_bytes(uintptr_t instruction_pointer)
 
     bytes = (const uint8_t *)(instruction_pointer - BYTES_BEFORE_EIP);
     for (index = 0; index < BYTES_AROUND_EIP && written < (int)sizeof(line) - 4; ++index) {
-        written += _snprintf(line + written, sizeof(line) - (size_t)written, "%02X%s",
-                             bytes[index], (index == BYTES_BEFORE_EIP - 1) ? " | " : " ");
+        /* _snprintf returns NEGATIVE on truncation rather than the length it wanted. Adding
+         * that to `written` walks the next write off the FRONT of the buffer, and the loop
+         * guard does not catch it, because a negative is still below the limit. It cannot
+         * happen at the constants above, where 32 bytes need 98 of 160, and that is exactly
+         * why it would go unnoticed by whoever widens BYTES_AROUND_EIP later, inside the one
+         * function here that only ever runs when something has already gone wrong. */
+        int chunk = _snprintf(line + written, sizeof(line) - (size_t)written, "%02X%s",
+                              bytes[index], (index == BYTES_BEFORE_EIP - 1) ? " | " : " ");
+        if (chunk < 0) {
+            break;
+        }
+        written += chunk;
     }
     line[sizeof(line) - 1] = '\0';
 
@@ -141,7 +159,7 @@ static void report_faulting_bytes(uintptr_t instruction_pointer)
  * does not exist. We sweep the raw stack for values that land in WMAIN's .text. That yields
  * candidates for the call chain, stale ones included, which is exactly why the stack offset is
  * printed with each: the LOWEST offsets are the youngest frames and the most believable. */
-static void report_engine_frames(uintptr_t stack_pointer)
+static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
 {
     const uint32_t *slot = (const uint32_t *)stack_pointer;
     uintptr_t       text_start = host_image_text();
@@ -152,7 +170,7 @@ static void report_engine_frames(uintptr_t stack_pointer)
     log_info("--- stack sweep, .text %08X..%08X (lowest offset = youngest frame) ---",
              (unsigned)text_start, (unsigned)text_end);
 
-    for (index = 0; index < STACK_SCAN_BYTES / 4 && shown < MAX_FRAMES_SHOWN; ++index) {
+    for (index = 0; index < scan_bytes / 4 && shown < MAX_FRAMES_SHOWN; ++index) {
         uint32_t value;
 
         if (!memory_read_u32((uintptr_t)&slot[index], &value)) {
@@ -173,18 +191,41 @@ static void report_engine_frames(uintptr_t stack_pointer)
 
 static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *context)
 {
-    char where[MAX_PATH + 32];
+    /* Static, for the same reason describe_module's own buffer is: the guard below makes this
+     * function single threaded for the whole of its body. */
+    static char where[MAX_PATH + 32];
+    bool        overflow;
 
-    if (InterlockedIncrement(&crash_state.reports) > MAX_REPORTS) {
+    /* A CRASH HANDLER THAT FAULTS CALLS ITSELF. The vectored handler sees the second exception
+     * exactly as it saw the first, so without this the reporter recurses, each time on a shorter
+     * stack, until something else kills the process and the log ends mid line. The report counter
+     * below does not prevent that on its own, it only bounds how often it happens.
+     *
+     * InterlockedCompareExchange rather than a plain flag, because two threads can fault in the
+     * same instant. The loser is dropped rather than made to wait, which is the right way round:
+     * the first crash is the one worth reading and the second is usually a consequence of it. */
+    if (InterlockedCompareExchange(&crash_state.busy, 1, 0) != 0) {
         return;
     }
 
-    describe_module((uintptr_t)record->ExceptionAddress, where, sizeof(where));
+    if (InterlockedIncrement(&crash_state.reports) > MAX_REPORTS) {
+        InterlockedExchange(&crash_state.busy, 0);
+        return;
+    }
 
+    overflow = (record->ExceptionCode == EXCEPTION_STACK_OVERFLOW);
+
+    /* THE CODE, THE ADDRESS AND THE REGISTERS GO OUT BEFORE THE MODULE IS NAMED, and that order
+     * is the whole point of this paragraph. GetModuleHandleEx and GetModuleFileName both take the
+     * loader lock, and one of the three crashes this reporter was written for hung inside a
+     * graphics wrapper cleanup, which is to say inside the loader, holding it. Naming the module
+     * first, as this used to, means that deadlock costs the entire report rather than one line of
+     * it. Everything that can be had from the record and the context alone is therefore already
+     * in the file by the time anything reaches for the lock. */
     log_info("################ CRASH (%s) ################", how);
-    log_error("%s (%08lX) at %08X  ->  %s", fatal_exception_name(record->ExceptionCode),
-              (unsigned long)record->ExceptionCode, (unsigned)(uintptr_t)record->ExceptionAddress,
-              where);
+    log_error("%s (%08lX) at %08X", fatal_exception_name(record->ExceptionCode),
+              (unsigned long)record->ExceptionCode,
+              (unsigned)(uintptr_t)record->ExceptionAddress);
 
     if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
         const char *operation = (record->ExceptionInformation[0] == 0) ? "READ"
@@ -198,12 +239,27 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
              (unsigned)context->Eax, (unsigned)context->Ebx, (unsigned)context->Ecx,
              (unsigned)context->Edx, (unsigned)context->Esi, (unsigned)context->Edi);
 
-    report_faulting_bytes((uintptr_t)context->Eip);
-    report_engine_frames((uintptr_t)context->Esp);
+    describe_module((uintptr_t)record->ExceptionAddress, where, sizeof(where));
+    log_info("faulting module: %s", where);
+
+    if (overflow) {
+        /* The byte dump is skipped here, and not because it would fault: it is simply the least
+         * useful part of this particular report, since on a stack overflow the faulting
+         * instruction is whichever one happened to touch the guard page rather than the bug. What
+         * it costs is another 160 byte buffer and another kilobyte log line on the single page
+         * Windows leaves once it clears the guard, and the sweep is worth more than it is: in a
+         * runaway recursion the repeating pattern of return addresses IS the answer. */
+        report_engine_frames((uintptr_t)context->Esp, STACK_SCAN_BYTES_OVERFLOW);
+    } else {
+        report_faulting_bytes((uintptr_t)context->Eip);
+        report_engine_frames((uintptr_t)context->Esp, STACK_SCAN_BYTES);
+    }
 
     log_info("WMAIN .text %08X + %08X",
              (unsigned)host_image_text(), (unsigned)host_image_text_size());
     log_info("################ END ################");
+
+    InterlockedExchange(&crash_state.busy, 0);
 }
 
 static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *pointers)

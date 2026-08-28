@@ -51,9 +51,19 @@ arranged deliberately rather than left to chance.
 ## Known limitations
 
 * **The stack sweep is not a real stack walk.** That would need the unwind data of a 1999 MSVC
-  build, which does not exist. The raw stack is swept for values landing in `WMAIN`'s `.text`, which
-  yields *candidates* for the call chain, stale ones included. That is why the stack offset is
-  printed with each: the lowest offsets are the youngest frames and the most believable.
+  build, which does not exist. The raw stack is swept for values that land in executable memory,
+  which yields *candidates* for the call chain, stale ones included. That is why the stack offset
+  is printed with each: the lowest offsets are the youngest frames and the most believable.
+* **It sweeps for every module, not only the engine.** A frame inside `WMAIN` is marked `engine`;
+  anything else is named by the base of the module holding it and its offset into it, and a short
+  legend at the end resolves those bases to file names. The legend is last on purpose: naming a
+  module needs `GetModuleFileName` and the loader lock, so if that deadlocks the report is already
+  complete and only the names are missing.
+
+  This was added after a crash whose entire call chain was in `d3d9.dll`, `USER32.dll` and the
+  graphics driver, with no engine frame beneath it. The old sweep recognised `WMAIN` and nothing
+  else, so it printed the frame loop, stopped, and read as a dead end; finding the DLL responsible
+  took five rounds of disabling features by hand. The addresses were on the stack the whole time.
 * At most four full reports per process; beyond that nothing new is said and a flood would bury
   the one entry that matters.
 * **A first-chance access violation is not a report.** This project reads engine memory through

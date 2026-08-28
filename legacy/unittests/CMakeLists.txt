@@ -23,6 +23,7 @@ endfunction()
 
 
 add_unit_test(fov_math   variable_fov      variable_fov/fov_math.c)
+add_unit_test(sound_owner sound_lifetime_fix sound_lifetime_fix/sound_lifetime_fix.c)
 add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
 
 # The damper, the mouse bank and the travel angle together: all three are the arithmetic that

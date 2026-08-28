@@ -154,6 +154,11 @@ add_engine_fix(ground_clip_fix
     move_mode.c
 )
 
+add_engine_fix(sound_lifetime_fix
+    dll_main.c
+    sound_lifetime_fix.c
+)
+
 add_engine_fix(diagnostics
     dll_main.c
     diagnostics.c

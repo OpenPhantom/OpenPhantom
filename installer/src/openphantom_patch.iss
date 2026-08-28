@@ -72,13 +72,14 @@ Name: "patch"; Description: "{cm:CompPatch}"; Types: everything full custom
 
 ; ---- part of the patch ---------------------------------------------------------------------------
 ; The wrapper is here because the game does not reach a working Direct3D without it, and its ini was
-; derived from the engine, so the two are one component. The next two repair crashes. crash_report
+; derived from the engine, so the two are one component. The next three repair crashes. crash_report
 ; does nothing until the process dies and is then the only thing that says what happened. The last
 ; two repair audio faults that have no upside to keeping.
 Name: "patch\wrapper";             Description: "{cm:CompWrapper}";     Types: everything full custom; Flags: fixed
 Name: "patch\crt_copy_fix";        Description: "{cm:CompCrtCopy}";     Types: everything full custom; Flags: fixed
 Name: "patch\render_guard";        Description: "{cm:CompRenderGuard}"; Types: everything full custom; Flags: fixed
 Name: "patch\crash_report";        Description: "{cm:CompCrashRep}";    Types: everything full custom; Flags: fixed
+Name: "patch\sound_lifetime_fix";  Description: "{cm:CompSoundLife}";   Types: everything full custom; Flags: fixed
 Name: "patch\imuse_fix";           Description: "{cm:CompAudio}";       Types: everything full custom; Flags: fixed
 Name: "patch\sfx_volume_save_fix"; Description: "{cm:CompSfxVolume}";   Types: everything full custom; Flags: fixed
 
@@ -190,6 +191,8 @@ Source: "{#PatchSrc}\mods\dismemberment.dll";       DestDir: "{app}\mods"; \
     Components: patch\dismemberment;       Flags: ignoreversion
 Source: "{#PatchSrc}\mods\crash_report.dll";        DestDir: "{app}\mods"; \
     Components: patch\crash_report;        Flags: ignoreversion
+Source: "{#PatchSrc}\mods\sound_lifetime_fix.dll";  DestDir: "{app}\mods"; \
+    Components: patch\sound_lifetime_fix;  Flags: ignoreversion
 Source: "{#PatchSrc}\mods\dev_overlay.dll";         DestDir: "{app}\mods"; \
     Components: patch\dev_overlay;         Flags: ignoreversion
 Source: "{#PatchSrc}\mods\diagnostics.dll";         DestDir: "{app}\mods"; \

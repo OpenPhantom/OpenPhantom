@@ -116,6 +116,15 @@ released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the 
 its authored pace rather than merely failing to hang. The confirming step, setting the key to 0
 and checking that the freeze returns, has not been run yet.
 
+## The plausibility bound
+
+`frame_delta.c` refuses a measurement above `MAX_PLAUSIBLE_SECONDS`, which is ten, and leaves the
+engine its own value when it does. The comment there used to say that this catches a level load.
+It does not: a load takes a fraction of ten seconds, so the measured value is written. Whether the
+engine is better off with that value or with its own has not been measured, so the bound stays at
+what shipped.
+
+
 `InterpolateMovers`, `InterpolateParticles`, `PreciseFrameTime` and `RebaseSimClock` were played
 and accepted by the maintainer, which is why they now default to on. That is a judgement about how
 they feel; the numbers in their own files are still a byte census and arithmetic rather than a

@@ -170,15 +170,21 @@ static bool make_lock_atomic(uintptr_t im_lock)
     if (!memory_read(im_lock, existing, sizeof(existing))) {
         return false;
     }
+    /* Already atomic, so this has run once before in this process and there is nothing to do.
+     * Tested BEFORE the shape check below, and that order is the fix rather than a preference:
+     * an already-patched body begins with the F0 prefix, the shape check only accepts one
+     * beginning FF, so while this sat after it the arm could never be reached at all. A second
+     * install did not report "nothing to do", it fell into the warning below and announced that
+     * ImLock was not `inc [mem] / ret` when in truth it was, and was already repaired. */
+    if (existing[0] == 0xF0) {
+        return true;
+    }
     /* Refuse unless it is exactly the body this was measured against: `FF 05 <abs32>` then `C3`.
      * Resolving the site is not the same as knowing what is at it. */
     if (existing[0] != 0xFF || existing[1] != 0x05 || existing[6] != 0xC3) {
         log_warning("ImLock at %08X is not `inc [mem] / ret` - the atomic increment is NOT written",
                     (unsigned)im_lock);
         return false;
-    }
-    if (existing[0] == 0xF0) {
-        return true;                     /* already atomic: installed twice, nothing to do */
     }
 
     memcpy(&gate_operand, existing + 2, sizeof(gate_operand));

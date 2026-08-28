@@ -34,8 +34,8 @@ static signature_t sites[SITE_COUNT] = {
 
 typedef struct sim_pause_state {
     bool               resolved;
-    bool               held;        /* whether THIS is the reason the flag is set */
-    int32_t            restore;     /* what the flag held before this set it */
+    uint32_t           holders;     /* bitmask of sim_pause_holder_t; paused while any is set */
+    int32_t            restore;     /* what the flag held before the FIRST holder took it */
     volatile int32_t  *flag;
 } sim_pause_state_t;
 
@@ -70,26 +70,35 @@ bool sim_pause_is_available(void)
     return pause_state.resolved;
 }
 
-void sim_pause_set(bool paused)
+void sim_pause_hold(sim_pause_holder_t who, bool held)
 {
+    uint32_t before;
+
     if (!pause_state.resolved) {
         return;
     }
-    if (paused == pause_state.held) {
-        /* Already in that state. Returning here is what makes this safe to call every frame:
-           without it, a second hold would remember the value this one just wrote and the release
-           would restore a pause instead of lifting it. */
+
+    before = pause_state.holders;
+    if (held) {
+        pause_state.holders |= (uint32_t)who;
+    } else {
+        pause_state.holders &= ~(uint32_t)who;
+    }
+    if (pause_state.holders == before) {
+        /* That holder was already in that state. Returning here is what makes this safe to call
+           every frame: without it, a repeated hold would remember the value this one just wrote
+           and the release would restore a pause instead of lifting it. */
         return;
     }
 
-    if (paused) {
+    if (before == 0u) {
+        /* First holder in. Whatever the cell says now is what the last one out puts back. */
         pause_state.restore = *pause_state.flag;
         *pause_state.flag = 1;
-        pause_state.held = true;
-    } else {
-        /* Restored rather than zeroed, so opening the panel while the game is already paused for
-           its own reasons cannot un-pause it on the way out. */
+    } else if (pause_state.holders == 0u) {
+        /* Last holder out. Restored rather than zeroed, so taking the pause while the game is
+           already paused for its own reasons cannot un-pause it on the way out. A holder letting
+           go while another still has it writes nothing at all, which is the whole point. */
         *pause_state.flag = pause_state.restore;
-        pause_state.held = false;
     }
 }

@@ -165,6 +165,10 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
     dev_overlay/cheats_no_fog.c
+    # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
+    # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
+    # resolved site every entry point returns immediately, which is exactly what a test process wants.
+    dev_overlay/sim_pause.c
 )
 
 # The character census reads a live process, so what can be tested without the game is the

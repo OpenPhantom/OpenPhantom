@@ -29,6 +29,18 @@
  *
  * The previous value is remembered and restored rather than cleared to zero, so opening the panel
  * while the game is already paused for its own reasons cannot un-pause it on the way out.
+ *
+ * WHY THERE ARE HOLDERS RATHER THAN A SINGLE FLAG. Two features in this DLL want the simulation
+ * stopped and they can be on at the same time: the panel while it is open, and the free camera
+ * for as long as it is flying. The free camera used to write the cell itself, which is how the
+ * two of them broke each other. Turn the free camera on, open the panel so this remembers a 1,
+ * turn the free camera off inside the panel so the cell goes to 0, then close the panel: the 1 is
+ * put back and the game is frozen with nothing holding it and nothing on screen to say why. The
+ * mirror of that sequence cancels the free camera pause while it is still flying.
+ *
+ * So the cell has exactly one writer now, and callers say who they are. The value underneath is
+ * captured when the FIRST holder takes it and put back when the LAST one lets go, which keeps the
+ * original promise above and makes it hold for any number of holders rather than only one.
  */
 #ifndef DEV_OVERLAY_SIM_PAUSE_H
 #define DEV_OVERLAY_SIM_PAUSE_H
@@ -42,9 +54,17 @@ bool sim_pause_install(void);
 /* Whether the flag was resolved, for the caller that has to be honest in its log line. */
 bool sim_pause_is_available(void);
 
-/* Holds or releases the pause. Idempotent: setting the state it is already in does nothing, so a
- * caller may drive it from the panel's own open flag every frame without the remembered value
- * being overwritten by the value this itself wrote. */
-void sim_pause_set(bool paused);
+/* Who is asking. One bit each, because they can overlap. */
+typedef enum sim_pause_holder {
+    SIM_PAUSE_PANEL       = 1u << 0,   /* the dev panel, while it is open      */
+    SIM_PAUSE_FREE_CAMERA = 1u << 1    /* the free camera, while it is flying  */
+} sim_pause_holder_t;
+
+/* Takes or releases one holder. Idempotent per holder: setting the state that holder is already
+ * in does nothing, so a caller may drive it from its own open flag every frame without the
+ * remembered value being overwritten by the value this itself wrote. The simulation is paused
+ * while any holder has it, and the value from before the first one is restored when the last
+ * lets go. */
+void sim_pause_hold(sim_pause_holder_t who, bool held);
 
 #endif /* DEV_OVERLAY_SIM_PAUSE_H */

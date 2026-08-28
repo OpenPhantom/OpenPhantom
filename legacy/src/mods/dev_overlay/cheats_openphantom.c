@@ -77,6 +77,8 @@
  * ============================================================================================ */
 #include "cheats_openphantom.h"
 
+#include "sim_pause.h"
+
 #include "cheats_no_fog.h"
 #include "cheats_original_actions.h"
 
@@ -576,31 +578,11 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * a deliberate, smaller freeze: enough to stop the world moving under a free camera, not a
  * reproduction of the retail pause experience.
  *
- * The second cmp's operand, not the first, is what this pattern exists to read - the first is kept
- * as fixed, literal bytes purely for the uniqueness it adds, the same way other patterns in this
- * file keep a neighbouring instruction literal without needing its value. Not a detour target:
- * nothing here is ever overwritten, only read once for the address of the flag. */
-static const uint8_t SIG_SIM_PAUSE_GATE[] = {
-    0x83, 0x3D, 0x44, 0x13, 0x88, 0x00, 0x00,        /* cmp [00881344],0                    */
-    0x75, 0x00,                                      /* jnz +N                               */
-    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,        /* cmp [sim pause flag],0               */
-    0x75, 0x00,                                      /* jnz +N                               */
-    0x6A, 0x00,                                      /* push 0                               */
-    0xE8, 0x00, 0x00, 0x00, 0x00,                    /* call the substep driver              */
-    0x83, 0xC4, 0x04                                 /* add esp,4                            */
-};
-static const uint8_t MSK_SIM_PAUSE_GATE[] = {
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0x00,
-    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
-    0xFF, 0x00,
-    0xFF, 0xFF,
-    0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0xFF
-};
-_Static_assert(sizeof(SIG_SIM_PAUSE_GATE) == sizeof(MSK_SIM_PAUSE_GATE),
-               "the sim-pause-gate pattern and its mask are different lengths");
-#define OFFSET_SIM_PAUSE_FLAG  0x0Bu   /* operand of the second cmp - the flag's own address */
+ * THE PATTERN FOR THIS GATE IS NOT REPEATED HERE. sim_pause.c, in this same DLL, resolves this
+ * exact site, reads the same operand and owns the cell. This feature asks it to hold the pause
+ * rather than resolving the address a second time and writing the cell itself. Two resolvers of
+ * one address is how the two of them came to fight; see sim_pause.h for the sequence that left
+ * the game frozen with nothing holding it. */
 
 /* Free camera, site two of two: the camera object pointer, and its per-frame update.
  *
@@ -781,8 +763,6 @@ typedef struct cheats_own_state {
                                                           * its own site did not resolve */
     uintptr_t               camera_view_address;       /* address OF the camera object pointer;
                                                           * 0 = unresolved, free camera unavailable */
-    uintptr_t               sim_pause_flag_address;     /* address of the sim-freeze cell; 0 =
-                                                          * unresolved, free camera unavailable */
     float                   jump_boost_scale;           /* see JUMP_BOOST_SCALE_DEFAULT above */
 } cheats_own_state_t;
 
@@ -1244,9 +1224,7 @@ static void __cdecl hook_camera_update(void)
             /* Falling edge: hand the world back. The camera itself needs no un-write - the very
              * next updateCam call recomputes it from the player the ordinary way, since nothing
              * here touches state (+0x00) or anything else the follow logic reads. */
-            if (own_state.sim_pause_flag_address != 0) {
-                *(int32_t *)own_state.sim_pause_flag_address = 0;
-            }
+            sim_pause_hold(SIM_PAUSE_FREE_CAMERA, false);
             if (freecam_cursor_hidden) {
                 ShowCursor(TRUE);
                 freecam_cursor_hidden = false;
@@ -1267,7 +1245,7 @@ static void __cdecl hook_camera_update(void)
 
     if (!freecam_valid) {
         /* Rising edge: seed POSITION from wherever the camera already is, so switching on never
-         * snaps the view, and pause the simulation - see SIG_SIM_PAUSE_GATE's own comment for why
+         * snaps the view, and pause the simulation - see sim_pause.h for why
          * this one flag is enough to stop the player and the whole world simulating out from
          * under a camera that is no longer looking through the player's own eyes. */
         freecam_x = *(float *)((uint8_t *)view + CAMERA_ANCHOR_X_OFFSET);
@@ -1311,9 +1289,7 @@ static void __cdecl hook_camera_update(void)
                 freecam_pitch = -FREECAM_PITCH_LIMIT;
             }
         }
-        if (own_state.sim_pause_flag_address != 0) {
-            *(int32_t *)own_state.sim_pause_flag_address = 1;
-        }
+        sim_pause_hold(SIM_PAUSE_FREE_CAMERA, true);
         QueryPerformanceFrequency(&freecam_perf_frequency);
         {
             LARGE_INTEGER now;
@@ -1790,17 +1766,15 @@ static void install_fall_punishment_immunity(void)
  * half a feature; either both resolve or the cheat says why and stays unavailable. */
 static bool install_freecam(void)
 {
-    uintptr_t pause_site;
     uintptr_t view_site;
     uintptr_t update_site;
-    uint32_t  pause_flag_address = 0;
     uint32_t  view_address = 0;
 
-    pause_site = signature_find_unique(SIG_SIM_PAUSE_GATE, MSK_SIM_PAUSE_GATE,
-                                       sizeof SIG_SIM_PAUSE_GATE);
-    if (pause_site == 0 ||
-        !memory_read_u32(pause_site + OFFSET_SIM_PAUSE_FLAG, &pause_flag_address) ||
-        !memory_is_inside_image(pause_flag_address, sizeof(int32_t))) {
+    /* Idempotent, and called here rather than assumed: dev_overlay.c installs this too, but
+     * whichever of the two runs first, both need it resolved and neither should rely on the other
+     * having got there. Asking the one owner is also what stops this feature and the panel
+     * disagreeing about whether the cell is available at all. */
+    if (!sim_pause_install()) {
         log_warning("free camera: the simulation pause gate did not resolve, that cheat stays "
                     "unavailable");
         return false;
@@ -1831,11 +1805,10 @@ static bool install_freecam(void)
     }
 
     own_state.camera_update_original = (camera_update_fn_t)own_state.camera_update_detour.original;
-    own_state.sim_pause_flag_address = (uintptr_t)pause_flag_address;
     own_state.camera_view_address    = (uintptr_t)view_address;
-    log_info("free camera: pause flag at %08X, camera object pointer at %08X, update chained at "
-             "%08X - WASD moves along the view, mouse looks, E/Q move vertically",
-             (unsigned)pause_flag_address, (unsigned)view_address, (unsigned)update_site);
+    log_info("free camera: pausing through sim_pause, camera object pointer at %08X, update "
+             "chained at %08X - WASD moves along the view, mouse looks, E/Q move vertically",
+             (unsigned)view_address, (unsigned)update_site);
     return true;
 }
 

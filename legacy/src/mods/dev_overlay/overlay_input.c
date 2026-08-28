@@ -222,7 +222,7 @@ static void set_open(bool open)
     /* The freeze stops the player being given orders; this stops the world carrying on regardless.
        Both, because either alone leaves half the game running: without the freeze the player moves
        behind the panel, and without this the NPCs, movers and timers do. */
-    sim_pause_set(open);
+    sim_pause_hold(SIM_PAUSE_PANEL, open);
     if (!open) {
         /* AFTER input_freeze_set(false), not before: a queued play-as swap has its own precondition
          * that reads as unmet while the player is suspended, which is exactly what closing this

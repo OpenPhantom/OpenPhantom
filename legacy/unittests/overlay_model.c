@@ -197,24 +197,33 @@ int main(void)
     ut_check(overlay_model_row_count() ==
                  1u + (uint32_t)CHEATS_OWN_COUNT + 5u + 6u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary, the skip-to-next-level action, the draw distance row and its "
-             "six lines are all on screen");
+             "the fold's own summary and its six lines, the skip-to-next-level action and the "
+             "draw distance row are all on screen");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
-    /* The lines are appended after the skip-to-next-level action rather than directly under the
-       summary they belong to, because that action's own id has to stay put whether the fold is
-       open or shut. So the first line is two rows past the summary, not one. */
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 6u, &row) &&
+    /* Directly under the summary that revealed them, which is the only place a reader looks for
+       them. Their ids are the tail of the group's id space, since that is the part allowed to
+       change size, so the row they are drawn at and the id they carry are deliberately not the
+       same number. This checks the drawn order, which is the half a player sees. */
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 4u, &row) &&
                  row.kind == OVERLAY_ROW_INFO &&
                  strcmp(row.label, "    Needs an exit key set first") == 0,
-             "the first line spells out in words the same ordering the row layout already shows");
-    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 6u),
+             "the first line sits immediately below the summary, not at the end of the group");
+    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 4u),
              "but a line itself does nothing when clicked - only the summary is interactive");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 9u, &row) &&
                  strcmp(row.label, "    Press your exit key to exit free camera") == 0,
              "and the sixth, last line spells out the way back out too");
 
+    /* The rows that were below the summary are still below the lines, in the order they had. A
+       fold that reorders the rows around it would be worse than one that does not open. */
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 10u, &row) &&
+                 row.kind == OVERLAY_ROW_ACTION,
+             "the skip-to-next-level action is pushed down the screen by the six lines");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
+                 strcmp(row.label, "Draw distance (1.0 to 2.5)") == 0,
+             "and the draw distance row last, which is the whole group accounted for");
     ut_section("closing the how-to-fly fold again");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");

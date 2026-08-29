@@ -286,7 +286,13 @@ The focus guard has three named branches and the log says which one was taken:
 
 ## Testing status
 
-**Offline only. Nothing here has been observed running.**
+**Played, including at 3840x2160.** The mode reaches the game's own options screen, the game runs
+in it, and the menus hold the resolution rather than dropping to 640x480 and rebuilding the device.
+That last part is the one worth watching, because the 640x480 island it leaves is the visible cost
+of it: about 15 per cent of the picture at 1080p and under 4 per cent at 2160p, so the higher the
+resolution the more obvious it is.
+
+The offline verification below still stands and is what the individual patches rest on.
 
 `/W4 /WX` clean with zero compiler warnings; the DLL links and all six wired unit tests pass,
 including the `focus_guard` test that enumerates all 64 input combinations of the release rule and

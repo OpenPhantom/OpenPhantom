@@ -56,9 +56,13 @@ pull request needs, and the ground rules for working against a binary you do not
 to. Each component adds its own rules on top; `legacy/CONTRIBUTING.md` is the one that exists so
 far.
 
-The most useful thing right now is testing. Almost everything in `legacy/` is verified offline and
-only three fixes have been confirmed in actual play, so a report saying what happened on your
-machine, with `engine_fixes.log` attached, is worth more than it sounds.
+The most useful thing right now is testing. Every fix here has been played with in a full
+installation, and several have been confirmed against the specific behaviour they change; each
+fix has its own README and that is where the claim for it lives. But played on a couple of
+machines is not works everywhere, so a report saying what happened on yours, with
+`engine_fixes.log` attached, is worth more than it sounds. Every fix names the build it was
+linked from on its own line in that log, which usually answers the first question a report
+raises.
 
 ## Discord
 

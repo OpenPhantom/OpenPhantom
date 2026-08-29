@@ -29,6 +29,8 @@ bool overlay_draw_resolve(void);
  * it, which is established; the other two are left and right in an order the bytes do not say. */
 void overlay_draw_set_align(int32_t mode);
 
+/* The panel's size is owned by dev_menu_size_row.c and asked for while drawing, not set from here. */
+
 /* Paints the current model, and answers whether it could. False means the engine has no display
  * mode to draw into, which the caller treats as "this panel is not being seen" rather than as a
  * frame to skip. */

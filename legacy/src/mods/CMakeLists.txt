@@ -248,6 +248,7 @@ add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
     view_range_row.c
+    dev_menu_size_row.c
     overlay_model.c
     overlay_draw.c
     overlay_sites.c

@@ -75,10 +75,10 @@ int main(void)
              "the OpenPhantom tab holds one group, and it starts folded too");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 5u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 6u,
              "unfolding shows the heading, this project's cheats, the jump-boost scale row, the "
              "free-camera exit hotkey row, the fly-controls note, the skip-to-next-level action "
-             "and the draw distance row appended after them");
+             "and the draw distance and dev menu size rows appended after them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
@@ -190,15 +190,29 @@ int main(void)
     ut_check(row.value[0] != '\0',
              "and it always shows a number, read from the ini rather than from the game");
 
+    ut_section("the dev menu size row, last of the group's fixed rows");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 6u, &row) &&
+                 row.kind == OVERLAY_ROW_VALUE,
+             "a typed value row, the third this group holds, and the last row of all while the "
+             "fold is shut, since the fold's own lines are the only rows that ever join the group");
+    ut_check(strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
+             "named for what it edits and carrying its range, the same as the row above it");
+    ut_check(row.available,
+             "available with nothing resolved, for a stronger reason than the draw distance row "
+             "above: it edits how this panel is drawn and reaches into no engine site at all, so "
+             "there is nothing here that could fail to resolve");
+    ut_check(row.value[0] != '\0',
+             "and it always shows a number, the scale the panel is currently drawn at");
+
     ut_section("opening the how-to-fly fold");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 1u + (uint32_t)CHEATS_OWN_COUNT + 5u + 6u,
+                 1u + (uint32_t)CHEATS_OWN_COUNT + 6u + 6u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary and its six lines, the skip-to-next-level action and the "
-             "draw distance row are all on screen");
+             "the fold's own summary and its six lines, the skip-to-next-level action, the draw "
+             "distance row and the dev menu size row are all on screen");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
@@ -223,12 +237,16 @@ int main(void)
              "the skip-to-next-level action is pushed down the screen by the six lines");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
                  strcmp(row.label, "Draw distance (1.0 to 2.5)") == 0,
-             "and the draw distance row last, which is the whole group accounted for");
+             "and the draw distance row after it, still in the order it was drawn in");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 12u, &row) &&
+                 strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
+             "and the dev menu size row last, which is the whole group accounted for");
+
     ut_section("closing the how-to-fly fold again");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 5u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 6u,
              "its six lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");

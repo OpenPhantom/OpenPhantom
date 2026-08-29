@@ -162,6 +162,7 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
     dev_overlay/view_range_row.c
+    dev_overlay/dev_menu_size_row.c
     dev_overlay/cheats_original.c
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c

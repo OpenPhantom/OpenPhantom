@@ -72,6 +72,7 @@ add_engine_fix(view_distance_fix
     view_distance_fix.c
     cell_watchdog.c
     draw_table.c
+    vertex_table.c
     fog_regime.c
     spawn_census.c
 )
@@ -138,15 +139,6 @@ add_engine_fix(decal_fix
     decal_fix.c
 )
 
-# Three pointers in the executable's import address table, and the reason they have to be rewritten
-# at all is in the file's own header: Windows hands this executable the system winmm.dll even though
-# a stand-in sits beside it, which is not true of any other library the game folder carries.
-add_engine_fix(xidi_bridge
-    dll_main.c
-    xidi_bridge.c
-    wrapper_path.c
-)
-
 # Two independent bugs behind "the SFX slider resets to full on reload": the value saved came from
 # an unreliable AIL query instead of the engine's own volume mirror, and separately the startup
 # load-time apply is a guaranteed no-op because bapsound_moduleInit marks sound ready one statement
@@ -154,6 +146,17 @@ add_engine_fix(xidi_bridge
 add_engine_fix(sfx_volume_save_fix
     dll_main.c
     sfx_volume_save_fix.c
+)
+
+add_engine_fix(ground_clip_fix
+    dll_main.c
+    ground_clip_fix.c
+    move_mode.c
+)
+
+add_engine_fix(sound_lifetime_fix
+    dll_main.c
+    sound_lifetime_fix.c
 )
 
 add_engine_fix(diagnostics
@@ -167,6 +170,11 @@ add_engine_fix(diagnostics
     diag_flow.c
     diag_frame.c
     diag_present.c
+    diag_projectiles.c
+    diag_characters.c
+    character_scan.c
+    debug_register.c
+    diag_write_watch.c
 )
 target_link_libraries(diagnostics PRIVATE winmm psapi pdh)
 
@@ -186,10 +194,12 @@ add_engine_fix(fmv_player
     movie_path.c
     menu_cursor_cells.c
     video_overlay.c
+    sfx_mute.c
+    render_curtain.c
     vlc_locate.c
     vlc_playback.c
 )
-target_link_libraries(fmv_player PRIVATE advapi32)
+target_link_libraries(fmv_player PRIVATE advapi32 winmm)
 
 
 # Two unbounded writes in one engine function, so one DLL and one hook. Nothing here changes
@@ -222,15 +232,43 @@ add_engine_fix(large_textures
 # in it: diagnostics and developer tools become groups inside the same panel, and a shipped DLL
 # cannot be renamed without breaking every configuration file that mentions it. It draws with the
 # engine's own two dimensional primitives, so there is no window and no second surface.
+# A talking NPC's own script sets its head/face animation target once per line and only ever
+# resets it as a side effect of that same actor's own NEXT line starting, never when a different
+# actor's line supersedes it. Invisible whenever the previous speaker is off camera, which is most
+# of the game; visible the moment a shot holds on two actors while one keeps talking. This calls
+# the engine's own animation debounce/trigger function the instant a different actor's dialogue
+# trigger fires, exactly what a correctly authored "Animation: idle" node would do.
+add_engine_fix(dialogue_anim_fix
+    dll_main.c
+    dialogue_anim_fix.c
+)
+target_link_libraries(dialogue_anim_fix PRIVATE winmm)
+
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
+    view_range_row.c
     overlay_model.c
     overlay_draw.c
     overlay_sites.c
     overlay_layout.c
     overlay_input.c
     input_freeze.c
+    sim_pause.c
     cheats_original.c
+    cheats_original_actions.c
     cheats_openphantom.c
+    cheats_no_fog.c
 )
+
+# A field investigation found that Xidi, a third-party wrapper this project used to install to
+# expose an Xbox-style pad to this game's own WinMM joystick calls, produces rare but large
+# single-frame stalls while being actively polled. The only two things it was used for here,
+# right-stick look and Start pausing, are reproduced without it: XInputGetState reads the pad
+# directly, SendInput feeds the same synthetic mouse/keyboard input any external tool would. No
+# wrapper DLL and no dependency on enhanced_input.
+add_engine_fix(controller_input
+    dll_main.c
+    controller_input.c
+)
+target_link_libraries(controller_input PRIVATE xinput)

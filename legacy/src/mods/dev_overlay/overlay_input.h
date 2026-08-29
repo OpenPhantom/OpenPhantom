@@ -40,4 +40,15 @@ void overlay_input_update_pointer(void);
 /* Where that pointer is, in the screen pixels the panel is laid out in. */
 void overlay_input_pointer(float *out_x, float *out_y);
 
+/* Whether the search box is the thing typing reaches right now. False the moment the panel opens
+ * and after every close, true only once a click has landed inside the field itself. The painter
+ * asks this to show which state the field is in. */
+bool overlay_input_search_focused(void);
+
+/* Notches scrolled since the last take, positive away from the player, negative towards. Observed
+ * from every message this DLL's hook sees, whether or not the panel is open - unlike everything
+ * else here, which only runs while it is. Consumes: what it returns has been taken out of the
+ * accumulator. */
+int32_t overlay_input_take_wheel_delta(void);
+
 #endif /* OVERLAY_INPUT_H */

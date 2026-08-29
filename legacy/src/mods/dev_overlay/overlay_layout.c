@@ -157,3 +157,17 @@ int32_t overlay_draw_tab_at(float x, float y)
     }
     return -1;
 }
+
+/* The field's own box, the same rectangle overlay_draw.c fills and outlines: search_top plus a
+ * quarter H above and below the 1.5H field it draws. Kept here rather than duplicated by eye in
+ * two files, for the same reason the row and tab tests are here rather than in the painter. */
+bool overlay_draw_search_at(float x, float y)
+{
+    const float right = built.left + built.width;
+    const float fy0 = built.top + built.search_top + (built.search_h - 1.5f * built.text_h) * 0.5f;
+    const float fy1 = fy0 + 1.5f * built.text_h;
+    const float fx0 = built.left + EDGE_PAD * built.text_h;
+    const float fx1 = right - EDGE_PAD * built.text_h;
+
+    return x >= fx0 && x < fx1 && y >= fy0 && y < fy1;
+}

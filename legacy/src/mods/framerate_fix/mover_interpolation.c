@@ -423,15 +423,18 @@ static void snapshot_subnodes(const uint8_t *mover, bool wrapped)
     int32_t count;
     int32_t index;
 
-    if (!memory_is_readable_range((uintptr_t)mover, MOVER_SUBNODE_ARRAY + SUBNODE_STRIDE)) {
+    /* Both guards take the structured-exception form for the same reason the one in
+     * hook_tick_mover above does: this runs underneath a detour the stall census measured at
+     * thousands of calls a frame, and a system call is not affordable there. */
+    if (!memory_try_readable((uintptr_t)mover, MOVER_SUBNODE_ARRAY + SUBNODE_STRIDE)) {
         return;
     }
     count = *(const int32_t *)(mover + MOVER_SUBNODE_COUNT);
     if (count <= 0 || count > 256) {
         return;
     }
-    if (!memory_is_readable_range((uintptr_t)(mover + MOVER_SUBNODE_ARRAY),
-                                  (size_t)count * SUBNODE_STRIDE)) {
+    if (!memory_try_readable((uintptr_t)(mover + MOVER_SUBNODE_ARRAY),
+                             (size_t)count * SUBNODE_STRIDE)) {
         return;
     }
 
@@ -458,8 +461,19 @@ static void __cdecl hook_tick_mover(void *mover, float now)
     bool            integrating;
     float           pose_before = 0.0f;
 
+    /* memory_try_readable, NOT memory_is_readable_range, and the difference is the whole reason
+     * this hook was field-reported as a frame-rate stall. The asking form walks the region list
+     * through VirtualQuery, which is a system call. This hook sits on bapmap_tickMover, and a
+     * census taken during the reported stall measured that function at 3,400 calls per FRAME while
+     * settled debris was being created near a lift: every one of them was arriving through this
+     * detour, so the guard alone was driving thousands of kernel transitions a frame and cost
+     * roughly ninety per cent of the frame rate (8.5 fps against 60 with this feature switched
+     * off, same encounter, same debris count). The span checked is unchanged and still covers
+     * every field read below, MOVER_TRACK_LENGTH at 0x28, MOVER_POSE at 0x2C and MOVER_TIME_BASE
+     * at 0x30; only the way it is checked changed, to the structured-exception form common/memory.c
+     * documents for exactly this case, which is a few instructions instead of a syscall. */
     integrating = (record != NULL) &&
-                  memory_is_readable_range((uintptr_t)record, MOVER_TIME_BASE + sizeof(float)) &&
+                  memory_try_readable((uintptr_t)record, MOVER_TIME_BASE + sizeof(float)) &&
                   (*(const float *)(record + MOVER_TIME_BASE) != now);
 
     if (integrating) {

@@ -72,27 +72,31 @@ Name: "patch"; Description: "{cm:CompPatch}"; Types: everything full custom
 
 ; ---- part of the patch ---------------------------------------------------------------------------
 ; The wrapper is here because the game does not reach a working Direct3D without it, and its ini was
-; derived from the engine, so the two are one component. The next two repair crashes. crash_report
+; derived from the engine, so the two are one component. The next three repair crashes. crash_report
 ; does nothing until the process dies and is then the only thing that says what happened. The last
 ; two repair audio faults that have no upside to keeping.
 Name: "patch\wrapper";             Description: "{cm:CompWrapper}";     Types: everything full custom; Flags: fixed
 Name: "patch\crt_copy_fix";        Description: "{cm:CompCrtCopy}";     Types: everything full custom; Flags: fixed
 Name: "patch\render_guard";        Description: "{cm:CompRenderGuard}"; Types: everything full custom; Flags: fixed
 Name: "patch\crash_report";        Description: "{cm:CompCrashRep}";    Types: everything full custom; Flags: fixed
+Name: "patch\sound_lifetime_fix";  Description: "{cm:CompSoundLife}";   Types: everything full custom; Flags: fixed
 Name: "patch\imuse_fix";           Description: "{cm:CompAudio}";       Types: everything full custom; Flags: fixed
 Name: "patch\sfx_volume_save_fix"; Description: "{cm:CompSfxVolume}";   Types: everything full custom; Flags: fixed
 
 ; ---- recommended -----------------------------------------------------------------------------------
+Name: "patch\ground_clip_fix";    Description: "{cm:CompGroundClip}";  Types: everything full custom
 Name: "patch\enhanced_resolution"; Description: "{cm:CompResolution}";  Types: everything full custom
 Name: "patch\framerate_fix";       Description: "{cm:CompFramerate}";   Types: everything full custom
 Name: "patch\variable_fov";        Description: "{cm:CompFov}";         Types: everything full custom
 Name: "patch\hud_ratio_scaling";   Description: "{cm:CompHud}";         Types: everything full custom
 Name: "patch\decal_fix";           Description: "{cm:CompDecal}";       Types: everything full custom
+Name: "patch\dialogue_anim_fix";   Description: "{cm:CompDialogueAnim}"; Types: everything full custom
 Name: "patch\view_distance_fix";   Description: "{cm:CompViewDist}";    Types: everything full custom
 
 ; ---- offered ---------------------------------------------------------------------------------------
 Name: "patch\large_textures";      Description: "{cm:CompLargeTex}";    Types: everything custom
 Name: "patch\enhanced_input";      Description: "{cm:CompInput}";       Types: everything custom
+Name: "patch\controller_input";    Description: "{cm:CompController}";  Types: everything custom
 Name: "patch\dismemberment";       Description: "{cm:CompDismember}";   Types: everything custom
 Name: "patch\dev_overlay";         Description: "{cm:CompDevOverlay}";  Types: everything custom
 Name: "patch\diagnostics";         Description: "{cm:CompDiag}";        Types: everything custom
@@ -151,6 +155,8 @@ Source: "{#DxWrapperSrc}\dxwrapper.ini"; DestDir: "{app}"; \
 ; are independent of each other, which is why there is no dependency between the rows.
 Source: "{#PatchSrc}\mods\crt_copy_fix.dll";        DestDir: "{app}\mods"; \
     Components: patch\crt_copy_fix;        Flags: ignoreversion
+Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
+    Components: patch\ground_clip_fix;     Flags: ignoreversion
 Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 Source: "{#PatchSrc}\mods\framerate_fix.dll";       DestDir: "{app}\mods"; \
@@ -161,12 +167,16 @@ Source: "{#PatchSrc}\mods\hud_ratio_scaling.dll";   DestDir: "{app}\mods"; \
     Components: patch\hud_ratio_scaling;   Flags: ignoreversion
 Source: "{#PatchSrc}\mods\enhanced_input.dll";      DestDir: "{app}\mods"; \
     Components: patch\enhanced_input;      Flags: ignoreversion
+Source: "{#PatchSrc}\mods\controller_input.dll";    DestDir: "{app}\mods"; \
+    Components: patch\controller_input;    Flags: ignoreversion
 Source: "{#PatchSrc}\mods\imuse_fix.dll";           DestDir: "{app}\mods"; \
     Components: patch\imuse_fix;           Flags: ignoreversion
 Source: "{#PatchSrc}\mods\sfx_volume_save_fix.dll"; DestDir: "{app}\mods"; \
     Components: patch\sfx_volume_save_fix; Flags: ignoreversion
 Source: "{#PatchSrc}\mods\decal_fix.dll";           DestDir: "{app}\mods"; \
     Components: patch\decal_fix;           Flags: ignoreversion
+Source: "{#PatchSrc}\mods\dialogue_anim_fix.dll";   DestDir: "{app}\mods"; \
+    Components: patch\dialogue_anim_fix;   Flags: ignoreversion
 Source: "{#PatchSrc}\mods\render_guard.dll";        DestDir: "{app}\mods"; \
     Components: patch\render_guard;        Flags: ignoreversion
 ; effect_clock is part of framerate_fix rather than a choice of its own: at 30 fps it changes nothing
@@ -181,6 +191,8 @@ Source: "{#PatchSrc}\mods\dismemberment.dll";       DestDir: "{app}\mods"; \
     Components: patch\dismemberment;       Flags: ignoreversion
 Source: "{#PatchSrc}\mods\crash_report.dll";        DestDir: "{app}\mods"; \
     Components: patch\crash_report;        Flags: ignoreversion
+Source: "{#PatchSrc}\mods\sound_lifetime_fix.dll";  DestDir: "{app}\mods"; \
+    Components: patch\sound_lifetime_fix;  Flags: ignoreversion
 Source: "{#PatchSrc}\mods\dev_overlay.dll";         DestDir: "{app}\mods"; \
     Components: patch\dev_overlay;         Flags: ignoreversion
 Source: "{#PatchSrc}\mods\diagnostics.dll";         DestDir: "{app}\mods"; \

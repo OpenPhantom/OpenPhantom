@@ -1,6 +1,6 @@
 # Third-party components
 
-Everything under `dist/` except `saves/` and `Xidi.ini` is third-party, carried here so the
+Everything under `dist/` except `saves/` is third-party, carried here so the
 installer needs no network, during installation or afterwards. `dist/ffmpeg/ffmpeg.exe` is the
 exact build `convert_movies.ps1` pins, so it is what the converter would have downloaded on first
 use; carrying it is what makes cutscene conversion work offline too. Each is redistributable; this file records what they are, what
@@ -14,10 +14,8 @@ The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover 
 | VLC / libVLC | 3.0.23 | **GPL v2** | https://www.videolan.org/vlc/ |
 | DSOAL | r694 | **LGPL 2.1** | https://github.com/kcat/dsoal |
 | OpenAL Soft (inside DSOAL) | as shipped in DSOAL r694 | **LGPL 2** | https://github.com/kcat/openal-soft |
-| Xidi | v5.0.0 | BSD 3-Clause | https://github.com/samuelgr/Xidi |
 | FFmpeg (gyan.dev `essentials` build) | 9.0 | **GPL v3** (the build bundles x264) | https://github.com/GyanD/codexffmpeg |
 | dxwrapper | as shipped with patch v0.2.1 | see `dist/dxwrapper/dxwrapper-License.txt` | https://github.com/elishacloud/dxwrapper |
-| Microsoft Visual C++ Redistributable (x86) | as downloaded from aka.ms | Microsoft Visual Studio redistributable terms | https://aka.ms/vs/17/release/vc_redist.x86.exe |
 
 `dist/dxwrapper/dxwrapper.ini` is **modified from upstream**: `AntiAliasing` is 0 where
 dxwrapper ships 4, because 4 caused visible bugs in this game. That is the only change,
@@ -72,6 +70,28 @@ wants them.
 **Mirrors.** Prefer one archive containing the installer and `source/` together over separate
 downloads on a page. Releases get re-uploaded elsewhere, and a mirror carrying only the
 installer strands whoever takes it from there.
+
+## The binaries themselves
+
+The archives above are the *source*. `THIRD-PARTY-BINARIES.sha256` beside this file records the
+sha256 of every third-party binary the installer ships, 37 of them, in the format `sha256sum -c`
+reads. From `installer/`:
+
+    sha256sum -c THIRD-PARTY-BINARIES.sha256
+
+This existed as a gap rather than a decision: the source archives have been pinned and hashed
+since they were added, and the binaries built from them never were, which is the wrong way round
+for anyone asking what they are about to run. A licence file says what the terms are; it does not
+say that the DLL beside it is the one the project meant to ship.
+
+Only third-party binaries are listed. The project builds its own DLLs from the source in this
+repository and they change with every build, so recording their hashes in a checked-in file would
+be stale before it was committed. The point of this manifest is the code that came from somewhere
+else, which is exactly the code the repository cannot otherwise account for.
+
+Regenerate it whenever a component is refreshed, in the same commit as the refresh. A manifest
+that lags the binaries it describes is worse than none, because it reads as verification.
+
 
 ## Refreshing a component
 

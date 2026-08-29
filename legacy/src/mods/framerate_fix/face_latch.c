@@ -195,12 +195,19 @@ typedef struct face_latch_state {
 static face_latch_state_t latch_state;
 
 /* ============================================================================================ */
+/* memory_try_read, not the asking form, and this walk is the reason why. It runs from a detour on
+ * the engine's own facing-command completion, which scripted actors POLL, so it is a per-object
+ * path rather than installation code. The previous form cost two system calls for every pointer
+ * read, not one: memory_is_readable_range calls VirtualQuery, and so does memory_read_u32
+ * underneath, because memory_read validates the same range again. Three of these plus the two
+ * reads below came to roughly eight kernel transitions to answer one question. See render_guard.c,
+ * which states the rule this now follows: memory_read_* belongs in installation code and in code
+ * that runs at human rates, never in a path the engine drives per object. */
 static bool read_pointer(uintptr_t address, uintptr_t *out)
 {
     uint32_t value;
 
-    if (!memory_is_readable_range(address, sizeof(uint32_t)) ||
-        !memory_read_u32(address, &value) || value == 0) {
+    if (!memory_try_read(address, &value, sizeof(value)) || value == 0) {
         return false;
     }
     *out = (uintptr_t)value;
@@ -225,8 +232,7 @@ static bool clip_holds_at_end(void *record, int32_t third_operand, bool *known)
     if (!read_pointer((uintptr_t)record + RECORD_OBJECT, &object) ||
         !read_pointer(object + OBJECT_THING, &thing) ||
         !read_pointer(thing + THING_PUPPET, &puppet) ||
-        !memory_is_readable_range(object + OBJECT_TRACK_SLOT, sizeof(uint32_t)) ||
-        !memory_read_u32(object + OBJECT_TRACK_SLOT, &slot)) {
+        !memory_try_read(object + OBJECT_TRACK_SLOT, &slot, sizeof(slot))) {
         return (third_operand == 0);
     }
     if (slot > (uint32_t)TRACK_SLOT_MAX) {
@@ -234,8 +240,7 @@ static bool clip_holds_at_end(void *record, int32_t third_operand, bool *known)
     }
 
     track = puppet + TRACK_FIRST + slot * TRACK_STRIDE;
-    if (!memory_is_readable_range(track + TRACK_MODE_FLAGS, sizeof(uint32_t)) ||
-        !memory_read_u32(track + TRACK_MODE_FLAGS, &flags)) {
+    if (!memory_try_read(track + TRACK_MODE_FLAGS, &flags, sizeof(flags))) {
         return (third_operand == 0);
     }
 
@@ -274,6 +279,18 @@ static int32_t __cdecl hook_face_complete(void *record, int32_t third_operand)
     result = latch_state.original(record, third_operand);
 
     if (result == 0 || latch_state.substep_counter == NULL) {
+        return result;
+    }
+
+    /* The cheap tests before the expensive one, which is the other half of this file's own cost
+     * problem. clip_holds_at_end walks four engine structures, and face_latch_should_yield below
+     * discards the answer on every simulation step that is not the one in yield_period, which at
+     * the default of 16 is fifteen steps out of every sixteen. These two conditions are exactly
+     * that function's own first two rejections, so answering them here changes no behaviour and
+     * only decides whether the walk was worth doing. The full test still runs below, so the
+     * unit-tested function stays the authority on when a yield actually happens. */
+    if (latch_state.yield_period == 0 ||
+        (*latch_state.substep_counter % latch_state.yield_period) != 0) {
         return result;
     }
 

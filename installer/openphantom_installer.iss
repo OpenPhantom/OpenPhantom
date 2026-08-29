@@ -17,6 +17,18 @@
 
 #define GameName "Star Wars Episode I: The Phantom Menace"
 
+; OUR version, not the game's. Written once because it reaches two places that must agree: the
+; version the wizard shows and the version resource of the built executable. They were separate
+; literals and they drifted, so a build shipped as one version announced itself as another.
+;
+; The file name deliberately carries no version. The release artefact is named exactly what this
+; produces, so there is no rename step between building and shipping, and the version is still in
+; the file for anyone who opens its properties.
+;
+; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
+; PowerShell path is Windows own, neither of them moves when this does.
+#define AppVer "1.1"
+
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
 
@@ -29,7 +41,7 @@
 ; rather than a second copy of it.
 AppId={{7C5AF842-8C19-4B17-CCA0-9AE3A49BD10E}
 AppName={#GameName}
-AppVersion=1.0
+AppVersion={#AppVer}
 
 ; AppName is the game, so these are the only place the installer says where it came from. All three
 ; links go to the project rather than to a personal page.
@@ -54,7 +66,7 @@ OutputBaseFilename=OpenPhantom_Installer
 
 ; The version resource of the produced installer. Without this Inno stamps its own compiler version
 ; on it, so the file properties would name Inno's release rather than ours.
-VersionInfoVersion=1.0
+VersionInfoVersion={#AppVer}
 ; Built installers are kept out of the repository; they are rebuilt from this script.
 OutputDir=output
 UninstallDisplayIcon={app}\WMAIN.EXE
@@ -75,6 +87,17 @@ PrivilegesRequired=admin
 ; including the cutscene player and its converter. They are still on the
 ; Back button, and nothing installs before the ready page.
 UsePreviousSetupType=no
+
+; A LOG IS WRITTEN, ALWAYS, to the user's temp folder. This installer writes into a folder that
+; belongs to somebody else, and two of the things it decides there are invisible afterwards: which
+; saved games it carried out and back around a clean reinstall, and which of the bundled chapter
+; saves it skipped because a slot was already in use. Both are recorded, and neither leaves any
+; other trace, so without a log the only way to answer "did it touch my saves" is to have watched.
+;
+; Found the hard way: the skip decision was given a log line and the first installation that
+; exercised it produced no log to read it in, which left a save handling change unverifiable by
+; anything short of running it twice with a hex editor.
+SetupLogging=yes
 
 ; The installer stays in 32-bit mode. Windows then redirects its HKLM\SOFTWARE writes into
 ; WOW6432Node by itself, which is where the 32-bit game looks for them.
@@ -229,12 +252,12 @@ Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{
 ; Nothing is downloaded during installation, so there is no download hash to check. Everything the
 ; installer places is compiled into it out of dist and is covered by Setup's own integrity check.
 
-; One include per subject. Xidi and DSOAL hang off the patch component, so they come before the
-; saves, which does not, and the patch keeps one unbroken subtree in the component list.
+; One include per subject. DSOAL hangs off the patch component, so it comes before the saves,
+; which does not, and the patch keeps one unbroken subtree in the component list.
 #include "src\openphantom_patch.iss"
-#include "src\xidi.iss"
 #include "src\dsoal.iss"
 #include "src\complete_saves.iss"
+#include "src\game_defaults.iss"
 
 [CustomMessages]
 english.DiscPageCaption=Find your game disc
@@ -249,11 +272,14 @@ english.TypeCustom=Choose what to install
 english.CompPatch=The following OpenPhantom patches are installed
 english.CompWrapper=Translates the old DirectDraw 7 graphics to Direct3D 9
 english.CompCrtCopy=Fixes a copy loop bug
+english.CompGroundClip=Stops characters being pushed through the floor
 english.CompResolution=Patch for more native and higher resolutions in the game
 english.CompFramerate=Frees the frame rate from 30, with camera, animation and effects adjusted for it
 english.CompFov=Adjustable field of view, with a slider in the video options
 english.CompHud=Display and text are no longer stretched on wide screens
 english.CompInput=New input options, for example free look and sideways movement
+english.CompController=Controller support: right stick looks, Start pauses, the triggers roll
+english.CompDialogueAnim=Stops a talking character's head animation carrying into the next line
 english.CompAudio=Audio bugfix
 english.CompSfxVolume=Fixes the audio settings not being saved correctly
 english.CompDecal=Brings back shadows, scorch marks and footprints
@@ -265,13 +291,13 @@ english.CompFmvRuntime=The player needed for that. Carried in this installer
 english.CompViewDist=Fog now hides the draw distance (nicer at a higher FOV)
 english.CompDismember=Lightsaber dismemberment (mod)
 english.CompCrashRep=Writes a crash report
+english.CompSoundLife=Fixes a save and load crash
 english.CompDiag=Logs for fault finding. Everything off until you switch it on
 english.CompDsoal=Restores the 3D sound audio option
 english.DsoundTaken=A different dsound.dll is already in the game folder and could not be moved aside:%n%n      %1%n%nNothing was installed. Sound support needs that exact name, and this installer never deletes a file it did not put there.%n%nUsually the game is still running. Close it and start again, or go back and untick sound support.
-english.CompXidi=Modern controller support via Xidi
 english.OldWrapperFailed=An earlier version of this installer put the controller wrapper here, and it could not be moved aside:%n%n      %1%n%nEverything is installed and the game runs. On most machines that old file is never loaded and nothing is wrong.%n%nUsually the game is still running. If your controller behaves oddly, close the game and rename that file yourself.
-english.VcRuntimeFailed=Controller support needs the Microsoft Visual C++ runtime, and it could not be installed. The installer stopped with code %1.%n%nEverything else is installed and the game runs normally. Only the controller will not work, and engine_fixes.log next to the game says so on every start.%n%nInstall "Microsoft Visual C++ Redistributable (x86)" from Microsoft yourself and it starts working, without reinstalling anything here.
 english.CompSaves=Saved games, one at the start of each chapter
+english.CompGameDefaults=Starting settings: a PlayStation-style controller layout and 1920x1080. Overwrites your own bindings if you have any
 english.SavesFailed=Not all of the saved games could be copied into:%n%n      %1%n%nEverything else is installed and the game runs. Your own saved games were not touched.%n%nUsually the folder is write protected or the game is still running.
 english.ReinstallCaption=The game is already installed here
 english.ReinstallDescription=What should happen to it?
@@ -335,11 +361,14 @@ german.TypeCustom=Auswählen, was installiert wird
 german.CompPatch=Folgende OpenPhantom-Patches werden installiert
 german.CompWrapper=Übersetzt die alte DirectDraw-7-Grafik nach Direct3D 9
 german.CompCrtCopy=Behebt einen Kopierschleifen-Bug
+german.CompGroundClip=Verhindert, dass Charaktere durch den Boden gedrückt werden
 german.CompResolution=Patch für mehr native und höhere Auflösungen im Spiel
 german.CompFramerate=Löst die Bildrate von 30, mit angepasster Kamera, Animation und Effekten
 german.CompFov=Einstellbares Sichtfeld, mit einem Regler in den Videooptionen
 german.CompHud=Anzeige und Schrift werden auf breiten Bildschirmen nicht mehr verzerrt
 german.CompInput=Neue Eingabeoptionen, z. B. freie Sicht und Seitwärtsbewegungen
+german.CompController=Controller-Unterstützung: rechter Stick blickt, Start pausiert, die Trigger rollen
+german.CompDialogueAnim=Beendet die Sprechanimation einer Figur, sobald die nächste Zeile beginnt
 german.CompAudio=Audio-Bugfix
 german.CompSfxVolume=Bugfix für die korrekte Speicherung der Audio-Einstellungen
 german.CompDecal=Holt Schatten, Brandflecken und Fußspuren zurück
@@ -351,13 +380,13 @@ german.CompFmvRuntime=Der dafür nötige Abspieler. In diesem Installationsprogr
 german.CompViewDist=Nebel verdeckt jetzt die Draw-Distance (bei höherem FOV schöner)
 german.CompDismember=Lichtschwert-Amputation (Mod)
 german.CompCrashRep=Schreibt einen Absturzbericht
+german.CompSoundLife=Behebt einen Absturz beim Speichern und Laden
 german.CompDiag=Protokolle zur Fehlersuche. Alles aus, bis Sie es einschalten
 german.CompDsoal=Wiederherstellung der 3D-Klang-Audio-Option
 german.DsoundTaken=Im Spielverzeichnis liegt bereits eine fremde dsound.dll, die nicht beiseitegelegt werden konnte:%n%n      %1%n%nEs wurde nichts installiert. Die Klang-Unterstützung braucht genau diesen Namen, und dieses Installationsprogramm löscht keine Datei, die es nicht selbst angelegt hat.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut, oder gehen Sie zurück und wählen Sie die Klang-Unterstützung ab.
-german.CompXidi=Moderner Controller-Support via Xidi
 german.OldWrapperFailed=Eine frühere Fassung dieses Installationsprogramms hat den Controller-Wrapper hier abgelegt, und er konnte nicht beiseitegelegt werden:%n%n      %1%n%nAlles ist installiert und das Spiel läuft. Auf den meisten Rechnern wird diese alte Datei nie geladen und es ist nichts kaputt.%n%nMeist läuft das Spiel noch. Falls sich Ihr Controller seltsam verhält, beenden Sie das Spiel und benennen Sie die Datei selbst um.
-german.VcRuntimeFailed=Die Controller-Unterstützung braucht die Microsoft-Visual-C++-Laufzeit, und die konnte nicht installiert werden. Das Installationsprogramm endete mit Code %1.%n%nAlles Übrige ist installiert und das Spiel läuft normal. Nur der Controller funktioniert nicht, und die engine_fixes.log neben dem Spiel sagt das bei jedem Start.%n%nInstallieren Sie „Microsoft Visual C++ Redistributable (x86)" selbst, dann funktioniert es, ohne dass hier etwas neu installiert werden muss.
 german.CompSaves=Spielstände, je einer zu Beginn jedes Kapitels
+german.CompGameDefaults=Startwerte: eine Controller-Belegung im PlayStation-Stil und 1920x1080. Überschreibt vorhandene eigene Belegungen
 german.SavesFailed=Es konnten nicht alle Spielstände kopiert werden nach:%n%n      %1%n%nAlles Übrige ist installiert und das Spiel läuft. Ihre eigenen Spielstände wurden nicht angetastet.%n%nMeist ist das Verzeichnis schreibgeschützt oder das Spiel läuft noch.
 german.ReinstallCaption=Das Spiel ist hier bereits installiert
 german.ReinstallDescription=Was soll damit geschehen?
@@ -701,10 +730,11 @@ end;
     ddraw.dll     dxwrapper       the graphics wrapper
     dsound.dll    DSOAL           the audio wrapper
 
-  winmm.dll is deliberately not among them any more. The controller wrapper used to be installed
-  under that name and is now installed as xidi_winmm.dll, because Windows hands this executable the
-  system winmm.dll whatever sits beside it, so the name bought a contest with other projects and
-  never bought the wrapper.
+  winmm.dll is deliberately not among them. A controller wrapper used to be installed under that
+  name; this installer no longer installs a controller wrapper at all, because controller_input.dll,
+  part of the patch, reads a pad directly and needs no wrapper. RetireOldControllerWrapper below
+  still moves aside what a much older release left under that name, checked by its own literal
+  marker string rather than through SlotMarker.
 
   Do not turn this round into a search for other projects' names: our own dxwrapper.dll contains the
   strings dgVoodoo and DDrawCompat because it recognises them at run time.
@@ -1118,7 +1148,6 @@ begin
 
   CopyOptionalFile(AppDir + 'engine_fixes.ini', AppDir + 'engine_fixes.ini.previous', Preserved, Result);
   CopyOptionalFile(AppDir + 'dxwrapper.ini',    AppDir + 'dxwrapper.ini.previous',    Preserved, Result);
-  CopyOptionalFile(AppDir + 'Xidi.ini',         AppDir + 'Xidi.ini.previous',         Preserved, Result);
   CopyOptionalFile(AppDir + 'alsoft.ini',       AppDir + 'alsoft.ini.previous',       Preserved, Result);
 end;
 
@@ -1178,6 +1207,16 @@ begin
     Exit;
   end;
 
+  { Written to the setup log and nowhere else. The converter's own notes go to stderr under
+    -Quiet and this procedure discards stderr, so without this record the log could say the
+    cutscenes were converted and never say which FFmpeg converted them. The installer
+    carries its own copy and names it on the command line above; this is the line that
+    shows the one it named is the one that ran. }
+  if Copy(Line, 1, 7) = 'FFMPEG ' then begin
+    Log('convert_movies: ' + Line);
+    Exit;
+  end;
+
   if (Copy(Line, 1, 3) = 'OK ') or (Copy(Line, 1, 5) = 'SKIP ') or
      (Copy(Line, 1, 5) = 'FAIL ') then begin
     MovieDone := MovieDone + 1;
@@ -1220,6 +1259,7 @@ var
   Height, ResultCode: Integer;
   Converted, Skipped: Integer;
   Script, Params: String;
+  InstalledFFmpeg, FFmpegExe: String;
 begin
   Height := ChosenMovieHeight;
   if Height < 0 then
@@ -1245,8 +1285,44 @@ begin
   SetEnvironmentVariable('PATH',
     ExpandConstant('{app}\mods\fmv') + ';' + GetEnv('PATH'));
 
+  { -FFmpegPath names the copy this installer carried, instead of letting the script search.
+    The search consults its %LOCALAPPDATA% cache BEFORE PATH, so without this a copy left by
+    an earlier run would be preferred over the version-pinned one just installed, and run by
+    this elevated process. -NoDownload closes the other end of the same seam: an elevated
+    run must not reach the network on its own initiative, however well pinned the fetch is.
+    Both are unnecessary for the player-started "Convert Movies.bat", which is neither
+    elevated nor silent, and it passes neither. }
+  // RUN IT FROM {tmp}, NOT FROM WHERE IT WAS JUST INSTALLED. [Dirs] grants users-modify on {app},
+  // because the game keeps its settings and saves inside its own folder and cannot run otherwise,
+  // and Windows passes that grant down by inheritance to everything created underneath it, which
+  // includes mods\fmv\ffmpeg.exe. This step runs inside an elevated process, so running a file
+  // out of a directory every user of the machine can write to is the wrong way round.
+  //
+  // Setup rewrites ffmpeg.exe on every installation, so the file copied here is its own rather than
+  // whatever happened to be there. What that does not cover is the gap between the file copy stage
+  // and this step, which is seconds rather than instants. {tmp} belongs to Setup, and copying into
+  // it closes that gap.
+  //
+  // A failed copy falls back to the installed path, with the reason in the log, rather than
+  // abandoning the conversion. That fallback is exactly what this did before the staging existed,
+  // so it cannot be worse than not having tried, and it is recorded rather than silent.
+  //
+  // The deeper fix is to stop mods\ inheriting the grant at all, which would also stop anyone
+  // swapping a feature DLL under the game between runs. That changes what a player may do with
+  // their own installation, so it is not folded in here.
+  InstalledFFmpeg := ExpandConstant('{app}\mods\fmv\ffmpeg.exe');
+  FFmpegExe := ExpandConstant('{tmp}\ffmpeg.exe');
+  if FileCopy(InstalledFFmpeg, FFmpegExe, False) then begin
+    Log('convert_movies: staged FFmpeg into ' + FFmpegExe + ', running it from there');
+  end else begin
+    Log('convert_movies: could not stage FFmpeg into {tmp}, running the installed copy at ' +
+        InstalledFFmpeg);
+    FFmpegExe := InstalledFFmpeg;
+  end;
+
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
             ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
+            ' -NoDownload -FFmpegPath "' + FFmpegExe + '"' +
             ' -TargetHeight ' + IntToStr(Height);
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
@@ -1308,29 +1384,64 @@ end;
 procedure InstallCompleteSaves;
 var
   Rec: TFindRec;
-  SaveDir: String;
-  Found, Copied: Integer;
+  SaveDir, SrcDir, Target: String;
+  Found, Copied, Kept: Integer;
 begin
   if not WizardIsComponentSelected('complete_saves') then
     Exit;
 
   SaveDir := AddBackslash(ExpandConstant('{app}\Save'));
-  Copied := CopyFilesInFolder(ExpandConstant('{#SavesTmp}\Save'),
-                              RemoveBackslashUnlessRoot(SaveDir), Found);
-  if Copied <> Found then
-    MsgBox(UserMessage('SavesFailed', ExpandConstant('{app}\Save')), mbError, MB_OK);
+  SrcDir := AddBackslash(ExpandConstant('{#SavesTmp}\Save'));
+  Found := 0;
+  Copied := 0;
+  Kept := 0;
 
-  if not FindFirst(SaveDir + '*.sav', Rec) then
+  if not DirExists(SrcDir) then
     Exit;
 
-  try
-    repeat
-      if (Rec.Attributes and FILE_ATTRIBUTE_READONLY) <> 0 then
-        SetFileAttributes(SaveDir + Rec.Name, Rec.Attributes and not FILE_ATTRIBUTE_READONLY);
-    until not FindNext(Rec);
-  finally
-    FindClose(Rec);
+  { A SLOT THAT ALREADY HOLDS A SAVE IS NEVER WRITTEN. This used to hand the whole set to
+    CopyFilesInFolder, which copies with FailIfExists false because that is what the carry-over
+    restore needs, and the restore is putting the player's own files back. Here it meant a returning
+    player who reran Setup to update a patch lost slots 1 to 11: complete_saves is part of the
+    default install type, UsePreviousSetupType is off so a rerun returns to that default, and the
+    error text on this very procedure promises their saved games were not touched. It now is.
+
+    The component is deliberately still offered by default. On a fresh installation nothing
+    collides, so all eleven arrive; on a rerun the player keeps every slot they have used and gets
+    only the chapters they never started. }
+  if FindFirst(SrcDir + '*', Rec) then begin
+    try
+      repeat
+        if (Rec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then begin
+          Found := Found + 1;
+          Target := SaveDir + Rec.Name;
+          if FileExists(Target) then
+            Kept := Kept + 1
+          else begin
+            if ForceDirectories(RemoveBackslashUnlessRoot(SaveDir)) then begin
+              if CopyFile(SrcDir + Rec.Name, Target, True) then begin
+                Copied := Copied + 1;
+                { Read-only cleared only on what was just written, never on a file the player
+                  already had: the media these were compiled from can carry the attribute and the
+                  game cannot write a slot that has it. }
+                if (Rec.Attributes and FILE_ATTRIBUTE_READONLY) <> 0 then
+                  SetFileAttributes(Target, Rec.Attributes and not FILE_ATTRIBUTE_READONLY);
+              end;
+            end;
+          end;
+        end;
+      until not FindNext(Rec);
+    finally
+      FindClose(Rec);
+    end;
   end;
+
+  Log('complete_saves: ' + IntToStr(Found) + ' carried, ' + IntToStr(Copied) + ' written, ' +
+      IntToStr(Kept) + ' slots left alone because the player already had a save there');
+
+  { Only a genuine failure is worth a dialog. A slot kept is the feature working. }
+  if (Copied + Kept) <> Found then
+    MsgBox(UserMessage('SavesFailed', ExpandConstant('{app}\Save')), mbError, MB_OK);
 end;
 
 { The answers that are keys rather than files. After the install, because the row that installs
@@ -1391,65 +1502,96 @@ begin
     MsgBox(UserMessage('SettingsFailed', '[options] Sound 3D Driver' + #13#10), mbError, MB_OK);
 end;
 
-{ True when the 32-bit Visual C++ 2015-2022 runtime is not on this machine.
+{ A controller layout and a display mode, written into the player's own obi.ini one key at a time.
 
-  Both files of the controller wrapper import MSVCP140 and VCRUNTIME140. The files are the test
-  rather than the runtime's registry key, because the files are what the loader looks for: a machine
-  can carry the key from a repair that left nothing behind, and can carry the DLLs without the key
-  when something else brought them.
+  Sixty writes rather than a file copy, for the reason the sound provider above gives: obi.ini holds
+  the player's gamma, their sound choice and anything else they have set, so it is merged and never
+  replaced. The previous file is copied beside itself first, the same as there.
 
-  The installer stays in 32-bit mode, so the system directory constant below expands to the 32-bit
-  one, which is where a 32-bit wrapper's imports are resolved from. Note for anyone editing this
-  comment: a setup constant in braces cannot be written inside a brace comment, because the closing
-  brace ends the comment there.
+  The bindings are the PlayStation release's arrangement, read off a working installation rather
+  than derived: the engine stores each one as a packed integer whose meaning is not documented
+  anywhere in this project, so they are carried as the numbers they are. JOYENABLE is among them
+  because a layout with the pad switched off is the state this component exists to save people from.
 
-  Also used as the Check on the row that downloads the runtime, so nothing is fetched on a machine
-  that already has it. }
-function VcRuntimeMissing: Boolean;
-begin
-  Result := (not FileExists(ExpandConstant('{sys}\MSVCP140.dll'))) or
-            (not FileExists(ExpandConstant('{sys}\VCRUNTIME140.dll')));
-end;
+  1920x1080 replaces the engine's own 640x480, which is what a fresh obi.ini carries. It is a
+  starting value and not a limit: enhanced_resolution offers the full mode list, and the video
+  options screen still writes whatever the player picks.
 
-{ Runs Microsoft's own installer, only when controller support was ticked and the runtime is
-  genuinely absent.
+  Values are written even where the key already exists, which is the whole point when somebody ticks
+  this, and is why the caption says so in both languages. }
+{ One semicolon-separated string rather than an array, because Inno's Pascal Script has no typed
+  constants and cannot initialise an array where it is declared. Broken on key boundaries so a line
+  never splits a binding in half. }
+const
+  GameDefaultBindings =
+    'X0JOY=258;X1JOY=513;Y0JOY=772;Y1JOY=1027;' +
+    'Z0JOY=261;Z1JOY=518;R0JOY=775;R1JOY=2560;' +
+    'R2JOY=1032;U0JOY=5129;U1JOY=5130;P0JOY=781;' +
+    'P1JOY=1038;P2JOY=4623;K0JOY=1553;K1JOY=2322;' +
+    'K2JOY=1299;K3JOY=1812;K4JOY=2069;K8JOY=2072;' +
+    'K9JOY=3097;K10JOY=1306;K11JOY=1307;K12JOY=3100;' +
+    'K13JOY=3357;K14JOY=3614;K15JOY=3871;K16JOY=4128;' +
+    'K17JOY=4385;K18JOY=1314;K19JOY=1315;K20JOY=1316;' +
+    'K21JOY=293;K22JOY=2048;K23JOY=550;K24JOY=2048;' +
+    'K25JOY=807;K26JOY=2560;K27JOY=1064;K28JOY=2560;' +
+    'K29JOY=297;K30JOY=1280;K31JOY=554;K32JOY=1280;' +
+    'K33JOY=811;K34JOY=1280;K35JOY=1068;K36JOY=1280;' +
+    'K37JOY=2605;K38JOY=2606;K39JOY=2607;K40JOY=2608;' +
+    'K41JOY=65535;K42JOY=65535;JOYENABLE=1;R3JOY=2560;' +
+    'P3JOY=4880;K5JOY=2582;K6JOY=2071;K7JOY=256';
 
-  Reported rather than fatal, and that is a change from what this used to cost. The wrapper is no
-  longer a static import of the game: xidi_bridge.dll loads it with LoadLibrary, so a missing
-  runtime now fails that one call and the game starts and plays exactly as it would without
-  controller support. It used to mean the game did not start at all. }
-procedure InstallVcRuntime;
+procedure ApplyGameDefaults;
 var
-  Installer: String;
-  ResultCode: Integer;
+  Ini, Rest, Entry, Failed: String;
+  Backed, Split, Written: Integer;
+  Ok: Boolean;
 begin
-  if not WizardIsComponentSelected('patch\xidi') then
-    Exit;
-  if not VcRuntimeMissing then
+  if not WizardIsComponentSelected('game_defaults') then
     Exit;
 
-  Installer := ExpandConstant('{tmp}\vc_redist.x86.exe');
-  if not FileExists(Installer) then begin
-    { The download did not happen, so there is nothing to run and the code to report is its
-      absence rather than an exit code nobody produced. }
-    MsgBox(UserMessage('VcRuntimeFailed', 'no download'), mbError, MB_OK);
-    Exit;
+  Ini := ExpandConstant('{app}\obi.ini');
+  Backed := 0;
+  Ok := True;
+  CopyOptionalFile(Ini, ExpandConstant('{app}\obi.ini.previous'), Backed, Ok);
+
+  Failed := '';
+  Written := 0;
+  Rest := GameDefaultBindings + ';';
+  while Rest <> '' do begin
+    Split := Pos(';', Rest);
+    if Split = 0 then begin
+      Entry := Rest;
+      Rest := '';
+    end else begin
+      Entry := Copy(Rest, 1, Split - 1);
+      Rest := Copy(Rest, Split + 1, Length(Rest) - Split);
+    end;
+
+    Split := Pos('=', Entry);
+    { Every entry is written as KEY=VALUE above, so a missing separator is an edit to that table
+      rather than anything the machine can produce. Skipped rather than guessed at. }
+    if Split > 1 then begin
+      if SetIniString('options', Copy(Entry, 1, Split - 1),
+                      Copy(Entry, Split + 1, Length(Entry) - Split), Ini) then
+        Written := Written + 1
+      else
+        Failed := Failed + '[options] ' + Copy(Entry, 1, Split - 1) + #13#10;
+    end;
   end;
 
-  if not Exec(Installer, '/install /quiet /norestart', '', SW_SHOW,
-              ewWaitUntilTerminated, ResultCode) then
-    ResultCode := -1;
+  if not SetIniString('options', 'screen_width', '1920', Ini) then
+    Failed := Failed + '[options] screen_width' + #13#10;
+  if not SetIniString('options', 'screen_height', '1080', Ini) then
+    Failed := Failed + '[options] screen_height' + #13#10;
 
-  { 0 is success; 3010 is success asking for a restart, which is not ours to force. }
-  if (ResultCode = 0) or (ResultCode = 3010) then
-    Exit;
+  { A count rather than a decoration. Every write above reports its own failure, but a table that
+    parsed into nothing would report nothing at all and leave this component looking as though it
+    had worked, which is the one way this can fail silently. }
+  if (Written = 0) and (Failed = '') then
+    Failed := 'the controller layout table parsed into no entries' + #13#10;
 
-  { The files decide rather than the exit code alone: a non-zero code from a runtime installer
-    often means it declined because a newer build is already present. }
-  if not VcRuntimeMissing then
-    Exit;
-
-  MsgBox(UserMessage('VcRuntimeFailed', IntToStr(ResultCode)), mbError, MB_OK);
+  if Failed <> '' then
+    MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -1462,7 +1604,7 @@ begin
 
   ApplyChosenSettings;
   ApplySoundProvider;
-  InstallVcRuntime;
+  ApplyGameDefaults;
   InstallCompleteSaves;
   ConvertMovies;
 end;
@@ -1568,10 +1710,9 @@ begin
       Exit;
   end;
 
-  { Controller support needs no room made for it. Its wrapper is installed as xidi_winmm.dll, a name
-    nothing else in a game folder uses, and the bridge DLL loads that file by full path. What an
-    older release of this installer left under the old name does have to go, though, and whether
-    controller support is ticked this time does not change that: the name is no longer ours. }
+  { This installer no longer installs a controller wrapper at all, so there is no slot of its own
+    needing room. What a much older release left under the name winmm.dll still has to go, the same
+    as it always did: the name is not ours and never answers to a controller any more. }
   RetireOldControllerWrapper;
 
   if WizardIsComponentSelected('patch\dsoal') then begin

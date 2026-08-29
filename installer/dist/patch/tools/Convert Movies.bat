@@ -15,16 +15,6 @@ rem until a key is pressed.
 
 setlocal
 
-rem MODIFIED FOR THE OPENPHANTOM INSTALLER. Not in the patch archive this file came from.
-rem
-rem The installer carries FFmpeg and puts it beside libVLC, so convert_movies.ps1 finds it on PATH
-rem rather than downloading 106 MB on the first conversion. It looks in its own cache first and on
-rem PATH second, and this is the second step.
-rem
-rem setlocal above keeps this to this window. Nothing on the machine is changed, and an FFmpeg the
-rem player installed themselves still wins if it is already cached.
-set "PATH=%~dp0..\mods\fmv;%PATH%"
-
 rem A folder dragged onto a batch file can arrive with a trailing backslash, and a backslash sitting
 rem directly in front of the closing quote of -GameDirectory "..." further down is an ESCAPE by the
 rem time PowerShell parses the command line - so the quote is swallowed and PowerShell is handed one

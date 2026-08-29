@@ -56,6 +56,7 @@
 #include "fmv_player.h"
 
 #include "movie_path.h"
+#include "render_curtain.h"
 #include "video_overlay.h"
 #include "vlc_playback.h"
 
@@ -168,6 +169,8 @@ static fmv_player_state_t fmv_player_state;
 static void load_config(void)
 {
     char scaling[16];
+    int  post_movie_hold_ms;
+    int  post_movie_fade_ms;
 
     fmv_player_state.enabled = ini_read_bool(FMV_PLAYER_SECTION, "Enabled", true);
     ini_read_string(FMV_PLAYER_SECTION, "MovieDirectory", "movies_hd",
@@ -184,6 +187,40 @@ static void load_config(void)
     log_info("movies are shown %s", fmv_player_state.stretch_movies
                  ? "STRETCHED to fill the screen, so a roughly 4:3 source is pulled out of shape"
                  : "LETTERBOXED, keeping their own shape with black bars where the screen differs");
+
+    /* A live probe on the player's own body around the level 6 opening cutscene measured a real
+     * position-settle transient - the player's authoritative position, not its render blend -
+     * overshooting by 1.48 units and taking about 650 ms to read flat again, entirely under an
+     * engine position-override flag that retail's own resolution switch around every movie
+     * incidentally outlives before its picture is ever shown. This DLL's own faster transition does
+     * not spend that time, so this holds the picture back, still solid black, for a short beat after
+     * the movie itself has already finished, buying the same runway back without switching
+     * anything. Zero disables it outright. See render_curtain.c for how it is actually drawn. */
+    post_movie_hold_ms = ini_read_int(FMV_PLAYER_SECTION, "PostMovieHoldMs", 2500);
+    if (post_movie_hold_ms < 0) {
+        post_movie_hold_ms = 0;
+    }
+    render_curtain_set_hold_ms((unsigned)post_movie_hold_ms);
+
+    /* Cutting straight from the held black to the game is its own small jolt even once the settle
+     * above has actually finished, so the curtain fades out over this many ms afterward rather than
+     * simply vanishing. 0 skips the fade. */
+    post_movie_fade_ms = ini_read_int(FMV_PLAYER_SECTION, "PostMovieFadeMs", 300);
+    if (post_movie_fade_ms < 0) {
+        post_movie_fade_ms = 0;
+    }
+    render_curtain_set_fade_ms((unsigned)post_movie_fade_ms);
+
+    /* The curtain hides the picture, not the simulation: real frames keep ticking behind it, and a
+     * real sound effect tied to the same transient the curtain exists to hide (see sfx_mute.c and
+     * render_curtain.c's own headers) still fires audibly even with nothing visible. sfx_mute.c
+     * suppresses that ONE scripted sound call directly rather than touching any volume, so it does
+     * not clip dialogue the way an earlier, master-volume-based version of this measurably did. On
+     * by default. */
+    render_curtain_set_mute_enabled(ini_read_bool(FMV_PLAYER_SECTION, "MutePostMovieAudio", true));
+
+    log_info("holding %d ms of black after each movie finishes, then fading in over %d ms, before "
+             "the game is shown", post_movie_hold_ms, post_movie_fade_ms);
 }
 
 /* True when the configured folder exists at all. Nothing else in this DLL is worth doing when it
@@ -267,6 +304,27 @@ static void resolve_engine_cells(uintptr_t site)
     fmv_player_state.in_movie = (int32_t *)(uintptr_t)in_movie_cmp;
     log_info("the engine's in-movie cell is at %08X and is held for the length of every movie "
              "this DLL plays", (unsigned)in_movie_cmp);
+}
+
+/* The post-movie curtain (video_overlay.c) exists for a position-settle transient that can only
+ * happen once a level and its player object already exist. The two startup splash movies play
+ * before any level is loaded - there is nothing there for the curtain to hide, only an unwanted
+ * extra pause on every single launch. `name` is still the retail backslash-relative name at this
+ * point ("movie\\logo", "movie\\bigape", "movie\\scene1", ...), so only its own base is compared. */
+static bool movie_wants_post_movie_curtain(const char *name)
+{
+    const char *base = name;
+    const char *scan;
+
+    if (name == NULL) {
+        return true;
+    }
+    for (scan = name; *scan != '\0'; ++scan) {
+        if (*scan == '\\' || *scan == '/') {
+            base = scan + 1;
+        }
+    }
+    return _stricmp(base, "logo") != 0 && _stricmp(base, "bigape") != 0;
 }
 
 /* ============================================================================================ */
@@ -365,6 +423,14 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
         *fmv_player_state.in_movie = 0;
     }
 
+    /* Only a movie that actually played leaves anything worth hiding a runway for, and only for the
+     * movies the runway is actually needed for: a level and its player already exist. The two
+     * startup splash movies never get it. See render_curtain.c's own header for what this covers
+     * and why it is drawn this way rather than as a window on top of the game. */
+    if (played && movie_wants_post_movie_curtain(name)) {
+        render_curtain_begin();
+    }
+
     if (played) {
         /* Non-zero because all three refusal paths in the retail function return 0, which is byte
          * evidence that zero means "did not play". The exact value it returns when it DID play has
@@ -434,6 +500,7 @@ void fmv_player_install(void)
     }
 
     resolve_engine_cells(site);
+    render_curtain_install();
 
     /* Started here, as early as this DLL's own install runs, so the background load has the most
      * possible time to finish before the first movie needs it. It is not waited on: the hook polls

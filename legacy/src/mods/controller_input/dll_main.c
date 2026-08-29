@@ -1,5 +1,5 @@
-/* dll_main.c: entry point of xidi_bridge.dll. See ../common/mod_entry.h for the contract. */
-#include "xidi_bridge.h"
+/* dll_main.c: entry point of controller_input.dll. See common/mod_entry.h for the contract. */
+#include "controller_input.h"
 
 #include "common/mod_entry.h"
 
@@ -18,5 +18,5 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 
 ENGINE_FIX_ENTRY
 {
-    xidi_bridge_install();
+    controller_input_install();
 }

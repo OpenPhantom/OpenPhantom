@@ -87,11 +87,14 @@ typedef struct cell_watchdog_state {
     float           cell_budget;
     uint32_t        cell_high_water;
     uint32_t        vertex_high_water;
+    uint32_t        vertex_limit;      /* raised by cell_watchdog_set_vertex_limit() */
+    uint32_t        vertex_alarm;      /* scales with vertex_limit, same ratio as retail's 75 % */
     bool            overflow_reported;
     bool            vertex_warned;
 } cell_watchdog_state_t;
 
 static cell_watchdog_state_t watchdog_state = { NULL, NULL, CELL_LIMIT_RETAIL, 1.0f, 0, 0,
+                                                VERTEX_CACHE_LIMIT, VERTEX_CACHE_ALARM,
                                                 false, false };
 
 /* ============================================================================================ */
@@ -226,10 +229,29 @@ float cell_watchdog_budget(void)
     return watchdog_state.cell_budget;
 }
 
+void cell_watchdog_set_vertex_limit(uint32_t new_limit)
+{
+    if (new_limit < VERTEX_CACHE_LIMIT) {
+        return;
+    }
+    watchdog_state.vertex_limit = new_limit;
+    /* Same 75 % ratio the retail-sized alarm already used, not a fixed offset from the new limit -
+     * a fixed offset would mean the alarm fires later, proportionally, exactly where more headroom
+     * makes a JUMP in the counter (see vertex_table.c, section 1) more dangerous, not less. */
+    watchdog_state.vertex_alarm = (uint32_t)(((uint64_t)new_limit * VERTEX_CACHE_ALARM) /
+                                             VERTEX_CACHE_LIMIT);
+
+    log_info("vertex cache budget x%.2f (%u instead of %u), alarm from %u.",
+             (double)new_limit / (double)VERTEX_CACHE_LIMIT, (unsigned)new_limit,
+             (unsigned)VERTEX_CACHE_LIMIT, (unsigned)watchdog_state.vertex_alarm);
+}
+
 /* ============================================================================================ */
 static void watch_vertex_cache(float *effective_view_scale)
 {
     uint32_t used;
+    uint32_t limit = watchdog_state.vertex_limit;
+    uint32_t alarm = watchdog_state.vertex_alarm;
 
     if (watchdog_state.vertex_count == NULL) {
         return;
@@ -237,24 +259,24 @@ static void watch_vertex_cache(float *effective_view_scale)
     used = *watchdog_state.vertex_count;
 
     /* A counter far beyond four times the limit is not a counter any more; do not act on noise. */
-    if (used > VERTEX_CACHE_LIMIT * 4u) {
+    if (used > limit * 4u) {
         return;
     }
     if (used > watchdog_state.vertex_high_water) {
         watchdog_state.vertex_high_water = used;
     }
 
-    if (used >= VERTEX_CACHE_LIMIT && !watchdog_state.vertex_warned) {
+    if (used >= limit && !watchdog_state.vertex_warned) {
         watchdog_state.vertex_warned = true;
         log_error("VERTEX CACHE FULL (%u of %u). From here the geometry is torn, and it stays "
                   "torn until the level reloads, gate 2 jumps behind the `touched` reset loop. "
                   "The view scale goes to 1.00 immediately.",
-                  (unsigned)used, (unsigned)VERTEX_CACHE_LIMIT);
+                  (unsigned)used, (unsigned)limit);
         *effective_view_scale = 1.0f;
         return;
     }
 
-    if (used >= VERTEX_CACHE_ALARM && *effective_view_scale > 1.0f) {
+    if (used >= alarm && *effective_view_scale > 1.0f) {
         float previous = *effective_view_scale;
 
         *effective_view_scale -= VIEW_SCALE_STEP;
@@ -264,7 +286,7 @@ static void watch_vertex_cache(float *effective_view_scale)
         log_warning("%u of %u vertex cache slots (peak %u), view scale %.2f -> %.2f. Braking "
                     "earlier than for the cells, because an overflow here tears the geometry "
                     "until the level reloads.",
-                    (unsigned)used, (unsigned)VERTEX_CACHE_LIMIT,
+                    (unsigned)used, (unsigned)limit,
                     (unsigned)watchdog_state.vertex_high_water,
                     (double)previous, (double)*effective_view_scale);
     }

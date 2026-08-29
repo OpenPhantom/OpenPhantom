@@ -62,21 +62,6 @@ neither would stay accurate if it were made to describe the other.
                OpenAL Soft licence files
     Unaltered, from DSOAL's own archived build r694.
 
-  Xidi                                                    BSD 3-Clause
-    Files      xidi_winmm.dll, Xidi.32.dll
-    Copyright  Samuel Grossman
-    Source     https://github.com/samuelgr/Xidi
-    Licence    Xidi-License.txt
-    Unaltered. Installed under a different name than upstream uses, for the
-    reason given in the installer's src\xidi.iss; the files themselves are
-    untouched.
-
-  Microsoft Visual C++ Redistributable (x86)              Microsoft's terms
-    Files      none. Run during installation only if the runtime was missing,
-               and deleted afterwards. What it installs is Microsoft's.
-    Source     https://aka.ms/vs/17/release/vc_redist.x86.exe
-    Redistributed unmodified, as Microsoft's redistributable terms allow.
-
   Saved games
     Files      Save\ZANZI01.SAV to ZANZI11.SAV, if you chose them
     Made for this project by playing the game. Not taken from anywhere else,

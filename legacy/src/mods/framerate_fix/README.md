@@ -39,7 +39,7 @@ survives that recompile, which is why it does not share a gate with the rest of 
 
 | Site | Retail VA | What |
 |---|---|---|
-| `sys_waitForFrame` | `0x475B75` | both cap immediates, the limiter flag, the Sleep push |
+| `sys_waitForFrame` | `0x475B75` | both cap immediates, the limiter flag, the Sleep push. The 1/30 immediate sits inside the matched pattern; the 1/60 one does not, so the instruction holding it is validated before either is written and the cap declines as a whole if it disagrees |
 | `sys_runSubsteps` selector | `0x475737` | the 1/64 arm is overwritten with 1/32 |
 | `render_frameEnd` | `0x46C139` | detoured for the per-frame tick |
 | `g_clockTicks++` | `0x46C1B5` | operand read; the counter is driven from elapsed time |
@@ -90,6 +90,13 @@ survives that recompile, which is why it does not share a gate with the rest of 
   exact up to 127 fps, saturating above it.
 * `AnimationClockMode` cannot express a fractional clock, the consumer truncates to `uint32`
   before converting to float.
+* **A guard on a hot path has to be the structured-exception form, not the asking form.** The
+  mover tick hook validates the record before reading it, and that check was
+  `memory_is_readable_range`, which walks the region list through `VirtualQuery`, a system call.
+  `bapmap_tickMover` looked like draw-path frequency and is not: a census measured it at 3,400
+  calls per frame while settled debris was being created near a lift, every one of them arriving
+  through this detour. The guard alone was driving thousands of kernel transitions a frame. See
+  the testing status below for the measurement and `mover_interpolation.c` for the site.
 
 ## Fallback behaviour
 
@@ -109,10 +116,43 @@ released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the 
 its authored pace rather than merely failing to hang. The confirming step, setting the key to 0
 and checking that the freeze returns, has not been run yet.
 
+## The plausibility bound
+
+`frame_delta.c` refuses a measurement above `MAX_PLAUSIBLE_SECONDS`, which is ten, and leaves the
+engine its own value when it does. The comment there used to say that this catches a level load.
+It does not: a load takes a fraction of ten seconds, so the measured value is written. Whether the
+engine is better off with that value or with its own has not been measured, so the bound stays at
+what shipped.
+
+
 `InterpolateMovers`, `InterpolateParticles`, `PreciseFrameTime` and `RebaseSimClock` were played
 and accepted by the maintainer, which is why they now default to on. That is a judgement about how
 they feel; the numbers in their own files are still a byte census and arithmetic rather than a
 measurement of a session, and `sim_clock` and `mover_blend` have unit tests covering the
 arithmetic alone.
+
+**`InterpolateMovers` was field-reported as a severe frame-rate stall, and the cause was the guard
+rather than the interpolation.** A stall at two lift platforms had been attributed to the engine for
+some time and was being compensated for in a separate DLL. Bisecting the installed mods against a
+pure retail install narrowed it here, and switching this one key off removed it: at the same
+encounter, the same 57 debris entries and the same 60 fps cap, the burst that creates the debris ran
+at 8.5 fps with movers on and 60.0 fps with them off.
+
+The mechanism was then measured rather than guessed, with the `Trigger=6` call-site censuses in
+`diagnostics`. Polygon transforms were not the cost: `bapmap_polyToWorld` ran at 3,679 calls per
+frame with movers on against 3,090 with them off, which is nowhere near a tenfold difference in
+frame time. The mover census carried the answer instead, in its unattributed column: with movers on,
+all 679,974 `bapmap_tickMover` calls in a 200-frame window came from a return address it could not
+recognise, because that address was this DLL's own trampoline. With movers off, none did. The hook
+was in front of a function running 3,400 times a frame, and its `VirtualQuery` guard was the whole
+cost.
+
+The repair is three calls changed from `memory_is_readable_range` to `memory_try_readable`, the
+structured-exception form `common/memory.c` documents for exactly this case. The spans validated are
+unchanged. Confirmed in game afterwards at both lifts: a flat 60.0 fps through the burst with
+`InterpolateMovers=1`, and the census showing 2,223 `tickMover` calls per frame still arriving
+through the detour with 6,960 poses blended and none refused, so the interpolation is doing its full
+job rather than having quietly stopped. That last check is the point: the call count did not fall,
+only the cost per call.
 
 Everything else in this DLL is still only reviewed and built, not accepted in game.

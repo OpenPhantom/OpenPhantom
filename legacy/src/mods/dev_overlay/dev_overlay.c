@@ -13,7 +13,9 @@
 
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
+#include "cheats_original_actions.h"
 #include "input_freeze.h"
+#include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
 #include "overlay_model.h"
@@ -151,6 +153,7 @@ void dev_overlay_install(void)
     /* Either half is worth having on its own, so both are attempted and neither decides the
      * outcome. What decides it is whether anything at all can be offered. */
     cheats_ready = cheats_original_resolve();
+    cheats_ready = cheats_original_actions_resolve() || cheats_ready;
     cheats_ready = cheats_openphantom_install() || cheats_ready;
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "
@@ -168,16 +171,36 @@ void dev_overlay_install(void)
      * still switches cheats; the player simply keeps moving behind it, which is what happened
      * before this existed. The log says which of the two the session got. */
     (void)input_freeze_install();
+    /* Neither is a condition of the panel, and they fail independently: one stops the player being
+       given orders, the other stops the simulation stepping at all. */
+    (void)sim_pause_install();
 
     if (!overlay_input_install()) {
         return;
     }
 
+    /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
+     * window messages - overlay_input.c's own domain. Wired here, after both installs have run,
+     * rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name, so that
+     * linking cheats_openphantom.c on its own (the unit test built against the real cheat
+     * sources, see unittests/CMakeLists.txt) never has to drag in the whole message-hook
+     * subsystem just to satisfy one symbol it never exercises. */
+    cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);
+
     log_info("The key below Escape opens the Cheatmenu. The panel is drawn into the "
              "game's own frame, so it needs "
              "no window and cannot take the focus. %s",
              input_freeze_is_available()
-                 ? "While it is open the game reads nothing from the device, which is how this "
-                   "engine is actually stopped: it polls movement rather than being sent it."
-                 : "The input freeze did NOT arm, so the player keeps moving behind the panel.");
+                 ? (sim_pause_is_available()
+                        ? "While it is open the game reads nothing from the device and the "
+                          "simulation itself is held on the engine's own pause flag, so neither "
+                          "the player nor the world moves behind the panel."
+                        : "While it is open the game reads nothing from the device, so the player "
+                          "stops; the simulation pause did NOT arm, so the world keeps running "
+                          "behind the panel.")
+                 : (sim_pause_is_available()
+                        ? "The input freeze did NOT arm, so the player keeps taking orders behind "
+                          "the panel, though the simulation itself is held."
+                        : "Neither the input freeze nor the simulation pause armed, so the game "
+                          "carries on entirely behind the panel."));
 }

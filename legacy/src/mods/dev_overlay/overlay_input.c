@@ -51,7 +51,9 @@
  * ============================================================================================ */
 #include "overlay_input.h"
 
+#include "cheats_original_actions.h"
 #include "input_freeze.h"
+#include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_model.h"
 
@@ -119,8 +121,10 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define MSG_CHAR            0x0102
 #define MSG_MOUSE_MOVE      0x0200
 #define MSG_LEFT_BUTTON     0x0201
+#define MSG_MOUSE_WHEEL     0x020A
 #define KEY_ESCAPE          0x1B
 #define KEY_BACKSPACE       0x08
+#define KEY_RETURN          0x0D
 
 /* THE KEY THAT OPENS THE PANEL, AND WHY TWO OF THEM ARE ACCEPTED BY DEFAULT.
  *
@@ -176,6 +180,7 @@ typedef struct overlay_input_state {
     bool              installed;
     bool              open;
     bool              saw_a_message;
+    bool              search_focused;    /* whether a click has landed in the search field yet */
     detour_t          detour;
     key_hook_fn_t     original;
     HWND              window;
@@ -211,8 +216,19 @@ static overlay_input_state_t input_state;
 static void set_open(bool open)
 {
     input_state.open = open;
+    input_state.search_focused = false;   /* every open starts unfocused; see the header comment
+                                            * on overlay_input_search_focused() for why */
     input_freeze_set(open);
+    /* The freeze stops the player being given orders; this stops the world carrying on regardless.
+       Both, because either alone leaves half the game running: without the freeze the player moves
+       behind the panel, and without this the NPCs, movers and timers do. */
+    sim_pause_hold(SIM_PAUSE_PANEL, open);
     if (!open) {
+        /* AFTER input_freeze_set(false), not before: a queued play-as swap has its own precondition
+         * that reads as unmet while the player is suspended, which is exactly what closing this
+         * call just ended. See cheats_original_actions.h's note on invoke() for why the swap is
+         * queued rather than run the moment its row is pressed. */
+        cheats_original_actions_apply_pending();
         overlay_model_reset();
         return;
     }
@@ -284,13 +300,33 @@ void overlay_input_pointer(float *out_x, float *out_y)
     if (out_y != NULL) { *out_y = input_state.pointer_y; }
 }
 
+bool overlay_input_search_focused(void)
+{
+    return input_state.search_focused;
+}
+
 /* ============================================================================================ */
 
 static void click(float x, float y)
 {
-    int32_t tab = overlay_draw_tab_at(x, y);
+    int32_t tab;
     int32_t row;
 
+    /* A click anywhere ends the search box's focus except a click ON it, which is what starts it.
+     * That is the whole of the click-to-type rule: typing goes into the box only between these two
+     * moments, never just because the panel is open. The jump-scale edit follows the same rule via
+     * the unconditional cancel below - it is cancelled on every click, then immediately re-armed by
+     * overlay_model_activate() a few lines down if and only if the click actually landed back on
+     * its own row, which is exactly the "click it again to redo it" shape that row already has. */
+    if (overlay_draw_search_at(x, y)) {
+        input_state.search_focused = true;
+        overlay_model_value_cancel();
+        return;
+    }
+    input_state.search_focused = false;
+    overlay_model_value_cancel();
+
+    tab = overlay_draw_tab_at(x, y);
     if (tab >= 0) {
         overlay_model_set_tab((overlay_tab_t)tab);
         overlay_model_rebuild();
@@ -321,11 +357,43 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         if (message == MSG_SYS_KEY_DOWN && !is_open_key(wparam)) {
             return false;
         }
+        /* A hotkey row is waiting for exactly this. Checked before Escape and everything else
+         * below, on purpose: whatever key arrives while capturing IS the binding, including
+         * Escape itself, rather than closing the panel or being swallowed as ordinary navigation.
+         * Predictable this way - no separate list of keys a capture refuses to accept - and a
+         * player who binds something inconvenient can simply click the row again to rebind it. */
+        if (overlay_model_is_capturing_hotkey()) {
+            overlay_model_capture_hotkey(wparam);
+            overlay_model_rebuild();
+            return true;
+        }
+        /* Checked before Escape and everything else below, same priority as the hotkey capture
+         * just above and for the same reason: while a value is being typed, Enter/Escape/Backspace
+         * belong to THAT field (commit/cancel/delete a digit), not to the panel (close) or the
+         * search box (whose own backspace arm is further down and gated on a focus this is not). */
+        if (overlay_model_is_editing_value()) {
+            if (wparam == KEY_RETURN) {
+                overlay_model_value_commit();
+                overlay_model_rebuild();
+                return true;
+            }
+            if (wparam == KEY_ESCAPE) {
+                overlay_model_value_cancel();
+                overlay_model_rebuild();
+                return true;
+            }
+            if (wparam == KEY_BACKSPACE) {
+                overlay_model_value_backspace();
+                overlay_model_rebuild();
+                return true;
+            }
+            return true;      /* everything else is swallowed, same as the panel-wide lock below */
+        }
         if (wparam == KEY_ESCAPE) {
             set_open(false);
             return true;
         }
-        if (wparam == KEY_BACKSPACE) {
+        if (wparam == KEY_BACKSPACE && input_state.search_focused) {
             overlay_model_search_backspace();
             overlay_model_rebuild();
             return true;
@@ -335,10 +403,23 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
 
     switch (message) {
     case MSG_CHAR:
-        /* Backspace also arrives as a character and would otherwise be appended as one. */
+        /* Backspace also arrives as a character and would otherwise be appended as one - it is
+         * handled above, as a key-down, for both fields, so it is only ever excluded here. Typing
+         * reaches either field only once a click has landed on it - see click() - which is also
+         * what stops the open key itself leaking in as a character the instant the panel opens: the
+         * key-down that opens the panel is handled above and never reaches here, but Windows still
+         * queues the matching WM_CHAR right behind it, and without the focus gate that character
+         * had nowhere else to go but into a box nobody had clicked on yet. The value row is checked
+         * first because a click that starts editing it also leaves search_focused false, never
+         * both true at once, so the order between these two only matters for readability. */
         if (wparam != KEY_BACKSPACE) {
-            overlay_model_search_append((char)wparam);
-            overlay_model_rebuild();
+            if (overlay_model_is_editing_value()) {
+                overlay_model_value_append((char)wparam);
+                overlay_model_rebuild();
+            } else if (input_state.search_focused) {
+                overlay_model_search_append((char)wparam);
+                overlay_model_rebuild();
+            }
         }
         return true;
 
@@ -358,6 +439,36 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
     return false;
 }
 
+/* Notches scrolled since the last take, positive away from the player. Free camera's own fly
+ * speed (see cheats_openphantom.c) is the one consumer, and it needs the wheel while FLYING, which
+ * is exactly when the panel is closed - unlike everything else in this file, gated on
+ * input_state.open, this has to be observed unconditionally, in hook_key() itself rather than in
+ * handle() below. It is never consumed: the message still reaches input_state.original()
+ * afterwards exactly as if this were not here, since nothing here is known to need the wheel for
+ * anything of its own and there is no reason to find out by swallowing it.
+ *
+ * No locking: hook_key() and the consumer both run on the single game thread (a chained window-
+ * message dispatch and a chained per-frame camera update respectively), never concurrently, the
+ * same reasoning that lets the rest of this file's state go unguarded too. */
+static int32_t wheel_delta_accum;
+
+static void observe_wheel(int32_t message, int32_t wparam)
+{
+    if (message != MSG_MOUSE_WHEEL) {
+        return;
+    }
+    /* WHEEL_DELTA notches live in the high word of wParam, signed. */
+    wheel_delta_accum += (int32_t)(int16_t)((uint32_t)wparam >> 16);
+}
+
+int32_t overlay_input_take_wheel_delta(void)
+{
+    int32_t delta = wheel_delta_accum;
+
+    wheel_delta_accum = 0;
+    return delta;
+}
+
 static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam, uint32_t lparam)
 {
     /* The game's own window, taken from the first message rather than searched for. */
@@ -373,6 +484,8 @@ static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam
         log_info("the message hook is live, first message %04X. Reported once.",
                  (unsigned)message);
     }
+
+    observe_wheel(message, wparam);
 
     if (is_key_down(message) && is_open_key(wparam)) {
         log_info("the overlay was %s with key %02X",

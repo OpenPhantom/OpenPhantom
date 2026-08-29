@@ -50,6 +50,7 @@
 #include "draw_table.h"
 #include "fog_regime.h"
 #include "spawn_census.h"
+#include "vertex_table.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -202,7 +203,9 @@ typedef struct view_distance_config {
     int   two_sided_max;
     bool  relocate_draw_table;
     bool  lower_cell_limit;
+    bool  relocate_vertex_table;
     bool  spawn_census;
+    bool  log_player_position;
 } view_distance_config_t;
 
 typedef struct view_distance_state {
@@ -269,15 +272,50 @@ static void load_config(void)
     config->two_sided_max       = ini_read_int  (VIEW_DISTANCE_SECTION, "TwoSidedMax", 8);
     config->relocate_draw_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateDrawTable", true);
     config->lower_cell_limit    = ini_read_bool (VIEW_DISTANCE_SECTION, "LowerCellLimit", true);
+    /* WALL 2 in cell_watchdog.h: the vertex cache. Doubling it the same ratio draw_table.c already
+     * field-proved for the cell table (16384 -> 32768 slots, 1 MiB -> 2 MiB) so the three gates
+     * that abort cleanly today have real headroom before ANY of the 132 authored range=64 cells or
+     * a wider field of view can trip them. */
+    config->relocate_vertex_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateVertexCache",
+                                                    true);
     /* Read out of the diagnostics section rather than this one, because that is where every
      * measurement switch in this file lives and a reader looking for one should find them
      * together. It is only an ini key: this DLL still has no run-time dependency on the
      * diagnostics DLL, and it works whether or not that DLL is installed at all. */
     config->spawn_census        = ini_read_bool (DIAGNOSTICS_SECTION, "Spawns", false);
 
-    /* Cap from the control review: above 2.0 the 8192-entry collector gets tight and the
-     * 128-slot character pool gets short. */
-    config->view_range_scale = clamp_float(config->view_range_scale, 1.0f, 2.0f);
+    config->log_player_position =
+        ini_read_bool (VIEW_DISTANCE_SECTION, "LogPlayerPosition", false);
+
+    /* THIS WAS RAISED TO 4.0 ONCE, ON REASONING THAT FIELD TESTING THEN DISPROVED. Kept here
+     * rather than quietly reverted, because the reasoning was wrong in a way worth remembering.
+     *
+     * The argument was: RelocateDrawTable makes the 16384-entry cell table safe with a proven
+     * 1.93x reserve, cell_watchdog_budget() already folds that into the radius cap, and the
+     * remaining wall - the 16384-slot vertex cache - is watched in real time with an alarm at 75%,
+     * earlier than the cells' 90%. All of that is true and none of it was enough: at 3.0 and 4.0
+     * the game showed exactly the failure cell_watchdog.c's own comments already named -
+     * "torn geometry until the level reloads" - and it did not self-correct.
+     *
+     * What the argument missed: the counters do not climb, they JUMP. cell_watchdog.c documents
+     * this for cells - "the counter jumped from under 7680 to 8189 in ONE frame, the gentle
+     * back-off never got its turn, only the emergency brake" - and the same is true of the vertex
+     * cache, turning a corner into open geometry. The watchdog's backoff helps the NEXT frame; it
+     * cannot undo the frame that already overshot, and a vertex-cache overshoot does not clear
+     * itself the way a cell-table one does. A larger ViewRangeScale does not make that jump safer,
+     * it makes the jump BIGGER, which is the opposite of what real-time coverage alone could fix.
+     *
+     * SECOND ATTEMPT, and the difference from the first is not more reasoning about the existing
+     * wall, it is that the wall itself moved. RelocateVertexCache=1 (default, vertex_table.c) is
+     * no longer a real-time watch on a fixed 16384-slot ceiling; it is a relocated 32768-slot
+     * buffer, and a field session confirmed the relocation itself: engine_fixes.log shows all
+     * 15/15 operands written and the watchdog's alarm rescaled to 24576, then a played session
+     * with a widened FOV, thousands of decals and nearly 4800 mover poses produced not one
+     * VERTEX CACHE FULL line. That is evidence the relocation WORKS, not evidence 2.5 is safe -
+     * the counter still jumps rather than climbs, and this ceiling has been wrong once already on
+     * an argument that sounded just as sound. So: one step, to 2.5, not back to 4.0, and it stays
+     * here pending its own field test rather than being trusted on the strength of this one. */
+    config->view_range_scale = clamp_float(config->view_range_scale, 1.0f, 2.5f);
     config->npc_range_scale  = clamp_float(config->npc_range_scale, 1.0f, 2.0f);
     if (config->fog_scale <= 0.0f) {
         config->fog_scale = config->view_range_scale;
@@ -501,9 +539,50 @@ static int32_t __cdecl hook_thing_draw(void *thing, void *matrix)
 }
 
 /* ============================================================================================ */
+/* How often the ViewRangeScale key is re-read, in frames. The developer overlay writes that key
+ * when its draw distance row is committed, and this is how the change reaches a running game.
+ *
+ * WHY A POLL AND NOT A CALL. The overlay lives in its own DLL, and feature DLLs in this project
+ * never depend on each other at run time: any one of them can be deleted from mods\ without
+ * breaking the others. The ini is a channel both already have and neither owns.
+ *
+ * WHAT IT COSTS. One profile read a second. That is a file the operating system has cached and is
+ * measured in tens of microseconds, so amortised across sixty frames it is well under a microsecond
+ * each. Worth stating rather than assuming, since this project has already been caught once by a
+ * cheap looking call inside a per-frame path, but a once-a-second read is a different order of
+ * thing from a per-object syscall. */
+#define SCALE_POLL_FRAMES 60u
+
+/* Re-reads the setting and adopts it when it has changed. Assigning the config value is not enough
+ * on its own: effective_view_scale is what the range hook actually multiplies by, and the watchdog
+ * only ever lowers it, so a raise has to reset it. Lowering the setting resets it too, which hands
+ * the watchdog a fresh start rather than leaving it braked from a scale that is no longer set. */
+static void poll_view_range_scale(void)
+{
+    static uint32_t frames;
+    float           requested;
+
+    if (++frames < SCALE_POLL_FRAMES) {
+        return;
+    }
+    frames = 0;
+
+    requested = clamp_float(ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale",
+                                           view_state.config.view_range_scale), 1.0f, 2.5f);
+    if (requested == view_state.config.view_range_scale) {
+        return;
+    }
+
+    log_info("ViewRangeScale changed on disk, %.2f -> %.2f, adopting it",
+             (double)view_state.config.view_range_scale, (double)requested);
+    view_state.config.view_range_scale = requested;
+    view_state.effective_view_scale = requested;
+}
+
 static void on_frame(void)
 {
     view_state.two_sided_this_frame = 0;
+    poll_view_range_scale();
     cell_watchdog_on_frame(&view_state.effective_view_scale);
 
     /* AFTER the watchdog, deliberately. When the watchdog lowers the scale it moves the cut edge,
@@ -704,6 +783,16 @@ void view_distance_fix_install(void)
         }
     }
 
+    /* Same ordering rule as the draw table just above, and for the identical reason: the watchdog
+     * has already resolved the vertex counter by this point, and this relocation touches none of
+     * the operands that resolution reads. */
+    if (view_state.config.relocate_vertex_table) {
+        vertex_table_relocate();
+        if (vertex_table_is_active()) {
+            cell_watchdog_set_vertex_limit(vertex_table_limit());
+        }
+    }
+
     /* ORDER: the fog reads the cut edge the draw-distance detour reports, so that detour has to be
      * standing before the first frame the fog ticks on. */
     install_view_distance();
@@ -715,9 +804,17 @@ void view_distance_fix_install(void)
      * failure the engine reports nowhere: a spawn the pools were too full to satisfy. */
     (void)spawn_census_install(sites[SITE_ACTIVATION_SCAN].address,
                                view_state.config.spawn_census);
+
+    /* The destroy side of the same investigation. Self-resolves its own site, independent of
+     * activation_scan. Nothing else in this project detours that function any more; see
+     * spawn_census.h's own comment. */
+    (void)spawn_census_install_destroy_observer(view_state.config.spawn_census);
+
+    spawn_census_log_player_position(view_state.config.log_player_position);
 }
 
 void view_distance_fix_shutdown(void)
 {
     draw_table_restore();
+    vertex_table_restore();
 }

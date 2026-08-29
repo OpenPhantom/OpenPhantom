@@ -23,5 +23,11 @@ Name: "complete_saves"; Description: "{cm:CompSaves}"; Types: everything custom
 ; Laid down in {tmp} rather than straight into Save\. The copy into Save\ runs from [Code] after the
 ; carry-over has put the player's own saves back, otherwise the restore would overwrite it. See
 ; InstallCompleteSaves.
+;
+; A SLOT THAT ALREADY HOLDS A SAVE IS NEVER WRITTEN. That is what makes this component safe to leave
+; in the default install type: on a fresh installation nothing collides and all eleven arrive, and
+; on a rerun to update a patch the player keeps every slot they have used and gets only the chapters
+; they never started. It did overwrite, and the error text on the copy has always promised it did
+; not.
 Source: "dist\saves\*.SAV"; DestDir: "{#SavesTmp}\Save"; \
     Components: complete_saves; Flags: ignoreversion

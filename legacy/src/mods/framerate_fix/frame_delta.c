@@ -139,8 +139,13 @@ static const uint8_t SIG_FRAME_DELTA_STORE[] = {
 };
 #define OFFSET_FRAME_DELTA_CELL 0x02u
 
-/* A frame longer than this is not a frame, it is a stall or a level load, and a counter that went
- * backwards is a broken counter. Either way the engine's own value is left in place. */
+/* A counter that went backwards is a broken counter, and a frame longer than this is a stall.
+ * Either way the engine keeps its own value.
+ *
+ * Ten seconds does not catch a level load, and the comment here used to claim it did. A load
+ * takes a fraction of that, so it passes this test and the measured value is written. Whether
+ * the engine is better off with that value or with its own is not measured, so the bound stays
+ * at what shipped. */
 #define MAX_PLAUSIBLE_SECONDS 10.0
 
 /* One line when the first delta is actually written, and one every few minutes after that. The

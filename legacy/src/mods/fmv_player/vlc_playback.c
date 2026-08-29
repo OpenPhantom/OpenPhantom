@@ -172,7 +172,24 @@ static bool init_worker(void)
     wchar_t core_path[MAX_PATH];
     wchar_t main_path[MAX_PATH];
     wchar_t plugin_path[MAX_PATH];
-    static const char *const instance_args[] = { "--quiet", "--no-video-title-show" };
+    static const char *const instance_args[] = { "--no-video-title-show", "--aout=waveout" };
+    /* CONFIRMED FIELD FIX for a ROG Ally X that reported silent movies with DSOAL installed.
+     *
+     * --aout=mmdevice (forcing WASAPI) was the first fix tried, on the theory that libVLC's own
+     * auto-probe was falling back to DirectSound and DSOAL (a DirectSound-to-OpenAL layer for the
+     * retail game's own EAX effects) was swallowing the audio from there. FIELD-TESTED and it did
+     * NOT fix it: the movies stayed silent even with WASAPI forced and DirectSound removed from
+     * the path entirely, which ruled out DirectSound/DSOAL as the actual cause.
+     *
+     * --aout=waveout (winmm) is what's forced now, and IT FIXED THE REPORTED SYSTEM: the oldest
+     * Windows audio output there is, older than DirectSound and WASAPI both, with no exclusive-
+     * mode negotiation, no audio session machinery and no device enumeration through the MMDevice
+     * COM API that WASAPI and mmdevice both depend on. Whatever was actually wrong on that system
+     * - handheld audio middleware, a spatial audio APO, a COM initialisation quirk from running
+     * inside an injected DLL - never got the chance to interfere with winmm's much smaller
+     * surface. The specific mechanism was never pinned down beyond that, and does not need to be:
+     * the fix is confirmed on the machine that reported the bug, which is the bar every other
+     * field-tested fix in this project is held to. */
 
     if (!vlc_locate_directory(vlc_dir, ARRAYSIZE(vlc_dir))) {
         return false;   /* vlc_locate.c has already said which places it looked in */
@@ -229,7 +246,8 @@ static bool init_worker(void)
         return false;
     }
 
-    log_info("libVLC ready, plugins from %ls", plugin_path);
+    log_info("libVLC ready, plugins from %ls, audio output forced to waveout (confirmed field fix "
+             "for silent movies on at least one system)", plugin_path);
     return true;
 }
 
@@ -348,22 +366,33 @@ static bool escape_pressed_now(bool *was_down)
     return fresh;
 }
 
-/* True for the two posted messages that BEGIN a close, as opposed to WM_QUIT, which is what a close
- * has already turned into.
+/* True for the posted message that BEGINS a close by mouse, as opposed to WM_QUIT, which is what a
+ * close has already turned into.
  *
- * This distinction is the whole reason this function exists. Alt+F4 arrives as WM_SYSKEYDOWN with
- * VK_F4, and the close box as WM_NCLBUTTONDOWN on hit-test area HTCLOSE. Neither is a close yet:
- * DefWindowProc is what turns them into WM_SYSCOMMAND, then WM_CLOSE, then eventually
+ * The close box arrives as WM_NCLBUTTONDOWN on hit-test area HTCLOSE, and it is not a close yet:
+ * DefWindowProc is what turns it into WM_SYSCOMMAND, then WM_CLOSE, then eventually
  * PostQuitMessage. The overlay never takes activation, so the focus window during a movie is the
- * game's, so both of these are addressed to exactly the window whose messages this loop drops -
- * which means DefWindowProc never runs and no WM_QUIT is ever produced for the branch below to
- * catch. Handling only WM_QUIT preserves a quit somebody else raised and loses every quit the
- * player raises, which is the wrong half. */
+ * game's, so it is addressed to exactly the window whose messages this loop drops, which means
+ * DefWindowProc never runs and no WM_QUIT is ever produced. Handling only WM_QUIT would preserve a
+ * quit somebody else raised and lose every quit the player raises, which is the wrong half.
+ *
+ * ALT+F4 IS NOT HANDLED HERE, AND COULD NOT USEFULLY BE. WM_SYSKEYDOWN with VK_F4 used to be in
+ * the range list above and could never fire: a filtered peek returns the FIRST message in its
+ * range, Alt+F4 queues VK_MENU before VK_F4, and holding Alt autorepeats more behind it, so the F4
+ * was never examined. An external audit found that and was right about the code.
+ *
+ * It was wrong about the consequence. THE GAME IGNORES WM_CLOSE AT ALL TIMES: its window procedure
+ * at 0x0049905E takes case 0x10 in the switch, sets the result to zero and breaks, so DefWindowProcA
+ * never runs and the default destroy never happens, and the chained handlers never see it either.
+ * Only WM_DESTROY calls PostQuitMessage, raised by the game's own quit path. Confirmed in play:
+ * Alt+F4 does nothing during ordinary gameplay with no movie involved.
+ *
+ * So there was no close being lost here to restore. Detecting the combination properly was tried,
+ * and it ended the movie and then posted a close the engine discarded. Making Alt+F4 genuinely
+ * close the game would override a decision the engine took for itself, which is a behaviour change
+ * rather than a repair and does not belong in the movie player. */
 static bool is_close_request(const MSG *message)
 {
-    if (message->message == WM_SYSKEYDOWN && message->wParam == VK_F4) {
-        return true;
-    }
     return message->message == WM_NCLBUTTONDOWN && message->wParam == HTCLOSE;
 }
 
@@ -386,7 +415,6 @@ static bool is_close_request(const MSG *message)
 static bool close_was_requested(HWND game_window)
 {
     static const struct { UINT first; UINT last; } ranges[] = {
-        { WM_SYSKEYDOWN,     WM_SYSKEYDOWN     },
         { WM_NCLBUTTONDOWN,  WM_NCLBUTTONDOWN  }
     };
     MSG    message;

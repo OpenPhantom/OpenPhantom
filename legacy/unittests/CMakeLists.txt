@@ -23,6 +23,7 @@ endfunction()
 
 
 add_unit_test(fov_math   variable_fov      variable_fov/fov_math.c)
+add_unit_test(sound_owner sound_lifetime_fix sound_lifetime_fix/sound_lifetime_fix.c)
 add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
 
 # The damper, the mouse bank and the travel angle together: all three are the arithmetic that
@@ -130,12 +131,6 @@ add_unit_test(imuse_guard imuse_fix imuse_fix/imuse_guard.c)
 # are silent, and one of them asks the file system about a file the player never named.
 add_unit_test(movie_path fmv_player fmv_player/movie_path.c)
 
-# The two path answers xidi_bridge stands on. Both are wrong silently: the first decides whether
-# the fix has anything to do at all, and a plain prefix test would call C:\Gamedata a file inside
-# C:\Game; the second refuses a path that does not fit instead of truncating it into the name of
-# some other file.
-add_unit_test(wrapper_path xidi_bridge xidi_bridge/wrapper_path.c)
-
 add_unit_test(menu_patcher "")
 
 # The chained detours actually get installed and called through here, on a page of machine code the
@@ -166,6 +161,32 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 # executable neither of them could resolve.
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
+    dev_overlay/view_range_row.c
     dev_overlay/cheats_original.c
+    dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
+    dev_overlay/cheats_no_fog.c
+    # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
+    # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
+    # resolved site every entry point returns immediately, which is exactly what a test process wants.
+    dev_overlay/sim_pause.c
 )
+
+# The character census reads a live process, so what can be tested without the game is the
+# arithmetic underneath it: the pool slot walk, the radius test, the vertical classification and
+# the fixed width name field. character_scan.c holds exactly that and nothing else.
+add_unit_test(character_scan diagnostics diagnostics/character_scan.c)
+
+# The debug register bit packing. Getting a condition or a length wrong does not fail loudly, it
+# arms a watch that never fires, which reads as "nothing writes this field". Worth pinning to the
+# values the manual specifies.
+add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
+
+# The one decision the ground clip fix makes. The modes it is checked against were read out of a
+# live level rather than invented, and the case that must NOT change, a collision tested character
+# keeping its velocity, matters as much as the case that must.
+add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
+
+# The draw distance row's own arithmetic: the clamp, and the hand written parser that exists
+# because strtof would read a decimal point only where the locale agrees it is one.
+add_unit_test(view_range_row dev_overlay dev_overlay/view_range_row.c)

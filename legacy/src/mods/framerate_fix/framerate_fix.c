@@ -83,6 +83,24 @@ static const uint8_t SIG_WAIT_FOR_FRAME[] = {
 };
 #define OFFSET_CAP_30_IMMEDIATE  0x10u
 #define OFFSET_CAP_60_IMMEDIATE  0x19u
+
+/* THE 1/30 IMMEDIATE IS INSIDE THE SIGNATURE AND THE 1/60 ONE IS NOT. The pattern above is 22
+ * bytes, so it ends at +0x15 and a match already proves what sits at +0x10. +0x19 is three bytes past the
+ * end of it and was written on the strength of the match alone, which is the one code write in this
+ * DLL that did not check what it was overwriting. On a build that diverges after the matched
+ * prologue that is four bytes of unknown instruction inside sys_waitForFrame.
+ *
+ * What actually sits there is the immediate of the instruction that starts at +0x16:
+ *
+ *   00475B8B  C7 45 FC 89 88 88 3C    mov  dword ptr [ebp-4],0x3C888889    ; 1/60
+ *
+ * so the seven bytes from +0x16 are checked as a unit before either cap is written. Checking the
+ * immediate alone would accept the right four bytes in the wrong instruction; checking the
+ * instruction as well is what makes the offset mean something. */
+#define OFFSET_CAP_60_MOV        0x16u
+static const uint8_t EXPECTED_CAP_60_MOV[] = {
+    0xC7, 0x45, 0xFC, 0x89, 0x88, 0x88, 0x3C
+};
 #define OFFSET_LIMITER_CMP       0x39u
 #define OFFSET_LIMITER_ADDRESS   0x3Bu
 #define OFFSET_SLEEP_PUSH        0x54u
@@ -317,6 +335,19 @@ static void patch_render_cap(void)
 
     if (framerate_state.config.target_fps > 0) {
         float cap = 1.0f / (float)framerate_state.config.target_fps;
+
+        /* BOTH WRITES OR NEITHER. If the cheat arm is not where it is expected, the 30 Hz write on
+           its own would still cap the frame rate, and the 60fps cheat could then undo it from
+           inside the game with nothing here to notice. A half applied cap is the shape this
+           project's own rule about unknown builds exists to refuse, so the whole cap declines and
+           says which byte disagreed. */
+        if (!patch_validate_bytes(site + OFFSET_CAP_60_MOV, EXPECTED_CAP_60_MOV,
+                                  sizeof(EXPECTED_CAP_60_MOV))) {
+            log_warning("the 60fps cheat arm is not the expected `mov [ebp-4],1/60` at %08X, so "
+                        "the render cap is left alone entirely rather than half applied",
+                        (unsigned)(site + OFFSET_CAP_60_MOV));
+            return;
+        }
 
         patch_write_f32(site + OFFSET_CAP_30_IMMEDIATE, cap);
         patch_write_f32(site + OFFSET_CAP_60_IMMEDIATE, cap);   /* the cheat arm must not undo us */

@@ -131,6 +131,9 @@ so does one that arrives before libVLC has finished loading.
 | `MovieDirectory` | `movies_hd` | Where converted files live, relative to `WMAIN.EXE`. |
 | `Extension` | `mp4` | The file extension to look for. |
 | `Scaling` | `letterbox` | `letterbox` keeps the movie's own shape and puts black bars where the screen differs. `stretch` fills the screen exactly. Anything else reads as `letterbox`. |
+| `PostMovieHoldMs` | `2500` | How long the overlay stays up, still solid black, after a movie that was played once a level and its player already exist. `0` disables it. See "The post-movie curtain" below. |
+| `PostMovieFadeMs` | `300` | How long the curtain then takes to fade from opaque to transparent before it is destroyed, instead of cutting straight to the game. `0` skips the fade. |
+| `MutePostMovieAudio` | `1` | Suppress the one scripted sound call behind the curtain's own thud. Not a volume mute - dialogue and every other sound path are untouched. See "The post-movie curtain" below. |
 
 `Scaling` is applied when the movie plays, not when it is converted, so it works on files you
 already have and changing your mind costs nothing but a restart. Stretch is expressed as the
@@ -230,6 +233,84 @@ With the padding gone there is exactly one aspect-ratio decision, and it is take
 the only party that knows how big the screen actually is. That is also the whole answer to "make it
 fill the monitor, and letterbox when the shape does not match": it already does, once, correctly.
 
+## The post-movie curtain (`render_curtain.c`, `sfx_mute.c`)
+
+Field report: right after the intro movies play going into level 6 (`fedship.b3d`, the Trade
+Federation Battleship), Obi-Wan visibly drops into the map as if he had been suspended somewhere
+higher, complete with a genuine falling/landing sound. Isolated live to this DLL - the retail Bink
+path, which always forces a resolution switch around every movie, never shows it.
+
+A live probe on the player's own body (`Plr_CommitPose`, `0x0044C06B`) caught the mechanism
+directly: `pPlayer+0xA0` is a position-override flag that, while set, force-copies the player's real
+position every substep from `pPlayer+0x124`. Watched frame by frame around the opening cutscene,
+that source genuinely rises from the correct height to +1.48 units, overshoots back down to -0.04
+below it, and settles exactly on the correct value again - a real, self-resolving engine transient
+(a follow/settle filter driving the player toward its cutscene position, not a rendering artefact,
+which is what a genuine landing sound during the same window requires), taking roughly 650 ms to
+read flat once the cutscene lock fires, sometimes longer in practice. What retail's own resolution
+switch buys, incidentally, is enough black-screen time that this always finishes before its picture
+is ever shown again; this DLL's own faster transition does not spend that time, so the first real
+frame can land mid-transient.
+
+The curtain draws solid black for `PostMovieHoldMs` after the movie itself has already finished -
+not blocking, the engine keeps ticking normally underneath, which is what actually gives the
+transient somewhere to run to completion - then fades out over `PostMovieFadeMs` instead of cutting
+straight to the game. It is scoped to movies played once a level and a player already exist: the two
+startup splash movies (`logo`, `bigape`) never get it, matched by the movie's own retail name in
+`fmv_player.c`.
+
+**It is drawn by the game's own renderer, not a separate window.** A first version held a borderless
+overlay window open over the game instead of destroying it right away, which worked for a player
+watching their own monitor and was confirmed live to be **invisible in a screen recording made
+specifically to show it working**. Most "game capture" style recorders hook the game's own Present
+call and grab the raw backbuffer before Windows' own compositor (DWM) ever draws a separate window
+on top of it, so a window-based curtain reaches the player's eyes but never reaches a captured
+frame. `render_curtain.c` instead redirects the same call `dev_overlay`'s own cheat panel redirects
+- the one that closes the scene right before the page is shown - and draws a full-screen rectangle
+through the engine's own filled-shape primitive (`0x00419660`, byte-identical to
+`dev_overlay/overlay_sites.c`'s own `SIG_DRAW_QUAD`; what the game draws its own letterbox bars and
+screen tint with), packed ARGB with the alpha carrying the fade. That is real content on the frame
+the game actually presents, so any capture method shows exactly what the player sees - and a cheat
+panel opened on top of it still draws on top, for the same reason: this file's hook runs as the
+outer wrapper (loading after "dev_overlay" alphabetically), draws its own quad, then calls through
+to dev_overlay's own hook, which paints the panel after.
+
+**The curtain hides the picture, not the simulation.** The landing sound above is still audible
+behind it, because holding the overlay open does not slow anything down - whatever plays that sound
+fires at the same simulated instant regardless of how long the curtain is held.
+
+Two earlier attempts at fixing this were each replaced in turn:
+
+1. Muted `bapsound_setMasterVolume` (the same cell the SFX slider drives) for the transient's own
+   lifetime. Confirmed live, this measurably broke something else: the level's own opening line
+   ("I have a bad feeling about this") starts inside the same window as the landing sound, on the
+   same engine audio channel, so muting long enough to cover the one reliably clipped the start of
+   the other - Obi's first three words were silently eaten every time.
+2. Suppressed `0x00417143`, the wrapper the level script interpreter's own "Sound" opcode (`0x603`,
+   sitting right next to `0x604` "LOCK Player" in the same script) calls. A reasonable theory, and
+   wrong: confirmed live with a diagnostics build watching every call to `bapsound_play` by name,
+   opcode `0x603` never fires for this cutscene at all, so suppressing its wrapper suppressed
+   nothing.
+
+That same live capture (`[diagnostics] Audio=1`, every sound played from level load through the
+first two spoken lines) shows exactly one candidate: `FSMJCON1.wav`, playing once, 2-D, right in the
+gap between the level becoming visible and Obi-Wan's own first line - nothing else plays in that
+window that is not an ambient loop already rejected for being out of range, or a menu sound from
+well before the level even loads.
+
+**Not one sound - a family, one per playable character.** The transient itself is not unique to
+fedship.b3d either: a second live capture, playing as Qui-Gon (`iamquigon`), catches the same
+transient at a DIFFERENT level's own opening (race.b3d) playing `FSUJSND1.wav` instead. Both share
+the same shape - `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
+sound-specific suffix - which is what `sfx_mute.c` matches on now rather than either exact name, so
+Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having to
+catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
+byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips every call whose
+sound record's own name matches `FS?J*` (case-insensitive, third character a wildcard) while
+suppression is armed - every other sound, both spoken lines included, passes through untouched -
+tracking `pPlayer+0xA0` directly so suppression ends the moment the transient it exists for
+actually finishes, or the curtain's own timer as a fallback cap.
+
 ## Why a separate window instead of drawing into the game's own surface
 
 Everything that made the first design slow was on the far side of a DirectDraw surface neither
@@ -318,6 +399,30 @@ one match per image, and five cross-checks before any of it is used: each cell m
 its load and its store, the Y cells must sit four bytes past the X cells in both pairs, the origin
 pair must be reachable at a fixed distance with the expected opcode, and every cell must lie inside
 the host image.
+
+## Closing the game during a movie
+
+**This game cannot be closed with Alt+F4 at any time, and that is the engine's own decision.** Its
+window procedure at `0x0049905E` takes `WM_CLOSE` in the switch and returns zero without reaching
+`DefWindowProcA`, so the default destroy never happens, and because the switch takes it the message
+never reaches the chained handlers either. Only `WM_DESTROY` calls `PostQuitMessage`, and the game's
+own quit path is what raises that. Confirmed in play with no movie involved.
+
+The close box is still read off the game's queue here, because a close request that the engine
+chooses to discard is still a request this loop should not eat on the way past.
+
+**What was actually wrong here**, and an external audit found it: `WM_SYSKEYDOWN` with `VK_F4` was in
+the peeked range and could never match. A filtered peek returns the first message in its range,
+Alt+F4 queues `VK_MENU` before `VK_F4`, and holding Alt autorepeats more `VK_MENU` behind it, so the
+F4 was never examined. That dead branch is gone, along with the comment that described the mechanism
+at length without it being able to work.
+
+The audit's stated consequence, that a player could not close the game for the length of a movie,
+does not follow: they cannot close it during ordinary gameplay either. Detecting the combination
+properly was tried and did exactly nothing useful, ending the movie and then posting a close the
+engine discarded. Making Alt+F4 genuinely close the game would be overriding a decision the engine
+took for itself, which is a behaviour change rather than a repair and does not belong in the movie
+player.
 
 ## Known limitations
 

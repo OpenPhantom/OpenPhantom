@@ -10,6 +10,7 @@
 #include "common/signature.h"
 
 #include <windows.h>
+#include <intrin.h>
 #include <mmsystem.h>
 
 #include <stdbool.h>
@@ -177,6 +178,7 @@ static signature_t sites[SITE_COUNT] = {
 #define CHANNEL_MAX_DIST   0x24
 #define CHANNEL_DISTANCE   0x40
 #define CHANNEL_PRIORITY   0x70
+#define CHANNEL_OWNER_HANDLE 0x78
 #define SOUND_REF_NAME     0x04   /* char[0x34] */
 
 /* B3D_SPLA, a "sound place", 0x3C bytes. */
@@ -326,6 +328,35 @@ static void __cdecl hook_sound_free_channel(uint32_t channel)
     } else {
         wav[0] = '?';
         wav[1] = '\0';
+    }
+
+    /* THE OWNER HANDLE, READ BEFORE THE ORIGINAL RUNS because the original clears it.
+     *
+     * bapsound_play stores the address the caller passed for its channel handle, and
+     * bapsound_freeChannel writes -1 through it when the voice ends. Three call sites in the
+     * projectile code pass the address of a stack local and then call bapsound_pinChannel,
+     * which detaches the position by copying it and leaves this pointer alone. The frame
+     * returns and the pointer stays, so the write lands in a frame that no longer exists.
+     *
+     * Above esp is a live frame, where the write corrupts something another function is still
+     * using; below esp is unused space, where it does nothing. That distinction is why the
+     * offset is printed rather than only the address. */
+    if (channel < CHANNEL_COUNT && audio_state.channel_bank != NULL) {
+        const void *owner = *(void * const *)(audio_state.channel_bank
+                                              + channel * CHANNEL_STRIDE
+                                              + CHANNEL_OWNER_HANDLE);
+        uintptr_t   at    = (uintptr_t)owner;
+        uintptr_t   base  = (uintptr_t)__readfsdword(0x04);
+        uintptr_t   limit = (uintptr_t)__readfsdword(0x08);
+
+        if (at >= limit && at < base) {
+            uintptr_t here = (uintptr_t)&owner;
+            diag_log_write("aud  STALE OWNER ch %u \"%s\" -> %08X, in the stack %08X..%08X, "
+                           "%s esp by %u bytes", (unsigned)channel, wav, (unsigned)at,
+                           (unsigned)limit, (unsigned)base,
+                           (at >= here) ? "ABOVE" : "below",
+                           (unsigned)((at >= here) ? (at - here) : (here - at)));
+        }
     }
 
     original(channel);

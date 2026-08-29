@@ -49,8 +49,14 @@
 #define DUMP_AFTER  4u
 
 /* At most this many hitch dumps per session. A picture that hitches every frame is a finding all by
- * itself and does not need three hundred dumps to say so; the count keeps rising either way. */
-#define MAX_DUMPS 40u
+ * itself and does not need three hundred dumps to say so; the count keeps rising either way.
+ *
+ * Raised from 40 for a specific hunt: a whole level can generate enough small, ordinary hitches
+ * (a fast pan, a mover starting) to exhaust 40 dumps well before reaching the one moment actually
+ * being chased, leaving only the uncapped per-second summary for it. 300 is deliberately the number
+ * the comment above once used as "this would be a lot"; if a session hits it, that count rising on
+ * its own is already the finding. */
+#define MAX_DUMPS 300u
 
 /* The median is taken over this many of the most recent frames. Long enough to be a session's
  * character rather than a moment's, short enough to follow a genuine change of frame rate. */

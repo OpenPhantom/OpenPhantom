@@ -54,6 +54,11 @@ void cell_watchdog_on_frame(float *effective_view_scale);
 /* Adopts the larger limit after a successful draw-table relocation. */
 void cell_watchdog_set_limit(uint32_t new_limit);
 
+/* Adopts the larger limit after a successful vertex-table relocation (vertex_table.c). Scales the
+ * alarm threshold with it, the same way cell_watchdog_set_limit() already scales the cells' own
+ * alarm and panic fractions. */
+void cell_watchdog_set_vertex_limit(uint32_t new_limit);
+
 /* The cell budget as a multiple of the shipped 8192, for the radius cap. */
 float cell_watchdog_budget(void);
 

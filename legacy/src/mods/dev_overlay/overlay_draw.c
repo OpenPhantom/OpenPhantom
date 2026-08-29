@@ -8,6 +8,7 @@
 
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
+#include "cheats_original_actions.h"
 #include "overlay_input.h"
 #include "overlay_layout.h"
 #include "overlay_model.h"
@@ -68,6 +69,12 @@
 #define C_CHIP_OFF      0xFF262B38u
 #define C_CHIP_OFF_TEXT 0xFF98A0B4u
 #define C_STATE_NA      0xFF6B7186u
+
+/* An action is not a state, on or off, so it gets neither chip colour: the same accent blue the
+ * panel already uses for "this is interactive" everywhere else, on the same dark fill an OFF chip
+ * uses. Green here would read as "this is currently on", which a fire-once row never is. */
+#define C_CHIP_ACTION      0xFF262B38u
+#define C_CHIP_ACTION_TEXT 0xFF5AA0F0u
 
 #define C_POINTER       0xFFFFFFFFu
 
@@ -257,28 +264,51 @@ static const char *fit(const char *what, float room, char *scratch, size_t scrat
     return scratch;
 }
 
-/* The widest NAME the tab can ever show, over ALL its rows rather than the visible ones. Measured
- * over the visible ones, the panel would change width on every keystroke and every fold. */
-static float widest_name(void)
+/* Folds `widest` up to whichever of it and every name in [0, count) is largest. Shared because the
+ * Original tab now measures two sources rather than one, and a loop copied twice is two chances to
+ * change only one of them. */
+static float widen_over(float widest, uint32_t count, const char *(*name_of)(uint32_t))
 {
-    const overlay_tab_t tab = overlay_model_tab();
-    float               widest = 0.0f;
-    uint32_t            count;
-    uint32_t            i;
+    uint32_t i;
 
-    count = (tab == OVERLAY_TAB_ORIGINAL) ? cheats_original_count()
-                                          : (uint32_t)CHEATS_OWN_COUNT;
     for (i = 0; i < count; ++i) {
-        const char *name = (tab == OVERLAY_TAB_ORIGINAL)
-                         ? cheats_original_name(i)
-                         : cheats_openphantom_name((cheats_own_id_t)i);
-        const float width = text_width(name);
+        const float width = text_width(name_of(i));
 
         if (width > widest) {
             widest = width;
         }
     }
     return widest;
+}
+
+static const char *original_toggle_name(uint32_t i)
+{
+    return cheats_original_name(i);
+}
+
+static const char *original_action_name(uint32_t i)
+{
+    return cheats_original_actions_name((cheats_action_id_t)i);
+}
+
+static const char *openphantom_name(uint32_t i)
+{
+    return cheats_openphantom_name((cheats_own_id_t)i);
+}
+
+/* The widest NAME the tab can ever show, over ALL its rows rather than the visible ones. Measured
+ * over the visible ones, the panel would change width on every keystroke and every fold. The
+ * Original tab holds two groups now, so both are measured whether or not either is folded open. */
+static float widest_name(void)
+{
+    float widest = 0.0f;
+
+    if (overlay_model_tab() == OVERLAY_TAB_ORIGINAL) {
+        widest = widen_over(widest, cheats_original_count(), original_toggle_name);
+        widest = widen_over(widest, (uint32_t)CHEATS_ACTION_COUNT, original_action_name);
+        return widest;
+    }
+    return widen_over(widest, (uint32_t)CHEATS_OWN_COUNT, openphantom_name);
 }
 
 bool overlay_draw_paint(void)
@@ -328,7 +358,14 @@ bool overlay_draw_paint(void)
     write_in("Cheatmenu", left + EDGE_PAD * lay.text_h, lay.top + lay.cap_h,
              lay.title_h - lay.cap_h, C_ACCENT);
     {
-        const char *hint = "Esc closes";
+        /* A queued swap outranks the usual hint while one is pending: it is the more useful thing
+         * to say right now, and the row itself already reads QUEUED, so this is confirming what
+         * closing does rather than introducing new information. Kept short rather than naming the
+         * character: the panel's width is sized to fit the longest ROW label, not this hint plus
+         * "Cheatmenu" both fitting the title band together, and a name-carrying hint here would be
+         * the one string in the whole panel that was never checked against that budget. */
+        const char *hint = (cheats_original_actions_pending_label() != NULL)
+                          ? "Close applies the queued swap" : "Esc closes";
 
         write_in(hint, right - EDGE_PAD * lay.text_h - text_width(hint), lay.top + lay.cap_h,
                  lay.title_h - lay.cap_h, C_ROW_TEXT_DIM);
@@ -353,15 +390,21 @@ bool overlay_draw_paint(void)
     }
 
     /* --- the search field. Opaque with a light border rather than a translucent black rectangle:
-     * the same shape, and the difference between a well and a hole. --- */
+     * the same shape, and the difference between a well and a hole.
+     *
+     * Typing only reaches this box once it has been clicked into - see overlay_input.c's click()
+     * and the focus gate in handle(). The border and the caret are what say so: the accent border
+     * and the caret both only appear once a click actually landed here, so the box never LOOKS
+     * ready to type into before it is. --- */
     {
+        const bool  focused = overlay_input_search_focused();
         const float fy0 = lay.top + lay.search_top + (lay.search_h - 1.5f * lay.text_h) * 0.5f;
         const float fy1 = fy0 + 1.5f * lay.text_h;
         const float tx = left + (EDGE_PAD + 0.5f) * lay.text_h;
         float       caret;
 
         fill_outlined(left + EDGE_PAD * lay.text_h, fy0, right - EDGE_PAD * lay.text_h, fy1,
-                      C_FIELD_BORDER, C_FIELD_FILL);
+                      focused ? C_ACCENT : C_FIELD_BORDER, C_FIELD_FILL);
         typed = overlay_model_search();
         if (typed[0] != 0) {
             write_in(typed, tx, fy0, fy1 - fy0, C_TYPED);
@@ -370,8 +413,10 @@ bool overlay_draw_paint(void)
             write_in("Search", tx + 0.5f * lay.text_h, fy0, fy1 - fy0, C_PLACEHOLDER);
             caret = tx;
         }
-        fill(caret, fy0 + 0.25f * lay.text_h, caret + lay.rule * 2.0f,
-             fy0 + 1.25f * lay.text_h, C_ACCENT);
+        if (focused) {
+            fill(caret, fy0 + 0.25f * lay.text_h, caret + lay.rule * 2.0f,
+                 fy0 + 1.25f * lay.text_h, C_ACCENT);
+        }
     }
     fill(left, lay.top + lay.rows_top - lay.rule, right, lay.top + lay.rows_top, C_RULE);
 
@@ -405,13 +450,37 @@ bool overlay_draw_paint(void)
             continue;
         }
 
+        if (row.kind == OVERLAY_ROW_INFO) {
+            /* Full row width, no chip and no hover fill - it is a note attached to the row above
+             * it, not a control of its own, and dimmed the same way an unavailable row's name is
+             * so it reads as secondary at a glance rather than as another cheat to look for. */
+            const float name_x = left + NAME_X * lay.text_h;
+            const float room = right - EDGE_PAD * lay.text_h - name_x;
+            const char *label = fit(row.label, room, scratch, sizeof scratch);
+
+            write_in(label, name_x, y, lay.row_h, C_ROW_TEXT_DIM);
+            continue;
+        }
+
         if (is_hot) {
             fill(left + lay.rule, y, right - lay.rule, y + lay.row_h, C_ROW_HOT);
             fill(left + lay.rule, y, left + lay.rule * 4.0f, y + lay.row_h, C_ACCENT);
         }
 
         {
-            const char *word = row.available ? (row.on ? "ON" : "OFF") : "n/a";
+            /* A hotkey row, and now a value row too, get the action's own chip styling - both are
+             * buttons that start something rather than a plain switch, the same as ACTION - but
+             * never fall through to "RUN": source_row() always populates value for either kind
+             * (the bound key's name / "Set" / "...", or the current number / what is being typed),
+             * so that arm of the word choice below is dead for both and kept only because ACTION
+             * still needs it. */
+            const bool  is_action = (row.kind == OVERLAY_ROW_ACTION || row.kind == OVERLAY_ROW_HOTKEY ||
+                                     row.kind == OVERLAY_ROW_VALUE);
+            const char *word = !row.available    ? "n/a"
+                             : row.pending        ? "QUEUED"
+                             : row.value[0] != 0  ? row.value    /* e.g. the graphics detail level */
+                             : is_action          ? "RUN"
+                             : row.on             ? "ON" : "OFF";
             const float chip_w = text_width(word) + lay.text_h;
             const float chip_x1 = right - EDGE_PAD * lay.text_h;
             const float chip_x0 = chip_x1 - chip_w;
@@ -432,13 +501,23 @@ bool overlay_draw_paint(void)
 
             write_in(label, name_x, y, lay.row_h, row.available ? C_ROW_TEXT : C_ROW_TEXT_DIM);
 
-            if (row.available) {
+            if (!row.available) {
+                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_STATE_NA);
+            } else if (row.pending) {
+                /* Queued reads as "this will happen", the same claim ON already makes, so it gets
+                 * ON's own colour rather than a third one - a fourth chip colour buys nothing a
+                 * different WORD does not already say on its own. */
+                fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h, C_CHIP_ON);
+                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_CHIP_ON_TEXT);
+            } else if (is_action) {
+                fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h,
+                     C_CHIP_ACTION);
+                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_CHIP_ACTION_TEXT);
+            } else {
                 fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h,
                      row.on ? C_CHIP_ON : C_CHIP_OFF);
                 write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h,
                          row.on ? C_CHIP_ON_TEXT : C_CHIP_OFF_TEXT);
-            } else {
-                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_STATE_NA);
             }
         }
     }

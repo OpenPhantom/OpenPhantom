@@ -28,4 +28,24 @@
  * same in the log. */
 bool spawn_census_install(uintptr_t activation_scan, bool enabled);
 
+/* The destroy side of the same investigation. Detours the actor-teardown function directly (self-
+ * resolves its own site, independent of activation_scan) and logs its reason code plus the same
+ * name/position spawn_census already reads, so the two logs read as one story. Same `enabled` flag
+ * as spawn_census_install; observation only.
+ *
+ * A fix that refused one specific destroy reason for five known placements used to live here
+ * alongside this observer, then moved into a DLL of its own, and has since been removed entirely:
+ * the stall it was aimed at turned out to be a VirtualQuery guard in framerate_fix, and the race
+ * itself costs nothing observable once that is repaired. See spawn_census.c's own comment above
+ * hook_actor_destroy for the mechanism, the four suppression attempts and the measurements. */
+bool spawn_census_install_destroy_observer(bool enabled);
+
+/* TEMPORARY: logs the player's own current position and camera yaw/pitch roughly once a second,
+ * plus every active placement within a short radius of it. Built after two guesses at which
+ * placement was one of the field report's droids, by loose position matching against a list of
+ * everything that happened to fire a "created" log, were both wrong; actors already active before
+ * the capture window started never emit one. This says directly where the player is and what is
+ * actually near them, which is how the five placements named in spawn_census.c were found. */
+void spawn_census_log_player_position(bool enabled);
+
 #endif /* SPAWN_CENSUS_H */

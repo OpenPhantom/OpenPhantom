@@ -76,9 +76,67 @@ static bool collect_mods(const char *directory, mod_list_t *list)
     return true;
 }
 
+/* WHICH BUILD IS THIS, answered on the line that announces the module rather than by asking
+ * somebody to look at file properties.
+ *
+ * The cost of not having this was three rounds of a field investigation. A tester reported a
+ * crash, a fix was built and sent, the crash was reported again, and the only way to tell
+ * whether the fix was even in the process was that one DLL happened to have changed a log
+ * message. The one whose constant had changed logged nothing different at all, so its build was
+ * unknowable from a log; a fix was briefly credited to the wrong DLL because of it.
+ *
+ * THE PE TIMESTAMP AND NOT THE FILE DATE. IMAGE_FILE_HEADER.TimeDateStamp is the link time,
+ * written into the bytes of the file, so it survives copying, zipping, emailing and anything
+ * else that happens between a build and a tester. A file date is metadata and any of those can
+ * reset it. It is read out of the already mapped headers, so this costs no file I/O.
+ *
+ * Both forms are printed. The local time is for a human comparing against a build they have,
+ * and the raw hex is the identity itself: unambiguous across time zones and the thing to quote
+ * when asking whether two people are running the same binary.
+ *
+ * A build with /Brepro writes a content hash here instead of a time, which reads as a date far
+ * outside any plausible range. That is why the range is tested rather than trusted, and why the
+ * hex is printed either way: a hash is still a perfectly good identity, it is just not a date. */
+static void describe_build(HMODULE module, char *out, size_t size)
+{
+    const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)module;
+    const IMAGE_NT_HEADERS *nt;
+    ULONGLONG               hundred_ns;
+    FILETIME                utc, local;
+    SYSTEMTIME              when;
+    DWORD                   stamp;
+
+    out[0] = '\0';
+
+    if (dos == NULL || dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return;
+    }
+    nt = (const IMAGE_NT_HEADERS *)((const char *)module + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return;
+    }
+    stamp = nt->FileHeader.TimeDateStamp;
+
+    /* 1970 in hundred nanosecond units since 1601, which is what a FILETIME counts. */
+    hundred_ns = 116444736000000000ULL + (ULONGLONG)stamp * 10000000ULL;
+    utc.dwLowDateTime  = (DWORD)hundred_ns;
+    utc.dwHighDateTime = (DWORD)(hundred_ns >> 32);
+
+    if (stamp > 0x40000000u && stamp < 0x80000000u &&
+        FileTimeToLocalFileTime(&utc, &local) && FileTimeToSystemTime(&local, &when)) {
+        _snprintf(out, size, ", built %04u-%02u-%02u %02u:%02u (%08X)",
+                  when.wYear, when.wMonth, when.wDay, when.wHour, when.wMinute,
+                  (unsigned)stamp);
+    } else {
+        _snprintf(out, size, ", build id %08X", (unsigned)stamp);
+    }
+    out[size - 1] = '\0';
+}
+
 static void load_one(const char *directory, const char *name)
 {
     char                    path[MAX_PATH];
+    char                    build[64];
     HMODULE                 module;
     engine_fix_install_fn_t install;
 
@@ -91,15 +149,17 @@ static void load_one(const char *directory, const char *name)
         return;
     }
 
+    describe_build(module, build, sizeof(build));
+
     install = (engine_fix_install_fn_t)GetProcAddress(module, ENGINE_FIX_ENTRY_NAME);
     if (install == NULL) {
-        log_info("mod %-24s loaded at %08X, no %s export, left to its own DllMain",
-                 name, (unsigned)(uintptr_t)module, ENGINE_FIX_ENTRY_NAME);
+        log_info("mod %-24s loaded at %08X%s, no %s export, left to its own DllMain",
+                 name, (unsigned)(uintptr_t)module, build, ENGINE_FIX_ENTRY_NAME);
         return;
     }
 
-    log_info("mod %-24s loaded at %08X, calling %s",
-             name, (unsigned)(uintptr_t)module, ENGINE_FIX_ENTRY_NAME);
+    log_info("mod %-24s loaded at %08X%s, calling %s",
+             name, (unsigned)(uintptr_t)module, build, ENGINE_FIX_ENTRY_NAME);
     install();
 }
 

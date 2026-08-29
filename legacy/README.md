@@ -34,9 +34,11 @@ included here or distributed with this project.
 | `imuse_fix` | Pauses the music when the game loses focus, and stops the music thread locking itself up |
 | `sfx_volume_save_fix` | Keeps the SFX volume you set, which the original wrote back wrongly and then never applied on load |
 | `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops |
-| `xidi_bridge` | Controller support: points the three WinMM joystick imports at the wrapper, which Windows otherwise never lets the game reach |
+| `controller_input` | Right stick looks around, Start pauses, the triggers roll, reading the pad directly with no wrapper DLL of any kind |
 | `fmv_player` | Plays the pre-rendered movies through a modern decoder in a window over the game, for any movie you have converted yourself |
+| `dialogue_anim_fix` | Stops a talking NPC's leftover head animation once the other speaker's line takes over, scoped to the one confirmed conversation |
 | `crt_copy_fix` | Repairs an inlined copy loop that reads four bytes before its source, in 40 places |
+| `ground_clip_fix` | Stops a character the engine never collision tests from being pushed down through the floor it stands on, which is how a seated character can be walked under the level a fraction at a time |
 | `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |
 | `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |

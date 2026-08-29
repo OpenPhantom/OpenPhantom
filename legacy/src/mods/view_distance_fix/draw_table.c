@@ -50,10 +50,10 @@
  * ==============================================================================================
  * 2. THE SIZES, and why exactly these numbers
  *
- *     buffer     0x6000 = 24576 entries = 0x48000 B = 294,912 B (committed, RW)
+ *     buffer     0xA000 = 40960 entries = 0x78000 B = 491,520 B (committed, RW)
  *     guard      1 page = 0x1000 B immediately behind it, PAGE_NOACCESS
- *     limit      0x4000 = 16384
- *     reserve    0x6000 - 0x4000 = 8192 entries
+ *     limit      0x8000 = 32768
+ *     reserve    0xA000 - 0x8000 = 8192 entries
  *
  * The reserve has to cover the worst case that can happen AFTER the gate has tripped:
  *
@@ -72,23 +72,32 @@
  *      be appended in the SAME call. One gatherCellMovers call can therefore overshoot the
  *      reserve by 855 on its own.
  *
- *     Worst case total = 135 + 4117 = 4252 entries. Reserve 8192 / 4252 = factor 1.93. The guard
- *     page is therefore never touched in normal operation; if it ever is, something happened that
- *     none of the three analyses foresaw, and then it faults at the CAUSING instruction instead
- *     of ten minutes later in the import table.
+ *     Worst case total = 135 + 4117 = 4252 entries, a property of the game's own shipped content
+ *     (largest single cell, largest level's total mover faces) and NOT of where the limit itself
+ *     is set - raising the limit does not raise this number, so the SAME 8192-entry reserve still
+ *     carries a 1.93x margin over it at 32768 as it did at 16384. The guard page is therefore
+ *     never touched in normal operation; if it ever is, something happened that none of the three
+ *     analyses foresaw, and then it faults at the CAUSING instruction instead of ten minutes later
+ *     in the import table.
  *
- * Why the limit goes to 16384 AND NOT HIGHER: the vertex cache has 16384 slots of 0x40 B (exactly
- * 1 MiB) and is the NEXT wall. Because unique vertices per face exceed 1.0 in all eleven levels
- * (1.075 .. 1.522), it always trips before a 16384-entry table does, at roughly 10,200 to
- * 11,900 faces.
+ * Why 16384 -> 32768, a second raise: the first ceiling (16384) was set against the vertex cache,
+ * which at the time was a fixed 16384-slot wall of its own and always tripped first. That wall has
+ * since moved (vertex_table.c relocates it to 32768 slots too), and a field session at
+ * ViewRangeScale=2.5, 120 degree FOV, in a geometrically dense scene (the QUEEN palace gardens)
+ * measured a peak of 13616 of 16384 cells before the watchdog collapsed the effective scale to
+ * 1.00 to stay under it - real demand already within 17% of the OLD ceiling. Doubling again, to
+ * the same 32768 the vertex cache now carries, leaves that measured peak at 41% of the new limit
+ * rather than raising blind. This does not raise the visible draw distance past what
+ * MAX_DRAW_RANGE (view_distance_fix.c) already allows - it lets the watchdog actually deliver that
+ * distance in a dense scene instead of collapsing back toward retail.
  *
  * Why a guard page and not "a few thousand more entries": additional committed entries would
  * SWALLOW the overflow and hide the defect. And the proof that ONE page suffices is arithmetic:
  * the four append blocks write strictly ascending with a stride of 12, and every touched field of
  * an entry lies within the same 12 bytes, +0 (poly), +4 (next) and +8 (clipMask, written by the
  * CONSUMER at 0x41A17C). The highest touched byte of an entry is therefore base + 12n + 11.
- * 12 < 4096, so the write head cannot skip a page. And 0x48000 is exactly divisible by 12, so
- * entry 24576 begins precisely at the buffer end and hits the guard page with its first write.
+ * 12 < 4096, so the write head cannot skip a page. And 0x78000 is exactly divisible by 12, so
+ * entry 40960 begins precisely at the buffer end and hits the guard page with its first write.
  * Were the buffer size not a multiple of 12, the last entry could straddle the page boundary and
  * still write half of its bytes legally.
  *
@@ -123,10 +132,10 @@
 
 #define ENTRY_STRIDE        12u
 #define OLD_ENTRY_COUNT 0x2000u
-#define BUFFER_ENTRIES  0x6000u
+#define BUFFER_ENTRIES  0xA000u
 #define BUFFER_BYTES    (BUFFER_ENTRIES * ENTRY_STRIDE)
 #define GUARD_BYTES     0x1000u
-#define GATE_NEW        0x4000u
+#define GATE_NEW        0x8000u
 #define GATE_RETAIL     0x2000u
 #define GATE_LOWERED    0x1C00u   /* what cell_watchdog writes, if it already ran */
 

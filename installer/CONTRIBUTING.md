@@ -16,16 +16,15 @@ one of those slots that does not carry it belongs to somebody else and is moved 
 overwritten. Our loader chains to whatever held `dinput.dll` before, so overwriting that one would
 destroy the thing the chain needs.
 
-**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, and the controller wrapper is
-now installed as `xidi_winmm.dll` instead, with a patch DLL pointing the game's three joystick
-imports at it. That was forced rather than chosen, because Windows hands this executable the system
-`winmm.dll` whatever sits beside it, but it is the better arrangement anyway: no contest with other
-projects, no file moved aside, and a wrapper that answers three calls instead of standing in front
-of the whole audio engine. Where a system name can be avoided, avoid it.
+**Prefer a name nobody contests.** `winmm.dll` used to be a fourth, back when this installer
+offered a controller wrapper installed under that name. It no longer installs a controller wrapper
+of any kind, so that fourth name is gone rather than merely avoided: controller support reads a pad
+directly and needs no DLL standing in front of another subsystem. Where a system name can be
+avoided, avoid it; not needing the name at all is better still.
 
 **A configuration file is never silently replaced.** `obi.ini` is the player's, so it is merged key
-by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini`, `Xidi.ini` and `alsoft.ini` are
-ours and are replaced, with the previous file kept beside them under a `.previous` name. Those four
+by key and never written whole. `engine_fixes.ini`, `dxwrapper.ini` and `alsoft.ini` are ours and
+are replaced, with the previous file kept beside them under a `.previous` name. Those three
 are not preference files: each names one section per component, and components are renamed between
 releases, so an old file looks configured and behaves like defaults.
 
@@ -47,7 +46,9 @@ uninstaller removes exactly those.
 ## Every external result is checked
 
 * A helper process reports an exit code and the installer reads it.
-* Nothing is downloaded. What ships is in `dist/`, and Inno's own integrity check covers it.
+* The installer downloads nothing. What it ships is in `dist/`, and Inno's own integrity check
+  covers it. One tool it carries may download when a player runs it on its own, under the
+  conditions set out in "What must not appear"; the installer never invokes it that way.
 * A copy that had to succeed and did not stops the installation with a message naming the file.
 * Work that can leave the machine half done happens before the first file is written, where stopping
   still costs nothing.
@@ -101,7 +102,29 @@ to stand on its own.
 ## What must not appear
 
 * Absolute paths belonging to anyone's machine.
-* A download at install time or after it, for any reason.
+* A download by the installer, at install time or after it, for any reason.
+
+  There is one bounded exception, and it is bounded rather than a hole. `dist/patch/` is also
+  published as a patch archive on its own, and that archive carries no FFmpeg, so a player who
+  installed the patch alone would have a cutscene converter with nothing to convert with. The
+  reason this rule exists is preservation, and preservation is a promise the *installer* makes:
+  it must still work in twenty years with no network. The patch archive never made it, and its
+  user is already sourcing components themselves.
+
+  A download in a tool that also ships in the patch archive alone is therefore allowed, if all
+  three hold:
+
+    * it is pinned to an exact URL and checked against a recorded sha256 and size before use,
+      never a rolling "latest";
+    * it is never the only route to the component, so a dead URL costs convenience and not
+      capability;
+    * it is refused outright when the installer is the caller.
+
+  `tools\convert_movies.ps1` is the only such tool. The installer invokes it with `-NoDownload`
+  and `-FFmpegPath`, naming the copy it carried, so the installer's own guarantee is unchanged.
+  That second switch matters as much as the first: the script consults its `%LOCALAPPDATA%`
+  cache before `PATH`, so without being told which binary to use it could prefer a copy left by
+  an earlier run over the pinned one just installed, and run it elevated.
 * A binary in `dist/` taken from a mirror when its author publishes one themselves. Where no such
   build exists, say so where the component is defined and name who built the one that ships.
 * Loosening file system permissions beyond what the game needs to write its saves.

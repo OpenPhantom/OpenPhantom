@@ -384,12 +384,24 @@ static void resolve_wavering_graphics(void)
     st.wavering_off = (call1_fn_t)off_target;
     st.wavering_on = (call1_fn_t)on_target;
     set_label(CHEATS_ACTION_WAVERING_GRAPHICS, "Wavering graphics (drop a beat)");
-    /* Deliberately not `st.slots[...].available = true` - see the comment above this function. */
+    /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
     log_info("wavering graphics resolved (flag and both apply calls all valid) but is held back as "
              "n/a rather than offered: no confirmed visible effect. See the comment above "
              "resolve_wavering_graphics().");
 }
 
+/* HELD BACK AS N/A, the third row in this file that resolves and is still not offered.
+ *
+ * The game's own debug mode draws its frame rate readout through the same text layer this panel
+ * draws through, and running it from here breaks the panel: field confirmed, by turning it on and
+ * watching what happened to the overlay afterwards. The flag and its code text both resolve, so
+ * this is not a resolve failure and saying so in the log would be misleading; it is a row that
+ * works and must not be offered from this panel.
+ *
+ * Kept visible and greyed rather than deleted, for the same reason as view credits and wavering
+ * graphics: a row that quietly disappears invites being added back by somebody who does not know
+ * why it went. The label still shows the code, so the cheat is still discoverable to anyone who
+ * wants to type it into the game's own console, which is where it works. */
 static void resolve_debug_mode(void)
 {
     char text[24] = { 0 };
@@ -399,7 +411,7 @@ static void resolve_debug_mode(void)
         log_warning("the debug-mode flag did not resolve, that row stays unavailable");
         return;
     }
-    st.slots[CHEATS_ACTION_DEBUG_MODE].available = true;
+    /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
     if (read_code_text(OP_DEBUG_CODE_TEXT, text, sizeof text)) {
         _snprintf(label, sizeof label, "Debug mode (%s)", text);
         label[sizeof label - 1] = '\0';
@@ -407,6 +419,8 @@ static void resolve_debug_mode(void)
     } else {
         set_label(CHEATS_ACTION_DEBUG_MODE, "Debug mode");
     }
+    log_info("debug mode resolved but is held back as n/a: running it from this panel breaks the "
+             "panel, field confirmed. See the comment above resolve_debug_mode().");
 }
 
 static void resolve_graphics_detail(void)

@@ -75,7 +75,6 @@ typedef struct cheats_own_state {
     float                   jump_boost_scale;           /* see JUMP_BOOST_SCALE_DEFAULT above */
 } cheats_own_state_t;
 
-static cheats_own_state_t own_state;
 
 /* The one record every cheat writes into. Defined in cheats_openphantom.c, which also runs the
  * install pass that fills it. */

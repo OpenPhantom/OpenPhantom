@@ -280,6 +280,16 @@ static int32_t __cdecl hook_thing_draw(void *thing, float *matrix)
  * comment for why this needs two hooks rather than one. */
 /* ============================================================================================ */
 
+/* THE one state record, declared extern in cheats_internal.h and defined here because this file is
+ * the one that runs the install pass which fills it.
+ *
+ * It was briefly defined in the header instead, which compiles and is wrong: a static in a header
+ * gives every file that includes it a private copy, so the cheats that moved out wrote their
+ * availability into records the panel never reads and each other's hooks looked uninstalled. It
+ * showed up as rows greyed out for no reason, with the log saying a site was hooked a line above
+ * the warning that it was not. */
+cheats_own_state_t own_state;
+
 bool cheats_install_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
                         const void *hook, detour_t *detour, size_t prologue_size,
                         const char *what)

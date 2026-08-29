@@ -159,5 +159,6 @@ engine's size.
   `HudScale=1.0` at every mode, and both `SquareHud` values at every 4:3 mode.
 * **Every byte pattern verified offline** against both retail builds with
   All six patterns resolve uniquely on each.
-* **NOT accepted in game.** No screen has been looked at. Nothing here is a statement about how it
-  looks or behaves while playing.
+* **Accepted in game**, at 3840x2160, which is a 16:9 canvas and therefore the case this exists
+  for: the HUD blocks stay square and the text is not stretched. The bit exact identities above
+  are what say it changes nothing at 4:3.

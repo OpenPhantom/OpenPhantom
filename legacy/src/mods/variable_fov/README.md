@@ -149,8 +149,8 @@ honest answer.
 Built and linked, `/W4 /WX` clean. `unittests/fov_math.c`, 43 checks, all passing, including two
 cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000 degrees,
 and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded 3-D menu constant.
-Offline verification of every pattern passes on both retail builds. **Not accepted in
-game.**
+Offline verification of every pattern passes on both retail builds. **Accepted in game**, at
+3840x2160 with a non zero `ExtraDegrees`, which is the configuration it is played in.
 
 To check in game: open Options -> Video, confirm the slider is under the check boxes, that dragging
 it changes the view live, that the caption names both angles, and that leaving the screen writes

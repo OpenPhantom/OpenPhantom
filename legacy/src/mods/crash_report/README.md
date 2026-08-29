@@ -92,4 +92,10 @@ arranged deliberately rather than left to chance.
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. No unit tests: there is no isolated pure logic here; every
-function either talks to the OS or formats a report. **Not accepted in game.**
+function either talks to the OS or formats a report.
+
+**Accepted in game, on real crashes rather than induced ones.** It caught a repeatable fault on
+three machines and produced the report that was used to diagnose it: the exception, the registers,
+the stack extent, and the module each frame belonged to. The module naming is what turned a report
+that read as a dead end into the one that named the fault, so that part is confirmed by having
+done its job rather than by having been looked at.

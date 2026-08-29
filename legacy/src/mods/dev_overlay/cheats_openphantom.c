@@ -810,6 +810,43 @@ static void  *npc_damage_trampoline;   /* the original 15 bytes, replayed when n
 static void  *npc_damage_continue;     /* site + NPC_DAMAGE_PROLOGUE_SIZE, resumed when one skips it */
 static bool   npc_damage_skip;
 
+/* Character record fields the one shot cheat needs, all of them read by diagnostics in the running
+ * game as well. stateFlags carries the bit that says the actor's own script is responsible for its
+ * death; when it is clear, enemy_onContact's tail writes the death state itself. */
+#define NPC_STATE_FLAGS_OFFSET   0x14u
+#define NPC_STATE_OFFSET         0x20u
+#define NPC_BODY_OFFSET          0x34u
+#define NPC_BODY_CLASS_OFFSET    0x04u
+#define NPC_SCRIPT_OWNS_DEATH    0x10000u
+#define NPC_STATE_FADEOUT           12u
+
+/* Who dealt the damage, on the ATTACKING object rather than on the victim. bapObj+0x08 is the
+ * side a contact came from, and 1 is the player. shot_spawn writes it into every projectile it
+ * creates from its own last argument, so a bolt carries the class of whoever fired it, and the
+ * engine itself tests it against 1 in three places to give the player different ammunition. A
+ * sabre cut arrives with the player body as the attacker, which carries the same class. */
+#define NPC_ATTACKER_ARGUMENT    0x0Cu
+#define NPC_SHOOTER_CLASS_OFFSET 0x08u
+#define SHOOTER_CLASS_PLAYER        1
+
+/* WHOSE SHOT WAS THAT. Without this the cheat is not "the player one shots NPCs", it is "every
+ * source of damage in the game is lethal": a droid firing at another droid kills it outright, and
+ * so does a stray bolt that happens to catch Qui-Gon or Jar Jar, which can end an escort without
+ * anything appearing to have gone wrong. The victim is the only thing the hook used to read, and
+ * the attacker was sitting in the next argument the whole time.
+ *
+ * A NULL attacker is not the player. The engine passes 0 for damage that came from no object at
+ * all, which is how a fall is delivered. */
+static bool damage_came_from_the_player(const char *frame_pointer)
+{
+    const char *attacker = *(const char *const *)(frame_pointer + NPC_ATTACKER_ARGUMENT);
+
+    if (attacker == NULL) {
+        return false;
+    }
+    return *(const int32_t *)(attacker + NPC_SHOOTER_CLASS_OFFSET) == SHOOTER_CLASS_PLAYER;
+}
+
 static void __cdecl on_npc_damage(char *frame_pointer)
 {
     void *victim = *(void **)(frame_pointer + 0x08);   /* [ebp+8], enemy_receiveDamage's param_1 */
@@ -824,11 +861,47 @@ static void __cdecl on_npc_damage(char *frame_pointer)
         npc_damage_skip = true;      /* the write below never runs at all; health is untouched */
         return;
     }
-    if (own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].on) {
-        /* <=0 is exactly what the death gate this function feeds (0x00437070, see dismemberment.c's
-         * own DEATH GATE comment) tests for, so this is indistinguishable to the rest of the engine
-         * from a hit that happened to deal lethal damage the ordinary way. */
+    if (own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].on &&
+        damage_came_from_the_player(frame_pointer)) {
+        /* <=0 is what the death gate this function feeds (0x00437070, see dismemberment.c's own
+         * DEATH GATE comment) tests for.
+         *
+         * THIS IS NOT INDISTINGUISHABLE FROM ORDINARY LETHAL DAMAGE, and this comment used to say
+         * it was. It is indistinguishable to the GATE, which only asks whether health reached zero.
+         * It is not indistinguishable to a script that gates its own death on a health BAND. The
+         * scrapyard machine in Mos Espa asks for health at or below 900 of 999 while the player is
+         * within two units, and runs its own explosion when it sees that. Ordinary damage walks
+         * health down through the band and the script fires. One store of zero steps over the band
+         * entirely, so the script never sees a value inside it.
+         *
+         * What that costs is visible in the game. When the engine takes the death instead, an actor
+         * whose model has no death animation completes the death state in a single tick and lands in
+         * the corpse state, which turns its collision off and leaves it drawn. It stays there for
+         * twenty minutes of level time, solid to look at and walked straight through, and its script
+         * never runs again because the interpreter only runs in the active state. Killed by hand
+         * that same machine explodes correctly; killed by this cheat it became a permanent ghost.
+         *
+         * So the cheat cleans up after itself. If the script already owns the death, the 0x10000 bit
+         * is set and everything it authored still happens, including its explosion, so nothing here
+         * touches it. If the engine is about to take the death, this claims it instead and hands the
+         * actor to the fade out state, which the engine finishes on its own: alpha decays, the actor
+         * asks to be removed, and it is freed. That is a clean disappearance rather than a ghost. */
+        uint32_t state_flags = *(const uint32_t *)((const char *)victim + NPC_STATE_FLAGS_OFFSET);
+
         *(int32_t *)((char *)victim + 0x38) = 0;
+
+        if ((state_flags & NPC_SCRIPT_OWNS_DEATH) == 0) {
+            void *body = *(void *const *)((const char *)victim + NPC_BODY_OFFSET);
+
+            *(uint32_t *)((char *)victim + NPC_STATE_FLAGS_OFFSET) =
+                state_flags | NPC_SCRIPT_OWNS_DEATH;
+            if (body != NULL) {
+                /* Collision off, which is what every death in this engine does first and what the
+                 * fade state does not do for itself. */
+                *(uint32_t *)((char *)body + NPC_BODY_CLASS_OFFSET) = 0;
+            }
+            *(uint32_t *)((char *)victim + NPC_STATE_OFFSET) = NPC_STATE_FADEOUT;
+        }
         npc_damage_skip = true;
     }
 }
@@ -1822,7 +1895,7 @@ bool cheats_openphantom_install(void)
     own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].name = "Unlimited health";
     own_state.cheats[CHEATS_OWN_NO_FOG].name = "No fog";
     own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].name = "Invincible NPCs";
-    own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].name = "One-shot NPCs";
+    own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].name = "One-shot NPCs (your damage)";
     own_state.cheats[CHEATS_OWN_GIANT_PLAYER].name = "Giant player";
     own_state.cheats[CHEATS_OWN_TINY_PLAYER].name = "Tiny player";
     own_state.cheats[CHEATS_OWN_JUMP_BOOST].name = "Jump boost";

@@ -258,6 +258,9 @@ add_engine_fix(dev_overlay
     cheats_original.c
     cheats_original_actions.c
     cheats_openphantom.c
+    cheats_npc_damage.c
+    cheats_jump_boost.c
+    cheats_free_camera.c
     cheats_no_fog.c
 )
 

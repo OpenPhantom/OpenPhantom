@@ -145,9 +145,9 @@ Source: "{#DxWrapperSrc}\dxwrapper-License.txt"; DestDir: "{app}"; \
 ; foreign one is the difference between the wrapper this release was tested with and one nobody has
 ; run.
 ;
-; This copy is not upstream's untouched: AntiAliasing is 0 here where dxwrapper ships 4, because 4
-; produced visible bugs in this game. It is the one deliberate change in the file, so re-apply it
-; when dist\dxwrapper is refreshed, and check the setting is still spelled that way.
+; This copy is not upstream's untouched: six settings are tuned for this game, and they are listed
+; in THIRD-PARTY-NOTICES.md. Re-apply them when dist\dxwrapper is refreshed, by diffing this file
+; against the dxwrapper.ini inside the release archive rather than by working from that list.
 Source: "{#DxWrapperSrc}\dxwrapper.ini"; DestDir: "{app}"; \
     Components: patch\wrapper; Flags: ignoreversion
 

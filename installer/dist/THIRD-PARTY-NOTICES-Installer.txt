@@ -68,10 +68,13 @@ neither would stay accurate if it were made to describe the other.
     and covered by the project's own licence.
 
   dxwrapper.ini
-    One setting differs from what DxWrapper ships: AntiAliasing is 0 rather
-    than 4, because 4 produced visible bugs in this game. The DxWrapper
-    binaries themselves are unaltered. See THIRD-PARTY-NOTICES.txt for
-    DxWrapper's own terms.
+    Six settings differ from the file DxWrapper ships with its dx7.games
+    build, all of them tuning this game rather than repairing DxWrapper:
+    DdrawEmulateSurface, DdrawUseShadowSurface and DdrawEnableByteAlignment
+    are 1 rather than 0, AnisotropicFiltering and DepthBiasFactor are 16
+    rather than 0, and ForceVsyncMode is 1 rather than 0. Everything else in
+    the file is upstream's. The DxWrapper binaries themselves are unaltered.
+    See THIRD-PARTY-NOTICES.txt for DxWrapper's own terms.
 
 
 -------------------------------------------------------------------------------

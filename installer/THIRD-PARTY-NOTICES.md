@@ -15,11 +15,25 @@ The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover 
 | DSOAL | r694 | **LGPL 2.1** | https://github.com/kcat/dsoal |
 | OpenAL Soft (inside DSOAL) | as shipped in DSOAL r694 | **LGPL 2** | https://github.com/kcat/openal-soft |
 | FFmpeg (gyan.dev `essentials` build) | 9.0 | **GPL v3** (the build bundles x264) | https://github.com/GyanD/codexffmpeg |
-| dxwrapper | as shipped with patch v0.2.1 | see `dist/dxwrapper/dxwrapper-License.txt` | https://github.com/elishacloud/dxwrapper |
+| dxwrapper (the `dx7.games` build) | 1.8.8600.25 | see `dist/dxwrapper/dxwrapper-License.txt` | https://github.com/elishacloud/dxwrapper |
 
-`dist/dxwrapper/dxwrapper.ini` is **modified from upstream**: `AntiAliasing` is 0 where
-dxwrapper ships 4, because 4 caused visible bugs in this game. That is the only change,
-and it has to be re-applied whenever the folder is refreshed.
+`dist/dxwrapper/dxwrapper.ini` is **modified from upstream**. Six settings differ from the
+`dx7.games` file dxwrapper ships, and every one of them tunes this game rather than repairing
+dxwrapper:
+
+| setting | upstream | here |
+|---|---|---|
+| `DdrawEmulateSurface` | 0 | 1 |
+| `DdrawUseShadowSurface` | 0 | 1 |
+| `DdrawEnableByteAlignment` | 0 | 1 |
+| `AnisotropicFiltering` | 0 | 16 |
+| `DepthBiasFactor` | 0 | 16 |
+| `ForceVsyncMode` | 0 | 1 |
+
+Everything else in the file is upstream's, taken from the release being shipped, and the
+binaries are unaltered. Those six are the ones to re-apply when the folder is refreshed, and
+the way to find them is to diff the shipped file against the `dxwrapper.ini` inside the
+release archive rather than to trust this list.
 
 The licence text of every one of these is installed beside the game, and the files are in
 `dist/` next to the binaries they cover.

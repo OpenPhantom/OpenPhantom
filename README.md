@@ -6,7 +6,7 @@ look, working music and video, and compatibility with 64-bit Windows. It is also
 engineering and preservation project, rebuilding the engine as documented, maintainable source
 with the tools to edit and extend it.
 
-**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/tag/i1.3)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
+**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/download/i1.3/OpenPhantom_Installer.exe)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
 
 The project has two halves that will run side by side for a long time. One patches the retail
 executable so the game you already own runs properly today. The other reconstructs the engine from

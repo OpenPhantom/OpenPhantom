@@ -203,6 +203,10 @@ typedef struct menu_island_clip_state {
     bool                     installed;
     bool                     active;
 
+    /* The island IS the menu canvas, which menu_scale may have widened. 640x480 when it has not. */
+    int                      island_width;
+    int                      island_height;
+
     const volatile uint32_t *menu_draw_flag;   /* the engine's own bracket cell */
 
     detour_t                 draw_sprite_detour;
@@ -223,10 +227,11 @@ bool menu_island_clip_fill_is_whole(float fill)
 }
 
 bool menu_island_clip_rect(float *left, float *right, float *top, float *bottom,
-                           float island_left, float island_top)
+                           float island_left, float island_top,
+                           float island_width, float island_height)
 {
-    float island_right  = island_left + (float)MENU_ISLAND_WIDTH;
-    float island_bottom = island_top  + (float)MENU_ISLAND_HEIGHT;
+    float island_right  = island_left + island_width;
+    float island_bottom = island_top  + island_height;
 
     /* Reversed or unordered bounds (NaN lands here too, every comparison with it is false) are
      * not this repair's business: pass them to the engine exactly as they arrived. */
@@ -267,11 +272,12 @@ static bool island_origin(float *out_left, float *out_top)
         return false;
     }
 
-    /* The engine's own formula, g_menuOrigin = ((W-640)/2, (H-480)/2), integer division and all.
-     * The 640x480 floor in graphics_buildModeList makes a negative origin unreachable, and the
+    /* The engine's own formula, g_menuOrigin = ((W-canvas)/2), integer division and all, using the
+     * canvas menu_scale settled on rather than the authored one. The 640x480 floor in
+     * graphics_buildModeList makes a negative origin unreachable at the authored size, and the
      * clamp below is for the shutdown path that writes garbage into the size cells. */
-    left = (width  - MENU_ISLAND_WIDTH)  / 2;
-    top  = (height - MENU_ISLAND_HEIGHT) / 2;
+    left = (width  - clip_state.island_width)  / 2;
+    top  = (height - clip_state.island_height) / 2;
     if (left < 0) {
         left = 0;
     }
@@ -326,12 +332,14 @@ static void __cdecl hook_draw_sprite(void *texture, float left, float right, flo
         float original_top    = top;
         float original_bottom = bottom;
 
-        if (!menu_island_clip_rect(&left, &right, &top, &bottom, island_left, island_top)) {
+        if (!menu_island_clip_rect(&left, &right, &top, &bottom, island_left, island_top,
+                                   (float)clip_state.island_width,
+                                   (float)clip_state.island_height)) {
             if (!clip_state.logged_skip) {
                 clip_state.logged_skip = true;
-                log_info("a menu sprite lay entirely outside the 640x480 island and was dropped, "
-                         "which is what the engine's own canvas clip does with it at real "
-                         "640x480. Reported once.");
+                log_info("a menu sprite lay entirely outside the %dx%d island and was dropped, "
+                         "which is what the engine's own canvas clip does with it. Reported once.",
+                         clip_state.island_width, clip_state.island_height);
             }
             return;
         }
@@ -397,15 +405,17 @@ static bool resolve_flag_cell(uintptr_t site)
     return true;
 }
 
-bool menu_island_clip_install(bool enabled)
+bool menu_island_clip_install(bool enabled, int canvas_width, int canvas_height)
 {
     if (clip_state.installed) {
         return clip_state.active;
     }
-    clip_state.installed = true;
+    clip_state.installed   = true;
+    clip_state.island_width  = (canvas_width  > 0) ? canvas_width  : MENU_ISLAND_WIDTH;
+    clip_state.island_height = (canvas_height > 0) ? canvas_height : MENU_ISLAND_HEIGHT;
 
     if (!enabled) {
-        log_info("ClampMenuSpritesToIsland=0, menu sprites may write outside the 640x480 island, "
+        log_info("ClampMenuSpritesToIsland=0, menu sprites may write outside the menu island, "
                  "where nothing can erase them: with the menus keeping a large resolution, a "
                  "hovered button's halo stamps the island's border and the stamp stays until the "
                  "screen closes");
@@ -438,12 +448,13 @@ bool menu_island_clip_install(bool enabled)
     }
 
     clip_state.active = true;
-    log_info("menu sprites are clamped to the 640x480 island while the engine's own widget-pass "
+    log_info("menu sprites are clamped to the %dx%d island while the engine's own widget-pass "
              "flag [%08X] is up (blitter hooked at %08X). A sprite fully inside the island "
              "passes through bit-identical, and so does one drawn with a partial fill; the "
              "hovered button's halo, which pokes past the island's left border and used to stamp "
              "it blue for the life of the screen, is now cut at the border the way real 640x480 "
              "cut it.",
+             clip_state.island_width, clip_state.island_height,
              (unsigned)(uintptr_t)clip_state.menu_draw_flag,
              (unsigned)sites[CLIP_SITE_DRAW_SPRITE].address);
     return true;

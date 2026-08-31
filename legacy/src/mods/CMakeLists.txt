@@ -57,6 +57,8 @@ add_engine_fix(enhanced_resolution
     focus_guard.c
     menu_island_clip.c
     menu_scale.c
+    menu_loading_bar.c
+    menu_art_source.c
     mode_filter.c
 )
 

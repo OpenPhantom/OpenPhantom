@@ -25,21 +25,29 @@
 
 #include <stdbool.h>
 
-/* The menu toolkit's whole world. The engine centres this island by adding
- * g_menuOrigin = ((W-640)/2, (H-480)/2) in the draw path and the hit test, and clips every
- * canvas blit against exactly these two numbers. */
+/* The menu toolkit's authored world. The engine centres this island by adding
+ * g_menuOrigin = ((W-canvas)/2) in the draw path and the hit test, and clips every canvas blit
+ * against the canvas size.
+ *
+ * THE CANVAS IS NOT ALWAYS 640x480. menu_scale.c widens it to fit the converted artwork, and it
+ * moves the engine's own clip immediates and origin arithmetic to match, so the island this clamps
+ * to has to be told what the canvas actually is. Clamping to 640x480 while the menus draw on a
+ * 3840x2160 canvas cuts real widgets off at a border that no longer exists. These two remain the
+ * AUTHORED size, which is what the island is when nothing has scaled it. */
 #define MENU_ISLAND_WIDTH  640
 #define MENU_ISLAND_HEIGHT 480
 
 /* The arithmetic alone, exposed so the unit test can drive it without a game.
  *
- * Clamps the rectangle in place to [island_left, island_left+640] x [island_top, island_top+480].
+ * Clamps the rectangle in place to [island_left, island_left+island_width] x
+ * [island_top, island_top+island_height].
  * Returns false when the rectangle lies entirely outside the island, which means the draw should
  * be skipped; the engine's own 640x480 canvas clip would have dropped it the same way. A
  * rectangle whose bounds are reversed or unordered (NaN included) is not ours to judge and is
  * passed through untouched with a true return. */
 bool menu_island_clip_rect(float *left, float *right, float *top, float *bottom,
-                           float island_left, float island_top);
+                           float island_left, float island_top,
+                           float island_width, float island_height);
 
 /* True when the blitter's `fill` argument means "draw all of it", which is the only case in which
  * clamping the rectangle is the same operation the retail screen edge performed. Exposed for the
@@ -49,6 +57,9 @@ bool menu_island_clip_fill_is_whole(float fill);
 /* Resolves its two sites and installs the sprite-blitter detour. Returns true only when the
  * clamp is really in force. Call AFTER window_fit_install(): the island origin is derived from
  * window_fit_current_mode_size(), and that accessor is resolved there. */
-bool menu_island_clip_install(bool enabled);
+/* `canvas_width` and `canvas_height` are the menu canvas menu_scale settled on, which is what
+ * the island actually is; pass 640x480 when nothing scaled it. Call this AFTER menu_scale_install,
+ * for the same reason the cursor cage is installed after it. */
+bool menu_island_clip_install(bool enabled, int canvas_width, int canvas_height);
 
 #endif /* MENU_ISLAND_CLIP_H */

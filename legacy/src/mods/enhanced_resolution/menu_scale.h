@@ -44,6 +44,12 @@
  *    focus outline, the slider grab box and the list box row arithmetic follow for free. That is
  *    the reason this is done to the rect data and not at the blitter: intercepting the draw would
  *    leave every one of those input paths behind, and there is no survivable half of that.
+
+ * 5. The four animated previews on the main menu. Those are Bink clips decoded at run time into
+ *    232x100 surfaces the game creates itself, so unlike every other menu bitmap they are not
+ *    touched by converting the artwork. They are upscaled at draw time instead, into a buffer of
+ *    ours, leaving the engine's surface alone. See the note by preview_upscale in menu_scale.c for
+ *    why enlarging that surface would have been the wrong answer.
  *
  * ==============================================================================================
  * Why this refuses to install without the cursor cage

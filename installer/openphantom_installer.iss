@@ -354,6 +354,7 @@ english.MenuArtDone=The menu artwork was converted.%n%n%1%n%nThe menus will fill
 english.MenuArtPartly=Not all of the menu artwork was converted.%n%n%1%n%nThe game is installed and runs, and the menus that were not converted look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
 english.MenuArtFailed=The menu artwork could not be converted. The converter stopped with code %1.%n%nThe game is installed and runs, and the menus look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
 english.MenuArtNoScript=The menu artwork converter was not found at %1, so the menus were left as they are.
+english.MenuArtNoReport=The menu artwork converter finished without saying what it did, so the artwork may or may not have been made.%n%nLook for a menu_hd folder beside the game. You can run tools\Convert Menu Art.bat there at any time.
 english.ConvertDone=The cutscenes were converted.%n%n%1%n%nNothing else is needed. The game uses them from now on.
 english.ConvertKept=The cutscenes were left as they were.%n%n%1%n%nConverted films were already in the game folder, so nothing was encoded and the size you chose was not applied to them.%n%nTo redo them at that size, delete the movies_hd folder beside the game and run tools\Convert Movies.bat.
 english.ConvertNoFilms=There were no cutscenes to convert.%n%n%1%n%nNo .BIK files were found beside the game, so nothing was encoded.%n%nThe game is installed and runs. If you expected films, check that GAMEDATA\MOVIE has them.
@@ -461,6 +462,7 @@ german.MenuArtDone=Die Menügrafiken wurden umgewandelt.%n%n%1%n%nDie Menüs fü
 german.MenuArtPartly=Es wurden nicht alle Menügrafiken umgewandelt.%n%n%1%n%nDas Spiel ist installiert und läuft. Nicht umgewandelte Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
 german.MenuArtFailed=Die Menügrafiken konnten nicht umgewandelt werden. Der Umwandler endete mit Code %1.%n%nDas Spiel ist installiert und läuft, die Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
 german.MenuArtNoScript=Der Umwandler für die Menügrafiken wurde unter %1 nicht gefunden. Die Menüs wurden unverändert gelassen.
+german.MenuArtNoReport=Der Umwandler für die Menügrafiken wurde beendet, ohne mitzuteilen, was er getan hat. Die Grafiken wurden möglicherweise erzeugt, möglicherweise auch nicht.%n%nSehen Sie nach, ob neben dem Spiel ein Ordner menu_hd liegt. Sie können tools\Convert Menu Art.bat dort jederzeit ausführen.
 german.ConvertDone=Die Zwischensequenzen wurden umgewandelt.%n%n%1%n%nMehr ist nicht nötig. Das Spiel verwendet sie ab sofort.
 german.ConvertKept=Die Zwischensequenzen wurden unverändert gelassen.%n%n%1%n%nIm Spielverzeichnis lagen bereits umgewandelte Filme, es wurde also nichts kodiert und die gewählte Größe wurde nicht auf sie angewendet.%n%nUm sie in dieser Größe neu zu erzeugen, löschen Sie den Ordner movies_hd neben dem Spiel und führen Sie tools\Convert Movies.bat aus.
 german.ConvertNoFilms=Es gab keine Zwischensequenzen zum Umwandeln.%n%n%1%n%nNeben dem Spiel wurden keine .BIK-Dateien gefunden, es wurde also nichts kodiert.%n%nDas Spiel ist installiert und läuft. Falls Sie Filme erwartet haben, prüfen Sie, ob GAMEDATA\MOVIE sie enthält.
@@ -1483,6 +1485,11 @@ begin
   end
   else if MenuArtResult <> '' then
     MsgBox(UserMessage('MenuArtPartly', MenuArtResult), mbError, MB_OK)
+  else if ResultCode = 0 then
+    { It succeeded and said nothing this understood, which is not a failure and must not be reported
+      as one. It happens when the installed converter is older than the installer driving it, which
+      is exactly what a hand-copied second copy of a script invites. }
+    MsgBox(UserMessage('MenuArtNoReport', ''), mbInformation, MB_OK)
   else
     MsgBox(UserMessage('MenuArtFailed', IntToStr(ResultCode)), mbError, MB_OK);
 end;

@@ -47,7 +47,7 @@ archive: DxWrapper's licence requires its notice to travel with it.
              ddraw.dll        (the DxWrapper stub loader)
              dxwrapper.ini    (configuration, not code)
 
-  Version    1.7.8400.25
+  Version    1.8.8600.25
   Copyright  Copyright (C) 2025 Elisha Riedlinger
   Licence    zlib
   Source     https://github.com/elishacloud/dxwrapper

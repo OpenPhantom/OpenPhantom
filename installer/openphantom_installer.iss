@@ -318,9 +318,7 @@ english.MovieOptOriginal=Keep the original size (recommended, smallest files)
 english.MovieOpt1080=Enlarge to 1080p
 english.MovieOpt1440=Enlarge to 1440p
 english.MovieOpt2160=Enlarge to 4K (much larger files, no more detail)
-english.MovieOptOwn=Another size:
 english.MovieOptLater=Not now. I will run tools\Convert Movies.bat myself later
-english.MovieBadHeight=Type your screen size as width x height, for example 3440x1440, or just the height on its own.%n%nOnly the height is used. The films are 640 x 405, a different shape from any modern screen, so the width follows their own shape and they are never stretched.%n%nThe height has to be between 240 and 2160. The films are 405 lines tall, so a larger number costs disc space rather than showing you more.
 english.ScalingPageCaption=Cutscene shape
 english.ScalingPageDescription=The films are almost square, your screen is not
 english.ScalingPageText=One of the two has to give.%n%nYou can change this whenever you like. It is read while a film plays, so it also applies to films you converted earlier.%n%nYou find it later in engine_fixes.ini under [fmv_player] Scaling.
@@ -430,9 +428,7 @@ german.MovieOptOriginal=Originalgröße behalten (empfohlen, kleinste Dateien)
 german.MovieOpt1080=Auf 1080p vergrößern
 german.MovieOpt1440=Auf 1440p vergrößern
 german.MovieOpt2160=Auf 4K vergrößern (deutlich größere Dateien, nicht mehr Details)
-german.MovieOptOwn=Andere Größe:
 german.MovieOptLater=Jetzt nicht. Ich starte tools\Convert Movies.bat später selbst
-german.MovieBadHeight=Geben Sie Ihre Bildschirmgröße als Breite x Höhe an, zum Beispiel 3440x1440, oder nur die Höhe.%n%nVerwendet wird nur die Höhe. Die Filme sind 640 x 405 und haben damit ein anderes Format als jeder heutige Bildschirm, deshalb richtet sich die Breite nach ihrem eigenen Format und sie werden nie verzerrt.%n%nDie Höhe muss zwischen 240 und 2160 liegen. Die Filme sind 405 Zeilen hoch, eine größere Zahl kostet also Speicherplatz und zeigt Ihnen nicht mehr.
 german.ScalingPageCaption=Form der Zwischensequenzen
 german.ScalingPageDescription=Die Filme sind fast quadratisch, Ihr Bildschirm ist es nicht
 german.ScalingPageText=Eines von beiden muss nachgeben.%n%nSie können das jederzeit ändern. Es wird beim Abspielen gelesen und gilt damit auch für Filme, die Sie schon umgewandelt haben.%n%nSpäter finden Sie es in der engine_fixes.ini unter [fmv_player] Scaling.
@@ -519,7 +515,6 @@ var
     one line per movie, and MovieResult is its summary line so the closing message can say what
     happened rather than only that it stopped. }
   MoviePage: TInputOptionWizardPage;
-  MovieEdit: TNewEdit;
   ConvertPage: TOutputProgressWizardPage;
   MovieTotal, MovieDone: Integer;
   MovieResult: String;
@@ -645,39 +640,6 @@ begin
   end;
 end;
 
-{ The height out of whatever was typed on the cutscene page, or -1 when it is not a number.
-
-  A SIZE IS ACCEPTED WHERE A HEIGHT IS MEANT, on purpose. The films are 640x405 and the converter
-  scales by height alone, with the width following the film's own shape so it is never stretched, so
-  a width cannot be honoured and asking for one would be a lie. But somebody reading "another size"
-  on the page before this one will type their screen size here too, and translating 2560x1440 into
-  1440 is this program's job rather than theirs. Two numbers means the second one; one number means
-  itself. }
-function TypedMovieHeight: Integer;
-var
-  I: Integer;
-  Digits, Last: String;
-  S: String;
-begin
-  S := Trim(MovieEdit.Text);
-  Digits := '';
-  Last := '';
-
-  { The LAST number in the string, which is the height in both forms this accepts and needs no test
-    for which form was typed: "2560x1440" ends on the height, and "1440" is its own last number. }
-  for I := 1 to Length(S) do begin
-    if (S[I] >= '0') and (S[I] <= '9') then
-      Digits := Digits + S[I]
-    else if Digits <> '' then begin
-      Last := Digits;
-      Digits := '';
-    end;
-  end;
-  if Digits <> '' then
-    Last := Digits;
-
-  Result := StrToIntDef(Last, -1);
-end;
 
 
 
@@ -736,10 +698,6 @@ begin
   MenuArtPage.SelectedValueIndex := 4;
 end;
 
-procedure MovieEditChanged(Sender: TObject);
-begin
-  MoviePage.SelectedValueIndex := 4;
-end;
 
 procedure InitializeWizard;
 var
@@ -781,24 +739,8 @@ begin
   MoviePage.Add(ExpandConstant('{cm:MovieOpt1080}'));
   MoviePage.Add(ExpandConstant('{cm:MovieOpt1440}'));
   MoviePage.Add(ExpandConstant('{cm:MovieOpt2160}'));
-  MoviePage.Add(ExpandConstant('{cm:MovieOptOwn}'));
   MoviePage.Add(ExpandConstant('{cm:MovieOptLater}'));
   MoviePage.SelectedValueIndex := 0;
-
-  { The row height is set rather than measured, because the box below sits ON one of these rows and
-    a guessed height would put it between two of them. }
-  MoviePage.CheckListBox.MinItemHeight := ScaleY(18);
-  MoviePage.CheckListBox.Height := ScaleY(6 * 18);
-
-  MovieEdit := TNewEdit.Create(MoviePage);
-  MovieEdit.Parent := MoviePage.Surface;
-  MovieEdit.Left := MoviePage.CheckListBox.Left + ScaleX(110);
-  MovieEdit.Top := MoviePage.CheckListBox.Top + ScaleY(18) * 4 - ScaleY(2);
-  MovieEdit.Width := ScaleX(90);
-  MovieEdit.Text := IntToStr(ScreenWidth) + 'x' + IntToStr(ScreenHeight);
-
-  { Assigned after the text above, so filling in the default does not tick the option. }
-  MovieEdit.OnChange := @MovieEditChanged;
 
   { Letterbox first and preselected, because it is the answer that shows the movie the shape it was
     made in. Stretch is offered rather than hidden: on a wide screen some people would rather have no
@@ -1203,24 +1145,6 @@ end;
   The ceiling is the engine's, not a preference: the run length encoder writes a literal control word
   as (run and 0xfff) while advancing the output by the whole run, so a canvas wider than 4095 pixels
   corrupts the stream. 4095/640 is 6.398, which 3840 is comfortably inside and 4096 is not. }
-{ Leaving the cutscene quality page. Only the typed answer can be wrong, and it is caught here
-  rather than at the end, because here the box is still in front of the person who filled it in.
-
-  The ceiling is a judgement rather than a limit of anything: the films are 640x405, so 2160 lines is
-  already five times more than was ever encoded, and past that the only thing that grows is the file. }
-function MoviePageAccepted: Boolean;
-var
-  Typed: Integer;
-begin
-  Result := True;
-  if MoviePage.SelectedValueIndex <> 4 then
-    Exit;
-
-  Typed := TypedMovieHeight;
-  Result := (Typed >= 240) and (Typed <= 2160);
-  if not Result then
-    MsgBox(ExpandConstant('{cm:MovieBadHeight}'), mbError, MB_OK);
-end;
 
 function MenuArtPageAccepted: Boolean;
 var
@@ -1246,8 +1170,6 @@ begin
     Result := ReinstallPageAccepted
   else if CurPageID = FpsPage.ID then
     Result := FpsPageAccepted
-  else if CurPageID = MoviePage.ID then
-    Result := MoviePageAccepted
   else if CurPageID = MenuArtPage.ID then
     Result := MenuArtPageAccepted
   else if CurPageID = wpReady then
@@ -1442,7 +1364,6 @@ begin
     1: Result := 1080;
     2: Result := 1440;
     3: Result := 2160;
-    4: Result := TypedMovieHeight;
   end;
 end;
 

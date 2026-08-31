@@ -27,7 +27,7 @@
 ;
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
-#define AppVer "1.2"
+#define AppVer "1.3"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
@@ -341,7 +341,7 @@ english.ConvertWorking=Converting the cutscenes...
 english.MenuArtWorking=Converting the menu artwork...
 english.MenuArtPageCaption=Menu artwork
 english.MenuArtPageDescription=How the menus should be made to fit your screen
-english.MenuArtPageText=The menus were drawn for a 640x480 screen in 1999, and the game cannot enlarge them by itself, so on a modern display they sit as a small island in the middle of the picture.%n%nThis makes larger copies of the pictures already inside your own game, once, now. Nothing is downloaded and no game file is changed.%n%nBigger screens need a lot of disc space: around 210 MB for 1080p, and 840 MB for 4K.
+english.MenuArtPageText=The menus were drawn for a 640x480 screen in 1999 and the game cannot enlarge them by itself, so on a modern display they sit as a small island in the middle of the picture.%n%nThis makes larger copies of the pictures already inside your own game. Nothing is downloaded, your own game files are only read, and the game is then set to run at the size you choose here.%n%nChoose the size you actually play at. If you later run the game SMALLER than this, the menus go back to their original size until you convert again, which takes a minute with tools\Convert Menu Art.bat in the game folder. Around 210 MB for 1080p, 840 MB for 4K.
 english.MenuArtOptScreen=Fit this screen, %1 (recommended)
 english.MenuArtOpt1080=1920 x 1080 (about 210 MB)
 english.MenuArtOpt1440=2560 x 1440 (about 375 MB)
@@ -354,7 +354,7 @@ english.MenuFitPageDescription=How the 4:3 menu artwork should fill a widescreen
 english.MenuFitPageText=The menus were drawn in the same 4:3 shape as an old television. On a widescreen display they can either be stretched to fill it, or kept in their own shape with black down each side.%n%nStretching suits these menus, because they are mostly panels and lettering rather than photographs.
 english.MenuFitStretch=Stretch to fill the screen (recommended)
 english.MenuFitUniform=Keep the original shape, with black down the sides
-english.MenuArtDone=The menu artwork was converted.%n%n%1%n%nThe menus will fill your screen the next time you play.
+english.MenuArtDone=The menu artwork was converted.%n%n%1%n%nThe menus will fill your screen the next time you play, and the game has been set to that resolution.%n%nIf you change the game to a smaller resolution later, the menus go back to their original size until you convert again with tools\Convert Menu Art.bat in the game folder.%n%nTo undo it completely and get the disc space back, delete the menu_hd folder beside the game. Nothing else depends on it.
 english.MenuArtPartly=Not all of the menu artwork was converted.%n%n%1%n%nThe game is installed and runs, and the menus that were not converted look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
 english.MenuArtFailed=The menu artwork could not be converted. The converter stopped with code %1.%n%nThe game is installed and runs, and the menus look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
 english.MenuArtNoScript=The menu artwork converter was not found at %1, so the menus were left as they are.
@@ -453,7 +453,7 @@ german.ConvertWorking=Zwischensequenzen werden umgewandelt...
 german.MenuArtWorking=Menügrafiken werden umgewandelt...
 german.MenuArtPageCaption=Menügrafiken
 german.MenuArtPageDescription=Wie die Menüs an Ihren Bildschirm angepasst werden
-german.MenuArtPageText=Die Menüs wurden 1999 für 640x480 gezeichnet, und das Spiel kann sie nicht selbst vergrößern. Auf einem heutigen Bildschirm sitzen sie deshalb als kleine Insel in der Mitte des Bildes.%n%nHier werden einmalig größere Kopien der Bilder erzeugt, die bereits in Ihrem eigenen Spiel liegen. Es wird nichts heruntergeladen und keine Spieldatei verändert.%n%nGrößere Bildschirme brauchen viel Speicherplatz: etwa 210 MB für 1080p und 840 MB für 4K.
+german.MenuArtPageText=Die Menüs wurden 1999 für 640x480 gezeichnet, und das Spiel kann sie nicht selbst vergrößern. Auf einem heutigen Bildschirm sitzen sie deshalb als kleine Insel in der Mitte des Bildes.%n%nHier werden größere Kopien der Bilder erzeugt, die bereits in Ihrem eigenen Spiel liegen. Es wird nichts heruntergeladen, Ihre Spieldateien werden nur gelesen, und das Spiel wird anschließend auf die hier gewählte Größe eingestellt.%n%nWählen Sie die Größe, in der Sie tatsächlich spielen. Wenn Sie das Spiel später KLEINER als diese Größe laufen lassen, kehren die Menüs zu ihrer ursprünglichen Größe zurück, bis Sie erneut umwandeln. Das dauert eine Minute mit tools\Convert Menu Art.bat im Spielverzeichnis. Etwa 210 MB für 1080p, 840 MB für 4K.
 german.MenuArtOptScreen=An diesen Bildschirm anpassen, %1 (empfohlen)
 german.MenuArtOpt1080=1920 x 1080 (etwa 210 MB)
 german.MenuArtOpt1440=2560 x 1440 (etwa 375 MB)
@@ -466,7 +466,7 @@ german.MenuFitPageDescription=Wie die 4:3-Menügrafiken einen Breitbildschirm au
 german.MenuFitPageText=Die Menüs wurden im 4:3-Format eines alten Fernsehers gezeichnet. Auf einem Breitbildschirm können sie entweder gestreckt werden, oder sie behalten ihr Format und bekommen schwarze Balken an den Seiten.%n%nStrecken passt zu diesen Menüs, denn sie bestehen überwiegend aus Flächen und Schrift und nicht aus Fotos.
 german.MenuFitStretch=Auf Bildschirmbreite strecken (empfohlen)
 german.MenuFitUniform=Originalformat behalten, mit schwarzen Balken an den Seiten
-german.MenuArtDone=Die Menügrafiken wurden umgewandelt.%n%n%1%n%nDie Menüs füllen beim nächsten Spielstart Ihren Bildschirm.
+german.MenuArtDone=Die Menügrafiken wurden umgewandelt.%n%n%1%n%nDie Menüs füllen beim nächsten Spielstart Ihren Bildschirm, und das Spiel wurde auf diese Auflösung eingestellt.%n%nWenn Sie das Spiel später auf eine kleinere Auflösung umstellen, kehren die Menüs zu ihrer ursprünglichen Größe zurück, bis Sie mit tools\Convert Menu Art.bat im Spielverzeichnis erneut umwandeln.%n%nUm alles rückgängig zu machen und den Speicherplatz zurückzubekommen, löschen Sie den Ordner menu_hd neben dem Spiel. Nichts anderes hängt davon ab.
 german.MenuArtPartly=Es wurden nicht alle Menügrafiken umgewandelt.%n%n%1%n%nDas Spiel ist installiert und läuft. Nicht umgewandelte Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
 german.MenuArtFailed=Die Menügrafiken konnten nicht umgewandelt werden. Der Umwandler endete mit Code %1.%n%nDas Spiel ist installiert und läuft, die Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
 german.MenuArtNoScript=Der Umwandler für die Menügrafiken wurde unter %1 nicht gefunden. Die Menüs wurden unverändert gelassen.

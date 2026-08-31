@@ -108,6 +108,38 @@ static const uint8_t MSK_MENU_ORIGIN[] = {
 #define ORIGIN_SITE_COUNT     2u
 
 /* ---------------------------------------------------------------------------------------------
+ * swlistbx_draw, for the two insets it holds its rows in by
+ *
+ *     0045CD2B  83 C1 06    add ecx,6      x0 = rect.x + 6
+ *     0045CD3A  83 C0 03    add eax,3      y  = rect.y + 3
+ *
+ * Both are canvas units baked into the code, so they stay 6 and 3 while everything around them
+ * grows. Against a 16 pixel row a 3 pixel gap is a fifth of a row; against a 36 pixel row it is
+ * a twelfth, and the first line ends up touching the box border. Scaling them is two bytes.
+ *
+ * This site is optional. If it does not resolve the scale still works and the rows are merely
+ * held a little tight, which is worth a note in the log and not worth refusing over.
+ */
+static const uint8_t SIG_LISTBOX_DRAW[] = {
+    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x54, 0x01, 0x00, 0x00,   /* prologue, 0x154 of locals      */
+    0xC7, 0x45, 0xD8, 0x00, 0x00, 0x00, 0x00,               /* mov [ebp-0x28],0               */
+    0x8B, 0x45, 0x08, 0x8B, 0x48, 0x30, 0x89, 0x4D, 0xE4,   /* pWidget->pLink                 */
+    0x8B, 0x55, 0x08, 0x8B, 0x42, 0x34, 0x89, 0x45, 0xE8    /* pWidget->pData                 */
+};
+#define LISTBOX_DRAW_X_INSET 0xA8u
+#define LISTBOX_DRAW_Y_INSET 0xB7u
+#define LISTBOX_SHIPPED_X_INSET 6
+#define LISTBOX_SHIPPED_Y_INSET 3
+
+/* The TOP inset is deliberately more than proportional, and this is a judgement rather than a
+ * derivation. Scaling the authored 3 gives 7 at 2.25x, which is correct arithmetic and still
+ * reads tight: at 16 pixel rows the glyph very nearly filled its row, so 3 pixels was the whole
+ * visible gap, while at 36 pixel rows the eye reads the space above the first line against a much
+ * larger letter. Judged on screen at 1080p. The left inset needs no such help, because nothing
+ * sits above a letter to crowd it. */
+#define LISTBOX_TOP_INSET_BASE  7
+
+/* ---------------------------------------------------------------------------------------------
  * swmenu_open
  */
 static const uint8_t SIG_MENU_OPEN[] = {
@@ -121,12 +153,14 @@ static const uint8_t SIG_MENU_OPEN[] = {
 enum {
     SITE_RLE_BLIT,
     SITE_MENU_OPEN,
+    SITE_LISTBOX_DRAW,
     SITE_COUNT
 };
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("swrle_blit", SIG_RLE_BLIT),
-    SIGNATURE_ENTRY_DETOUR("swmenu_open", SIG_MENU_OPEN, MENU_OPEN_PROLOGUE)
+    SIGNATURE_ENTRY_DETOUR("swmenu_open", SIG_MENU_OPEN, MENU_OPEN_PROLOGUE),
+    SIGNATURE_ENTRY("swlistbx_draw", SIG_LISTBOX_DRAW)
 };
 
 /* The widget record, from the engine's own layout. Stride and field offsets are byte proven. */
@@ -138,6 +172,18 @@ static signature_t sites[SITE_COUNT] = {
 #define WIDGET_RECT_HEIGHT   0x2Cu
 #define WIDGET_TERMINATOR    (-1)
 #define MENU_WIDGET_ARRAY    0x08u
+#define WIDGET_LINK          0x30u
+
+/* A list box keeps a seven int record of its own, hung off the widget rather than in it, and
+ * the two fields that matter here are byte proven:
+ *
+ *     +0x08  lineHeight   the font height, floored at 16
+ *     +0x0C  numLines     how many rows fit, from the box height at BUILD time
+ *
+ * SW_LISTBOX is type 5, and 13 of them ship across the 22 screens. */
+#define WIDGET_TYPE_LISTBOX  5
+#define LISTBOX_LINE_HEIGHT  0x08u
+#define LISTBOX_NUM_LINES    0x0Cu
 
 /* A widget array that walks past this many entries without finding its terminator is not a widget
  * array, and scaling whatever it really is would corrupt memory rather than draw a menu. The
@@ -164,6 +210,7 @@ typedef struct menu_scale_state {
     size_t      scaled_menu_count;
     bool        warned_capacity;
     bool        warned_sanity;
+    bool        warned_listbox;
 } menu_scale_state_t;
 
 static menu_scale_state_t scale_state;
@@ -248,6 +295,61 @@ static bool remember_scaled_menu(const void *menu)
     return true;
 }
 
+/* A list box decides its row spacing and row count when the menu is BUILT, from the font height and
+ * the box height as authored:
+ *
+ *     pLBox->lineHeight = (h < 17) ? 16 : font3d_queryFont();
+ *     pLBox->numLines   = (pWidget->rect.height - 3) / pLBox->lineHeight;
+ *     pWidget->rect.height = pLBox->numLines * pLBox->lineHeight + 6;
+ *
+ * All of that has already happened by the time anything here runs. So scaling the box on its own
+ * leaves the rows 16 pixels apart inside a box two or three times taller, while the glyphs drawn
+ * into them have grown with g_menuScale. The rows pile into each other, which is what the
+ * resolution list, the sound providers and the keyboard controls all look like.
+ *
+ * The repair is the engine's own three lines, re-run against the scaled box. lineHeight moves by
+ * the VERTICAL ratio, the same one the glyphs moved by, because a row has to be as tall as the text
+ * in it. Then the row count and the box height follow from the engine's own arithmetic rather than
+ * from anything invented here.
+ *
+ * The box height is passed in rather than re-read, so this cannot disagree with the rectangle the
+ * caller just wrote. */
+static void scale_list_box(char *widget, int32_t scaled_height)
+{
+    int32_t *list = *(int32_t *const *)(widget + WIDGET_LINK);
+    int32_t  line_height;
+    int32_t  lines;
+
+    if (list == NULL) {
+        return;                       /* a list box with no record: not ours to repair */
+    }
+
+    line_height = scaled_coordinate(list[LISTBOX_LINE_HEIGHT / sizeof(int32_t)],
+                                    scale_state.ratio_y);
+    if (line_height < 1) {
+        return;                       /* refuse rather than divide by zero below */
+    }
+
+    lines = (scaled_height - 3) / line_height;
+    if (lines < 1) {
+        lines = 1;                    /* a box too short for one row still shows one */
+    }
+
+    if (!scale_state.warned_listbox) {
+        scale_state.warned_listbox = true;
+        log_info("list box rows re-spaced for the scaled text: row height %d -> %d, %d rows -> "
+                 "%d, box %d tall. Reported once; it runs on every menu open, because the "
+                 "engine re-derives both numbers every time one is opened.",
+                 (int)list[LISTBOX_LINE_HEIGHT / sizeof(int32_t)], (int)line_height,
+                 (int)list[LISTBOX_NUM_LINES / sizeof(int32_t)], (int)lines,
+                 (int)(lines * line_height + 6));
+    }
+
+    list[LISTBOX_LINE_HEIGHT / sizeof(int32_t)] = line_height;
+    list[LISTBOX_NUM_LINES   / sizeof(int32_t)] = lines;
+    *(int32_t *)(widget + WIDGET_RECT_HEIGHT)   = lines * line_height + 6;
+}
+
 /* Multiplies one menu's widget rectangles by the scale, once. Everything downstream reads these
  * same numbers: the blitter, the focus outline, the hit test, the slider and the list box. */
 static void scale_widgets(void *menu)
@@ -273,6 +375,7 @@ static void scale_widgets(void *menu)
         rect[1] = scaled_coordinate(rect[1], scale_state.ratio_y);   /* y      */
         rect[2] = scaled_coordinate(rect[2], scale_state.ratio_x);   /* width  */
         rect[3] = scaled_coordinate(rect[3], scale_state.ratio_y);   /* height */
+
     }
 
     /* Ran off the end without a terminator. The widgets already touched keep their new size, which
@@ -333,9 +436,46 @@ static bool ratio_from_artwork(float *out_x, float *out_y)
     return true;
 }
 
+/* The list boxes, AFTER the engine has opened the menu.
+ *
+ * They cannot be done in the same walk as the rectangles. A list box keeps its row height and row
+ * count in a record hung off the widget, and that record does not exist yet when swmenu_open is
+ * entered: swmenu_open is what sends SWMSG_RESET, and the reset is what allocates it, measures the
+ * font and derives both numbers. Running earlier finds a null pointer, which is what it did.
+ *
+ * Worse than nothing, in fact: the reset derives `numLines` from `(rect.height - 3) / lineHeight`,
+ * so once the box has been scaled it computes how many SIXTEEN pixel rows fit in a box two or three
+ * times taller, then draws that many rows of text that is no longer sixteen pixels tall. That is
+ * the crammed list, and it is caused by the scale rather than merely left unfixed by it.
+ *
+ * So this runs last, with the record populated and the engine's own arithmetic already done, and
+ * redoes that arithmetic with a row height that matches the text actually being drawn. */
+static void scale_list_boxes(void *menu)
+{
+    char    *widgets = *(char *const *)((char *)menu + MENU_WIDGET_ARRAY);
+    uint32_t index;
+
+    if (widgets == NULL) {
+        return;
+    }
+
+    for (index = 0; index < WIDGET_SANITY_LIMIT; ++index) {
+        char *widget = widgets + (size_t)index * WIDGET_STRIDE;
+        int32_t type = *(const int32_t *)(widget + WIDGET_TYPE);
+
+        if (type == WIDGET_TERMINATOR) {
+            return;
+        }
+        if (type == WIDGET_TYPE_LISTBOX) {
+            scale_list_box(widget, *(const int32_t *)(widget + WIDGET_RECT_HEIGHT));
+        }
+    }
+}
+
 static int32_t __cdecl hook_menu_open(void *menu)
 {
     menu_open_fn_t original = (menu_open_fn_t)scale_state.menu_open_detour.original;
+    int32_t        result;
 
     if (original == NULL) {
         return 0;                                    /* the un-armed instant between write and
@@ -343,13 +483,30 @@ static int32_t __cdecl hook_menu_open(void *menu)
                                                       * carries */
     }
 
-    /* BEFORE the original, because the original is what makes the menu current and starts drawing
-     * from it. Scaling afterwards would leave one frame at the authored size. */
+    /* The rectangles BEFORE the original, because the original is what makes the menu current and
+     * starts drawing from it, and because its own reset pass reads the box heights this writes.
+     * Scaling afterwards would leave one frame at the authored size. */
     if (menu != NULL && !menu_already_scaled(menu) && remember_scaled_menu(menu)) {
         scale_widgets(menu);
     }
 
-    return original(menu);
+    result = original(menu);
+
+    /* EVERY open, not just the first, and that difference is the whole of it.
+     *
+     * The rectangles are scaled once because scaling multiplies, and doing it twice would
+     * double the menu. The list boxes are the opposite: swmenu_open sends SWMSG_RESET every
+     * single time, and the reset re-derives the row height from the font and the row count from
+     * the box, so it undoes this on every open. Correcting only the first open leaves a menu
+     * that is right the first time it is seen and crammed every time after.
+     *
+     * Multiplying the row height is safe here for one reason: this runs immediately after the
+     * reset that produced it, so the value read is always the authored one and never one this
+     * has already scaled. */
+    if (menu != NULL) {
+        scale_list_boxes(menu);
+    }
+    return result;
 }
 
 /* Puts the two canvas immediates back. Used only to roll back a half-done install. */
@@ -478,6 +635,31 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
                     "stay repointed and are harmless on their own: they only recentre a canvas "
                     "nothing draws past");
         return false;
+    }
+
+    /* Optional, and after everything that can still fail, so a missing inset never costs the
+     * scale itself. */
+    if (sites[SITE_LISTBOX_DRAW].address != 0) {
+        uintptr_t draw = sites[SITE_LISTBOX_DRAW].address;
+        int32_t   inset_x = (int32_t)((float)LISTBOX_SHIPPED_X_INSET * ratio_x + 0.5f);
+        int32_t   inset_y = (int32_t)((float)LISTBOX_TOP_INSET_BASE * ratio_y + 0.5f);
+
+        if (inset_x > 127) { inset_x = 127; }      /* both are signed byte immediates */
+        if (inset_y > 127) { inset_y = 127; }
+
+        if (patch_write_u8(draw + LISTBOX_DRAW_X_INSET, (uint8_t)inset_x) == PATCH_RESULT_OK &&
+            patch_write_u8(draw + LISTBOX_DRAW_Y_INSET, (uint8_t)inset_y) == PATCH_RESULT_OK) {
+            log_info("list box text insets: %d -> %d across, %d -> %d down (the top one is "
+                     "given more than its share, see the note by LISTBOX_TOP_INSET_BASE)",
+                     LISTBOX_SHIPPED_X_INSET, (int)inset_x,
+                     LISTBOX_SHIPPED_Y_INSET, (int)inset_y);
+        } else {
+            log_warning("the list box text insets could not be scaled, so rows sit a little "
+                        "tight against the top and left of their box. Nothing else is affected");
+        }
+    } else {
+        log_info("swlistbx_draw did not resolve, so the list box text insets stay at their "
+                 "authored 6 and 3 and the rows sit a little tight. Nothing else is affected");
     }
 
     scale_state.installed = true;

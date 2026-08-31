@@ -296,9 +296,11 @@ def main():
     if not os.path.isdir(output):
         os.makedirs(output)
 
-    written = skipped = 0
-    total = 0
-    names = []
+    # The archives are read in full before anything is converted, so the count can be announced
+    # first. A caller driving this needs the total to size a progress bar, and it cannot get one
+    # afterwards because by then the bar is over. The line protocol is convert_movies.ps1's, so
+    # one parser serves both.
+    work = []
     for archive in ARCHIVES:
         path = find_file(game, archive)
         if path is None:
@@ -308,20 +310,39 @@ def main():
         members = list(read_lab_directory(path))
         if not args.quiet:
             print('  %s - %d pictures' % (archive, len(members)))
-        with io.open(path, 'rb') as handle:
-            for name, offset, size in members:
-                handle.seek(offset)
-                bigger = upscale_bmp(handle.read(size), ratio_x, ratio_y)
-                if bigger is None:
-                    skipped += 1
-                    continue
-                with io.open(os.path.join(output, name), 'wb') as out:
-                    out.write(bigger)
-                written += 1
-                total += len(bigger)
-                names.append(name)
+        work.extend((path, member) for member in members)
+    if args.quiet:
+        sys.stdout.write('TOTAL %d\n' % len(work))
+
+    written = skipped = 0
+    total = 0
+    names = []
+    handles = {}
+    try:
+        for path, (name, offset, size) in work:
+            if path not in handles:
+                handles[path] = io.open(path, 'rb')
+            handles[path].seek(offset)
+            bigger = upscale_bmp(handles[path].read(size), ratio_x, ratio_y)
+            if bigger is None:
+                skipped += 1
                 if args.quiet:
-                    sys.stdout.write('%s %d\n' % (name, len(bigger)))
+                    sys.stdout.write('SKIP %s\n' % name)
+                continue
+            with io.open(os.path.join(output, name), 'wb') as out:
+                out.write(bigger)
+            written += 1
+            total += len(bigger)
+            names.append(name)
+            if args.quiet:
+                out_w, out_h = struct.unpack_from('<ii', bigger, 18)
+                sys.stdout.write('OK %s %dx%d %d\n'
+                                 % (name, out_w, out_h, len(bigger)))
+    finally:
+        for handle in handles.values():
+            handle.close()
+    if args.quiet:
+        sys.stdout.write('DONE written=%d skipped=%d\n' % (written, skipped))
 
     with io.open(os.path.join(output, MANIFEST_NAME), 'w', encoding='ascii') as handle:
         handle.write('# OpenPhantom menu artwork. Written by tools/convert_menu.py from your own '

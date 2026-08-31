@@ -177,6 +177,13 @@ Source: "{#PatchSrc}\tools\convert_menu.py";       DestDir: "{app}\tools"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 Source: "{#PatchSrc}\tools\convert_menu.sh";       DestDir: "{app}\tools"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
+
+; A second copy of the menu converter, in the temporary folder, and it is the one
+; ConvertMenuArt runs. The copy above is for the player to run later; this one runs during
+; installation with Setup's rights, and {tmp} is the only one of the two that an ordinary user
+; cannot write to first. Removed when Setup finishes.
+Source: "{#PatchSrc}\tools\convert_menu.ps1"; DestDir: "{#PatchTmp}\tools"; \
+    Components: patch\enhanced_resolution; Flags: ignoreversion deleteafterinstall
 Source: "{#PatchSrc}\mods\framerate_fix.dll";       DestDir: "{app}\mods"; \
     Components: patch\framerate_fix;       Flags: ignoreversion
 Source: "{#PatchSrc}\mods\variable_fov.dll";        DestDir: "{app}\mods"; \

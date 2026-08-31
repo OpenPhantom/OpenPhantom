@@ -51,8 +51,9 @@
 
 .PARAMETER Quiet
     Non-interactive, for an installer or another program driving this. Never prompts, prints no
-    banner, and writes one machine-readable line per file to stdout. Requires -GameDirectory, and
-    cannot be combined with -Interactive.
+    banner, and writes the same machine-readable lines convert_movies.ps1 does, so one parser
+    serves both: TOTAL n first, then OK name WxH bytes or SKIP name per picture, then
+    DONE written=n skipped=n. Requires -GameDirectory, and cannot be combined with -Interactive.
 
 .PARAMETER Remove
     Deletes the files this tool wrote, using the manifest it leaves behind, and then the folder if
@@ -367,45 +368,63 @@ if (-not (Test-Path $OutputDirectory)) {
     $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
 }
 
-$written = 0
-$skipped = 0
-$total   = [long]0
-$names   = New-Object 'System.Collections.Generic.List[string]'
-
+# The archives are read in full before anything is converted, so the count can be announced
+# first. A caller driving this needs the total to size a progress bar, and it cannot get one
+# afterwards because by then the bar is over.
+$work = New-Object 'System.Collections.Generic.List[object]'
 foreach ($archive in @('big.lab', 'LOCALIZE.LAB')) {
     $path = Join-Path $GameDirectory $archive
     if (-not (Test-Path $path)) {
         Write-Line "  $archive not present, skipped"
         continue
     }
-
     $members = Read-LabDirectory -Path $path
     Write-Line "  $archive - $($members.Count) pictures"
-
-    $stream = [System.IO.File]::OpenRead($path)
-    try {
-        foreach ($member in $members) {
-            $stream.Position = $member.DataOffset
-            $data = New-Object byte[] $member.Size
-            $read = $stream.Read($data, 0, $member.Size)
-            if ($read -ne $member.Size) { $skipped++; continue }
-
-            $destination = Join-Path $OutputDirectory $member.Name
-            $result = Convert-Picture -Data $data -RatioX $ratioX -RatioY $ratioY `
-                                      -Destination $destination
-            if ($null -eq $result) { $skipped++; continue }
-
-            $written++
-            $total += $result.Bytes
-            $names.Add($member.Name)
-            if ($Quiet) {
-                Write-Output ("{0} {1}x{2} {3}" -f $member.Name, $result.Width, $result.Height,
-                                                   $result.Bytes)
-            }
-        }
-    } finally {
-        $stream.Dispose()
+    foreach ($member in $members) {
+        $work.Add([pscustomobject]@{ Archive = $path; Member = $member })
     }
+}
+if ($Quiet) { Write-Output ("TOTAL {0}" -f $work.Count) }
+
+$written = 0
+$skipped = 0
+$total   = [long]0
+$names   = New-Object 'System.Collections.Generic.List[string]'
+$streams = @{}
+
+try {
+    foreach ($item in $work) {
+        if (-not $streams.ContainsKey($item.Archive)) {
+            $streams[$item.Archive] = [System.IO.File]::OpenRead($item.Archive)
+        }
+        $stream = $streams[$item.Archive]
+        $member = $item.Member
+
+        $stream.Position = $member.DataOffset
+        $data = New-Object byte[] $member.Size
+        $read = $stream.Read($data, 0, $member.Size)
+        $result = $null
+        if ($read -eq $member.Size) {
+            $result = Convert-Picture -Data $data -RatioX $ratioX -RatioY $ratioY `
+                                      -Destination (Join-Path $OutputDirectory $member.Name)
+        }
+
+        if ($null -eq $result) {
+            $skipped++
+            if ($Quiet) { Write-Output ("SKIP {0}" -f $member.Name) }
+            continue
+        }
+
+        $written++
+        $total += $result.Bytes
+        $names.Add($member.Name)
+        if ($Quiet) {
+            Write-Output ("OK {0} {1}x{2} {3}" -f $member.Name, $result.Width, $result.Height,
+                                                  $result.Bytes)
+        }
+    }
+} finally {
+    foreach ($stream in $streams.Values) { $stream.Dispose() }
 }
 
 # The manifest is what -Remove reads, so a file somebody else put in this folder is never deleted.
@@ -417,6 +436,8 @@ $manifest.Add(("# {0}x{1} {2}, canvas {3}x{4}, {5}" -f $Width, $Height, $Fit.ToL
 $manifest.Add('# Delete this folder, or run: Convert Menu Art.bat -Remove')
 foreach ($name in $names) { $manifest.Add($name) }
 Set-Content -Path (Join-Path $OutputDirectory $ManifestName) -Value $manifest -Encoding ASCII
+
+if ($Quiet) { Write-Output ("DONE written={0} skipped={1}" -f $written, $skipped) }
 
 Write-Line ''
 Write-Line ("{0} pictures written, {1} skipped, {2:N1} MB on disk" -f `

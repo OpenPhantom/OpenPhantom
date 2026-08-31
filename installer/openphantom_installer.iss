@@ -336,6 +336,24 @@ english.ConvertPageCaption=Converting the cutscenes
 english.ConvertPageDescription=This happens once. After that the game plays the converted films.
 english.ConvertPreparing=Getting ready...
 english.ConvertWorking=Converting the cutscenes...
+english.MenuArtWorking=Converting the menu artwork...
+english.MenuArtPageCaption=Menu artwork
+english.MenuArtPageDescription=How the menus should be made to fit your screen
+english.MenuArtPageText=The menus were drawn for a 640x480 screen in 1999, and the game cannot enlarge them by itself, so on a modern display they sit as a small island in the middle of the picture.%n%nThis makes larger copies of the pictures already inside your own game, once, now. Nothing is downloaded and no game file is changed.%n%nBigger screens need a lot of disc space: around 210 MB for 1080p, and 840 MB for 4K.
+english.MenuArtOptScreen=Fit this screen, %1 (recommended)
+english.MenuArtOpt1080=1920 x 1080 (about 210 MB)
+english.MenuArtOpt1440=2560 x 1440 (about 375 MB)
+english.MenuArtOpt2160=3840 x 2160 (about 840 MB)
+english.MenuArtOptLater=Not now. I will run tools\Convert Menu Art.bat myself later
+english.MenuFitPageCaption=Menu shape
+english.MenuFitPageDescription=How the 4:3 menu artwork should fill a widescreen display
+english.MenuFitPageText=The menus were drawn in the same 4:3 shape as an old television. On a widescreen display they can either be stretched to fill it, or kept in their own shape with black down each side.%n%nStretching suits these menus, because they are mostly panels and lettering rather than photographs.
+english.MenuFitStretch=Stretch to fill the screen (recommended)
+english.MenuFitUniform=Keep the original shape, with black down the sides
+english.MenuArtDone=The menu artwork was converted.%n%n%1%n%nThe menus will fill your screen the next time you play.
+english.MenuArtPartly=Not all of the menu artwork was converted.%n%n%1%n%nThe game is installed and runs, and the menus that were not converted look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
+english.MenuArtFailed=The menu artwork could not be converted. The converter stopped with code %1.%n%nThe game is installed and runs, and the menus look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
+english.MenuArtNoScript=The menu artwork converter was not found at %1, so the menus were left as they are.
 english.ConvertDone=The cutscenes were converted.%n%n%1%n%nNothing else is needed. The game uses them from now on.
 english.ConvertKept=The cutscenes were left as they were.%n%n%1%n%nConverted films were already in the game folder, so nothing was encoded and the size you chose was not applied to them.%n%nTo redo them at that size, delete the movies_hd folder beside the game and run tools\Convert Movies.bat.
 english.ConvertNoFilms=There were no cutscenes to convert.%n%n%1%n%nNo .BIK files were found beside the game, so nothing was encoded.%n%nThe game is installed and runs. If you expected films, check that GAMEDATA\MOVIE has them.
@@ -425,6 +443,24 @@ german.ConvertPageCaption=Zwischensequenzen werden umgewandelt
 german.ConvertPageDescription=Das geschieht einmalig. Danach spielt das Spiel die umgewandelten Filme.
 german.ConvertPreparing=Vorbereitung...
 german.ConvertWorking=Zwischensequenzen werden umgewandelt...
+german.MenuArtWorking=Menügrafiken werden umgewandelt...
+german.MenuArtPageCaption=Menügrafiken
+german.MenuArtPageDescription=Wie die Menüs an Ihren Bildschirm angepasst werden
+german.MenuArtPageText=Die Menüs wurden 1999 für 640x480 gezeichnet, und das Spiel kann sie nicht selbst vergrößern. Auf einem heutigen Bildschirm sitzen sie deshalb als kleine Insel in der Mitte des Bildes.%n%nHier werden einmalig größere Kopien der Bilder erzeugt, die bereits in Ihrem eigenen Spiel liegen. Es wird nichts heruntergeladen und keine Spieldatei verändert.%n%nGrößere Bildschirme brauchen viel Speicherplatz: etwa 210 MB für 1080p und 840 MB für 4K.
+german.MenuArtOptScreen=An diesen Bildschirm anpassen, %1 (empfohlen)
+german.MenuArtOpt1080=1920 x 1080 (etwa 210 MB)
+german.MenuArtOpt1440=2560 x 1440 (etwa 375 MB)
+german.MenuArtOpt2160=3840 x 2160 (etwa 840 MB)
+german.MenuArtOptLater=Jetzt nicht. Ich starte tools\Convert Menu Art.bat später selbst
+german.MenuFitPageCaption=Menüformat
+german.MenuFitPageDescription=Wie die 4:3-Menügrafiken einen Breitbildschirm ausfüllen sollen
+german.MenuFitPageText=Die Menüs wurden im 4:3-Format eines alten Fernsehers gezeichnet. Auf einem Breitbildschirm können sie entweder gestreckt werden, oder sie behalten ihr Format und bekommen schwarze Balken an den Seiten.%n%nStrecken passt zu diesen Menüs, denn sie bestehen überwiegend aus Flächen und Schrift und nicht aus Fotos.
+german.MenuFitStretch=Auf Bildschirmbreite strecken (empfohlen)
+german.MenuFitUniform=Originalformat behalten, mit schwarzen Balken an den Seiten
+german.MenuArtDone=Die Menügrafiken wurden umgewandelt.%n%n%1%n%nDie Menüs füllen beim nächsten Spielstart Ihren Bildschirm.
+german.MenuArtPartly=Es wurden nicht alle Menügrafiken umgewandelt.%n%n%1%n%nDas Spiel ist installiert und läuft. Nicht umgewandelte Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
+german.MenuArtFailed=Die Menügrafiken konnten nicht umgewandelt werden. Der Umwandler endete mit Code %1.%n%nDas Spiel ist installiert und läuft, die Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
+german.MenuArtNoScript=Der Umwandler für die Menügrafiken wurde unter %1 nicht gefunden. Die Menüs wurden unverändert gelassen.
 german.ConvertDone=Die Zwischensequenzen wurden umgewandelt.%n%n%1%n%nMehr ist nicht nötig. Das Spiel verwendet sie ab sofort.
 german.ConvertKept=Die Zwischensequenzen wurden unverändert gelassen.%n%n%1%n%nIm Spielverzeichnis lagen bereits umgewandelte Filme, es wurde also nichts kodiert und die gewählte Größe wurde nicht auf sie angewendet.%n%nUm sie in dieser Größe neu zu erzeugen, löschen Sie den Ordner movies_hd neben dem Spiel und führen Sie tools\Convert Movies.bat aus.
 german.ConvertNoFilms=Es gab keine Zwischensequenzen zum Umwandeln.%n%n%1%n%nNeben dem Spiel wurden keine .BIK-Dateien gefunden, es wurde also nichts kodiert.%n%nDas Spiel ist installiert und läuft. Falls Sie Filme erwartet haben, prüfen Sie, ob GAMEDATA\MOVIE sie enthält.
@@ -454,6 +490,11 @@ function SetFileAttributes(lpFileName: String; dwFileAttributes: Cardinal): Bool
 function SetEnvironmentVariable(lpName, lpValue: String): Boolean;
   external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
+{ SM_CXSCREEN and SM_CYSCREEN, for the menu artwork page's first option. Declared here with the
+  other imports rather than beside its callers, because an external has to be seen first. }
+function GetSystemMetrics(nIndex: Integer): Integer;
+  external 'GetSystemMetrics@user32.dll stdcall';
+
 const
   DRIVE_REMOVABLE = 2;
   DRIVE_FIXED     = 3;
@@ -471,6 +512,14 @@ var
   ConvertPage: TOutputProgressWizardPage;
   MovieTotal, MovieDone: Integer;
   MovieResult: String;
+
+  { The same three, for the menu artwork. Its converter announces the count on a TOTAL line before
+    it starts, because unlike the movies there is nothing on disc to count beforehand: the pictures
+    are inside big.lab and LOCALIZE.LAB and only the converter reads those. }
+  MenuArtPage: TInputOptionWizardPage;
+  MenuFitPage: TInputOptionWizardPage;
+  MenuArtTotal, MenuArtDone, MenuArtSkipped: Integer;
+  MenuArtResult: String;
 
   { Both are written into engine_fixes.ini after it has been installed, because the row that installs
     it replaces the file. }
@@ -528,6 +577,27 @@ end;
 function UserMessage(const Name, Argument: String): String;
 begin
   Result := FmtMessage(ExpandConstant('{cm:' + Name + '}'), [Argument]);
+end;
+
+{ The primary display, in pixels, for the menu artwork page's first option.
+
+  SM_CXSCREEN and SM_CYSCREEN, which are the PRIMARY monitor rather than the whole desktop, and that
+  is the wanted answer: the game runs on one monitor. They are also the values Windows reports after
+  DPI virtualisation, and since Setup is not marked DPI aware, a scaled desktop reports the scaled
+  size. That is still the size the game will be asked to fill, so it is still the right number. }
+function ScreenWidth: Integer;
+begin
+  Result := GetSystemMetrics(0);
+end;
+
+function ScreenHeight: Integer;
+begin
+  Result := GetSystemMetrics(1);
+end;
+
+function ScreenSizeText: String;
+begin
+  Result := IntToStr(ScreenWidth) + ' x ' + IntToStr(ScreenHeight);
 end;
 
 { Used by every external Source above. Inno asks for it once while it works out how much has to be
@@ -668,6 +738,37 @@ begin
   { Assigned after the text above, so filling in the default does not tick the option. }
   FpsEdit.OnChange := @FpsEditChanged;
 
+  { The player's own screen is preselected, because that is the size the artwork has to be for the
+    menus to fill it and there is no reason to make somebody read their own resolution off a label.
+    The fixed sizes below it are for converting on one machine and playing on another. }
+  MenuArtPage := CreateInputOptionPage(
+    FpsPage.ID,
+    ExpandConstant('{cm:MenuArtPageCaption}'),
+    ExpandConstant('{cm:MenuArtPageDescription}'),
+    ExpandConstant('{cm:MenuArtPageText}'),
+    True,
+    False);
+  MenuArtPage.Add(FmtMessage(ExpandConstant('{cm:MenuArtOptScreen}'), [ScreenSizeText]));
+  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt1080}'));
+  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt1440}'));
+  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt2160}'));
+  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOptLater}'));
+  MenuArtPage.SelectedValueIndex := 0;
+
+  { Stretch first and preselected. These menus are panels and lettering, which take it without
+    looking wrong, and filling the screen is the entire point of converting anything. Keeping the
+    shape is offered rather than hidden, because it is a taste and not a mistake. }
+  MenuFitPage := CreateInputOptionPage(
+    MenuArtPage.ID,
+    ExpandConstant('{cm:MenuFitPageCaption}'),
+    ExpandConstant('{cm:MenuFitPageDescription}'),
+    ExpandConstant('{cm:MenuFitPageText}'),
+    True,
+    False);
+  MenuFitPage.Add(ExpandConstant('{cm:MenuFitStretch}'));
+  MenuFitPage.Add(ExpandConstant('{cm:MenuFitUniform}'));
+  MenuFitPage.SelectedValueIndex := 0;
+
   ConvertPage := CreateOutputProgressPage(
     ExpandConstant('{cm:ConvertPageCaption}'),
     ExpandConstant('{cm:ConvertPageDescription}'));
@@ -704,7 +805,14 @@ begin
       setting is read at playback, so it applies to files converted later or by hand. }
     Result := not WizardIsComponentSelected('patch\fmv_player')
   else if PageID = FpsPage.ID then
-    Result := not WizardIsComponentSelected('patch\framerate_fix');
+    Result := not WizardIsComponentSelected('patch\framerate_fix')
+  else if PageID = MenuArtPage.ID then
+    Result := not WizardIsComponentSelected('patch\enhanced_resolution')
+  else if PageID = MenuFitPage.ID then
+    { Not asked when nothing is being converted now: unlike the cutscene scaling, which is read at
+      playback, this one is baked into the pictures and means nothing without them. }
+    Result := (not WizardIsComponentSelected('patch\enhanced_resolution')) or
+              (MenuArtPage.SelectedValueIndex = 4);
 end;
 
 function WantsCleanReinstall: Boolean;
@@ -1254,6 +1362,131 @@ begin
     Result := StrToIntDef(Digits, -1);
 end;
 
+{ The size chosen on the menu artwork page, or 0x0 for "not now". Reported as a pair because the
+  converter takes both: a menu is not upscaled by a single factor, since a 4:3 canvas on a 16:9
+  screen is stretched by different amounts across and down. }
+procedure ChosenMenuSize(var W, H: Integer);
+begin
+  W := 0;
+  H := 0;
+  if not WizardIsComponentSelected('patch\enhanced_resolution') then
+    Exit;
+
+  case MenuArtPage.SelectedValueIndex of
+    0: begin W := ScreenWidth; H := ScreenHeight; end;
+    1: begin W := 1920; H := 1080; end;
+    2: begin W := 2560; H := 1440; end;
+    3: begin W := 3840; H := 2160; end;
+  end;
+
+  { Below the canvas the menus are authored at there is nothing to upscale to, and the converter
+    refuses rather than shrinking anything. Asking it to fail is worse than not asking. }
+  if (W < 640) or (H < 480) then begin
+    W := 0;
+    H := 0;
+  end;
+end;
+
+{ Called once per line the menu converter writes. Its -Quiet mode speaks the same protocol
+  convert_movies.ps1 does, with one addition: a TOTAL line first, because the pictures live inside
+  the archives and there is nothing on disc to count before it starts. }
+procedure MenuArtOnLog(const S: String; const Error, FirstLine: Boolean);
+var
+  Line: String;
+begin
+  if Error then
+    Exit;
+
+  Line := Trim(S);
+  if Line = '' then
+    Exit;
+
+  if Copy(Line, 1, 6) = 'TOTAL ' then begin
+    MenuArtTotal := StrToIntDef(Copy(Line, 7, Length(Line)), 0);
+    Exit;
+  end;
+
+  if Copy(Line, 1, 5) = 'DONE ' then begin
+    MenuArtResult := Copy(Line, 6, Length(Line));
+    Exit;
+  end;
+
+  if Copy(Line, 1, 3) = 'OK ' then begin
+    MenuArtDone := MenuArtDone + 1;
+  end else if Copy(Line, 1, 5) = 'SKIP ' then begin
+    MenuArtDone := MenuArtDone + 1;
+    MenuArtSkipped := MenuArtSkipped + 1;
+  end else
+    Exit;
+
+  if MenuArtTotal > 0 then
+    ConvertPage.SetProgress(MenuArtDone, MenuArtTotal);
+  ConvertPage.SetText(ExpandConstant('{cm:MenuArtWorking}'), Line);
+end;
+
+{ Makes the upscaled menu artwork, hidden, with a progress page in front of it.
+
+  The script is the copy in the patch's unpacked folder rather than the one just installed, for the
+  same reason the movie converter uses that copy: [Dirs] grants users-modify on the game folder,
+  because the game keeps its settings and saves inside it, and this runs with Setup's rights. }
+procedure ConvertMenuArt;
+var
+  W, H, ResultCode: Integer;
+  Script, Params, Fit: String;
+begin
+  ChosenMenuSize(W, H);
+  if (W = 0) or (H = 0) then
+    Exit;
+
+  Script := ExpandConstant('{#PatchTmp}\tools\convert_menu.ps1');
+  if not FileExists(Script) then begin
+    MsgBox(UserMessage('MenuArtNoScript', Script), mbError, MB_OK);
+    Exit;
+  end;
+
+  MenuArtTotal := 0;
+  MenuArtDone := 0;
+  MenuArtSkipped := 0;
+  MenuArtResult := '';
+
+  if MenuFitPage.SelectedValueIndex = 1 then
+    Fit := 'Uniform'
+  else
+    Fit := 'Stretch';
+
+  { No -OutputDirectory: the script's own default is menu_hd, which is also the DLL's own default
+    MenuArtDirectory, and naming it in two places is how those two drift apart. }
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
+            ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
+            ' -Width ' + IntToStr(W) + ' -Height ' + IntToStr(H) +
+            ' -Fit ' + Fit;
+
+  ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
+  ConvertPage.SetProgress(0, 100);
+  ConvertPage.Show;
+  try
+    if not ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+                            Params, ExpandConstant('{app}'), SW_HIDE,
+                            ewWaitUntilTerminated, ResultCode, @MenuArtOnLog) then
+      ResultCode := -1;
+  finally
+    ConvertPage.Hide;
+  end;
+
+  { The DONE line is what decides the message, for the same reason it does for the movies: "it
+    stopped" and "it converted seventy-two of them" are different things to be told. }
+  if (ResultCode = 0) and (MenuArtResult <> '') then begin
+    if MenuArtSkipped > 0 then
+      MsgBox(UserMessage('MenuArtPartly', MenuArtResult), mbInformation, MB_OK)
+    else
+      MsgBox(UserMessage('MenuArtDone', MenuArtResult), mbInformation, MB_OK)
+  end
+  else if MenuArtResult <> '' then
+    MsgBox(UserMessage('MenuArtPartly', MenuArtResult), mbError, MB_OK)
+  else
+    MsgBox(UserMessage('MenuArtFailed', IntToStr(ResultCode)), mbError, MB_OK);
+end;
+
 procedure ConvertMovies;
 var
   Height, ResultCode: Integer;
@@ -1607,6 +1840,7 @@ begin
   ApplyGameDefaults;
   InstallCompleteSaves;
   ConvertMovies;
+  ConvertMenuArt;
 end;
 
 { Clears one contested name by moving what is there rather than overwriting it.

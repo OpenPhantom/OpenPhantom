@@ -162,9 +162,15 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
     dev_overlay/view_range_row.c
+    dev_overlay/dev_menu_size_row.c
     dev_overlay/cheats_original.c
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
+    # The cheats were split by responsibility when cheats_openphantom.c passed twice the size this
+    # project allows. They still share one state record, so the test links all four together.
+    dev_overlay/cheats_npc_damage.c
+    dev_overlay/cheats_jump_boost.c
+    dev_overlay/cheats_free_camera.c
     dev_overlay/cheats_no_fog.c
     # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
     # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a

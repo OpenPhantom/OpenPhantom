@@ -24,6 +24,7 @@
 #include "overlay_model.h"
 
 #include "view_range_row.h"
+#include "dev_menu_size_row.h"
 
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
@@ -101,8 +102,9 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
 
 /* One past free camera's own row: a fold, the same shape as a group's own expand/collapse but
  * scoped to one row rather than a whole section - clicking it toggles model.freecam_info_expanded,
- * and while that is true, FREECAM_INFO_LINE_COUNT more INFO rows follow it (ids INFO_ROW_ID+1
- * through INFO_ROW_ID+FREECAM_INFO_LINE_COUNT), one per line of FREECAM_INFO_LINES. Reusing
+ * and while that is true, FREECAM_INFO_LINE_COUNT more INFO rows are drawn directly beneath it,
+ * one per line of FREECAM_INFO_LINES. They carry ids from FREECAM_LINE_FIRST_ID rather than ids
+ * following this one; see openphantom_row_id() for why the two differ. Reusing
  * OVERLAY_ROW_INFO's existing rendering entirely - full width, no chip - rather than adding a
  * second kind: the fold marker and the indent are both just characters in the label text (see
  * source_row() below), so nothing in overlay_draw.c has to change to draw this. The reason for
@@ -136,9 +138,24 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
  * guarded by static asserts; appending costs none of that and disturbs no existing id. It is a
  * setting rather than a cheat, so the bottom of the group is also where it belongs to read.
  *
- * The fold's own info lines follow THIS row now rather than END_LEVEL_ROW_ID, which is the one
- * piece of arithmetic adding a row here has to move. */
+ * The fold's own lines take the ids after every fixed row here, so a new fixed row is appended
+ * below this one and above FREECAM_LINE_FIRST_ID, and disturbs neither. Where those lines are
+ * DRAWN is a separate question, answered by openphantom_row_id(). */
 #define VIEW_RANGE_ROW_ID (END_LEVEL_ROW_ID + 1u)
+
+/* The dev menu's own size, one past the draw distance row and last of the group's fixed rows.
+ * Last because it is the only row whose effect is the menu itself: changing it moves every row
+ * including this one, and a control that moves while it is being used is easier to find again at
+ * the bottom than in the middle. Labelled for the thing a player already has a name for, the dev
+ * menu, rather than for the panel it is drawn on. */
+#define DEV_MENU_SIZE_ROW_ID (VIEW_RANGE_ROW_ID + 1u)
+
+/* The fold's own lines, past every fixed row above. Their ids are the tail of this id space
+ * because the tail is the only part of it that may change size, but the tail is NOT where they
+ * belong on screen: a reader looks for them directly beneath the summary that revealed them, not
+ * at the bottom of the group. openphantom_row_id() below is where those two orders are put back
+ * together, and it is the only code that needs to know they ever differed. */
+#define FREECAM_LINE_FIRST_ID (DEV_MENU_SIZE_ROW_ID + 1u)
 
 /* Short enough for value[8]. Letters and digits already match their own virtual-key codes; function
  * keys and the handful of others worth naming get their own case; anything else prints as hex
@@ -319,17 +336,38 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +4: the jump-boost scale row, inserted right after jump boost's own toggle row; the
-         * free-camera exit hotkey row, which takes over free camera's own (now shifted) numeric
-         * slot; the "how to fly" fold, one past where free camera itself now sits; and "Skip to
-         * next level", one past that; and the draw distance row, one past THAT. See
-         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/VIEW_RANGE_ROW_ID/
-         * INFO_ROW_ID/END_LEVEL_ROW_ID and their own handling in source_row() below. The fold's
-         * own lines add FREECAM_INFO_LINE_COUNT more only while it is open, the same shape a
-         * group's own child count already uses in append_group() below. */
-        return (uint32_t)CHEATS_OWN_COUNT + 5u +
+        /* +6, one for each row this group holds that is not one of its own cheats: the jump-boost
+         * scale row, inserted right after jump boost's own toggle row; the free-camera exit hotkey
+         * row, which takes over free camera's own (now shifted) numeric slot; the "how to fly"
+         * fold, one past where free camera itself now sits; "Skip to next level", one past that;
+         * the draw distance row, one past THAT; and the dev menu size row, last of the six. See
+         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID/
+         * VIEW_RANGE_ROW_ID/DEV_MENU_SIZE_ROW_ID and their own handling in source_row() below. The
+         * fold's own lines add FREECAM_INFO_LINE_COUNT more only while it is open, the same shape
+         * a group's own child count already uses in append_group() below. */
+        return (uint32_t)CHEATS_OWN_COUNT + 6u +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
+}
+
+/* Slot is the position a row occupies on screen within this group; the answer is the id that
+ * belongs there. The two are the same number until the free camera fold opens, because that is
+ * the only thing in this group that changes how many rows there are. When it is open, its lines
+ * are drawn where they read, directly under the summary, while keeping the ids at the end of the
+ * space where they can grow and shrink without moving anything else. The fixed rows below the
+ * summary keep their ids and simply sit further down the screen.
+ *
+ * Everything downstream compares against the fixed constants above and never against a slot, so
+ * activation, hotkey capture and value editing are all unaffected by the fold being open. */
+static uint32_t openphantom_row_id(uint32_t slot)
+{
+    if (!model.freecam_info_expanded || slot <= INFO_ROW_ID) {
+        return slot;                 /* shut, or at or above the summary: the orders agree */
+    }
+    if (slot <= INFO_ROW_ID + FREECAM_INFO_LINE_COUNT) {
+        return FREECAM_LINE_FIRST_ID + (slot - INFO_ROW_ID - 1u);      /* one of the lines */
+    }
+    return slot - FREECAM_INFO_LINE_COUNT;   /* a fixed row, pushed down the screen by them */
 }
 
 static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
@@ -367,6 +405,11 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         return;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
+        /* Arriving as a screen position and continuing as an id. Reassigned rather than kept in
+           a second local so that no comparison below can accidentally reach the slot instead. */
+        id = openphantom_row_id(id);
+        out->id = id;
+
         if (id == JUMP_SCALE_ROW_ID) {
             out->kind = OVERLAY_ROW_VALUE;
             copy_label(out->label, "Jump boost scale");
@@ -464,12 +507,30 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->value[sizeof out->value - 1] = '\0';
             return;
         }
-        if (model.freecam_info_expanded && id > VIEW_RANGE_ROW_ID &&
-            id <= VIEW_RANGE_ROW_ID + FREECAM_INFO_LINE_COUNT) {
+        if (id == DEV_MENU_SIZE_ROW_ID) {
+            out->kind = OVERLAY_ROW_VALUE;
+            /* The range is in the label for the same reason the draw distance row states its own:
+               a refused number is a poor way to learn what the limits are. */
+            copy_label(out->label, "Dev menu size (0.33 to 4.0)");
+            out->on = false;        /* meaningless for a value row; never read by the drawer */
+            /* Always available. It edits how this panel is drawn and a settings file, and reaches
+               into no engine site at all, so there is nothing that could fail to resolve. */
+            out->available = true;
+            if (model.editing_value && model.editing_value_row == DEV_MENU_SIZE_ROW_ID) {
+                _snprintf(out->value, sizeof out->value, "%s_", model.value_edit_buf);
+            } else {
+                dev_menu_size_row_format(dev_menu_size_row_get(), out->value, sizeof out->value);
+            }
+            out->value[sizeof out->value - 1] = '\0';
+            return;
+        }
+        if (model.freecam_info_expanded && id >= FREECAM_LINE_FIRST_ID &&
+            id < FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT) {
             char line[OVERLAY_LABEL_MAX];
 
             out->kind = OVERLAY_ROW_INFO;
-            _snprintf(line, sizeof line, "    %s", FREECAM_INFO_LINES[id - VIEW_RANGE_ROW_ID - 1u]);
+            _snprintf(line, sizeof line, "    %s",
+                      FREECAM_INFO_LINES[id - FREECAM_LINE_FIRST_ID]);
             line[sizeof line - 1] = '\0';
             copy_label(out->label, line);
             out->on = false;
@@ -710,6 +771,18 @@ void overlay_model_value_commit(void)
     model.editing_value = false;
     if (model.value_edit_buf[0] == 0) {
         return;      /* nothing was typed, leave whatever value was already set alone */
+    }
+
+    if (row == DEV_MENU_SIZE_ROW_ID) {
+        float parsed;
+
+        /* The same refusal as the draw distance row below, and it matters more here: text that
+         * is not a number becoming a zero would clamp to the smallest panel, so a typing mistake
+         * would shrink the thing being typed into. */
+        if (dev_menu_size_row_parse(model.value_edit_buf, &parsed)) {
+            (void)dev_menu_size_row_set(parsed);
+        }
+        return;
     }
 
     if (row == VIEW_RANGE_ROW_ID) {

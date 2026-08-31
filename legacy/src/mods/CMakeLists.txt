@@ -248,6 +248,7 @@ add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
     view_range_row.c
+    dev_menu_size_row.c
     overlay_model.c
     overlay_draw.c
     overlay_sites.c
@@ -258,6 +259,9 @@ add_engine_fix(dev_overlay
     cheats_original.c
     cheats_original_actions.c
     cheats_openphantom.c
+    cheats_npc_damage.c
+    cheats_jump_boost.c
+    cheats_free_camera.c
     cheats_no_fog.c
 )
 

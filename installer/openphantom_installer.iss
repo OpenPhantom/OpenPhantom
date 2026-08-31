@@ -27,7 +27,7 @@
 ;
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
-#define AppVer "1.1"
+#define AppVer "1.2"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"

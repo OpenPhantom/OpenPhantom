@@ -6,6 +6,8 @@
  */
 #include "overlay_draw.h"
 
+#include "dev_menu_size_row.h"
+
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
 #include "cheats_original_actions.h"
@@ -113,6 +115,10 @@ bool overlay_draw_screen(float *out_width, float *out_height)
  * it there and the third ends it there. Rather than guess twice, it is a setting. */
 static int32_t align_mode = 1;
 
+/* Clamped rather than refused: a number somebody typed into an ini should move the panel toward
+ * what they meant, and a panel that silently kept its old size because the value was out of range
+ * would read as the setting not working at all. Below a third the text stops being legible and
+ * above four the panel stops fitting anything, so those are the ends. */
 void overlay_draw_set_align(int32_t mode)
 {
     align_mode = mode;
@@ -147,9 +153,18 @@ static void prepare_font(void)
      * One was tried and is three times that on a 1920 wide display, which is unreadable as a panel.
      * The size was never the defect: the defect was measuring the font BEFORE selecting it and
      * setting these scales, so the measurement described a different font than the drawing did.
-     * That is fixed above, and changing this at the same time only hid it. */
-    draw_state.glyph_scale(OVERLAY_AUTHORED_WIDTH / *draw_state.screen_w,
-                           OVERLAY_AUTHORED_HEIGHT / *draw_state.screen_h);
+     * That is fixed above, and changing this at the same time only hid it.
+     *
+     * DevMenuSize multiplies both, and that is the only place it is applied. Every band, row and
+     * the width clamp are multiples of the height this font measures, and both measurements run
+     * through this function first, so scaling here scales the whole panel and its text together
+     * rather than growing the boxes around text that stayed put. */
+    {
+        const float panel_scale = dev_menu_size_row_current();
+
+        draw_state.glyph_scale(panel_scale * OVERLAY_AUTHORED_WIDTH / *draw_state.screen_w,
+                               panel_scale * OVERLAY_AUTHORED_HEIGHT / *draw_state.screen_h);
+    }
 }
 
 /* The height of a capital in the font the panel actually draws with. Every band is a multiple of

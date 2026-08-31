@@ -91,10 +91,12 @@ archive under `source/` where the licence asks for it.
 `dist/patch/` is refreshed wholesale from a build of `legacy/`, so anything else kept in that folder
 is destroyed on the next refresh; that is why dxwrapper has a folder of its own.
 
-Two things do not survive a refresh on their own and have to be re-applied: `dxwrapper.ini`'s
-`AntiAliasing=0`, which upstream ships as 4 and which causes visible bugs in this game, and any
-component whose destination folders are derived rather than written out, currently the libVLC
-plugins.
+Two things do not survive a refresh on their own and have to be re-applied: the six settings in
+`dxwrapper.ini` that differ from the file upstream ships, listed in `THIRD-PARTY-NOTICES.md`, and
+any component whose destination folders are derived rather than written out, currently the libVLC
+plugins. Diff the shipped ini against the one inside the release archive rather than working from
+a list; upstream adds settings between releases, and a new one arrives with its own default only
+if the file is rebuilt from theirs.
 
 ## Testing status
 

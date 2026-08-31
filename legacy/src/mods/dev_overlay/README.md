@@ -298,7 +298,8 @@ which.
 
 ## The draw distance row
 
-The OpenPhantom tab's last row edits `[view_distance_fix] ViewRangeScale`, the draw distance, typed
+The OpenPhantom tab's second to last row edits `[view_distance_fix] ViewRangeScale`, the draw
+distance, typed
 in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`, so it
 is learned from the row rather than by having a number refused.
 
@@ -315,6 +316,32 @@ read `2.50x` while the game is really drawing at `1.00x`. Reporting the live val
 `view_distance_fix` for it, which is the dependency above. The watchdog announces itself in
 `engine_fixes.log` when it brakes, which is where that answer lives instead.
 
+## The dev menu size row
+
+The last row of the OpenPhantom tab edits `[dev_overlay] DevMenuSize`, which is how much bigger
+than its authored size this menu is drawn. Typed in like the two rows above it, with the accepted
+range, `0.33 to 4.0`, in the label.
+
+**It is named for the dev menu rather than for the panel**, because the menu is the thing a player
+already has a name for and the panel is an implementation detail of it.
+
+**The menu is a fixed number of pixels, which is the problem this solves.** It reads the same on a
+1080 display as on a 4K one, which is deliberate: what it cannot know is how big those pixels
+physically are. The engine has the resolution and not the screen, so on a high density laptop
+panel the size that is comfortable on a desktop monitor comes out too small to read. There is no
+number this can default to that is right everywhere, which is why it is a row and not a constant.
+
+**It takes effect on the next frame, and it moves itself while it is being used.** Committing a
+value redraws the menu at the new size immediately, including the row that was just typed into,
+which is why this row is last: a control that moves while you are working it is easier to find
+again at the bottom of a group than in the middle of one.
+
+**The value is owned by `dev_menu_size_row.c`, not by the drawing.** The row is asked for the
+current scale on every frame and answers from memory, reading the ini only on the first ask of a
+session. Writing goes the other way, straight to the ini, so the setting survives a restart in the
+same place the drawing would have looked for it anyway. Nothing here calls into another mod, so
+this row works whatever else is or is not in the `mods` folder.
+
 ## Configuration: `[dev_overlay]`
 
 | Key | Default | Meaning |
@@ -322,6 +349,7 @@ read `2.50x` while the game is really drawing at `1.00x`. Reporting the live val
 | `Enabled` | `1` | |
 | `OpenKey` | `0` | The virtual key that opens the panel. `0` accepts whichever key sits below Escape: the caret on a German layout, the backtick on a British one. |
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
+| `DevMenuSize` | `1.0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
 
 ## Limitations
 

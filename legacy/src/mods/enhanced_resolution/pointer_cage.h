@@ -2,6 +2,7 @@
 #define POINTER_CAGE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Widen the DRAWN menu cursor's clamp from the 640x480 island it ships with to the whole display
  * mode, and keep it there when the mode changes.
@@ -17,10 +18,15 @@
  * touched here.
  *
  * `enabled` false leaves the engine exactly as it shipped and says so once. */
-void pointer_cage_install(bool enabled);
+/* `menu_scale` is the multiple the menu canvas is drawn at, 1 when it is not scaled. The cage is
+ * CANVAS relative, not screen relative: the engine clamps to `g_menuOriginX + immediate`, and the
+ * canvas is what the menus can erase. A cursor allowed outside it stamps itself on every pixel it
+ * crosses, because nothing there ever repaints. At scale 1 this writes the values that shipped. */
+void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height);
 
 /* True when the clamp really was widened, for the caller's own log. */
 bool pointer_cage_is_active(void);
+
 
 /* ---- the arithmetic, exposed because it is the part that can be checked without a display -----
  *

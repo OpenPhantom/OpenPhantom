@@ -118,6 +118,9 @@
  */
 #include "pointer_cage.h"
 
+/* For the canvas the cage is sized from. */
+#include "menu_scale.h"
+
 #include "window_fit.h"
 
 #include "common/frame_hook.h"
@@ -266,6 +269,7 @@ typedef struct pointer_cage_state {
     int32_t applied_height;
 
     bool warned_implausible;
+
 } pointer_cage_state_t;
 
 static pointer_cage_state_t cage_state;
@@ -320,28 +324,6 @@ static bool cage_offsets_are_sane(uintptr_t site)
                           "the second height clamp");
 }
 
-/* The DLL's single answer to "how big is the display mode really". It lives in window_fit.c
- * because that is where the one accessor reporting it was found and range-checked, and asking a
- * second time here would mean two answers to one question.
- *
- * The obvious second route was measured and rejected: the width/height getters are
- * `push ebp / mov ebp,esp / mov eax,[abs32] / pop ebp / ret`, and that shape occurs TWENTY-FIVE
- * times in every shipped image; five of them as an adjacent pair, which is the only thing that
- * distinguishes these two. A signature for it would be choosing one of twenty-five by position. */
-static bool read_mode_size(int32_t *out_width, int32_t *out_height)
-{
-    int width = 0;
-    int height = 0;
-
-    if (!window_fit_current_mode_size(&width, &height)) {
-        return false;
-    }
-
-    *out_width  = (int32_t)width;
-    *out_height = (int32_t)height;
-    return true;
-}
-
 /* Writes the four clamps ABSOLUTELY from the current mode. Never `imm += delta`: a refresh that
  * accumulated would drift by exactly as many mode changes as the session had. */
 static bool write_clamps(int32_t width, int32_t height)
@@ -370,74 +352,6 @@ static bool write_clamps(int32_t width, int32_t height)
     return true;
 }
 
-/* Puts the shipped 640x480 clamps back. Used only as the rollback of a half-done install, which is
- * the one state this feature must never leave behind. */
-static void restore_shipped_clamps(void)
-{
-    size_t index;
-
-    for (index = 0; index < 2; ++index) {
-        (void)patch_write_u32(cage_state.width_immediates[index], SHIPPED_CAGE_WIDTH);
-        (void)patch_write_u32(cage_state.height_immediates[index], SHIPPED_CAGE_HEIGHT);
-    }
-    cage_state.applied_width  = 0;
-    cage_state.applied_height = 0;
-}
-
-static bool mode_size_is_usable(int32_t width, int32_t height)
-{
-    int clamp_width = 0;
-    int clamp_height = 0;
-
-    if (pointer_cage_extent((int)width, (int)height, &clamp_width, &clamp_height)) {
-        return true;
-    }
-    /* Reported rather than skipped in silence: a plausibility limit that quietly does nothing is
-     * indistinguishable from a feature that was never installed. */
-    if (!cage_state.warned_implausible) {
-        cage_state.warned_implausible = true;
-        log_warning("the display mode reads %dx%d, which is too small to cage a %d-pixel cursor "
-                    "in, the clamp is left at whatever it last was. This is reported once.",
-                    (int)width, (int)height, CURSOR_MARGIN);
-    }
-    return false;
-}
-
-/* Once per rendered frame: two loads and two compares, and a write only when the mode really
- * changed. A detour on the engine's own mode-change broadcast would be cheaper and would miss the
- * loading screen, which suppresses that broadcast entirely. */
-static void on_frame(void)
-{
-    int32_t width;
-    int32_t height;
-
-    if (!cage_state.active) {
-        return;
-    }
-
-    if (!read_mode_size(&width, &height)) {
-        return;
-    }
-
-    if (width == cage_state.applied_width && height == cage_state.applied_height) {
-        return;
-    }
-    if (!mode_size_is_usable(width, height)) {
-        return;
-    }
-
-    if (write_clamps(width, height)) {
-        log_info("the display mode changed to %dx%d, the menu cursor may now travel %dx%d",
-                 (int)width, (int)height,
-                 (int)(width - CURSOR_MARGIN), (int)(height - CURSOR_MARGIN));
-    } else {
-        log_warning("the display mode changed to %dx%d but the menu cursor clamp could not be "
-                    "rewritten, it still allows %dx%d", (int)width, (int)height,
-                    (int)(cage_state.applied_width - CURSOR_MARGIN),
-                    (int)(cage_state.applied_height - CURSOR_MARGIN));
-    }
-}
-
 /* ============================================================================================ */
 static bool install_cage(uintptr_t site, int32_t width, int32_t height)
 {
@@ -457,9 +371,6 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
     cage_state.height_immediates[0] = site + OFFSET_HEIGHT_IMM_1;
     cage_state.height_immediates[1] = site + OFFSET_HEIGHT_IMM_2;
 
-    if (!mode_size_is_usable(width, height)) {
-        return false;
-    }
 
     if (!memory_read_u32(site + OFFSET_ORIGIN_X_OPERAND, &shipped_origin_x) ||
         !memory_read_u32(site + OFFSET_ORIGIN_Y_OPERAND, &shipped_origin_y)) {
@@ -478,33 +389,24 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
         return false;
     }
 
-    /* STEP TWO. On its own this would be catastrophic, the cage would become [0, 607] while
-     * the widgets sit centred, leaving nothing clickable, so a failure here goes back to the
-     * state above rather than leaving the two halves disagreeing. */
-    if (patch_write_pointer32(site + OFFSET_ORIGIN_X_OPERAND, &cage_origin_zero_x)
-            != PATCH_RESULT_OK ||
-        patch_write_pointer32(site + OFFSET_ORIGIN_Y_OPERAND, &cage_origin_zero_y)
-            != PATCH_RESULT_OK) {
-        (void)patch_write_u32(site + OFFSET_ORIGIN_X_OPERAND, shipped_origin_x);
-        (void)patch_write_u32(site + OFFSET_ORIGIN_Y_OPERAND, shipped_origin_y);
-        restore_shipped_clamps();
-        log_error("the menu cursor clamp's origin could not be repointed, so the widened clamp "
-                  "has been ROLLED BACK to the shipped 640x480 one. Leaving it half-applied would "
-                  "have anchored a full-screen cage at the menu origin, which reaches past the "
-                  "screen edge; leaving the other half applied would have made every widget "
-                  "unreachable.");
-        return false;
-    }
+    /* There is no step two any more. This used to repoint the two origin operands at zero cells,
+     * turning a canvas relative clamp into a screen relative one so the cursor could leave the
+     * menu. That was the wrong idea: outside the canvas nothing repaints, so the cursor stamped a
+     * copy of itself on every pixel it crossed. Keeping the engine's own origin is both correct
+     * and simpler, and it removes the one partial state this feature could be left in.
+     *
+     * shipped_origin_x and shipped_origin_y are still read above, as a proof the operands are
+     * readable before anything is written; nothing is done with them now. */
+    (void)shipped_origin_x;
+    (void)shipped_origin_y;
 
     cage_state.active = true;
     return true;
 }
 
-void pointer_cage_install(bool enabled)
+void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height)
 {
     uintptr_t site;
-    int32_t   width = 0;
-    int32_t   height = 0;
 
     if (cage_state.installed) {
         return;
@@ -512,11 +414,30 @@ void pointer_cage_install(bool enabled)
     cage_state.installed = true;
 
     if (!enabled) {
-        log_info("WidenMenuCursorArea=0, the drawn menu cursor keeps the 640x480 island it "
-                 "shipped with, which on a larger display mode is a box in the middle of the "
-                 "screen that it cannot be moved out of");
+        log_info("WidenMenuCursorArea=0, the engine's own menu cursor clamp is left exactly as it "
+                 "shipped. That is the right setting at MenuScale=1, where the two are identical; "
+                 "with the canvas scaled it leaves the cursor in a 607x447 box while the widgets "
+                 "sit outside it, which is why MenuScale declines to install alongside this.");
         return;
     }
+
+    /* The canvas, not the display mode, and that is the whole of this feature.
+     *
+     * The engine clamps the drawn menu cursor to `g_menuOriginX + immediate`, so the immediate is a
+     * canvas extent and the clamp is already anchored where the menus are. The canvas is also
+     * exactly the region the menus repaint: a widget erases by drawing over itself, clipped to the
+     * canvas. Allowing the cursor outside it means crossing pixels that nothing ever repaints, and
+     * every one of them keeps a copy of the cursor until the screen closes.
+     *
+     * This module used to widen the clamp to the whole display mode, which is that mistake, and it
+     * was invisible for as long as the feature never armed. It arms now.
+     *
+     * Deriving the clamp from the canvas also removes every reason this was fragile. Nothing here
+     * needs the display mode, so there is no accessor to resolve, nothing to re-read when the mode
+     * changes, and no waiting on graphics startup. At MenuScale=1 the immediates come out 607 and
+     * 447, which is what the engine shipped, so this is then a no-op that writes the same numbers. */
+    if (canvas_width  < MENU_SCALE_CANVAS_WIDTH)  { canvas_width  = MENU_SCALE_CANVAS_WIDTH;  }
+    if (canvas_height < MENU_SCALE_CANVAS_HEIGHT) { canvas_height = MENU_SCALE_CANVAS_HEIGHT; }
 
     signature_resolve_table(sites, SITE_COUNT);
 
@@ -525,42 +446,28 @@ void pointer_cage_install(bool enabled)
         log_warning("the menu cursor clamp did not resolve, so it is left as it shipped. NOTE that "
                     "this pattern contains the two clamp values it patches, so an ALREADY WIDENED "
                     "clamp, an earlier generation of this DLL still in the process, also fails "
-                    "to resolve here. In that case the cursor already reaches the whole screen and "
+                    "to resolve here. In that case the cursor already reaches the whole canvas and "
                     "nothing is wrong.");
         return;
     }
     if (!cage_offsets_are_sane(site)) {
         return;
     }
-    if (!read_mode_size(&width, &height)) {
-        log_warning("the current display mode could not be read, so the menu cursor clamp is left "
-                    "as it shipped. That accessor is resolved by the window-fitting module in this "
-                    "same DLL and is the only site in the image that reports the mode size "
-                    "uniquely.");
-        return;
-    }
-    if (!install_cage(site, width, height)) {
+    if (!install_cage(site, canvas_width, canvas_height)) {
         return;
     }
 
-    log_info("the drawn menu cursor may now travel %dx%d instead of 607x447, anchored at the "
-             "screen origin instead of the menu's (patched at %08X). "
-             "The menus themselves are NOT moved: the engine already centres them and adds that "
-             "origin in both the draw path and the hit test, so a cursor outside the 640x480 "
-             "island simply hits nothing. REPORTED COST, not reproduced here yet: the pause "
-             "screens cannot erase a cursor outside that island, their damage rectangles clip to "
-             "640x480, so crossing the island's edge may stamp the cursor's glow onto the border "
-             "until the screen closes. Set WidenMenuCursorArea=0 if you see that.",
-             (int)(cage_state.applied_width - CURSOR_MARGIN),
-             (int)(cage_state.applied_height - CURSOR_MARGIN),
-             (unsigned)site);
-
-    if (!frame_hook_add(on_frame)) {
-        log_warning("the per-frame hook is unavailable, so the menu cursor clamp is NOT refreshed "
-                    "when the display mode changes. It stays at the %dx%d computed now, which is "
-                    "correct until the resolution is changed from inside the game.",
-                    (int)(cage_state.applied_width - CURSOR_MARGIN),
-                    (int)(cage_state.applied_height - CURSOR_MARGIN));
+    if (canvas_width == MENU_SCALE_CANVAS_WIDTH) {
+        log_info("the menu cursor clamp is the canvas, 607x447 from the menu origin, which is what "
+                 "the engine shipped (patched at %08X, same values). It becomes larger only when "
+                 "MenuScale does.", (unsigned)site);
+    } else {
+        log_info("the drawn menu cursor may now travel %dx%d from the menu origin, following the "
+                 "%dx%d canvas the menus are drawn on (patched at %08X). It is deliberately NOT "
+                 "allowed outside it: nothing repaints out there, so a cursor crossing it would "
+                 "stamp a copy of itself on every pixel until the screen closed.",
+                 (int)(canvas_width - CURSOR_MARGIN), (int)(canvas_height - CURSOR_MARGIN),
+                 (int)canvas_width, (int)canvas_height, (unsigned)site);
     }
 }
 
@@ -568,3 +475,4 @@ bool pointer_cage_is_active(void)
 {
     return cage_state.active;
 }
+

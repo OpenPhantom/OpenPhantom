@@ -19,6 +19,11 @@
 #include <stdlib.h>
 
 /* The island origin the engine computes at 3840x2160: ((3840-640)/2, (2160-480)/2). */
+/* The island is the menu canvas, which is the authored size unless menu_scale widened it.
+ * These cases are all about the authored one, so the clamp they check is the one the retail
+ * 640x480 screen edge performed. */
+#define ISLAND_W ((float)MENU_ISLAND_WIDTH)
+#define ISLAND_H ((float)MENU_ISLAND_HEIGHT)
 #define UHD_LEFT 1600.0f
 #define UHD_TOP   840.0f
 
@@ -30,7 +35,8 @@ static void test_identity_inside(void)
     ut_section("a sprite inside the island is untouched");
 
     /* The authored button rectangle 7,175,199,53, placed on the 4K island. */
-    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "an authored widget is drawn");
     ut_near(left,  UHD_LEFT + 7.0f,   0.0, "its left bound is bit-identical");
     ut_near(right, UHD_LEFT + 206.0f, 0.0, "its right bound is bit-identical");
@@ -39,7 +45,8 @@ static void test_identity_inside(void)
 
     /* The island's own full extent, edge to edge, is also inside. */
     left = UHD_LEFT; right = UHD_LEFT + 640.0f; top = UHD_TOP; bottom = UHD_TOP + 480.0f;
-    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "the full-island backdrop is drawn");
     ut_near(left, UHD_LEFT, 0.0, "the backdrop's left bound is untouched");
     ut_near(right, UHD_LEFT + 640.0f, 0.0, "the backdrop's right bound is untouched");
@@ -54,7 +61,8 @@ static void test_reported_defect(void)
 
     ut_section("the reported defect's own numbers");
 
-    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "the poking halo is still drawn");
     ut_near(left, UHD_LEFT, 0.0, "and is cut exactly at the island's left border");
     ut_near(right, UHD_LEFT + 228.0f, 0.0, "while its inside part keeps its bound");
@@ -69,7 +77,8 @@ static void test_all_four_borders(void)
 
     ut_section("a sprite past all four borders");
 
-    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "an oversized sprite is still drawn");
     ut_near(left, UHD_LEFT, 0.0, "left lands on the border");
     ut_near(right, UHD_LEFT + 640.0f, 0.0, "right lands on the border");
@@ -85,17 +94,20 @@ static void test_outside_is_skipped(void)
 
     left = UHD_LEFT - 100.0f; right = UHD_LEFT - 40.0f;
     top = UHD_TOP + 10.0f; bottom = UHD_TOP + 42.0f;
-    ut_check(!menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(!menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "a sprite wholly left of the island is skipped");
 
     /* Edge-touching: a zero-width remainder is not a draw. */
     left = UHD_LEFT - 32.0f; right = UHD_LEFT;
-    ut_check(!menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(!menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "a sprite ending exactly on the border is skipped");
 
     left = UHD_LEFT + 10.0f; right = UHD_LEFT + 42.0f;
     top = UHD_TOP + 480.0f; bottom = UHD_TOP + 512.0f;
-    ut_check(!menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP),
+    ut_check(!menu_island_clip_rect(&left, &right, &top, &bottom, UHD_LEFT, UHD_TOP,
+                                   ISLAND_W, ISLAND_H),
              "a sprite starting exactly on the bottom border is skipped");
 }
 
@@ -107,7 +119,8 @@ static void test_640x480_is_the_screen(void)
 
     ut_section("at 640x480 the island is the screen");
 
-    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f),
+    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f,
+                                   ISLAND_W, ISLAND_H),
              "the same halo is drawn at 640x480");
     ut_near(left, 0.0, 0.0, "and is cut at screen x=0, where the rasterizer cut it");
     ut_near(right, 228.0, 0.0, "with the rest untouched");
@@ -120,7 +133,8 @@ static void test_not_ours_to_judge(void)
     ut_section("bounds the clamp has no business judging");
 
     left = 300.0f; right = 200.0f; top = 10.0f; bottom = 40.0f;
-    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f),
+    ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f,
+                                   ISLAND_W, ISLAND_H),
              "reversed bounds pass through");
     ut_near(left, 300.0, 0.0, "with the left bound untouched");
     ut_near(right, 200.0, 0.0, "and the right bound untouched");
@@ -128,7 +142,8 @@ static void test_not_ours_to_judge(void)
     {
         float not_a_number = (float)atof("nan");
         left = not_a_number; right = 100.0f; top = 10.0f; bottom = 40.0f;
-        ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f),
+        ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f,
+                                   ISLAND_W, ISLAND_H),
                  "a NaN bound passes through rather than being invented around");
         ut_near(right, 100.0, 0.0, "and the finite bounds are untouched");
     }

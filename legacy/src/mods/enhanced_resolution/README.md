@@ -35,6 +35,7 @@ the mode table that the aspect gate anchors.
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
 | `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole display mode instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. **Reported cost, not reproduced here yet:** the pause screens repair themselves through damage rectangles clipped to the same hard-coded 640x480 canvas, so a cursor moved past the island's edge cannot be erased and may stamp its blue glow onto the border until the screen closes. Every clickable widget is inside the island either way, so set this to `0` if you see that |
 | `ClampMenuSpritesToIsland` | `1` | the erase-side companion of `MenuKeepsResolution`: clamp the menu toolkit's sprite draws to the 640x480 island, gated on the engine's own widget-pass flag so the HUD and the frozen pause backdrop pass through untouched. Closes the reported blue stamp the hovered button's halo left on the island's border (drawn against the screen, repaired against the canvas). Bit-identical for every sprite that fits the island, and a sprite drawn with a partial fill is passed through untouched |
+| `MenuScale` | `1` | how many times its authored size to draw the 640x480 menu canvas at, 1 to 4. `1` is off. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. Only half a feature without upscaled artwork: the blitter copies one source pixel to one destination pixel, so the layout spreads but the bitmaps do not grow |
 
 ## Engine locations
 
@@ -56,6 +57,9 @@ the mode table that the aspect gate anchors.
 | the DirectDraw enumeration callback | `0x4928FC` | detoured, 6-byte prologue, **only** when `FilterModeEnumeration=1`. Address free: the mode counter, the 64 cap, the 0x54 stride and the table base are all read out of the matched operands and checked before use |
 | `swmenu_render`, the widget-pass bracket | `0x45DC6F`..`0x45DCB9` | **read, never patched**: address-free masked pattern over `inc g_tickCounter / mov [flag],1 / cmp [parent],1`; the flag cell is read out of the `C7 05` operand and cross-checked against the closing `mov [flag],0` at +0x41. The gate for the island clamp. In `obi.exe` it resolves at `0x45DC0F`, with the flag cell at `0x008BFB40` instead of `0x008BFBA0` |
 | `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
+| `swrle_blit`, the canvas clip | `0x004616CC` | two immediates at `+0x30` and `+0x37`, `640`/`480` -> `640N`/`480N`; the function reads the destination surface size and discards it |
+| the menu origin block | matched **twice** | `0x0045D69D` and `0x0045D7CB`; three operands each repointed at cells holding `640N` and `480N`, which also gives `g_menuScale` its multiplier without touching its non-popping `fst` |
+| `swmenu_open` | `0x0045D9F5` | detoured, 8 byte prologue; scales each menu's widget rectangles once, which the draw and the hit test both read |
 
 ## Why the gate alone is not enough
 

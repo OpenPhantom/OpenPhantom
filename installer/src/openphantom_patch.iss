@@ -159,6 +159,31 @@ Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
     Components: patch\ground_clip_fix;     Flags: ignoreversion
 Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
+
+; The menu artwork converter. Like the movie one it carries no content: it makes bigger copies of
+; the pictures already inside the player's own big.lab and LOCALIZE.LAB, into a menu_hd folder the
+; DLL mounts and reads the scale out of. Without it MenuScale finds no converted artwork and leaves
+; the menus exactly as they shipped, so the two halves install together or the feature is absent.
+;
+; FOUR FILES BECAUSE OF LINUX. "Convert Menu Art.bat" drives convert_menu.ps1, which resamples with
+; GDI+; neither half works under Proton, where Wine ships no PowerShell and System.Drawing.Common is
+; Windows-only on .NET Core. convert_menu.sh drives convert_menu.py, which needs nothing but Python
+; 3 and is already on the Steam Deck. The two produce byte-identical output from the same input.
+Source: "{#PatchSrc}\tools\convert_menu.ps1";      DestDir: "{app}\tools"; \
+    Components: patch\enhanced_resolution; Flags: ignoreversion
+Source: "{#PatchSrc}\tools\Convert Menu Art.bat";  DestDir: "{app}\tools"; \
+    Components: patch\enhanced_resolution; Flags: ignoreversion
+Source: "{#PatchSrc}\tools\convert_menu.py";       DestDir: "{app}\tools"; \
+    Components: patch\enhanced_resolution; Flags: ignoreversion
+Source: "{#PatchSrc}\tools\convert_menu.sh";       DestDir: "{app}\tools"; \
+    Components: patch\enhanced_resolution; Flags: ignoreversion
+
+; A second copy of the menu converter, in the temporary folder, and it is the one
+; ConvertMenuArt runs. The copy above is for the player to run later; this one runs during
+; installation with Setup's rights, and {tmp} is the only one of the two that an ordinary user
+; cannot write to first. Removed when Setup finishes.
+Source: "{#PatchSrc}\tools\convert_menu.ps1"; DestDir: "{#PatchTmp}\tools"; \
+    Components: patch\enhanced_resolution; Flags: ignoreversion deleteafterinstall
 Source: "{#PatchSrc}\mods\framerate_fix.dll";       DestDir: "{app}\mods"; \
     Components: patch\framerate_fix;       Flags: ignoreversion
 Source: "{#PatchSrc}\mods\variable_fov.dll";        DestDir: "{app}\mods"; \

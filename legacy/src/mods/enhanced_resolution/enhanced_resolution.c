@@ -43,6 +43,9 @@
 #include "cursor_anchor.h"
 #include "focus_guard.h"
 #include "menu_island_clip.h"
+#include "menu_loading_bar.h"
+#include "menu_art_source.h"
+#include "menu_scale.h"
 #include "mode_filter.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
@@ -179,6 +182,8 @@ typedef struct resolution_config {
     bool widen_menu_cursor_area;
     bool clamp_menu_sprites_to_island;
     bool filter_mode_enumeration;
+    float menu_scale;
+    char  menu_art_directory[192];
 } resolution_config_t;
 
 typedef struct resolution_state {
@@ -288,6 +293,20 @@ static void load_config(void)
      * on a driver that only reports 16 bit, because then there is nothing to filter. */
     config->filter_mode_enumeration =
         ini_read_bool(RESOLUTION_SECTION, "FilterModeEnumeration", true);
+
+    /* Default 1, which is off and is exactly the behaviour that shipped. Whole multiples only:
+     * the menu bitmaps are blitted one source pixel to one destination pixel, so a fractional
+     * canvas would leave the artwork sitting at a size the layout does not agree with. See
+     * menu_scale.h for why this is only half a feature without upscaled artwork, and for why it
+     * declines to install when the menu cursor cage is not widened. */
+    config->menu_scale =
+        ini_read_float(RESOLUTION_SECTION, "MenuScale", 0.0f);
+
+    /* Where tools\convert_menu.ps1 wrote the upscaled artwork. One folder rather than seventy
+     * loose files beside WMAIN.EXE, mounted through the engine's own resource chain, and named
+     * here so it can be moved or emptied without touching the DLL. Empty declines the mount. */
+    ini_read_string(RESOLUTION_SECTION, "MenuArtDirectory", MENU_ART_DEFAULT_DIRECTORY,
+                    config->menu_art_directory, sizeof config->menu_art_directory);
 
     if (config->max_menu_modes > MAX_MENU_MODES_LIMIT) {
         config->max_menu_modes = MAX_MENU_MODES_LIMIT;
@@ -677,12 +696,41 @@ void enhanced_resolution_install(void)
          *
          * The two are otherwise unrelated: this one is about the cursor the MENUS draw and is
          * useful whether or not the window is ever moved. */
-        pointer_cage_install(resolution_state.config.widen_menu_cursor_area);
+        /* The artwork mount comes first of all, because menu_scale reads the converted
+         * artwork's own size to decide the canvas, and that file lives in this folder. The mount
+         * itself happens later, when the engine starts its menu system; this only arms it. */
+        (void)menu_art_source_install(resolution_state.config.menu_art_directory[0] != '\0',
+                                      resolution_state.config.menu_art_directory);
 
-        /* Same ordering constraint as the cage: the island's origin is derived from
-         * window_fit_current_mode_size(). This is the erase-side companion of
-         * MenuKeepsResolution, see menu_island_clip.c for the defect it closes. */
-        (void)menu_island_clip_install(resolution_state.config.clamp_menu_sprites_to_island);
+        /* menu_scale FIRST now, because the cage is sized from the canvas it draws and
+         * asks menu_scale_current() for the multiple. The two used to be the other way
+         * round, when the cage widened to the display mode and the scale had to ask
+         * whether it had armed. */
+        (void)menu_scale_install(resolution_state.config.menu_scale,
+                                 resolution_state.config.widen_menu_cursor_area);
+
+        {
+            int32_t canvas_width;
+            int32_t canvas_height;
+
+            menu_scale_canvas(&canvas_width, &canvas_height);
+            pointer_cage_install(resolution_state.config.widen_menu_cursor_area,
+                                 canvas_width, canvas_height);
+
+            /* Same ordering constraint again, and the same reason: the loading bar is drawn by
+             * hand off the menu origin rather than as widgets, so it is sized from the canvas
+             * menu_scale settled on rather than from the setting. */
+            (void)menu_loading_bar_install(canvas_width, canvas_height);
+
+            /* Same ordering constraint as the cage: the island's origin is derived from
+             * window_fit_current_mode_size(), and its SIZE is the canvas menu_scale settled on.
+             * Clamping to the authored 640x480 while the menus draw on a scaled canvas cuts real
+             * widgets off at a border that is no longer there. This is the erase-side companion
+             * of MenuKeepsResolution, see menu_island_clip.c for the defect it closes. */
+            (void)menu_island_clip_install(resolution_state.config.clamp_menu_sprites_to_island,
+                                           canvas_width, canvas_height);
+        }
+
     }
 }
 

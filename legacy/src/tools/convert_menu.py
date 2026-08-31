@@ -141,6 +141,51 @@ def upscale_bmp(data, ratio_x, ratio_y):
     return bytes(out)
 
 
+def set_game_resolution(game, width, height):
+    """Point obi.ini at the size just converted for, and say what happened.
+
+    Not a convenience. The engine's menu blitter clips against the canvas rather than against the
+    screen buffer it is drawing into, so running at a SMALLER resolution than the artwork was made
+    for makes it write past the end of that buffer and the game crashes. Matching the two avoids it.
+
+    obi.ini is rewritten by the game whenever the display mode changes, so this is a starting point
+    rather than a lock; the DLL refuses to scale a canvas that no longer fits the screen, which is
+    what covers somebody changing the resolution in Options later.
+
+    Every other line is passed through exactly as found. This file holds key bindings and
+    calibration somebody may have spent time on, and it is not ours to reformat.
+    """
+    path = find_file(game, 'obi.ini') or os.path.join(game, 'obi.ini')
+    if not os.path.isfile(path):
+        with io.open(path, 'w', encoding='ascii', newline='\r\n') as handle:
+            handle.write('screen_width=%d\n' % width)
+            handle.write('screen_height=%d\n' % height)
+        return 'created obi.ini with screen_width=%d, screen_height=%d' % (width, height)
+
+    with io.open(path, 'rb') as handle:
+        raw = handle.read()
+    newline = b'\r\n' if b'\r\n' in raw else b'\n'
+    lines = raw.split(newline)
+
+    saw_width = saw_height = False
+    for index, line in enumerate(lines):
+        stripped = line.strip().lower()
+        if stripped.startswith(b'screen_width') and b'=' in stripped:
+            lines[index] = b'screen_width=%d' % width
+            saw_width = True
+        elif stripped.startswith(b'screen_height') and b'=' in stripped:
+            lines[index] = b'screen_height=%d' % height
+            saw_height = True
+    if not saw_width:
+        lines.append(b'screen_width=%d' % width)
+    if not saw_height:
+        lines.append(b'screen_height=%d' % height)
+
+    with io.open(path, 'wb') as handle:
+        handle.write(newline.join(lines))
+    return 'obi.ini set to screen_width=%d, screen_height=%d' % (width, height)
+
+
 def primary_screen_size():
     """Best effort, and a 1080p answer rather than a failure when there is nothing to ask."""
     for command, pattern in (('xrandr --current', ' connected primary '),
@@ -243,6 +288,10 @@ def main():
                         help='never prompt; requires the game directory')
     parser.add_argument('--remove', action='store_true',
                         help='delete what this tool wrote, using its manifest')
+    parser.add_argument('--keep-game-resolution', action='store_true',
+                        help="leave screen_width and screen_height in obi.ini alone; the game "
+                             "crashes if it runs smaller than the artwork, so only pass this when "
+                             "converting for a machine you are not sitting at")
     args = parser.parse_args()
 
     game = args.game_directory
@@ -341,6 +390,22 @@ def main():
     finally:
         for handle in handles.values():
             handle.close()
+    # After the pictures, so a run that failed half way does not leave the game pointed at a size
+    # the artwork was never finished for.
+    if not args.keep_game_resolution and written:
+        try:
+            note = set_game_resolution(game, width, height)
+            if not args.quiet:
+                print('')
+                print('  %s' % note)
+        except (OSError, IOError) as error:
+            if not args.quiet:
+                print('')
+                print('  obi.ini could not be updated: %s' % error)
+                print('  Set screen_width=%d and screen_height=%d in it by hand, or the game may '
+                      'run' % (width, height))
+                print('  at a smaller size than the artwork was made for.')
+
     if args.quiet:
         sys.stdout.write('DONE written=%d skipped=%d\n' % (written, skipped))
 

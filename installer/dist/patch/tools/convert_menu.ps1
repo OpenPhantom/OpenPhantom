@@ -58,6 +58,17 @@
 .PARAMETER Remove
     Deletes the files this tool wrote, using the manifest it leaves behind, and then the folder if
     it is empty. Nothing else is touched, so a file you put in that folder yourself survives.
+
+.PARAMETER KeepGameResolution
+    Leaves screen_width and screen_height in obi.ini alone.
+
+    By default they are set to the size just converted for, and that is not a convenience: the
+    engine's menu blitter clips against the canvas rather than against the screen buffer it is
+    drawing into, so running the game at a SMALLER resolution than the artwork was made for makes it
+    write past the end of that buffer, and the game crashes. Matching the two is what avoids it.
+
+    Pass this if you are converting for a machine you are not sitting at, and set the resolution
+    there yourself. Nothing else in obi.ini is touched either way.
 #>
 [CmdletBinding()]
 param(
@@ -69,7 +80,8 @@ param(
     [string] $Fit = 'Stretch',
     [switch] $Interactive,
     [switch] $Quiet,
-    [switch] $Remove
+    [switch] $Remove,
+    [switch] $KeepGameResolution
 )
 
 Set-StrictMode -Version 2.0
@@ -221,6 +233,41 @@ function Convert-Picture {
         $source.Dispose()
         $inputStream.Dispose()
     }
+}
+
+# --------------------------------------------------------------------------------------------
+# obi.ini is the game's own settings file and it is REWRITTEN by the game whenever the display mode
+# changes, so this is a starting point rather than a lock. The DLL refuses to scale a canvas that no
+# longer fits the screen, which is what covers somebody changing the resolution in Options later.
+#
+# Every other line is passed through exactly as it was found, including its line endings: this file
+# holds key bindings and calibration somebody may have spent time on, and it is not ours to reformat.
+# --------------------------------------------------------------------------------------------
+function Set-GameResolution {
+    param([string] $GameDirectory, [int] $Width, [int] $Height)
+
+    $path = Join-Path $GameDirectory 'obi.ini'
+    if (-not (Test-Path $path)) {
+        Set-Content -Path $path -Encoding ascii `
+            -Value @("screen_width=$Width", "screen_height=$Height")
+        return "created obi.ini with screen_width=$Width, screen_height=$Height"
+    }
+
+    $lines = [System.IO.File]::ReadAllLines($path)
+    $sawWidth = $false
+    $sawHeight = $false
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        if ($lines[$i] -match '^\s*screen_width\s*=') {
+            $lines[$i] = "screen_width=$Width";  $sawWidth = $true
+        } elseif ($lines[$i] -match '^\s*screen_height\s*=') {
+            $lines[$i] = "screen_height=$Height"; $sawHeight = $true
+        }
+    }
+    if (-not $sawWidth)  { $lines += "screen_width=$Width" }
+    if (-not $sawHeight) { $lines += "screen_height=$Height" }
+
+    [System.IO.File]::WriteAllLines($path, $lines)
+    return "obi.ini set to screen_width=$Width, screen_height=$Height"
 }
 
 # --------------------------------------------------------------------------------------------
@@ -436,6 +483,21 @@ $manifest.Add(("# {0}x{1} {2}, canvas {3}x{4}, {5}" -f $Width, $Height, $Fit.ToL
 $manifest.Add('# Delete this folder, or run: Convert Menu Art.bat -Remove')
 foreach ($name in $names) { $manifest.Add($name) }
 Set-Content -Path (Join-Path $OutputDirectory $ManifestName) -Value $manifest -Encoding ASCII
+
+# After the pictures, so a run that failed half way does not leave the game pointed at a size the
+# artwork was never finished for.
+if (-not $KeepGameResolution -and $written -gt 0) {
+    try {
+        $note = Set-GameResolution -GameDirectory $GameDirectory -Width $Width -Height $Height
+        Write-Line ''
+        Write-Line "  $note"
+    } catch {
+        Write-Line ''
+        Write-Line "  obi.ini could not be updated: $($_.Exception.Message)"
+        Write-Line "  Set screen_width=$Width and screen_height=$Height in it by hand, or the game"
+        Write-Line "  may run at a smaller size than the artwork was made for."
+    }
+}
 
 if ($Quiet) { Write-Output ("DONE written={0} skipped={1}" -f $written, $skipped) }
 

@@ -550,18 +550,74 @@ if ($Quiet) {
 # and padding to 406 would bake in the black row this chain avoids everywhere else. The aspect
 # ratio moves by a quarter of a percent, which is under a pixel across the width of any window.
 # The expressions carry no comma on purpose, because the filters are joined with one.
-$videoFilters = @()
-if ($TargetHeight -gt 0) {
-    $videoFilters += "scale=-2:${TargetHeight}:flags=lanczos"
-} else {
-    $videoFilters += "crop=trunc(iw/2)*2:trunc(ih/2)*2"
+# ONE MOVIE IS A DIFFERENT SHAPE FROM THE OTHER TEN, and asking for a tall picture is what makes
+# that matter. Read out of the Bink headers of a retail pressing:
+#
+#     LOGO.BIK   640x272   2.35:1     ARENA / SCENE1..8   640x405     BIGAPE   640x469
+#
+# scale=-2:<height> fixes the height and lets the width follow the shape, so at 2160 lines the logo
+# comes out 5082 pixels wide while everything else lands between 2948 and 3413. Most H.264 decoders
+# refuse a frame wider than 4096: the file encodes without complaint, libVLC opens it, and the
+# picture is BLACK. Reported from a real 4K install where every other movie played.
+#
+# So the height is capped per movie, at whatever keeps the derived width inside the limit. Only the
+# logo is ever capped, and only when a large size was asked for. Capping the height rather than
+# adding a width term to the filter keeps the expressions comma-free, which is what lets them be
+# joined with a comma below.
+$MaxEncodedWidth = 3840
+
+# Bink stores its frame size as two little-endian dwords at offset 20 and 24, right after the magic,
+# the file size and the frame count. Nothing else in the header is needed here.
+function Get-BinkFrameSize {
+    param([string] $Path)
+
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $header = New-Object byte[] 28
+            if ($stream.Read($header, 0, 28) -ne 28) { return $null }
+            if ([System.Text.Encoding]::ASCII.GetString($header, 0, 3) -ne 'BIK') { return $null }
+            $w = [BitConverter]::ToUInt32($header, 20)
+            $h = [BitConverter]::ToUInt32($header, 24)
+            if ($w -lt 1 -or $h -lt 1 -or $w -gt 16384 -or $h -gt 16384) { return $null }
+            return @([int]$w, [int]$h)
+        } finally {
+            $stream.Dispose()
+        }
+    } catch {
+        return $null
+    }
 }
+
+# The height to actually encode this one at: the height asked for, unless that would make it too
+# wide. A source whose header cannot be read keeps the requested height, which is what happened
+# before this existed.
+function Get-EncodeHeight {
+    param([string] $Path, [int] $Requested)
+
+    if ($Requested -le 0) { return $Requested }
+    $size = Get-BinkFrameSize -Path $Path
+    if ($null -eq $size) { return $Requested }
+
+    $widest = [math]::Floor($MaxEncodedWidth * $size[1] / $size[0])
+    if ($widest -ge $Requested) { return $Requested }
+    $capped = [int]([math]::Floor($widest / 2) * 2)      # H.264 4:2:0 needs both sides even
+    if ($capped -lt 2) { return $Requested }
+    return $capped
+}
+
 if ($TargetFps -gt 0) {
-    $videoFilters += "fps=$TargetFps"
+    $extraFilters = @("fps=$TargetFps")
+} else {
+    $extraFilters = @()
 }
 
 Write-Note "Converting $($bikFiles.Count) movie(s) from '$movieSource' to '$OutputDirectory'..."
-Write-Note "  filters: $($videoFilters -join ',')"
+if ($TargetHeight -gt 0) {
+    Write-Note "  scaling to $TargetHeight lines, capped so nothing exceeds $MaxEncodedWidth wide"
+} else {
+    Write-Note "  keeping each movie's own size"
+}
 
 $converted = 0
 $skipped = 0
@@ -594,6 +650,20 @@ foreach ($bik in $bikFiles) {
     $tempPath = Join-Path $OutputDirectory "$baseName.converting.mp4"
 
     $ffmpegArgs = @("-y", "-i", $bik.FullName)
+    # Per movie, because the cap depends on this one's shape.
+    $videoFilters = @()
+    if ($TargetHeight -gt 0) {
+        $encodeHeight = Get-EncodeHeight -Path $bik.FullName -Requested $TargetHeight
+        if ($encodeHeight -ne $TargetHeight) {
+            Write-Note ("  {0}: {1} lines rather than {2}, so it stays inside {3} pixels wide" -f `
+                        $bik.Name, $encodeHeight, $TargetHeight, $MaxEncodedWidth)
+        }
+        $videoFilters += "scale=-2:${encodeHeight}:flags=lanczos"
+    } else {
+        $videoFilters += "crop=trunc(iw/2)*2:trunc(ih/2)*2"
+    }
+    $videoFilters += $extraFilters
+
     if ($videoFilters.Count -gt 0) {
         $ffmpegArgs += @("-vf", ($videoFilters -join ","))
     }

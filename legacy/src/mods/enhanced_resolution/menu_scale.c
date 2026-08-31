@@ -1222,6 +1222,20 @@ static uint32_t __cdecl hook_query_font(void)
     return (uint32_t)((float)raw * scale_state.ratio_y + 0.5f);
 }
 
+/* The inverse of scaled_coordinate, for putting a rectangle back. Rounding means this is not exact
+ * to the pixel on every value, which is acceptable: it runs once, when the scale is abandoned, and
+ * the alternative is leaving the screen laid out for a canvas that no longer exists. */
+static int32_t unscaled_coordinate(int32_t value, float ratio)
+{
+    float restored;
+
+    if (!(ratio > 0.0f)) {
+        return value;
+    }
+    restored = (float)value / ratio;
+    return (restored >= 0.0f) ? (int32_t)(restored + 0.5f) : -(int32_t)(-restored + 0.5f);
+}
+
 /* Has this menu already been scaled? The engine hands back the same pointers for the life of the
  * process, so pointer identity is the whole test. */
 static scaled_menu_t *find_scaled_menu(const void *menu)
@@ -1426,6 +1440,38 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
                              (uint8_t)DRAW_CURSOR_SHIPPED);
     }
 
+    /* Every menu already scaled is put back to its authored rectangles. Without this the fallback
+     * is merely non-fatal rather than usable: a screen scaled for a 3840 canvas, drawn against a 640
+     * clip, is a heap of widgets in the top left corner. The engine re-derives the parts it owns on
+     * the next open anyway - a picture adopts its bitmap's size, a list box re-runs SWMSG_RESET - so
+     * only the authored positions have to be restored here. */
+    {
+        size_t index;
+
+        for (index = 0; index < scale_state.scaled_menu_count; ++index) {
+            scaled_menu_t *tracked = &scale_state.scaled_menus[index];
+            char          *widgets;
+            size_t         widget;
+
+            if (tracked->menu == NULL) {
+                continue;
+            }
+            widgets = *(char *const *)((const char *)tracked->menu + MENU_WIDGET_ARRAY);
+            for (widget = 0; widgets != NULL && widget < tracked->widgets; ++widget) {
+                int32_t *rect = (int32_t *)(widgets + widget * WIDGET_STRIDE + WIDGET_RECT_X);
+
+                rect[0] = unscaled_coordinate(rect[0], scale_state.ratio_x);
+                rect[1] = unscaled_coordinate(rect[1], scale_state.ratio_y);
+                rect[2] = unscaled_coordinate(rect[2], scale_state.ratio_x);
+                rect[3] = unscaled_coordinate(rect[3], scale_state.ratio_y);
+            }
+            free(tracked->shadow);
+            tracked->shadow = NULL;
+            tracked->menu   = NULL;
+        }
+        scale_state.scaled_menu_count = 0;
+    }
+
     /* Ratio 1 is what switches off everything that is not a patched byte: the widget scaling, the
      * per-frame correction, the font height, the preview upscaler and the 3-D placement all test it
      * or multiply by it, and the 3-D hook hands the engine its own body back once stood_down is up. */
@@ -1585,6 +1631,15 @@ static void __cdecl hook_draw_menu(void *menu)
 
     if (original == NULL) {
         return;
+    }
+
+    /* HERE AND NOT ONLY AT swmenu_open, because the resolution is changed FROM a menu. The options
+     * screen is open the whole time: the mode changes, the engine recomputes the origin from the
+     * cells this file owns, and the very next frame blits a canvas wider than the new back buffer.
+     * Nothing reopens, so a check on open never runs, and the first thing that happens is the write
+     * past the end of the buffer. Two float reads and two compares, before anything is drawn. */
+    if (!scale_state.stood_down) {
+        (void)canvas_still_fits();
     }
     tracked = (menu != NULL) ? find_scaled_menu(menu) : NULL;
     widgets = (menu != NULL) ? *(char *const *)((char *)menu + MENU_WIDGET_ARRAY) : NULL;

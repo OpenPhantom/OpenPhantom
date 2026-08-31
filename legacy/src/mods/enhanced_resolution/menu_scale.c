@@ -229,6 +229,7 @@ static const uint8_t MSK_DRAW_MENU[] = {
  * the box. The 2.0f is a halving and stays 2.0f.
  */
 static const uint8_t SIG_SW3D_PROJECT[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18,        /* push ebp / mov ebp,esp / sub esp,0x18 */
     0x8B, 0x45, 0x0C, 0xDB, 0x40, 0x08, 0xD8, 0x35, 0x78, 0x88, 0x4A, 0x00,
     0xD9, 0x5D, 0xF4, 0x8B, 0x4D, 0x0C, 0xDB, 0x41, 0x0C, 0xD8, 0x05, 0x7C,
     0x88, 0x4A, 0x00, 0xD9, 0x5D, 0xEC, 0x8B, 0x55, 0x0C, 0xDB, 0x02, 0xD8,
@@ -238,17 +239,38 @@ static const uint8_t SIG_SW3D_PROJECT[] = {
     0x4A, 0x00, 0xD9, 0x5D, 0xF8, 0xD9, 0x05, 0x2C, 0x68, 0x4B, 0x00, 0xD8,
     0x35, 0x88, 0x88, 0x4A, 0x00, 0xD9, 0x5D, 0xFC
 };
-#define SW3D_INSET_OPERAND    0x17u   /* fadd [-5.0f]      */
-#define SW3D_CENTRE_X_OPERAND 0x3Au   /* fsub [320.0f]     */
-#define SW3D_CENTRE_Y_OPERAND 0x46u   /* fsub [240.0f]     */
-#define SW3D_FOCAL_OPERAND    0x55u   /* fdiv [554.256f]   */
+#define SW3D_PROJECT_PROLOGUE 6u
+
+/* The bottom inset, authored in canvas pixels: a model stands 5 pixels up from the bottom edge of
+ * its box rather than on it. */
+#define SW3D_BOTTOM_INSET 5.0f
 
 /* Read, never written. g_menuScale is the engine's own live float, the one the repointed numerator
  * feeds; the camera is whatever rdCamera_BuildProjection last produced, and +0x3C is the focal in
  * pixels it derived from the field of view. */
 #define ENGINE_MENU_SCALE_CELL 0x004B682CU
+
+/* The display the engine settled on, as floats, and the menu origin it derived from them. Read to
+ * check the canvas still fits, and the origin is WRITTEN when it does not. See menu_scale_stand_down.
+ */
+#define ENGINE_SCREEN_WIDTH_CELL  0x0086A440U
+#define ENGINE_SCREEN_HEIGHT_CELL 0x0086A438U
+#define ENGINE_MENU_ORIGIN_X_CELL 0x006CFD58U
+#define ENGINE_MENU_ORIGIN_Y_CELL 0x006CFD5CU
 #define ENGINE_CURRENT_CAMERA  0x006F83E4U
 #define CAMERA_FOCAL_PIXELS    0x3Cu
+
+/* THE number the projection actually multiplies by, `s = g_projScale / depth` in
+ * bapvrt_projectVertex. It is COPIED from rdCamera+0x3C once per frame, in render_prepareFrame, and
+ * that copy is the whole point of reading it here instead of reading the camera: the field of view
+ * can be applied to the camera between the copy and the draw, and then the camera says one lens
+ * while the renderer is still using another. Reading the camera is what made the hero slide
+ * sideways while the field of view slider moved. */
+#define ENGINE_PROJ_SCALE_CELL 0x005BF9E8U
+
+/* g_swMac.pCurrMenu: null whenever no menu is open, which is the test for "this text belongs to a
+ * menu". See the note by hook_query_font for why that gate exists. */
+#define ENGINE_CURRENT_MENU_CELL 0x0086D370U
 
 /* ---------------------------------------------------------------------------------------------
  * font3d_queryFont, retail 0x0046B780. Detoured on a 10 byte prologue.
@@ -271,10 +293,19 @@ static const uint8_t SIG_SW3D_PROJECT[] = {
  * Scaling the answer here rather than patching swtext_draw fixes the left and right aligned cases
  * too, which place their baseline at `rect.y + lineH` and were high by the same reasoning.
  *
- * The only two callers in the image are swtext_draw and the list box's SWMSG_RESET, so this cannot
- * reach anything outside the menus. The list box one is WANTED: it makes the engine derive its own
- * row height correctly. The floor it is compared against is scaled to match, see
- * SIG_LISTBOX_FLOOR.
+ * IT IS GATED ON A MENU BEING OPEN, and that gate was not there at first, which was a bug.
+ *
+ * The reasoning for leaving it out was that swtext_draw and the list box's SWMSG_RESET are the only
+ * callers in the image. That came from grepping the decompilation, and the decompilation says of
+ * itself, in game/dialog.c, that text_emitRow is "the part that was not reconstructed" - the very
+ * function that places a row of subtitle text. In game subtitles came out mis-positioned and the
+ * cause was invisible to a search of the source, because the calling code is not in the source.
+ * They came right the moment the converted artwork was removed, which is what proved it was ours.
+ *
+ * So the answer is only scaled when a menu is actually open. Subtitles, the HUD and anything else
+ * the game draws during play get the raw field the engine has always had. The list box case is
+ * WANTED: it makes the engine derive its own row height correctly, and the floor it is compared
+ * against is scaled to match, see SIG_LISTBOX_FLOOR.
  */
 static const uint8_t SIG_QUERY_FONT[] = {
     0x55, 0x8B, 0xEC,                                  /* push ebp / mov ebp,esp                */
@@ -377,6 +408,124 @@ static const uint8_t MSK_SET_WIDGET_IMAGE[] = {
  * comparison means to a reader of the disassembly. */
 #define COMPRESS_NEVER 0x7F
 
+/* ---------------------------------------------------------------------------------------------
+ * swpic_drawCursor, retail 0x0045FD01. The size of the drawn menu pointer.
+ *
+ *     swrle_getCursor(&x, &y);
+ *     texture_drawSprite(pCursorDraw, x, x + 0x20, y, y + 0x20, 0xf0ffffff, 1.0f);
+ *
+ * A 32 pixel cursor on a 4K screen is about a third of the size it appeared at when the menus were
+ * 640x480, and it is the last thing on these screens still drawn at its authored size.
+ *
+ * UNLIKE EVERY OTHER MENU PICTURE, THIS ONE CAN SIMPLY BE MADE BIGGER. It does not go through
+ * swrle_blit, the run length blitter with no scale term that made converting the artwork necessary
+ * in the first place; it goes through texture_drawSprite, which takes the destination extents as
+ * arguments. So the two `+ 0x20` immediates are the whole of it.
+ *
+ * ONE RATIO, NOT TWO. Scaling width and height separately would stretch the pointer on a display
+ * that is not 4:3, and a stretched arrow reads as a rendering fault rather than as a design. The
+ * vertical ratio is used for both, which is the one the text already follows.
+ *
+ * THE CEILING IS 127 AND IT IS THE INSTRUCTION'S. Both are `add reg,imm8` with a signed byte, so
+ * 127 is as large as this can go without moving code: at 3840x2160 the proportional answer would be
+ * 144. The difference is not worth relocating a function over, and a clamped cursor is still three
+ * times the size it would otherwise have been.
+ */
+static const uint8_t SIG_DRAW_CURSOR[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10,        /* push ebp / mov ebp,esp / sub esp,0x10        */
+    0x8D, 0x45, 0xF8, 0x50,                    /* lea eax,[ebp-8] / push eax                   */
+    0x8D, 0x4D, 0xFC, 0x51,                    /* lea ecx,[ebp-4] / push ecx                   */
+    0xE8, 0x00, 0x00, 0x00, 0x00,              /* call swrle_getCursor, displacement masked    */
+    0x83, 0xC4, 0x08,                          /* add esp,8                                    */
+    0x68, 0x00, 0x00, 0x80, 0x3F,              /* push 1.0f                                    */
+    0x68, 0xFF, 0xFF, 0xFF, 0xF0,              /* push 0xf0ffffff                              */
+    0x8B, 0x55, 0xF8, 0x83, 0xC2, 0x20,        /* mov edx,[ebp-8] / add edx,32   <- at +0x25   */
+    0x89, 0x55, 0xF4,
+    0xDB, 0x45, 0xF4, 0x51, 0xD9, 0x1C, 0x24,
+    0xDB, 0x45, 0xF8, 0x51, 0xD9, 0x1C, 0x24,
+    0x8B, 0x45, 0xFC, 0x83, 0xC0, 0x20         /* mov eax,[ebp-4] / add eax,32   <- at +0x3C   */
+};
+static const uint8_t MSK_DRAW_CURSOR[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+#define DRAW_CURSOR_WIDTH   0x25u
+#define DRAW_CURSOR_HEIGHT  0x3Cu
+#define DRAW_CURSOR_SHIPPED 32
+
+/* ---------------------------------------------------------------------------------------------
+ * sw3d_draw, retail 0x0045C23B. How BIG a 3-D widget's model is drawn.
+ *
+ *     pos[0] = pos[1] = pos[2] = g_menuScale;
+ *     rdMatrix_scale(mat, pos);
+ *
+ * A model's size on screen is its world size times focalPx over depth, exactly like anything else in
+ * the world, so a wider field of view makes it smaller. That is not a fault in the placement: the
+ * hero really is a 3-D object sitting at a fixed distance, and a wider lens really does shrink it.
+ * It is still wrong for a menu, where the hero should be the same size whatever lens the reader
+ * prefers for the game.
+ *
+ * Dividing the matrix scale by the lens cancels it, and the reference lens is the one the game would
+ * have at its AUTHORED vertical field of view for this canvas: 554.256 is that focal at 640x480, and
+ * it scales with the canvas the same way everything else here does. So at the default field of view
+ * the model is exactly the size it is today, and at any other it stays that size instead of
+ * following the lens.
+ *
+ * Three reads of the same global, one per axis, all repointed at one cell.
+ */
+static const uint8_t SIG_SW3D_DRAW[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44,        /* push ebp / mov ebp,esp / sub esp,0x44        */
+    0x8B, 0x45, 0x08, 0x8B, 0x48, 0x34,        /* mov eax,[pWidget] / mov ecx,[eax+0x34]       */
+    0x89, 0x4D, 0xBC, 0x8B, 0x55, 0xBC, 0x52,  /* stash it and push it                          */
+    0xE8, 0x00, 0x00, 0x00, 0x00,              /* call sw3d_getLoadState, masked                */
+    0x83, 0xC4, 0x04, 0x85, 0xC0               /* add esp,4 / test eax,eax                      */
+};
+static const uint8_t MSK_SW3D_DRAW[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+#define SW3D_DRAW_PROLOGUE 6u
+
+/* The three `mov reg,[g_menuScale]` operands, one per axis of the scale. */
+#define SW3D_SCALE_OPERAND_X 0xAEu
+#define SW3D_SCALE_OPERAND_Y 0xB6u
+#define SW3D_SCALE_OPERAND_Z 0xBFu
+
+/* 320 / tan(30 deg): the focal length, in pixels, of the lens the menus were authored under. */
+#define SW3D_AUTHORED_FOCAL 554.256f
+
+/* HOW FAR THE SIZE COMPENSATION IS ALLOWED TO GO, and it has to stop somewhere.
+ *
+ * Holding a model's apparent size while the lens widens means growing it at a fixed distance, and a
+ * model that grows far enough pushes its own front face through the near plane and is culled
+ * entirely. Moving it further away does not rescue it: the compensation grows the model in
+ * proportion to the extra distance, so the two cancel and the sign of the near margin never changes.
+ * Past some lens the model cannot be both the right size and in front of the camera.
+ *
+ * Measured rather than guessed: at a field of view above about 108 degrees the hero and the
+ * inventory vanished. That works out at a factor near 1.79, and this sits below it with room.
+ *
+ * The factor depends only on the field of view, not on the resolution, which is why one number
+ * serves every setup: with a fixed vertical field of view the focal length is proportional to the
+ * screen height, and so is the reference above, so the ratio cancels the resolution out.
+ *
+ * Past the clamp the models resume shrinking as the lens widens, which is the shipped behaviour and
+ * is visibly better than their disappearing. */
+#define SW3D_MAX_SIZE_COMPENSATION 1.6f
+
 enum {
     SITE_RLE_BLIT,
     SITE_MENU_OPEN,
@@ -387,6 +536,8 @@ enum {
     SITE_QUERY_FONT,
     SITE_LISTBOX_FLOOR,
     SITE_SET_WIDGET_IMAGE,
+    SITE_DRAW_CURSOR,
+    SITE_SW3D_DRAW,
     SITE_COUNT
 };
 
@@ -397,10 +548,12 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR("swpic_draw", SIG_PIC_DRAW, PIC_DRAW_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR_MASKED("xswift_drawMenu", SIG_DRAW_MENU, MSK_DRAW_MENU,
                                   DRAW_MENU_PROLOGUE),
-    SIGNATURE_ENTRY("sw3d_rectToViewOffset", SIG_SW3D_PROJECT),
+    SIGNATURE_ENTRY_DETOUR("sw3d_rectToViewOffset", SIG_SW3D_PROJECT, SW3D_PROJECT_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR("font3d_queryFont", SIG_QUERY_FONT, QUERY_FONT_PROLOGUE),
     SIGNATURE_ENTRY_MASKED("swlistbx_input row floor", SIG_LISTBOX_FLOOR, MSK_LISTBOX_FLOOR),
-    SIGNATURE_ENTRY_MASKED("swpic_setWidgetImage", SIG_SET_WIDGET_IMAGE, MSK_SET_WIDGET_IMAGE)
+    SIGNATURE_ENTRY_MASKED("swpic_setWidgetImage", SIG_SET_WIDGET_IMAGE, MSK_SET_WIDGET_IMAGE),
+    SIGNATURE_ENTRY_MASKED("swpic_drawCursor", SIG_DRAW_CURSOR, MSK_DRAW_CURSOR),
+    SIGNATURE_ENTRY_DETOUR_MASKED("sw3d_draw", SIG_SW3D_DRAW, MSK_SW3D_DRAW, SW3D_DRAW_PROLOGUE)
 };
 
 /* The widget record, from the engine's own layout. Stride and field offsets are byte proven. */
@@ -429,6 +582,8 @@ static signature_t sites[SITE_COUNT] = {
 typedef int32_t(__cdecl *menu_open_fn_t)(void *menu);
 typedef void(__cdecl *draw_menu_fn_t)(void *menu);
 typedef uint32_t(__cdecl *query_font_fn_t)(void);
+typedef void(__cdecl *sw3d_project_fn_t)(float *offset, const int32_t *rect);
+typedef void(__cdecl *sw3d_draw_fn_t)(void *widget);
 
 /* One scaled menu, and the x and y this last wrote into each of its widgets.
  *
@@ -451,14 +606,18 @@ typedef struct menu_scale_state {
     detour_t  pic_draw_detour;
     detour_t  draw_menu_detour;
     detour_t  query_font_detour;
+    detour_t  sw3d_project_detour;
+    detour_t  sw3d_draw_detour;
 
     scaled_menu_t scaled_menus[SCALED_MENU_CAPACITY];
     size_t        scaled_menu_count;
     bool        warned_capacity;
     bool        warned_sanity;
     bool        warned_shadow;
-    bool        sw3d_repointed;
     bool        logged_focal;
+    bool        stood_down;
+    bool        warned_compensation;
+    bool        warned_outside_menu;
 } menu_scale_state_t;
 
 static menu_scale_state_t scale_state;
@@ -481,12 +640,7 @@ static float menu_scaled_height = (float)MENU_SCALE_CANVAS_HEIGHT;
  * only when a 4:3 canvas has been stretched onto a wider display. */
 static float menu_text_scale_numerator = (float)MENU_SCALE_CANVAS_WIDTH;
 
-/* The four operands sw3d_rectToViewOffset is repointed at. Their shipped values are the defaults,
- * so a failed repoint leaves the engine's own arithmetic exactly as it was. */
-static float menu_sw3d_bottom_inset = -5.0f;
-static float menu_sw3d_centre_x     = 320.0f;
-static float menu_sw3d_centre_y     = 240.0f;
-static float menu_sw3d_focal        = 554.256f;
+
 
 float menu_scale_ratio(void)
 {
@@ -1053,6 +1207,18 @@ static uint32_t __cdecl hook_query_font(void)
     if (raw == 0 || !(scale_state.ratio_y > 1.0f)) {
         return raw;
     }
+
+    if (*(void *const *)(uintptr_t)ENGINE_CURRENT_MENU_CELL == NULL) {
+        /* Not a menu. Reported once, because it is the evidence that a caller exists which the
+         * decompilation does not contain, and the next person to widen this needs to know. */
+        if (!scale_state.warned_outside_menu) {
+            scale_state.warned_outside_menu = true;
+            log_info("font3d_queryFont was called with no menu open, so something outside the "
+                     "menus uses it: it is answered unscaled there. This is what mis-placed the "
+                     "subtitles before the gate existed");
+        }
+        return raw;
+    }
     return (uint32_t)((float)raw * scale_state.ratio_y + 0.5f);
 }
 
@@ -1192,36 +1358,222 @@ static void scale_widgets(void *menu)
  * Width and height are deliberately NOT shadowed. swpic_draw writes the frame's size into them on
  * every single draw, by design, and that size is already correct because it comes from the artwork.
  */
-/* Keeps the 3-D focal cell equal to g_menuScale times the camera's real focal length, which is the
- * identity that puts a scaled canvas coordinate on the screen pixel it names. Both halves are read
- * from the engine rather than computed, so this cannot drift from a mode change, a field of view
- * change, or anything else that rebuilds the projection. */
-static void refresh_sw3d_focal(void)
+/* Defined below, next to the install it rolls back. */
+static void restore_canvas_clip(uintptr_t site);
+
+/* Puts everything back and stops scaling, because the canvas no longer fits the screen.
+ *
+ * THIS IS A MEMORY SAFETY MEASURE, not a cosmetic one. swrle_blit clips against the canvas rather
+ * than against the surface it is drawing into: it reads the destination's real width and height and
+ * then throws both away for the two immediates this file writes. So a canvas wider or taller than
+ * the back buffer does not merely draw off the edge, it writes PAST THE END OF THE BUFFER, and the
+ * game crashes. The report that led to this was exactly that: artwork converted for 3840x2160 and
+ * obi.ini left at something smaller.
+ *
+ * The origin is written too, and it has to be. Restoring the clip alone leaves g_menuOrigin holding
+ * the value the engine derived for the old canvas, which is NEGATIVE when the canvas was wider than
+ * the screen, and a 640 wide clip added to a negative origin writes before the START of the buffer.
+ * The engine only recomputes the origin on a mode change, so waiting for one is not an option.
+ *
+ * Everything undone here is undone completely, because this runs before any widget rectangle has
+ * been scaled: swmenu_open scales them, and this is the first thing swmenu_open's hook does. A
+ * screen already scaled by an earlier open keeps its rectangles, which is wrong-looking and safe,
+ * and that is the right way round.
+ *
+ * The cursor cage keeps the clamp it was installed with, so the drawn pointer can still travel
+ * outside the picture. That is cosmetic and pointer_cage owns those immediates, so it is said in the
+ * log rather than reached into from here. */
+static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
 {
+    int32_t origin_x = (screen_width  - MENU_SCALE_CANVAS_WIDTH)  / 2;
+    int32_t origin_y = (screen_height - MENU_SCALE_CANVAS_HEIGHT) / 2;
+
+    if (scale_state.stood_down) {
+        return;
+    }
+    scale_state.stood_down = true;
+
+    log_warning("the menu artwork is %dx%d but the game is running at %dx%d, so the menus are NOT "
+                "scaled. Drawing a canvas larger than the screen writes past the end of the frame "
+                "buffer and crashes. Convert the artwork for %dx%d with tools\\Convert Menu Art.bat, "
+                "or set the game back to the size it was converted for",
+                (int)scale_state.canvas_width, (int)scale_state.canvas_height,
+                (int)screen_width, (int)screen_height, (int)screen_width, (int)screen_height);
+
+    if (sites[SITE_RLE_BLIT].address != 0) {
+        restore_canvas_clip(sites[SITE_RLE_BLIT].address);
+    }
+
+    /* The cells the repointed operands read. The operands stay repointed; holding the authored
+     * numbers makes them behave exactly as the constants they replaced. */
+    menu_scaled_width         = (float)MENU_SCALE_CANVAS_WIDTH;
+    menu_scaled_height        = (float)MENU_SCALE_CANVAS_HEIGHT;
+    menu_text_scale_numerator = (float)MENU_SCALE_CANVAS_WIDTH;
+
+    if (sites[SITE_LISTBOX_FLOOR].address != 0) {
+        (void)patch_write_u8(sites[SITE_LISTBOX_FLOOR].address + LISTBOX_FLOOR_COMPARE,
+                             (uint8_t)LISTBOX_SHIPPED_FLOOR);
+        (void)patch_write_u32(sites[SITE_LISTBOX_FLOOR].address + LISTBOX_FLOOR_VALUE,
+                              (uint32_t)LISTBOX_SHIPPED_FLOOR);
+    }
+    if (sites[SITE_SET_WIDGET_IMAGE].address != 0) {
+        (void)patch_write_u8(sites[SITE_SET_WIDGET_IMAGE].address + SET_WIDGET_IMAGE_COMPRESS, 1);
+    }
+    if (sites[SITE_DRAW_CURSOR].address != 0) {
+        (void)patch_write_u8(sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_WIDTH,
+                             (uint8_t)DRAW_CURSOR_SHIPPED);
+        (void)patch_write_u8(sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_HEIGHT,
+                             (uint8_t)DRAW_CURSOR_SHIPPED);
+    }
+
+    /* Ratio 1 is what switches off everything that is not a patched byte: the widget scaling, the
+     * per-frame correction, the font height, the preview upscaler and the 3-D placement all test it
+     * or multiply by it, and the 3-D hook hands the engine its own body back once stood_down is up. */
+    scale_state.ratio_x       = 1.0f;
+    scale_state.ratio_y       = 1.0f;
+    scale_state.canvas_width  = MENU_SCALE_CANVAS_WIDTH;
+    scale_state.canvas_height = MENU_SCALE_CANVAS_HEIGHT;
+
+    if (origin_x < 0) { origin_x = 0; }
+    if (origin_y < 0) { origin_y = 0; }
+    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_X_CELL = origin_x;
+    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_Y_CELL = origin_y;
+
+    log_info("  menu origin put back to %d,%d. The drawn cursor keeps the wider area it was caged "
+             "to, which is cosmetic", (int)origin_x, (int)origin_y);
+}
+
+/* True when the canvas still fits the screen. Checked on every menu open rather than once, because
+ * the reader can change resolution in the options screen at any time and the artwork cannot follow
+ * them. */
+static bool canvas_still_fits(void)
+{
+    float screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
+    float screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
+
+    if (!(screen_width > 0.0f) || !(screen_height > 0.0f)) {
+        return true;                  /* no mode yet: nothing has drawn, so nothing is at risk */
+    }
+    if ((float)scale_state.canvas_width  <= screen_width &&
+        (float)scale_state.canvas_height <= screen_height) {
+        return true;
+    }
+    menu_scale_stand_down((int32_t)screen_width, (int32_t)screen_height);
+    return false;
+}
+
+/* The cell the three matrix-scale reads in sw3d_draw are repointed at. Written immediately before
+ * each of those reads, by the hook below, so it can never be a frame behind the lens. */
+static float menu_sw3d_model_scale = 1.0f;
+
+/* Holds a 3-D widget's model at one size whatever the field of view is. See the note by
+ * SIG_SW3D_DRAW for why the size follows the lens at all, and what the reference lens is. */
+static void __cdecl hook_sw3d_draw(void *widget)
+{
+    sw3d_draw_fn_t original = (sw3d_draw_fn_t)scale_state.sw3d_draw_detour.original;
+    float          engine_scale = *(const float *)(uintptr_t)ENGINE_MENU_SCALE_CELL;
+    float          projection   = *(const float *)(uintptr_t)ENGINE_PROJ_SCALE_CELL;
+
+    if (original == NULL) {
+        return;
+    }
+
+    if (scale_state.stood_down || !(projection > 0.0f)) {
+        menu_sw3d_model_scale = engine_scale;      /* exactly what the engine would have read */
+    } else {
+        float compensation = (SW3D_AUTHORED_FOCAL * scale_state.ratio_y) / projection;
+
+        if (compensation > SW3D_MAX_SIZE_COMPENSATION) {
+            compensation = SW3D_MAX_SIZE_COMPENSATION;
+            if (!scale_state.warned_compensation) {
+                scale_state.warned_compensation = true;
+                log_info("the field of view is wide enough that holding the 3-D models at their "
+                         "authored size would push them through the near plane and cull them, so "
+                         "the compensation stops at %.2f. Past this they shrink as the lens widens, "
+                         "which is what the unpatched game does",
+                         (double)SW3D_MAX_SIZE_COMPENSATION);
+            }
+        }
+        menu_sw3d_model_scale = engine_scale * compensation;
+    }
+    original(widget);
+}
+
+/* Where a 3-D widget's model goes, computed here rather than by repointing the engine's constants.
+ *
+ * The engine's own arithmetic is
+ *
+ *     f = depth * (g_menuScale / 554.256f)
+ *     x =  f * ((rect.x + rect.width / 2)     - 320.0f)
+ *     z = -f * ((rect.y + rect.height - 5.0f) - 240.0f)
+ *
+ * and it lands a canvas pixel on the screen pixel it names, because the projection is focalPx over
+ * depth and 554.256 is that focal at the size the menus were authored for. Written without the
+ * coincidence, what it means is
+ *
+ *     offset = (canvas pixel - canvas centre) * depth / focalPx
+ *
+ * which is what this computes, with the canvas centre being the scaled one and focalPx read from the
+ * camera AT THIS INSTANT.
+ *
+ * WHY NOT KEEP REPOINTING THE CONSTANTS. That was the first version and it was wrong in a way no
+ * amount of care about the arithmetic would have fixed: the cell holding the focal has to be written
+ * before the placement happens, and the placement happens after the camera has been rebuilt for the
+ * frame. Refreshing it once per menu frame sampled a lens that had not changed yet, so dragging the
+ * field of view slider slid the hero sideways, out by exactly the ratio between the lens we had
+ * sampled and the one actually projecting. A probe proved it: the lens was logged once, at startup,
+ * and never again while the slider moved. Reading it here removes the ordering question entirely,
+ * because there is no longer a stored value to be stale.
+ *
+ * It also hands the [0x4A8888] operand back to variable_fov, which wants it for the same reason and
+ * whose own compensation is now harmless: nothing here reads that constant any more.
+ *
+ * The engine's own body is called when there is no camera to read, and when the scale has stood
+ * down, so the untouched game is always the fallback rather than an approximation of it. */
+static void __cdecl hook_sw3d_project(float *offset, const int32_t *rect)
+{
+    sw3d_project_fn_t  original = (sw3d_project_fn_t)scale_state.sw3d_project_detour.original;
     const char *const *camera_slot = (const char *const *)(uintptr_t)ENGINE_CURRENT_CAMERA;
-    const char        *camera;
+    const char        *camera = NULL;
     float              focal;
-    float              scale;
+    float              depth;
 
-    if (!scale_state.sw3d_repointed) {
+    if (original == NULL) {
         return;
     }
-    camera = *camera_slot;
-    if (camera == NULL) {
-        return;                       /* no camera yet: the cell keeps whatever it had */
+    /* g_projScale first, because it is what will be multiplied by. The camera is the fallback for
+     * the first frame, before render_prepareFrame has copied anything into it. */
+    focal = *(const float *)(uintptr_t)ENGINE_PROJ_SCALE_CELL;
+    if (!(focal > 0.0f)) {
+        camera = *camera_slot;
+        focal  = (camera != NULL) ? *(const float *)(camera + CAMERA_FOCAL_PIXELS) : 0.0f;
     }
-    focal = *(const float *)(camera + CAMERA_FOCAL_PIXELS);
-    scale = *(const float *)(uintptr_t)ENGINE_MENU_SCALE_CELL;
-    if (!(focal > 0.0f) || !(scale > 0.0f)) {
+
+    if (scale_state.stood_down || offset == NULL || rect == NULL || !(focal > 0.0f)) {
+        original(offset, rect);
         return;
     }
 
-    menu_sw3d_focal = scale * focal;
+    depth = offset[1];
+    {
+        float centre_x = (float)scale_state.canvas_width  * 0.5f;
+        float centre_y = (float)scale_state.canvas_height * 0.5f;
+        float across   = (float)rect[0] + (float)rect[2] * 0.5f;
+        float down     = (float)rect[1] + (float)rect[3]
+                       - SW3D_BOTTOM_INSET * scale_state.ratio_y;
+        float per_pixel = depth / focal;
+
+        offset[0] =  (across - centre_x) * per_pixel;
+        offset[1] =  depth;                     /* the caller's own, deliberately preserved */
+        offset[2] = -(down   - centre_y) * per_pixel;
+    }
+
     if (!scale_state.logged_focal) {
         scale_state.logged_focal = true;
-        log_info("3-D widgets: focal cell %.3f, from the live camera focal %.2f and g_menuScale "
-                 "%.4f. It is refreshed every menu frame, so it follows the field of view slider",
-                 (double)menu_sw3d_focal, (double)focal, (double)scale);
+        log_info("3-D widgets are placed about %.1f,%.1f from the camera's live focal length "
+                 "(%.2f right now), so they hold still while the field of view changes",
+                 (double)((float)scale_state.canvas_width * 0.5f),
+                 (double)((float)scale_state.canvas_height * 0.5f), (double)focal);
     }
 }
 
@@ -1234,8 +1586,6 @@ static void __cdecl hook_draw_menu(void *menu)
     if (original == NULL) {
         return;
     }
-    refresh_sw3d_focal();
-
     tracked = (menu != NULL) ? find_scaled_menu(menu) : NULL;
     widgets = (menu != NULL) ? *(char *const *)((char *)menu + MENU_WIDGET_ARRAY) : NULL;
 
@@ -1348,7 +1698,12 @@ static int32_t __cdecl hook_menu_open(void *menu)
     /* The rectangles BEFORE the original, because the original is what makes the menu current and
      * starts drawing from it, and because its own reset pass reads the box heights this writes.
      * Scaling afterwards would leave one frame at the authored size. */
-    if (menu != NULL && find_scaled_menu(menu) == NULL && scaled_menu_room_left()) {
+    if (!scale_state.stood_down) {
+        (void)canvas_still_fits();
+    }
+
+    if (menu != NULL && !scale_state.stood_down &&
+        find_scaled_menu(menu) == NULL && scaled_menu_room_left()) {
         scale_widgets(menu);
     }
 
@@ -1542,6 +1897,29 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
                     "authored 160x120 inside a scaled frame. Nothing else is affected");
     }
 
+    if (sites[SITE_DRAW_CURSOR].address != 0) {
+        int32_t size = (int32_t)((float)DRAW_CURSOR_SHIPPED * ratio_y + 0.5f);
+        bool    clamped = false;
+
+        if (size > 127) {                     /* both are signed byte immediates */
+            size = 127;
+            clamped = true;
+        }
+        if (patch_write_u8(sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_WIDTH,  (uint8_t)size)
+                == PATCH_RESULT_OK &&
+            patch_write_u8(sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_HEIGHT, (uint8_t)size)
+                == PATCH_RESULT_OK) {
+            log_info("the drawn menu pointer is %d pixels instead of %d%s", (int)size,
+                     DRAW_CURSOR_SHIPPED,
+                     clamped ? ", which is the largest a signed byte immediate can hold; the "
+                               "proportional size would have been larger" : "");
+        } else {
+            log_warning("the drawn menu pointer could not be resized, so it stays %d pixels and "
+                        "looks small on a large screen. Nothing else is affected",
+                        DRAW_CURSOR_SHIPPED);
+        }
+    }
+
     /* The list box insets. */
     if (sites[SITE_LISTBOX_DRAW].address != 0) {
         uintptr_t draw = sites[SITE_LISTBOX_DRAW].address;
@@ -1566,43 +1944,34 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
                  "authored 6 and 3 and the rows sit a little tight. Nothing else is affected");
     }
 
-    if (sites[SITE_SW3D_PROJECT].address != 0 && scale_state.draw_menu_detour.original != NULL) {
-        uintptr_t site = sites[SITE_SW3D_PROJECT].address;
-
-        /* The focal cell is deliberately left at its shipped value here. It cannot be computed at
-         * install because there is no camera yet, and refresh_sw3d_focal writes the real one before
-         * the first menu is drawn, since it runs at the top of the draw. Repointing this at all is
-         * gated on that hook being live for exactly that reason: the three cells are only correct
-         * together. */
-        menu_sw3d_bottom_inset = -5.0f  * ratio_y;
-        menu_sw3d_centre_x     = 320.0f * ratio_x;
-        menu_sw3d_centre_y     = 240.0f * ratio_y;
-
-        if (patch_write_pointer32(site + SW3D_INSET_OPERAND,    &menu_sw3d_bottom_inset)
-                == PATCH_RESULT_OK &&
-            patch_write_pointer32(site + SW3D_CENTRE_X_OPERAND, &menu_sw3d_centre_x)
-                == PATCH_RESULT_OK &&
-            patch_write_pointer32(site + SW3D_CENTRE_Y_OPERAND, &menu_sw3d_centre_y)
-                == PATCH_RESULT_OK &&
-            patch_write_pointer32(site + SW3D_FOCAL_OPERAND,    &menu_sw3d_focal)
-                == PATCH_RESULT_OK) {
-            scale_state.sw3d_repointed = true;
-            log_info("the 3-D widgets project about %.1f,%.1f, so the hero and the inventory "
-                     "models follow the canvas. This takes the same operand variable_fov wants, "
-                     "and loads first, so that mod will report menu_3d_focal as NOT RESOLVED. That "
-                     "is expected: the job is done here instead, with the canvas taken into "
-                     "account as well as the lens",
-                     (double)menu_sw3d_centre_x, (double)menu_sw3d_centre_y);
-        } else {
-            log_warning("sw3d_rectToViewOffset could not be repointed, so the 27 3-D widgets on the "
-                        "pause screens keep projecting about the authored 320,240 and land in the "
-                        "wrong place. Nothing else is affected");
-        }
+    if (sites[SITE_SW3D_DRAW].address != 0 &&
+        detour_install(&scale_state.sw3d_draw_detour, sites[SITE_SW3D_DRAW].address,
+                       (const void *)hook_sw3d_draw, SW3D_DRAW_PROLOGUE) &&
+        patch_write_pointer32(sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_X,
+                              &menu_sw3d_model_scale) == PATCH_RESULT_OK &&
+        patch_write_pointer32(sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_Y,
+                              &menu_sw3d_model_scale) == PATCH_RESULT_OK &&
+        patch_write_pointer32(sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_Z,
+                              &menu_sw3d_model_scale) == PATCH_RESULT_OK) {
+        log_info("3-D widget models are held at the size they have at the authored field of view, "
+                 "so changing the field of view no longer grows or shrinks the hero and the "
+                 "inventory");
     } else {
-        log_info("the 3-D widgets on the pause screens keep their authored projection and will sit "
-                 "in the wrong place: %s",
-                 (sites[SITE_SW3D_PROJECT].address == 0) ? "sw3d_rectToViewOffset did not resolve"
-                                                         : "the per-frame draw hook is not live");
+        log_warning("sw3d_draw could not be hooked, so the 3-D models on the pause screens grow as "
+                    "the field of view narrows and shrink as it widens. Their positions are "
+                    "unaffected");
+    }
+
+    if (sites[SITE_SW3D_PROJECT].address != 0 &&
+        detour_install(&scale_state.sw3d_project_detour, sites[SITE_SW3D_PROJECT].address,
+                       (const void *)hook_sw3d_project, SW3D_PROJECT_PROLOGUE)) {
+        log_info("the 3-D widgets on the pause screens are placed from the camera's live focal "
+                 "length, so the hero and the inventory models follow the canvas and hold still "
+                 "while the field of view changes");
+    } else {
+        log_warning("sw3d_rectToViewOffset could not be hooked, so the 27 3-D widgets on the pause "
+                    "screens keep projecting about the authored 320,240 and land in the wrong "
+                    "place. Nothing else is affected");
     }
 
     if (sites[SITE_PIC_DRAW].address != 0 &&

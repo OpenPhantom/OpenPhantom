@@ -318,7 +318,9 @@ english.MovieOptOriginal=Keep the original size (recommended, smallest files)
 english.MovieOpt1080=Enlarge to 1080p
 english.MovieOpt1440=Enlarge to 1440p
 english.MovieOpt2160=Enlarge to 4K (much larger files, no more detail)
+english.MovieOptOwn=Another size:
 english.MovieOptLater=Not now. I will run tools\Convert Movies.bat myself later
+english.MovieBadHeight=Type your screen size as width x height, for example 3440x1440, or just the height on its own.%n%nOnly the height is used. The films are 640 x 405, a different shape from any modern screen, so the width follows their own shape and they are never stretched.%n%nThe height has to be between 240 and 2160. The films are 405 lines tall, so a larger number costs disc space rather than showing you more.
 english.ScalingPageCaption=Cutscene shape
 english.ScalingPageDescription=The films are almost square, your screen is not
 english.ScalingPageText=One of the two has to give.%n%nYou can change this whenever you like. It is read while a film plays, so it also applies to films you converted earlier.%n%nYou find it later in engine_fixes.ini under [fmv_player] Scaling.
@@ -344,7 +346,9 @@ english.MenuArtOptScreen=Fit this screen, %1 (recommended)
 english.MenuArtOpt1080=1920 x 1080 (about 210 MB)
 english.MenuArtOpt1440=2560 x 1440 (about 375 MB)
 english.MenuArtOpt2160=3840 x 2160 (about 840 MB)
+english.MenuArtOptOwn=Another size:
 english.MenuArtOptLater=Not now. I will run tools\Convert Menu Art.bat myself later
+english.MenuArtBadSize=Type the screen size as width x height, for example 3440x1440.%n%nIt cannot be smaller than 640 x 480, which is the size the menus were drawn at, and there is nothing to gain above 3840 x 2160.
 english.MenuFitPageCaption=Menu shape
 english.MenuFitPageDescription=How the 4:3 menu artwork should fill a widescreen display
 english.MenuFitPageText=The menus were drawn in the same 4:3 shape as an old television. On a widescreen display they can either be stretched to fill it, or kept in their own shape with black down each side.%n%nStretching suits these menus, because they are mostly panels and lettering rather than photographs.
@@ -426,7 +430,9 @@ german.MovieOptOriginal=Originalgröße behalten (empfohlen, kleinste Dateien)
 german.MovieOpt1080=Auf 1080p vergrößern
 german.MovieOpt1440=Auf 1440p vergrößern
 german.MovieOpt2160=Auf 4K vergrößern (deutlich größere Dateien, nicht mehr Details)
+german.MovieOptOwn=Andere Größe:
 german.MovieOptLater=Jetzt nicht. Ich starte tools\Convert Movies.bat später selbst
+german.MovieBadHeight=Geben Sie Ihre Bildschirmgröße als Breite x Höhe an, zum Beispiel 3440x1440, oder nur die Höhe.%n%nVerwendet wird nur die Höhe. Die Filme sind 640 x 405 und haben damit ein anderes Format als jeder heutige Bildschirm, deshalb richtet sich die Breite nach ihrem eigenen Format und sie werden nie verzerrt.%n%nDie Höhe muss zwischen 240 und 2160 liegen. Die Filme sind 405 Zeilen hoch, eine größere Zahl kostet also Speicherplatz und zeigt Ihnen nicht mehr.
 german.ScalingPageCaption=Form der Zwischensequenzen
 german.ScalingPageDescription=Die Filme sind fast quadratisch, Ihr Bildschirm ist es nicht
 german.ScalingPageText=Eines von beiden muss nachgeben.%n%nSie können das jederzeit ändern. Es wird beim Abspielen gelesen und gilt damit auch für Filme, die Sie schon umgewandelt haben.%n%nSpäter finden Sie es in der engine_fixes.ini unter [fmv_player] Scaling.
@@ -452,7 +458,9 @@ german.MenuArtOptScreen=An diesen Bildschirm anpassen, %1 (empfohlen)
 german.MenuArtOpt1080=1920 x 1080 (etwa 210 MB)
 german.MenuArtOpt1440=2560 x 1440 (etwa 375 MB)
 german.MenuArtOpt2160=3840 x 2160 (etwa 840 MB)
+german.MenuArtOptOwn=Andere Größe:
 german.MenuArtOptLater=Jetzt nicht. Ich starte tools\Convert Menu Art.bat später selbst
+german.MenuArtBadSize=Geben Sie die Bildschirmgröße als Breite x Höhe an, zum Beispiel 3440x1440.%n%nSie darf nicht kleiner als 640 x 480 sein, der Größe, in der die Menüs gezeichnet wurden, und über 3840 x 2160 ist nichts zu gewinnen.
 german.MenuFitPageCaption=Menüformat
 german.MenuFitPageDescription=Wie die 4:3-Menügrafiken einen Breitbildschirm ausfüllen sollen
 german.MenuFitPageText=Die Menüs wurden im 4:3-Format eines alten Fernsehers gezeichnet. Auf einem Breitbildschirm können sie entweder gestreckt werden, oder sie behalten ihr Format und bekommen schwarze Balken an den Seiten.%n%nStrecken passt zu diesen Menüs, denn sie bestehen überwiegend aus Flächen und Schrift und nicht aus Fotos.
@@ -511,6 +519,7 @@ var
     one line per movie, and MovieResult is its summary line so the closing message can say what
     happened rather than only that it stopped. }
   MoviePage: TInputOptionWizardPage;
+  MovieEdit: TNewEdit;
   ConvertPage: TOutputProgressWizardPage;
   MovieTotal, MovieDone: Integer;
   MovieResult: String;
@@ -519,6 +528,7 @@ var
     it starts, because unlike the movies there is nothing on disc to count beforehand: the pictures
     are inside big.lab and LOCALIZE.LAB and only the converter reads those. }
   MenuArtPage: TInputOptionWizardPage;
+  MenuArtEdit: TNewEdit;
   MenuFitPage: TInputOptionWizardPage;
   MenuArtTotal, MenuArtDone, MenuArtSkipped: Integer;
   MenuArtResult: String;
@@ -602,6 +612,75 @@ begin
   Result := IntToStr(ScreenWidth) + ' x ' + IntToStr(ScreenHeight);
 end;
 
+{ "1920x1080" and the handful of ways somebody will actually type it, into a pair of numbers, or
+  0x0 when it is not a size at all. The separator is anything that is not a digit, so 1920 x 1080,
+  1920*1080 and 1920,1080 all read the same; nobody should have to guess which one is wanted. }
+procedure ParseSize(const S: String; var W, H: Integer);
+var
+  I: Integer;
+  Digits, Second: String;
+  Seen: Boolean;
+begin
+  W := 0;
+  H := 0;
+  Digits := '';
+  Second := '';
+  Seen := False;
+
+  for I := 1 to Length(S) do begin
+    if (S[I] >= '0') and (S[I] <= '9') then begin
+      if Seen then
+        Second := Second + S[I]
+      else
+        Digits := Digits + S[I];
+    end else if Digits <> '' then
+      Seen := True;
+  end;
+
+  W := StrToIntDef(Digits, 0);
+  H := StrToIntDef(Second, 0);
+  if (W <= 0) or (H <= 0) then begin
+    W := 0;
+    H := 0;
+  end;
+end;
+
+{ The height out of whatever was typed on the cutscene page, or -1 when it is not a number.
+
+  A SIZE IS ACCEPTED WHERE A HEIGHT IS MEANT, on purpose. The films are 640x405 and the converter
+  scales by height alone, with the width following the film's own shape so it is never stretched, so
+  a width cannot be honoured and asking for one would be a lie. But somebody reading "another size"
+  on the page before this one will type their screen size here too, and translating 2560x1440 into
+  1440 is this program's job rather than theirs. Two numbers means the second one; one number means
+  itself. }
+function TypedMovieHeight: Integer;
+var
+  I: Integer;
+  Digits, Last: String;
+  S: String;
+begin
+  S := Trim(MovieEdit.Text);
+  Digits := '';
+  Last := '';
+
+  { The LAST number in the string, which is the height in both forms this accepts and needs no test
+    for which form was typed: "2560x1440" ends on the height, and "1440" is its own last number. }
+  for I := 1 to Length(S) do begin
+    if (S[I] >= '0') and (S[I] <= '9') then
+      Digits := Digits + S[I]
+    else if Digits <> '' then begin
+      Last := Digits;
+      Digits := '';
+    end;
+  end;
+  if Digits <> '' then
+    Last := Digits;
+
+  Result := StrToIntDef(Last, -1);
+end;
+
+
+
 { Used by every external Source above. Inno asks for it once while it works out how much has to be
   copied, and again for each file. }
 function DiscPath(Param: String): String;
@@ -650,6 +729,18 @@ begin
   FpsPage.SelectedValueIndex := 2;
 end;
 
+{ Typing in the box picks the row it sits on, so nobody fills it in and then wonders why their size
+  was ignored. Same reasoning as FpsEditChanged, and the row index is the one below the presets. }
+procedure MenuArtEditChanged(Sender: TObject);
+begin
+  MenuArtPage.SelectedValueIndex := 4;
+end;
+
+procedure MovieEditChanged(Sender: TObject);
+begin
+  MoviePage.SelectedValueIndex := 4;
+end;
+
 procedure InitializeWizard;
 var
   Found: String;
@@ -690,8 +781,24 @@ begin
   MoviePage.Add(ExpandConstant('{cm:MovieOpt1080}'));
   MoviePage.Add(ExpandConstant('{cm:MovieOpt1440}'));
   MoviePage.Add(ExpandConstant('{cm:MovieOpt2160}'));
+  MoviePage.Add(ExpandConstant('{cm:MovieOptOwn}'));
   MoviePage.Add(ExpandConstant('{cm:MovieOptLater}'));
   MoviePage.SelectedValueIndex := 0;
+
+  { The row height is set rather than measured, because the box below sits ON one of these rows and
+    a guessed height would put it between two of them. }
+  MoviePage.CheckListBox.MinItemHeight := ScaleY(18);
+  MoviePage.CheckListBox.Height := ScaleY(6 * 18);
+
+  MovieEdit := TNewEdit.Create(MoviePage);
+  MovieEdit.Parent := MoviePage.Surface;
+  MovieEdit.Left := MoviePage.CheckListBox.Left + ScaleX(110);
+  MovieEdit.Top := MoviePage.CheckListBox.Top + ScaleY(18) * 4 - ScaleY(2);
+  MovieEdit.Width := ScaleX(90);
+  MovieEdit.Text := IntToStr(ScreenWidth) + 'x' + IntToStr(ScreenHeight);
+
+  { Assigned after the text above, so filling in the default does not tick the option. }
+  MovieEdit.OnChange := @MovieEditChanged;
 
   { Letterbox first and preselected, because it is the answer that shows the movie the shape it was
     made in. Stretch is offered rather than hidden: on a wide screen some people would rather have no
@@ -754,8 +861,26 @@ begin
   MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt1080}'));
   MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt1440}'));
   MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt2160}'));
+  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOptOwn}'));
   MenuArtPage.Add(ExpandConstant('{cm:MenuArtOptLater}'));
   MenuArtPage.SelectedValueIndex := 0;
+
+  { An ultrawide is not on the list above and never will be: there are too many shapes to enumerate,
+    and somebody converting for a screen they are not sitting at cannot use the first row either. The
+    row height is set rather than measured, because the box below sits ON one of these rows and a
+    guessed height would put it between two of them. }
+  MenuArtPage.CheckListBox.MinItemHeight := ScaleY(18);
+  MenuArtPage.CheckListBox.Height := ScaleY(6 * 18);
+
+  MenuArtEdit := TNewEdit.Create(MenuArtPage);
+  MenuArtEdit.Parent := MenuArtPage.Surface;
+  MenuArtEdit.Left := MenuArtPage.CheckListBox.Left + ScaleX(110);
+  MenuArtEdit.Top := MenuArtPage.CheckListBox.Top + ScaleY(18) * 4 - ScaleY(2);
+  MenuArtEdit.Width := ScaleX(90);
+  MenuArtEdit.Text := IntToStr(ScreenWidth) + 'x' + IntToStr(ScreenHeight);
+
+  { Assigned after the text above, so filling in the default does not tick the option. }
+  MenuArtEdit.OnChange := @MenuArtEditChanged;
 
   { Stretch first and preselected. These menus are panels and lettering, which take it without
     looking wrong, and filling the screen is the entire point of converting anything. Keeping the
@@ -814,7 +939,7 @@ begin
     { Not asked when nothing is being converted now: unlike the cutscene scaling, which is read at
       playback, this one is baked into the pictures and means nothing without them. }
     Result := (not WizardIsComponentSelected('patch\enhanced_resolution')) or
-              (MenuArtPage.SelectedValueIndex = 4);
+              (MenuArtPage.SelectedValueIndex = 5);
 end;
 
 function WantsCleanReinstall: Boolean;
@@ -1072,6 +1197,45 @@ begin
   Result := False;
 end;
 
+{ Leaving the menu artwork page. Only the typed answer can be wrong, and it is caught here rather
+  than at the end, because here the box is still in front of the person who filled it in.
+
+  The ceiling is the engine's, not a preference: the run length encoder writes a literal control word
+  as (run and 0xfff) while advancing the output by the whole run, so a canvas wider than 4095 pixels
+  corrupts the stream. 4095/640 is 6.398, which 3840 is comfortably inside and 4096 is not. }
+{ Leaving the cutscene quality page. Only the typed answer can be wrong, and it is caught here
+  rather than at the end, because here the box is still in front of the person who filled it in.
+
+  The ceiling is a judgement rather than a limit of anything: the films are 640x405, so 2160 lines is
+  already five times more than was ever encoded, and past that the only thing that grows is the file. }
+function MoviePageAccepted: Boolean;
+var
+  Typed: Integer;
+begin
+  Result := True;
+  if MoviePage.SelectedValueIndex <> 4 then
+    Exit;
+
+  Typed := TypedMovieHeight;
+  Result := (Typed >= 240) and (Typed <= 2160);
+  if not Result then
+    MsgBox(ExpandConstant('{cm:MovieBadHeight}'), mbError, MB_OK);
+end;
+
+function MenuArtPageAccepted: Boolean;
+var
+  W, H: Integer;
+begin
+  Result := True;
+  if MenuArtPage.SelectedValueIndex <> 4 then
+    Exit;
+
+  ParseSize(MenuArtEdit.Text, W, H);
+  Result := (W >= 640) and (H >= 480) and (W <= 3840) and (H <= 2160);
+  if not Result then
+    MsgBox(ExpandConstant('{cm:MenuArtBadSize}'), mbError, MB_OK);
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
@@ -1082,6 +1246,10 @@ begin
     Result := ReinstallPageAccepted
   else if CurPageID = FpsPage.ID then
     Result := FpsPageAccepted
+  else if CurPageID = MoviePage.ID then
+    Result := MoviePageAccepted
+  else if CurPageID = MenuArtPage.ID then
+    Result := MenuArtPageAccepted
   else if CurPageID = wpReady then
     Result := ReadyPageAccepted;
 end;
@@ -1274,6 +1442,7 @@ begin
     1: Result := 1080;
     2: Result := 1440;
     3: Result := 2160;
+    4: Result := TypedMovieHeight;
   end;
 end;
 
@@ -1379,6 +1548,7 @@ begin
     1: begin W := 1920; H := 1080; end;
     2: begin W := 2560; H := 1440; end;
     3: begin W := 3840; H := 2160; end;
+    4: ParseSize(MenuArtEdit.Text, W, H);
   end;
 
   { Below the canvas the menus are authored at there is nothing to upscale to, and the converter

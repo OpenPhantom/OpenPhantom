@@ -1,8 +1,12 @@
-# OpenPhantom
+# OpenPhantom - Star Wars Episode I: The Phantom Menace PC fixes and modding tools
 
-OpenPhantom is a reverse engineering and preservation project for the PC version of *Star Wars
-Episode I: The Phantom Menace*. The aim is a documented, maintainable source base that keeps the
-original game's behaviour, runs on modern systems, and comes with the tools to edit and extend it.
+OpenPhantom makes the 1999 PC version of *Star Wars Episode I: The Phantom Menace* run properly on
+modern hardware: widescreen resolutions, uncapped frame rate, a corrected field of view, mouse
+look, working music and video, and compatibility with 64-bit Windows. It is also a reverse
+engineering and preservation project, rebuilding the engine as documented, maintainable source
+with the tools to edit and extend it.
+
+**[Download the latest release](../../releases)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
 
 The project has two halves that will run side by side for a long time. One patches the retail
 executable so the game you already own runs properly today. The other reconstructs the engine from
@@ -28,9 +32,9 @@ Full guides for installation, usage and configuration are in the
 
 * [Installation Guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide)
 * [In game settings](https://github.com/OpenPhantom/OpenPhantom/wiki/In-Game-Settings)
-* [Reporting Issues with the OpenPhantom Patches](https://github.com/OpenPhantom/OpenPhantom/wiki/Issues)
 * [Currently working on, with spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers)
-
+* [Known Issues](https://github.com/OpenPhantom/OpenPhantom/wiki/Known-Issues)
+* [Reporting Issues with the OpenPhantom Patches](https://github.com/OpenPhantom/OpenPhantom/wiki/Issues)
 
 ## Goals
 
@@ -87,7 +91,12 @@ none of it.
 MIT. The source here is free to use, modify and distribute under those terms, provided the licence
 notice travels with it. See [LICENSE](LICENSE).
 
-The licence covers this source code only. It grants nothing regarding the original game, its
+The licence covers this source code only, and not the third-party binaries the installer carries
+in `installer/dist/`, which are each under their own terms and include GPL and proprietary
+components. See [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md), which also
+records what a release has to ship alongside the installer to satisfy them.
+
+It grants nothing regarding the original game, its
 assets, or anything else its rights holders own. Release archives may also contain third party
 components under their own licences, which are named in the release notes.
 

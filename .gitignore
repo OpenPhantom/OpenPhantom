@@ -1,0 +1,5 @@
+# Editor and IDE state. A workspace file describes one person's window layout and which
+# folders they happened to open, so it belongs to them rather than to the project.
+*.code-workspace
+.vscode/
+.idea/

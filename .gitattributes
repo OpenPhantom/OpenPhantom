@@ -1,0 +1,6 @@
+# Everything the installer carries is preserved byte for byte. core.autocrlf would rewrite the
+# line endings of upstream licence texts and readmes on checkout, so the files people receive
+# would no longer match what their authors published, and no checksum recorded against them
+# would hold.
+installer/dist/** -text
+installer/source/** -text

@@ -70,6 +70,7 @@
 #include <windows.h>
 
 #include <stdbool.h>
+#include <string.h>
 #include <wchar.h>
 
 #define OVERLAY_CLASS_NAME L"OpenPhantomFmvPlayerOverlay"
@@ -244,6 +245,39 @@ bool video_overlay_is_still_loading(void)
 }
 
 /* ============================================================================================ */
+/* See the header. SURFACE_POPUP is what shipped and stays the default. */
+typedef enum {
+    SURFACE_POPUP = 0,
+    SURFACE_CHILD,
+    SURFACE_GAME
+} surface_mode_t;
+
+static surface_mode_t surface_mode = SURFACE_POPUP;
+
+void video_overlay_set_surface_mode(const char *mode)
+{
+    if (mode == NULL) {
+        return;
+    }
+    if (_stricmp(mode, "popup") == 0) {
+        surface_mode = SURFACE_POPUP;
+    } else if (_stricmp(mode, "child") == 0) {
+        surface_mode = SURFACE_CHILD;
+        log_info("the movie surface is a child of the game's window rather than a window of its "
+                 "own. This is the Wine default: a top level window is mapped as an X11 window, "
+                 "the window manager focuses it, and Wine then holds the focus for a window that "
+                 "refuses activation, so no key reaches the game until the movie ends. See "
+                 "video_overlay.h");
+    } else if (_stricmp(mode, "game") == 0) {
+        surface_mode = SURFACE_GAME;
+        log_info("libVLC is given the game's own window and no movie window is created. This is "
+                 "the last resort Wine setting: see video_overlay.h");
+    } else {
+        log_warning("MovieSurface=%s is not one of popup, child or game, so the shipped popup is "
+                    "kept", mode);
+    }
+}
+
 /* The one moment that needs a manual black fill: the gap between the window appearing and libVLC's
  * first decoded frame reaching it.
  *
@@ -295,11 +329,53 @@ static bool monitor_rect_of(HWND window, RECT *out_rect)
     return true;
 }
 
+/* The surface libVLC is given. See the header for what each one is for and why the choice exists
+ * at all. Returns NULL in SURFACE_GAME, where NULL is the answer rather than a failure, so the
+ * caller tests the mode and not just the handle. */
+static HWND create_surface(HWND game_window)
+{
+    RECT rect;
+
+    if (surface_mode == SURFACE_GAME) {
+        return NULL;
+    }
+
+    if (surface_mode == SURFACE_CHILD) {
+        /* The game's client area, not the monitor. A child is positioned inside its parent, so its
+         * origin is 0,0 by definition. The engine forces the display to its minimum mode while a
+         * movie plays, as monitor_rect_of's own note explains, so this can be 640x480: that is the
+         * whole of the game's window at that moment, which is the whole of the screen, so the
+         * picture still covers everything the player can see. */
+        if (!GetClientRect(game_window, &rect)) {
+            log_error("the game window's client area could not be read (error %u)",
+                      (unsigned)GetLastError());
+            return NULL;
+        }
+        return CreateWindowExW(WS_EX_NOACTIVATE, OVERLAY_CLASS_NAME, L"", WS_CHILD,
+                               0, 0, rect.right - rect.left, rect.bottom - rect.top,
+                               game_window, NULL, own_module(), NULL);
+    }
+
+    if (!monitor_rect_of(game_window, &rect)) {
+        return NULL;
+    }
+
+    /* Owned by the game window, so Windows keeps it above its owner with no WS_EX_TOPMOST and no
+     * Z-order reassertion, and WS_EX_NOACTIVATE because it never needs keyboard focus: Escape is
+     * read as physical key state inside vlc_playback.c rather than as per-window input. Both were
+     * already true of the separate-process design and neither was ever the problem; being
+     * in-process is what is different here. */
+    return CreateWindowExW(WS_EX_NOACTIVATE, OVERLAY_CLASS_NAME, L"", WS_POPUP,
+                           rect.left, rect.top,
+                           rect.right - rect.left, rect.bottom - rect.top,
+                           game_window, NULL, own_module(), NULL);
+}
+
 bool video_overlay_play_blocking(const wchar_t *file_path)
 {
     HWND  game_window;
-    RECT  overlay_rect;
     HWND  overlay_window;
+    HWND  render_window;
     bool  played;
 
     if (file_path == NULL) {
@@ -310,32 +386,25 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
     if (game_window == NULL) {
         return false;
     }
-    if (!monitor_rect_of(game_window, &overlay_rect)) {
-        return false;
-    }
 
-    /* Owned by the game window, so Windows keeps it above its owner with no WS_EX_TOPMOST and no
-     * Z-order reassertion, and WS_EX_NOACTIVATE because it never needs keyboard focus: Escape is
-     * read as physical key state inside vlc_playback.c rather than as per-window input. Both were
-     * already true of the separate-process design and neither was ever the problem; being
-     * in-process is what is different here. */
-    overlay_window = CreateWindowExW(WS_EX_NOACTIVATE, OVERLAY_CLASS_NAME, L"", WS_POPUP,
-                                     overlay_rect.left, overlay_rect.top,
-                                     overlay_rect.right - overlay_rect.left,
-                                     overlay_rect.bottom - overlay_rect.top,
-                                     game_window, NULL, own_module(), NULL);
-    if (overlay_window == NULL) {
+    overlay_window = create_surface(game_window);
+    if (overlay_window == NULL && surface_mode != SURFACE_GAME) {
         log_error("the overlay window could not be created (error %u)", (unsigned)GetLastError());
         return false;
     }
+    render_window = (overlay_window != NULL) ? overlay_window : game_window;
 
-    ShowWindow(overlay_window, SW_SHOW);
-    fill_black_once(overlay_window);
-    UpdateWindow(overlay_window);
+    if (overlay_window != NULL) {
+        ShowWindow(overlay_window, SW_SHOW);
+        fill_black_once(overlay_window);
+        UpdateWindow(overlay_window);
+    }
 
-    played = vlc_playback_play_blocking(overlay_window, file_path, game_window);
+    played = vlc_playback_play_blocking(render_window, file_path, game_window);
 
-    DestroyWindow(overlay_window);
+    if (overlay_window != NULL) {
+        DestroyWindow(overlay_window);
+    }
 
     /* The pump above is scoped to the overlay, so the game window's own mouse messages were never
      * touched while the movie ran: they simply queued up. Left alone, that whole backlog would be

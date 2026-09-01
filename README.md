@@ -105,3 +105,5 @@ components under their own licences, which are named in the release notes.
 General enquiries and feedback: **openphantom@proton.me**
 
 For anything technical, an issue on this repository will reach more people and stays searchable.
+
+[![Total Downloads](https://img.shields.io/github/downloads/OpenPhantom/OpenPhantom/total?label=All%20Downloads)](https://github.com/OpenPhantom/OpenPhantom/releases)

@@ -6,6 +6,7 @@
 
 add_library(engine_fixes_common STATIC
     host_image.c
+    platform.c
     logging.c
     ini.c
     memory.c

@@ -44,7 +44,7 @@ Full guides for installation, usage and configuration are in the
 
 ## Goals
 
-* Reconstruct the original engine as clean, maintainable source.
+* Reconstruct the original engine as clean, maintainable source code.
 * Keep the original gameplay behaviour. Where the 1999 look or feel was deliberate, it stays.
 * Run on modern systems, including Linux and 64 bit builds.
 * Improve stability, performance and extensibility without changing how the game plays.

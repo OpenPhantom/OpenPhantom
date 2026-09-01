@@ -17,6 +17,21 @@
 
 #define GameName "Star Wars Episode I: The Phantom Menace"
 
+; THE SAME TITLE WITH THE COLON TAKEN OUT, AND IT EXISTS ONLY TO BE PART OF A FILENAME.
+;
+; A shortcut is a file, and a colon cannot be in a Windows filename. NTFS does not reject one: it
+; reads what follows as an alternate data stream, so `{commondesktop}\{#GameName}` asked for a file
+; called "Star Wars Episode I" carrying a stream named " The Phantom Menace.lnk". That is what got
+; created. The visible file is zero bytes, Explorer draws it as a blank page because it has no
+; extension to recognise, and double clicking it does nothing, while the real shortcut sits in the
+; stream where nothing can open it. No error is reported at any point.
+;
+; So {#GameName} stays exactly as it is for AppName, where it is displayed rather than written to
+; disc and the colon is correct, and everything under [Icons] uses this instead. The separator is a
+; dash because that is what LucasArts themselves used when they hit this, which is visible in the
+; Start menu to this day: "LucasArts\Star Wars - Battle for Naboo".
+#define ShortcutName "Star Wars Episode I - The Phantom Menace"
+
 ; OUR version, not the game's. Written once because it reaches two places that must agree: the
 ; version the wizard shows and the version resource of the built executable. They were separate
 ; literals and they drifted, so a build shipped as one version announced itself as another.
@@ -69,7 +84,8 @@ OutputBaseFilename=OpenPhantom_Installer
 VersionInfoVersion={#AppVer}
 ; Built installers are kept out of the repository; they are rebuilt from this script.
 OutputDir=output
-UninstallDisplayIcon={app}\WMAIN.EXE
+; TPM.EXE and not WMAIN.EXE, for the reason set out above [Icons]: WMAIN.EXE carries no icon.
+UninstallDisplayIcon={app}\TPM.EXE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -239,11 +255,23 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\TPM.EXE
 ; setting changes the coordinate space a window is placed in, which is the same thing the
 ; resolution fix works in, and the two have never been tried together.
 
+; WMAIN.EXE IS WHAT RUNS, AND TPM.EXE IS WHAT THE ICON COMES FROM. Those have to be two different
+; files here. A shortcut with no IconFilename takes its icon from whatever it points at, and
+; WMAIN.EXE has no resource directory at all: no icon, no version information, nothing. Windows then
+; falls back to the blank page it shows for a file type it does not know, which is what the desktop
+; shortcut looked like before this line existed.
+;
+; Of the six executables the disc carries, WMAIN.EXE is the only one with no icon. TPM.EXE is the
+; one to borrow from: it is the original launcher, it is copied unconditionally above, and it is the
+; file the disc check looks for, so it cannot be absent while the game is installed. Its icon is the
+; LucasArts logo, one 32x32 image at 16 colours, which is the era it comes from. It will look coarse
+; at the sizes a modern desktop draws, and that is a deliberate trade against inventing artwork.
 [Icons]
-Name: "{group}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"
-Name: "{group}\{cm:UninstallProgram,{#GameName}}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
-    Tasks: desktopicon
+Name: "{group}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
+    IconFilename: "{app}\TPM.EXE"
+Name: "{group}\{cm:UninstallProgram,{#ShortcutName}}"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
+    IconFilename: "{app}\TPM.EXE"; Tasks: desktopicon
 
 ; There is deliberately no [UninstallDelete] section. Inno removes the files it installed; saved
 ; games, settings and anything a player added afterwards are not ours to delete. The folder stays

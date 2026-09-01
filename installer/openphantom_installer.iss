@@ -1408,7 +1408,7 @@ begin
   end;
 
   { Written to the setup log and nowhere else. The converter's own notes go to stderr under
-    -Quiet and this procedure discards stderr, so without this record the log could say the
+    --quiet and this procedure discards stderr, so without this record the log could say the
     cutscenes were converted and never say which FFmpeg converted them. The installer
     carries its own copy and names it on the command line above; this is the line that
     shows the one it named is the one that ran. }
@@ -1480,9 +1480,9 @@ begin
   end;
 end;
 
-{ Called once per line the menu converter writes. Its -Quiet mode speaks the same protocol
-  convert_movies.ps1 does, with one addition: a TOTAL line first, because the pictures live inside
-  the archives and there is nothing on disc to count before it starts. }
+{ Called once per line the menu converter writes. Its --quiet mode speaks the same protocol the
+  movie half does, with one addition: a TOTAL line first, because the pictures live inside the
+  archives and there is nothing on disc to count before it starts. }
 procedure MenuArtOnLog(const S: String; const Error, FirstLine: Boolean);
 var
   Line: String;
@@ -1519,9 +1519,15 @@ end;
 
 { Makes the upscaled menu artwork, hidden, with a progress page in front of it.
 
-  The script is the copy in the patch's unpacked folder rather than the one just installed, for the
-  same reason the movie converter uses that copy: [Dirs] grants users-modify on the game folder,
-  because the game keeps its settings and saves inside it, and this runs with Setup's rights. }
+  The converter is the copy in the patch's unpacked folder rather than the one just installed, for
+  the same reason the movie half uses that copy: [Dirs] grants users-modify on the game folder,
+  because the game keeps its settings and saves inside it, and this runs with Setup's rights.
+
+  IT IS A NATIVE EXECUTABLE, AND THAT IS THE WHOLE POINT. This step used to be PowerShell driving
+  GDI+, which meant it did nothing at all under Proton or Lutris: Wine ships no PowerShell. The
+  executable is a plain Win32 console program, so Wine runs it exactly as Windows does and a Steam
+  Deck installation now converts its artwork during Setup like any other. The .ps1, .py and .sh
+  scripts still install beside it for anyone who wants to convert again at a different size. }
 procedure ConvertMenuArt;
 var
   W, H, ResultCode: Integer;
@@ -1531,7 +1537,7 @@ begin
   if (W = 0) or (H = 0) then
     Exit;
 
-  Script := ExpandConstant('{#PatchTmp}\tools\convert_menu.ps1');
+  Script := ExpandConstant('{#PatchTmp}\tools\openphantom_convert.exe');
   if not FileExists(Script) then begin
     MsgBox(UserMessage('MenuArtNoScript', Script), mbError, MB_OK);
     Exit;
@@ -1543,23 +1549,20 @@ begin
   MenuArtResult := '';
 
   if MenuFitPage.SelectedValueIndex = 1 then
-    Fit := 'Uniform'
+    Fit := ' --uniform'
   else
-    Fit := 'Stretch';
+    Fit := '';
 
-  { No -OutputDirectory: the script's own default is menu_hd, which is also the DLL's own default
+  { No --output: the converter's own default is menu_hd, which is also the DLL's own default
     MenuArtDirectory, and naming it in two places is how those two drift apart. }
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
-            ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
-            ' -Width ' + IntToStr(W) + ' -Height ' + IntToStr(H) +
-            ' -Fit ' + Fit;
+  Params := 'menu --quiet --game "' + ExpandConstant('{app}') + '"' +
+            ' --width ' + IntToStr(W) + ' --height ' + IntToStr(H) + Fit;
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
   ConvertPage.SetProgress(0, 100);
   ConvertPage.Show;
   try
-    if not ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-                            Params, ExpandConstant('{app}'), SW_HIDE,
+    if not ExecAndLogOutput(Script, Params, ExpandConstant('{app}'), SW_HIDE,
                             ewWaitUntilTerminated, ResultCode, @MenuArtOnLog) then
       ResultCode := -1;
   finally
@@ -1596,7 +1599,7 @@ begin
   if Height < 0 then
     Exit;
 
-  Script := ExpandConstant('{#PatchTmp}\tools\convert_movies.ps1');
+  Script := ExpandConstant('{#PatchTmp}\tools\openphantom_convert.exe');
   if not FileExists(Script) then begin
     MsgBox(UserMessage('ConvertNoScript', Script), mbError, MB_OK);
     Exit;
@@ -1606,23 +1609,21 @@ begin
   MovieDone := 0;
   MovieResult := '';
 
-  { convert_movies.ps1 looks for FFmpeg in its own cache, then on PATH, then downloads one. The
-    copy installed under mods\fmv is put on PATH here so it is found at the second step and the
-    third never happens. This changes the environment of this process only, which the converter
-    inherits; nothing is written to the machine's environment.
-
-    "Convert Movies.bat" does the same for itself, so a conversion the player starts later finds it
-    too. Both are needed: this one runs the script directly and never goes through the batch file. }
+  { The converter is told which FFmpeg to use on the command line below, so this is not what makes
+    the conversion work. It is here for what FFmpeg itself may go looking for, and because the
+    scripts installed alongside do search PATH; putting the copy under mods\fmv on it costs nothing
+    and removes a difference between the two ways of running a conversion. This changes the
+    environment of this process only, which the converter inherits; nothing is written to the
+    machine's environment. }
   SetEnvironmentVariable('PATH',
     ExpandConstant('{app}\mods\fmv') + ';' + GetEnv('PATH'));
 
-  { -FFmpegPath names the copy this installer carried, instead of letting the script search.
-    The search consults its %LOCALAPPDATA% cache BEFORE PATH, so without this a copy left by
-    an earlier run would be preferred over the version-pinned one just installed, and run by
-    this elevated process. -NoDownload closes the other end of the same seam: an elevated
-    run must not reach the network on its own initiative, however well pinned the fetch is.
-    Both are unnecessary for the player-started "Convert Movies.bat", which is neither
-    elevated nor silent, and it passes neither. }
+  { --ffmpeg names the copy this installer carried, rather than leaving the converter to find one.
+    The converter never downloads and never consults a cache, so both of the seams the old
+    PowerShell step had to be argued shut are simply absent here; naming the file is still worth
+    doing, because an elevated process should run the binary it just verified rather than whichever
+    one a search settles on. The player-started "Convert Movies.bat" passes nothing and is neither
+    elevated nor silent. }
   // RUN IT FROM {tmp}, NOT FROM WHERE IT WAS JUST INSTALLED. [Dirs] grants users-modify on {app},
   // because the game keeps its settings and saves inside its own folder and cannot run otherwise,
   // and Windows passes that grant down by inheritance to everything created underneath it, which
@@ -1651,17 +1652,15 @@ begin
     FFmpegExe := InstalledFFmpeg;
   end;
 
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
-            ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
-            ' -NoDownload -FFmpegPath "' + FFmpegExe + '"' +
-            ' -TargetHeight ' + IntToStr(Height);
+  Params := 'movies --quiet --game "' + ExpandConstant('{app}') + '"' +
+            ' --ffmpeg "' + FFmpegExe + '"' +
+            ' --height ' + IntToStr(Height);
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
   ConvertPage.SetProgress(0, MovieTotal);
   ConvertPage.Show;
   try
-    if not ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-                            Params, ExpandConstant('{app}'), SW_HIDE,
+    if not ExecAndLogOutput(Script, Params, ExpandConstant('{app}'), SW_HIDE,
                             ewWaitUntilTerminated, ResultCode, @ConvertOnLog) then
       ResultCode := -1;
   finally

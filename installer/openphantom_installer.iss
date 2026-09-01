@@ -620,6 +620,22 @@ end;
   is the wanted answer: the game runs on one monitor. They are also the values Windows reports after
   DPI virtualisation, and since Setup is not marked DPI aware, a scaled desktop reports the scaled
   size. That is still the size the game will be asked to fill, so it is still the right number. }
+{ True when this Setup is running under Wine, which includes Proton and Lutris.
+
+  The registry key is Wine's own and has been there for the life of the project: Wine creates it and
+  Windows never does. The game's own DLLs ask ntdll for wine_get_version instead, which is a better
+  question, but Inno's [Code] cannot call an export by address and this answer is good enough for
+  the one thing it decides here.
+
+  There is exactly one caller, ApplyWinePovFix. An earlier version of this function skipped both
+  conversion pages under Wine, because both converters were PowerShell and Wine ships none; that is
+  gone, because the converter is now a native executable Wine runs exactly as Windows does. }
+function RunningUnderWine: Boolean;
+begin
+  Result := RegKeyExists(HKEY_CURRENT_USER, 'Software\Wine') or
+            RegKeyExists(HKEY_LOCAL_MACHINE, 'Software\Wine');
+end;
+
 function ScreenWidth: Integer;
 begin
   Result := GetSystemMetrics(0);
@@ -1952,6 +1968,42 @@ begin
     MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
 end;
 
+{ D-PAD UP IS HELD DOWN FOR EVER UNDER WINE, AND THIS UNBINDS IT.
+
+  P0JOY is the game's binding for D-pad up. The POV hat on a pad reports a DIRECTION when it is
+  pressed and a centred value when it is not, and Windows and Wine do not agree on what centred is:
+  under Wine the game reads the hat as permanently pushed up, so the menus scroll on their own and
+  the character walks without a hand on the pad. FIELD CONFIRMED on a Steam Deck and on Linux Mint.
+
+  5133 is not a number invented here. It is what the game itself wrote into obi.ini when the binding
+  was set to "none" on the controls screen, which is also why it is trusted: the engine's own answer
+  for that control, in the engine's own encoding, rather than a value reasoned out from the others.
+  It belongs to the same 0x14xx family as the shipped U0JOY=5129 and U1JOY=5130, which are the U
+  axis left unbound for the same reason.
+
+  NOT gated on the game_defaults component. That component is a preference, it is off unless asked
+  for, and it writes a whole controller layout; this is a defect that makes the game unplayable with
+  a pad attached, so gating it behind an optional component would leave most people broken. It does
+  run after ApplyGameDefaults, because that component's own table sets P0JOY=781 and the last write
+  is the one that counts.
+
+  Windows never reaches this, so a Windows installation is untouched. }
+procedure ApplyWinePovFix;
+var
+  Ini: String;
+begin
+  if not RunningUnderWine then
+    Exit;
+
+  Ini := ExpandConstant('{app}\obi.ini');
+  if SetIniString('options', 'P0JOY', '5133', Ini) then
+    Log('wine: P0JOY (D-pad up) set to 5133, the game''s own "none", because Wine reports the '
+        + 'POV hat as permanently pushed up')
+  else
+    Log('wine: P0JOY could not be written to ' + Ini + '. D-pad up will read as held down; set it '
+        + 'to none on the controls screen to fix it by hand.');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
@@ -1963,6 +2015,7 @@ begin
   ApplyChosenSettings;
   ApplySoundProvider;
   ApplyGameDefaults;
+  ApplyWinePovFix;
   InstallCompleteSaves;
   ConvertMovies;
   ConvertMenuArt;

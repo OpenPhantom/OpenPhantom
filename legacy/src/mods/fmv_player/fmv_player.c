@@ -60,6 +60,8 @@
 #include "video_overlay.h"
 #include "vlc_playback.h"
 
+#include "common/platform.h"
+
 #include "common/detour.h"
 #include "common/host_image.h"
 #include "common/ini.h"
@@ -182,6 +184,60 @@ static void load_config(void)
      * movie's own shape, because a misspelled setting should leave the picture undistorted rather
      * than silently pick the more destructive of the two. */
     ini_read_string(FMV_PLAYER_SECTION, "Scaling", "letterbox", scaling, sizeof scaling);
+
+    /* Which window the movie is drawn into. The default depends on the platform: the popup that
+     * has always shipped on Windows, and a child of the game's own window under Wine, where a top
+     * level window takes the keyboard away for as long as a cutscene lasts. See video_overlay.h. */
+    {
+        char        surface[16];
+        const char *default_surface = platform_is_wine() ? "child" : "popup";
+
+        ini_read_string(FMV_PLAYER_SECTION, "MovieSurface", default_surface,
+                        surface, sizeof surface);
+
+        /* An empty value is NOT the same as an absent key, and the ini ships this one present and
+         * empty so the paragraph explaining it has something to sit on. GetPrivateProfileString
+         * returns the default only for a key it cannot find; a key with no value comes back empty.
+         * Both mean "no opinion", so both take the platform's own answer here. Without this the
+         * shipped ini would put every Linux installation back on the popup window and take its
+         * keyboard away during a cutscene, which is the defect this setting exists to avoid. */
+        video_overlay_set_surface_mode((surface[0] != 0) ? surface : default_surface);
+    }
+
+    /* Which video output libVLC uses.
+     *
+     * THE DEFAULT DEPENDS ON WHERE THIS IS RUNNING, and that is the whole point. On Windows the
+     * choice is left to libVLC, exactly as it always has been, so nothing about a Windows
+     * installation changes. Under Wine the default is gdi, because libVLC's own choice there is
+     * Direct3D and building a second Direct3D device takes the engine's exclusive mode one away:
+     * the cutscenes play, and every frame after them is drawn into nothing. FIELD CONFIRMED on
+     * Linux Mint under Lutris, where gdi fixed it and the window based theories did not.
+     *
+     * The ini still wins if it names an output, so this is a better default and not a decision
+     * taken away from anybody. See vlc_playback.h. */
+    {
+        char        video_output[32];
+        const char *default_output = platform_is_wine() ? "gdi" : "";
+
+        ini_read_string(FMV_PLAYER_SECTION, "VideoOutput", default_output,
+                        video_output, sizeof video_output);
+        /* Present and empty is not absent: see the note by MovieSurface above. Without this the
+         * shipped ini would hand libVLC no video output at all on Linux, which is exactly the
+         * black menu this setting exists to prevent. */
+        const char *chosen_output = (video_output[0] != 0) ? video_output : default_output;
+
+        vlc_playback_set_video_output(chosen_output);
+
+        if (platform_is_wine()) {
+            /* The output actually handed over, not the raw ini value: those differ whenever the
+             * key is absent or empty, which is how it ships, and a log line that reported the
+             * empty one would say the opposite of what happened. */
+            log_info("running under Wine, so libVLC's video output is '%s' rather than libVLC's "
+                     "own choice: its Direct3D output builds a second device and the game loses "
+                     "the one it is drawing with. VideoOutput in the ini overrides this",
+                     chosen_output);
+        }
+    }
     fmv_player_state.stretch_movies = (_stricmp(scaling, "stretch") == 0);
     vlc_playback_set_stretch(fmv_player_state.stretch_movies);
     log_info("movies are shown %s", fmv_player_state.stretch_movies

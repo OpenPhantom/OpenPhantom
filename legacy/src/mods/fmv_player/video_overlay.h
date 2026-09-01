@@ -39,4 +39,32 @@ bool video_overlay_is_still_loading(void);
  * caller is expected to fall back to the original playback path. */
 bool video_overlay_play_blocking(const wchar_t *file_path);
 
+/* WHICH WINDOW LIBVLC DRAWS INTO. The default is "popup" on Windows and "child" under Wine, and
+ * neither needs setting: the ini is here to override a machine that disagrees.
+ *
+ * WHAT "child" IS ACTUALLY FOR, because it is not what it was written for. It was built to test
+ * whether a second full screen window was what turned the menus black under Wine. It was NOT: that
+ * was libVLC's Direct3D video output taking the engine's exclusive mode device away, and it is
+ * fixed by the video output setting in vlc_playback.h instead. This looked like a dead end.
+ *
+ * It turned out to be the fix for a different defect. Under Wine a real Escape did not skip a
+ * movie, while the controller's synthesised one did, and three separate ways of READING the key
+ * failed because the key was never reaching the process at all. A top level window is mapped as a
+ * real X11 window, an X11 window manager focuses a newly mapped one, and the HWND behind it is
+ * WS_EX_NOACTIVATE, so Wine held the focus for a window that refuses activation and every keystroke
+ * went nowhere for as long as the movie lasted. A child is drawn inside its parent and is not an
+ * X11 window at all, so nothing is ever mapped and the focus never moves.
+ *
+ *   "popup"  a full screen WS_POPUP owned by the game window. Correct on Windows and the default
+ *            there: it is what has always shipped and what every Windows release was tested with.
+ *   "child"  a WS_CHILD inside the game's own window. The default under Wine. FIELD CONFIRMED on
+ *            Linux Mint together with the gdi video output: the movies play and Escape skips them.
+ *   "game"   no window of ours at all: libVLC is handed the game's own window. Never needed in the
+ *            end, kept because it costs two lines and is the only remaining thing to try if a
+ *            machine turns up that neither of the above suits.
+ *
+ * An unrecognised name is refused and logged rather than guessed at, and the platform default is
+ * kept. */
+void video_overlay_set_surface_mode(const char *mode);
+
 #endif /* VIDEO_OVERLAY_H */

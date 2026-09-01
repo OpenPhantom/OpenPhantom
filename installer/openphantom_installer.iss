@@ -17,6 +17,21 @@
 
 #define GameName "Star Wars Episode I: The Phantom Menace"
 
+; THE SAME TITLE WITH THE COLON TAKEN OUT, AND IT EXISTS ONLY TO BE PART OF A FILENAME.
+;
+; A shortcut is a file, and a colon cannot be in a Windows filename. NTFS does not reject one: it
+; reads what follows as an alternate data stream, so `{commondesktop}\{#GameName}` asked for a file
+; called "Star Wars Episode I" carrying a stream named " The Phantom Menace.lnk". That is what got
+; created. The visible file is zero bytes, Explorer draws it as a blank page because it has no
+; extension to recognise, and double clicking it does nothing, while the real shortcut sits in the
+; stream where nothing can open it. No error is reported at any point.
+;
+; So {#GameName} stays exactly as it is for AppName, where it is displayed rather than written to
+; disc and the colon is correct, and everything under [Icons] uses this instead. The separator is a
+; dash because that is what LucasArts themselves used when they hit this, which is visible in the
+; Start menu to this day: "LucasArts\Star Wars - Battle for Naboo".
+#define ShortcutName "Star Wars Episode I - The Phantom Menace"
+
 ; OUR version, not the game's. Written once because it reaches two places that must agree: the
 ; version the wizard shows and the version resource of the built executable. They were separate
 ; literals and they drifted, so a build shipped as one version announced itself as another.
@@ -27,7 +42,7 @@
 ;
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
-#define AppVer "1.3"
+#define AppVer "1.4"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
@@ -69,7 +84,8 @@ OutputBaseFilename=OpenPhantom_Installer
 VersionInfoVersion={#AppVer}
 ; Built installers are kept out of the repository; they are rebuilt from this script.
 OutputDir=output
-UninstallDisplayIcon={app}\WMAIN.EXE
+; TPM.EXE and not WMAIN.EXE, for the reason set out above [Icons]: WMAIN.EXE carries no icon.
+UninstallDisplayIcon={app}\TPM.EXE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -239,11 +255,23 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\TPM.EXE
 ; setting changes the coordinate space a window is placed in, which is the same thing the
 ; resolution fix works in, and the two have never been tried together.
 
+; WMAIN.EXE IS WHAT RUNS, AND TPM.EXE IS WHAT THE ICON COMES FROM. Those have to be two different
+; files here. A shortcut with no IconFilename takes its icon from whatever it points at, and
+; WMAIN.EXE has no resource directory at all: no icon, no version information, nothing. Windows then
+; falls back to the blank page it shows for a file type it does not know, which is what the desktop
+; shortcut looked like before this line existed.
+;
+; Of the six executables the disc carries, WMAIN.EXE is the only one with no icon. TPM.EXE is the
+; one to borrow from: it is the original launcher, it is copied unconditionally above, and it is the
+; file the disc check looks for, so it cannot be absent while the game is installed. Its icon is the
+; LucasArts logo, one 32x32 image at 16 colours, which is the era it comes from. It will look coarse
+; at the sizes a modern desktop draws, and that is a deliberate trade against inventing artwork.
 [Icons]
-Name: "{group}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"
-Name: "{group}\{cm:UninstallProgram,{#GameName}}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#GameName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
-    Tasks: desktopicon
+Name: "{group}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
+    IconFilename: "{app}\TPM.EXE"
+Name: "{group}\{cm:UninstallProgram,{#ShortcutName}}"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
+    IconFilename: "{app}\TPM.EXE"; Tasks: desktopicon
 
 ; There is deliberately no [UninstallDelete] section. Inno removes the files it installed; saved
 ; games, settings and anything a player added afterwards are not ours to delete. The folder stays
@@ -592,6 +620,22 @@ end;
   is the wanted answer: the game runs on one monitor. They are also the values Windows reports after
   DPI virtualisation, and since Setup is not marked DPI aware, a scaled desktop reports the scaled
   size. That is still the size the game will be asked to fill, so it is still the right number. }
+{ True when this Setup is running under Wine, which includes Proton and Lutris.
+
+  The registry key is Wine's own and has been there for the life of the project: Wine creates it and
+  Windows never does. The game's own DLLs ask ntdll for wine_get_version instead, which is a better
+  question, but Inno's [Code] cannot call an export by address and this answer is good enough for
+  the one thing it decides here.
+
+  There is exactly one caller, ApplyWinePovFix. An earlier version of this function skipped both
+  conversion pages under Wine, because both converters were PowerShell and Wine ships none; that is
+  gone, because the converter is now a native executable Wine runs exactly as Windows does. }
+function RunningUnderWine: Boolean;
+begin
+  Result := RegKeyExists(HKEY_CURRENT_USER, 'Software\Wine') or
+            RegKeyExists(HKEY_LOCAL_MACHINE, 'Software\Wine');
+end;
+
 function ScreenWidth: Integer;
 begin
   Result := GetSystemMetrics(0);
@@ -1408,7 +1452,7 @@ begin
   end;
 
   { Written to the setup log and nowhere else. The converter's own notes go to stderr under
-    -Quiet and this procedure discards stderr, so without this record the log could say the
+    --quiet and this procedure discards stderr, so without this record the log could say the
     cutscenes were converted and never say which FFmpeg converted them. The installer
     carries its own copy and names it on the command line above; this is the line that
     shows the one it named is the one that ran. }
@@ -1480,9 +1524,9 @@ begin
   end;
 end;
 
-{ Called once per line the menu converter writes. Its -Quiet mode speaks the same protocol
-  convert_movies.ps1 does, with one addition: a TOTAL line first, because the pictures live inside
-  the archives and there is nothing on disc to count before it starts. }
+{ Called once per line the menu converter writes. Its --quiet mode speaks the same protocol the
+  movie half does, with one addition: a TOTAL line first, because the pictures live inside the
+  archives and there is nothing on disc to count before it starts. }
 procedure MenuArtOnLog(const S: String; const Error, FirstLine: Boolean);
 var
   Line: String;
@@ -1519,9 +1563,15 @@ end;
 
 { Makes the upscaled menu artwork, hidden, with a progress page in front of it.
 
-  The script is the copy in the patch's unpacked folder rather than the one just installed, for the
-  same reason the movie converter uses that copy: [Dirs] grants users-modify on the game folder,
-  because the game keeps its settings and saves inside it, and this runs with Setup's rights. }
+  The converter is the copy in the patch's unpacked folder rather than the one just installed, for
+  the same reason the movie half uses that copy: [Dirs] grants users-modify on the game folder,
+  because the game keeps its settings and saves inside it, and this runs with Setup's rights.
+
+  IT IS A NATIVE EXECUTABLE, AND THAT IS THE WHOLE POINT. This step used to be PowerShell driving
+  GDI+, which meant it did nothing at all under Proton or Lutris: Wine ships no PowerShell. The
+  executable is a plain Win32 console program, so Wine runs it exactly as Windows does and a Steam
+  Deck installation now converts its artwork during Setup like any other. The .ps1, .py and .sh
+  scripts still install beside it for anyone who wants to convert again at a different size. }
 procedure ConvertMenuArt;
 var
   W, H, ResultCode: Integer;
@@ -1531,7 +1581,7 @@ begin
   if (W = 0) or (H = 0) then
     Exit;
 
-  Script := ExpandConstant('{#PatchTmp}\tools\convert_menu.ps1');
+  Script := ExpandConstant('{#PatchTmp}\tools\openphantom_convert.exe');
   if not FileExists(Script) then begin
     MsgBox(UserMessage('MenuArtNoScript', Script), mbError, MB_OK);
     Exit;
@@ -1543,23 +1593,20 @@ begin
   MenuArtResult := '';
 
   if MenuFitPage.SelectedValueIndex = 1 then
-    Fit := 'Uniform'
+    Fit := ' --uniform'
   else
-    Fit := 'Stretch';
+    Fit := '';
 
-  { No -OutputDirectory: the script's own default is menu_hd, which is also the DLL's own default
+  { No --output: the converter's own default is menu_hd, which is also the DLL's own default
     MenuArtDirectory, and naming it in two places is how those two drift apart. }
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
-            ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
-            ' -Width ' + IntToStr(W) + ' -Height ' + IntToStr(H) +
-            ' -Fit ' + Fit;
+  Params := 'menu --quiet --game "' + ExpandConstant('{app}') + '"' +
+            ' --width ' + IntToStr(W) + ' --height ' + IntToStr(H) + Fit;
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
   ConvertPage.SetProgress(0, 100);
   ConvertPage.Show;
   try
-    if not ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-                            Params, ExpandConstant('{app}'), SW_HIDE,
+    if not ExecAndLogOutput(Script, Params, ExpandConstant('{app}'), SW_HIDE,
                             ewWaitUntilTerminated, ResultCode, @MenuArtOnLog) then
       ResultCode := -1;
   finally
@@ -1596,7 +1643,7 @@ begin
   if Height < 0 then
     Exit;
 
-  Script := ExpandConstant('{#PatchTmp}\tools\convert_movies.ps1');
+  Script := ExpandConstant('{#PatchTmp}\tools\openphantom_convert.exe');
   if not FileExists(Script) then begin
     MsgBox(UserMessage('ConvertNoScript', Script), mbError, MB_OK);
     Exit;
@@ -1606,23 +1653,21 @@ begin
   MovieDone := 0;
   MovieResult := '';
 
-  { convert_movies.ps1 looks for FFmpeg in its own cache, then on PATH, then downloads one. The
-    copy installed under mods\fmv is put on PATH here so it is found at the second step and the
-    third never happens. This changes the environment of this process only, which the converter
-    inherits; nothing is written to the machine's environment.
-
-    "Convert Movies.bat" does the same for itself, so a conversion the player starts later finds it
-    too. Both are needed: this one runs the script directly and never goes through the batch file. }
+  { The converter is told which FFmpeg to use on the command line below, so this is not what makes
+    the conversion work. It is here for what FFmpeg itself may go looking for, and because the
+    scripts installed alongside do search PATH; putting the copy under mods\fmv on it costs nothing
+    and removes a difference between the two ways of running a conversion. This changes the
+    environment of this process only, which the converter inherits; nothing is written to the
+    machine's environment. }
   SetEnvironmentVariable('PATH',
     ExpandConstant('{app}\mods\fmv') + ';' + GetEnv('PATH'));
 
-  { -FFmpegPath names the copy this installer carried, instead of letting the script search.
-    The search consults its %LOCALAPPDATA% cache BEFORE PATH, so without this a copy left by
-    an earlier run would be preferred over the version-pinned one just installed, and run by
-    this elevated process. -NoDownload closes the other end of the same seam: an elevated
-    run must not reach the network on its own initiative, however well pinned the fetch is.
-    Both are unnecessary for the player-started "Convert Movies.bat", which is neither
-    elevated nor silent, and it passes neither. }
+  { --ffmpeg names the copy this installer carried, rather than leaving the converter to find one.
+    The converter never downloads and never consults a cache, so both of the seams the old
+    PowerShell step had to be argued shut are simply absent here; naming the file is still worth
+    doing, because an elevated process should run the binary it just verified rather than whichever
+    one a search settles on. The player-started "Convert Movies.bat" passes nothing and is neither
+    elevated nor silent. }
   // RUN IT FROM {tmp}, NOT FROM WHERE IT WAS JUST INSTALLED. [Dirs] grants users-modify on {app},
   // because the game keeps its settings and saves inside its own folder and cannot run otherwise,
   // and Windows passes that grant down by inheritance to everything created underneath it, which
@@ -1651,17 +1696,15 @@ begin
     FFmpegExe := InstalledFFmpeg;
   end;
 
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' +
-            ' -Quiet -GameDirectory "' + ExpandConstant('{app}') + '"' +
-            ' -NoDownload -FFmpegPath "' + FFmpegExe + '"' +
-            ' -TargetHeight ' + IntToStr(Height);
+  Params := 'movies --quiet --game "' + ExpandConstant('{app}') + '"' +
+            ' --ffmpeg "' + FFmpegExe + '"' +
+            ' --height ' + IntToStr(Height);
 
   ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
   ConvertPage.SetProgress(0, MovieTotal);
   ConvertPage.Show;
   try
-    if not ExecAndLogOutput(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-                            Params, ExpandConstant('{app}'), SW_HIDE,
+    if not ExecAndLogOutput(Script, Params, ExpandConstant('{app}'), SW_HIDE,
                             ewWaitUntilTerminated, ResultCode, @ConvertOnLog) then
       ResultCode := -1;
   finally
@@ -1925,6 +1968,42 @@ begin
     MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
 end;
 
+{ D-PAD UP IS HELD DOWN FOR EVER UNDER WINE, AND THIS UNBINDS IT.
+
+  P0JOY is the game's binding for D-pad up. The POV hat on a pad reports a DIRECTION when it is
+  pressed and a centred value when it is not, and Windows and Wine do not agree on what centred is:
+  under Wine the game reads the hat as permanently pushed up, so the menus scroll on their own and
+  the character walks without a hand on the pad. FIELD CONFIRMED on a Steam Deck and on Linux Mint.
+
+  5133 is not a number invented here. It is what the game itself wrote into obi.ini when the binding
+  was set to "none" on the controls screen, which is also why it is trusted: the engine's own answer
+  for that control, in the engine's own encoding, rather than a value reasoned out from the others.
+  It belongs to the same 0x14xx family as the shipped U0JOY=5129 and U1JOY=5130, which are the U
+  axis left unbound for the same reason.
+
+  NOT gated on the game_defaults component. That component is a preference, it is off unless asked
+  for, and it writes a whole controller layout; this is a defect that makes the game unplayable with
+  a pad attached, so gating it behind an optional component would leave most people broken. It does
+  run after ApplyGameDefaults, because that component's own table sets P0JOY=781 and the last write
+  is the one that counts.
+
+  Windows never reaches this, so a Windows installation is untouched. }
+procedure ApplyWinePovFix;
+var
+  Ini: String;
+begin
+  if not RunningUnderWine then
+    Exit;
+
+  Ini := ExpandConstant('{app}\obi.ini');
+  if SetIniString('options', 'P0JOY', '5133', Ini) then
+    Log('wine: P0JOY (D-pad up) set to 5133, the game''s own "none", because Wine reports the '
+        + 'POV hat as permanently pushed up')
+  else
+    Log('wine: P0JOY could not be written to ' + Ini + '. D-pad up will read as held down; set it '
+        + 'to none on the controls screen to fix it by hand.');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
@@ -1936,6 +2015,7 @@ begin
   ApplyChosenSettings;
   ApplySoundProvider;
   ApplyGameDefaults;
+  ApplyWinePovFix;
   InstallCompleteSaves;
   ConvertMovies;
   ConvertMenuArt;

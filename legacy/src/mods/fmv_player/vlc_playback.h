@@ -45,6 +45,27 @@ void vlc_playback_init_async(void);
  * A libVLC without the export it needs stays on letterbox and says so once. */
 void vlc_playback_set_stretch(bool stretch);
 
+/* WHICH VIDEO OUTPUT LIBVLC USES. An empty name, which is the default, leaves libVLC to choose, so
+ * an installation that says nothing behaves exactly as it always has.
+ *
+ * This exists for the same Wine defect video_overlay.h describes: the cutscenes play and the menu
+ * that follows is black, with the game still running, its sound audible and its frames still being
+ * drawn. What that header assumed was the WINDOW turned out not to be: drawing the movie into a
+ * child of the game's own window, which adds no window at all at the X11 level, made no difference.
+ *
+ * What is left is the DEVICE. libVLC's default video output on Windows is Direct3D, so playing a
+ * movie creates a SECOND Direct3D device while the engine is holding an exclusive mode one through
+ * dxwrapper. That is window independent, which is exactly the shape of what was measured. An output
+ * that paints through GDI instead creates no device and cannot take the engine's away.
+ *
+ * Passed straight to libVLC as --vout=NAME, so the names are libVLC's own: "gdi" for the plain
+ * Windows blitter, "opengl" or "gl", "direct3d9", "direct3d11". A name libVLC does not know makes
+ * it fall back to its own choice rather than fail, so a typo costs a wrong output and not a movie.
+ *
+ * Must be called before vlc_playback_init_async: the argument is read once, when the instance is
+ * created on the worker thread. */
+void vlc_playback_set_video_output(const char *name);
+
 /* Non-blocking. True only once the background load above has both FINISHED and SUCCEEDED; false
  * while it is still running, if it was never started, and if it finished with a failure. A caller
  * that sees false has nothing to play through for this one movie and should use the original

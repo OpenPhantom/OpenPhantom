@@ -22,6 +22,7 @@
 #include "vlc_locate.h"
 
 #include "common/logging.h"
+#include "common/platform.h"
 
 #include <process.h>
 #include <stdbool.h>
@@ -165,6 +166,23 @@ static void unload(void)
     ZeroMemory(&vlc_api, sizeof vlc_api);
 }
 
+/* --vout=NAME, assembled once and held for the life of the process because libVLC keeps the
+ * pointers it is given. Empty means the argument is not passed at all, which is not the same as
+ * passing an empty one: libVLC then chooses, exactly as it did before this existed. */
+static char vout_argument[64] = "";
+
+void vlc_playback_set_video_output(const char *name)
+{
+    if (name == NULL || name[0] == '\0') {
+        vout_argument[0] = '\0';
+        return;
+    }
+    if (_snprintf_s(vout_argument, sizeof vout_argument, _TRUNCATE, "--vout=%s", name) < 0) {
+        vout_argument[0] = '\0';
+        log_warning("VideoOutput=%s does not fit, libVLC will choose its own video output", name);
+    }
+}
+
 /* ============================================================================================ */
 static bool init_worker(void)
 {
@@ -172,7 +190,8 @@ static bool init_worker(void)
     wchar_t core_path[MAX_PATH];
     wchar_t main_path[MAX_PATH];
     wchar_t plugin_path[MAX_PATH];
-    static const char *const instance_args[] = { "--no-video-title-show", "--aout=waveout" };
+    const char *instance_args[3];
+    int         instance_arg_count = 0;
     /* CONFIRMED FIELD FIX for a ROG Ally X that reported silent movies with DSOAL installed.
      *
      * --aout=mmdevice (forcing WASAPI) was the first fix tried, on the theory that libVLC's own
@@ -190,6 +209,12 @@ static bool init_worker(void)
      * surface. The specific mechanism was never pinned down beyond that, and does not need to be:
      * the fix is confirmed on the machine that reported the bug, which is the bar every other
      * field-tested fix in this project is held to. */
+
+    instance_args[instance_arg_count++] = "--no-video-title-show";
+    instance_args[instance_arg_count++] = "--aout=waveout";
+    if (vout_argument[0] != '\0') {
+        instance_args[instance_arg_count++] = vout_argument;
+    }
 
     if (!vlc_locate_directory(vlc_dir, ARRAYSIZE(vlc_dir))) {
         return false;   /* vlc_locate.c has already said which places it looked in */
@@ -238,7 +263,7 @@ static bool init_worker(void)
         return false;
     }
 
-    vlc_api.instance = vlc_api.new_instance((int)ARRAYSIZE(instance_args), instance_args);
+    vlc_api.instance = vlc_api.new_instance(instance_arg_count, instance_args);
     if (vlc_api.instance == NULL) {
         log_error("libvlc_new refused, most often because the plugins folder under %ls is missing "
                   "or incomplete", vlc_dir);
@@ -247,7 +272,8 @@ static bool init_worker(void)
     }
 
     log_info("libVLC ready, plugins from %ls, audio output forced to waveout (confirmed field fix "
-             "for silent movies on at least one system)", plugin_path);
+             "for silent movies on at least one system), video output %s", plugin_path,
+             (vout_argument[0] != '\0') ? vout_argument : "left to libVLC");
     return true;
 }
 
@@ -365,6 +391,28 @@ static bool escape_pressed_now(bool *was_down)
     *was_down = down;
     return fresh;
 }
+
+/* WHY THE TEST ABOVE IS ENOUGH, INCLUDING UNDER WINE, AND WHAT IT COST TO LEARN THAT.
+ *
+ * There was a period where a real Escape did not skip a movie under Wine while the controller's
+ * Start button did. Start works because controller_input.c synthesises Escape with SendInput, which
+ * writes straight into Wine's own input state; a key pressed by a hand has to arrive from X11
+ * first, and it was not arriving at all. Two readings of the key were built on that evidence and
+ * BOTH FAILED IN THE FIELD: the game window's message queue, and raw input on a message-only window
+ * with RIDEV_INPUTSINK. Neither could have worked, and the reason names the real cause.
+ *
+ * The key was never reaching the PROCESS. Escape opened the menus normally during play, so Wine was
+ * delivering it perfectly well; it stopped only while a movie was on screen, which was the only
+ * time video_overlay.c put a TOP LEVEL window up. An X11 window manager focuses a newly mapped top
+ * level window, and the HWND behind that one is WS_EX_NOACTIVATE, so Wine had been handed the focus
+ * for a window that refuses activation and the key went nowhere. Nothing this file could read would
+ * have found it, which is why three read paths all failed the same way.
+ *
+ * The fix is in video_overlay.c and it is a window, not a key: under Wine the movie is drawn into a
+ * CHILD of the game's own window, so no X11 window is ever created and the focus never moves.
+ * FIELD CONFIRMED on Linux Mint. GetAsyncKeyState then answers exactly as it does on Windows, which
+ * is why there is one test here again and no Wine-only path at all. */
+
 
 /* True for the posted message that BEGINS a close by mouse, as opposed to WM_QUIT, which is what a
  * close has already turned into.

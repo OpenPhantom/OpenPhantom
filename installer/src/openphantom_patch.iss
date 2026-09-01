@@ -169,6 +169,10 @@ Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
 ; GDI+; neither half works under Proton, where Wine ships no PowerShell and System.Drawing.Common is
 ; Windows-only on .NET Core. convert_menu.sh drives convert_menu.py, which needs nothing but Python
 ; 3 and is already on the Steam Deck. The two produce byte-identical output from the same input.
+;
+; Setup no longer runs either of them: openphantom_convert.exe below does that job on both
+; platforms. These are here for a player who wants to convert again at a different size without
+; re-running the installer, and they are the readable record of how the conversion works.
 Source: "{#PatchSrc}\tools\convert_menu.ps1";      DestDir: "{app}\tools"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 Source: "{#PatchSrc}\tools\Convert Menu Art.bat";  DestDir: "{app}\tools"; \
@@ -178,12 +182,22 @@ Source: "{#PatchSrc}\tools\convert_menu.py";       DestDir: "{app}\tools"; \
 Source: "{#PatchSrc}\tools\convert_menu.sh";       DestDir: "{app}\tools"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 
-; A second copy of the menu converter, in the temporary folder, and it is the one
-; ConvertMenuArt runs. The copy above is for the player to run later; this one runs during
+; THE CONVERTER SETUP ITSELF RUNS, for both the menu artwork and the cutscenes, which is why it
+; carries both components and installs once rather than twice. It is a plain Win32 console program
+; and therefore the only one of the five converters that works everywhere: Wine runs it exactly as
+; Windows does, so an installation under Proton or Lutris converts during Setup instead of leaving
+; the player a pair of shell commands. It produces output byte-identical to the scripts beside it,
+; which is checked rather than assumed.
+Source: "{#PatchSrc}\tools\openphantom_convert.exe"; DestDir: "{app}\tools"; \
+    Components: patch\enhanced_resolution patch\fmv_player; Flags: ignoreversion
+
+; A second copy of the converter, in the temporary folder, and it is the one ConvertMenuArt and
+; ConvertMovies actually run. The copy above is for the player to run later; this one runs during
 ; installation with Setup's rights, and {tmp} is the only one of the two that an ordinary user
 ; cannot write to first. Removed when Setup finishes.
-Source: "{#PatchSrc}\tools\convert_menu.ps1"; DestDir: "{#PatchTmp}\tools"; \
-    Components: patch\enhanced_resolution; Flags: ignoreversion deleteafterinstall
+Source: "{#PatchSrc}\tools\openphantom_convert.exe"; DestDir: "{#PatchTmp}\tools"; \
+    Components: patch\enhanced_resolution patch\fmv_player; \
+    Flags: ignoreversion deleteafterinstall
 Source: "{#PatchSrc}\mods\framerate_fix.dll";       DestDir: "{app}\mods"; \
     Components: patch\framerate_fix;       Flags: ignoreversion
 Source: "{#PatchSrc}\mods\variable_fov.dll";        DestDir: "{app}\mods"; \
@@ -234,16 +248,19 @@ Source: "{#PatchSrc}\tools\convert_movies.ps1"; DestDir: "{app}\tools"; \
 Source: "{#PatchSrc}\tools\Convert Movies.bat"; DestDir: "{app}\tools"; \
     Components: patch\fmv_player; Flags: ignoreversion
 
-; A second copy of the converter, in the temporary folder, and it is the one ConvertMovies runs.
-; The copy above is for the player to run later; this one runs during installation with Setup's
-; rights, and {tmp} is the only one of the two that an ordinary user cannot write to first.
-; Removed when Setup finishes.
-Source: "{#PatchSrc}\tools\convert_movies.ps1"; DestDir: "{#PatchTmp}\tools"; \
-    Components: patch\fmv_player; Flags: ignoreversion deleteafterinstall
+; The Linux half of the cutscene converter, for the same reason the menu one ships twice: the .ps1
+; cannot run under Proton or Lutris. convert_movies.py needs only Python 3 and whatever ffmpeg the
+; system has. Setup drives openphantom_convert.exe rather than either of them; these are for a
+; conversion the player starts later, at a size they pick themselves.
+Source: "{#PatchSrc}\tools\convert_movies.py"; DestDir: "{app}\tools"; \
+    Components: patch\fmv_player; Flags: ignoreversion
+Source: "{#PatchSrc}\tools\convert_movies.sh"; DestDir: "{app}\tools"; \
+    Components: patch\fmv_player; Flags: ignoreversion
 
 ; Installed beside libVLC, which is where the rest of the cutscene feature keeps its binaries, and
-; put on PATH by the two things that run the converter. convert_movies.ps1 looks in its own cache,
-; then on PATH, then downloads; being on PATH is what stops it reaching the third.
+; put on PATH by the things that run a conversion. convert_movies.ps1 looks in its own cache, then
+; on PATH, then downloads; being on PATH is what stops it reaching the third. Setup names this copy
+; on openphantom_convert.exe's command line instead, which never searches and never downloads.
 ;
 ; It used to go to the local application data folder, where the script caches its own download.
 ; That worked, but it is a per-user folder written by an elevated installer, so it landed in

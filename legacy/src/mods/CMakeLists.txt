@@ -76,6 +76,7 @@ add_engine_fix(view_distance_fix
     dll_main.c
     view_distance_fix.c
     cell_watchdog.c
+    frame_governor.c
     draw_table.c
     vertex_table.c
     fog_regime.c

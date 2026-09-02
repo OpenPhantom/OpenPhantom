@@ -62,4 +62,17 @@ void cell_watchdog_set_vertex_limit(uint32_t new_limit);
 /* The cell budget as a multiple of the shipped 8192, for the radius cap. */
 float cell_watchdog_budget(void);
 
+/* The lowest scale this watchdog has imposed since the last reset, or a value above any legal
+ * scale when it has not had to impose one. frame_governor.c needs it because the two of them
+ * lower the same number for different reasons: without this term the frame governor would hand
+ * back, thirty seconds later, exactly the scale this one refused to allow, and the two would take
+ * turns undoing each other for as long as the level lasted. Correctness outranks comfort. */
+float cell_watchdog_ceiling(void);
+
+/* Forgets that ceiling. Called only when ViewRangeScale changes on disk: the reader has just said
+ * what they want, and a watchdog still braked from a setting nobody is asking for any more would
+ * quietly ignore it. Nothing else resets it - a brake this watchdog applied to avoid an overflow
+ * stands for the rest of the level, which is the whole point of it. */
+void cell_watchdog_reset_ceiling(void);
+
 #endif /* CELL_WATCHDOG_H */

@@ -197,6 +197,11 @@ add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
 # keeping its velocity, matters as much as the case that must.
 add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
 
+# The frame-time governor's one decision. The dead zone between its two thresholds is the property
+# that stops it oscillating, and it is a relationship between two settings rather than anything
+# either says alone, so it is worth a test of its own.
+add_unit_test(frame_governor view_distance_fix view_distance_fix/frame_governor.c)
+
 # The draw distance row's own arithmetic: the clamp, and the hand written parser that exists
 # because strtof would read a decimal point only where the locale agrees it is one.
 add_unit_test(view_range_row dev_overlay dev_overlay/view_range_row.c)

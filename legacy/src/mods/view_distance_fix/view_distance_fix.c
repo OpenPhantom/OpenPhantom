@@ -47,6 +47,7 @@
 #include "view_distance_fix.h"
 
 #include "cell_watchdog.h"
+#include "frame_governor.h"
 #include "draw_table.h"
 #include "fog_regime.h"
 #include "spawn_census.h"
@@ -193,6 +194,8 @@ typedef uint32_t (__cdecl *build_projection_fn_t)(int32_t *camera);
 typedef struct view_distance_config {
     bool  enabled;
     float view_range_scale;
+    bool  frame_backoff;
+    float backoff_fps;
     bool  fog_inside_cut;
     bool  fog_follow_fov;
     bool  vertex_fog;
@@ -248,6 +251,8 @@ static void load_config(void)
 
     config->enabled             = ini_read_bool (VIEW_DISTANCE_SECTION, "Enabled", true);
     config->view_range_scale    = ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale", 1.0f);
+    config->frame_backoff       = ini_read_bool (VIEW_DISTANCE_SECTION, "FrameBackoff", true);
+    config->backoff_fps         = ini_read_float(VIEW_DISTANCE_SECTION, "BackoffFps", 0.0f);
     config->fog_inside_cut      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogInsideCut", true);
     config->fog_follow_fov      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogFollowFov", true);
     config->vertex_fog          = ini_read_bool (VIEW_DISTANCE_SECTION, "VertexFog", true);
@@ -577,12 +582,24 @@ static void poll_view_range_scale(void)
              (double)view_state.config.view_range_scale, (double)requested);
     view_state.config.view_range_scale = requested;
     view_state.effective_view_scale = requested;
+    /* Both watchdogs start again from here. The reader has just said what they want, and either of
+     * them still braked from a setting nobody is asking for any more would quietly ignore it. */
+    cell_watchdog_reset_ceiling();
+    frame_governor_reset(requested);
 }
 
 static void on_frame(void)
 {
     view_state.two_sided_this_frame = 0;
     poll_view_range_scale();
+
+    /* BEFORE the cell watchdog, and handed that watchdog's own ceiling so it can never give back a
+     * scale the watchdog refused. The two lower the same number for different reasons: the cell
+     * watchdog to stop the draw table overflowing into the bucket list heads, which is a
+     * correctness guard, and the governor because the scale is costing more frame time than it is
+     * worth. Correctness outranks comfort, so the governor is the one that has to yield. */
+    frame_governor_on_frame(&view_state.effective_view_scale,
+                            view_state.config.view_range_scale, cell_watchdog_ceiling());
     cell_watchdog_on_frame(&view_state.effective_view_scale);
 
     /* AFTER the watchdog, deliberately. When the watchdog lowers the scale it moves the cut edge,
@@ -764,6 +781,12 @@ void view_distance_fix_install(void)
         view_state.config.view_range_scale = 1.0f;
         view_state.effective_view_scale = 1.0f;
     }
+
+    /* AFTER the frame hook is settled, so that the scale it is told about is the one that survived
+     * the branch above: with no hook the range is pinned to 1.0 and there is nothing for a
+     * governor to give back. */
+    frame_governor_configure(view_state.config.frame_backoff, view_state.config.backoff_fps,
+                             view_state.config.view_range_scale);
 
     install_fov_observer();
 

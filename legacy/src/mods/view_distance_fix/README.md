@@ -29,7 +29,9 @@ order of thing from a per-object syscall.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `ViewRangeScale` | `1.0` | 1.0-2.5 | the watchdog only ever lowers this |
+| `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below |
+| `FrameBackoff` | `1` | | lower the view distance when it costs too much frame time, and give it back when it does not. Does nothing at scale 1.0 |
+| `BackoffFps` | `0` | | the rate below which it backs off; `0` = three quarters of `framerate_fix`'s `TargetFps`, or 50 uncapped |
 | `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view |
 | `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
@@ -232,6 +234,88 @@ re-issues all thirty-four render states, the five fog states among them, **uncon
 it runs from `std3D_open`, from `graphics_setMode` itself (`0x0046BD8B`: `getRenderFlags` ->
 `setRenderFlags` -> commit) and from every level load through `baplight_applyLevelFog`
 (`0x0041F200`). Fog cannot be lost to a stale shadow.
+
+## What the range costs, and the governor that watches it
+
+Issue #35 was reported as "the tank at the beginning of the gardens of theed makes the fps drop
+considerably". It is not the tank. Measured on the reporter's machine in GARDEN, across the
+cutscene the tank drives out of, with a 100 fps cap:
+
+| | `ViewRangeScale` 2.50 | `ViewRangeScale` 1.00 |
+|---|---|---|
+| frame time | 14.5-15.4 ms | 10.00 ms |
+| frame rate | 64-69 fps | 100.0, flat |
+| CPU per frame | 21-26 ms | 12-13 ms |
+| GPU | 15-27 % | unchanged |
+
+**The graphics card did not move, and that is the whole mechanism.** This engine transforms world
+geometry on the CPU, so a longer view is more work per frame for the processor and none at all for
+the card. Frame time is the only instrument that can see this: a card sitting at 20 % busy at both
+settings says nothing.
+
+Neither watchdog below fired during that run. Peak cell usage never came near the alarm, nothing
+overflowed, nothing was in danger. Those two guard against corruption, and a scale that is merely
+expensive walks straight past them, which is what `FrameBackoff` is for.
+
+It measures the median frame of each window - a median so that one 250 ms level load cannot move
+it - and sizes each step by how far off target that window was: a 3 % miss only nudges, a 40 %
+miss moves four times as far. Recovery is deliberately slower than backing off, the first step
+back needing thirty consecutive healthy seconds and the rest coming every ten. It never goes below
+1.0 and never above what is configured, and it yields to the cell watchdog wherever the two
+disagree, because that one is a correctness guard and this one is only a comfort guard.
+
+**It decides twice a second, on the window just finished.** The first version decided once a
+second against a ring it never emptied, so its median covered the last 256 frames - two and a half
+seconds at 100 fps - and lagged the scene by over a second. Between that and steps sized for a
+gentler cost curve than this setting actually has, it took **fourteen seconds** to walk 2.50 down
+to 1.00 in a cutscene that is about thirteen seconds long: it arrived after the thing it was
+reacting to had finished, which is what a field run reported as "better but still drops". The
+window is now emptied after each decision and a decision is every half second.
+
+**An attribution test was tried here and removed; it is worth knowing why.** The first run walked
+2.50 down to 1.15 in nine consecutive seconds, and its log shows the first three steps made the
+frame time *worse*:
+
+```
+2.50 -> 2.35   16.1 ms       2.05 -> 1.90   16.8 ms
+2.35 -> 2.20   16.6 ms       1.90 -> 1.75   16.1 ms
+2.20 -> 2.05   16.9 ms       ... on down to 1.15
+```
+
+so a version was tried that refused to step again until a step had measurably helped. It made
+things worse, and its own log says how:
+
+```
+14.7 ms (68 fps)  View scale 2.05 -> 1.90.
+15.7 ms (64 fps)  ... the last step to 1.90 did not improve it (14.7 ms then)
+18.9 ms (53 fps)  ... the last step to 1.90 did not improve it (14.7 ms then)
+19.1 ms (52 fps)  ... the last step to 1.90 did not improve it (14.7 ms then)
+```
+
+It held at 52 fps for seven consecutive seconds. The comparison is against the frame time at the
+moment of the step, and in a scene whose own cost is rising that measures **the scene, not the
+step** - so it blames the step for the scene and refuses to act exactly when it is needed most.
+The confound has no fix: there is no way to hold a moving scene still while attributing a quarter
+of a millisecond to one step. The test is gone and the size of the step does its job instead.
+
+It is worth keeping written down, because the reasoning behind it is appealing and somebody will
+think of it again. Note also what the same log disproves: the first run walking to 1.15 was **not**
+over-correction. That scene measured 13.8 ms even at 1.15, so the target was not reachable at any
+scale and there was no setting it could have stopped at and been right. `unittests/frame_governor.c`
+replays both runs.
+
+The two thresholds are deliberately apart, backing off below `BackoffFps` and recovering only
+above it plus 15 %. The band between them is a dead zone it settles into rather than crosses; with
+the thresholds touching, a scale landing between them would be lowered, recover, be raised and be
+lowered again for as long as the level lasted. `unittests/frame_governor.c` pins that band down,
+including both edges and the inverted-threshold case that would have no band at all.
+
+To check in game: set `ViewRangeScale=2.5`, play the GARDEN tank cutscene, and read the log.
+
+```
+[view_distance_fix] frame governor active: the view distance backs off below 75 fps (13.3 ms a frame) ...
+[view_distance_fix] frame governor: 15.2 ms a frame (66 fps), past the 13.3 ms this is allowed to cost. View scale 2.50 -> 2.35.
+```
 
 ## The two walls
 

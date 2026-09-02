@@ -48,6 +48,7 @@
 #include "menu_scale.h"
 #include "mode_filter.h"
 #include "ending_resolution.h"
+#include "credits_skip.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
 
@@ -177,6 +178,7 @@ typedef struct resolution_config {
     int  force_width;
     bool log_resolution_calls;
     bool ending_keeps_resolution;
+    bool skip_credits;
     int  force_height;
     bool log_mode_table;
     bool menu_keeps_resolution;
@@ -224,6 +226,8 @@ static void load_config(void)
                                                   "LogResolutionCalls", false);
     config->ending_keeps_resolution = ini_read_bool(RESOLUTION_SECTION,
                                                     "EndingKeepsResolution", true);
+    config->skip_credits          = ini_read_bool(RESOLUTION_SECTION,
+                                                  "SkipCredits", true);
     config->force_height          = ini_read_int (RESOLUTION_SECTION, "ForceHeight", 0);
     /* Off, like every other diagnostic in this tree. A release ships nothing switched on that
      * only writes to the log, so the default has to be off in the code as well as in the shipped
@@ -711,6 +715,7 @@ void enhanced_resolution_install(void)
     install_enum_modes_cap();
     install_forced_startup_resolution();
     ending_resolution_install(resolution_state.config.ending_keeps_resolution);
+    credits_skip_install(resolution_state.config.skip_credits);
     install_menu_resolution_gate();
 
     /* LAST, and this is an ordering constraint and not merely a reading order: both features below

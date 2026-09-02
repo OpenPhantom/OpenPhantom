@@ -37,6 +37,10 @@ void overlay_input_close(void);
  * draws. Called once per painted frame. */
 void overlay_input_update_pointer(void);
 
+/* Moves the list by whatever the wheel has done since the last frame. Called once a frame while
+ * the panel is open, from the same place as the pointer update. */
+void overlay_input_update_scroll(void);
+
 /* Where that pointer is, in the screen pixels the panel is laid out in. */
 void overlay_input_pointer(float *out_x, float *out_y);
 

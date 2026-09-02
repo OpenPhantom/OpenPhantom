@@ -260,10 +260,42 @@ overlay_tab_t overlay_model_tab(void)
     return model.tab;
 }
 
+/* The first drawn row, as a REQUEST rather than a fact: the reader below is what makes it true
+ * against a row count that changes under it. */
+static int32_t scroll_want = 0;
+
+void overlay_model_scroll_by(int32_t rows)
+{
+    scroll_want += rows;
+    if (scroll_want < 0) {
+        scroll_want = 0;
+    }
+}
+
+static void scroll_home(void)
+{
+    scroll_want = 0;
+}
+
+uint32_t overlay_model_scroll(uint32_t visible)
+{
+    const uint32_t count = overlay_model_row_count();
+    const uint32_t most  = (count > visible) ? (count - visible) : 0u;
+
+    if (scroll_want < 0) {
+        scroll_want = 0;
+    }
+    if ((uint32_t)scroll_want > most) {
+        scroll_want = (int32_t)most;      /* the list shrank, or it was never that long */
+    }
+    return (uint32_t)scroll_want;
+}
+
 void overlay_model_set_tab(overlay_tab_t tab)
 {
     if ((unsigned)tab < (unsigned)OVERLAY_TAB_COUNT) {
         model.tab = tab;
+        scroll_home();
     }
 }
 
@@ -275,6 +307,8 @@ const char *overlay_model_search(void)
 void overlay_model_set_search(const char *text)
 {
     size_t i;
+
+    scroll_home();
 
     if (text == NULL) {
         model.search[0] = '\0';
@@ -290,6 +324,7 @@ void overlay_model_search_append(char letter)
 {
     size_t length = strlen(model.search);
 
+    scroll_home();
     if (length + 1u >= OVERLAY_SEARCH_MAX) {
         return;
     }
@@ -303,6 +338,8 @@ void overlay_model_search_append(char letter)
 void overlay_model_search_backspace(void)
 {
     size_t length = strlen(model.search);
+
+    scroll_home();
 
     if (length > 0u) {
         model.search[length - 1u] = '\0';

@@ -55,6 +55,7 @@
 #include "input_freeze.h"
 #include "sim_pause.h"
 #include "overlay_draw.h"
+#include "overlay_layout.h"
 #include "overlay_model.h"
 
 #include "common/detour.h"
@@ -125,6 +126,10 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define KEY_ESCAPE          0x1B
 #define KEY_BACKSPACE       0x08
 #define KEY_RETURN          0x0D
+#define KEY_PAGE_UP         0x21
+#define KEY_PAGE_DOWN       0x22
+#define KEY_UP              0x26
+#define KEY_DOWN            0x28
 
 /* THE KEY THAT OPENS THE PANEL, AND WHY TWO OF THEM ARE ACCEPTED BY DEFAULT.
  *
@@ -258,6 +263,28 @@ bool overlay_input_is_open(void)
  * So this does the same. The cursor keeps moving while the panel is open, because the panel is not
  * a window and takes nothing away from it, and the position is simply mapped into the panel's own
  * space. There is no speed to tune and nothing to drift. */
+/* The wheel, once a frame, and only while the panel is open.
+ *
+ * It consumes the same accumulator the free camera's fly speed reads. That is not a clash: the
+ * camera needs the wheel while FLYING, which is exactly when the panel is closed and this does not
+ * run. Whichever of the two is on screen owns the wheel, and neither ever sees the other's notches.
+ *
+ * One notch is WHEEL_DELTA, 120. Three rows a notch is the shape Windows itself uses by default and
+ * it reads about right against a row this tall. */
+#define WHEEL_NOTCH   120
+#define ROWS_PER_NOTCH  3
+
+void overlay_input_update_scroll(void)
+{
+    const int32_t delta = overlay_input_take_wheel_delta();
+
+    if (delta != 0) {
+        /* Away from the player scrolls UP the list, which is the direction every other list on the
+         * machine moves. */
+        overlay_model_scroll_by(-(delta / WHEEL_NOTCH) * ROWS_PER_NOTCH);
+    }
+}
+
 void overlay_input_update_pointer(void)
 {
     POINT cursor;
@@ -388,6 +415,25 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
                 return true;
             }
             return true;      /* everything else is swallowed, same as the panel-wide lock below */
+        }
+        /* SCROLLING BY KEY, AND NOT ONLY BY WHEEL. The machine that needs a scrolling list most is
+         * the one with the smallest screen, and on a Steam Deck there is no wheel at all unless
+         * somebody has bound one in Steam Input. These four are otherwise unused by the panel.
+         *
+         * Placed after the hotkey capture and the value editor above, so binding an arrow to a
+         * cheat still works and typing into a field is undisturbed. */
+        if (wparam == KEY_UP || wparam == KEY_DOWN) {
+            overlay_model_scroll_by((wparam == KEY_UP) ? -1 : 1);
+            return true;
+        }
+        if (wparam == KEY_PAGE_UP || wparam == KEY_PAGE_DOWN) {
+            /* A page is what is on screen less one row, so the row you were reading stays in
+             * view and there is no gap to lose your place in. */
+            const uint32_t visible = overlay_layout()->visible_rows;
+            const int32_t  page = (visible > 1u) ? (int32_t)(visible - 1u) : 1;
+
+            overlay_model_scroll_by((wparam == KEY_PAGE_UP) ? -page : page);
+            return true;
         }
         if (wparam == KEY_ESCAPE) {
             set_open(false);

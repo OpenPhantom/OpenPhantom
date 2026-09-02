@@ -94,6 +94,22 @@ void overlay_model_rebuild(void);
 
 uint32_t overlay_model_row_count(void);
 
+/* WHICH ROW IS DRAWN FIRST, so a list taller than the screen can still be reached.
+ *
+ * `visible` is what the layout worked out fits. The answer is clamped against it on every ask
+ * rather than corrected when the list changes: the row count moves with every keystroke in the
+ * search field and every fold, and a stored index would be stale between the change and the next
+ * correction. Clamping where it is read means it can never point past the end.
+ *
+ * Scrolling is by whole rows because the rows are what the hit test divides by; a smooth offset
+ * would put half a row under the pointer and give the click nowhere honest to land. */
+uint32_t overlay_model_scroll(uint32_t visible);
+
+/* Moves the first drawn row by `rows`, negative toward the top. Clamped at the top here and at the
+ * bottom by the reader above, which is the only place the row count and the visible count are both
+ * known. */
+void overlay_model_scroll_by(int32_t rows);
+
 /* Copies one row out. False for an index past the end, and then `out` is untouched. */
 bool overlay_model_row(uint32_t index, overlay_row_t *out);
 

@@ -95,6 +95,7 @@ static void __cdecl hook_scene_end(void)
             overlay_input_close();
         } else {
             overlay_input_update_pointer();
+            overlay_input_update_scroll();
             overlay_model_rebuild();
         }
     }

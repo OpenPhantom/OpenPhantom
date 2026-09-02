@@ -70,7 +70,25 @@ void overlay_layout_build(float text_height, float content_width, uint32_t row_c
     out.search_h = SEARCH_H * out.text_h;
     out.rows_top = out.search_top + out.search_h;
     out.row_h = ROW_H * out.text_h;
-    out.height = out.rows_top + (float)row_count * out.row_h + BOTTOM_PAD * out.text_h;
+    /* The rows that fit, and the panel is built around THAT rather than around the row count.
+     * One text height is kept back at each end so the panel never sits flush against the screen
+     * edge, which is the same margin the repositioning below uses. At least one row is always
+     * shown: a panel with no rows at all would be a worse answer than a cramped one. */
+    {
+        const float chrome    = out.rows_top + BOTTOM_PAD * out.text_h;
+        const float available = screen_height - 2.0f * out.text_h - chrome;
+        uint32_t    fits      = 1u;
+
+        if (available > 0.0f && out.row_h > 0.0f) {
+            fits = (uint32_t)(available / out.row_h);
+            if (fits < 1u) {
+                fits = 1u;
+            }
+        }
+        out.visible_rows = (row_count < fits) ? row_count : fits;
+    }
+
+    out.height = out.rows_top + (float)out.visible_rows * out.row_h + BOTTOM_PAD * out.text_h;
 
     x = EDGE_PAD * out.text_h;
     for (i = 0; i < OVERLAY_LAYOUT_TABS; ++i) {
@@ -132,7 +150,14 @@ int32_t overlay_draw_row_at(float x, float y)
         return -1;
     }
     index = (int32_t)((y - top) / built.row_h);
-    if (index < 0 || (uint32_t)index >= overlay_model_row_count()) {
+    /* Only the rows on screen are targets, and the first of them is wherever the list is scrolled
+     * to. Without the second test a click below the last drawn row would land on whatever row the
+     * arithmetic ran on to. */
+    if (index < 0 || (uint32_t)index >= built.visible_rows) {
+        return -1;
+    }
+    index += (int32_t)overlay_model_scroll(built.visible_rows);
+    if ((uint32_t)index >= overlay_model_row_count()) {
         return -1;
     }
     return index;

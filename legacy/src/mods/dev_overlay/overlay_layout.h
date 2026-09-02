@@ -54,6 +54,13 @@ typedef struct layout {
     float rows_top;
     float row_h;
 
+    /* HOW MANY ROWS ARE ACTUALLY DRAWN, which is not how many the tab has. Enough rows, a large
+     * DevMenuSize or a short screen and the list is taller than the display; the panel used to be
+     * pushed up until its top hit zero and then simply ran off the bottom, with no clipping and
+     * nothing to say the rows were there. This is the number that fits, and everything past it is
+     * reached by scrolling. */
+    uint32_t visible_rows;
+
     float tab_x0[OVERLAY_LAYOUT_TABS];
     float tab_w[OVERLAY_LAYOUT_TABS];
 } layout_t;

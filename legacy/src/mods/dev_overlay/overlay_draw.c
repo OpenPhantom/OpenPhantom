@@ -336,6 +336,7 @@ bool overlay_draw_paint(void)
     float       pointer_y = 0.0f;
     int32_t     hot;
     uint32_t    i;
+    uint32_t    first;             /* the row drawn at the top, see the list below */
     const char *typed;
     char        scratch[OVERLAY_LABEL_MAX + 4];
 
@@ -435,13 +436,18 @@ bool overlay_draw_paint(void)
     }
     fill(left, lay.top + lay.rows_top - lay.rule, right, lay.top + lay.rows_top, C_RULE);
 
-    /* --- the list ---------------------------------------------------------------------- */
-    for (i = 0; i < overlay_model_row_count(); ++i) {
-        overlay_row_t row;
-        const float   y = lay.top + lay.rows_top + (float)i * lay.row_h;
-        const bool    is_hot = ((int32_t)i == hot);
+    /* --- the list ------------------------------------------------------------------------------
+     * DRAWN BY POSITION, INDEXED BY ROW. `i` counts down the panel and `index` counts down the tab,
+     * and they differ by wherever the list is scrolled to. Everything below keys off `row`, so only
+     * the two lines that turn a position into a row have to know scrolling exists. */
+    first = overlay_model_scroll(lay.visible_rows);
+    for (i = 0; i < lay.visible_rows; ++i) {
+        overlay_row_t  row;
+        const uint32_t index = first + i;
+        const float    y = lay.top + lay.rows_top + (float)i * lay.row_h;
+        const bool     is_hot = ((int32_t)index == hot);
 
-        if (!overlay_model_row(i, &row)) {
+        if (!overlay_model_row(index, &row)) {
             break;
         }
 
@@ -534,6 +540,37 @@ bool overlay_draw_paint(void)
                 write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h,
                          row.on ? C_CHIP_ON_TEXT : C_CHIP_OFF_TEXT);
             }
+        }
+    }
+
+    /* --- the scroll indicator, and only when there is something to indicate -----------------------
+     * A thumb on the inside of the right border, as long a fraction of the track as the visible
+     * rows are of all of them, and as far down it as the list is scrolled. It is drawn rather than
+     * clickable on purpose: the wheel and the keys already move the list, and a draggable bar this
+     * thin would be a target the game's own pointer is not precise enough to hit.
+     *
+     * Absent entirely when everything fits, so the ordinary panel is exactly what it always was. */
+    {
+        const uint32_t count = overlay_model_row_count();
+
+        if (count > lay.visible_rows && lay.visible_rows > 0u) {
+            const float track_y0 = lay.top + lay.rows_top;
+            const float track_y1 = track_y0 + (float)lay.visible_rows * lay.row_h;
+            const float track_h  = track_y1 - track_y0;
+            const float w        = lay.rule * 3.0f;
+            const float x1       = right - lay.rule;
+            const float x0       = x1 - w;
+            float       thumb_h  = track_h * (float)lay.visible_rows / (float)count;
+            float       thumb_y;
+
+            if (thumb_h < lay.text_h) {
+                thumb_h = lay.text_h;         /* never so short it reads as a speck */
+            }
+            thumb_y = track_y0 + (track_h - thumb_h) *
+                      ((float)first / (float)(count - lay.visible_rows));
+
+            fill(x0, track_y0, x1, track_y1, C_RULE);
+            fill(x0, thumb_y, x1, thumb_y + thumb_h, C_ACCENT);
         }
     }
 

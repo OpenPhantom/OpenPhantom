@@ -7,7 +7,7 @@
 
 OpenPhantom is a modern PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It fixes the original PC version for modern Windows PCs, adding widescreen and ultrawide resolutions, uncapped FPS, corrected field of view, mouse look, working music and video, and 64-bit Windows compatibility. OpenPhantom also reverse engineers and reconstructs the game's engine as documented, maintainable source code, with tools for modding, editing, and extending the game.
 
-**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/tag/i1.3)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
+**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/tag/i1.4)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
 
 OpenPhantom has two parts that will run side by side for a long time. The legacy patches are useful today: they modify the original retail executable in memory so you can play the game you already own with modern fixes. The reconstructed engine is the long-term project: rebuilding the game's systems from the ground up as clean, maintainable source code that can eventually support deeper modding and new features.
 
@@ -19,7 +19,7 @@ OpenPhantom has two parts that will run side by side for a long time. The legacy
 
 *4K rendering with expanded draw distance.*
 
-**Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/tag/i1.3) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
+**Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/tag/i1.4) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
 
 ## What's Included  
 

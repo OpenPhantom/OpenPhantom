@@ -11,6 +11,8 @@
  */
 #include "unittest.h"
 
+#include <string.h>
+
 #include "fog_regime.h"
 
 #include <math.h>
@@ -46,8 +48,12 @@ static const level_case_t levels[] = {
 
 static fog_regime_config_t default_config(void)
 {
+    /* Zeroed first, deliberately. This assigned field by field, so a field added to the struct
+       later was left as whatever the stack held, and the first one added did exactly that: two
+       unrelated checks began failing on a value nobody had written. */
     fog_regime_config_t config;
 
+    memset(&config, 0, sizeof config);
     config.vertex_fog     = true;
     config.follow_fov     = true;
     config.inside_cut     = true;

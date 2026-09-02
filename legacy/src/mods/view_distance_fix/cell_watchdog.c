@@ -280,6 +280,10 @@ static void watch_vertex_cache(float *effective_view_scale)
                   "The view scale goes to 1.00 immediately.",
                   (unsigned)used, (unsigned)limit);
         *effective_view_scale = 1.0f;
+        /* Recorded, like every other brake here. Without it the frame governor is entitled to
+         * hand this scale back thirty seconds later, and this particular brake was applied
+         * because the geometry is ALREADY torn and stays torn until the level reloads. */
+        watchdog_state.ceiling = 1.0f;
         return;
     }
 

@@ -80,6 +80,7 @@ typedef struct fog_regime_config {
     float fog_scale;        /* >1 pushes the authored fog out; 1 leaves it alone */
     float settle_seconds;   /* how long a change takes; 0 means step immediately */
     bool  pixel_fog;        /* hand fog to the device per pixel, where it can measure eye-space w */
+    float min_end_fraction; /* least the fog end may be, as a share of the cut edge; 0 disables */
 } fog_regime_config_t;
 
 typedef struct fog_regime_band {

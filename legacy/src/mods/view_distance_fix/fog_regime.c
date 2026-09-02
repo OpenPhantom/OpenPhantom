@@ -372,6 +372,35 @@ void fog_regime_target_band(const fog_regime_config_t *config,
             end = limit;
         }
     }
+    /* HOW FAR IN THE COUPLING IS ALLOWED TO PULL THE END, and this is the one bound the original
+     * had none of.
+     *
+     * Both terms above are cos(half angle) in disguise, which converts a radial reach into a
+     * forward one: a cell at the frustum CORNER at radial distance `cut` is only cut*cos(theta)
+     * ahead of the eye, and fog is measured on the forward distance, so ending the band there is
+     * what guarantees the corner is hidden before it pops. The trouble is that it applies a
+     * correction computed for the corner to the WHOLE screen, and straight ahead the forward
+     * distance is the radial distance:
+     *
+     *   hFOV  60 (authored)   end 18.2 of a 22 cut    83 %
+     *   hFOV  94              end 14.3                65 %
+     *   hFOV 120              end 10.5                48 %
+     *
+     * So a wide picture is fogged solid at half the distance the engine is still drawing geometry,
+     * and everything between is painted flat. Field reported as a level looking washed out and as
+     * characters below a cliff being drawn but invisible.
+     *
+     * The floor keeps the corner correction while refusing to spend more than a set share of the
+     * visible world on it. Past that the extreme corners may pop in, which costs a few pixels at
+     * the edge of the picture rather than everything beyond halfway. */
+    if (config->min_end_fraction > 0.0f) {
+        float floor_end = (live_cut - FOG_CELL_MARGIN_UNITS) * config->min_end_fraction;
+
+        if (floor_end > 0.0f && end < floor_end) {
+            end = floor_end;
+        }
+    }
+
     if (end < FOG_MIN_END) {
         end = FOG_MIN_END;
     }

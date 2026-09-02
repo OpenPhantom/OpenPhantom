@@ -38,6 +38,7 @@ order of thing from a per-object syscall.
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
 | `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below. The fallback now, not the answer |
 | `PixelFog` | `0` | | let the device fog per pixel instead; needs table fog and w fog, falls back to the ramp |
+| `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |

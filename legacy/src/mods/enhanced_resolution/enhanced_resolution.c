@@ -47,6 +47,7 @@
 #include "menu_art_source.h"
 #include "menu_scale.h"
 #include "mode_filter.h"
+#include "ending_resolution.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
 
@@ -54,6 +55,8 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+
+#include <intrin.h>          /* _ReturnAddress, for LogResolutionCalls */
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
@@ -172,6 +175,8 @@ typedef struct resolution_config {
     bool widescreen_modes;
     int  max_menu_modes;
     int  force_width;
+    bool log_resolution_calls;
+    bool ending_keeps_resolution;
     int  force_height;
     bool log_mode_table;
     bool menu_keeps_resolution;
@@ -215,6 +220,10 @@ static void load_config(void)
     config->widescreen_modes      = ini_read_bool(RESOLUTION_SECTION, "WidescreenModes", true);
     config->max_menu_modes        = ini_read_int (RESOLUTION_SECTION, "MaxMenuModes", 63);
     config->force_width           = ini_read_int (RESOLUTION_SECTION, "ForceWidth", 0);
+    config->log_resolution_calls  = ini_read_bool(RESOLUTION_SECTION,
+                                                  "LogResolutionCalls", false);
+    config->ending_keeps_resolution = ini_read_bool(RESOLUTION_SECTION,
+                                                    "EndingKeepsResolution", true);
     config->force_height          = ini_read_int (RESOLUTION_SECTION, "ForceHeight", 0);
     /* Off, like every other diagnostic in this tree. A release ships nothing switched on that
      * only writes to the log, so the default has to be off in the code as well as in the shipped
@@ -471,6 +480,9 @@ static int32_t __cdecl hook_enum_modes(mode_label_t *out)
 /* ============================================================================================ */
 #define RESOLUTION_READ_INI 0xFFFFFFFFu
 
+/* Enough to cover a whole session's mode changes and nowhere near enough to be a flood. */
+#define RESOLUTION_CALL_LOG_MAX 32u
+
 static int32_t __cdecl hook_set_resolution(uint32_t width, uint32_t height)
 {
     set_resolution_fn_t original =
@@ -479,6 +491,26 @@ static int32_t __cdecl hook_set_resolution(uint32_t width, uint32_t height)
     /* This detour exists for ForceWidth/ForceHeight and nothing else. The window fit used to be
      * driven from here and that was the defect: this function is not the choke point, and the mode
      * changes a player triggers do not pass through it. */
+    /* MEASUREMENT, off unless asked for. graphics_setResolution has SIX callers and
+     * MenuKeepsResolution neutralises exactly one of them, the gate inside swmenu_enterMenuMode.
+     * A screen that drops to 640x480 while every other menu holds its size is therefore reaching
+     * this function by one of the other five, and the only way to know WHICH is to ask the call
+     * itself. The return address is the caller: a detour is entered through a jump patched over
+     * the prologue, so the stack still carries the address the engine will return to.
+     *
+     * Capped, because a mode change is rare but a runaway log is not worth risking. */
+    if (resolution_state.config.log_resolution_calls) {
+        static unsigned reported = 0;
+
+        if (reported < RESOLUTION_CALL_LOG_MAX) {
+            ++reported;
+            log_info("graphics_setResolution(%u, %u) called from %08X%s",
+                     (unsigned)width, (unsigned)height,
+                     (unsigned)(uintptr_t)_ReturnAddress(),
+                     (reported == RESOLUTION_CALL_LOG_MAX) ? " (last one reported)" : "");
+        }
+    }
+
     if (resolution_state.config.force_width > 0 && resolution_state.config.force_height > 0 &&
         width == RESOLUTION_READ_INI && height == RESOLUTION_READ_INI) {
         log_info("startup resolution forced to %dx%d (was 'read obi.ini')",
@@ -597,7 +629,10 @@ static void install_forced_startup_resolution(void)
 {
     uintptr_t site = sites[SITE_SET_RESOLUTION].address;
 
-    if (resolution_state.config.force_width <= 0 || resolution_state.config.force_height <= 0) {
+    const bool forcing = (resolution_state.config.force_width > 0 &&
+                          resolution_state.config.force_height > 0);
+
+    if (!forcing && !resolution_state.config.log_resolution_calls) {
         /* Named rather than skipped in silence: this used to be hooked whenever window fitting was
          * on, and it no longer is. A reader comparing two logs has to be able to see that the
          * detour is absent because nothing asked for it, not because it failed. */
@@ -606,17 +641,24 @@ static void install_forced_startup_resolution(void)
         return;
     }
     if (site == 0) {
-        log_warning("graphics_set_resolution did not resolve - ForceWidth/ForceHeight are IGNORED "
-                    "and obi.ini decides the startup resolution");
+        log_warning("graphics_set_resolution did not resolve - ForceWidth/ForceHeight are IGNORED, "
+                    "LogResolutionCalls can report nothing, and obi.ini decides the startup "
+                    "resolution");
         return;
     }
 
     if (detour_install(&resolution_state.set_resolution_detour, site,
                        (const void *)hook_set_resolution, SET_RESOLUTION_PROLOGUE_SIZE)) {
-        log_info("hooked graphics_setResolution at %08X - the startup resolution is forced to "
-                 "%dx%d instead of being read from obi.ini",
-                 (unsigned)site, resolution_state.config.force_width,
-                 resolution_state.config.force_height);
+        if (forcing) {
+            log_info("hooked graphics_setResolution at %08X - the startup resolution is forced to "
+                     "%dx%d instead of being read from obi.ini",
+                     (unsigned)site, resolution_state.config.force_width,
+                     resolution_state.config.force_height);
+        } else {
+            log_info("hooked graphics_setResolution at %08X for LogResolutionCalls only: every "
+                     "call is reported with the address that made it, and nothing is changed",
+                     (unsigned)site);
+        }
     } else {
         log_error("the graphics_setResolution detour at %08X FAILED - ForceWidth/ForceHeight are "
                   "IGNORED", (unsigned)site);
@@ -668,6 +710,7 @@ void enhanced_resolution_install(void)
     install_aspect_gate();
     install_enum_modes_cap();
     install_forced_startup_resolution();
+    ending_resolution_install(resolution_state.config.ending_keeps_resolution);
     install_menu_resolution_gate();
 
     /* LAST, and this is an ordering constraint and not merely a reading order: both features below

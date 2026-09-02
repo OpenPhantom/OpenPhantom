@@ -60,6 +60,7 @@ add_engine_fix(enhanced_resolution
     menu_loading_bar.c
     menu_art_source.c
     mode_filter.c
+    ending_resolution.c
 )
 
 add_engine_fix(hud_ratio_scaling

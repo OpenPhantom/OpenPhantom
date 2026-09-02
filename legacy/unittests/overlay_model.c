@@ -20,6 +20,28 @@
 
 #include <string.h>
 
+/* THE DRAWING AND INPUT HALVES, STUBBED, and only these two.
+ *
+ * The sources under test reach across to the other half of the overlay in two places: the size row
+ * asks the renderer how big the screen is, and the level skip and the free camera both ask the
+ * input half to close the panel. Linking the real overlay_draw.c and overlay_input.c to satisfy
+ * those would drag Direct3D and a window procedure into a process that has neither, which is a
+ * much larger dependency than the model test wants for two calls it does not exercise.
+ *
+ * The screen stub answers "no screen", which is the honest answer here and the one the size row is
+ * already written to survive: no device means no measurement, so automatic sizing falls back to its
+ * own default rather than reading a number out of an uninitialised renderer. */
+bool overlay_draw_screen(float *out_width, float *out_height)
+{
+    (void)out_width;
+    (void)out_height;
+    return false;
+}
+
+void overlay_input_close(void)
+{
+}
+
 /* The first row is always the group heading, so a folded tab has exactly one row. */
 static int row_count_after(const char *search)
 {

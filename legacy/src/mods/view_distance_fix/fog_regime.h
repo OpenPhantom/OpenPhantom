@@ -79,6 +79,7 @@ typedef struct fog_regime_config {
     bool  inside_cut;       /* additionally cap the band to the no-pop-in limit */
     float fog_scale;        /* >1 pushes the authored fog out; 1 leaves it alone */
     float settle_seconds;   /* how long a change takes; 0 means step immediately */
+    bool  pixel_fog;        /* hand fog to the device per pixel, where it can measure eye-space w */
 } fog_regime_config_t;
 
 typedef struct fog_regime_band {

@@ -199,6 +199,7 @@ typedef struct view_distance_config {
     bool  fog_inside_cut;
     bool  fog_follow_fov;
     bool  vertex_fog;
+    bool  pixel_fog;
     float fog_scale;
     float fog_settle_seconds;
     float npc_range_scale;
@@ -258,6 +259,7 @@ static void load_config(void)
     config->vertex_fog          = ini_read_bool (VIEW_DISTANCE_SECTION, "VertexFog", true);
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
+    config->pixel_fog           = ini_read_bool (VIEW_DISTANCE_SECTION, "PixelFog", false);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
      *
      * The test this would scale is a plain squared distance in three dimensions (0x00428EB3:
@@ -737,6 +739,7 @@ static void install_fog_regime(void)
     fog_regime_config_t fog_config;
 
     fog_config.vertex_fog     = view_state.config.vertex_fog;
+    fog_config.pixel_fog      = view_state.config.pixel_fog;
     fog_config.follow_fov     = view_state.config.fog_follow_fov;
     fog_config.inside_cut     = view_state.config.fog_inside_cut;
     fog_config.fog_scale      = view_state.config.fog_scale;

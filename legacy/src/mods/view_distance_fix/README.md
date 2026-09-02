@@ -36,7 +36,8 @@ order of thing from a per-object syscall.
 | `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
-| `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below |
+| `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below. The fallback now, not the answer |
+| `PixelFog` | `0` | | let the device fog per pixel instead; needs table fog and w fog, falls back to the ramp |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |
@@ -213,6 +214,77 @@ all five fog render states are issued exactly as the engine intends and are acce
 `VertexFog=1` answers the capability question with "no table fog" and sets `FOGTABLEMODE` to
 `D3DFOG_NONE` at **both** writers, so the specular alpha the ramp produces is what the device
 blends with.
+
+### The band was never the wrong thing to hand over
+
+This section used to say the engine passes its band in the wrong units. It does not, and the
+distinction matters because it is the difference between a workaround and a fix.
+
+Direct3D chooses between **w-based** and **z-based** fog by inspecting the fourth column of the
+**projection matrix**: an affine one selects device depth, a non-affine one selects the reciprocal
+of `rhw`. In this engine `rhw` is `1 / cam.y`, so `w` is a distance in world units, which is
+exactly what the authored band is written in. The engine's table-fog branch is a **correct w-fog
+configuration**.
+
+What is missing is the matrix. Cross-referencing every use of the device pointer shows vtable slot
+`+0x64`, `SetTransform`, is **never called anywhere in the image**, and `rdCamera_updateProjection`
+builds frustum plane constants rather than a `D3DMATRIX`. With none set the runtime sees the
+identity, decides it is affine, measures device depth in `[0,1]`, and a world-unit band against it
+fogs nothing. On period hardware without `D3DPRASTERCAPS_FOGTABLE` this never mattered, because the
+software ramp ran instead, which is presumably why it shipped.
+
+`PixelFog=1` supplies that matrix and hands the branch back. It reads the device's own caps first
+and requires both `D3DPRASTERCAPS_FOGTABLE` (`0x100`) and `D3DPRASTERCAPS_WFOG` (`0x00100000`),
+which live in the same dword the engine already tests; if either is missing, or `SetTransform` is
+refused, nothing changes and the ramp above stays in charge. The matrix is only ever a fog
+configuration channel, since the geometry is pre-transformed and is never multiplied by it: the
+fourth column is what selects the w path, and the near and far values behind it do not reach the
+fog factor.
+
+Two things it buys. The fog factor is computed **per pixel** rather than as an 8-bit value at each
+vertex interpolated across polygons, so large sparsely tessellated surfaces stop shimmering as the
+camera moves. And the band needs **no conversion at all**, so everything below that reasons in
+world units keeps doing so.
+
+One thing it costs, and it is worth knowing before touching this file: with the ramp the engine
+re-read `world+0x218/+0x21C` every frame, so writing those two floats was enough for anyone. On the
+device path they only reach `FOGSTART`/`FOGEND` through `applyLevelFog`, so every writer has to be
+pushed. There are two: this file, and the developer overlay's no-fog cheat, which holds the band
+out past everything drawn. The frame tick pushes **their** value when it sees one that is not ours,
+and treats "settled" as meaning both that our band has not moved and that the device is showing it.
+Without that second half the fog could be switched off and never back on.
+
+### What a level opens with, and what the band follows
+
+Two behaviours worth knowing, both from chasing a reported flicker in the first seconds of a level.
+
+**A level opens on its own authored band.** At a load nothing has walked the new world yet, so
+there is no cut edge to reason from. The fallback used to substitute the level's authored view
+distance for the cut and compute a band from it, which is a guess, and with `ViewRangeScale` above
+1 it is wrong in the direction that shows: one level authors 22 while the real cut at 2.5 turned
+out to be 39, so the band sat far nearer the camera than it belonged and stayed there until the
+first frame that walked the world. The authored band is the one value known to be right for that
+level, so it is what a level gets until the renderer says otherwise, and the move to ours is eased
+rather than snapped.
+
+**The band follows a settled draw distance, not the instantaneous one.** The cut edge is not
+steady: the frame governor moves the view scale whenever a scene costs too much, in steps of its
+own every half second, and every step changes the distance the band is computed from. Measured
+during one level's opening, where the governor works hardest because the frame rate is worst:
+
+```
+fov 120.0  cut ref 22  live 39  -> band 6.0..19.2   (band was at 3.3..10.7)
+fov 120.0  cut ref 22  live 34  -> band 5.2..16.7   (band was at 3.7..11.9)
+fov 120.0  cut ref 22  live 33  -> band 5.0..16.2   (band was at 4.6..14.6)
+fov 120.0  cut ref 22  live 32  -> band 4.9..15.7   (band was at 5.0..16.2)
+```
+
+The field of view never moved and neither did the reference. The live cut fell, and the band spent
+the whole sequence chasing a target that had already moved again. Easing the **cut** rather than
+only the band is what fixes it: a step becomes a slope, several steps inside one settle become one
+slope, and the fog ends where the draw distance ended without visiting every value on the way. It
+is deliberately slower than the band's own settle, because smoothing an input faster than its
+consumer only moves the problem.
 
 **The three writes are all-or-nothing, and that is not tidiness.** With the ramp disarmed, the
 world pass writes a **constant zero** into the specular of every world vertex (`0x00402459`), and

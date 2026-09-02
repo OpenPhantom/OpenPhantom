@@ -222,6 +222,30 @@ typedef struct fog_regime_state {
     float               live_cut;
     bool                cut_observed;
 
+    /* The address of the engine's device-record pointer, taken out of the capability query's own
+     * `mov eax,[abs32]` before that query is patched over. Zero when it could not be read. */
+    uintptr_t           device_record_ptr;
+    bool                caps_reported;
+
+    /* Where the engine keeps its IDirect3DDevice3 pointer, read out of the state commit's own
+     * `mov ecx,[abs32]`. Zero when that could not be read. */
+    uintptr_t           device_ptr_addr;
+    uint32_t            device_caps;
+
+    /* What install_vertex_fog wrote, kept so that the pixel path can hand the engine back its own
+     * table-fog branch. Reverting is the whole reason these are stored. */
+    bool                vertex_fog_installed;
+    uintptr_t           query_entry;
+    uintptr_t           applier_push;
+    uintptr_t           commit_push;
+    uint8_t             saved_query[3];
+
+    bool                pixel_fog_active;
+    fog_regime_band_t   device_band;       /* what FOGSTART and FOGEND were last told */
+    bool                inside_apply;      /* true while our own applyLevelFog detour is running */
+
+    const void         *projection_device;   /* the device the matrix was last given to */
+
     bool                tick_active;
     bool                span_refused;    /* the "end came out below start" complaint, logged once */
 } fog_regime_state_t;
@@ -417,6 +441,28 @@ static void target_now(fog_regime_band_t *out)
 /* ==============================================================================================
  * C, the level record
  * ============================================================================================ */
+/* With the per-vertex ramp the engine re-reads the band from the world record every frame, so
+ * writing those two floats was enough. The device path does not: FOGSTART and FOGEND only move when
+ * applyLevelFog runs. That function is already detoured here, so its original is called directly,
+ * which reprograms the device from the fields just written and re-enters nothing. */
+static void push_band_to_device(void)
+{
+    apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
+
+    /* Not while the detour below is running. That function ends by calling the original itself, so
+     * pushing here as well would reprogram the device twice for one engine call. */
+    if (fog_state.inside_apply) {
+        return;
+    }
+    if (fog_state.pixel_fog_active && original != NULL && fog_state.level != NULL) {
+        const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+
+        original(fog_state.level);
+        fog_state.device_band.start = live[0];
+        fog_state.device_band.end   = live[1];
+    }
+}
+
 static void write_band(const fog_regime_band_t *band)
 {
     float *fields;
@@ -443,6 +489,7 @@ static void write_band(const fog_regime_band_t *band)
     fields[0] = band->start;               /* +0x218 */
     fields[1] = band->end;                 /* +0x21C */
     fog_state.written = *band;
+    push_band_to_device();
 }
 
 /* Is this the world we were last told about? The pointer ALONE is not an identity: the record is
@@ -506,6 +553,13 @@ static bool remember_level(void *level)
     fog_state.authored.end        = fog[1];
     fog_state.level_view_distance = *view_distance;
     fog_state.span_refused        = false;
+
+    /* The cut belongs to the level being left, not this one. Nothing has walked the new world yet,
+     * so the draw-distance hook has not run and reference_cut and live_cut still describe the
+     * previous level. Clearing this makes the snap below fall back to this level's own authored
+     * view distance for both, a ratio of one, which is the honest answer until the first frame of
+     * the new world reports a real one. Left set, the snap is computed from the level just left
+     * and the band then walks to its true value over the settle time. */
     return true;
 }
 
@@ -517,6 +571,8 @@ static void __cdecl hook_apply_fog(void *level)
         original(level);
         return;
     }
+
+    fog_state.inside_apply = true;
 
     if (is_the_same_level(level)) {
         /* The effects fog restore came through, or the level was re-applied: this function
@@ -536,8 +592,14 @@ static void __cdecl hook_apply_fog(void *level)
                  (double)fog_state.horizontal_fov_degrees);
     }
 
+    fog_state.inside_apply = false;
     original(level);
 }
+
+/* Defined with the other install-time reads further down, because that is where they belong; only
+ * their first CALLS are up here, on the frame path. */
+static void report_device_fog_caps(void);
+static void consider_pixel_fog(uint32_t caps);
 
 void fog_regime_on_frame(void)
 {
@@ -559,19 +621,54 @@ void fog_regime_on_frame(void)
      * future patch might, gets to keep its value instead of being overwritten sixty times a
      * second by ours. */
     if (!is_the_same_level(fog_state.level)) {
+        /* SOMEBODY ELSE IS HOLDING THE BAND, and they are entitled to. The no-fog cheat pushes it
+         * past everything the renderer still has in view, every frame, and this tick stands aside
+         * for exactly that.
+         *
+         * On the per-vertex path standing aside was enough, because the engine re-read these two
+         * fields every frame and whatever was in them took effect. The device path does not: the
+         * band only reaches FOGSTART and FOGEND through applyLevelFog. So a writer who is not us
+         * would be writing into a record nobody reads, and their fog would never change. Pushing
+         * their value, not ours, is what keeps that promise. */
+        if (fog_state.pixel_fog_active) {
+            const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+
+            if (live[0] != fog_state.device_band.start ||
+                live[1] != fog_state.device_band.end) {
+                apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
+
+                if (original != NULL) {
+                    original(fog_state.level);
+                    fog_state.device_band.start = live[0];
+                    fog_state.device_band.end   = live[1];
+                }
+            }
+        }
         return;
     }
 
-    target_now(&target);
+    report_device_fog_caps();
+    consider_pixel_fog(fog_state.device_caps);
 
     seconds = (fog_state.frame_delta != NULL) ? *fog_state.frame_delta : 0.0f;
+
+    target_now(&target);
+
     fog_state.current.start = fog_regime_ease(fog_state.current.start, target.start, seconds,
                                               fog_state.config.settle_seconds);
     fog_state.current.end   = fog_regime_ease(fog_state.current.end, target.end, seconds,
                                               fog_state.config.settle_seconds);
 
+    /* Settled means OUR band has not moved AND the device is showing it. The second half matters
+     * only on the device path, and it is what lets fog come back after another feature has held
+     * the band: the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping
+     * sees nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the
+     * fog can be switched off and never on again. */
     if (fog_state.current.start == fog_state.written.start &&
-        fog_state.current.end == fog_state.written.end) {
+        fog_state.current.end == fog_state.written.end &&
+        (!fog_state.pixel_fog_active ||
+         (fog_state.device_band.start == fog_state.current.start &&
+          fog_state.device_band.end == fog_state.current.end))) {
         return;                            /* settled: no write, no cache line touched */
     }
     write_band(&fog_state.current);
@@ -595,6 +692,190 @@ static bool write_fog_regime_byte(const char *what, uintptr_t address,
     return true;
 }
 
+/* THE DEVICE'S OWN FOG CAPABILITIES, read once the device exists and reported once.
+ *
+ * The engine asks this hardware one question, "can you do table fog", and acts on it. There is a
+ * second bit in the same word that decides whether the fog it then configures can work at all:
+ *
+ *   D3DPRASTERCAPS_FOGTABLE 0x00000100  the engine's own gate; set means it leaves fog to the
+ *                                       device and does not run its per-vertex ramp
+ *   D3DPRASTERCAPS_WFOG     0x00100000  the device measures fog against eye-space w
+ *
+ * That second bit matters because the band the engine hands over is in WORLD units, and w in this
+ * engine is world units, so the shipped configuration is correct for a w-fog device and meaningless
+ * for a z-fog one. Which of the two a modern wrapper offers is not knowable from the executable, so
+ * it is logged rather than assumed.
+ *
+ * The offset is the one the query itself uses. The record holds a copy of the device description at
+ * +0x138, D3DPRIMCAPS dpcTriCaps sits at +0x64 inside that, and dwRasterCaps is eight bytes into
+ * D3DPRIMCAPS: 0x138 + 0x64 + 0x08 = 0x1A4. */
+/* IDirect3DDevice3's vtable. SetRenderState at +0x58 is proven by the signature above, which
+ * matches `call [eax+0x58]` at the state commit, and SetTransform is three slots further on. */
+#define D3D_VTBL_SET_TRANSFORM    0x64u
+#define D3D_TRANSFORM_PROJECTION  3u
+
+/* A w-compliant projection, and it is only ever a fog configuration channel: the geometry is
+ * pre-transformed, so Direct3D never multiplies anything by this. What matters is the fourth
+ * column, (0,0,1,0) rather than (0,0,0,1). An affine matrix makes the runtime measure fog against
+ * device depth in [0,1]; a non-affine one makes it use the reciprocal of rhw, which in this engine
+ * is a distance in world units, and world units are what the level's own band is written in.
+ *
+ * The near and far values behind _33 and _43 (0.1 and 1000) do not reach the fog factor. They only
+ * have to make the matrix non-affine, and _34 must stay exactly 1.0 for the normalisation the
+ * runtime expects. _11 and _22 are decoration. */
+static const float PROJECTION_W_COMPLIANT[16] = {
+    1.0f, 0.0f, 0.0f,        0.0f,
+    0.0f, 1.0f, 0.0f,        0.0f,
+    0.0f, 0.0f, 1.0001f,     1.0f,
+    0.0f, 0.0f, -0.10001f,   0.0f
+};
+
+typedef long (__stdcall *set_transform_fn_t)(void *device, uint32_t state, const void *matrix);
+
+#define DEVICE_RASTER_CAPS_OFFSET 0x1A4u
+#define RASTER_CAPS_FOGTABLE      0x00000100u
+#define RASTER_CAPS_WFOG          0x00100000u
+
+static void report_device_fog_caps(void)
+{
+    const void *record;
+    uint32_t    caps = 0;
+
+    if (fog_state.caps_reported || fog_state.device_record_ptr == 0) {
+        return;
+    }
+    /* The device is opened after this DLL installs, so the pointer is null for the first frames.
+     * Waiting rather than reporting a zero is the difference between "no device yet" and "a device
+     * that offers nothing", which are not the same answer. */
+    record = *(const void *const *)fog_state.device_record_ptr;
+    if (record == NULL) {
+        return;
+    }
+    if (!memory_is_readable_range((uintptr_t)record + DEVICE_RASTER_CAPS_OFFSET, sizeof caps)) {
+        fog_state.caps_reported = true;
+        log_warning("the device record at %08X is not readable at +0x1A4, its fog capabilities "
+                    "are unknown", (unsigned)(uintptr_t)record);
+        return;
+    }
+    caps = *(const uint32_t *)((const char *)record + DEVICE_RASTER_CAPS_OFFSET);
+    fog_state.caps_reported = true;
+    fog_state.device_caps = caps;
+
+    log_info("device raster caps %08X: table fog %s, w fog %s. %s",
+             (unsigned)caps,
+             (caps & RASTER_CAPS_FOGTABLE) ? "YES" : "no",
+             (caps & RASTER_CAPS_WFOG) ? "YES" : "no",
+             (caps & RASTER_CAPS_WFOG)
+                 ? "The device measures fog against eye-space w, which is what this engine's band "
+                   "is already expressed in, so per-pixel fog is reachable here."
+                 : "The device measures fog against device depth, so the engine's world-unit band "
+                   "cannot be handed to it unconverted and the per-vertex ramp is the only path.");
+}
+
+/* Hand the fog back to the device, per pixel, and give it the one thing it was missing.
+ *
+ * The engine's table-fog branch is not wrong. It pushes the level's band to FOGSTART and FOGEND in
+ * world units, and eye-space w in this engine IS world units, so that pairing is correct for a
+ * device measuring fog against w. What decides whether the device measures w or device depth is the
+ * projection matrix, and the engine never sets one: SetTransform is not called anywhere in the
+ * image, so the runtime sees the identity, calls it affine, and measures depth in [0,1]. A
+ * world-unit band against a [0,1] depth fogs nothing, which is why the game looks unfogged on any
+ * device that reports table fog.
+ *
+ * So this does not convert the band. It sets a w-compliant projection and gives the engine its own
+ * branch back, which removes the per-vertex ramp and with it the two artefacts the ramp cannot
+ * avoid: an 8-bit fog factor per vertex, and interpolation of that factor across polygons without
+ * regard to where the band actually is.
+ *
+ * It happens HERE, on the frame path, rather than at install, because the device does not exist at
+ * install time and neither do its capabilities. Installing the ramp first and reverting it once the
+ * device proves it can do better is the order that degrades safely: a device that cannot keeps the
+ * fog it already had. */
+static bool device_supports_pixel_fog(uint32_t caps)
+{
+    return (caps & RASTER_CAPS_FOGTABLE) != 0u && (caps & RASTER_CAPS_WFOG) != 0u;
+}
+
+static bool give_device_projection(void *device)
+{
+    void **vtable;
+    set_transform_fn_t set_transform;
+
+    if (device == NULL || !memory_is_readable_range((uintptr_t)device, sizeof(void *))) {
+        return false;
+    }
+    vtable = *(void ***)device;
+    if (vtable == NULL ||
+        !memory_is_readable_range((uintptr_t)vtable + D3D_VTBL_SET_TRANSFORM, sizeof(void *))) {
+        return false;
+    }
+    set_transform = (set_transform_fn_t)vtable[D3D_VTBL_SET_TRANSFORM / sizeof(void *)];
+    if (set_transform == NULL) {
+        return false;
+    }
+    return set_transform(device, D3D_TRANSFORM_PROJECTION, PROJECTION_W_COMPLIANT) >= 0;
+}
+
+/* Undo the three writes install_vertex_fog made, in the reverse order it made them. */
+static bool restore_engine_table_fog(void)
+{
+    if (!fog_state.vertex_fog_installed) {
+        return true;                       /* never armed: nothing to give back */
+    }
+    if (patch_write_bytes(fog_state.commit_push, FOG_TABLE_LINEAR,
+                          sizeof FOG_TABLE_LINEAR) != PATCH_RESULT_OK ||
+        patch_write_bytes(fog_state.applier_push, FOG_TABLE_LINEAR,
+                          sizeof FOG_TABLE_LINEAR) != PATCH_RESULT_OK ||
+        patch_write_bytes(fog_state.query_entry, fog_state.saved_query,
+                          sizeof fog_state.saved_query) != PATCH_RESULT_OK) {
+        return false;
+    }
+    fog_state.vertex_fog_installed = false;
+    return true;
+}
+
+static void consider_pixel_fog(uint32_t caps)
+{
+    void *device;
+
+    if (!fog_state.config.pixel_fog || fog_state.pixel_fog_active ||
+        fog_state.device_ptr_addr == 0) {
+        return;
+    }
+    if (!device_supports_pixel_fog(caps)) {
+        log_info("PixelFog=1, but this device does not offer both table fog and w fog, so the "
+                 "per-vertex ramp stays in charge. Nothing is changed.");
+        fog_state.config.pixel_fog = false;
+        return;
+    }
+    device = *(void **)fog_state.device_ptr_addr;
+    if (device == NULL) {
+        return;                            /* not open yet; asked again next frame */
+    }
+    if (!give_device_projection(device)) {
+        log_warning("SetTransform refused the projection, so fog would be measured against device "
+                    "depth and a world-unit band would fog nothing. The per-vertex ramp stays.");
+        fog_state.config.pixel_fog = false;
+        return;
+    }
+    if (!restore_engine_table_fog()) {
+        log_error("the projection was set but the per-vertex patches could not be reverted. The "
+                  "engine is now in a mixed state; the ramp still runs and the fog may be wrong.");
+        fog_state.config.pixel_fog = false;
+        return;
+    }
+
+    fog_state.pixel_fog_active = true;
+    fog_state.projection_device = device;
+    log_info("pixel fog active: the device measures eye-space w, the band goes to it in world "
+             "units unconverted, and the engine's own per-vertex ramp is switched back off. No "
+             "8-bit fog factor and no interpolation of it across polygons.");
+
+    /* The band only reaches the device through applyLevelFog, and that has already run for this
+     * level. Push what we hold now, or the first level entered this way keeps the authored band. */
+    push_band_to_device();
+}
+
 /* Move the engine from device table fog, which a pre-transformed vertex cannot feed, onto its own
  * per-vertex ramp. See the site comments above for why all three writes belong together. */
 static void install_vertex_fog(void)
@@ -607,6 +888,32 @@ static void install_vertex_fog(void)
     uintptr_t commit_push;
     uint32_t  device_record_operand = 0;
     uint8_t   saved_query[sizeof FOG_CAP_QUERY_OFF];
+
+    /* BEFORE the early return and before any patch. The query's own operand is the only place this
+     * DLL can learn where the device record pointer lives, and arming vertex fog writes over it. */
+    if (query != 0) {
+        uintptr_t entry = (uintptr_t)((intptr_t)query + FOG_CAP_QUERY_HEAD_OFFSET);
+        uint32_t  operand = 0;
+
+        if (patch_validate_bytes(entry, FOG_CAP_QUERY_HEAD, sizeof FOG_CAP_QUERY_HEAD) &&
+            memory_read_u32(entry + sizeof FOG_CAP_QUERY_HEAD, &operand) &&
+            memory_is_inside_image(operand, sizeof(uint32_t))) {
+            fog_state.device_record_ptr = (uintptr_t)operand;
+        }
+    }
+
+    /* And the device INTERFACE pointer, which is a different thing from the record above. The state
+     * commit's signature begins `push 0x23; mov ecx,[abs32]`, so the operand sits four bytes in.
+     * Taken here for the same reason as the record: nothing later in this file has another way to
+     * find it, and this site is about to be written over. */
+    if (commit != 0) {
+        uint32_t operand = 0;
+
+        if (memory_read_u32(commit + 4u, &operand) &&
+            memory_is_inside_image(operand, sizeof(uint32_t))) {
+            fog_state.device_ptr_addr = (uintptr_t)operand;
+        }
+    }
 
     if (!fog_state.config.vertex_fog) {
         log_info("VertexFog=0, the fog regime is left exactly as the device asks for it");
@@ -665,6 +972,12 @@ static void install_vertex_fog(void)
                     "unchanged");
         return;
     }
+
+    fog_state.vertex_fog_installed = true;
+    fog_state.query_entry  = query_entry;
+    fog_state.applier_push = applier_push;
+    fog_state.commit_push  = commit_push;
+    memcpy(fog_state.saved_query, saved_query, sizeof fog_state.saved_query);
 
     log_info("distance fog runs on the engine's own per-vertex ramp: capability query %08X now "
              "answers 'no table fog', FOGTABLEMODE is D3DFOG_NONE at %08X and %08X. The fog "

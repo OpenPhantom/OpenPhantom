@@ -197,6 +197,28 @@ static const uint8_t FOG_TABLE_NONE[]      = { 0x6A, 0x00 };        /* push D3DF
 #define FOG_DEAD_BAND_UNITS      0.01f
 #define FOG_MAX_TRUSTED_SECONDS  0.125f
 
+/* THE BAND FOLLOWS A SETTLED DRAW DISTANCE, NOT THE INSTANTANEOUS ONE.
+ *
+ * The cut edge is not a steady number. The frame governor moves the view scale whenever a scene
+ * costs too much, in steps of its own every half second, and every step changes the distance the
+ * band is computed from. Measured during the opening cutscene of RACE, where the governor works
+ * hardest because the frame rate is worst:
+ *
+ *   fov 120.0  cut ref 22  live 39  -> band 6.0..19.2   (band was at 3.3..10.7)
+ *   fov 120.0  cut ref 22  live 34  -> band 5.2..16.7   (band was at 3.7..11.9)
+ *   fov 120.0  cut ref 22  live 33  -> band 5.0..16.2   (band was at 4.6..14.6)
+ *   fov 120.0  cut ref 22  live 32  -> band 4.9..15.7   (band was at 5.0..16.2)
+ *
+ * The field of view never moved and neither did the reference. The live cut fell 39, 34, 33, 32,
+ * and the band spent the whole cutscene chasing a target that had already moved again. That is the
+ * fog visibly swinging at level entry, which is what issue #30 reports.
+ *
+ * Easing the CUT rather than only the band is what fixes it. A step becomes a slope, several steps
+ * inside one settle become one slope, and the fog ends up where the draw distance ended up without
+ * having visited every value on the way. Slower than the band's own settle, deliberately: this is
+ * the input, and smoothing an input faster than its consumer only moves the problem. */
+#define FOG_CUT_SETTLE_SECONDS   4.0f
+
 typedef void (__cdecl *apply_fog_fn_t)(void *level);
 
 typedef struct fog_regime_state {
@@ -221,6 +243,8 @@ typedef struct fog_regime_state {
     float               reference_cut;
     float               live_cut;
     bool                cut_observed;
+    bool                cut_first_seen;    /* the first real observation after a level snap */
+    float               settled_live_cut;  /* the live cut, eased; see FOG_CUT_SETTLE_SECONDS */
 
     /* The address of the engine's device-record pointer, taken out of the capability query's own
      * `mov eax,[abs32]` before that query is patched over. Zero when it could not be read. */
@@ -411,6 +435,13 @@ void fog_regime_note_cut(int32_t reference_range, int32_t effective_range)
 {
     fog_state.reference_cut = clamp_cut(reference_range);
     fog_state.live_cut      = clamp_cut(effective_range);
+    if (!fog_state.cut_observed) {
+        /* The level snapped its band from an ASSUMED cut, because nothing had walked the new world
+         * yet. This is the first real one, so there is nothing to ease from and the settled value
+         * starts here rather than crawling up to it from a guess. */
+        fog_state.settled_live_cut = fog_state.live_cut;
+        fog_state.cut_first_seen   = true;
+    }
     fog_state.cut_observed  = true;
 }
 
@@ -421,7 +452,7 @@ static void current_cut(float *reference, float *live)
 {
     if (fog_state.cut_observed) {
         *reference = fog_state.reference_cut;
-        *live      = fog_state.live_cut;
+        *live      = fog_state.settled_live_cut;
         return;
     }
     *reference = clamp_cut(fog_state.level_view_distance);
@@ -432,6 +463,22 @@ static void target_now(fog_regime_band_t *out)
 {
     float reference;
     float live;
+
+    /* NO OBSERVATION YET MEANS NO OPINION. A level that has just loaded has not been walked, so
+     * there is no cut edge to reason from, and the fallback used to be the level's own authored
+     * view distance for both sides. That is a guess, and with ViewRangeScale above 1 it is a bad
+     * one in the direction that shows: RACE authors 22, the real cut with the scale at 2.5 turned
+     * out to be 39, and a band computed from 22 sits far nearer the camera than it belongs. The
+     * level then holds that band for as long as it takes the first frame to walk the world, which
+     * on a level with a loading pause and an opening camera move is a second or two of fog much
+     * too close, reported as exactly that.
+     *
+     * The authored band is the one thing here that is known to be right for this level, so it is
+     * what a level gets until the renderer says otherwise. */
+    if (!fog_state.cut_observed) {
+        *out = fog_state.authored;
+        return;
+    }
 
     current_cut(&reference, &live);
     fog_regime_target_band(&fog_state.config, &fog_state.authored,
@@ -560,6 +607,8 @@ static bool remember_level(void *level)
      * view distance for both, a ratio of one, which is the honest answer until the first frame of
      * the new world reports a real one. Left set, the snap is computed from the level just left
      * and the band then walks to its true value over the settle time. */
+    fog_state.cut_observed   = false;
+    fog_state.cut_first_seen = false;
     return true;
 }
 
@@ -651,6 +700,20 @@ void fog_regime_on_frame(void)
     consider_pixel_fog(fog_state.device_caps);
 
     seconds = (fog_state.frame_delta != NULL) ? *fog_state.frame_delta : 0.0f;
+
+    /* The input, eased, before anything reads it. */
+    if (fog_state.cut_observed) {
+        fog_state.settled_live_cut = fog_regime_ease(fog_state.settled_live_cut,
+                                                     fog_state.live_cut, seconds,
+                                                     FOG_CUT_SETTLE_SECONDS);
+    }
+
+    /* The level opened on its own authored band, which is a real band and not a guess, so the move
+     * to ours is EASED rather than snapped. It used to snap, and correctly: the starting point was
+     * then a value computed from an assumed cut, and sliding away from a wrong number only draws
+     * attention to it. Now that the starting point is the level's own, a snap is a visible jump on
+     * the first frame of every level, which is what a couple of them were reported flashing on. */
+    fog_state.cut_first_seen = false;
 
     target_now(&target);
 

@@ -381,7 +381,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * follow-blend arm - has already finished. Roll (+0x3c) is left alone; a free camera has no use
  * for it and neither does anything reading euler.x/euler.y elsewhere. */
 
-/* THE FALL GRACE, and why it lives here rather than with the free camera that grants it.
+/* The fall grace, and why it lives here rather than with the free camera that grants it.
  *
  * The five sites below are the only things in this project that suppress a consequence of falling,
  * and they were all written for jump boost. The free camera's teleport creates the same situation
@@ -389,10 +389,10 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * a fall nobody chose to take should not be a death. Rather than a second set of hooks, the gate
  * becomes a question with two answers, and the sites go on asking one question.
  *
- * TIMED, AND MEASURED AGAINST THE CLOCK RATHER THAN TICKED. A deadline compared with the counter
- * needs nothing to run every frame and cannot drift if something stops running.
+ * It is a deadline compared with the counter rather than a tick, so it needs nothing to run every
+ * frame and cannot drift if something stops running.
  *
- * IT ENDS ON THE FIRST LANDING. on_fall_damage is only reached BY landing, so its own arm clears
+ * It ends on the first landing. on_fall_damage is only reached BY landing, so its own arm clears
  * the grace: the fall is over, and a player who then walks off a ledge should be treated normally.
  * The cap exists for the fall that never lands, over a spot with nothing modelled beneath it,
  * where suppressing the airborne timer forever would be worse than the death it prevents. */
@@ -428,33 +428,33 @@ static bool fall_grace_active(void)
     return true;
 }
 
-/* NO FLOOR, NO SUPPRESSION AT ALL: a fall with nothing beneath it gets the retail engine, whole.
+/* No floor, no suppression: a fall with nothing beneath it gets the retail engine, whole.
  *
- * Every suppression in this file exists to stop a BIG JUMP being punished for coming down hard.
+ * Every suppression in this file exists to stop a big jump being punished for coming down hard.
  * None of them was ever meant for a fall off the edge of the world, and applying them there is
  * what turned that fall from a death into an unrecoverable state:
  *
- *   FIELD CONFIRMED. Fall off a ledge with jump boost on, or after a free camera teleport, and the
- *   player keeps going far below the world. The audio goes very loud, the death screen arrives long
- *   after it should have, and LOADING FROM THAT DEATH SCREEN DOES NOT WORK - the game comes back
- *   still falling and still wrong, and only loading from the main menu clears it. All of it is the
- *   one cause: the fall was never allowed to end.
+ *   Confirmed in the field. Fall off a ledge with jump boost on, or after a free camera teleport,
+ *   and the player keeps going far below the world. The audio goes very loud, the death screen
+ *   arrives long after it should have, and loading from that death screen does not work: the game
+ *   comes back still falling and still wrong, and only loading from the main menu clears it. All
+ *   of it is one cause, which is that the fall was never allowed to end.
  *
- * THE TEST IS WHETHER THERE IS ANYWHERE TO LAND, asked once when the fall begins, and it gates
- * ALL FIVE suppressions rather than only the death timer. A boosted jump has ground beneath it and
- * keeps its full immunity however long it takes to come down. A fall with nothing beneath it is
- * handed back to retail ENTIRELY: the damage, both deaths and both camera latches all behave as
- * they do with no cheat installed at all, because that is the behaviour known to end properly.
+ * The test is whether there is anywhere to land. It is asked once, when the fall begins, and it
+ * gates all five suppressions rather than only the death timer. A boosted jump has ground beneath
+ * it and keeps its full immunity however long it takes to come down. A fall with nothing beneath
+ * it is handed back to retail entirely: the damage, both deaths and both camera latches behave as
+ * they do with no cheat installed, because that is the behaviour known to end properly.
  *
  * A time limit was tried first and was the wrong shape: it cannot tell a high jump from a void
  * fall, so any value that spares the jump also lets the void fall run long enough to break.
  *
  * bapmap_probeFloor is the engine's own answer to that question. It seeds dist to 3.4e38 and only
  * replaces it when a floor polygon is actually found under the probe's own x/y, and the one range
- * limit in its acceptance rule applies to floors ABOVE the feet, not below - so it reaches as far
- * down as the level goes. j0nny's decomp, bp/bapmap.c:1866 and include/bapmap.h section 7.
+ * limit in its acceptance rule applies to floors above the feet, not below, so it reaches as far
+ * down as the level goes. Read out of the decompiled body rather than assumed.
  *
- * The question is asked at the camera latch below, which retail fires at the EARLIEST of the three
+ * The question is asked at the camera latch below, which retail fires at the earliest of the three
  * fall branches, the very moment the fall becomes significant and before the 2 second timer is
  * armed. That is the honest "this fall has begun" signal and it costs no hook of its own. */
 static bool fall_has_landing = true;   /* until a fall says otherwise */

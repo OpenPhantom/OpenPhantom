@@ -156,7 +156,7 @@ static LARGE_INTEGER freecam_perf_frequency;
 static LONGLONG      freecam_last_tick;
 static POINT         freecam_cursor_anchor;
 
-/* THE BOUND KEY, which ends the flight and brings the player to the camera. It was the plain exit
+/* The bound key ends the flight and brings the player to the camera. It was the plain exit
  * key first; the teleport is the thing worth binding, and F4 covers leaving without moving.
  *
  * Free camera's own mouse look claims the cursor, which leaves both the dev panel
@@ -167,7 +167,7 @@ static POINT         freecam_cursor_anchor;
 static int32_t freecam_hotkey;
 static bool    freecam_hotkey_was_down;
 
-/* TWO KEYS, TWO INTENTIONS, so neither needs a toggle explaining which one is armed. The BOUND key
+/* Two keys, two intentions, so neither needs a toggle explaining which is armed. The bound key
  * (see the hotkey row in overlay_model.c) means "the player comes HERE"; F4 means "put it back,
  * nobody moved". The teleport is the one on a key of the player own choosing because it is what
  * the camera is usually being flown for; F4 is fixed because a fallback that always means the same
@@ -177,11 +177,11 @@ static bool    freecam_hotkey_was_down;
  * it: one position write while the simulation is still frozen, not a player simulating against its
  * own state machine while something else drags it around. */
 #define FREECAM_RETURN_KEY 0x73          /* VK_F4. Alt+F4 still closes the game: Alt is not read */
-/* HOW FAR THE TELEPORT IS ALLOWED TO DROP SOMEBODY, in the engine's own world units.
+/* How far the teleport is allowed to drop somebody, in the engine's own world units.
  *
  * A drop onto a real floor was still enough to break the game when it was high enough: the audio
  * ramps up and stays up, and the arrival never settles. That is not the void case jump boost now
- * hands back to the engine - there IS a floor - it is simply a fall longer than anything the
+ * hands back to the engine, because there is a floor. It is simply a fall longer than anything the
  * engine was ever built to run.
  *
  * The number is read off the engine's own fall thresholds rather than picked. FUN_0044F162, the
@@ -232,22 +232,22 @@ static void __cdecl hook_camera_update(void)
 
     if (!own_state.cheats[CHEATS_OWN_FREECAM].on) {
         if (freecam_valid) {
-            /* THE TELEPORT, if F4 asked for it, and BEFORE the simulation is released: one
+            /* The teleport, if the bound key asked for it, and before the simulation is released: one
              * write into a world that is still frozen, so the player's own physics resumes FROM
              * the new place rather than being fought at it. That ordering is the whole difference
              * between this and the noclip this feature replaced.
              *
              * The position is all that moves. Velocity, mode and heading keep whatever they held
              * when flight began, so stepping out mid-air is a fall from wherever the camera was
-             * left - bounded by FREECAM_MAX_TELEPORT_DROP, which is what keeps that fall one the
+             * left, bounded by FREECAM_MAX_TELEPORT_DROP, which is what keeps that fall one the
              * engine can actually finish. The follow camera needs nothing either way: the very
              * next updateCam recomputes it from the player, wherever the player now is. */
             if (freecam_teleport_pending) {
                 void **player_slot = (void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
                 uint8_t *player = (player_slot != NULL) ? (uint8_t *)*player_slot : NULL;
 
-                /* IS THIS SOMEWHERE A PERSON CAN BE PUT? Asked before anything is written, because
-                 * refusing has to leave the player exactly where they were - which is the same
+                /* Is this somewhere a person can be put? Asked before anything is written, because
+                 * refusing has to leave the player exactly where they were, which is the same
                  * thing the plain return key does, so a refusal simply becomes a plain return
                  * rather than a key that appears to do nothing.
                  *
@@ -289,7 +289,7 @@ static void __cdecl hook_camera_update(void)
                      * Traced through the decomp of Plr_CommitPose after an earlier attempt on
                      * +0x124 left the player exactly where they started.
                      *
-                     * THE CAMERA'S OWN Z, DELIBERATELY. Standing the player on the floor beneath
+                     * The camera's own Z, deliberately. Standing the player on the floor beneath
                      * the camera was tried and taken back out: dropping somebody in from height is
                      * a thing people want to do with this, and snapping to the ground removes it.
                      * The drop is bounded instead, by the height test above, which keeps the thing
@@ -425,7 +425,7 @@ static void __cdecl hook_camera_update(void)
      * was simply stuck. The bound key below is the actual fix: keyboard only, needs no cursor at
      * all, and does not touch how the mouse behaves while flying. Whether the panel itself is ever
      * usable mid-flight is a separate question, unresolved, and no longer the one that mattered. */
-    /* THE BOUND KEY BRINGS THE PLAYER. It ends the flight and drops the player wherever the camera
+    /* The bound key brings the player. It ends the flight and drops them wherever the camera
      * is, which is what the camera is usually being flown FOR, so it is the action worth putting
      * on a key of the player's own choosing. The plain return is on F4 below.
      *
@@ -443,7 +443,7 @@ static void __cdecl hook_camera_update(void)
         freecam_hotkey_was_down = hotkey_down;
     }
 
-    /* F4 LEAVES WITHOUT MOVING ANYBODY, which is the other half of what a free camera is for:
+    /* F4 leaves without moving anybody, which is the other half of what a free camera is for:
      * looking at something and then carrying on from where you actually were. Fixed rather than
      * bindable because it is the fallback, and because a fixed key that always means "put it back"
      * is worth more than one more thing to configure.

@@ -83,7 +83,7 @@ int main(void)
              "governor holding one threshold and not the other is worse than one holding neither");
 
     ut_section("thresholds the wrong way round are refused, not obeyed");
-    /* Inverted thresholds have no dead zone at all - every frame time is both too slow and fast
+    /* Inverted thresholds have no dead zone at all, since every frame time is both too slow and fast
        enough - so this is the configuration that would oscillate hardest. It must be rejected. */
     ut_check(frame_governor_decide(12.0f, RAISE_BELOW_MS, LOWER_ABOVE_MS, NEEDED, NEEDED) ==
                  FRAME_GOVERNOR_HOLD,

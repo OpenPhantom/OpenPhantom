@@ -20,7 +20,7 @@
 
 #include <string.h>
 
-/* THE DRAWING AND INPUT HALVES, STUBBED, and only these two.
+/* The drawing and input halves, stubbed, and only these two.
  *
  * The sources under test reach across to the other half of the overlay in two places: the size row
  * asks the renderer how big the screen is, and the level skip and the free camera both ask the

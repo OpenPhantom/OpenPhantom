@@ -219,7 +219,7 @@ static overlay_input_state_t input_state;
  * The panel swallows the messages it wants by answering them itself, which needs no cell at all.
  * The address is still resolved, because it is what proves the pattern landed on the right
  * function, and the log still names it. */
-/* THE PANEL IS HELD OPEN WHILE THE CAMERA IS FLYING, and this is a repair rather than a policy.
+/* The panel is held open while the camera is flying, and this is a repair, not a policy.
  *
  * Free camera runs on the panel being up: closing it releases SIM_PAUSE_PANEL and the input freeze
  * out from under a camera that is still detoured and still flying, and the camera is left broken.

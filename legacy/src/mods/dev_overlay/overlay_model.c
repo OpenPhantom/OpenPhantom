@@ -116,7 +116,7 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
  * same for the way back out, since once free camera is on, this fold is the only place left that
  * still says which key does that. */
 #define INFO_ROW_ID (FREECAM_ROW_ID + 1u)
-/* NINE LINES, NOT SIX, because two of them describe the two ways out and each is a sentence wider
+/* Nine lines, not six, because two of them describe the two ways out and each is a sentence wider
  * than the panel. A line that does not fit is drawn clipped, running off the edge of the box with
  * no ellipsis and no wrap, so the reader loses the end of exactly the sentence that tells them how
  * to get out. Each is written as a line plus a continuation indented two spaces instead. */
@@ -507,7 +507,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
              * ON - cheats_openphantom_toggle() enforces this too, so this is display honesty
              * rather than the only gate: a row that looked clickable but silently refused every
              * click would be worse than one that shows why. Once it IS on, availability no longer
-             * depends on this - the row is unreachable anyway with the mouse claimed, and the
+             * depends on this: the row is unreachable anyway with the mouse claimed, and the
              * hotkey is how it actually turns back off. */
             if (!out->on && cheats_openphantom_freecam_hotkey() == 0) {
                 out->available = false;
@@ -645,7 +645,7 @@ void overlay_model_rebuild(void)
     bool     freecam_on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
 
     if (freecam_on != model.freecam_was_on) {
-        /* Free camera just changed state - either the panel's own toggle, or (more often) its
+        /* Free camera just changed state, either by the panel's own toggle or (more often) its
          * hotkey, which flips this straight inside cheats_openphantom.c without ever going through
          * overlay_model_activate(). Catching it here, on every rebuild, is what sees the hotkey
          * path too. The mouse is fully claimed for as long as free camera flies, so this is also

@@ -71,7 +71,7 @@ float cell_watchdog_ceiling(void);
 
 /* Forgets that ceiling. Called only when ViewRangeScale changes on disk: the reader has just said
  * what they want, and a watchdog still braked from a setting nobody is asking for any more would
- * quietly ignore it. Nothing else resets it - a brake this watchdog applied to avoid an overflow
+ * quietly ignore it. Nothing else resets it, because a brake applied to avoid an overflow
  * stands for the rest of the level, which is the whole point of it. */
 void cell_watchdog_reset_ceiling(void);
 

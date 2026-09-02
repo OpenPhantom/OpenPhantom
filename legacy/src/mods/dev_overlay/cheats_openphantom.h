@@ -98,12 +98,12 @@
  * out of both the dev panel and the game's own pause menu at once - there is no cursor left to
  * click either with. A bound key is the way out: a physical key, read directly the same way E/Q
  * already are, that only means anything while free camera is on, and ends the flight on its own
- * without needing the mouse at all. It also BRINGS THE PLAYER to wherever the camera is, which is
+ * without needing the mouse at all. It also brings the player to wherever the camera is, which is
  * what the camera is usually being flown for; F4 ends the flight without moving anybody, and is
  * fixed rather than bindable because a fallback that always means the same thing is worth more
  * than one more thing to configure. See the panel's own hotkey row (OVERLAY_ROW_HOTKEY in
  * overlay_model.c) for how the bindable one gets set. Free camera refuses to turn on at all until
- * it is bound - see cheats_openphantom_toggle()'s own gate - because turning it on without one is
+ * it is bound, see cheats_openphantom_toggle()'s own gate, because turning it on without one is
  * a door with no handle on the inside.
  *
  * "Skip to next level" is not a toggle either, and not one of the nine cheats above: a debug-only
@@ -156,7 +156,7 @@ float cheats_openphantom_jump_boost_scale(void);
 void cheats_openphantom_jump_boost_set_scale(float scale);
 
 /* Flips one and answers the new state. A cheat whose site did not resolve stays off, and free
- * camera specifically also stays off with no key bound - see cheats_openphantom.c. */
+ * camera specifically also stays off with no key bound. See cheats_openphantom.c. */
 bool cheats_openphantom_toggle(cheats_own_id_t id);
 
 /* The virtual key that ends the flight AND brings the player to the camera. 0 means unbound, in

@@ -1,7 +1,6 @@
 /* floor_probe.c: the engine's own "what is the floor under this point", wrapped for two callers.
  *
- * bapmap_probeFloor is named and typed by j0nny's decomp (include/bapmap.h section 7, body at
- * bp/bapmap.c:1866):
+ * bapmap_probeFloor is named and typed by the decompilation of this engine:
  *
  *   void bapmap_probeFloor(const vec3 *pos, groundContact *out)
  *
@@ -11,9 +10,9 @@
  *                                   polygon is actually found under the probe's own x/y. The whole
  *                                   block is 0x88 bytes.
  *
- * ITS DOWNWARD REACH IS UNLIMITED, which is what makes it usable as "is there anything under this
+ * Its downward reach is unlimited, which is what makes it usable as "is there anything under this
  * point at all". The one range limit in its acceptance rule, 1.0 unit, applies to floors ABOVE the
- * feet - the step-up case - and not to drops, so a floor a thousand units below is still found.
+ * feet, the step-up case, and not to drops, so a floor a thousand units below is still found.
  * That was read out of the decompiled body rather than assumed; getting it backwards would have
  * made every high drop read as a void.
  */
@@ -27,7 +26,7 @@
 #include <string.h>
 
 /* Address free; measured ONE match. The prologue's own frame size and the [ebp+0xc] / +0x18 walk
- * of the second argument are what make it unique - there is no shorter distinctive run here. */
+ * of the second argument are what make it unique; there is no shorter distinctive run here. */
 static const uint8_t SIG_PROBE_FLOOR[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x7C, 0x57,
     0xC7, 0x45, 0xC8, 0x00, 0x00, 0x00, 0x00,

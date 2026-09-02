@@ -35,7 +35,7 @@
 #define GOVERNOR_HEALTHY_SECONDS       30u
 #define GOVERNOR_HEALTHY_SECONDS_AGAIN 10u
 
-/* HOW OFTEN IT DECIDES, and it is not once a second any more.
+/* How often it decides, and it is not once a second any more.
  *
  * The cutscene this was built for is about thirteen seconds long and the first version took
  * fourteen to walk 2.50 down to 1.00, so it arrived after the thing it was reacting to had
@@ -66,7 +66,7 @@
 #define GOVERNOR_UNCAPPED_BACKOFF_FPS 50.0f
 
 /* The fraction of a frame cap that counts as missing it. At TargetFps 100 this is 75 fps: not a
- * frame rate anybody would call broken, which is the point - the report this was built for was a
+ * frame rate anybody would call broken, which is the point. The report this was built for was a
  * drop from 100 to 66, and a governor that only woke at 30 fps would have slept through it. */
 #define GOVERNOR_CAP_FRACTION 0.75f
 
@@ -150,9 +150,8 @@ static int compare_float(const void *left, const void *right)
 }
 
 /* The middle sample of the ring. A median rather than a mean specifically so that one enormous
- * frame - a level load is 250 ms of it, and the log from the field report has several - cannot
- * move the decision. A mean over a second containing one 250 ms frame reads as 12 ms when every
- * other frame was 10. */
+ * frame, and a level load is 250 ms of one, cannot move the decision. A mean over a second
+ * containing a single 250 ms frame reads as 12 ms when every other frame was 10. */
 static float median_frame_ms(void)
 {
     float    sorted[GOVERNOR_RING];
@@ -323,7 +322,7 @@ void frame_governor_configure(bool enabled, float backoff_fps, float configured_
     if (!(target_fps > 0.0f)) {
         /* framerate_fix owns the cap, and its own section is where the number lives. Reading
          * across sections is not new here: [diagnostics] Spawns is read by this same DLL, for the
-         * same reason - the setting belongs where its subject is, not where its reader is. */
+         * same reason: the setting belongs where its subject is, not where its reader is. */
         const float cap = ini_read_float("framerate_fix", "TargetFps", 0.0f);
 
         target_fps = (cap > 0.0f) ? (cap * GOVERNOR_CAP_FRACTION) : GOVERNOR_UNCAPPED_BACKOFF_FPS;

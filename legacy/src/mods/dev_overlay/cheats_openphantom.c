@@ -82,6 +82,7 @@
 
 #include "cheats_no_fog.h"
 #include "cheats_original_actions.h"
+#include "overlay_input.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -524,6 +525,23 @@ bool cheats_openphantom_end_level_invoke(void)
     if (cell == NULL) {
         return false;
     }
+
+    /* THE PANEL CLOSES ITSELF, and this is a repair rather than tidiness.
+     *
+     * The panel is toggled from the game's own key handler at 0043F603, which is on the GAMEPLAY
+     * path. Skipping the LAST level does not load another one: the campaign driver runs the closing
+     * cutscene and then credits_screen, and neither of those pumps messages through that handler.
+     * A panel left open across that transition can no longer be closed by the key that opened it,
+     * so it sits over the credits for good and the process has to be killed. Field confirmed.
+     *
+     * Closing on EVERY skip rather than only on the last level is deliberate. Telling the two apart
+     * means reading the campaign's level index, and the only address available for it is an
+     * adjacency guess against the status cell above; a skip is also a transition out of the level
+     * the panel was opened in, so there is nothing to preserve. It costs one key press to reopen,
+     * and after the credits it opens exactly as it always did: this closes the panel, it does not
+     * disable it. */
+    overlay_input_close();
+
     *cell = 3;
     return true;
 }

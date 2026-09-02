@@ -6,6 +6,7 @@
  * Split out of cheats_openphantom.c; nothing changed in the move. */
 #include "cheats_openphantom.h"
 #include "cheats_internal.h"
+#include "floor_probe.h"
 
 #include "sim_pause.h"
 #include "overlay_input.h"
@@ -176,6 +177,31 @@ static bool    freecam_hotkey_was_down;
  * it: one position write while the simulation is still frozen, not a player simulating against its
  * own state machine while something else drags it around. */
 #define FREECAM_RETURN_KEY 0x73          /* VK_F4. Alt+F4 still closes the game: Alt is not read */
+/* HOW FAR THE TELEPORT IS ALLOWED TO DROP SOMEBODY, in the engine's own world units.
+ *
+ * A drop onto a real floor was still enough to break the game when it was high enough: the audio
+ * ramps up and stays up, and the arrival never settles. That is not the void case jump boost now
+ * hands back to the engine - there IS a floor - it is simply a fall longer than anything the
+ * engine was ever built to run.
+ *
+ * The number is read off the engine's own fall thresholds rather than picked. FUN_0044F162, the
+ * ground-contact resolver, compares the accumulated fall distance at player+0x360 against three
+ * constants in the shipped WMAIN.EXE, read here out of the instructions that reference them:
+ *
+ *   0044f5a8  FCOMP [0x004a875c] = 3.5    minimum fall distance for damage
+ *   0044f48b  FCOMP [0x004a86dc] = 6.0    the fall-death distance test
+ *   0044f1e3  FCOMP [0x004a86f4] = 8.0    the distance at which a fall becomes "significant",
+ *                                         which is what arms the 2.0 second airborne death
+ *
+ * So 8 units is already a serious fall to this engine and 3.5 units hurts. The cap here is TEN
+ * TIMES the distance at which the engine starts treating a fall as dangerous, which is generous
+ * enough for the "drop somebody in from up high" this feature is wanted for, and still well short
+ * of the falls that broke it. It also lands close to where the engine's own airborne timer would
+ * have ended the fall anyway: 3.4 seconds of falling, against the roughly 3 seconds that timer
+ * allows once it arms, so past this point the flight is holding open a fall the engine already
+ * considers finished. */
+#define FREECAM_MAX_TELEPORT_DROP 80.0f
+
 static bool freecam_teleport_pending = false;   /* raised by the BOUND key, read on the way out */
 static bool freecam_return_was_down  = false;
 
@@ -213,13 +239,47 @@ static void __cdecl hook_camera_update(void)
              *
              * The position is all that moves. Velocity, mode and heading keep whatever they held
              * when flight began, so stepping out mid-air is a fall from wherever the camera was
-             * left, and a fall from high enough still kills exactly as the engine intends - jump
-             * boost's own immunities cover that, deliberately not duplicated here. The follow
-             * camera needs nothing either way: the very next updateCam recomputes it from the
-             * player, wherever the player now is. */
+             * left - bounded by FREECAM_MAX_TELEPORT_DROP, which is what keeps that fall one the
+             * engine can actually finish. The follow camera needs nothing either way: the very
+             * next updateCam recomputes it from the player, wherever the player now is. */
             if (freecam_teleport_pending) {
                 void **player_slot = (void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
                 uint8_t *player = (player_slot != NULL) ? (uint8_t *)*player_slot : NULL;
+
+                /* IS THIS SOMEWHERE A PERSON CAN BE PUT? Asked before anything is written, because
+                 * refusing has to leave the player exactly where they were - which is the same
+                 * thing the plain return key does, so a refusal simply becomes a plain return
+                 * rather than a key that appears to do nothing.
+                 *
+                 * An unresolved probe is NOT a refusal. On an executable this cannot be asked
+                 * about, the teleport keeps working exactly as it did before the check existed;
+                 * the alternative is a feature that silently stops working on a build nobody has
+                 * tested, which is worse than the fall it is guarding against. */
+                if (player != NULL) {
+                    const float camera[3] = { freecam_x, freecam_y, freecam_z };
+                    float       drop = 0.0f;
+
+                    switch (floor_probe_below(camera, &drop)) {
+                    case FLOOR_PROBE_NONE:
+                        log_info("the teleport was refused and the camera returned instead: there "
+                                 "is no floor under it at all, so the player would have been "
+                                 "dropped out of the world");
+                        player = NULL;
+                        break;
+                    case FLOOR_PROBE_FOUND:
+                        if (drop > FREECAM_MAX_TELEPORT_DROP) {
+                            log_info("the teleport was refused and the camera returned instead: "
+                                     "the floor under it is %.0f units down, past the %.0f the "
+                                     "engine can finish a fall from",
+                                     (double)drop, (double)FREECAM_MAX_TELEPORT_DROP);
+                            player = NULL;
+                        }
+                        break;
+                    case FLOOR_PROBE_UNAVAILABLE:
+                    default:
+                        break;
+                    }
+                }
 
                 if (player != NULL) {
                     /* The player's live position, +0x118 (pos), which Plr_CommitPose then pushes
@@ -232,8 +292,8 @@ static void __cdecl hook_camera_update(void)
                      * THE CAMERA'S OWN Z, DELIBERATELY. Standing the player on the floor beneath
                      * the camera was tried and taken back out: dropping somebody in from height is
                      * a thing people want to do with this, and snapping to the ground removes it.
-                     * The fall that follows is the player's own business; the consequences of it
-                     * are handled by the fall grace above. */
+                     * The drop is bounded instead, by the height test above, which keeps the thing
+                     * people want without keeping the fall that broke the game. */
                     float *position = (float *)(player + PLAYER_POSITION_OFFSET);
 
                     position[0] = freecam_x;
@@ -254,7 +314,7 @@ static void __cdecl hook_camera_update(void)
 
                     log_info("the free camera teleport key dropped the player at %.1f %.1f %.1f",
                              (double)freecam_x, (double)freecam_y, (double)freecam_z);
-                } else {
+                } else if (player_slot == NULL || *player_slot == NULL) {
                     log_warning("the teleport key asked to drop the player at the camera, but "
                                 "there is no player record to move; the camera returned instead");
                 }

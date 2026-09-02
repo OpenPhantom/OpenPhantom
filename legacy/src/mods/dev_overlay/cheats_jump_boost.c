@@ -9,6 +9,7 @@
  *
  * Split out of cheats_openphantom.c; nothing changed in the move. */
 #include "cheats_openphantom.h"
+#include "floor_probe.h"
 #include "cheats_internal.h"
 
 #include "sim_pause.h"
@@ -427,9 +428,58 @@ static bool fall_grace_active(void)
     return true;
 }
 
-/* The one question the five sites ask. */
+/* NO FLOOR, NO SUPPRESSION AT ALL: a fall with nothing beneath it gets the retail engine, whole.
+ *
+ * Every suppression in this file exists to stop a BIG JUMP being punished for coming down hard.
+ * None of them was ever meant for a fall off the edge of the world, and applying them there is
+ * what turned that fall from a death into an unrecoverable state:
+ *
+ *   FIELD CONFIRMED. Fall off a ledge with jump boost on, or after a free camera teleport, and the
+ *   player keeps going far below the world. The audio goes very loud, the death screen arrives long
+ *   after it should have, and LOADING FROM THAT DEATH SCREEN DOES NOT WORK - the game comes back
+ *   still falling and still wrong, and only loading from the main menu clears it. All of it is the
+ *   one cause: the fall was never allowed to end.
+ *
+ * THE TEST IS WHETHER THERE IS ANYWHERE TO LAND, asked once when the fall begins, and it gates
+ * ALL FIVE suppressions rather than only the death timer. A boosted jump has ground beneath it and
+ * keeps its full immunity however long it takes to come down. A fall with nothing beneath it is
+ * handed back to retail ENTIRELY: the damage, both deaths and both camera latches all behave as
+ * they do with no cheat installed at all, because that is the behaviour known to end properly.
+ *
+ * A time limit was tried first and was the wrong shape: it cannot tell a high jump from a void
+ * fall, so any value that spares the jump also lets the void fall run long enough to break.
+ *
+ * bapmap_probeFloor is the engine's own answer to that question. It seeds dist to 3.4e38 and only
+ * replaces it when a floor polygon is actually found under the probe's own x/y, and the one range
+ * limit in its acceptance rule applies to floors ABOVE the feet, not below - so it reaches as far
+ * down as the level goes. j0nny's decomp, bp/bapmap.c:1866 and include/bapmap.h section 7.
+ *
+ * The question is asked at the camera latch below, which retail fires at the EARLIEST of the three
+ * fall branches, the very moment the fall becomes significant and before the 2 second timer is
+ * armed. That is the honest "this fall has begun" signal and it costs no hook of its own. */
+static bool fall_has_landing = true;   /* until a fall says otherwise */
+
+/* True when there is a floor somewhere under the player right now. Answers TRUE when the probe
+ * cannot be resolved at all, so a build that cannot ask the question keeps the immunity it had
+ * rather than quietly starting to kill people. */
+static bool floor_exists_under_player(void)
+{
+    void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+
+    if (player_record == NULL) {
+        return true;
+    }
+    return floor_probe_below((const float *)((char *)player_record + PLAYER_POSITION_OFFSET),
+                             NULL) != FLOOR_PROBE_NONE;
+}
+
+/* The one question the five sites ask, and the floor test lives HERE so that every one of them
+ * inherits it. No site has to remember to add it, and a suppression added later gets it free. */
 static bool fall_consequences_suppressed(void)
 {
+    if (!fall_has_landing) {
+        return false;          /* nothing to land on: retail gets its own behaviour back, whole */
+    }
     return own_state.cheats[CHEATS_OWN_JUMP_BOOST].on || fall_grace_active();
 }
 
@@ -473,13 +523,20 @@ static void __cdecl hook_jedi_jump_entry(void)
  * check it on every single landing. */
 static void __cdecl on_fall_damage(void)
 {
-    if (!fall_consequences_suppressed()) {
-        hook_damage(10);
-        return;
-    }
-    /* Reached only BY landing, so this is where a granted grace has done its job. Jump boost's own
-     * suppression is unaffected: it is a cheat that stays on until it is switched off. */
+    /* Asked BEFORE the state below is cleared, because clearing it would change the answer. */
+    const bool suppressed = fall_consequences_suppressed();
+
+    /* Reached only BY landing, so whatever this fall was, it is over here: a granted grace has
+     * done its job, and the next fall gets to ask the floor question fresh. Both are cleared even
+     * when the fall was NOT suppressed, so a fall ruled to have no landing takes its damage and
+     * still leaves the state clean behind it. Jump boost's own suppression is unaffected: it is a
+     * cheat that stays on until it is switched off. */
     fall_grace_until = 0;
+    fall_has_landing = true;
+
+    if (!suppressed) {
+        hook_damage(10);
+    }
 }
 
 /* A naked trampoline, the same shape as hook_npc_damage above and for the same reason: the ten
@@ -588,6 +645,13 @@ static void __declspec(naked) hook_distance_death(void)
  * comment for why a literal is what's actually available here. */
 static void __cdecl on_camera_lock(void)
 {
+    /* Retail fires this at the moment a fall first becomes significant, which makes it the place
+     * to ask whether this fall has anywhere to end. Asked whether or not the camera latch itself
+     * is suppressed: the question is about the FALL, not about what this cheat does to the
+     * camera, and asked ONCE per fall rather than every frame because the answer cannot change while
+     * falling straight down and a probe is not free. */
+    fall_has_landing = floor_exists_under_player();
+
     if (!fall_consequences_suppressed() && own_state.camera_type_select != NULL) {
         own_state.camera_type_select(0xD);
     }

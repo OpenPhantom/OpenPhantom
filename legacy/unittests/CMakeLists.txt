@@ -172,6 +172,10 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/cheats_jump_boost.c
     dev_overlay/cheats_free_camera.c
     dev_overlay/cheats_no_fog.c
+    # Both jump boost and the free camera ask the same "is there a floor under this" question,
+    # so the module that owns it has to be linked beside them. It resolves nothing in a test
+    # process either, and answers UNAVAILABLE, which is the case both callers must survive.
+    dev_overlay/floor_probe.c
     # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
     # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
     # resolved site every entry point returns immediately, which is exactly what a test process wants.

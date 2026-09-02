@@ -424,3 +424,48 @@ Three things this needed that were each found in the field, not predicted:
 
 Tested in game on Windows: teleport across a room, teleport onto a ledge, F4 from mid-air, and the
 panel refusing to close while flying.
+
+**A fall the engine cannot finish is handed back to it whole.** Jump boost suppresses five
+consequences of falling so that a higher jump is not punished for coming down harder: the damage,
+the airborne-too-long death, the fall-distance death and the two camera latches. None of those was
+ever meant for a fall off the edge of the world, and applying them there did not make the player
+immortal, it made the fall endless. Field report:
+
+> if i fall like how i would fall off a ledge to my death normally and the died screen shows up IF
+> we do that through super jump or fly cam then the audio goes really loud and the death screen
+> takes a lot longer to show and when you load game from the death screen it doesnt actually load
+> the game its still loud audio and your still off the ledge
+
+All of it is one cause. `floor_probe.c` asks the engine's own `bapmap_probeFloor` whether there is
+anywhere to land, once, at the moment a fall first becomes significant, and the answer gates every
+one of the five suppressions rather than only the death. A boosted jump has ground under it and
+keeps its full immunity however long it takes to come down; a fall with nothing under it behaves
+exactly as it does with no cheat installed at all, because that is the behaviour known to end
+properly. An unresolved probe answers "floor", so a build that cannot ask the question keeps the
+immunity it had rather than quietly starting to kill people.
+
+A time limit was tried first and was the wrong shape: it cannot tell a high jump from a void fall,
+so any value that spares the jump also lets the void fall run long enough to break.
+
+**The teleport will not drop the player further than the engine can cope with.** A drop onto a real
+floor still broke it if it was high enough, so the drop is capped at 80 world units and a teleport
+past that ends the flight without moving anybody, exactly as F4 does. The number is read off the
+engine's own thresholds rather than picked: `FUN_0044F162` compares accumulated fall distance at
+`player+0x360` against 3.5 (minimum distance for damage), 6.0 (the fall-death test) and 8.0 (the
+distance at which a fall becomes significant, which arms the 2.0 second airborne death). Eight
+units is already a serious fall to this engine, so the cap is ten times that: generous for dropping
+somebody in from height, and still short of the falls that broke it.
+
+Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4` in the shipped
+`WMAIN.EXE`. Note that the data addresses quoted throughout these comments come from j0nny's
+`obiold.exe` and do not map to the same places in the shipped executable - in `WMAIN.EXE` that
+range is inside `.rsrc`. They were read by finding the `FCOMP` instructions that reference them.
+
+Tested in game on Windows: a boosted jump onto ground (immune as before), jump boost off a ledge
+into the void (dies promptly, death screen loads correctly, audio normal), a free camera teleport
+into the void (refused, camera returns), and a teleport from very high onto a real floor (refused
+the same way). The log lines to look for:
+```
+[dev_overlay] the floor probe resolved: falls and teleports can both be asked about
+[dev_overlay] the teleport was refused and the camera returned instead: the floor under it is 214 units down, past the 80 the engine can finish a fall from
+```

@@ -268,6 +268,7 @@ add_engine_fix(dev_overlay
     cheats_jump_boost.c
     cheats_free_camera.c
     cheats_no_fog.c
+    floor_probe.c
 )
 
 # A field investigation found that Xidi, a third-party wrapper this project used to install to

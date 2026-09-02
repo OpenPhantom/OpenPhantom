@@ -401,3 +401,26 @@ Its absence, or a "did not resolve" warning next to it naming which of the two s
 free camera declined entirely and is shown in the panel as unavailable. An earlier attempt at this
 feature, noclip - letting the player walk through walls and fly - was removed after free camera
 replaced it outright; see `cheats_openphantom.h`'s own header comment for why.
+
+**The bound key teleports, F4 does not.** The key set in the panel ends the flight and brings the
+player to wherever the camera is, which is what the camera is usually being flown for. F4 ends the
+flight and leaves the player exactly where they were, and is fixed rather than bindable because a
+fallback that always means the same thing is worth more than one more thing to configure. Both are
+read while the panel holds the simulation, so the move is written into a still-frozen world and
+the player's own physics resumes from the new place.
+
+Three things this needed that were each found in the field, not predicted:
+
+* The position that moves is `pPlayer+0x118` (`pos`), not `+0x124` (`desiredPos`). Phase 12 copies
+  `desiredPos` into `pos` only when `bMovedThisFrame` is set, and a standing player clears that
+  every substep, so a write to `+0x124` is simply discarded. The first attempt did exactly that and
+  looked like it did nothing. Traced through j0nny's decomp of `Plr_CommitPose`.
+* The panel has to close itself on the way out. It holds the simulation just as the camera does, so
+  without that the move does not resolve until the panel is closed by hand - which read, again, as
+  the key doing nothing.
+* The panel is locked open while the camera is flying: neither Escape nor the open key will close
+  it, because closing it mid-flight leaves the camera stranded with no cursor to recover it. The
+  only ways out are the bound key and F4, which is what the fly-controls fold now says.
+
+Tested in game on Windows: teleport across a room, teleport onto a ledge, F4 from mid-air, and the
+panel refusing to close while flying.

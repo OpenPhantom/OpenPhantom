@@ -464,7 +464,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
         !own_state.cheats[id].available) {
         return false;
     }
-    /* Turning free camera ON without an exit hotkey bound is a one-way door: the mouse it claims
+    /* Turning free camera ON without a key bound is a one-way door: the mouse it claims
      * is also what the dev panel and the game's own pause menu need, and there is no way to close
      * this cheat again without one. The authoritative gate lives here rather than only in the
      * panel's own row.available, so nothing that reaches this function directly can bypass it. */

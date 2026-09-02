@@ -8,6 +8,7 @@
 #include "cheats_internal.h"
 
 #include "sim_pause.h"
+#include "overlay_input.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -154,13 +155,30 @@ static LARGE_INTEGER freecam_perf_frequency;
 static LONGLONG      freecam_last_tick;
 static POINT         freecam_cursor_anchor;
 
-/* The exit hotkey. Free camera's own mouse look claims the cursor, which leaves both the dev panel
+/* THE BOUND KEY, which ends the flight and brings the player to the camera. It was the plain exit
+ * key first; the teleport is the thing worth binding, and F4 covers leaving without moving.
+ *
+ * Free camera's own mouse look claims the cursor, which leaves both the dev panel
  * and the game's own pause menu unreachable - no cursor, no click, and Escape does not work either
  * while the simulation this cheat paused is what would normally answer it. Without a keyboard-only
  * way out, turning this cheat on is a one-way door. 0 = unbound; the panel's hotkey row (see
  * overlay_model.c) is how a key gets into this. */
 static int32_t freecam_hotkey;
 static bool    freecam_hotkey_was_down;
+
+/* TWO KEYS, TWO INTENTIONS, so neither needs a toggle explaining which one is armed. The BOUND key
+ * (see the hotkey row in overlay_model.c) means "the player comes HERE"; F4 means "put it back,
+ * nobody moved". The teleport is the one on a key of the player own choosing because it is what
+ * the camera is usually being flown for; F4 is fixed because a fallback that always means the same
+ * thing is worth more than one more thing to configure.
+ *
+ * This is the fly-somewhere-and-continue workflow the old noclip was for, without any of what sank
+ * it: one position write while the simulation is still frozen, not a player simulating against its
+ * own state machine while something else drags it around. */
+#define FREECAM_RETURN_KEY 0x73          /* VK_F4. Alt+F4 still closes the game: Alt is not read */
+static bool freecam_teleport_pending = false;   /* raised by the BOUND key, read on the way out */
+static bool freecam_return_was_down  = false;
+
 
 int32_t cheats_openphantom_freecam_hotkey(void)
 {
@@ -183,10 +201,66 @@ static void __cdecl hook_camera_update(void)
     void **view_slot;
     void  *view;
 
+
     own_state.camera_update_original();
 
     if (!own_state.cheats[CHEATS_OWN_FREECAM].on) {
         if (freecam_valid) {
+            /* THE TELEPORT, if F4 asked for it, and BEFORE the simulation is released: one
+             * write into a world that is still frozen, so the player's own physics resumes FROM
+             * the new place rather than being fought at it. That ordering is the whole difference
+             * between this and the noclip this feature replaced.
+             *
+             * The position is all that moves. Velocity, mode and heading keep whatever they held
+             * when flight began, so stepping out mid-air is a fall from wherever the camera was
+             * left, and a fall from high enough still kills exactly as the engine intends - jump
+             * boost's own immunities cover that, deliberately not duplicated here. The follow
+             * camera needs nothing either way: the very next updateCam recomputes it from the
+             * player, wherever the player now is. */
+            if (freecam_teleport_pending) {
+                void **player_slot = (void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+                uint8_t *player = (player_slot != NULL) ? (uint8_t *)*player_slot : NULL;
+
+                if (player != NULL) {
+                    /* The player's live position, +0x118 (pos), which Plr_CommitPose then pushes
+                     * onto the drawn object. The desiredPos field at +0x124 is NOT the one to
+                     * write: phase 12 copies it into pos only when bMovedThisFrame is set, and a
+                     * standing player clears that every substep, so a write there is discarded.
+                     * Traced through the decomp of Plr_CommitPose after an earlier attempt on
+                     * +0x124 left the player exactly where they started.
+                     *
+                     * THE CAMERA'S OWN Z, DELIBERATELY. Standing the player on the floor beneath
+                     * the camera was tried and taken back out: dropping somebody in from height is
+                     * a thing people want to do with this, and snapping to the ground removes it.
+                     * The fall that follows is the player's own business; the consequences of it
+                     * are handled by the fall grace above. */
+                    float *position = (float *)(player + PLAYER_POSITION_OFFSET);
+
+                    position[0] = freecam_x;
+                    position[1] = freecam_y;
+                    position[2] = freecam_z;
+
+                    /* The arrival is a FALL, from whatever altitude the camera was flown to, and
+                     * it is not one the player chose to take. The same five consequences jump
+                     * boost suppresses are suppressed for it, ending on the first landing. See
+                     * cheats_openphantom_grant_fall_grace. */
+                    cheats_openphantom_grant_fall_grace();
+
+                    /* F4 means "put me there and play", and the panel holds the simulation just as
+                     * the camera does; without this the move would not resolve until the panel was
+                     * closed by hand, which is what made the first attempt look like it did nothing
+                     * until then. */
+                    overlay_input_close();
+
+                    log_info("the free camera teleport key dropped the player at %.1f %.1f %.1f",
+                             (double)freecam_x, (double)freecam_y, (double)freecam_z);
+                } else {
+                    log_warning("the teleport key asked to drop the player at the camera, but "
+                                "there is no player record to move; the camera returned instead");
+                }
+            }
+            freecam_teleport_pending = false;
+
             /* Falling edge: hand the world back. The camera itself needs no un-write - the very
              * next updateCam call recomputes it from the player the ordinary way, since nothing
              * here touches state (+0x00) or anything else the follow logic reads. */
@@ -214,6 +288,8 @@ static void __cdecl hook_camera_update(void)
          * snaps the view, and pause the simulation - see sim_pause.h for why
          * this one flag is enough to stop the player and the whole world simulating out from
          * under a camera that is no longer looking through the player's own eyes. */
+        freecam_teleport_pending = false;
+        freecam_return_was_down  = (GetAsyncKeyState(FREECAM_RETURN_KEY) & 0x8000) != 0;
         freecam_x = *(float *)((uint8_t *)view + CAMERA_ANCHOR_X_OFFSET);
         freecam_y = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Y_OFFSET);
         freecam_z = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Z_OFFSET);
@@ -286,18 +362,43 @@ static void __cdecl hook_camera_update(void)
      * panel usable while flying", it was "I have no way OUT of free camera once the mouse is
      * claimed" - the panel is unreachable without a working cursor and Escape does nothing while
      * this cheat has the simulation paused, so a player who did not already know a hotkey existed
-     * was simply stuck. The exit hotkey below is the actual fix: keyboard only, needs no cursor at
+     * was simply stuck. The bound key below is the actual fix: keyboard only, needs no cursor at
      * all, and does not touch how the mouse behaves while flying. Whether the panel itself is ever
      * usable mid-flight is a separate question, unresolved, and no longer the one that mattered. */
+    /* THE BOUND KEY BRINGS THE PLAYER. It ends the flight and drops the player wherever the camera
+     * is, which is what the camera is usually being flown FOR, so it is the action worth putting
+     * on a key of the player's own choosing. The plain return is on F4 below.
+     *
+     * The write itself happens on the falling edge above, one call later, so both keys share a
+     * single exit path and neither has to know how the other ends the flight. */
     if (freecam_hotkey != 0 && is_game_foreground()) {
         bool hotkey_down = (GetAsyncKeyState(freecam_hotkey) & 0x8000) != 0;
 
         if (hotkey_down && !freecam_hotkey_was_down) {
             freecam_hotkey_was_down = hotkey_down;
+            freecam_teleport_pending = true;
             own_state.cheats[CHEATS_OWN_FREECAM].on = false;
             return;   /* the falling-edge cleanup above runs on the NEXT call to this hook */
         }
         freecam_hotkey_was_down = hotkey_down;
+    }
+
+    /* F4 LEAVES WITHOUT MOVING ANYBODY, which is the other half of what a free camera is for:
+     * looking at something and then carrying on from where you actually were. Fixed rather than
+     * bindable because it is the fallback, and because a fixed key that always means "put it back"
+     * is worth more than one more thing to configure.
+     *
+     * Edge-detected like the bound key, and its held state is seeded at the rising edge below for
+     * the same reason: a key already down when the flight begins is not a request. */
+    if (is_game_foreground()) {
+        bool return_down = (GetAsyncKeyState(FREECAM_RETURN_KEY) & 0x8000) != 0;
+
+        if (return_down && !freecam_return_was_down) {
+            freecam_return_was_down = return_down;
+            own_state.cheats[CHEATS_OWN_FREECAM].on = false;
+            return;   /* no pending teleport: the falling edge just hands the world back */
+        }
+        freecam_return_was_down = return_down;
     }
 
     if (is_game_foreground()) {
@@ -485,6 +586,7 @@ bool install_freecam(void)
 
     own_state.camera_update_original = (camera_update_fn_t)own_state.camera_update_detour.original;
     own_state.camera_view_address    = (uintptr_t)view_address;
+
     log_info("free camera: pausing through sim_pause, camera object pointer at %08X, update "
              "chained at %08X - WASD moves along the view, mouse looks, E/Q move vertically",
              (unsigned)view_address, (unsigned)update_site);

@@ -9,7 +9,7 @@
  * worth writing down rather than passing on again.
  *
  * What is long is the row numbering and the reasoning attached to it. The OpenPhantom group's ids
- * are not a plain list: the jump-boost scale is inserted after its own toggle, the exit hotkey and
+ * are not a plain list: the jump-boost scale is inserted after its own toggle, the teleport key and
  * free camera swap places, a fold adds six more ids only while it is open, and each of those has a
  * static assert and a paragraph explaining what it is pinned to and what breaks if the enum behind
  * it is reordered. Deleting that reasoning to get under a limit would leave arithmetic nobody can
@@ -58,7 +58,7 @@ typedef struct overlay_model_state {
     group_state_t groups[OVERLAY_GROUP_COUNT];
     overlay_row_t rows[OVERLAY_ROWS_MAX];
     uint32_t      row_count;
-    bool          capturing_hotkey;   /* the free-camera exit hotkey row is waiting for a keypress */
+    bool          capturing_hotkey;   /* the free-camera teleport key row is waiting for a keypress */
     bool          freecam_info_expanded;   /* the "how to fly" row is showing its lines */
     bool          freecam_was_on;     /* last-seen CHEATS_OWN_FREECAM state, to catch the edge */
     bool          editing_value;           /* a value row is waiting for typed digits */
@@ -71,10 +71,10 @@ typedef struct overlay_model_state {
 
 static overlay_model_state_t model;
 
-/* The exit-hotkey row takes over free camera's own numeric slot in this group's id space, and
+/* The teleport-key row takes over free camera's own numeric slot in this group's id space, and
  * free camera itself moves one slot later (FREECAM_ROW_ID) - so walking ids in order puts the
  * hotkey row directly BEFORE the cheat it gates rather than after it, the same order a player
- * reads the panel in. Read top to bottom, that tells the whole story on its own: set an exit key,
+ * reads the panel in. Read top to bottom, that tells the whole story on its own: set a teleport key,
  * then the toggle right below it stops reading unavailable. Neither is a cheats_own_id_t, and
  * deliberately outside that enum's range instead of extending it: both are rows this panel adds,
  * not cheats cheats_openphantom.c itself offers a name or an on/off for.
@@ -116,14 +116,21 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
  * same for the way back out, since once free camera is on, this fold is the only place left that
  * still says which key does that. */
 #define INFO_ROW_ID (FREECAM_ROW_ID + 1u)
-#define FREECAM_INFO_LINE_COUNT 6u
+/* NINE LINES, NOT SIX, because two of them describe the two ways out and each is a sentence wider
+ * than the panel. A line that does not fit is drawn clipped, running off the edge of the box with
+ * no ellipsis and no wrap, so the reader loses the end of exactly the sentence that tells them how
+ * to get out. Each is written as a line plus a continuation indented two spaces instead. */
+#define FREECAM_INFO_LINE_COUNT 9u
 static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
-    "Needs an exit key set first",
+    "Needs a teleport key set first",
     "WASD to move",
     "Mouse to look",
     "E / Q for up and down",
     "Scroll wheel changes speed",
-    "Press your exit key to exit free camera"
+    "Your teleport key ends the flight",
+    "  and brings the player here",
+    "F4 ends the flight and leaves",
+    "  the player where they were"
 };
 
 /* "Skip to next level" - one slot after the free-camera info fold's own SUMMARY row (INFO_ROW_ID)
@@ -374,7 +381,7 @@ static uint32_t source_count(overlay_group_t group)
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
         /* +6, one for each row this group holds that is not one of its own cheats: the jump-boost
-         * scale row, inserted right after jump boost's own toggle row; the free-camera exit hotkey
+         * scale row, inserted right after jump boost's own toggle row; the free-camera teleport key
          * row, which takes over free camera's own (now shifted) numeric slot; the "how to fly"
          * fold, one past where free camera itself now sits; "Skip to next level", one past that;
          * the draw distance row, one past THAT; and the dev menu size row, last of the six. See
@@ -467,7 +474,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         }
         if (id == HOTKEY_ROW_ID) {
             out->kind = OVERLAY_ROW_HOTKEY;
-            copy_label(out->label, "Free camera exit key");
+            copy_label(out->label, "Free camera teleport key");
             out->on = false;        /* meaningless for a hotkey row; never read by the drawer */
             out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
             /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
@@ -486,7 +493,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             return;
         }
         if (id == FREECAM_ROW_ID) {
-            /* Free camera itself, one slot after its own exit-hotkey row now rather than at its
+            /* Free camera itself, one slot after its own teleport-key row now rather than at its
              * plain cheats_own_id_t position - see HOTKEY_ROW_ID/FREECAM_ROW_ID above. Named by
              * CHEATS_OWN_FREECAM explicitly rather than casting id the way the generic fallback
              * below does for the other three cheats: id here is FREECAM_ROW_ID, one past the real
@@ -496,11 +503,11 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             copy_label(out->label, cheats_openphantom_name(CHEATS_OWN_FREECAM));
             out->on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
             out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
-            /* Free camera specifically also needs an exit hotkey bound before it can be switched
+            /* Free camera specifically also needs a teleport key bound before it can be switched
              * ON - cheats_openphantom_toggle() enforces this too, so this is display honesty
              * rather than the only gate: a row that looked clickable but silently refused every
              * click would be worse than one that shows why. Once it IS on, availability no longer
-             * depends on this - the row is unreachable anyway with the mouse claimed, and the exit
+             * depends on this - the row is unreachable anyway with the mouse claimed, and the
              * hotkey is how it actually turns back off. */
             if (!out->on && cheats_openphantom_freecam_hotkey() == 0) {
                 out->available = false;
@@ -638,7 +645,7 @@ void overlay_model_rebuild(void)
     bool     freecam_on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
 
     if (freecam_on != model.freecam_was_on) {
-        /* Free camera just changed state - either the panel's own toggle, or (more often) its exit
+        /* Free camera just changed state - either the panel's own toggle, or (more often) its
          * hotkey, which flips this straight inside cheats_openphantom.c without ever going through
          * overlay_model_activate(). Catching it here, on every rebuild, is what sees the hotkey
          * path too. The mouse is fully claimed for as long as free camera flies, so this is also

@@ -96,12 +96,15 @@
  *
  * Free camera's own mouse look claims the cursor for as long as it is on, which locks the player
  * out of both the dev panel and the game's own pause menu at once - there is no cursor left to
- * click either with. A bound exit hotkey is the way out: a physical key, read directly the same
- * way E/Q already are, that only means anything while free camera is on, and turns it off on its
- * own without needing the mouse at all. See the panel's own hotkey row (OVERLAY_ROW_HOTKEY in
- * overlay_model.c) for how it gets bound. Free camera refuses to turn on at all until one is
- * bound - see cheats_openphantom_toggle()'s own gate - because turning it on without one is a
- * door with no handle on the inside.
+ * click either with. A bound key is the way out: a physical key, read directly the same way E/Q
+ * already are, that only means anything while free camera is on, and ends the flight on its own
+ * without needing the mouse at all. It also BRINGS THE PLAYER to wherever the camera is, which is
+ * what the camera is usually being flown for; F4 ends the flight without moving anybody, and is
+ * fixed rather than bindable because a fallback that always means the same thing is worth more
+ * than one more thing to configure. See the panel's own hotkey row (OVERLAY_ROW_HOTKEY in
+ * overlay_model.c) for how the bindable one gets set. Free camera refuses to turn on at all until
+ * it is bound - see cheats_openphantom_toggle()'s own gate - because turning it on without one is
+ * a door with no handle on the inside.
  *
  * "Skip to next level" is not a toggle either, and not one of the nine cheats above: a debug-only
  * action row, for iterating on a specific level without replaying everything before it. It writes
@@ -153,13 +156,19 @@ float cheats_openphantom_jump_boost_scale(void);
 void cheats_openphantom_jump_boost_set_scale(float scale);
 
 /* Flips one and answers the new state. A cheat whose site did not resolve stays off, and free
- * camera specifically also stays off with no exit hotkey bound - see cheats_openphantom.c. */
+ * camera specifically also stays off with no key bound - see cheats_openphantom.c. */
 bool cheats_openphantom_toggle(cheats_own_id_t id);
 
-/* The virtual key that turns free camera back off while it is on. 0 means unbound, in which case
- * cheats_openphantom_toggle() refuses to turn CHEATS_OWN_FREECAM on at all. */
+/* The virtual key that ends the flight AND brings the player to the camera. 0 means unbound, in
+ * which case cheats_openphantom_toggle() refuses to turn CHEATS_OWN_FREECAM on at all. */
 int32_t cheats_openphantom_freecam_hotkey(void);
 void cheats_openphantom_freecam_set_hotkey(int32_t virtual_key);
+
+/* Suppresses the five consequences of falling for a few seconds, the same five jump boost already
+ * suppresses while it is on: the damage, the airborne-too-long death, the fall-distance death and
+ * the two camera latches. Granted by the free camera teleport, because arriving at a camera that
+ * was flying is a fall the player did not choose to take. Ends on the first landing. */
+void cheats_openphantom_grant_fall_grace(void);
 
 /* Notches scrolled since the last take, positive away from the player - the exact contract
  * overlay_input_take_wheel_delta() keeps. A function pointer rather than calling that function by

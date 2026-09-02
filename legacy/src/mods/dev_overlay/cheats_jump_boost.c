@@ -305,8 +305,8 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
                                            * bytes, not ten - verified separately from the shared
                                            * push-imm8 shape every other site in this section uses */
 #define CAMERA_FREEZE_PROLOGUE_SIZE 9u
-#define PLAYER_POSITION_OFFSET 0x118u   /* what 0x0044F891's own argument (ECX = pPlayer+0x118)
-                                         * points at - the player's live position, three floats */
+/* PLAYER_POSITION_OFFSET moved to cheats_internal.h: free camera's exit teleport reads the same
+ * field, and one number in one place cannot drift. The evidence line moved with it. */
 
 /* Free camera, site one of two: the simulation pause flag.
  *
@@ -380,6 +380,59 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * follow-blend arm - has already finished. Roll (+0x3c) is left alone; a free camera has no use
  * for it and neither does anything reading euler.x/euler.y elsewhere. */
 
+/* THE FALL GRACE, and why it lives here rather than with the free camera that grants it.
+ *
+ * The five sites below are the only things in this project that suppress a consequence of falling,
+ * and they were all written for jump boost. The free camera's teleport creates the same situation
+ * from a different direction: the player arrives at whatever altitude the camera was flown to, and
+ * a fall nobody chose to take should not be a death. Rather than a second set of hooks, the gate
+ * becomes a question with two answers, and the sites go on asking one question.
+ *
+ * TIMED, AND MEASURED AGAINST THE CLOCK RATHER THAN TICKED. A deadline compared with the counter
+ * needs nothing to run every frame and cannot drift if something stops running.
+ *
+ * IT ENDS ON THE FIRST LANDING. on_fall_damage is only reached BY landing, so its own arm clears
+ * the grace: the fall is over, and a player who then walks off a ledge should be treated normally.
+ * The cap exists for the fall that never lands, over a spot with nothing modelled beneath it,
+ * where suppressing the airborne timer forever would be worse than the death it prevents. */
+#define FALL_GRACE_SECONDS 10.0f
+
+static LONGLONG fall_grace_until;      /* performance-counter ticks; 0 = no grace */
+
+void cheats_openphantom_grant_fall_grace(void)
+{
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER now;
+
+    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0 ||
+        !QueryPerformanceCounter(&now)) {
+        fall_grace_until = 0;
+        return;
+    }
+    fall_grace_until = now.QuadPart + (LONGLONG)((double)frequency.QuadPart *
+                                                 (double)FALL_GRACE_SECONDS);
+}
+
+static bool fall_grace_active(void)
+{
+    LARGE_INTEGER now;
+
+    if (fall_grace_until == 0) {
+        return false;
+    }
+    if (!QueryPerformanceCounter(&now) || now.QuadPart >= fall_grace_until) {
+        fall_grace_until = 0;
+        return false;
+    }
+    return true;
+}
+
+/* The one question the five sites ask. */
+static bool fall_consequences_suppressed(void)
+{
+    return own_state.cheats[CHEATS_OWN_JUMP_BOOST].on || fall_grace_active();
+}
+
 static void __cdecl hook_jump_entry(void)
 {
     own_state.jump_entry_original();
@@ -420,9 +473,13 @@ static void __cdecl hook_jedi_jump_entry(void)
  * check it on every single landing. */
 static void __cdecl on_fall_damage(void)
 {
-    if (!own_state.cheats[CHEATS_OWN_JUMP_BOOST].on) {
+    if (!fall_consequences_suppressed()) {
         hook_damage(10);
+        return;
     }
+    /* Reached only BY landing, so this is where a granted grace has done its job. Jump boost's own
+     * suppression is unaffected: it is a cheat that stays on until it is switched off. */
+    fall_grace_until = 0;
 }
 
 /* A naked trampoline, the same shape as hook_npc_damage above and for the same reason: the ten
@@ -460,7 +517,7 @@ static void __declspec(naked) hook_fall_damage(void)
  * site below, so this never risks calling through a half-resolved pointer. */
 static void __cdecl on_time_death(void)
 {
-    if (!own_state.cheats[CHEATS_OWN_JUMP_BOOST].on && own_state.death_trigger != NULL) {
+    if (!fall_consequences_suppressed() && own_state.death_trigger != NULL) {
         own_state.death_trigger(2);
     }
 }
@@ -497,7 +554,7 @@ static void *distance_death_skip_continue;
 
 static void __cdecl on_distance_death(void)
 {
-    distance_death_skip = own_state.cheats[CHEATS_OWN_JUMP_BOOST].on;
+    distance_death_skip = fall_consequences_suppressed();
     if (!distance_death_skip && own_state.death_trigger != NULL) {
         own_state.death_trigger(1);
     }
@@ -531,7 +588,7 @@ static void __declspec(naked) hook_distance_death(void)
  * comment for why a literal is what's actually available here. */
 static void __cdecl on_camera_lock(void)
 {
-    if (!own_state.cheats[CHEATS_OWN_JUMP_BOOST].on && own_state.camera_type_select != NULL) {
+    if (!fall_consequences_suppressed() && own_state.camera_type_select != NULL) {
         own_state.camera_type_select(0xD);
     }
 }
@@ -567,7 +624,7 @@ static void __declspec(naked) hook_camera_lock(void)
  * is off, the call still happens exactly as retail wrote it, argument included. */
 static void __cdecl on_camera_freeze(void)
 {
-    if (!own_state.cheats[CHEATS_OWN_JUMP_BOOST].on && own_state.camera_freeze_target != NULL) {
+    if (!fall_consequences_suppressed() && own_state.camera_freeze_target != NULL) {
         void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
 
         if (player_record != NULL) {

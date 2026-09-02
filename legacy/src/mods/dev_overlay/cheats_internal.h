@@ -23,6 +23,11 @@
 /* The player record pointer, read by the jump cheats and by the panel's own rows. */
 
 #define PLAYER_RECORD_PTR_ADDR 0x004B5220u
+
+/* The player's live position, three floats, byte-proven from 0x0044F891's own argument
+ * (ECX = pPlayer+0x118). Shared by jump boost's fall handling and by free camera's exit
+ * teleport, so the one number cannot drift between them. */
+#define PLAYER_POSITION_OFFSET 0x118u
 #define JUMP_BOOST_SCALE_DEFAULT 1.3f
 #define JUMP_BOOST_SCALE_MIN     0.5f
 #define JUMP_BOOST_SCALE_MAX     5.0f

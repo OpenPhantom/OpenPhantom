@@ -231,9 +231,9 @@ int main(void)
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 1u + (uint32_t)CHEATS_OWN_COUNT + 6u + 6u,
+                 1u + (uint32_t)CHEATS_OWN_COUNT + 6u + 9u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary and its six lines, the skip-to-next-level action, the draw "
+             "the fold's own summary and its nine lines, the skip-to-next-level action, the draw "
              "distance row and the dev menu size row are all on screen");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
@@ -244,23 +244,30 @@ int main(void)
        same number. This checks the drawn order, which is the half a player sees. */
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 4u, &row) &&
                  row.kind == OVERLAY_ROW_INFO &&
-                 strcmp(row.label, "    Needs an exit key set first") == 0,
+                 strcmp(row.label, "    Needs a teleport key set first") == 0,
              "the first line sits immediately below the summary, not at the end of the group");
     ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 4u),
              "but a line itself does nothing when clicked - only the summary is interactive");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 9u, &row) &&
-                 strcmp(row.label, "    Press your exit key to exit free camera") == 0,
-             "and the sixth, last line spells out the way back out too");
+    /* Nine lines, not six: the two that describe the two ways out are each a sentence too long to
+       fit the panel's width, so each is written as a line plus an indented continuation rather
+       than being allowed to run off the edge. The count is what this pins down - a line added
+       without the rows below it moving is the failure that would otherwise go unseen. */
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
+                 strcmp(row.label, "    F4 ends the flight and leaves") == 0,
+             "the eighth line names the other way out, the one that leaves the player put");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 12u, &row) &&
+                 strcmp(row.label, "      the player where they were") == 0,
+             "and the ninth is its continuation, indented past the line it finishes");
 
     /* The rows that were below the summary are still below the lines, in the order they had. A
        fold that reorders the rows around it would be worse than one that does not open. */
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 10u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 13u, &row) &&
                  row.kind == OVERLAY_ROW_ACTION,
-             "the skip-to-next-level action is pushed down the screen by the six lines");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
+             "the skip-to-next-level action is pushed down the screen by the nine lines");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 14u, &row) &&
                  strcmp(row.label, "Draw distance (1.0 to 2.5)") == 0,
              "and the draw distance row after it, still in the order it was drawn in");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 12u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 15u, &row) &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "and the dev menu size row last, which is the whole group accounted for");
 
@@ -269,7 +276,7 @@ int main(void)
              "the same summary row closes it back up");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 6u,
-             "its six lines are gone again, back to costing one row like any other cheat");
+             "its nine lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);

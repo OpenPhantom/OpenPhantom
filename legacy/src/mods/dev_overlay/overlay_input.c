@@ -51,6 +51,7 @@
  * ============================================================================================ */
 #include "overlay_input.h"
 
+#include "cheats_openphantom.h"
 #include "cheats_original_actions.h"
 #include "input_freeze.h"
 #include "sim_pause.h"
@@ -218,6 +219,27 @@ static overlay_input_state_t input_state;
  * The panel swallows the messages it wants by answering them itself, which needs no cell at all.
  * The address is still resolved, because it is what proves the pattern landed on the right
  * function, and the log still names it. */
+/* THE PANEL IS HELD OPEN WHILE THE CAMERA IS FLYING, and this is a repair rather than a policy.
+ *
+ * Free camera runs on the panel being up: closing it releases SIM_PAUSE_PANEL and the input freeze
+ * out from under a camera that is still detoured and still flying, and the camera is left broken.
+ * Field confirmed.
+ *
+ * So the two ways a PERSON closes the panel, Escape and the key that opened it, are refused while
+ * the camera is on. Nothing is taken away: free camera cannot be switched on at all without a key
+ * bound (see cheats_openphantom_toggle), and F4 is always there besides, so the flight can always
+ * be ended and the panel closes normally the moment it is. Ending the flight is the way out, and
+ * it is the ONLY thing that was ever going to leave both halves consistent.
+ *
+ * The programmatic closes are deliberately NOT gated: overlay_input_close() is what a level skip
+ * and a failed paint use, and both of those are the panel getting out of the way of something
+ * worse. Free camera's own teleport calls it too, on a frame where it has already switched
+ * itself off. */
+static bool free_camera_holds_panel(void)
+{
+    return cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
+}
+
 static void set_open(bool open)
 {
     input_state.open = open;
@@ -436,6 +458,9 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
             return true;
         }
         if (wparam == KEY_ESCAPE) {
+            if (free_camera_holds_panel()) {
+                return true;    /* swallowed, not acted on; see free_camera_holds_panel */
+            }
             set_open(false);
             return true;
         }
@@ -534,6 +559,13 @@ static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam
     observe_wheel(message, wparam);
 
     if (is_key_down(message) && is_open_key(wparam)) {
+        if (input_state.open && free_camera_holds_panel()) {
+            /* Said once per attempt rather than silently swallowed: a key that does nothing needs
+             * to say why, and the panel itself cannot say it while the camera owns the screen. */
+            log_info("the overlay stayed open: the free camera is flying, and closing the panel "
+                     "would break it. End the flight first with your teleport key or F4");
+            return HANDLED;
+        }
         log_info("the overlay was %s with key %02X",
                  input_state.open ? "closed" : "opened", (unsigned)wparam);
         set_open(!input_state.open);

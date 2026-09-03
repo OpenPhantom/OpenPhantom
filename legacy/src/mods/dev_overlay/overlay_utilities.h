@@ -24,8 +24,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Six, in the order they are drawn. The draw distance first, because it is the setting a player
- * came looking for; the key binding last, because it is the one nobody needs twice.
+/* Seven, in the order they are drawn. The draw distance first, because it is the setting a player
+ * came looking for, with a note under it saying what the game is actually running; the key binding
+ * last, because it is the one nobody needs twice.
  *
  * There were seven. A row for FogFollowFov was offered and taken out again: the fog's end floor
  * ships at the full draw distance, and the correction that setting applies is the same reach times
@@ -33,7 +34,7 @@
  * row could not change anything. Even with the floor lowered by hand it adds nothing below about
  * 106 degrees, against a field of view slider that stops at 120. The setting is still in the ini
  * for the person who lowers the floor and plays that wide. */
-#define OVERLAY_UTILITIES_ROW_COUNT 6u
+#define OVERLAY_UTILITIES_ROW_COUNT 7u
 
 /* Fills everything about one row except `group` and `id`, which belong to the caller's numbering.
  *

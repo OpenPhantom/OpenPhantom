@@ -254,6 +254,7 @@ add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
     fog_band_row.c
+    view_range_live_row.c
     overlay_key_name.c
     overlay_utilities.c
     open_key_row.c

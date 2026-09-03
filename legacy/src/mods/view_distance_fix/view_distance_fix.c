@@ -293,9 +293,9 @@ static void load_config(void)
     }
     config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
-    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 0.5f);
+    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 1.0f);
     config->level_open_seconds  = clamp_float(
-        ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenSeconds", 5.0f), 0.0f, 30.0f);
+        ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenSeconds", 0.0f), 0.0f, 30.0f);
     config->level_open_range    = clamp_float(
         ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenViewRange", 2.5f), 1.0f, 2.5f);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
@@ -679,6 +679,29 @@ static void poll_view_range_scale(void)
     frame_governor_reset(requested);
 }
 
+/* The draw distance actually in force, published for the panel to show.
+ *
+ * The panel writes ViewRangeScale and cannot see what happens to it afterwards. Two guards lower
+ * it: the frame governor when a scene costs too much, and the cell watchdog when the draw table or
+ * the vertex cache is close to overflowing. On Coruscant the watchdog can pin it at 1.00 for the
+ * whole level, and until this the panel went on showing the number that had been typed while the
+ * game ran something else, with nothing anywhere saying so.
+ *
+ * Through the ini because that is the channel these two DLLs already share and neither owns. It is
+ * written only when the value actually changes, which is a step of the governor every ten seconds
+ * at worst and an alarm from the watchdog, so this is not a file write per frame. The key is
+ * output only: nothing reads it back into the engine. */
+static void publish_effective_scale(float scale)
+{
+    static float published = -1.0f;
+
+    if (published >= 0.0f && scale > published - 0.005f && scale < published + 0.005f) {
+        return;
+    }
+    published = scale;
+    (void)ini_write_float(VIEW_DISTANCE_SECTION, "EffectiveViewRange", scale, 2);
+}
+
 static void on_frame(void)
 {
 
@@ -731,6 +754,7 @@ static void on_frame(void)
     }
 
     cell_watchdog_on_frame(&view_state.effective_view_scale);
+    publish_effective_scale(view_state.effective_view_scale);
 
     /* AFTER the watchdog, deliberately. When the watchdog lowers the scale it moves the cut edge,
      * and the fog eases towards a target computed from the number that is in force, reading it

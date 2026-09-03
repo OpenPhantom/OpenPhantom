@@ -32,9 +32,9 @@
 #define FOG_BAND_MAX 1.0f
 
 /* What the game runs at with the key absent, which is what the row has to show then. Its own name
- * rather than a reuse of the maximum, which it briefly equalled and no longer does: the two mean
- * different things and have now parted twice. */
-#define FOG_BAND_DEFAULT 0.5f
+ * rather than a reuse of the maximum even while it holds the same number: the two mean different
+ * things, and this one has moved four times while the maximum has not moved at all. */
+#define FOG_BAND_DEFAULT 1.0f
 
 /* One press of the row's own step. Smaller than the draw distance row's, because the whole useful
  * range here is narrower than that row's single step. */

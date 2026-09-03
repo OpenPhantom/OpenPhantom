@@ -7,6 +7,7 @@
 #include "fog_follow_row.h"
 #include "open_key_row.h"
 #include "overlay_key_name.h"
+#include "view_range_live_row.h"
 #include "view_range_row.h"
 
 #include <stdio.h>
@@ -16,6 +17,7 @@
  * reading decision and whoever changes it should have to change one list. */
 typedef enum utilities_slot {
     UTILITIES_VIEW_RANGE = 0,
+    UTILITIES_VIEW_RANGE_LIVE,
     UTILITIES_AUTO_RANGE,
     UTILITIES_FOG_BAND,
     UTILITIES_FOG_FOLLOW,
@@ -82,6 +84,25 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "Draw distance (1.0 to 2.5)");
         fill_typed(out, editing_text, view_range_row_format, view_range_row_get());
         return;
+
+    case UTILITIES_VIEW_RANGE_LIVE: {
+        /* A note rather than a control, so it cannot be clicked into and cannot be mistaken for
+         * something to set. What it reports is the number the game is running, which is not always
+         * the number above it: the frame governor lowers that when a scene costs too much, and the
+         * cell watchdog lowers it when the draw table or the vertex cache is near overflowing. On
+         * Coruscant the watchdog can pin it at 1.00 for a whole level, and the row above then shows
+         * a number nothing is using. */
+        char text[16];
+
+        out->kind = OVERLAY_ROW_INFO;
+        if (view_range_live_row_get(text, sizeof text)) {
+            _snprintf(out->label, sizeof out->label, "  in force: %s", text);
+        } else {
+            copy_label(out->label, "  in force: not reported");
+        }
+        out->label[sizeof out->label - 1] = '\0';
+        return;
+    }
 
     case UTILITIES_AUTO_RANGE:
         copy_label(out->label, "Draw distance follows the frame rate");

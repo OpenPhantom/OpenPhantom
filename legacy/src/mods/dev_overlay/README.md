@@ -315,9 +315,26 @@ the world changing.
 
 **The row shows the setting, not necessarily what the game is drawing at.** The cell watchdog lowers
 the scale on its own when a dense scene fills its buffers, so in a heavy area the row can honestly
-read `2.50x` while the game is really drawing at `1.00x`. Reporting the live value would mean asking
-`view_distance_fix` for it, which is the dependency above. The watchdog announces itself in
-`engine_fixes.log` when it brakes, which is where that answer lives instead.
+read `2.50x` while the game is really drawing at `1.00x`. The note directly under it is what says so.
+
+## The note under the draw distance
+
+The second row under **Utilities** is not a control. It reads `in force: 1.00x` and cannot be
+clicked into, because nothing here can change it: it reports the draw distance the game is actually
+running, which is not always the one typed above it. The frame governor lowers that when a scene
+costs too much frame time and the cell watchdog lowers it when the draw table or the vertex cache is
+close to overflowing, and on a heavy level the watchdog can hold it at `1.00x` for the whole level.
+
+**It exists because the row above it was reported as doing nothing.** On Coruscant the number could
+be typed, committed and written to the ini, and the world would not change, because the watchdog had
+already taken the scale and nothing on screen said so. The log said so, and nobody reads the log
+while playing.
+
+**It reads the ini rather than calling `view_distance_fix`**, the same way round as every other row
+here, except that the direction is reversed: that DLL publishes what it is running as
+`[view_distance_fix] EffectiveViewRange` and this only ever reads it. Editing that key does nothing,
+the next frame overwrites it, and a machine without `view_distance_fix` installed reads
+`in force: not reported` rather than a number this would otherwise have to invent.
 
 ## The fog rows
 
@@ -365,7 +382,7 @@ are allowed, and both things then happen.
 
 ## The dev menu size row
 
-The second to last row under **Utilities** edits `[dev_overlay] DevMenuSize`, which is how much bigger
+The last row but one under **Utilities** edits `[dev_overlay] DevMenuSize`, which is how much bigger
 than its authored size this menu is drawn. Typed in like the two rows above it, with the accepted
 range, `0.33 to 4.0`, in the label.
 

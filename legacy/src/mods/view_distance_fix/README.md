@@ -36,8 +36,9 @@ order of thing from a per-object syscall.
 | `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
-| `FogBandScale` | `0.5` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. Polled while running |
-| `LevelOpenSeconds` | `5.0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0` disables |
+| `FogBandScale` | `1.0` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. Polled while running |
+| `LevelOpenSeconds` | `0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0`, the default, leaves the engine's own behaviour alone |
+| `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it |
 | `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |
 | `FogImplementation` | `2` | 0-2 | which half of the engine draws the fog: `2` the device per pixel, `1` the engine's own per-vertex ramp, `0` neither. Read once at startup; see below |
 | `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above |

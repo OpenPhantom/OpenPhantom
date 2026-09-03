@@ -43,7 +43,7 @@ order of thing from a per-object syscall.
 | `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above |
 | `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
-| `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
+| `TwoSidedSevered` | `0` | | draw severed pieces two-sided. Off by default; see the limitations |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |
 | `RelocateDrawTable` | `1` | | move the cell table, raise its limit to 32768 (raised again from 16384; see `draw_table.c` section 2) |
 | `LowerCellLimit` | `1` | | lower it to 7168 instead; skipped when the relocation is active |
@@ -478,6 +478,17 @@ scene, not about seeing further than that ceiling.**
   placements activate inside the visible picture already, so this is the knob that removes pop-in,  and the reason its cap is 2.0 against a 128-slot character pool.
 * Two-sided drawing **softens** the see-through look; it does not close the hole. A severed limb is
   not a cut mesh, `bapobj_detachNode` only hides a node, there is no cap and no cut geometry.
+* **`TwoSidedSevered` ships off, and it has never been on in a released build.** `dev_overlay` hooks
+  `rdThing_Draw` as well and loads first, so until the site was declared in the detour form the
+  pattern found nothing and the feature switched itself off with a warning nobody read. The first
+  session in which it did run drew a bright sliver out of the player's hand across the whole level:
+  the predicate counted any hidden node as a cut, and `Plr_RebindWeaponModel` hides the children of
+  the weapon mount, which is the hand, on every spawn and every weapon change. It now tests
+  `pMeshHidden` alone, which only `bapobj_hideMeshesBelow` writes, so a holstered blaster can no
+  longer be mistaken for a severed limb. That narrowing costs the corpse: `bapobj_detachNode` marks
+  the piece through `+0x2C` and the body it came off through `+0x28`, so the piece is drawn two-sided
+  and the body is not. Tested in game to the extent that the sliver is gone with the fix and returns
+  without it; the cut itself has not been re-examined since.
 * Without the per-frame hook there is no watchdog, and the range is then **held at 1.0** rather than
   trusted.
 * Both relocated buffers are never freed, not even at detach: the cell table's bucket heads and any

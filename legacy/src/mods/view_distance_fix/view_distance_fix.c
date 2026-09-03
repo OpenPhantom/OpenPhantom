@@ -313,7 +313,7 @@ static void load_config(void)
      * from further round the corner. Hiding that by creating actors early trades a cosmetic
      * problem for a behavioural one, and the original rule wins. */
     config->npc_range_scale     = ini_read_float(VIEW_DISTANCE_SECTION, "NpcRangeScale", 1.0f);
-    config->two_sided_severed   = ini_read_bool (VIEW_DISTANCE_SECTION, "TwoSidedSevered", true);
+    config->two_sided_severed   = ini_read_bool (VIEW_DISTANCE_SECTION, "TwoSidedSevered", false);
     config->two_sided_max       = ini_read_int  (VIEW_DISTANCE_SECTION, "TwoSidedMax", 8);
     config->relocate_draw_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateDrawTable", true);
     config->lower_cell_limit    = ini_read_bool (VIEW_DISTANCE_SECTION, "LowerCellLimit", true);
@@ -506,9 +506,12 @@ static int32_t __cdecl hook_within_range(const float *a, const float *b, float r
  * vertex buffer overflows, bapdraw_reserveVerts returns NULL and rdMesh_draw aborts silently: a
  * WHOLE MODEL disappears.
  *
- * So per object. The marking needs no bookkeeping of its own, a thing with a set entry in
- * pNodeHidden or pMeshHidden has a hole, and those are exactly the ones meant: the severed piece
- * and the remaining body.
+ * So per object, and SHIPPED OFF. The marking needs no bookkeeping of its own, a thing with a set
+ * entry in pMeshHidden has a hole, and that is the severed piece. It is off by default because
+ * this feature never once ran in a released build: dev_overlay hooks rdThing_Draw for giant and
+ * tiny player and loads first, so the plain signature form below found nothing and the warning
+ * that said so went unread for months. The first session in which it did run drew a beam across
+ * the level, and one evening of testing is not enough to put it back on by default.
  *
  * WARNING: the word has to be RESET at the end. rdMesh_draw has a second caller (0x456E17 in
  * shot_drawAll) which would otherwise see the value of the last drawn thing.
@@ -517,15 +520,23 @@ static int32_t __cdecl hook_within_range(const float *a, const float *b, float r
  * the inside of the far side, lit with the front normal, i.e. flat.
  * ============================================================================================ */
 
-/* This predicate looked only at pNodeHidden until a byte census corrected it, and it therefore
- * MISSED exactly the object it is about:
- *   bapobj_hideMeshesBelow writes through [ecx+0x2C] -> pMeshHidden, NOT +0x28.
- *   bapobj_detachNode copies pNodeHidden body->piece at 0x41445B and only THEN sets
- *   bodyThing->pNodeHidden[n] = 1 at 0x4144BE.
- * The severed piece therefore inherits a zero array in +0x28 and is marked through +0x2C; the
- * corpse the other way round. Checking only +0x28 draws the CORPSE two-sided and the PIECE not.
+/* A thing has a hole when an entry in pMeshHidden is set, and NOT when one in pNodeHidden is.
+ *
+ * It tested both until the beam. pNodeHidden is ordinary engine bookkeeping with nothing to do
+ * with dismemberment: Plr_RebindWeaponModel calls bapobj_hideNodeChildren on the weapon mount,
+ * node name id 7, which is the HAND, once on spawn and again on every weapon change, and menu.c
+ * does the same to the inventory preview. Every armed actor in the game therefore carries a set
+ * entry in +0x28 from the moment it spawns, this predicate called all of them severed, and the
+ * player was drawn with backface culling off for the whole session. On screen that is a long
+ * bright sliver out of Obi-Wan's hand that follows him when he walks.
+ *
+ * pMeshHidden is reached only through bapobj_hideMeshesBelow, which only bapobj_detachNode and
+ * the reattach beside it call, so a set entry there does mean a cut. The narrowing costs the
+ * corpse: detachNode marks the PIECE through +0x2C and the body it came off through +0x28, so
+ * the piece keeps its two sides and the body loses them. That is the half worth having, and the
+ * half that cannot be mistaken for a holstered blaster.
  * Both fields are allocated by rdThing_SetModel with numNodes*4 and zeroed; maxMeshIdx < numNodes
- * holds in 265/265 measured models, so the bound carries for both. */
+ * holds in 265/265 measured models, so numNodes bounds the mesh array too. */
 static bool thing_has_hole(const void *thing)
 {
     const char *record = (const char *)thing;
@@ -536,7 +547,7 @@ static bool thing_has_hole(const void *thing)
 
     /* Every read below is the faulting form rather than the asking one, and that is a performance
      * decision with a measurable size. This function runs for every thing the engine draws, and it
-     * makes six of these reads each time; at three dozen actors that is a couple of hundred system
+     * makes four of these reads each time; at three dozen actors that is a couple of hundred system
      * calls per frame for nothing but permission to look. The guarantee is unchanged: a bad pointer
      * still refuses rather than killing the process. */
     if (record == NULL) {
@@ -551,15 +562,6 @@ static bool thing_has_hole(const void *thing)
         return false;                              /* plausibility, never read blind */
     }
 
-    if (memory_try_read((uintptr_t)(record + THING_NODE_HIDDEN), &hidden, sizeof(hidden)) &&
-        hidden != NULL &&
-        memory_try_readable((uintptr_t)hidden, node_count * sizeof(uint32_t))) {
-        for (index = 0; index < node_count; ++index) {
-            if (((const uint32_t *)hidden)[index] != 0) {
-                return true;
-            }
-        }
-    }
     if (memory_try_read((uintptr_t)(record + THING_MESH_HIDDEN), &hidden, sizeof(hidden)) &&
         hidden != NULL &&
         memory_try_readable((uintptr_t)hidden, node_count * sizeof(uint32_t))) {

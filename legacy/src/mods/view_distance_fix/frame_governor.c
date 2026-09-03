@@ -297,6 +297,23 @@ void frame_governor_reset(float configured_scale)
     governor.second_began_at = 0;
 }
 
+void frame_governor_set_enabled(bool enabled, float configured_scale)
+{
+    if (governor.enabled == enabled) {
+        return;
+    }
+    /* The thresholds and the performance counter were worked out at install and do not change, so
+     * this only has to move the switch and forget whatever the last session of hunting learned. */
+    frame_governor_reset(configured_scale);
+    governor.enabled = enabled && governor.frequency.QuadPart > 0;
+
+    log_info("frame governor %s. The draw distance %s.",
+             governor.enabled ? "switched ON" : "switched OFF",
+             governor.enabled ? "will be lowered when a scene costs more frame time than it is "
+                                "worth, and given back when it does not"
+                              : "stays exactly where it is set");
+}
+
 void frame_governor_configure(bool enabled, float backoff_fps, float configured_scale)
 {
     float target_fps = backoff_fps;

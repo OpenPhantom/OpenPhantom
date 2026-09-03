@@ -200,6 +200,7 @@ typedef struct view_distance_config {
     bool  fog_follow_fov;
     bool  vertex_fog;
     bool  pixel_fog;
+    bool  authored_fog;
     float fog_min_end;
     float fog_scale;
     float fog_settle_seconds;
@@ -253,7 +254,7 @@ static void load_config(void)
 
     config->enabled             = ini_read_bool (VIEW_DISTANCE_SECTION, "Enabled", true);
     config->view_range_scale    = ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale", 1.0f);
-    config->frame_backoff       = ini_read_bool (VIEW_DISTANCE_SECTION, "FrameBackoff", true);
+    config->frame_backoff       = ini_read_bool (VIEW_DISTANCE_SECTION, "FrameBackoff", false);
     config->backoff_fps         = ini_read_float(VIEW_DISTANCE_SECTION, "BackoffFps", 0.0f);
     config->fog_inside_cut      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogInsideCut", true);
     config->fog_follow_fov      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogFollowFov", true);
@@ -261,6 +262,7 @@ static void load_config(void)
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
     config->pixel_fog           = ini_read_bool (VIEW_DISTANCE_SECTION, "PixelFog", false);
+    config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
      *
@@ -576,6 +578,39 @@ static void poll_view_range_scale(void)
     }
     frames = 0;
 
+    /* The automation's own switch, read on the same schedule and for the same reason: the overlay
+     * writes it to the ini and this is where a running game notices. */
+    {
+        bool wanted = ini_read_bool(VIEW_DISTANCE_SECTION, "FrameBackoff",
+                                    view_state.config.frame_backoff);
+
+        if (wanted != view_state.config.frame_backoff) {
+            view_state.config.frame_backoff = wanted;
+            frame_governor_set_enabled(wanted, view_state.config.view_range_scale);
+        }
+    }
+
+    /* And which fog band to compute, on the same schedule and through the same channel. */
+    {
+        bool authored = ini_read_bool(VIEW_DISTANCE_SECTION, "AuthoredFogBand",
+                                      view_state.config.authored_fog);
+
+        if (authored != view_state.config.authored_fog) {
+            view_state.config.authored_fog = authored;
+            fog_regime_set_authored_band(authored);
+        }
+    }
+
+    /* And which half of the engine draws it. */
+    {
+        bool pixel = ini_read_bool(VIEW_DISTANCE_SECTION, "PixelFog", view_state.config.pixel_fog);
+
+        if (pixel != view_state.config.pixel_fog) {
+            view_state.config.pixel_fog = pixel;
+            fog_regime_set_pixel_fog(pixel);
+        }
+    }
+
     requested = clamp_float(ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale",
                                            view_state.config.view_range_scale), 1.0f, 2.5f);
     if (requested == view_state.config.view_range_scale) {
@@ -742,6 +777,7 @@ static void install_fog_regime(void)
 
     fog_config.vertex_fog     = view_state.config.vertex_fog;
     fog_config.pixel_fog      = view_state.config.pixel_fog;
+    fog_config.authored_band  = view_state.config.authored_fog;
     fog_config.min_end_fraction = clamp_float(view_state.config.fog_min_end, 0.0f, 1.0f);
     fog_config.follow_fov     = view_state.config.fog_follow_fov;
     fog_config.inside_cut     = view_state.config.fog_inside_cut;

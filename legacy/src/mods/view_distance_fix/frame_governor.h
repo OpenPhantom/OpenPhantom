@@ -120,4 +120,10 @@ void frame_governor_on_frame(float *effective_view_scale, float configured_scale
  * governor still braked from a setting nobody is asking for any more would silently ignore it. */
 void frame_governor_reset(float configured_scale);
 
+/* Switches it on or off while the game runs, which is how the developer overlay's own row reaches
+ * it. Turning it OFF hands the configured scale straight back rather than leaving the view where
+ * the governor happened to have walked it to: a reader who has just said "stop moving my draw
+ * distance" means the one they asked for, not the one they were left with. */
+void frame_governor_set_enabled(bool enabled, float configured_scale);
+
 #endif /* FRAME_GOVERNOR_H */

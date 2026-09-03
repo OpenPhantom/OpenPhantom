@@ -23,6 +23,8 @@
  */
 #include "overlay_model.h"
 
+#include "authored_fog_row.h"
+#include "auto_range_row.h"
 #include "view_range_row.h"
 #include "dev_menu_size_row.h"
 
@@ -150,12 +152,22 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
  * DRAWN is a separate question, answered by openphantom_row_id(). */
 #define VIEW_RANGE_ROW_ID (END_LEVEL_ROW_ID + 1u)
 
+/* Whether the draw distance above is allowed to move itself. Directly under the row it governs,
+ * because it is a property of that setting rather than a feature of its own, and a reader who has
+ * just set a draw distance is exactly the reader who wants to know whether it will stay there. */
+#define AUTO_RANGE_ROW_ID (VIEW_RANGE_ROW_ID + 1u)
+
+/* Which fog band the game computes, one past the automation switch. Beside those two because all
+ * three are properties of how far the world is drawn and how it is hidden, and a reader comparing
+ * them wants them together rather than scattered. */
+#define AUTHORED_FOG_ROW_ID (AUTO_RANGE_ROW_ID + 1u)
+
 /* The dev menu's own size, one past the draw distance row and last of the group's fixed rows.
  * Last because it is the only row whose effect is the menu itself: changing it moves every row
  * including this one, and a control that moves while it is being used is easier to find again at
  * the bottom than in the middle. Labelled for the thing a player already has a name for, the dev
  * menu, rather than for the panel it is drawn on. */
-#define DEV_MENU_SIZE_ROW_ID (VIEW_RANGE_ROW_ID + 1u)
+#define DEV_MENU_SIZE_ROW_ID (AUTHORED_FOG_ROW_ID + 1u)
 
 /* The fold's own lines, past every fixed row above. Their ids are the tail of this id space
  * because the tail is the only part of it that may change size, but the tail is NOT where they
@@ -380,16 +392,20 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +6, one for each row this group holds that is not one of its own cheats: the jump-boost
+        /* +8, one for each row this group holds that is not one of its own cheats: the jump-boost
          * scale row, inserted right after jump boost's own toggle row; the free-camera teleport key
          * row, which takes over free camera's own (now shifted) numeric slot; the "how to fly"
          * fold, one past where free camera itself now sits; "Skip to next level", one past that;
-         * the draw distance row, one past THAT; and the dev menu size row, last of the six. See
-         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID/
-         * VIEW_RANGE_ROW_ID/DEV_MENU_SIZE_ROW_ID and their own handling in source_row() below. The
-         * fold's own lines add FREECAM_INFO_LINE_COUNT more only while it is open, the same shape
-         * a group's own child count already uses in append_group() below. */
-        return (uint32_t)CHEATS_OWN_COUNT + 6u +
+         * the draw distance row, one past THAT; the switch that says whether the draw distance may
+         * move itself, directly under the row it governs; and the dev menu size row, last of the
+         * seven. See JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID/
+         * VIEW_RANGE_ROW_ID/AUTO_RANGE_ROW_ID/DEV_MENU_SIZE_ROW_ID and their own handling in
+         * source_row() below. The fold's own lines add FREECAM_INFO_LINE_COUNT more only while it
+         * is open, the same shape a group's own child count already uses in append_group() below.
+         *
+         * This number and the row ids above move together. Adding a row and forgetting this
+         * leaves the new row built but never drawn, which is what happened when one was added. */
+        return (uint32_t)CHEATS_OWN_COUNT + 8u +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
 }
@@ -549,6 +565,23 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
                 view_range_row_format(view_range_row_get(), out->value, sizeof out->value);
             }
             out->value[sizeof out->value - 1] = '\0';
+            return;
+        }
+        if (id == AUTO_RANGE_ROW_ID) {
+            out->kind = OVERLAY_ROW_CHEAT;
+            copy_label(out->label, "Draw distance follows the frame rate");
+            out->on = auto_range_row_get();
+            /* Always available, same as the row above and for the same reason: it edits a setting
+               file rather than reaching into the game, so it answers with no level loaded and
+               whether or not view_distance_fix is installed at all. */
+            out->available = true;
+            return;
+        }
+        if (id == AUTHORED_FOG_ROW_ID) {
+            out->kind = OVERLAY_ROW_CHEAT;
+            copy_label(out->label, "Authored fog, drawn per pixel");
+            out->on = authored_fog_row_get();
+            out->available = true;
             return;
         }
         if (id == DEV_MENU_SIZE_ROW_ID) {
@@ -720,6 +753,17 @@ bool overlay_model_activate(uint32_t index)
         model.editing_value_row = row.id;
         model.value_edit_buf[0] = '\0';
         return true;
+    }
+    if (row.id == AUTHORED_FOG_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
+        return authored_fog_row_set(!authored_fog_row_get());
+    }
+    if (row.id == AUTO_RANGE_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
+        /* Caught here for the same reason the action row below is: this id belongs to a setting
+         * file rather than to cheats_own_id_t, so falling through to the group's switch would ask
+         * cheats_openphantom_toggle() for an id its own bounds check refuses and the click would
+         * silently do nothing. Refuses when the file could not be written, so the row stays where
+         * it was rather than showing a state the game is not in. */
+        return auto_range_row_set(!auto_range_row_get());
     }
     if (row.kind == OVERLAY_ROW_ACTION && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
         /* The only OpenPhantom row that is an action rather than a toggle - checked here, before

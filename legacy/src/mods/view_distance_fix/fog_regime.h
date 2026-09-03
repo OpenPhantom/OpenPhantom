@@ -80,6 +80,7 @@ typedef struct fog_regime_config {
     float fog_scale;        /* >1 pushes the authored fog out; 1 leaves it alone */
     float settle_seconds;   /* how long a change takes; 0 means step immediately */
     bool  pixel_fog;        /* hand fog to the device per pixel, where it can measure eye-space w */
+    bool  authored_band;    /* use each level's own band untouched, ignoring every term below */
     float min_end_fraction; /* least the fog end may be, as a share of the cut edge; 0 disables */
 } fog_regime_config_t;
 
@@ -126,6 +127,18 @@ void fog_regime_install(const fog_regime_config_t *config);
 
 /* The horizontal field of view now in force, observed from the camera the engine rebuilt. */
 void fog_regime_set_fov(float horizontal_fov_degrees);
+
+/* Switches the authored-band mode while the game runs, which is how the developer overlay's own
+ * row reaches it. The next frame's target is computed the new way and eased to like any other
+ * change, so the two can be compared without a restart. */
+void fog_regime_set_authored_band(bool authored);
+
+/* Switches the fog DELIVERY while the game runs: the device doing it per pixel, or the engine's
+ * own per-vertex ramp. Turning it off re-arms the three writes install_vertex_fog made, which is
+ * the mirror of the revert taking it on already performs, so the two can be compared without a
+ * restart. The projection matrix is left set either way; with FOGTABLEMODE at D3DFOG_NONE the
+ * device is not consulting it, and unsetting it would be a write for no effect. */
+void fog_regime_set_pixel_fog(bool enabled);
 
 /* The cut edge, both as the engine would have had it and as it actually is after the radius cap
  * and the watchdog. Called from the draw-distance detour, which is the only place both numbers

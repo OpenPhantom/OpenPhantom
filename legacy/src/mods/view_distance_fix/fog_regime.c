@@ -358,6 +358,23 @@ void fog_regime_target_band(const fog_regime_config_t *config,
         return;
     }
 
+    /* The level's own band, untouched, when that is what was asked for.
+     *
+     * Everything below scales the authored band against the draw distance and the field of view,
+     * to guarantee the fog has gone solid before the geometry stops. Measuring the eleven shipped
+     * levels showed nine already do that on their own: at the draw distance their own header asks
+     * for, their authored fog is between 42 and 100 per cent opaque where the geometry ends, so
+     * there was nothing to fix and the scaling only brought the fog nearer than the level wanted.
+     * Two do not, Coruscant with no cover at all at its edge and the Federation ship with five per
+     * cent, and those two are what the scaling below exists for.
+     *
+     * Which is right depends on whether covering those two matters more than leaving the other
+     * nine as authored, and that is taste rather than correctness. */
+    if (config->authored_band) {
+        *out = *authored;
+        return;
+    }
+
     end = authored->end;
     if (config->fog_scale > 1.0f) {
         end *= config->fog_scale;
@@ -926,6 +943,50 @@ static bool restore_engine_table_fog(void)
     return true;
 }
 
+/* Put back what restore_engine_table_fog() undid. The same three writes install_vertex_fog makes,
+ * at the same three addresses, which were kept precisely so this direction is possible. */
+static bool rearm_vertex_fog(void)
+{
+    if (fog_state.vertex_fog_installed) {
+        return true;
+    }
+    if (fog_state.query_entry == 0 || fog_state.applier_push == 0 || fog_state.commit_push == 0) {
+        return false;
+    }
+    if (patch_write_bytes(fog_state.query_entry, FOG_CAP_QUERY_OFF,
+                          sizeof FOG_CAP_QUERY_OFF) != PATCH_RESULT_OK ||
+        patch_write_bytes(fog_state.applier_push, FOG_TABLE_NONE,
+                          sizeof FOG_TABLE_NONE) != PATCH_RESULT_OK ||
+        patch_write_bytes(fog_state.commit_push, FOG_TABLE_NONE,
+                          sizeof FOG_TABLE_NONE) != PATCH_RESULT_OK) {
+        return false;
+    }
+    fog_state.vertex_fog_installed = true;
+    return true;
+}
+
+void fog_regime_set_pixel_fog(bool enabled)
+{
+    if (enabled) {
+        /* consider_pixel_fog() picks this up on the next frame, applying the same capability and
+         * SetTransform gates it applies at startup. */
+        fog_state.config.pixel_fog = true;
+        return;
+    }
+    fog_state.config.pixel_fog = false;
+    if (!fog_state.pixel_fog_active) {
+        return;
+    }
+    if (!rearm_vertex_fog()) {
+        log_error("the per-vertex ramp could not be re-armed, so fog is being asked of a device "
+                  "that has been told not to do it. There will be no fog until the level reloads.");
+        return;
+    }
+    fog_state.pixel_fog_active = false;
+    log_info("fog delivery: the engine's own per-vertex ramp, as it was before pixel fog was "
+             "switched on.");
+}
+
 static void consider_pixel_fog(uint32_t caps)
 {
     void *device;
@@ -1155,6 +1216,20 @@ static void install_level_fog(void)
              (double)FOG_REFERENCE_FOV_DEGREES,
              fog_state.config.inside_cut ? ", then capped to that limit" : " (cap OFF)",
              (double)fog_state.config.fog_scale);
+}
+
+void fog_regime_set_authored_band(bool authored)
+{
+    if (fog_state.config.authored_band == authored) {
+        return;
+    }
+    fog_state.config.authored_band = authored;
+    log_info("fog band: %s", authored
+                 ? "each level's own, untouched. Nine of the eleven shipped levels already hide "
+                   "their own draw edge this way; Coruscant and the Federation ship will show "
+                   "theirs."
+                 : "scaled against the draw distance and the field of view, so the fog is solid "
+                   "before the geometry stops on every level.");
 }
 
 void fog_regime_install(const fog_regime_config_t *config)

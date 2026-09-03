@@ -72,6 +72,7 @@
 #include "cheats_no_fog.h"
 
 #include "common/frame_hook.h"
+#include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
@@ -112,6 +113,12 @@ _Static_assert(sizeof(SIG_LEVEL_POINTER) == sizeof(MSK_LEVEL_POINTER),
  * comfortably inside float32's precision. */
 #define NO_FOG_START 4000.0f
 #define NO_FOG_END   5000.0f
+
+/* Where the answer is kept between runs. The panel's other rows write their setting and let the
+ * owning DLL read it back; this one owns its own setting, so it reads and writes the same key
+ * itself and nothing has to poll. */
+#define NO_FOG_SECTION "dev_overlay"
+#define NO_FOG_KEY     "NoFog"
 
 typedef struct no_fog_state {
     bool             installed;
@@ -222,10 +229,16 @@ bool cheats_no_fog_install(void)
     }
 
     st.level_pointer = (void *volatile *)(uintptr_t)from_cmp;
+
+    /* Read only here, once, rather than per frame. Everything after this point is the player's
+     * own flipping, and the file is written from the toggle rather than re-read, so a panel that
+     * disagrees with the file is not a state this can reach. */
+    st.on = ini_read_bool(NO_FOG_SECTION, NO_FOG_KEY, false);
+
     log_info("no fog: world pointer at %08X, pushing world+0x218/0x21C out to %.0f/%.0f every "
-             "frame while on and restoring the level's own band while off. The fog flag at "
-             "world+0x210 is never touched.",
-             (unsigned)from_cmp, (double)NO_FOG_START, (double)NO_FOG_END);
+             "frame while on and restoring the level's own band while off, starting %s from the "
+             "last run. The fog flag at world+0x210 is never touched.",
+             (unsigned)from_cmp, (double)NO_FOG_START, (double)NO_FOG_END, st.on ? "on" : "off");
     return true;
 }
 
@@ -245,5 +258,14 @@ bool cheats_no_fog_toggle(void)
         return false;
     }
     st.on = !st.on;
+
+    /* Remembered for the next run, and deliberately not conditional on the write succeeding. This
+     * is a cheat rather than a setting: its point is the effect on the picture in front of the
+     * player, so a read-only ini costs the memory of the choice and nothing else. The rows that
+     * refuse on a failed write are the ones whose whole effect IS the file. */
+    if (!ini_write_int(NO_FOG_SECTION, NO_FOG_KEY, st.on ? 1 : 0)) {
+        log_warning("no fog: switched %s, but %s could not be written, so this run is the only one "
+                    "that has it", st.on ? "on" : "off", NO_FOG_KEY);
+    }
     return st.on;
 }

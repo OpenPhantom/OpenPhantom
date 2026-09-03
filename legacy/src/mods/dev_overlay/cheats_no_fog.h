@@ -9,6 +9,11 @@
  * function call to decline the way ammunition and damage have, so this holds the band out itself,
  * once per frame, through common/frame_hook.h.
  *
+ * It is also the one cheat here that is remembered between runs, under [dev_overlay] NoFog.
+ * Fog is a matter of taste rather than an advantage, and somebody who does not want it does not
+ * want it again tomorrow; the rest of this panel is deliberately session-only because a cheat left
+ * on by accident should not follow a player into a fresh game.
+ *
  * UNLIKE the ammunition and health cheats, this DOES restore a value on the way back off - the
  * band it found the level holding the first frame it saw that level's record, captured before ever
  * writing to it. A first version declined here too, the same "never invent a value" rule the other

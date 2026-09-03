@@ -349,7 +349,8 @@ this row works whatever else is or is not in the `mods` folder.
 | `Enabled` | `1` | |
 | `OpenKey` | `0` | The virtual key that opens the panel. `0` accepts whichever key sits below Escape: the caret on a German layout, the backtick on a British one. |
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
-| `DevMenuSize` | `1.0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
+| `DevMenuSize` | `0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
+| `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice rather than being edited here. |
 
 ## Limitations
 

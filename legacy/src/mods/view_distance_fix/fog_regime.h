@@ -82,6 +82,7 @@ typedef struct fog_regime_config {
     bool  pixel_fog;        /* hand fog to the device per pixel, where it can measure eye-space w */
     bool  authored_band;    /* use each level's own band untouched, ignoring every term below */
     float min_end_fraction; /* least the fog end may be, as a share of the cut edge; 0 disables */
+    float band_scale;       /* the whole band, nearer, after every term above; 1 leaves it */
 } fog_regime_config_t;
 
 typedef struct fog_regime_band {
@@ -133,12 +134,19 @@ void fog_regime_set_fov(float horizontal_fov_degrees);
  * change, so the two can be compared without a restart. */
 void fog_regime_set_authored_band(bool authored);
 
-/* Switches the fog DELIVERY while the game runs: the device doing it per pixel, or the engine's
- * own per-vertex ramp. Turning it off re-arms the three writes install_vertex_fog made, which is
- * the mirror of the revert taking it on already performs, so the two can be compared without a
- * restart. The projection matrix is left set either way; with FOGTABLEMODE at D3DFOG_NONE the
- * device is not consulting it, and unsetting it would be a write for no effect. */
-void fog_regime_set_pixel_fog(bool enabled);
+/* Whether the field of view scales the band, while the game runs. Pure arithmetic on a band this
+ * file already recomputes every frame, so it takes effect on the next one and eases in.
+ *
+ * There is deliberately no live switch for the DELIVERY beside it. See consider_pixel_fog(): going
+ * from the device back to the engine's ramp needs the device reprogrammed, and this engine only
+ * programs it from inside applyLevelFog, which runs at a level load. That is chosen once from
+ * FogImplementation instead. */
+/* How near the band sits, as a share of where every other term put it, while the game runs. Below
+ * 1 the fog arrives sooner and is denser at a given distance. Ignored when not positive, so a
+ * missing or nonsense value leaves the band where it was rather than collapsing it. */
+void fog_regime_set_band_scale(float scale);
+
+void fog_regime_set_follow_fov(bool follow);
 
 /* The cut edge, both as the engine would have had it and as it actually is after the radius cap
  * and the watchdog. Called from the draw-distance detour, which is the only place both numbers

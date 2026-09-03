@@ -32,13 +32,13 @@ order of thing from a per-object syscall.
 | `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below |
 | `FrameBackoff` | `1` | | lower the view distance when it costs too much frame time, and give it back when it does not. Does nothing at scale 1.0 |
 | `BackoffFps` | `0` | | the rate below which it backs off; `0` = three quarters of `framerate_fix`'s `TargetFps`, or 50 uncapped |
-| `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view |
+| `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view; no effect while `AuthoredFogBand` is `1` |
 | `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
-| `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below. The fallback now, not the answer |
-| `PixelFog` | `1` | | let the device fog per pixel instead; needs table fog and w fog, falls back to the ramp |
-| `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above; ignored while `PixelFog` is off |
+| `FogBandScale` | `1.0` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. Polled while running |
+| `FogImplementation` | `2` | 0-2 | which half of the engine draws the fog: `2` the device per pixel, `1` the engine's own per-vertex ramp, `0` neither. Read once at startup; see below |
+| `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above |
 | `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
@@ -183,7 +183,7 @@ Every change, the FOV slider moved, the watchdog lowering the range, the level's
 `render_frameEnd`'s first operand, so a given amount of *real* time produces the same result at 30
 and at 144 fps. A level **load** snaps instead: there is nothing on screen to ease away from.
 
-## Why the distance fog does not render, and what `VertexFog` does about it
+## Why the distance fog does not render, and what `FogImplementation` does about it
 
 The engine carries **two fog regimes** and chooses between them once per frame, from a single
 device capability bit.
@@ -213,7 +213,7 @@ device measures that world-unit band against a **device-space** depth confined t
 pixel lands before `FOGSTART`, the fog factor clamps to "clear", and nothing reports a problem:
 all five fog render states are issued exactly as the engine intends and are accepted.
 
-`VertexFog=1` answers the capability question with "no table fog" and sets `FOGTABLEMODE` to
+`FogImplementation=1` answers the capability question with "no table fog" and sets `FOGTABLEMODE` to
 `D3DFOG_NONE` at **both** writers, so the specular alpha the ramp produces is what the device
 blends with.
 
@@ -235,7 +235,7 @@ identity, decides it is affine, measures device depth in `[0,1]`, and a world-un
 fogs nothing. On period hardware without `D3DPRASTERCAPS_FOGTABLE` this never mattered, because the
 software ramp ran instead, which is presumably why it shipped.
 
-`PixelFog=1` supplies that matrix and hands the branch back. It reads the device's own caps first
+`FogImplementation=2` supplies that matrix and hands the branch back. It reads the device's own caps first
 and requires both `D3DPRASTERCAPS_FOGTABLE` (`0x100`) and `D3DPRASTERCAPS_WFOG` (`0x00100000`),
 which live in the same dword the engine already tests; if either is missing, or `SetTransform` is
 refused, nothing changes and the ramp above stays in charge. The matrix is only ever a fog
@@ -247,6 +247,18 @@ Two things it buys. The fog factor is computed **per pixel** rather than as an 8
 vertex interpolated across polygons, so large sparsely tessellated surfaces stop shimmering as the
 camera moves. And the band needs **no conversion at all**, so everything below that reasons in
 world units keeps doing so.
+
+**It is chosen once, at startup, and this was learned the hard way.** `1` and `2` differ in device
+state, and the only place this engine programs the device's fog is inside `baplight_applyLevelFog`,
+which runs at a level load. Reverting the three writes changes the byte that function will push
+*next time* and nothing else, so a switch made while a level is up leaves the engine computing a
+per-vertex factor the device has been told to ignore, and nothing is fogged at all. Three fixes
+were tried in the game and none worked: reverting the writes alone, additionally handing back an
+identity projection, and additionally calling `applyLevelFog`'s original by hand to reprogram the
+device. Tested by a person each time, no fog each time. What remains unexplained is why the third
+did not work, since it is what a level load does; the honest reading is that something else in the
+device or wrapper state is also one-way, and it was not worth more attempts to find out. So the
+setting waits for a restart, and the dev menu carries only the band terms, which are arithmetic.
 
 One thing it costs, and it is worth knowing before touching this file: with the ramp the engine
 re-read `world+0x218/+0x21C` every frame, so writing those two floats was enough for anyone. On the
@@ -475,7 +487,7 @@ scene, not about seeing further than that ceiling.**
   A cell whose `bapCell+0x03` override differs from the one the camera stands in is not modelled,  the fog eases towards the new value when the camera walks into it.
 * **`fx_rampFog` no longer draws anything in this regime, and that predates this change.** The
   cutscene tint and the fade to black (`0x0043906E`) walk the **device's** fog start `[0x866FA8]`,
-  which only table fog reads. With `VertexFog=1` the fog is computed from `world+0x218/+0x21C`
+  which only table fog reads. With `FogImplementation=1` the fog is computed from `world+0x218/+0x21C`
   instead, so those effects are inert. Nothing here made that worse and nothing here fixes it; it
   is a consequence of the regime switch and belongs in its own change.
 

@@ -336,6 +336,30 @@ float fog_regime_follow_factor(float horizontal_fov_degrees, float reference_cut
     return factor;
 }
 
+/* The taste multiplier, applied to a band that is otherwise finished.
+ *
+ * Kept out of the terms below because it is the only one of them that is not about hiding the edge
+ * the world stops at, and it applies whether the band was scaled against the draw distance or left
+ * exactly as the level authored it: somebody who wants thicker fog than the level shipped wants it
+ * either way, and having the setting quietly do nothing in one of the two would be worse than not
+ * offering it.
+ *
+ * Both ends move by the same factor, so the authored proportions survive and the span cannot
+ * invert. The one refusal is a band whose end would land inside the engine's own floor, where
+ * clamping would put one end past the other and have the ramp paint the world in the fog colour
+ * rather than showing less of it. */
+static void bring_band_in(fog_regime_band_t *band, float scale)
+{
+    if (band == NULL || !(scale > 0.0f) || scale == 1.0f) {
+        return;
+    }
+    if (!(band->end * scale > FOG_MIN_END)) {
+        return;
+    }
+    band->start *= scale;
+    band->end   *= scale;
+}
+
 void fog_regime_target_band(const fog_regime_config_t *config,
                             const fog_regime_band_t *authored,
                             float horizontal_fov_degrees,
@@ -372,6 +396,7 @@ void fog_regime_target_band(const fog_regime_config_t *config,
      * nine as authored, and that is taste rather than correctness. */
     if (config->authored_band) {
         *out = *authored;
+        bring_band_in(out, config->band_scale);
         return;
     }
 
@@ -428,6 +453,9 @@ void fog_regime_target_band(const fog_regime_config_t *config,
     ratio = end / authored->end;
     out->end   = end;
     out->start = authored->start * ratio;
+
+    /* Last, after every term that had a reason. See bring_band_in(). */
+    bring_band_in(out, config->band_scale);
 }
 
 float fog_regime_ease(float current, float target, float seconds, float settle_seconds)
@@ -507,9 +535,8 @@ static void current_cut(float *reference, float *live)
 
 static void target_now(fog_regime_band_t *out)
 {
-    fog_regime_config_t effective;
-    float               reference;
-    float               live;
+    float reference;
+    float live;
 
     /* NO OBSERVATION YET MEANS NO OPINION. A level that has just loaded has not been walked, so
      * there is no cut edge to reason from, and the fallback used to be the level's own authored
@@ -527,22 +554,8 @@ static void target_now(fog_regime_band_t *out)
         return;
     }
 
-    /* The authored band is only on offer while the device is doing the fogging. On the engine's
-     * own per-vertex ramp the band is the only thing hiding the edge the world stops at, and two
-     * of the eleven levels author fog that ends beyond anything the engine draws: Coruscant covers
-     * none of its own edge and the Federation ship five per cent. The ramp therefore always gets
-     * the scaled band, which is also what OpenPhantom shipped. The panel refuses the same pair, so
-     * a player reading the rows and the game running them agree.
-     *
-     * Read from pixel_fog_active rather than from the request, because a device that cannot fog
-     * per pixel leaves the request set and falls back, and it is the fallback that needs cover. */
-    effective = fog_state.config;
-    if (!fog_state.pixel_fog_active) {
-        effective.authored_band = false;
-    }
-
     current_cut(&reference, &live);
-    fog_regime_target_band(&effective, &fog_state.authored,
+    fog_regime_target_band(&fog_state.config, &fog_state.authored,
                            fog_state.horizontal_fov_degrees, reference, live, out);
 }
 
@@ -920,7 +933,7 @@ static bool device_supports_pixel_fog(uint32_t caps)
     return (caps & RASTER_CAPS_FOGTABLE) != 0u && (caps & RASTER_CAPS_WFOG) != 0u;
 }
 
-static bool give_device_projection(void *device)
+static bool set_device_projection(void *device, const float *matrix)
 {
     void **vtable;
     set_transform_fn_t set_transform;
@@ -937,7 +950,7 @@ static bool give_device_projection(void *device)
     if (set_transform == NULL) {
         return false;
     }
-    return set_transform(device, D3D_TRANSFORM_PROJECTION, PROJECTION_W_COMPLIANT) >= 0;
+    return set_transform(device, D3D_TRANSFORM_PROJECTION, matrix) >= 0;
 }
 
 /* Undo the three writes install_vertex_fog made, in the reverse order it made them. */
@@ -958,48 +971,24 @@ static bool restore_engine_table_fog(void)
     return true;
 }
 
-/* Put back what restore_engine_table_fog() undid. The same three writes install_vertex_fog makes,
- * at the same three addresses, which were kept precisely so this direction is possible. */
-static bool rearm_vertex_fog(void)
+void fog_regime_set_band_scale(float scale)
 {
-    if (fog_state.vertex_fog_installed) {
-        return true;
+    if (!(scale > 0.0f) || fog_state.config.band_scale == scale) {
+        return;
     }
-    if (fog_state.query_entry == 0 || fog_state.applier_push == 0 || fog_state.commit_push == 0) {
-        return false;
-    }
-    if (patch_write_bytes(fog_state.query_entry, FOG_CAP_QUERY_OFF,
-                          sizeof FOG_CAP_QUERY_OFF) != PATCH_RESULT_OK ||
-        patch_write_bytes(fog_state.applier_push, FOG_TABLE_NONE,
-                          sizeof FOG_TABLE_NONE) != PATCH_RESULT_OK ||
-        patch_write_bytes(fog_state.commit_push, FOG_TABLE_NONE,
-                          sizeof FOG_TABLE_NONE) != PATCH_RESULT_OK) {
-        return false;
-    }
-    fog_state.vertex_fog_installed = true;
-    return true;
+    fog_state.config.band_scale = scale;
+    log_info("fog band: scaled to %.2f of where the terms above it put it. The band eases to the "
+             "new target rather than stepping.", (double)scale);
 }
 
-void fog_regime_set_pixel_fog(bool enabled)
+void fog_regime_set_follow_fov(bool follow)
 {
-    if (enabled) {
-        /* consider_pixel_fog() picks this up on the next frame, applying the same capability and
-         * SetTransform gates it applies at startup. */
-        fog_state.config.pixel_fog = true;
+    if (fog_state.config.follow_fov == follow) {
         return;
     }
-    fog_state.config.pixel_fog = false;
-    if (!fog_state.pixel_fog_active) {
-        return;
-    }
-    if (!rearm_vertex_fog()) {
-        log_error("the per-vertex ramp could not be re-armed, so fog is being asked of a device "
-                  "that has been told not to do it. There will be no fog until the level reloads.");
-        return;
-    }
-    fog_state.pixel_fog_active = false;
-    log_info("fog delivery: the engine's own per-vertex ramp, as it was before pixel fog was "
-             "switched on.");
+    fog_state.config.follow_fov = follow;
+    log_info("fog band: the field of view %s scales it. The band eases to the new target rather "
+             "than stepping.", follow ? "now" : "no longer");
 }
 
 static void consider_pixel_fog(uint32_t caps)
@@ -1020,7 +1009,7 @@ static void consider_pixel_fog(uint32_t caps)
     if (device == NULL) {
         return;                            /* not open yet; asked again next frame */
     }
-    if (!give_device_projection(device)) {
+    if (!set_device_projection(device, PROJECTION_W_COMPLIANT)) {
         log_warning("SetTransform refused the projection, so fog would be measured against device "
                     "depth and a world-unit band would fog nothing. The per-vertex ramp stays.");
         fog_state.config.pixel_fog = false;
@@ -1035,6 +1024,15 @@ static void consider_pixel_fog(uint32_t caps)
 
     fog_state.pixel_fog_active = true;
     fog_state.projection_device = device;
+
+    /* ONE WAY, and that is the reason there is no switch back. Going the other way needs the
+     * device reprogrammed, because this engine only ever sets FOGTABLEMODE from inside
+     * applyLevelFog and that runs at a level load. Reverting the three writes changes what the
+     * NEXT load will push and nothing else, so the engine goes back to computing a per-vertex
+     * factor while the device is still told to ignore it, and nothing is fogged. Reverting the
+     * writes, handing the identity projection back, and calling applyLevelFog's original by hand
+     * were all tried in the game and none of them brought the fog back. So the delivery is chosen
+     * once, at startup, from FogImplementation, and what the panel offers is the band. */
     log_info("pixel fog active: the device measures eye-space w, the band goes to it in world "
              "units unconverted, and the engine's own per-vertex ramp is switched back off. No "
              "8-bit fog factor and no interpolation of it across polygons.");

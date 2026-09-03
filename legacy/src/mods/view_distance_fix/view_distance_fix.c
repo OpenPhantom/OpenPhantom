@@ -41,8 +41,15 @@
  * the placement is skipped, and an enemy that should be standing in front of the player is not
  * there at all. spawn_census.c counts exactly that.
  *
- * SIZE NOTE (rule 9): this file is over 600 lines because rule 8 wants the byte evidence at the
- * site rather than only in a document; the code itself is well inside the normal band.
+ * SIZE NOTE. Past the hard limit, and this change is what took it there. What is long is the byte
+ * evidence beside each site rather than the code, which is well inside the normal band, and that
+ * evidence is the reason the file reads the way it does.
+ *
+ * THE SEAM. Reading the settings and polling the handful of them that can change while the game
+ * runs is a responsibility of its own: it touches no engine memory, resolves no signature, and is
+ * the only part of this file a reader looking for a default cares about. It would take the config
+ * struct with it and leave the hooks behind. It is not taken here because this change adds a
+ * setting and moving the reader at the same time would mix a refactor into a feature.
  */
 #include "view_distance_fix.h"
 
@@ -198,10 +205,10 @@ typedef struct view_distance_config {
     float backoff_fps;
     bool  fog_inside_cut;
     bool  fog_follow_fov;
-    bool  vertex_fog;
-    bool  pixel_fog;
+    int   fog_implementation;   /* 0 engine untouched, 1 the per-vertex ramp, 2 per pixel */
     bool  authored_fog;
     float fog_min_end;
+    float fog_band_scale;
     float fog_scale;
     float fog_settle_seconds;
     float npc_range_scale;
@@ -258,12 +265,23 @@ static void load_config(void)
     config->backoff_fps         = ini_read_float(VIEW_DISTANCE_SECTION, "BackoffFps", 0.0f);
     config->fog_inside_cut      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogInsideCut", true);
     config->fog_follow_fov      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogFollowFov", true);
-    config->vertex_fog          = ini_read_bool (VIEW_DISTANCE_SECTION, "VertexFog", true);
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
-    config->pixel_fog           = ini_read_bool (VIEW_DISTANCE_SECTION, "PixelFog", true);
+    /* Which half of the engine draws the fog, and the one fog setting that is read here and never
+     * again. The two implementations differ in device state that this engine only programs from
+     * inside applyLevelFog, which runs at a level load and nowhere else, so a switch made while a
+     * level is up leaves the device and the engine disagreeing and nothing is fogged. Two attempts
+     * at making that safe both failed in the game, so it is not offered live: the panel carries
+     * the two band switches, which are pure arithmetic, and this one waits for a restart. */
+    config->fog_implementation  = ini_read_int  (VIEW_DISTANCE_SECTION, "FogImplementation", 2);
+    if (config->fog_implementation < 0 || config->fog_implementation > 2) {
+        log_warning("FogImplementation=%d is not one of 0, 1 or 2, so 2 is used",
+                    config->fog_implementation);
+        config->fog_implementation = 2;
+    }
     config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
+    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 1.0f);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
      *
      * The test this would scale is a plain squared distance in three dimensions (0x00428EB3:
@@ -601,13 +619,27 @@ static void poll_view_range_scale(void)
         }
     }
 
-    /* And which half of the engine draws it. */
+    /* How near the band sits, read on the same schedule so it can be tuned with the game up.
+     * That is the whole point of polling this one: the right number is a matter of looking at it,
+     * and a restart between each try makes that a long evening. */
     {
-        bool pixel = ini_read_bool(VIEW_DISTANCE_SECTION, "PixelFog", view_state.config.pixel_fog);
+        float scale = clamp_float(ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale",
+                                                 view_state.config.fog_band_scale), 0.25f, 1.0f);
 
-        if (pixel != view_state.config.pixel_fog) {
-            view_state.config.pixel_fog = pixel;
-            fog_regime_set_pixel_fog(pixel);
+        if (scale != view_state.config.fog_band_scale) {
+            view_state.config.fog_band_scale = scale;
+            fog_regime_set_band_scale(scale);
+        }
+    }
+
+    /* And whether the field of view scales it, the other half of what the panel offers. */
+    {
+        bool follow = ini_read_bool(VIEW_DISTANCE_SECTION, "FogFollowFov",
+                                    view_state.config.fog_follow_fov);
+
+        if (follow != view_state.config.fog_follow_fov) {
+            view_state.config.fog_follow_fov = follow;
+            fog_regime_set_follow_fov(follow);
         }
     }
 
@@ -775,10 +807,14 @@ static void install_fog_regime(void)
 {
     fog_regime_config_t fog_config;
 
-    fog_config.vertex_fog     = view_state.config.vertex_fog;
-    fog_config.pixel_fog      = view_state.config.pixel_fog;
+    /* 0 leaves the engine as the device asks for it, which on modern hardware is no fog at all.
+     * 1 and 2 both arm the ramp first, so a device that turns out not to support per-pixel fog
+     * degrades to the ramp rather than to nothing. */
+    fog_config.vertex_fog     = view_state.config.fog_implementation >= 1;
+    fog_config.pixel_fog      = view_state.config.fog_implementation == 2;
     fog_config.authored_band  = view_state.config.authored_fog;
     fog_config.min_end_fraction = clamp_float(view_state.config.fog_min_end, 0.0f, 1.0f);
+    fog_config.band_scale       = clamp_float(view_state.config.fog_band_scale, 0.25f, 1.0f);
     fog_config.follow_fov     = view_state.config.fog_follow_fov;
     fog_config.inside_cut     = view_state.config.fog_inside_cut;
     fog_config.fog_scale      = view_state.config.fog_scale;

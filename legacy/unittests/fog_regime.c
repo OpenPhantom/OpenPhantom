@@ -397,6 +397,77 @@ static void test_the_floor(void)
           "the follow factor bottoms out rather than collapsing the band to nothing");
 }
 
+/* The one term that can bring the band NEARER. Everything else here either leaves the authored
+ * numbers alone or pushes the end back out towards the draw edge, so a player who wants thicker
+ * fog than the level shipped had nothing to reach for until this. */
+static void test_the_band_scale(void)
+{
+    fog_regime_config_t config = default_config();
+    fog_regime_band_t   authored;
+    fog_regime_band_t   full;
+    fog_regime_band_t   near;
+    float               cut = 22.0f;
+
+    authored.start = 10.0f;
+    authored.end   = 32.0f;
+
+    config.min_end_fraction = 1.0f;
+    config.band_scale       = 1.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &full);
+
+    config.band_scale = 0.8f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+
+    ut_section("the band scale");
+    ut_check(near.end < full.end,
+             "below 1 the fog ends nearer the eye than every other term put it, which is the "
+             "whole point: the terms above decide where the fog HAS to be, this decides how much "
+             "sooner than that a player wants it");
+    ut_check(near.end > full.end * 0.79f && near.end < full.end * 0.81f,
+             "and it is the plain multiple it says it is, not an approximation of one");
+    ut_check(near.start < full.start,
+             "the start comes in with it, so the level's authored proportions survive and the "
+             "band does not simply get shorter at one end");
+    ut_check(near.end > near.start,
+             "and the span never inverts, which would have the engine paint the world in the fog "
+             "colour rather than showing less of it");
+
+    config.band_scale = 1.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+    ut_check(near.end == full.end && near.start == full.start,
+             "exactly 1 is a no-op, so the shipped default cannot move the band by rounding");
+
+    config.band_scale = 0.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+    ut_check(near.end == full.end,
+             "and a zero, which is what an absent or unreadable setting comes through as, is "
+             "ignored rather than collapsing the band onto the camera");
+
+    /* The one place this differs from every other term here: those all exist to hide the edge the
+       world stops at, so a band left as authored is left alone by them. This one is taste, and a
+       player who wants thicker fog wants it whichever band they chose. */
+    config.authored_band = true;
+    config.band_scale    = 1.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &full);
+    ut_check(full.start == authored.start && full.end == authored.end,
+             "an authored band at 1.0 is the level's own numbers exactly, untouched");
+
+    config.band_scale = 0.5f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+    ut_check(near.start == authored.start * 0.5f && near.end == authored.end * 0.5f,
+             "and it brings an authored band in as well, both ends by the same factor, rather "
+             "than doing nothing wherever the scaling terms do nothing");
+
+    /* A band short enough that the multiple would land its end inside the engine's own floor. */
+    authored.start = 1.0f;
+    authored.end   = 3.0f;
+    config.band_scale = 0.25f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+    ut_check(near.end > near.start,
+             "a band too short to survive the multiple is refused rather than clamped, since "
+             "clamping one end past the other paints the world in the fog colour");
+}
+
 int main(void)
 {
     test_identity_at_the_authored_field_of_view();
@@ -413,6 +484,7 @@ int main(void)
     test_easing_degenerate_input();
     test_the_fog_follows_a_shortened_cut_edge();
     test_the_floor();
+    test_the_band_scale();
 
     return ut_summary("fog_regime");
 }

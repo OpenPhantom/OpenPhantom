@@ -462,6 +462,54 @@ static bool fall_has_landing = true;   /* until a fall says otherwise */
 /* True when there is a floor somewhere under the player right now. Answers TRUE when the probe
  * cannot be resolved at all, so a build that cannot ask the question keeps the immunity it had
  * rather than quietly starting to kill people. */
+/* Both pieces of fall state, cleared together.
+ *
+ * fall_has_landing is answered when a fall BEGINS and set back to true only by landing, which is
+ * right inside one level and wrong across two. Skipping a level while falling over something with
+ * no floor under it carried "there is nothing to land on" into the next level, where it turns off
+ * all five suppressions, and the engine's own fall-distance death then fired on arrival. Reported
+ * from a test build: jump boost on, level skip, dead on the next level.
+ *
+ * The fall belonged to a world that no longer exists, so the honest answer is not to carry it. This
+ * does not touch whether jump boost is ON: a player who asked for it keeps it, and what they get on
+ * the new level is the immunity it is supposed to give. */
+void cheats_openphantom_reset_fall_state(void)
+{
+    fall_has_landing = true;
+    fall_grace_until = 0;
+}
+
+/* Jump boost is switched OFF across a level change, and back on afterwards.
+ *
+ * Reported from a test build: jump boost on, level skip, dead on arrival in the next level. The
+ * fall state carried across the transition was one cause and is reset above, and this is the other
+ * half, asked for directly: whatever else a level change does to a boosted jump, it does it with
+ * the boost switched off.
+ *
+ * It is a suspend rather than a plain switch off because the player asked for the cheat and should
+ * not have to ask again after every level. The flag is what tells the two apart: resume only puts
+ * back what suspend took, so somebody who switches it off themselves mid transition stays off. */
+static bool jump_boost_suspended;
+
+void cheats_openphantom_suspend_jump_boost(void)
+{
+    if (jump_boost_suspended || !own_state.cheats[CHEATS_OWN_JUMP_BOOST].on) {
+        return;
+    }
+    own_state.cheats[CHEATS_OWN_JUMP_BOOST].on = false;
+    jump_boost_suspended = true;
+}
+
+void cheats_openphantom_resume_jump_boost(void)
+{
+    if (!jump_boost_suspended) {
+        return;
+    }
+    jump_boost_suspended = false;
+    own_state.cheats[CHEATS_OWN_JUMP_BOOST].on = true;
+}
+
+
 static bool floor_exists_under_player(void)
 {
     void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;

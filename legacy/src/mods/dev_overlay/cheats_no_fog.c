@@ -71,6 +71,8 @@
  * ============================================================================================== */
 #include "cheats_no_fog.h"
 
+#include "cheats_openphantom.h"
+
 #include "common/frame_hook.h"
 #include "common/ini.h"
 #include "common/logging.h"
@@ -129,6 +131,7 @@ typedef struct no_fog_state {
      * file ever wrote to it), and the band this file itself last wrote - which is what tells the
      * next frame whether the record still holds ours or has been freed and reallocated under us. */
     void            *remembered_level;
+    void            *last_seen_level;   /* only to notice a level change; see the tick */
     bool             have_authored;
     float            authored_start;
     float            authored_end;
@@ -158,6 +161,23 @@ static void tick(void)
         return;
     }
     level = *st.level_pointer;
+
+    /* A level change, noticed here because this is the only cheat that already reads the world
+     * pointer every frame and resolving a second copy of that site would buy nothing.
+     *
+     * What it is for belongs to jump boost rather than to fog: that cheat is switched off across a
+     * level skip and this is what puts it back once the next level is up. The call does nothing
+     * unless a suspend is outstanding, so it costs a compare on every other frame.
+     *
+     * A pointer comparison rather than the fuller identity below: an allocator handing the new
+     * level the old address would miss it, and the cost of missing it is a cheat left off, which
+     * the player can switch on again. The cost of getting it wrong the other way is a cheat
+     * switching itself on during play. */
+    if (level != st.last_seen_level) {
+        st.last_seen_level = level;
+        cheats_openphantom_resume_jump_boost();
+    }
+
     if (level == NULL || !memory_is_readable_range((uintptr_t)level, WORLD_PROBE_SIZE)) {
         forget_level();
         return;

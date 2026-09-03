@@ -210,4 +210,5 @@ add_unit_test(frame_governor view_distance_fix view_distance_fix/frame_governor.
 
 # The draw distance row's own arithmetic: the clamp, and the hand written parser that exists
 # because strtof would read a decimal point only where the locale agrees it is one.
+add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)
 add_unit_test(view_range_row dev_overlay dev_overlay/view_range_row.c)

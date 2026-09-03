@@ -542,6 +542,30 @@ bool cheats_openphantom_end_level_invoke(void)
      * disable it. */
     overlay_input_close();
 
+    /* And the fall the player is in the middle of, if any, belongs to the level being left.
+     *
+     * jump_boost asks whether a fall has anywhere to land when the fall BEGINS, and only a landing
+     * answers the question again. Skipping out of a level in mid air therefore carried "nothing to
+     * land on" into the next one, which switches off all five fall suppressions, and the engine's
+     * own fall-distance death fired the moment the new level started. Reported from a test build as
+     * jump boost plus level skip killing the player on arrival.
+     *
+     * Reset rather than switching jump boost off, which was the other way to stop it: the player
+     * asked for the cheat and this is the one moment its whole purpose applies. */
+    cheats_openphantom_reset_fall_state();
+
+    /* And jump boost goes off across the transition, to be put back when the next level is up.
+     * Asked for directly after the fall reset alone was not trusted to cover it: whatever else a
+     * level change does to a boosted jump, it now does it with the boost switched off.
+     *
+     * Only where the no fog cheat resolved, because its per-frame tick is the one thing in this
+     * DLL that already watches the world pointer and it is what lifts the suspend. Without it the
+     * cheat would go off here and never come back, which is worse than not suspending at all. The
+     * fall reset above is the half that always runs. */
+    if (cheats_no_fog_is_available()) {
+        cheats_openphantom_suspend_jump_boost();
+    }
+
     *cell = 3;
     return true;
 }

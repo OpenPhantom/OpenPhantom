@@ -18,6 +18,7 @@
 #include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
+#include "overlay_key_name.h"
 #include "overlay_model.h"
 
 #include "common/patch.h"
@@ -148,7 +149,26 @@ void dev_overlay_install(void)
     }
 
     overlay_model_reset();
-    overlay_input_set_key(ini_read_int(DEV_OVERLAY_SECTION, "OpenKey", 0));
+    /* Read as TEXT, so the file can be typed into. A person who cannot open the panel cannot use
+     * the row inside it that binds a key, and that is exactly the person this setting is for, so
+     * "F8" and "numpad +" have to work as well as a number. A bare number still means what it
+     * always did. Anything unreadable is reported and falls back to the default rather than being
+     * taken as zero, which would have been indistinguishable from asking for the default. */
+    {
+        char    text[32];
+        int32_t key = 0;
+
+        if (ini_read_string(DEV_OVERLAY_SECTION, "OpenKey", "", text, sizeof(text)) &&
+            text[0] != '\0') {
+            if (!overlay_key_from_name(text, &key)) {
+                key = 0;
+                log_warning("OpenKey=%s is not a key this understands, so the panel opens on its "
+                            "default: F6, or whichever key sits below Escape. A name like F8, "
+                            "numpad + or backtick works, and so does a virtual key code.", text);
+            }
+        }
+        overlay_input_set_key(key);
+    }
     overlay_draw_set_align(ini_read_int(DEV_OVERLAY_SECTION, "TextAlign", 1));
 
     /* Either half is worth having on its own, so both are attempted and neither decides the

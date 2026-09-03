@@ -170,6 +170,20 @@ void cheats_openphantom_freecam_set_hotkey(int32_t virtual_key);
  * was flying is a fall the player did not choose to take. Ends on the first landing. */
 void cheats_openphantom_grant_fall_grace(void);
 
+/* Forgets whatever the current fall was, so the next level starts with the immunity jump boost
+ * normally gives. Called on a level skip: see the comment at the call site for why a level that is
+ * left in mid air otherwise kills the player on arrival in the next one. */
+void cheats_openphantom_reset_fall_state(void);
+
+/* Switches jump boost off across a level change and puts it back afterwards.
+ *
+ * Suspend remembers whether it was on and turns it off; resume turns it back on only if suspend
+ * was the thing that turned it off, so a player who switched it off themselves during the
+ * transition stays switched off. Both are no-ops when there is nothing to do, so they are safe to
+ * call on every level change whatever the state. */
+void cheats_openphantom_suspend_jump_boost(void);
+void cheats_openphantom_resume_jump_boost(void);
+
 /* Notches scrolled since the last take, positive away from the player - the exact contract
  * overlay_input_take_wheel_delta() keeps. A function pointer rather than calling that function by
  * name: the wheel is only observable through window messages, which is overlay_input.c's own

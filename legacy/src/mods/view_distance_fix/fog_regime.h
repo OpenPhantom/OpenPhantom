@@ -83,6 +83,7 @@ typedef struct fog_regime_config {
     bool  authored_band;    /* use each level's own band untouched, ignoring every term below */
     float min_end_fraction; /* least the fog end may be, as a share of the cut edge; 0 disables */
     float band_scale;       /* the whole band, nearer, after every term above; 1 leaves it */
+    float open_seconds;     /* how long a level opens with the fog switched off; 0 disables */
 } fog_regime_config_t;
 
 typedef struct fog_regime_band {
@@ -145,6 +146,12 @@ void fog_regime_set_authored_band(bool authored);
  * only programs it from inside applyLevelFog, which runs at a level load. That is chosen once,
  * from FogImplementation. */
 void fog_regime_set_band_scale(float scale);
+
+/* True while a level is still opening: the window the fog spends switched off, so that the band
+ * settling to its real value is not watched happening. Public because the draw distance is raised
+ * over the same window and that lives in another file, so the two have to begin and end together.
+ */
+bool fog_regime_level_opening(void);
 
 /* The cut edge, both as the engine would have had it and as it actually is after the radius cap
  * and the watchdog. Called from the draw-distance detour, which is the only place both numbers

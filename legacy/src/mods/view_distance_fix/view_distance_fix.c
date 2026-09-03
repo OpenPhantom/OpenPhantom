@@ -126,7 +126,11 @@ static const uint8_t SIG_MESH_CULL_WORD[] = { 0xB8, 0x01, 0x00, 0x00, 0x00, 0x84
  *   83 EC 48 / B9 0C000000            prologue, 8 bytes, clean boundary
  * NO frame pointer: the two cdecl arguments are at [esp+4] / [esp+8] on entry.
  * rdMesh_draw has two callers (0x4100E5 from here, 0x456E17 from shot_drawAll), which is why
- * the detour must RESET the cull word at the end, not merely set it at the start. */
+ * the detour must RESET the cull word at the end, not merely set it at the start.
+ *
+ * The pattern reaches eight bytes past the prologue on purpose. The prologue itself is what another
+ * DLL's detour overwrites, and dev_overlay does exactly that here, so the site is declared in the
+ * DETOUR form and the tail is what identifies it. */
 static const uint8_t SIG_THING_DRAW[] = {
     0x83, 0xEC, 0x48, 0xB9, 0x0C, 0x00, 0x00, 0x00, 0x55, 0x8B, 0x6C, 0x24, 0x50, 0x56, 0x8B, 0x74
 };
@@ -157,7 +161,12 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("view_distance",             SIG_VIEW_DISTANCE),
     SIGNATURE_ENTRY("activation_scan",           SIG_ACTIVATION_SCAN),
     SIGNATURE_ENTRY("mesh_cull_word",            SIG_MESH_CULL_WORD),
-    SIGNATURE_ENTRY("thing_draw",                SIG_THING_DRAW),
+    /* DETOUR form, because another DLL gets here first. dev_overlay hooks this same function
+       for giant and tiny player, and it loads before this one, so by the time this pattern is
+       searched the first eight bytes are a jump into its thunk. The plain form found zero
+       matches and switched two-sided drawing off in every session the overlay was installed,
+       on both platforms, reported only as a warning line nobody was reading. */
+    SIGNATURE_ENTRY_DETOUR("thing_draw",         SIG_THING_DRAW, THING_DRAW_PROLOGUE_SIZE),
     SIGNATURE_ENTRY_DETOUR("rdcamera_build_projection", SIG_RDCAMERA_BUILD_PROJECTION,
                            BUILD_PROJECTION_PROLOGUE_SIZE)
 };
@@ -209,6 +218,8 @@ typedef struct view_distance_config {
     bool  authored_fog;
     float fog_min_end;
     float fog_band_scale;
+    float level_open_seconds;
+    float level_open_range;
     float fog_scale;
     float fog_settle_seconds;
     float npc_range_scale;
@@ -239,6 +250,7 @@ typedef struct view_distance_state {
 
     uint8_t               *cull_word;
     int                    two_sided_this_frame;
+    bool                   was_opening;   /* so the window is logged once, not per frame */
 } view_distance_state_t;
 
 static view_distance_state_t view_state;
@@ -281,7 +293,11 @@ static void load_config(void)
     }
     config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
-    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 1.0f);
+    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 0.5f);
+    config->level_open_seconds  = clamp_float(
+        ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenSeconds", 5.0f), 0.0f, 30.0f);
+    config->level_open_range    = clamp_float(
+        ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenViewRange", 2.5f), 1.0f, 2.5f);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
      *
      * The test this would scale is a plain squared distance in three dimensions (0x00428EB3:
@@ -450,7 +466,20 @@ static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
      * edge would have been; it already carries the level's default AND any per-cell override
      * from bapCell+0x03, and `range` is where we have actually put it. The fog needs the ratio,
      * not either number on its own. */
-    fog_regime_note_cut(engine_range, range);
+    /* But NOT while the level's opening window has the scale raised above what the player asked
+     * for. The frame governor and the cell watchdog only ever LOWER it, so a scale above the
+     * configured one can only be that override, and the cut edge it produces is one the player is
+     * about to lose. Letting it into the fog's memory is what made the band fade in against an
+     * edge two and a half times the real one, on every level whose window ran: Mos Espa settled
+     * towards 27.1 in a world that stops at 22.
+     *
+     * A comparison rather than a timer, deliberately. Three attempts at timing this failed,
+     * because the scale is applied at the end of a frame and governs the next one, so every
+     * decision about it is a frame ahead of the cut that reports it. This test is made in the one
+     * place that holds the scale which actually produced the number in hand. */
+    if (view_state.effective_view_scale <= view_state.config.view_range_scale) {
+        fog_regime_note_cut(engine_range, range);
+    }
     return range;
 }
 
@@ -650,8 +679,10 @@ static void poll_view_range_scale(void)
 
 static void on_frame(void)
 {
+
     view_state.two_sided_this_frame = 0;
     poll_view_range_scale();
+
 
     /* BEFORE the cell watchdog, and handed that watchdog's own ceiling so it can never give back a
      * scale the watchdog refused. The two lower the same number for different reasons: the cell
@@ -660,6 +691,43 @@ static void on_frame(void)
      * worth. Correctness outranks comfort, so the governor is the one that has to yield. */
     frame_governor_on_frame(&view_state.effective_view_scale,
                             view_state.config.view_range_scale, cell_watchdog_ceiling());
+
+    /* The opening window raises the draw distance, and it has to be done HERE, after the governor
+     * and before the watchdog.
+     *
+     * A level's opening is usually an establishing camera set well back from the player, and at
+     * the shipped scale the geometry is cut off close enough that the shot is mostly empty ground.
+     * The fog is switched off over the same window by fog_regime, so the two are one effect: for
+     * these few seconds the game shows as much of the world as it can and hides none of it.
+     *
+     * Handing the raised number to the governor as a request was the first attempt and it did
+     * nothing at all. The governor keeps a ceiling of its own, pinned to the configured scale at
+     * install and only ever lowered from there, and it takes the smallest of that, the request and
+     * the watchdog's own limit. A request above its ceiling is therefore not a request, and the
+     * log said so: "never above the configured 1.00".
+     *
+     * It stays inside the governor's sampling rather than skipping the call, so the frames these
+     * seconds cost are still measured and the counter it times from is not left five seconds
+     * stale. What is overridden is only the value, and only upward, so a player already asking for
+     * more keeps what they asked for. The watchdog runs after and can still refuse the whole
+     * thing, which is the order everything else here uses: correctness outranks comfort. */
+    if (fog_regime_level_opening()) {
+        if (view_state.config.level_open_range > view_state.effective_view_scale) {
+            if (!view_state.was_opening) {
+                log_info("level opening: the draw distance is held at x%.2f while the fog is off, "
+                         "over the x%.2f otherwise in force",
+                         (double)view_state.config.level_open_range,
+                         (double)view_state.effective_view_scale);
+            }
+            view_state.effective_view_scale = view_state.config.level_open_range;
+        }
+        view_state.was_opening = true;
+    } else if (view_state.was_opening) {
+        view_state.was_opening = false;
+        log_info("level opening: the draw distance is back at x%.2f",
+                 (double)view_state.effective_view_scale);
+    }
+
     cell_watchdog_on_frame(&view_state.effective_view_scale);
 
     /* AFTER the watchdog, deliberately. When the watchdog lowers the scale it moves the cut edge,
@@ -804,6 +872,7 @@ static void install_fog_regime(void)
     fog_config.authored_band  = view_state.config.authored_fog;
     fog_config.min_end_fraction = clamp_float(view_state.config.fog_min_end, 0.0f, 1.0f);
     fog_config.band_scale       = clamp_float(view_state.config.fog_band_scale, 0.25f, 1.0f);
+    fog_config.open_seconds     = view_state.config.level_open_seconds;
     fog_config.follow_fov     = view_state.config.fog_follow_fov;
     fog_config.inside_cut     = view_state.config.fog_inside_cut;
     fog_config.fog_scale      = view_state.config.fog_scale;

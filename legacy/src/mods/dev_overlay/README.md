@@ -321,20 +321,24 @@ read `2.50x` while the game is really drawing at `1.00x`. Reporting the live val
 
 ## The fog rows
 
-Three rows under **Utilities**, all of them `[view_distance_fix]` keys the fog reads while the game
-runs, so each takes effect within about a second and none needs a restart.
+Two rows under **Utilities**, both `[view_distance_fix]` keys the fog reads while the game runs, so
+each takes effect within about a second and neither needs a restart.
 
 `Fog thickness` is `FogBandScale`, and it is the only setting in the whole fog path that can bring
 the band NEARER. Every other term decides where the fog has to be so that it is solid before the
 geometry stops; this one says how much sooner than that a player wants it, which is taste. Both
 ends of the band move together, so a level's authored proportions survive.
 
-`Fog follows the field of view` is `FogFollowFov`, and `Fog follows the draw distance` is
-`AuthoredFogBand`, inverted: the key asks whether the band is left alone, the row asks whether it
-moves, because moving is the behaviour a player is looking for after raising the draw distance and
-finding the world stops short of the fog. Turning it off takes the field-of-view row out of use,
-since a band left alone is scaled by nothing, and that row then reports itself `n/a` rather than
-reading as a switch that does nothing.
+`Fog follows the draw distance` is `AuthoredFogBand`, inverted: the key asks whether the band is
+left alone, the row asks whether it moves, because moving is the behaviour a player is looking for
+after raising the draw distance and finding the world stops short of the fog. It decides what the
+thickness above is a share OF, never whether it applies: the thickness is the last term in both
+modes, so following the draw distance cannot push the fog back out to it.
+
+`FogFollowFov` had a row here for one evening and lost it. The fog's end floor ships at the full
+draw distance and that setting's correction is the same distance times the cosine of half the
+picture, which is never larger, so the floor overrode it and the switch could not change anything.
+It is still in the ini for somebody who lowers the floor and plays very wide.
 
 Which half of the engine draws the fog is deliberately NOT here. `FogImplementation` is read once at
 startup, because the two implementations differ in device state the engine only programs at a level

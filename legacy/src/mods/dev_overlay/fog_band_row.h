@@ -31,14 +31,21 @@
 #define FOG_BAND_MIN 0.25f
 #define FOG_BAND_MAX 1.0f
 
+/* What the game runs at with the key absent, which is what the row has to show then. The same
+ * number as the maximum, and kept as its own name anyway: they mean different things, and 0.6 was
+ * the shipped default for long enough to prove that reusing one for the other reads as a mistake
+ * the moment they part again. */
+#define FOG_BAND_DEFAULT 1.0f
+
 /* One press of the row's own step. Smaller than the draw distance row's, because the whole useful
  * range here is narrower than that row's single step. */
 #define FOG_BAND_STEP 0.05f
 
-/* Clamps to the accepted range. A value that is not a number comes back as the MAXIMUM, not the
- * minimum: 1.0 is the shipped default and leaves the band alone, so an unreadable value costs
- * nothing, whereas falling back to 0.25 would wrap the player in fog because a file could not be
- * parsed. A number that is merely out of range clamps to the end it was heading for. */
+/* Clamps to the accepted range. A value that is not a number comes back as the shipped default,
+ * not as either end: an unreadable file should leave the game where a fresh installation would be,
+ * whereas falling back to 0.25 would wrap the player in fog because a file could not be parsed and
+ * falling back to 1.0 would quietly ship a picture nobody chose. A number that is merely out of
+ * range clamps to the end it was heading for, since that says which way it was going. */
 float fog_band_row_clamp(float scale);
 
 /* Parses what was typed. A bare number with an optional decimal point, with a trailing "x"

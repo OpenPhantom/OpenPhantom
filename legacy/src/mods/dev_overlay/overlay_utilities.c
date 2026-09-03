@@ -5,7 +5,6 @@
 #include "dev_menu_size_row.h"
 #include "fog_band_row.h"
 #include "fog_follow_row.h"
-#include "fog_fov_row.h"
 #include "open_key_row.h"
 #include "overlay_key_name.h"
 #include "view_range_row.h"
@@ -19,7 +18,6 @@ typedef enum utilities_slot {
     UTILITIES_VIEW_RANGE = 0,
     UTILITIES_AUTO_RANGE,
     UTILITIES_FOG_BAND,
-    UTILITIES_FOG_FOV,
     UTILITIES_FOG_FOLLOW,
     UTILITIES_DEV_MENU_SIZE,
     UTILITIES_OPEN_KEY
@@ -96,15 +94,6 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         fill_typed(out, editing_text, fog_band_row_format, fog_band_row_get());
         return;
 
-    case UTILITIES_FOG_FOV:
-        copy_label(out->label, "Fog follows the field of view");
-        out->on = fog_fov_row_get();
-        /* The one row here whose availability is not about something resolving. A band left as the
-           level authored it is scaled by nothing, so while the row below is off this term has
-           nothing to act on, and saying so beats reading as a switch that does nothing. */
-        out->available = fog_fov_row_available();
-        return;
-
     case UTILITIES_FOG_FOLLOW:
         copy_label(out->label, "Fog follows the draw distance");
         out->on = fog_follow_row_get();
@@ -163,10 +152,6 @@ bool overlay_utilities_toggle(uint32_t slot)
     switch ((utilities_slot_t)slot) {
     case UTILITIES_AUTO_RANGE:
         return auto_range_row_set(!auto_range_row_get());
-    case UTILITIES_FOG_FOV:
-        /* Refuses while unavailable, the same as it refuses a file it could not write: both leave
-         * the row where it was, which is where the game is. */
-        return fog_fov_row_set(!fog_fov_row_get());
     case UTILITIES_FOG_FOLLOW:
         return fog_follow_row_set(!fog_follow_row_get());
     default:

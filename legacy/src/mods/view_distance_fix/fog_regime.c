@@ -981,16 +981,6 @@ void fog_regime_set_band_scale(float scale)
              "new target rather than stepping.", (double)scale);
 }
 
-void fog_regime_set_follow_fov(bool follow)
-{
-    if (fog_state.config.follow_fov == follow) {
-        return;
-    }
-    fog_state.config.follow_fov = follow;
-    log_info("fog band: the field of view %s scales it. The band eases to the new target rather "
-             "than stepping.", follow ? "now" : "no longer");
-}
-
 static void consider_pixel_fog(uint32_t caps)
 {
     void *device;

@@ -134,19 +134,17 @@ void fog_regime_set_fov(float horizontal_fov_degrees);
  * change, so the two can be compared without a restart. */
 void fog_regime_set_authored_band(bool authored);
 
-/* Whether the field of view scales the band, while the game runs. Pure arithmetic on a band this
- * file already recomputes every frame, so it takes effect on the next one and eases in.
- *
- * There is deliberately no live switch for the DELIVERY beside it. See consider_pixel_fog(): going
- * from the device back to the engine's ramp needs the device reprogrammed, and this engine only
- * programs it from inside applyLevelFog, which runs at a level load. That is chosen once from
- * FogImplementation instead. */
 /* How near the band sits, as a share of where every other term put it, while the game runs. Below
- * 1 the fog arrives sooner and is denser at a given distance. Ignored when not positive, so a
- * missing or nonsense value leaves the band where it was rather than collapsing it. */
+ * 1 the fog arrives sooner and is denser at a given distance, and it is the last term applied in
+ * both modes, so whether the band follows the draw distance decides what this is a share OF and
+ * never whether it applies. Ignored when not positive, so a missing or nonsense value leaves the
+ * band where it was rather than collapsing it onto the camera.
+ *
+ * There is deliberately no live switch for the fog DELIVERY beside it. See consider_pixel_fog():
+ * going from the device back to the engine's ramp needs the device reprogrammed, and this engine
+ * only programs it from inside applyLevelFog, which runs at a level load. That is chosen once,
+ * from FogImplementation. */
 void fog_regime_set_band_scale(float scale);
-
-void fog_regime_set_follow_fov(bool follow);
 
 /* The cut edge, both as the engine would have had it and as it actually is after the radius cap
  * and the watchdog. Called from the draw-distance detour, which is the only place both numbers

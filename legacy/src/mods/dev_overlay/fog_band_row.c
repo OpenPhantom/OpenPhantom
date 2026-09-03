@@ -21,7 +21,7 @@ float fog_band_row_clamp(float scale)
        that is merely out of range is a different case: it says which direction the player wanted,
        so it clamps to that end. */
     if (scale != scale) {
-        return FOG_BAND_MAX;
+        return FOG_BAND_DEFAULT;
     }
     if (scale < FOG_BAND_MIN) {
         return FOG_BAND_MIN;
@@ -55,13 +55,13 @@ float fog_band_row_get(void)
     /* Read as text and parsed here rather than through a float reader, so the ini and the row
        agree about what counts as a number, decimal point included. */
     char  buffer[32];
-    float value = FOG_BAND_MAX;
+    float value = FOG_BAND_DEFAULT;
 
     if (!ini_read_string(VIEW_DISTANCE_SECTION, FOG_BAND_KEY, "", buffer, sizeof(buffer))) {
-        return FOG_BAND_MAX;
+        return FOG_BAND_DEFAULT;
     }
     if (!fog_band_row_parse(buffer, &value)) {
-        return FOG_BAND_MAX;
+        return FOG_BAND_DEFAULT;
     }
     return fog_band_row_clamp(value);
 }

@@ -632,17 +632,6 @@ static void poll_view_range_scale(void)
         }
     }
 
-    /* And whether the field of view scales it, the other half of what the panel offers. */
-    {
-        bool follow = ini_read_bool(VIEW_DISTANCE_SECTION, "FogFollowFov",
-                                    view_state.config.fog_follow_fov);
-
-        if (follow != view_state.config.fog_follow_fov) {
-            view_state.config.fog_follow_fov = follow;
-            fog_regime_set_follow_fov(follow);
-        }
-    }
-
     requested = clamp_float(ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale",
                                            view_state.config.view_range_scale), 1.0f, 2.5f);
     if (requested == view_state.config.view_range_scale) {

@@ -13,6 +13,9 @@
  * is left alone; the row asks whether it follows, because following is the behaviour a player is
  * looking for after setting a draw distance and finding the world stops short of the fog.
  *
+ * Turning it off also takes the field-of-view row above it out of use, since an untouched band is
+ * not scaled by that either.
+ *
  * It goes through the ini for the same reason the rows beside it do: the setting belongs to
  * view_distance_fix.dll, feature DLLs here never depend on each other at run time, and either can
  * be deleted from mods\ without breaking the other.
@@ -22,18 +25,12 @@
 
 #include <stdbool.h>
 
-/* True when the band is scaled against the draw distance and the field of view. Always true while
- * the fog is drawn per vertex: see fog_follow_row_available(). */
+/* True when the band is scaled against the draw distance. Absent reads as true, matching the
+ * shipped AuthoredFogBand of 0. */
 bool fog_follow_row_get(void);
 
-/* False while the fog is drawn per vertex, where the band is the only thing hiding the edge the
- * world stops at and an authored band leaves two of the levels bare. That combination is the one
- * this pair does not offer, and view_distance_fix reaches the same answer for itself, so the row
- * and the game agree about what is running. */
-bool fog_follow_row_available(void);
-
-/* Writes it. False when the row is unavailable or the file could not be written, which the caller
- * shows by leaving the row where it was rather than reporting a state the game is not in. */
+/* Writes it. False when the file could not be written, which the caller shows by leaving the row
+ * where it was rather than reporting a state the game is not in. */
 bool fog_follow_row_set(bool follow);
 
 #endif /* DEV_OVERLAY_FOG_FOLLOW_ROW_H */

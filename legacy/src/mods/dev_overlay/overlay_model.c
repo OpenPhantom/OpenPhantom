@@ -15,19 +15,21 @@
  * it is reordered. Deleting that reasoning to get under a limit would leave arithmetic nobody can
  * check, which the guidance here explicitly refuses.
  *
- * THE SEAM, if it grows again. The typed value and hotkey capture state, which is the editing state
- * machine reached through overlay_model_value_*() and overlay_model_capture_hotkey(), is a whole
- * responsibility rather than a slice of one, and it is the piece that would move. It is left here
- * for now because moving it while adding a row that uses it would mix a refactor into a feature,
- * and this project asks for one subject at a time.
+ * A SEAM was taken, and it was not the one this note used to name. Splitting the OpenPhantom tab
+ * into Cheats and Utilities moved the seven settings rows into overlay_utilities.c, which is a
+ * better cut than the editing state machine this note previously proposed: those rows share none
+ * of this file's navigation, search, folding or typing state, so what moved is a whole
+ * responsibility and what stayed is the part that has to know which row is being typed into.
+ *
+ * THE SEAM, if it grows again, is that editing state machine after all: the typed value and hotkey
+ * capture reached through overlay_model_value_*() and overlay_model_capture_hotkey(). Both groups
+ * now go through it, so it has two callers rather than one, which is the shape of something that
+ * wants to be its own file.
  */
 #include "overlay_model.h"
 
-#include "auto_range_row.h"
-#include "fog_follow_row.h"
-#include "pixel_fog_row.h"
-#include "view_range_row.h"
-#include "dev_menu_size_row.h"
+#include "overlay_key_name.h"
+#include "overlay_utilities.h"
 
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
@@ -52,7 +54,8 @@ typedef struct group_state {
 static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_TOGGLES */
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
-    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM      */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
+    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
 };
 
 typedef struct overlay_model_state {
@@ -61,7 +64,8 @@ typedef struct overlay_model_state {
     group_state_t groups[OVERLAY_GROUP_COUNT];
     overlay_row_t rows[OVERLAY_ROWS_MAX];
     uint32_t      row_count;
-    bool          capturing_hotkey;   /* the free-camera teleport key row is waiting for a keypress */
+    bool          capturing_hotkey;   /* a hotkey row is waiting for a keypress */
+    uint32_t      capturing_hotkey_row;   /* which one; two rows here bind a key */
     bool          freecam_info_expanded;   /* the "how to fly" row is showing its lines */
     bool          freecam_was_on;     /* last-seen CHEATS_OWN_FREECAM state, to catch the edge */
     bool          editing_value;           /* a value row is waiting for typed digits */
@@ -143,73 +147,27 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
  * row depends on free camera at all; it only needs a slot that will not move. */
 #define END_LEVEL_ROW_ID (INFO_ROW_ID + 1u)
 
-/* The draw distance scale, appended after "Skip to next level" rather than inserted anywhere
- * above it. Everything from JUMP_SCALE_ROW_ID down is positioned relative to a cheat enum and
- * guarded by static asserts; appending costs none of that and disturbs no existing id. It is a
- * setting rather than a cheat, so the bottom of the group is also where it belongs to read.
- *
- * The fold's own lines take the ids after every fixed row here, so a new fixed row is appended
- * below this one and above FREECAM_LINE_FIRST_ID, and disturbs neither. Where those lines are
- * DRAWN is a separate question, answered by openphantom_row_id(). */
-#define VIEW_RANGE_ROW_ID (END_LEVEL_ROW_ID + 1u)
-
-/* Whether the draw distance above is allowed to move itself. Directly under the row it governs,
- * because it is a property of that setting rather than a feature of its own, and a reader who has
- * just set a draw distance is exactly the reader who wants to know whether it will stay there. */
-#define AUTO_RANGE_ROW_ID (VIEW_RANGE_ROW_ID + 1u)
-
-/* How the fog is drawn, one past the automation switch. Beside those two because all of them are
- * properties of how far the world is drawn and how it is hidden, and a reader comparing them wants
- * them together rather than scattered. */
-#define PIXEL_FOG_ROW_ID (AUTO_RANGE_ROW_ID + 1u)
-
-/* Whether the band follows the draw distance, directly under the row that decides how the fog is
- * drawn. Under rather than above because the row above governs it: per-vertex fog has no usable
- * answer but "follows", so this row goes unavailable there rather than offering a state the game
- * will not enter. */
-#define FOG_FOLLOW_ROW_ID (PIXEL_FOG_ROW_ID + 1u)
-
-/* The dev menu's own size, one past the draw distance row and last of the group's fixed rows.
- * Last because it is the only row whose effect is the menu itself: changing it moves every row
- * including this one, and a control that moves while it is being used is easier to find again at
- * the bottom than in the middle. Labelled for the thing a player already has a name for, the dev
- * menu, rather than for the panel it is drawn on. */
-#define DEV_MENU_SIZE_ROW_ID (FOG_FOLLOW_ROW_ID + 1u)
-
 /* The fold's own lines, past every fixed row above. Their ids are the tail of this id space
  * because the tail is the only part of it that may change size, but the tail is NOT where they
  * belong on screen: a reader looks for them directly beneath the summary that revealed them, not
  * at the bottom of the group. openphantom_row_id() below is where those two orders are put back
  * together, and it is the only code that needs to know they ever differed. */
-#define FREECAM_LINE_FIRST_ID (DEV_MENU_SIZE_ROW_ID + 1u)
+#define FREECAM_LINE_FIRST_ID (END_LEVEL_ROW_ID + 1u)
+
+/* The utilities group's own ids, numbered from a base clear of every id the cheats group above can
+ * produce. Two pieces of panel state remember a row by its id alone, the typed value and the
+ * hotkey capture, and both groups hold a row of each kind, so overlapping numbers would let a
+ * commit land on a row in the other group. The assert is what keeps the two spaces apart as rows
+ * are added to either. */
+#define UTILITIES_FIRST_ID 64u
+_Static_assert(FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT <= UTILITIES_FIRST_ID,
+               "the cheats group has grown into the utilities group's id space; raise "
+               "UTILITIES_FIRST_ID");
 
 /* Short enough for value[8]. Letters and digits already match their own virtual-key codes; function
  * keys and the handful of others worth naming get their own case; anything else prints as hex
  * rather than silently showing nothing, since a key that was bound has to be identifiable if
  * something else on the system also happens to be using it. */
-static void key_name(int32_t vk, char *out, size_t out_size)
-{
-    if (vk >= 'A' && vk <= 'Z') {
-        _snprintf(out, out_size, "%c", (char)vk);
-    } else if (vk >= '0' && vk <= '9') {
-        _snprintf(out, out_size, "%c", (char)vk);
-    } else if (vk >= VK_F1 && vk <= VK_F12) {
-        _snprintf(out, out_size, "F%d", (int)(vk - VK_F1 + 1));
-    } else {
-        switch (vk) {
-        case VK_SPACE:   _snprintf(out, out_size, "Space");  break;
-        case VK_TAB:     _snprintf(out, out_size, "Tab");    break;
-        case VK_RETURN:  _snprintf(out, out_size, "Enter");  break;
-        case VK_ESCAPE:  _snprintf(out, out_size, "Esc");    break;
-        case VK_CONTROL: _snprintf(out, out_size, "Ctrl");   break;
-        case VK_SHIFT:   _snprintf(out, out_size, "Shift");  break;
-        case VK_MENU:    _snprintf(out, out_size, "Alt");    break;
-        default:         _snprintf(out, out_size, "%02X", (unsigned)vk); break;
-        }
-    }
-    out[out_size - 1] = '\0';
-}
-
 /* ============================================================================================ */
 
 static char lower(char c)
@@ -275,7 +233,12 @@ void overlay_model_reset(void)
 
     model.groups[OVERLAY_GROUP_ORIGINAL_TOGGLES].title = "Original cheats";
     model.groups[OVERLAY_GROUP_ORIGINAL_ACTIONS].title = "Original cheats (one-time effects)";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "OpenPhantom cheats";
+    /* Split by what a row does rather than by what reads it, following the retail half of this
+     * panel, which already separates its own toggles from its one-time effects. The tab began as
+     * five cheats with a settings row appended and settings kept arriving, until a reader had to
+     * scroll past invincibility to reach the draw distance. */
+    model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Utilities";
     for (i = 0; i < (uint32_t)OVERLAY_GROUP_COUNT; ++i) {
         model.groups[i].expanded = false;      /* everything starts folded, as asked */
     }
@@ -397,24 +360,22 @@ static uint32_t source_count(overlay_group_t group)
         return cheats_original_count();
     case OVERLAY_GROUP_ORIGINAL_ACTIONS:
         return (uint32_t)CHEATS_ACTION_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
+        return OVERLAY_UTILITIES_ROW_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +9, one for each row this group holds that is not one of its own cheats: the jump-boost
+        /* +4, one for each row this group holds that is not one of its own cheats: the jump-boost
          * scale row, inserted right after jump boost's own toggle row; the free-camera teleport key
          * row, which takes over free camera's own (now shifted) numeric slot; the "how to fly"
-         * fold, one past where free camera itself now sits; "Skip to next level", one past that;
-         * the draw distance row, one past THAT; the switch that says whether the draw distance may
-         * move itself; the two fog rows under it, one for how the fog is drawn and one for whether
-         * its band follows the draw distance; and the dev menu size row, last of the nine. See
-         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID/
-         * VIEW_RANGE_ROW_ID/AUTO_RANGE_ROW_ID/PIXEL_FOG_ROW_ID/FOG_FOLLOW_ROW_ID/
-         * DEV_MENU_SIZE_ROW_ID and their own handling in source_row() below. The fold's own lines
-         * add FREECAM_INFO_LINE_COUNT more only while it is open, the same shape a group's own
-         * child count already uses in append_group() below.
+         * fold, one past where free camera itself now sits; and "Skip to next level", one past
+         * that. See JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID
+         * and their own handling in source_row() below. The fold's own lines add
+         * FREECAM_INFO_LINE_COUNT more only while it is open, the same shape a group's own child
+         * count already uses in append_group() below.
          *
          * This number and the row ids above move together. Adding a row and forgetting this
          * leaves the new row built but never drawn, which is what happened when one was added. */
-        return (uint32_t)CHEATS_OWN_COUNT + 9u +
+        return (uint32_t)CHEATS_OWN_COUNT + 4u +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
 }
@@ -472,6 +433,24 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             }
         }
         return;
+    case OVERLAY_GROUP_OPENPHANTOM_UTILITIES: {
+        /* A slot here IS its position in the list, with none of the arithmetic the cheats group
+         * below needs: nothing in this group is positioned relative to a cheat enum and nothing in
+         * it folds. The id carries the base so it cannot be confused with a cheats-group id; see
+         * UTILITIES_FIRST_ID. */
+        const char *editing = NULL;
+        bool        capturing = false;
+
+        out->id = UTILITIES_FIRST_ID + id;
+        if (model.editing_value && model.editing_value_row == out->id) {
+            editing = model.value_edit_buf;
+        }
+        if (model.capturing_hotkey && model.capturing_hotkey_row == out->id) {
+            capturing = true;
+        }
+        overlay_utilities_row(id, editing, capturing, out);
+        return;
+    }
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
         /* Arriving as a screen position and continuing as an id. Reassigned rather than kept in
@@ -509,7 +488,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             } else {
                 int32_t vk = cheats_openphantom_freecam_hotkey();
                 if (vk != 0) {
-                    key_name(vk, out->value, sizeof out->value);
+                    overlay_key_name(vk, out->value, sizeof out->value);
                 } else {
                     _snprintf(out->value, sizeof out->value, "Set");
                 }
@@ -551,73 +530,13 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         }
         if (id == END_LEVEL_ROW_ID) {
             out->kind = OVERLAY_ROW_ACTION;
-            copy_label(out->label, "Skip to next level (debug, field-untested)");
+            /* It HAS been played since this row was added, so the label no longer says it
+               has not. It stays marked as a debug tool, which is still true: it is a jump to the
+               next level with none of the bookkeeping the game itself does on the way out of
+               one. */
+            copy_label(out->label, "Skip to next level (debug)");
             out->on = false;         /* meaningless for an action; never read by the drawer */
             out->available = cheats_openphantom_end_level_is_available();
-            return;
-        }
-        if (id == VIEW_RANGE_ROW_ID) {
-            out->kind = OVERLAY_ROW_VALUE;
-            /* The accepted range is in the label rather than left for the player to discover
-               by having a number refused. Same shape as the action row above, which says
-               what it is in brackets for the same reason, and well inside OVERLAY_LABEL_MAX. */
-            copy_label(out->label, "Draw distance (1.0 to 2.5)");
-            out->on = false;        /* meaningless for a value row; never read by the drawer */
-            /* Always available. This row edits a setting file rather than reaching into the
-               game, so it works with no level loaded and whether or not view_distance_fix is
-               even installed. What it cannot do is show that the fix is missing, since asking
-               would mean depending on it. */
-            out->available = true;
-            if (model.editing_value && model.editing_value_row == VIEW_RANGE_ROW_ID) {
-                _snprintf(out->value, sizeof out->value, "%s_", model.value_edit_buf);
-            } else {
-                view_range_row_format(view_range_row_get(), out->value, sizeof out->value);
-            }
-            out->value[sizeof out->value - 1] = '\0';
-            return;
-        }
-        if (id == AUTO_RANGE_ROW_ID) {
-            out->kind = OVERLAY_ROW_CHEAT;
-            copy_label(out->label, "Draw distance follows the frame rate");
-            out->on = auto_range_row_get();
-            /* Always available, same as the row above and for the same reason: it edits a setting
-               file rather than reaching into the game, so it answers with no level loaded and
-               whether or not view_distance_fix is installed at all. */
-            out->available = true;
-            return;
-        }
-        if (id == PIXEL_FOG_ROW_ID) {
-            out->kind = OVERLAY_ROW_CHEAT;
-            copy_label(out->label, "Fog drawn per pixel");
-            out->on = pixel_fog_row_get();
-            out->available = true;
-            return;
-        }
-        if (id == FOG_FOLLOW_ROW_ID) {
-            out->kind = OVERLAY_ROW_CHEAT;
-            copy_label(out->label, "Fog follows the draw distance");
-            out->on = fog_follow_row_get();
-            /* The one row in this group whose availability is not about something resolving. It is
-               unavailable while the fog is per vertex, where the band it edits has only one usable
-               value, and the row shows that value rather than pretending it can be moved. */
-            out->available = fog_follow_row_available();
-            return;
-        }
-        if (id == DEV_MENU_SIZE_ROW_ID) {
-            out->kind = OVERLAY_ROW_VALUE;
-            /* The range is in the label for the same reason the draw distance row states its own:
-               a refused number is a poor way to learn what the limits are. */
-            copy_label(out->label, "Dev menu size (0.33 to 4.0)");
-            out->on = false;        /* meaningless for a value row; never read by the drawer */
-            /* Always available. It edits how this panel is drawn and a settings file, and reaches
-               into no engine site at all, so there is nothing that could fail to resolve. */
-            out->available = true;
-            if (model.editing_value && model.editing_value_row == DEV_MENU_SIZE_ROW_ID) {
-                _snprintf(out->value, sizeof out->value, "%s_", model.value_edit_buf);
-            } else {
-                dev_menu_size_row_format(dev_menu_size_row_get(), out->value, sizeof out->value);
-            }
-            out->value[sizeof out->value - 1] = '\0';
             return;
         }
         if (model.freecam_info_expanded && id >= FREECAM_LINE_FIRST_ID &&
@@ -760,8 +679,10 @@ bool overlay_model_activate(uint32_t index)
     if (row.kind == OVERLAY_ROW_HOTKEY) {
         /* Starts a capture; does not bind anything itself. overlay_input.c routes the next
          * key-down to overlay_model_capture_hotkey() while this is true, rather than that key
-         * reaching its usual handling. */
+         * reaching its usual handling. The row is remembered because there is more than one that
+         * binds a key, and the capture has to land on the one that was clicked. */
         model.capturing_hotkey = true;
+        model.capturing_hotkey_row = row.id;
         return true;
     }
     if (row.kind == OVERLAY_ROW_VALUE) {
@@ -773,22 +694,6 @@ bool overlay_model_activate(uint32_t index)
         model.value_edit_buf[0] = '\0';
         return true;
     }
-    if (row.id == PIXEL_FOG_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
-        return pixel_fog_row_set(!pixel_fog_row_get());
-    }
-    if (row.id == FOG_FOLLOW_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
-        /* Refuses while unavailable, the same as it refuses a file it could not write: both end
-           with the row where it was, which is where the game is. */
-        return fog_follow_row_set(!fog_follow_row_get());
-    }
-    if (row.id == AUTO_RANGE_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
-        /* Caught here for the same reason the action row below is: this id belongs to a setting
-         * file rather than to cheats_own_id_t, so falling through to the group's switch would ask
-         * cheats_openphantom_toggle() for an id its own bounds check refuses and the click would
-         * silently do nothing. Refuses when the file could not be written, so the row stays where
-         * it was rather than showing a state the game is not in. */
-        return auto_range_row_set(!auto_range_row_get());
-    }
     if (row.kind == OVERLAY_ROW_ACTION && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
         /* The only OpenPhantom row that is an action rather than a toggle - checked here, before
          * the switch below, for the same reason HOTKEY/VALUE are: cheats_openphantom_toggle()
@@ -796,6 +701,10 @@ bool overlay_model_activate(uint32_t index)
         return cheats_openphantom_end_level_invoke();
     }
     switch ((overlay_group_t)row.group) {
+    case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
+        /* Every switch in that group, answered by the group itself. The two edit kinds above have
+         * already been taken, so what reaches here is a plain toggle. */
+        return overlay_utilities_toggle(row.id - UTILITIES_FIRST_ID);
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
         return true;
@@ -822,10 +731,20 @@ bool overlay_model_is_capturing_hotkey(void)
 
 void overlay_model_capture_hotkey(int32_t virtual_key)
 {
+    uint32_t row;
+
     if (!model.capturing_hotkey) {
         return;
     }
+    row = model.capturing_hotkey_row;
     model.capturing_hotkey = false;
+    if (row >= UTILITIES_FIRST_ID) {
+        /* A refusal leaves the binding alone and the row shows the key it still has, which is the
+         * same shape the value rows use for text that is not a number. The refused keys are the
+         * ones that would leave the panel unopenable or unusable; see open_key_row.c. */
+        (void)overlay_utilities_bind(row - UTILITIES_FIRST_ID, virtual_key);
+        return;
+    }
     cheats_openphantom_freecam_set_hotkey(virtual_key);
 }
 
@@ -885,28 +804,10 @@ void overlay_model_value_commit(void)
         return;      /* nothing was typed, leave whatever value was already set alone */
     }
 
-    if (row == DEV_MENU_SIZE_ROW_ID) {
-        float parsed;
-
-        /* The same refusal as the draw distance row below, and it matters more here: text that
-         * is not a number becoming a zero would clamp to the smallest panel, so a typing mistake
-         * would shrink the thing being typed into. */
-        if (dev_menu_size_row_parse(model.value_edit_buf, &parsed)) {
-            (void)dev_menu_size_row_set(parsed);
-        }
-        return;
-    }
-
-    if (row == VIEW_RANGE_ROW_ID) {
-        float parsed;
-
-        /* Parsed by view_range_row.c rather than by atof, which reads a full stop as a decimal
-         * point only where the locale agrees it is one. Text that is not a number is refused
-         * outright rather than becoming a zero the clamp would quietly turn into the minimum,
-         * which is a value the player never asked for. */
-        if (view_range_row_parse(model.value_edit_buf, &parsed)) {
-            (void)view_range_row_set(parsed);
-        }
+    if (row >= UTILITIES_FIRST_ID) {
+        /* Every typed row in that group, parsed and written by the group itself. A refusal leaves
+         * the setting alone, which is what the row then shows. */
+        (void)overlay_utilities_commit(row - UTILITIES_FIRST_ID, model.value_edit_buf);
         return;
     }
 

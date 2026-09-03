@@ -3,6 +3,17 @@
  * The entry points it paints through are resolved in overlay_sites.c; what is here is only
  * what the panel looks like. Every proportion is a multiple of the measured text height and
  * lives in overlay_layout.c, so this file holds colour, order and the shapes themselves.
+ *
+ * SIZE NOTE. Over six hundred lines, and it crossed on the change that made the panel size itself
+ * to its widest name and chip rather than to a fixed allowance. What is long is the reasoning
+ * attached to the colours and the shapes: why a chip is absent rather than grey, why an inactive
+ * tab gets no fill, why the leader is drawn only across the gap it belongs to. Each of those was
+ * arrived at by trying the other thing, and deleting the account of it would leave a wall of
+ * rectangles nobody can safely change.
+ *
+ * THE SEAM, if it grows again, is overlay_draw_paint() itself: the title band, the tabs and the
+ * search field are three blocks that share nothing with the row list below them but the layout
+ * they are measured against, and any of them would move out whole.
  */
 #include "overlay_draw.h"
 
@@ -311,19 +322,90 @@ static const char *openphantom_name(uint32_t i)
     return cheats_openphantom_name((cheats_own_id_t)i);
 }
 
-/* The widest NAME the tab can ever show, over ALL its rows rather than the visible ones. Measured
- * over the visible ones, the panel would change width on every keystroke and every fold. The
- * Original tab holds two groups now, so both are measured whether or not either is folded open. */
+/* The width the panel has to find room for, measured from the rows that are ON SCREEN rather than
+ * from any one source's list.
+ *
+ * It used to ask the cheat sources for their names, which was right while every row in a tab was a
+ * cheat and quietly wrong afterwards: the rows this panel adds itself, the settings and the
+ * actions and the folded notes, were never measured, so the panel was sized to fit the names it
+ * knew about and drew the rest clipped. Reported as an ellipsis in the middle of four rows.
+ *
+ * Asking the model instead means a label added anywhere is measured by the fact of being drawn,
+ * which is the only version of this that cannot fall out of step again. The cheat lists are still
+ * measured underneath it so that a folded tab is no narrower than an open one, which keeps the
+ * panel from changing width as groups are opened. */
 static float widest_name(void)
 {
-    float widest = 0.0f;
+    float    widest = 0.0f;
+    uint32_t count  = overlay_model_row_count();
+    uint32_t i;
 
     if (overlay_model_tab() == OVERLAY_TAB_ORIGINAL) {
         widest = widen_over(widest, cheats_original_count(), original_toggle_name);
         widest = widen_over(widest, (uint32_t)CHEATS_ACTION_COUNT, original_action_name);
-        return widest;
+    } else {
+        widest = widen_over(widest, (uint32_t)CHEATS_OWN_COUNT, openphantom_name);
     }
-    return widen_over(widest, (uint32_t)CHEATS_OWN_COUNT, openphantom_name);
+
+    for (i = 0; i < count; ++i) {
+        overlay_row_t row;
+
+        if (!overlay_model_row(i, &row)) {
+            continue;
+        }
+        /* A group heading is indented less than a row is, so it needs less room for the same
+         * text; measuring it against a row's indent is the safe direction to be wrong in. */
+        if (text_width(row.label) > widest) {
+            widest = text_width(row.label);
+        }
+    }
+    return widest;
+}
+
+/* The word in a row's chip. One function because two places need it and they have to agree: the
+ * drawing below, and the measurement above it that sizes the panel to fit. They were two copies of
+ * the same conditional for one commit, which is one commit longer than that is safe. */
+static const char *chip_word(const overlay_row_t *row)
+{
+    const bool is_action = (row->kind == OVERLAY_ROW_ACTION || row->kind == OVERLAY_ROW_HOTKEY ||
+                            row->kind == OVERLAY_ROW_VALUE);
+
+    return !row->available    ? "n/a"
+         : row->pending       ? "QUEUED"
+         : row->value[0] != 0 ? row->value    /* e.g. the graphics detail level */
+         : is_action          ? "RUN"
+         : row->on            ? "ON" : "OFF";
+}
+
+/* The widest CHIP the tab can show, which the panel has to find room for beside the widest name.
+ *
+ * Measured rather than assumed, because the assumption was wrong by a factor of four. The layout
+ * used to fold "the widest state chip" into one fixed allowance, which fits a chip reading "RUN"
+ * and does not fit one reading "auto 1.00x", so the longest label was drawn clipped even after the
+ * width ceiling was raised for it. The words are chosen exactly as the row drawing below chooses
+ * them, so what is measured is what is drawn. */
+static float widest_chip(void)
+{
+    float    widest = 0.0f;
+    uint32_t count  = overlay_model_row_count();
+    uint32_t i;
+
+    for (i = 0; i < count; ++i) {
+        overlay_row_t row;
+        float         w;
+
+        if (!overlay_model_row(i, &row)) {
+            continue;
+        }
+        if (row.kind == OVERLAY_ROW_GROUP || row.kind == OVERLAY_ROW_INFO) {
+            continue;              /* neither draws a chip: full width text */
+        }
+        w = text_width(chip_word(&row));
+        if (w > widest) {
+            widest = w;
+        }
+    }
+    return widest;
 }
 
 bool overlay_draw_paint(void)
@@ -347,8 +429,9 @@ bool overlay_draw_paint(void)
     for (i = 0; i < OVERLAY_LAYOUT_TABS; ++i) {
         tab_word[i] = text_width(TAB_TITLE[i]);
     }
-    overlay_layout_build(measured_text_height(), widest_name(), overlay_model_row_count(),
-                         tab_word, *draw_state.screen_w, *draw_state.screen_h);
+    overlay_layout_build(measured_text_height(), widest_name() + widest_chip(),
+                         overlay_model_row_count(), tab_word,
+                         *draw_state.screen_w, *draw_state.screen_h);
 
     lay = *overlay_layout();
     left = lay.left;
@@ -497,11 +580,7 @@ bool overlay_draw_paint(void)
              * still needs it. */
             const bool  is_action = (row.kind == OVERLAY_ROW_ACTION || row.kind == OVERLAY_ROW_HOTKEY ||
                                      row.kind == OVERLAY_ROW_VALUE);
-            const char *word = !row.available    ? "n/a"
-                             : row.pending        ? "QUEUED"
-                             : row.value[0] != 0  ? row.value    /* e.g. the graphics detail level */
-                             : is_action          ? "RUN"
-                             : row.on             ? "ON" : "OFF";
+            const char *word = chip_word(&row);
             const float chip_w = text_width(word) + lay.text_h;
             const float chip_x1 = right - EDGE_PAD * lay.text_h;
             const float chip_x0 = chip_x1 - chip_w;

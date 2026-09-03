@@ -161,8 +161,12 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 # executable neither of them could resolve.
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
+    dev_overlay/fog_band_row.c
+    dev_overlay/overlay_key_name.c
+    dev_overlay/overlay_utilities.c
+    dev_overlay/open_key_row.c
     dev_overlay/fog_follow_row.c
-    dev_overlay/pixel_fog_row.c
+    dev_overlay/fog_fov_row.c
     dev_overlay/auto_range_row.c
     dev_overlay/view_range_row.c
     dev_overlay/dev_menu_size_row.c

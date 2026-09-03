@@ -37,6 +37,7 @@ typedef enum overlay_group {
     OVERLAY_GROUP_ORIGINAL_TOGGLES = 0,
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
     OVERLAY_GROUP_OPENPHANTOM,
+    OVERLAY_GROUP_OPENPHANTOM_UTILITIES,
     OVERLAY_GROUP_COUNT
 } overlay_group_t;
 
@@ -62,7 +63,11 @@ typedef struct overlay_row {
     bool               pending;     /* actions only: queued to run when the panel closes, not yet
                                       * run - see cheats_original_actions.h for why the four
                                       * play-as codes work this way and nothing else does */
-    char               value[8];    /* actions: only for the one that has a number worth showing on
+    /* Sixteen, not eight. Eight fitted "2.50x" and every state word, and then the dev menu
+     * size row began reporting "auto 1.33x" and a player read "auto 1." - a truncation with no
+     * ellipsis, in the one place a number was the whole point of the row. Nothing here is a fixed
+     * width in the file format sense, so the cost of the slack is a few bytes per row. */
+    char               value[16];   /* actions: only for the one that has a number worth showing on
                                       * its own chip instead of RUN. hotkeys: the bound key's short
                                       * name, "..." while capturing, or empty when unbound. Empty
                                       * otherwise. */

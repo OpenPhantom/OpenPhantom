@@ -12,7 +12,10 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once - typed, in retail, one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** lists the three this project adds.
+* **OpenPhantom** holds two groups as well, split the same way and for the same reason the
+  Original tab is: **Cheats** are the things that change the game, **Utilities** are the settings
+  that configure this patch. It began as one group with a settings row appended, and the settings
+  outgrew the cheats, so a reader had to scroll past invincibility to reach the draw distance.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
@@ -298,7 +301,7 @@ which.
 
 ## The draw distance row
 
-The OpenPhantom tab's second to last row edits `[view_distance_fix] ViewRangeScale`, the draw
+The first row under **Utilities** edits `[view_distance_fix] ViewRangeScale`, the draw
 distance, typed
 in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`, so it
 is learned from the row rather than by having a number refused.
@@ -316,9 +319,49 @@ read `2.50x` while the game is really drawing at `1.00x`. Reporting the live val
 `view_distance_fix` for it, which is the dependency above. The watchdog announces itself in
 `engine_fixes.log` when it brakes, which is where that answer lives instead.
 
+## The fog rows
+
+Three rows under **Utilities**, all of them `[view_distance_fix]` keys the fog reads while the game
+runs, so each takes effect within about a second and none needs a restart.
+
+`Fog thickness` is `FogBandScale`, and it is the only setting in the whole fog path that can bring
+the band NEARER. Every other term decides where the fog has to be so that it is solid before the
+geometry stops; this one says how much sooner than that a player wants it, which is taste. Both
+ends of the band move together, so a level's authored proportions survive.
+
+`Fog follows the field of view` is `FogFollowFov`, and `Fog follows the draw distance` is
+`AuthoredFogBand`, inverted: the key asks whether the band is left alone, the row asks whether it
+moves, because moving is the behaviour a player is looking for after raising the draw distance and
+finding the world stops short of the fog. Turning it off takes the field-of-view row out of use,
+since a band left alone is scaled by nothing, and that row then reports itself `n/a` rather than
+reading as a switch that does nothing.
+
+Which half of the engine draws the fog is deliberately NOT here. `FogImplementation` is read once at
+startup, because the two implementations differ in device state the engine only programs at a level
+load, and switching while a level is up leaves nothing fogged at all.
+
+## The key that opens this menu
+
+The last row under **Utilities** binds `[dev_overlay] OpenKey`. Click it, press a key, and it is
+bound in the running panel and written to the ini, so the next start already has it.
+
+**The default accepts three keys**: F6, and the key directly below Escape, which is the backtick on
+a British or American layout and the caret on a German one. That last key has been the way in since
+this panel existed and is kept, but by itself it cannot cover a layout where the key below Escape is
+neither of those. F6 is in the same place on every keyboard and the retail game binds nothing to it.
+
+**F5 would have been the obvious choice and is taken.** The retail default key table binds it to
+`CONTROL_FN_09`, read by the player's own weapons and force handler. The game reads its keys as
+DirectInput scancodes and never sees the window messages this panel hooks, so a shared key would do
+both things at once rather than one of them.
+
+**Seven keys are refused**, all of which would lock a player out: Escape and Return and the four
+arrows, which drive the panel itself, and F4, so that Alt+F4 stays a way to quit. Keys the game uses
+are allowed, and both things then happen.
+
 ## The dev menu size row
 
-The last row of the OpenPhantom tab edits `[dev_overlay] DevMenuSize`, which is how much bigger
+The second to last row under **Utilities** edits `[dev_overlay] DevMenuSize`, which is how much bigger
 than its authored size this menu is drawn. Typed in like the two rows above it, with the accepted
 range, `0.33 to 4.0`, in the label.
 
@@ -333,8 +376,9 @@ number this can default to that is right everywhere, which is why it is a row an
 
 **It takes effect on the next frame, and it moves itself while it is being used.** Committing a
 value redraws the menu at the new size immediately, including the row that was just typed into,
-which is why this row is last: a control that moves while you are working it is easier to find
-again at the bottom of a group than in the middle of one.
+which is why this row is near the bottom: a control that moves while you are working it is easier
+to find again at the end of a group than in the middle of one. Only the key binding sits below it,
+and that one is used once.
 
 **The value is owned by `dev_menu_size_row.c`, not by the drawing.** The row is asked for the
 current scale on every frame and answers from memory, reading the ini only on the first ask of a
@@ -347,7 +391,7 @@ this row works whatever else is or is not in the `mods` folder.
 | Key | Default | Meaning |
 |---|---|---|
 | `Enabled` | `1` | |
-| `OpenKey` | `0` | The virtual key that opens the panel. `0` accepts whichever key sits below Escape: the caret on a German layout, the backtick on a British one. |
+| `OpenKey` | `0` | The virtual key that opens the panel. `0` accepts F6 and whichever key sits below Escape: the caret on a German layout, the backtick on a British one. Written by the panel's own key-binding row. |
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
 | `DevMenuSize` | `0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
 | `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice rather than being edited here. |

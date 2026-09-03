@@ -1,3 +1,9 @@
+/* SIZE NOTE. Over six hundred lines, and it was already over before the key this panel opens on
+ * became something a player can rebind. What is long is the account of the window procedure: which
+ * messages the game reads and which it does not, why a key has to be swallowed rather than passed
+ * on, and what Alt does to a message that looks like an ordinary keypress. The seam, if it grows,
+ * is the pointer and click handling, which shares only the detour with the keyboard half.
+ */
 /* overlay_input.c: one detour that opens the panel, drives it, and locks the game while it is up.
  *
  * ==============================================================================================
@@ -158,7 +164,19 @@ static bool is_key_down(int32_t message)
     return message == MSG_KEY_DOWN || message == MSG_SYS_KEY_DOWN;
 }
 
-/* Zero means "whatever sits below Escape on this keyboard", which is the default. */
+/* F6, chosen because the retail default key table binds every other key this panel might have
+ * taken and does not bind this one. F5 was the obvious candidate and is taken: it is CONTROL_FN_09,
+ * read by the player's own weapons and force handler. Since the game reads its keys as DirectInput
+ * scancodes and never sees the messages this file hooks, a shared key would do both things at once
+ * rather than one of them, so an unbound key is the only safe default. F4 was also unavailable,
+ * being the free camera's own way out, and F12 was avoided because Steam takes screenshots with it.
+ */
+#define OPEN_KEY_FUNCTION 0x75
+
+/* Zero means the default, which is F6 OR whatever sits below Escape on this keyboard. Three keys
+ * rather than one because the key below Escape has been the way in since this panel existed and
+ * removing it would strand anyone used to it, while by itself it cannot cover a layout where that
+ * key is neither the backtick nor the caret. F6 is the same on every keyboard there is. */
 static int32_t configured_key;
 
 static bool is_open_key(int32_t wparam)
@@ -166,7 +184,8 @@ static bool is_open_key(int32_t wparam)
     if (configured_key != 0) {
         return wparam == configured_key;
     }
-    return wparam == KEY_BELOW_ESCAPE_DE || wparam == KEY_BELOW_ESCAPE_US;
+    return wparam == OPEN_KEY_FUNCTION ||
+           wparam == KEY_BELOW_ESCAPE_DE || wparam == KEY_BELOW_ESCAPE_US;
 }
 
 void overlay_input_set_key(int32_t virtual_key)

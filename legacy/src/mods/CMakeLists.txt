@@ -253,8 +253,12 @@ target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
+    fog_band_row.c
+    overlay_key_name.c
+    overlay_utilities.c
+    open_key_row.c
     fog_follow_row.c
-    pixel_fog_row.c
+    fog_fov_row.c
     auto_range_row.c
     view_range_row.c
     dev_menu_size_row.c

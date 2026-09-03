@@ -60,6 +60,7 @@ static int first_row_is_group(void)
 int main(void)
 {
     overlay_row_t row;
+    bool          per_pixel = false;   /* what the row above the band row reads, captured there */
 
     ut_section("the search, which is pure and is where the quiet mistakes live");
     ut_check(overlay_model_matches("turntables", ""), "an empty search matches everything");
@@ -97,11 +98,11 @@ int main(void)
              "the OpenPhantom tab holds one group, and it starts folded too");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 8u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 9u,
              "unfolding shows the heading, this project's cheats, the jump-boost scale row, the "
              "free-camera teleport key row, the fly-controls note, the skip-to-next-level action "
-             "and the draw distance, its automation switch and the dev menu size rows appended "
-             "after them");
+             "and the draw distance, its automation switch, the two fog rows and the dev menu "
+             "size row appended after them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
@@ -223,16 +224,28 @@ int main(void)
              "available with nothing resolved, the same as the draw distance row it governs: it "
              "edits a setting file rather than the running game");
 
-    ut_section("the fog band row, beside the two settings it belongs with");
+    ut_section("the fog rows, beside the settings they belong with");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 7u, &row) &&
                  row.kind == OVERLAY_ROW_CHEAT,
-             "a switch, since the band is either the level's own or it is scaled");
-    ut_check(strcmp(row.label, "Authored fog, drawn per pixel") == 0,
+             "a switch, since the fog is drawn either per pixel or per vertex");
+    ut_check(strcmp(row.label, "Fog drawn per pixel") == 0,
              "named for what it selects rather than for the machinery behind either answer");
     ut_check(row.available, "available with nothing resolved, like the two rows above it");
+    per_pixel = row.on;
+
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 8u, &row) &&
+                 row.kind == OVERLAY_ROW_CHEAT,
+             "and the band row under it is a switch too, since the band either follows the draw "
+             "distance or is the level's own");
+    ut_check(strcmp(row.label, "Fog follows the draw distance") == 0,
+             "named for the behaviour a player is looking for rather than for the ini key, which "
+             "asks the opposite question");
+    ut_check(row.available == per_pixel,
+             "available exactly while the fog is drawn per pixel: on the engine's own ramp the "
+             "band has one usable value and the row shows it rather than offering to move it");
 
     ut_section("the dev menu size row, last of the group's fixed rows");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 8u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 9u, &row) &&
                  row.kind == OVERLAY_ROW_VALUE,
              "a typed value row, the third this group holds, and the last row of all while the "
              "fold is shut, since the fold's own lines are the only rows that ever join the group");
@@ -250,7 +263,7 @@ int main(void)
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 1u + (uint32_t)CHEATS_OWN_COUNT + 8u + 9u,
+                 1u + (uint32_t)CHEATS_OWN_COUNT + 9u + 9u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
              "the fold's own summary and its nine lines, the skip-to-next-level action, the draw "
              "distance row and the dev menu size row are all on screen");
@@ -290,9 +303,12 @@ int main(void)
                  strcmp(row.label, "Draw distance follows the frame rate") == 0,
              "then the switch that governs it, which is where it reads");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 16u, &row) &&
-                 strcmp(row.label, "Authored fog, drawn per pixel") == 0,
-             "then the fog band switch, beside the two it belongs with");
+                 strcmp(row.label, "Fog drawn per pixel") == 0,
+             "then the two fog switches, beside the settings they belong with");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 17u, &row) &&
+                 strcmp(row.label, "Fog follows the draw distance") == 0,
+             "the band row under the one that governs whether it can be moved");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 18u, &row) &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "and the dev menu size row last, which is the whole group accounted for");
 
@@ -300,7 +316,7 @@ int main(void)
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 8u,
+    ut_check(overlay_model_row_count() == 1u + (uint32_t)CHEATS_OWN_COUNT + 9u,
              "its nine lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");

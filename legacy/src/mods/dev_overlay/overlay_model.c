@@ -23,8 +23,9 @@
  */
 #include "overlay_model.h"
 
-#include "authored_fog_row.h"
 #include "auto_range_row.h"
+#include "fog_follow_row.h"
+#include "pixel_fog_row.h"
 #include "view_range_row.h"
 #include "dev_menu_size_row.h"
 
@@ -157,17 +158,23 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
  * just set a draw distance is exactly the reader who wants to know whether it will stay there. */
 #define AUTO_RANGE_ROW_ID (VIEW_RANGE_ROW_ID + 1u)
 
-/* Which fog band the game computes, one past the automation switch. Beside those two because all
- * three are properties of how far the world is drawn and how it is hidden, and a reader comparing
- * them wants them together rather than scattered. */
-#define AUTHORED_FOG_ROW_ID (AUTO_RANGE_ROW_ID + 1u)
+/* How the fog is drawn, one past the automation switch. Beside those two because all of them are
+ * properties of how far the world is drawn and how it is hidden, and a reader comparing them wants
+ * them together rather than scattered. */
+#define PIXEL_FOG_ROW_ID (AUTO_RANGE_ROW_ID + 1u)
+
+/* Whether the band follows the draw distance, directly under the row that decides how the fog is
+ * drawn. Under rather than above because the row above governs it: per-vertex fog has no usable
+ * answer but "follows", so this row goes unavailable there rather than offering a state the game
+ * will not enter. */
+#define FOG_FOLLOW_ROW_ID (PIXEL_FOG_ROW_ID + 1u)
 
 /* The dev menu's own size, one past the draw distance row and last of the group's fixed rows.
  * Last because it is the only row whose effect is the menu itself: changing it moves every row
  * including this one, and a control that moves while it is being used is easier to find again at
  * the bottom than in the middle. Labelled for the thing a player already has a name for, the dev
  * menu, rather than for the panel it is drawn on. */
-#define DEV_MENU_SIZE_ROW_ID (AUTHORED_FOG_ROW_ID + 1u)
+#define DEV_MENU_SIZE_ROW_ID (FOG_FOLLOW_ROW_ID + 1u)
 
 /* The fold's own lines, past every fixed row above. Their ids are the tail of this id space
  * because the tail is the only part of it that may change size, but the tail is NOT where they
@@ -392,20 +399,22 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +8, one for each row this group holds that is not one of its own cheats: the jump-boost
+        /* +9, one for each row this group holds that is not one of its own cheats: the jump-boost
          * scale row, inserted right after jump boost's own toggle row; the free-camera teleport key
          * row, which takes over free camera's own (now shifted) numeric slot; the "how to fly"
          * fold, one past where free camera itself now sits; "Skip to next level", one past that;
          * the draw distance row, one past THAT; the switch that says whether the draw distance may
-         * move itself, directly under the row it governs; and the dev menu size row, last of the
-         * seven. See JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID/
-         * VIEW_RANGE_ROW_ID/AUTO_RANGE_ROW_ID/DEV_MENU_SIZE_ROW_ID and their own handling in
-         * source_row() below. The fold's own lines add FREECAM_INFO_LINE_COUNT more only while it
-         * is open, the same shape a group's own child count already uses in append_group() below.
+         * move itself; the two fog rows under it, one for how the fog is drawn and one for whether
+         * its band follows the draw distance; and the dev menu size row, last of the nine. See
+         * JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID/
+         * VIEW_RANGE_ROW_ID/AUTO_RANGE_ROW_ID/PIXEL_FOG_ROW_ID/FOG_FOLLOW_ROW_ID/
+         * DEV_MENU_SIZE_ROW_ID and their own handling in source_row() below. The fold's own lines
+         * add FREECAM_INFO_LINE_COUNT more only while it is open, the same shape a group's own
+         * child count already uses in append_group() below.
          *
          * This number and the row ids above move together. Adding a row and forgetting this
          * leaves the new row built but never drawn, which is what happened when one was added. */
-        return (uint32_t)CHEATS_OWN_COUNT + 8u +
+        return (uint32_t)CHEATS_OWN_COUNT + 9u +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
 }
@@ -577,11 +586,21 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->available = true;
             return;
         }
-        if (id == AUTHORED_FOG_ROW_ID) {
+        if (id == PIXEL_FOG_ROW_ID) {
             out->kind = OVERLAY_ROW_CHEAT;
-            copy_label(out->label, "Authored fog, drawn per pixel");
-            out->on = authored_fog_row_get();
+            copy_label(out->label, "Fog drawn per pixel");
+            out->on = pixel_fog_row_get();
             out->available = true;
+            return;
+        }
+        if (id == FOG_FOLLOW_ROW_ID) {
+            out->kind = OVERLAY_ROW_CHEAT;
+            copy_label(out->label, "Fog follows the draw distance");
+            out->on = fog_follow_row_get();
+            /* The one row in this group whose availability is not about something resolving. It is
+               unavailable while the fog is per vertex, where the band it edits has only one usable
+               value, and the row shows that value rather than pretending it can be moved. */
+            out->available = fog_follow_row_available();
             return;
         }
         if (id == DEV_MENU_SIZE_ROW_ID) {
@@ -754,8 +773,13 @@ bool overlay_model_activate(uint32_t index)
         model.value_edit_buf[0] = '\0';
         return true;
     }
-    if (row.id == AUTHORED_FOG_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
-        return authored_fog_row_set(!authored_fog_row_get());
+    if (row.id == PIXEL_FOG_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
+        return pixel_fog_row_set(!pixel_fog_row_get());
+    }
+    if (row.id == FOG_FOLLOW_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
+        /* Refuses while unavailable, the same as it refuses a file it could not write: both end
+           with the row where it was, which is where the game is. */
+        return fog_follow_row_set(!fog_follow_row_get());
     }
     if (row.id == AUTO_RANGE_ROW_ID && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
         /* Caught here for the same reason the action row below is: this id belongs to a setting

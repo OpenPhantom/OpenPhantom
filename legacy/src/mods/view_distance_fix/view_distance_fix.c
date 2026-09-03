@@ -262,7 +262,7 @@ static void load_config(void)
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
     config->pixel_fog           = ini_read_bool (VIEW_DISTANCE_SECTION, "PixelFog", true);
-    config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", true);
+    config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
      *

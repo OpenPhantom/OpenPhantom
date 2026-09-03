@@ -507,8 +507,9 @@ static void current_cut(float *reference, float *live)
 
 static void target_now(fog_regime_band_t *out)
 {
-    float reference;
-    float live;
+    fog_regime_config_t effective;
+    float               reference;
+    float               live;
 
     /* NO OBSERVATION YET MEANS NO OPINION. A level that has just loaded has not been walked, so
      * there is no cut edge to reason from, and the fallback used to be the level's own authored
@@ -526,8 +527,22 @@ static void target_now(fog_regime_band_t *out)
         return;
     }
 
+    /* The authored band is only on offer while the device is doing the fogging. On the engine's
+     * own per-vertex ramp the band is the only thing hiding the edge the world stops at, and two
+     * of the eleven levels author fog that ends beyond anything the engine draws: Coruscant covers
+     * none of its own edge and the Federation ship five per cent. The ramp therefore always gets
+     * the scaled band, which is also what OpenPhantom shipped. The panel refuses the same pair, so
+     * a player reading the rows and the game running them agree.
+     *
+     * Read from pixel_fog_active rather than from the request, because a device that cannot fog
+     * per pixel leaves the request set and falls back, and it is the fallback that needs cover. */
+    effective = fog_state.config;
+    if (!fog_state.pixel_fog_active) {
+        effective.authored_band = false;
+    }
+
     current_cut(&reference, &live);
-    fog_regime_target_band(&fog_state.config, &fog_state.authored,
+    fog_regime_target_band(&effective, &fog_state.authored,
                            fog_state.horizontal_fov_degrees, reference, live, out);
 }
 

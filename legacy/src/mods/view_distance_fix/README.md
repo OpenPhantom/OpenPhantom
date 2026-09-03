@@ -37,7 +37,8 @@ order of thing from a per-object syscall.
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
 | `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below. The fallback now, not the answer |
-| `PixelFog` | `0` | | let the device fog per pixel instead; needs table fog and w fog, falls back to the ramp |
+| `PixelFog` | `1` | | let the device fog per pixel instead; needs table fog and w fog, falls back to the ramp |
+| `AuthoredFogBand` | `1` | | use each level's band untouched, ignoring every scaling term above |
 | `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |

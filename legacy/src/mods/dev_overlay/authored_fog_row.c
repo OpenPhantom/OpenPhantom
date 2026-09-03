@@ -12,7 +12,7 @@ bool authored_fog_row_get(void)
     /* The band is what the row reads, because it is the half that decides what the fog looks
      * like. The delivery below moves with it rather than being asked about separately: a state
      * where one is set and the other is not is neither of the two answers this row offers. */
-    return ini_read_bool(VIEW_DISTANCE_SECTION, AUTHORED_FOG_KEY, false);
+    return ini_read_bool(VIEW_DISTANCE_SECTION, AUTHORED_FOG_KEY, true);
 }
 
 bool authored_fog_row_set(bool authored)

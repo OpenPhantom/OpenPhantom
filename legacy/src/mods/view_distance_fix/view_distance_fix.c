@@ -254,15 +254,15 @@ static void load_config(void)
 
     config->enabled             = ini_read_bool (VIEW_DISTANCE_SECTION, "Enabled", true);
     config->view_range_scale    = ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale", 1.0f);
-    config->frame_backoff       = ini_read_bool (VIEW_DISTANCE_SECTION, "FrameBackoff", false);
+    config->frame_backoff       = ini_read_bool (VIEW_DISTANCE_SECTION, "FrameBackoff", true);
     config->backoff_fps         = ini_read_float(VIEW_DISTANCE_SECTION, "BackoffFps", 0.0f);
     config->fog_inside_cut      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogInsideCut", true);
     config->fog_follow_fov      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogFollowFov", true);
     config->vertex_fog          = ini_read_bool (VIEW_DISTANCE_SECTION, "VertexFog", true);
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
-    config->pixel_fog           = ini_read_bool (VIEW_DISTANCE_SECTION, "PixelFog", false);
-    config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
+    config->pixel_fog           = ini_read_bool (VIEW_DISTANCE_SECTION, "PixelFog", true);
+    config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", true);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
     /* 1.0, which is the engine's own activation distance and installs no patch at all.
      *

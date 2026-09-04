@@ -18,6 +18,8 @@ add_library(engine_fixes_common STATIC
     cinematic_gate.c
 )
 
-target_include_directories(engine_fixes_common PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(engine_fixes_common PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_BINARY_DIR}/generated)
 
 target_link_libraries(engine_fixes_common PUBLIC kernel32 user32)

@@ -19,6 +19,7 @@ function(add_engine_fix name)
         RUNTIME_OUTPUT_DIRECTORY_DEBUG ${ENGINE_FIX_OUTPUT}/mods
         RUNTIME_OUTPUT_DIRECTORY_RELEASE ${ENGINE_FIX_OUTPUT}/mods
     )
+    add_version_resource(${name})
 endfunction()
 
 

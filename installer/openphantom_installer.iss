@@ -42,7 +42,17 @@
 ;
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
-#define AppVer "1.5"
+;
+; ONE NUMBER FOR THE WHOLE PROJECT. The installer and the patch it carries share this version and
+; are released together, which is what has always happened in practice: every patch release to date
+; has an installer release on the same day, twice over on one of them. Two numbers were tracking one
+; event, so PatchVersion in src\openphantom_patch.iss now repeats this one rather than running its
+; own series.
+;
+; The patch's old v0.x line ends at v0.4.0 and joins this one here. It goes up rather than this one
+; coming down, because a version that moves backwards reads as a downgrade in Add/Remove Programs
+; and in the file properties, and would sit below five releases already published.
+#define AppVer "1.4.1"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"

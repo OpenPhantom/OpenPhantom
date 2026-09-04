@@ -1,6 +1,7 @@
 #include "logging.h"
 
 #include "host_image.h"
+#include "common/version.h"
 
 #include <windows.h>
 
@@ -100,8 +101,9 @@ void log_init(const char *feature_name, bool truncate)
 
         GetLocalTime(&now);
         length = _snprintf(header, sizeof(header),
-                           "OpenPhantom engine fixes  %04d-%02d-%02d %02d:%02d:%02d\r\n"
+                           "OpenPhantom engine fixes %s  %04d-%02d-%02d %02d:%02d:%02d\r\n"
                            "-----------------------------------------------------\r\n",
+                           OPENPHANTOM_VERSION,
                            now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
         if (length > 0) {
             WriteFile(log_state.file, header, (DWORD)length, &written, NULL);

@@ -12,6 +12,10 @@ add_library(dinput SHARED
 
 target_link_libraries(dinput PRIVATE engine_fixes_common)
 
+# Not a fix. It takes the dinput.dll name beside the executable and loads the ones in mods\,
+# so its description says what it is rather than repeating the default.
+add_version_resource(dinput "OpenPhantom loader")
+
 set_target_properties(dinput PROPERTIES
     PREFIX ""
     RUNTIME_OUTPUT_DIRECTORY ${ENGINE_FIX_OUTPUT}

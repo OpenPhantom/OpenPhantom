@@ -17,6 +17,7 @@
 #include "cheats_openphantom.h"
 #include "cheats_original_actions.h"
 #include "overlay_model.h"
+#include "strict_range_row.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -271,8 +272,8 @@ int main(void)
        the utilities heading, which sits directly after the cheats group's last row. */
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 2u + (uint32_t)CHEATS_OWN_COUNT + 4u + 7u,
-             "both headings, the cheats group's own rows, and the seven utilities under the "
+    ut_check(overlay_model_row_count() == 2u + (uint32_t)CHEATS_OWN_COUNT + 4u + 8u,
+             "both headings, the cheats group's own rows, and the eight utilities under the "
              "second heading");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 5u, &row) &&
                  row.kind == OVERLAY_ROW_GROUP,
@@ -302,28 +303,59 @@ int main(void)
              "named for what it does to the row above rather than for the machinery behind it");
     ut_check(row.available, "available for the same reason as the row above it");
 
-    ut_check(overlay_model_row(UTIL_ROW(3), &row) && row.kind == OVERLAY_ROW_VALUE,
+    ut_check(overlay_model_row(UTIL_ROW(3), &row) && row.kind == OVERLAY_ROW_CHEAT,
+             "then the strict switch, beside the automation switch it supersedes rather than "
+             "somewhere else in the list");
+    ut_check(strcmp(row.label, "Keep the draw distance (costs frame rate)") == 0,
+             "named for the trade rather than the machinery, and for the cost a reader meets in "
+             "ordinary play: the watchdog only acts above 1.00x");
+    ut_check(row.available, "available for the same reason as the row above it");
+
+    ut_check(overlay_model_row(UTIL_ROW(4), &row) && row.kind == OVERLAY_ROW_VALUE,
              "then the fog thickness, a typed value since how near the fog sits is a number");
     ut_check(strcmp(row.label, "Fog thickness (0.25 to 1.0)") == 0,
              "named for what a player would call it, carrying its range like the value above");
 
-    ut_check(overlay_model_row(UTIL_ROW(4), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(5), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Fog follows the draw distance") == 0,
              "then whether the band follows the draw distance, which decides what the thickness "
              "above is a share of rather than whether it applies at all");
     ut_check(row.available, "always available: it edits a setting file, like every row here");
 
-    ut_check(overlay_model_row(UTIL_ROW(5), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(6), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "then the dev menu size, the last of the three typed values");
 
-    ut_check(overlay_model_row(UTIL_ROW(6), &row) && row.kind == OVERLAY_ROW_HOTKEY,
+    ut_check(overlay_model_row(UTIL_ROW(7), &row) && row.kind == OVERLAY_ROW_HOTKEY,
              "and the key binding last, a capture rather than a value");
     ut_check(strcmp(row.label, "Key that opens this menu") == 0,
              "named for what it binds, in the words a player would use for it");
     ut_check(strcmp(row.value, "F6 or ~") == 0,
              "an unbound key reads as the default rather than as blank or as one key, since the "
              "default accepts F6 and whatever sits below Escape");
+
+    ut_section("the two draw-distance switches cannot both be on");
+    /* They contradict each other: strict mode declines the governor outright, so a frame-rate
+       switch still reading ON would be describing something that is not happening. This writes the
+       settings file, which is the only channel these rows have, and puts it back afterwards. */
+    if (strict_range_row_set(true)) {
+        overlay_model_rebuild();
+        ut_check(overlay_model_row(UTIL_ROW(2), &row) && !row.available,
+                 "with strict on, the frame-rate switch is greyed rather than left reading ON "
+                 "over a governor that is no longer acting");
+        ut_check(!row.on, "and it reports off, which is the state the game is actually in");
+        ut_check(!overlay_model_activate(UTIL_ROW(2)),
+                 "and it cannot be clicked, so the two can never both be on");
+
+        ut_check(strict_range_row_set(false), "strict goes back off");
+        overlay_model_rebuild();
+        ut_check(overlay_model_row(UTIL_ROW(2), &row) && row.available,
+                 "and the frame-rate switch comes back, because strict never wrote its key: a "
+                 "reader who turns strict on to look at something gets their governor back");
+    } else {
+        ut_check(false,
+                 "the settings file could not be written, so the exclusion was never exercised");
+    }
 
     ut_section("the two groups keep their own typed rows apart");
     /* Both groups hold a value row and a key row, and the panel remembers which row is being

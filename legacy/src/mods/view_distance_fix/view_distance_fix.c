@@ -219,8 +219,9 @@ typedef struct view_distance_config {
     bool  enabled;
     float view_range_scale;
     bool  frame_backoff;
+    bool  strict_view_range;
     float backoff_fps;
-    bool  fog_inside_cut;
+    int   fog_inside_cut;
     bool  fog_follow_fov;
     int   fog_implementation;   /* 0 engine untouched, 1 the per-vertex ramp, 2 per pixel */
     bool  authored_fog;
@@ -291,8 +292,18 @@ static void load_config(void)
     config->enabled             = ini_read_bool (VIEW_DISTANCE_SECTION, "Enabled", true);
     config->view_range_scale    = ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale", 1.0f);
     config->frame_backoff       = ini_read_bool (VIEW_DISTANCE_SECTION, "FrameBackoff", true);
+    config->strict_view_range   = ini_read_bool (VIEW_DISTANCE_SECTION, "StrictViewRange", false);
     config->backoff_fps         = ini_read_float(VIEW_DISTANCE_SECTION, "BackoffFps", 0.0f);
-    config->fog_inside_cut      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogInsideCut", true);
+    /* Read as a NUMBER, and an old ini carrying 1 keeps exactly the behaviour its owner has been
+     * running. 2 is the shipped answer: see fog_regime_depth_limit. */
+    config->fog_inside_cut      = ini_read_int  (VIEW_DISTANCE_SECTION, "FogInsideCut",
+                                                 FOG_END_NO_SATURATION);
+    if (config->fog_inside_cut < FOG_END_UNBOUNDED ||
+        config->fog_inside_cut > FOG_END_NO_SATURATION) {
+        log_warning("FogInsideCut=%d is not one of 0, 1 or 2, so the band ends just beyond the cut "
+                    "as it does by default", config->fog_inside_cut);
+        config->fog_inside_cut = FOG_END_NO_SATURATION;
+    }
     config->fog_follow_fov      = ini_read_bool (VIEW_DISTANCE_SECTION, "FogFollowFov", true);
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
@@ -690,6 +701,33 @@ static void poll_view_range_scale(void)
         }
     }
 
+    /* Strict mode, on the same schedule, so the overlay's row takes effect within the second like
+     * every other row rather than at the next level. Nothing is configured when it changes: the
+     * frame tick reads it directly, and the governor and the watchdog are left installed and
+     * measuring so that turning it back off restores their judgement rather than a stale one. */
+    {
+        bool wanted = ini_read_bool(VIEW_DISTANCE_SECTION, "StrictViewRange",
+                                    view_state.config.strict_view_range);
+
+        if (wanted != view_state.config.strict_view_range) {
+            view_state.config.strict_view_range = wanted;
+            if (wanted) {
+                log_warning("StrictViewRange=1: the draw distance is now held at exactly "
+                            "ViewRangeScale=%.2f and NOTHING will lower it. The cell watchdog "
+                            "still measures and still warns in this file, but it can no longer "
+                            "act, and the draw table overflowing writes over the bucket list "
+                            "heads rather than stopping. See the key's own comment in "
+                            "engine_fixes.ini before leaving this on.",
+                            (double)view_state.config.view_range_scale);
+            } else {
+                log_info("StrictViewRange=0: the frame governor and the cell watchdog have their "
+                         "say over the draw distance again. Any ceiling the watchdog had imposed "
+                         "before strict mode was switched on still stands, because a brake applied "
+                         "to avoid an overflow holds for the rest of the level.");
+            }
+        }
+    }
+
     /* And which fog band to compute, on the same schedule and through the same channel. */
     {
         bool authored = ini_read_bool(VIEW_DISTANCE_SECTION, "AuthoredFogBand",
@@ -759,14 +797,29 @@ static void on_frame(void)
     view_state.two_sided_this_frame = 0;
     poll_view_range_scale();
 
+    /* STRICT MODE, and it is deliberately the first thing after the poll rather than a branch
+     * wrapped around everything below.
+     *
+     * Every term further down either lowers the scale or raises it, and each has a reason. Strict
+     * mode says none of those reasons outrank the number the reader typed, so the honest way to
+     * express it is to assign that number here and then decline each term in turn, rather than to
+     * skip a block and leave whatever the last frame settled on. A scale lowered by the watchdog
+     * before strict was switched on is therefore released on the next frame, which is what a
+     * reader turning it on is asking for. */
+    if (view_state.config.strict_view_range) {
+        view_state.effective_view_scale = view_state.config.view_range_scale;
+    }
+
 
     /* BEFORE the cell watchdog, and handed that watchdog's own ceiling so it can never give back a
      * scale the watchdog refused. The two lower the same number for different reasons: the cell
      * watchdog to stop the draw table overflowing into the bucket list heads, which is a
      * correctness guard, and the governor because the scale is costing more frame time than it is
      * worth. Correctness outranks comfort, so the governor is the one that has to yield. */
-    frame_governor_on_frame(&view_state.effective_view_scale,
-                            view_state.config.view_range_scale, cell_watchdog_ceiling());
+    if (!view_state.config.strict_view_range) {
+        frame_governor_on_frame(&view_state.effective_view_scale,
+                                view_state.config.view_range_scale, cell_watchdog_ceiling());
+    }
 
     /* The opening window raises the draw distance, and it has to be done HERE, after the governor
      * and before the watchdog.
@@ -787,7 +840,7 @@ static void on_frame(void)
      * stale. What is overridden is only the value, and only upward, so a player already asking for
      * more keeps what they asked for. The watchdog runs after and can still refuse the whole
      * thing, which is the order everything else here uses: correctness outranks comfort. */
-    if (fog_regime_level_opening()) {
+    if (fog_regime_level_opening() && !view_state.config.strict_view_range) {
         if (view_state.config.level_open_range > view_state.effective_view_scale) {
             if (!view_state.was_opening) {
                 log_info("level opening: the draw distance is held at x%.2f while the fog is off, "
@@ -804,7 +857,56 @@ static void on_frame(void)
                  (double)view_state.effective_view_scale);
     }
 
-    cell_watchdog_on_frame(&view_state.effective_view_scale);
+    /* A SCRIPTED CAMERA GETS A RADIUS AUTHORED FOR SOMEWHERE ELSE, and this is the correction.
+     *
+     * bapdraw_drawWorld collects cells in a circle centred on the CAMERA's eye, and takes the
+     * radius from bapmat_viewDistance, which reads the override through level+0xA30. That field is
+     * the PLAYER's ground-contact block, copied in from player+0x2CC, and it is the only writer in
+     * the image. While the player drives, the two agree and nobody notices. A cutscene detaches
+     * them: the race opening puts the camera on a clifftop while the player walks the town below,
+     * so the camera is handed the town's 22 and everything beyond 22 units of the CLIFF is never
+     * gathered at all. Cells cross that edge as the shot moves and the geometry blinks.
+     *
+     * Measured rather than reasoned: raising this scale by hand pushed the boundary far out and
+     * took the blinking with it, while the fog, the frame rate, the field of view, the camera
+     * compensation and every buffer in the draw path were each ruled out on their own. The draw
+     * path's own ceilings peak between 1 and 33 per cent during the shot, so nothing is failing;
+     * the cells are simply never asked for.
+     *
+     * Only ever upward, after the governor and before the watchdog, exactly like the opening
+     * window above: a player already asking for more keeps it, and the watchdog can still refuse
+     * the whole thing when the table or the cache is near its limit. */
+    if (view_state.config.cutscene_range > 0.0f && !view_state.config.strict_view_range &&
+        cinematic_gate_script_owns_camera()) {
+        if (view_state.config.cutscene_range > view_state.effective_view_scale) {
+            if (!view_state.was_cutscene) {
+                log_info("scripted camera: the draw distance is held at x%.2f over the x%.2f "
+                         "otherwise in force, because the radius belongs to the player and the "
+                         "circle to the camera",
+                         (double)view_state.config.cutscene_range,
+                         (double)view_state.effective_view_scale);
+            }
+            view_state.effective_view_scale = view_state.config.cutscene_range;
+        }
+        view_state.was_cutscene = true;
+    } else if (view_state.was_cutscene) {
+        view_state.was_cutscene = false;
+        log_info("scripted camera: the draw distance is back at x%.2f",
+                 (double)view_state.effective_view_scale);
+    }
+
+    device_dither_on_frame();
+    if (view_state.config.strict_view_range) {
+        /* The watchdog still runs, on a copy. It keeps measuring both walls, keeps its own ceiling
+         * current for the moment strict mode is switched off again, and keeps warning in the log;
+         * what it cannot do is move the number the reader asked for. That is the whole of the
+         * setting, and it is the dangerous half: see the key's comment in engine_fixes.ini. */
+        float measured_only = view_state.effective_view_scale;
+
+        cell_watchdog_on_frame(&measured_only);
+    } else {
+        cell_watchdog_on_frame(&view_state.effective_view_scale);
+    }
     publish_effective_scale(view_state.effective_view_scale);
 
     /* AFTER the watchdog, deliberately. When the watchdog lowers the scale it moves the cut edge,

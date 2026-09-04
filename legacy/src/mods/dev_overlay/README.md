@@ -336,6 +336,47 @@ here, except that the direction is reversed: that DLL publishes what it is runni
 the next frame overwrites it, and a machine without `view_distance_fix` installed reads
 `in force: not reported` rather than a number this would otherwise have to invent.
 
+## The two switches under the draw distance
+
+`Draw distance follows the frame rate` is `[view_distance_fix] FrameBackoff`. It is the frame
+governor alone: the draw distance drops when a scene costs more frame time than the distance is
+worth and comes back when the scene gets cheaper. That moves the fog with it, so the world visibly
+opens and closes as the frame rate wanders, which some people want to stop.
+
+`Keep the draw distance (costs frame rate)` is `[view_distance_fix] StrictViewRange`, and it is the
+bigger hammer. It declines the governor, the level-opening window, the scripted-camera raise **and the cell
+watchdog**, so the number typed two rows above is the number in force on every frame.
+
+**The watchdog is the part to understand before leaving this on.** It is not automation for taste,
+it is a memory-corruption guard. The cell table ends exactly where the bucket list heads begin, its
+limit is checked once at the entry to the gather and not again, and an overflow was traced to an
+access violation in the draw function with a list head the renderer had read as a pointer. The
+vertex cache fails more quietly and more permanently: a vertex skipped once never gets a slot again
+until the level is reloaded, which is the stretched geometry people report after raising the
+distance.
+
+With this on both of those happen instead of being avoided. The watchdog keeps running on a copy of
+the scale, so it keeps measuring, keeps its own ceiling current for the moment the switch goes back
+off, and keeps writing its warnings to `engine_fixes.log`. What it cannot do is act.
+
+At `1.00x` there is nothing here to be afraid of. The risk is entirely in holding a raised scale on
+a level that cannot afford it, which is a reasonable thing to want while looking at something and a
+poor thing to leave on while playing.
+
+The row is named for the frame rate because that is the cost a reader will actually meet: the
+governor is the only one of the four that acts in ordinary play at `1.00x`. The watchdog's cost is
+real but conditional, and it is written here and in the ini rather than squeezed into a label.
+
+**The two switches are mutually exclusive, and the second one wins.** While strict is on the
+frame-rate row is greyed: it reads off, it cannot be clicked, and that is the state the game is
+genuinely in, because strict declines the governor outright. A row still reading ON over a governor
+that is not acting would be a lie in the one place a reader looks to find out what is happening.
+
+What it deliberately does **not** do is write `FrameBackoff`. Someone who had the governor on, turns
+strict on to look at something and turns it off again gets their governor back, rather than
+discovering that a setting they never touched has been changed for them. So the row reports the
+state the game is in and the file keeps the state the reader asked for.
+
 ## The fog rows
 
 Two rows under **Utilities**, both `[view_distance_fix]` keys the fog reads while the game runs, so

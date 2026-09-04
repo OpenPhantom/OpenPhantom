@@ -6,6 +6,7 @@
 #include "fog_band_row.h"
 #include "fog_follow_row.h"
 #include "open_key_row.h"
+#include "strict_range_row.h"
 #include "overlay_key_name.h"
 #include "view_range_live_row.h"
 #include "view_range_row.h"
@@ -19,6 +20,7 @@ typedef enum utilities_slot {
     UTILITIES_VIEW_RANGE = 0,
     UTILITIES_VIEW_RANGE_LIVE,
     UTILITIES_AUTO_RANGE,
+    UTILITIES_STRICT_RANGE,
     UTILITIES_FOG_BAND,
     UTILITIES_FOG_FOLLOW,
     UTILITIES_DEV_MENU_SIZE,
@@ -105,8 +107,27 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
     }
 
     case UTILITIES_AUTO_RANGE:
+        /* GREYED WHILE THE ROW BELOW IS ON, because the two contradict each other and the one
+         * below wins. Strict mode declines the governor outright, so a switch still reading ON
+         * would be describing something that is not happening.
+         *
+         * Its key is deliberately NOT written when that happens. A reader who had the governor on,
+         * turns strict on to look at something and turns it off again gets the governor back,
+         * rather than finding a setting they never changed has been changed for them. So this row
+         * reports the state the game is actually in, and the file keeps the state the reader
+         * asked for. */
         copy_label(out->label, "Draw distance follows the frame rate");
-        out->on = auto_range_row_get();
+        out->available = !strict_range_row_get();
+        out->on = out->available && auto_range_row_get();
+        return;
+
+    case UTILITIES_STRICT_RANGE:
+        /* Named for the trade rather than for the machinery, like the row above it. The frame rate
+         * is the cost a reader will actually meet, because the governor is the term that acts in
+         * ordinary play; the watchdog only acts above 1.00x, and what it costs when declined is in
+         * the ini and in strict_range_row.h rather than in 47 characters. */
+        copy_label(out->label, "Keep the draw distance (costs frame rate)");
+        out->on = strict_range_row_get();
         return;
 
     case UTILITIES_FOG_BAND:
@@ -172,7 +193,12 @@ bool overlay_utilities_toggle(uint32_t slot)
 {
     switch ((utilities_slot_t)slot) {
     case UTILITIES_AUTO_RANGE:
+        if (strict_range_row_get()) {
+            return false;              /* greyed; the model refuses first, this is the second lock */
+        }
         return auto_range_row_set(!auto_range_row_get());
+    case UTILITIES_STRICT_RANGE:
+        return strict_range_row_set(!strict_range_row_get());
     case UTILITIES_FOG_FOLLOW:
         return fog_follow_row_set(!fog_follow_row_get());
     default:

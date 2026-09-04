@@ -80,6 +80,11 @@ add_engine_fix(view_distance_fix
     draw_table.c
     vertex_table.c
     fog_regime.c
+    fog_trace.c
+    poly_bias.c
+    translucent_fog.c
+    device_dither.c
+    scene_fade.c
     spawn_census.c
 )
 

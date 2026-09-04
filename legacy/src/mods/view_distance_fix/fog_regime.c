@@ -11,6 +11,10 @@
  */
 #include "fog_regime.h"
 
+#include "cell_watchdog.h"
+#include "fog_trace.h"
+#include "view_distance_fix.h"
+
 #include "common/detour.h"
 #include "common/frame_hook.h"
 #include "common/logging.h"
@@ -321,6 +325,16 @@ static fog_regime_state_t fog_state;
 /* ==============================================================================================
  * A, the arithmetic. No engine memory is touched below this line until section C.
  * ============================================================================================ */
+float fog_regime_depth_limit(float cut_units)
+{
+    /* No field of view, no clamp, no guard beyond the one that keeps the band positive: the view
+     * axis is always on screen and cos(0) is 1, so this is the radial cut plus the margin and
+     * nothing else. See the header for why the margin's sign is opposite to the edge limit's. */
+    float reach = cut_units + FOG_CELL_MARGIN_UNITS;
+
+    return (reach > 0.0f) ? reach : 0.0f;
+}
+
 float fog_regime_edge_limit(float horizontal_fov_degrees, float cut_units)
 {
     float reach = cut_units - FOG_CELL_MARGIN_UNITS;
@@ -411,6 +425,24 @@ void fog_regime_target_band(const fog_regime_config_t *config,
 {
     float end;
     float ratio;
+    float edge;
+    /* The cap is fed the PESSIMISTIC cut. current_cut hands this function the eased live cut, which
+     * lags the real gather radius by up to FOG_CUT_SETTLE_SECONDS whenever the cut RISES: a
+     * governor recovery, or the scripted-camera raise. For those seconds the eased value is lower
+     * than the truth, and a cap computed from it sits inside the real cut, which is the flicker
+     * condition arrived at by arithmetic rather than by accident. Taking the smaller of the two
+     * here means an eased input can only ever make the band safer. The follow factor and the floor
+     * keep the eased value, because they are about how the band LOOKS rather than about what it has
+     * to cover. */
+    float cap_cut = (live_cut < reference_cut) ? live_cut : reference_cut;
+    /* And its mirror, for the same reason in the opposite direction. current_cut hands this the
+     * EASED live cut, which lags low while the cut is rising. A pop-in cap computed from a low cut
+     * is merely conservative, so that one takes the smaller. A no-saturation end computed from a
+     * low cut sits INSIDE the drawn world, which is exactly the flat region the rule exists to
+     * remove, so this one takes the larger. Residual, stated rather than hidden: above
+     * ViewRangeScale 1 the true live cut can still exceed both for up to FOG_CUT_SETTLE_SECONDS
+     * after a governor step, leaving a shallow saturated shell until the ease catches up. */
+    float sat_cut = (live_cut > reference_cut) ? live_cut : reference_cut;
 
     if (config == NULL || authored == NULL || out == NULL) {
         return;
@@ -449,11 +481,24 @@ void fog_regime_target_band(const fog_regime_config_t *config,
     if (config->follow_fov) {
         end *= fog_regime_follow_factor(horizontal_fov_degrees, reference_cut, live_cut);
     }
-    if (config->inside_cut) {
-        float limit = fog_regime_edge_limit(horizontal_fov_degrees, live_cut);
-
-        if (limit > 0.0f && end > limit) {
-            end = limit;
+    /* WHERE THE BAND ENDS. Rule 2 assigns rather than caps, and skips the floor entirely: the
+     * floor is (cut - margin) * fraction, which is below (cut + margin) for every fraction at or
+     * under one, so it could never bind here anyway.
+     *
+     * fog_scale and follow_fov are bypassed by that assignment, and neither is lost. FogScale's job
+     * is to make the fog follow the range, and this reads the live cut directly instead of
+     * inferring it from a configured scale. FogFollowFov's premise, that a wider picture needs the
+     * band nearer, is true of the corner and false of the axis, and the axis is what this bound is
+     * about. Both are still honoured under rules 0 and 1. */
+    edge = 0.0f;
+    if (config->inside_cut == FOG_END_NO_SATURATION) {
+        end = fog_regime_depth_limit(sat_cut);
+    } else if (config->inside_cut == FOG_END_NO_POP_IN) {
+        /* The no-pop-in limit, computed here and APPLIED AFTER THE FLOOR. See the floor's own
+         * comment for why the order is the whole point. */
+        edge = fog_regime_edge_limit(horizontal_fov_degrees, cap_cut);
+        if (edge > 0.0f && end > edge) {
+            end = edge;
         }
     }
     /* HOW FAR IN THE COUPLING IS ALLOWED TO PULL THE END, and this is the one bound the original
@@ -476,10 +521,31 @@ void fog_regime_target_band(const fog_regime_config_t *config,
      *
      * The floor keeps the corner correction while refusing to spend more than a set share of the
      * visible world on it. Past that the extreme corners may pop in, which costs a few pixels at
-     * the edge of the picture rather than everything beyond halfway. */
-    if (config->min_end_fraction > 0.0f) {
+     * the edge of the picture rather than everything beyond halfway.
+     *
+     * BUT THE FLOOR MAY NOT RAISE THE END PAST THE LIMIT, and until now it always did. The limit is
+     * (cut - margin) * cos(hFOV/2) and the floor is (cut - margin) * min_end_fraction, so at the
+     * shipped min_end_fraction of 1.0 the floor is at or above the limit for EVERY legal field of
+     * view, and the limit above was overwritten on every level, always. FogInsideCut has been dead
+     * at the shipped defaults, and the end has been pinned to the cut edge itself.
+     *
+     * That is not a missed optimisation, it is the flicker. The cut is a RADIAL radius and the fog
+     * ramp walks VIEW DEPTH, so a cell arriving at the boundary near the screen edge is only
+     * (cut - margin) * cos(hFOV/2) deep: about half the band end at 120 degrees. Boundary cells
+     * therefore appear and vanish at a fog factor near 0.5 rather than buried at 1.0, which is a
+     * visible blink at exactly the fog end, with a static band and no net change in the cell count
+     * because the churn is in the membership rather than the size. Every measurement taken of this
+     * agreed with that and with nothing else.
+     *
+     * So the floor is clamped to the limit. The floor keeps its purpose, which is to stop the
+     * corner correction washing out the middle of a wide picture, because that is served by RAISING
+     * a band the cosine pulled too near; it was never served by pushing one past the cut. */
+    if (config->inside_cut != FOG_END_NO_SATURATION && config->min_end_fraction > 0.0f) {
         float floor_end = (live_cut - FOG_CELL_MARGIN_UNITS) * config->min_end_fraction;
 
+        if (edge > 0.0f && floor_end > edge) {
+            floor_end = edge;
+        }
         if (floor_end > 0.0f && end < floor_end) {
             end = floor_end;
         }
@@ -540,6 +606,14 @@ static float clamp_cut(int32_t range)
     return (float)range;
 }
 
+void *fog_regime_device(void)
+{
+    if (fog_state.device_ptr_addr == 0) {
+        return NULL;
+    }
+    return *(void **)fog_state.device_ptr_addr;
+}
+
 void fog_regime_set_fov(float horizontal_fov_degrees)
 {
     if (horizontal_fov_degrees > 1.0f && horizontal_fov_degrees < 180.0f) {
@@ -564,6 +638,16 @@ void fog_regime_note_cut(int32_t reference_range, int32_t effective_range)
 /* The cut edge to work from. Without an observation, the draw-distance detour declined, or the
  * world walk has not run yet, the level's own draw distance is the honest stand-in, and it makes
  * the follow factor exactly 1.0 rather than an invented number. */
+/* Before the first frame of a level there is no reported cut, so both sides are predicted from
+ * the level's own authored view distance: the reference is that distance, and the live side is
+ * where this DLL's own scale and radius cap put it, asked of the one function that owns that
+ * arithmetic. The prediction is exact wherever the level has no per-cell override, which is the
+ * ordinary case, and it is what lets a level open on the band it is going to keep.
+ *
+ * It used to use the authored distance for BOTH sides, a ratio of one, which is only the same
+ * answer at ViewRangeScale=1. RACE authors 22 and the real cut at 2.5 is 39, and a band computed
+ * from 22 sits far nearer the camera than it belongs; that was reported, and predicting the live
+ * side rather than assuming it is what stops it coming back. */
 static void current_cut(float *reference, float *live)
 {
     if (fog_state.cut_observed) {
@@ -572,7 +656,7 @@ static void current_cut(float *reference, float *live)
         return;
     }
     *reference = clamp_cut(fog_state.level_view_distance);
-    *live      = *reference;
+    *live      = clamp_cut(view_distance_fix_cut_for(fog_state.level_view_distance));
 }
 
 static void target_now(fog_regime_band_t *out)
@@ -580,22 +664,17 @@ static void target_now(fog_regime_band_t *out)
     float reference;
     float live;
 
-    /* NO OBSERVATION YET MEANS NO OPINION. A level that has just loaded has not been walked, so
-     * there is no cut edge to reason from, and the fallback used to be the level's own authored
-     * view distance for both sides. That is a guess, and with ViewRangeScale above 1 it is a bad
-     * one in the direction that shows: RACE authors 22, the real cut with the scale at 2.5 turned
-     * out to be 39, and a band computed from 22 sits far nearer the camera than it belongs. The
-     * level then holds that band for as long as it takes the first frame to walk the world, which
-     * on a level with a loading pause and an opening camera move is a second or two of fog much
-     * too close, reported as exactly that.
+    /* A level that has just loaded has not been walked, so there is no reported cut. This used to
+     * return the authored band and wait, which is the honest answer only if the two are close, and
+     * at a wide field of view they are not: the edge limit takes a band ending at 32 down to 21.3
+     * on a level that draws to 22, so the level opened on almost no fog and the ease then drove
+     * the fog wall in at 19 units a second, in a world 22 units deep. Measured over 442 frames
+     * with everything else on that path constant, which is what the reports of flashing at the
+     * start of a level turned out to be.
      *
-     * The authored band is the one thing here that is known to be right for this level, so it is
-     * what a level gets until the renderer says otherwise. */
-    if (!fog_state.cut_observed) {
-        *out = fog_state.authored;
-        return;
-    }
-
+     * current_cut predicts both sides instead, so the band a level opens on is the band it keeps
+     * and there is nothing to travel. Whatever the first real cut then reports is a correction,
+     * not a journey. */
     current_cut(&reference, &live);
     fog_regime_target_band(&fog_state.config, &fog_state.authored,
                            fog_state.horizontal_fov_degrees, reference, live, out);
@@ -751,8 +830,24 @@ static bool remember_level(void *level)
     fog_state.cut_observed   = false;
     fog_state.cut_first_seen = false;
 
+    /* AND WHAT WE BELIEVE THE DEVICE IS SHOWING, which is nothing, because this is a new level.
+     *
+     * This is a record of what we last pushed, and it was carried across a level load. The tick's
+     * settled test asks whether the device already shows the current band, so on a second load of
+     * the same level, where the numbers come out identical, it compared our new band against the
+     * previous level's push, decided there was nothing to do and never pushed at all. The device
+     * then kept whatever the engine's own apply had put there: the AUTHORED band.
+     *
+     * Measured across two passes at the same level in one session. Both logged
+     * "level fog 10.0..32.0 -> 6.7..21.3", and the device held 6.65..21.29 on the first and
+     * 10.00..32.00 on the second, for 1063 frames, having never once been written. So this fog
+     * reached the hardware on the first level of a session and no other. */
+    fog_state.device_band.start = -1.0f;
+    fog_state.device_band.end   = -1.0f;
+
     /* And the opening window starts here, which is the one place that knows a level is new. */
     fog_state.open_left = fog_state.config.open_seconds;
+    fog_trace_begin();
     return true;
 }
 
@@ -806,6 +901,7 @@ void fog_regime_on_frame(void)
 {
     fog_regime_band_t target;
     float             seconds;
+    bool              settled;
 
     if (!fog_state.tick_active || fog_state.level == NULL) {
         return;
@@ -813,6 +909,7 @@ void fog_regime_on_frame(void)
     /* The world is freed and replaced by the level load. Until the fog detour hands us the new
      * one, the remembered pointer is not ours to write through. */
     if (*fog_state.level_pointer != fog_state.level) {
+        fog_trace_aside('p', 0.0f, 0.0f);
         return;
     }
     /* And the record still has to hold what we last put there. Two things ride on this. A level
@@ -822,6 +919,11 @@ void fog_regime_on_frame(void)
      * future patch might, gets to keep its value instead of being overwritten sixty times a
      * second by ours. */
     if (!the_band_is_still_ours(fog_state.level)) {
+        {
+            const float *seen = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+
+            fog_trace_aside('f', seen[0], seen[1]);
+        }
         /* Somebody else is holding the band, and they are entitled to. The no-fog cheat pushes it
          * past everything the renderer still has in view, every frame, and this tick stands aside
          * for exactly that.
@@ -863,15 +965,28 @@ void fog_regime_on_frame(void)
                                  ? FOG_MAX_TRUSTED_SECONDS : seconds;
         }
         if (fog_state.open_left > 0.0f) {
-            fog_regime_band_t hidden;
+            fog_regime_band_t open_band;
 
-            hidden.start = FOG_OPEN_HIDDEN_START;
-            hidden.end   = FOG_OPEN_HIDDEN_END;
-            if (hidden.start != fog_state.written.start ||
-                hidden.end != fog_state.written.end) {
-                fog_state.current = hidden;
-                write_band(&hidden);
+            if (fog_state.config.open_fog_end > fog_state.config.open_fog_start) {
+                /* Our own band, at the distances asked for, derived from nothing. The draw
+                 * distance is raised for this window and the engine culls whole cells at that
+                 * edge, so a cell arriving there takes its near end with it and no band placed at
+                 * the edge can cover it. A band laid well inside the raised cut can, and laying it
+                 * absolutely is what stops it moving while the window runs. */
+                open_band.start = fog_state.config.open_fog_start;
+                open_band.end   = fog_state.config.open_fog_end;
+            } else {
+                open_band.start = FOG_OPEN_HIDDEN_START;
+                open_band.end   = FOG_OPEN_HIDDEN_END;
             }
+            if (open_band.start != fog_state.written.start ||
+                open_band.end != fog_state.written.end) {
+                fog_state.current = open_band;
+                write_band(&open_band);
+            }
+            /* 'o' for the opening window. This branch returns before the sample at the bottom, so
+               without this the capture has a hole exactly where the window runs. */
+            fog_trace_aside('o', fog_state.written.start, fog_state.written.end);
             return;
         }
         /* See FOG_OPEN_FADE_FROM_AUTHORED. The cut is marked unobserved so the first report at
@@ -914,11 +1029,22 @@ void fog_regime_on_frame(void)
      * the band: the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping
      * sees nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the
      * fog can be switched off and never on again. */
-    if (fog_state.current.start == fog_state.written.start &&
-        fog_state.current.end == fog_state.written.end &&
-        (!fog_state.pixel_fog_active ||
-         (fog_state.device_band.start == fog_state.current.start &&
-          fog_state.device_band.end == fog_state.current.end))) {
+    settled = fog_state.current.start == fog_state.written.start &&
+              fog_state.current.end == fog_state.written.end &&
+              (!fog_state.pixel_fog_active ||
+               (fog_state.device_band.start == fog_state.current.start &&
+                fog_state.device_band.end == fog_state.current.end));
+
+    fog_trace_sample(fog_state.horizontal_fov_degrees, fog_state.reference_cut,
+                     fog_state.live_cut, fog_state.settled_live_cut, fog_state.cut_observed,
+                     &target, &fog_state.current, !settled);
+    {
+        uint32_t cells = 0u, vertices = 0u;
+
+        cell_watchdog_counts(&cells, &vertices);
+        fog_trace_counts(cells, vertices, seconds);
+    }
+    if (settled) {
         return;                            /* settled: no write, no cache line touched */
     }
     write_band(&fog_state.current);
@@ -1335,7 +1461,11 @@ static void install_level_fog(void)
              "%.0f degrees%s. FogScale=%.2f.",
              (unsigned)site, (double)FOG_CELL_MARGIN_UNITS,
              (double)FOG_REFERENCE_FOV_DEGREES,
-             fog_state.config.inside_cut ? ", then capped to that limit" : " (cap OFF)",
+             (fog_state.config.inside_cut == FOG_END_NO_SATURATION)
+                 ? ", then ended just beyond the cut so nothing drawn is ever fully fogged"
+                 : (fog_state.config.inside_cut == FOG_END_NO_POP_IN)
+                     ? ", then capped to the corner limit"
+                     : " (neither bound)",
              (double)fog_state.config.fog_scale);
 }
 
@@ -1361,6 +1491,8 @@ void fog_regime_install(const fog_regime_config_t *config)
 
     fog_state.config = *config;
     fog_state.horizontal_fov_degrees = FOG_REFERENCE_FOV_DEGREES;
+    fog_trace_configure(config->log_band);
+    fog_trace_counters_install();
     fog_state.installed = true;
 
     signature_resolve_table(sites, SITE_COUNT);

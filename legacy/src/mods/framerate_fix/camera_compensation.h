@@ -31,6 +31,7 @@
 #define CAMERA_COMPENSATION_H
 
 #include <stdbool.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -50,6 +51,21 @@ bool camera_compensation_build_anchor_blend(uint8_t *out, size_t out_size, const
 
 /* `smoothed_seconds_scale` is dt*30, already low-passed and quantised by the caller.
  * Cheap and idempotent: it writes nothing when the value has not really moved. */
-void camera_compensation_update(float smoothed_seconds_scale);
+/* `scripted_camera` is true while a script places the camera rather than the player driving it.
+ * The anchor weight then goes to ZERO, which is not the engine's value and is deliberate.
+ *
+ * The anchor is not only what the camera is drawn from. bapview_buildCamView composes the eye
+ * from it, and bapdraw_drawWorld collects the cells to draw in a circle centred on that eye. So
+ * the anchor is the ORIGIN OF THE WORLD GATHER, and any lag in it is a gather that trails the
+ * camera: cells ahead of the eye fall outside the radius and are never collected, which is world
+ * geometry silently not drawn. The count stays the same because the radius does; it is the
+ * membership that is wrong, which is why measuring the cell count never showed it.
+ *
+ * A followed camera wants the damping, and 30 fps behaviour restored is the right answer for it.
+ * A placed camera wants none: the target it is given is already interpolated smoothly between
+ * substeps, so a weight of zero puts the anchor exactly on it and the gather exactly under the
+ * camera. That is also what the free camera does, by writing the anchor directly, and is why the
+ * free camera has never shown this fault. */
+void camera_compensation_update(float smoothed_seconds_scale, bool scripted_camera);
 
 #endif /* CAMERA_COMPENSATION_H */

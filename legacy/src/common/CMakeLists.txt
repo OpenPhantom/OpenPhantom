@@ -15,6 +15,7 @@ add_library(engine_fixes_common STATIC
     signature.c
     frame_hook.c
     menu_patcher.c
+    cinematic_gate.c
 )
 
 target_include_directories(engine_fixes_common PUBLIC ${CMAKE_SOURCE_DIR}/src)

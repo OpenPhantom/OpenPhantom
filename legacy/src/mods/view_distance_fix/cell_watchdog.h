@@ -75,4 +75,9 @@ float cell_watchdog_ceiling(void);
  * stands for the rest of the level, which is the whole point of it. */
 void cell_watchdog_reset_ceiling(void);
 
+/* The engine's own two counters as they stand right now: cells gathered and vertex cache slots
+ * used. Both are already resolved for the watchdog and this only reads them. Either is left alone
+ * when its counter did not resolve, so seed them before calling. */
+void cell_watchdog_counts(uint32_t *cells, uint32_t *vertices);
+
 #endif /* CELL_WATCHDOG_H */

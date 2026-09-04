@@ -57,6 +57,14 @@
 #include "frame_governor.h"
 #include "draw_table.h"
 #include "fog_regime.h"
+
+#include "poly_bias.h"
+#include "device_dither.h"
+#include "scene_fade.h"
+#include "translucent_fog.h"
+
+#include "common/cinematic_gate.h"
+#include "fog_trace.h"
 #include "spawn_census.h"
 #include "vertex_table.h"
 
@@ -223,6 +231,14 @@ typedef struct view_distance_config {
     float fog_scale;
     float fog_settle_seconds;
     float npc_range_scale;
+    float cutscene_range;
+    bool  poly_depth_bias;
+    bool  translucent_fog;
+    bool  dither;
+    float level_fade_seconds;
+    bool  log_fog_band;
+    float level_open_fog_start;
+    float level_open_fog_end;
     bool  two_sided_severed;
     int   two_sided_max;
     bool  relocate_draw_table;
@@ -250,7 +266,8 @@ typedef struct view_distance_state {
 
     uint8_t               *cull_word;
     int                    two_sided_this_frame;
-    bool                   was_opening;   /* so the window is logged once, not per frame */
+    bool                   was_opening;
+    bool                   was_cutscene;   /* so the window is logged once, not per frame */
 } view_distance_state_t;
 
 static view_distance_state_t view_state;
@@ -313,6 +330,18 @@ static void load_config(void)
      * from further round the corner. Hiding that by creating actors early trades a cosmetic
      * problem for a behavioural one, and the original rule wins. */
     config->npc_range_scale     = ini_read_float(VIEW_DISTANCE_SECTION, "NpcRangeScale", 1.0f);
+    config->cutscene_range      = clamp_float(
+        ini_read_float(VIEW_DISTANCE_SECTION, "CutsceneViewRange", 0.0f), 0.0f, 2.5f);
+    config->poly_depth_bias     = ini_read_bool (VIEW_DISTANCE_SECTION, "PolyDepthBias", true);
+    config->translucent_fog     = ini_read_bool (VIEW_DISTANCE_SECTION, "TranslucentFog", false);
+    config->dither              = ini_read_bool (VIEW_DISTANCE_SECTION, "Dither", false);
+    config->level_fade_seconds  = clamp_float(
+        ini_read_float(VIEW_DISTANCE_SECTION, "LevelFadeSeconds", 0.4f), 0.0f, 10.0f);
+    config->log_fog_band        = ini_read_bool (VIEW_DISTANCE_SECTION, "LogFogBand", false);
+    config->level_open_fog_start = clamp_float(
+        ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenFogStart", 0.0f), 0.0f, 4000.0f);
+    config->level_open_fog_end   = clamp_float(
+        ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenFogEnd", 0.0f), 0.0f, 4000.0f);
     config->two_sided_severed   = ini_read_bool (VIEW_DISTANCE_SECTION, "TwoSidedSevered", false);
     config->two_sided_max       = ini_read_int  (VIEW_DISTANCE_SECTION, "TwoSidedMax", 8);
     config->relocate_draw_table = ini_read_bool (VIEW_DISTANCE_SECTION, "RelocateDrawTable", true);
@@ -437,13 +466,21 @@ static float maximum_range(void)
     return (MAX_DRAW_RANGE * root > MAX_DRAW_RANGE) ? MAX_DRAW_RANGE : MAX_DRAW_RANGE * root;
 }
 
-static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
+/* Where this DLL puts the cut edge for an engine range of `engine_range`, with the scale and the
+ * radius cap that are in force at the moment of asking.
+ *
+ * Its own function because the fog needs the answer BEFORE the first frame of a level. The world
+ * has not been walked at that point, so the hook below has not run and there is no reported cut,
+ * and the fog used to decline to have an opinion and hold the authored band until one arrived.
+ * That is a whole frame of authored fog followed by a walk to the real band, and at a wide field
+ * of view the two are far apart: 32 against 21.3 on a level that draws to 22. Predicting it from
+ * the level's own authored view distance costs nothing and is exact wherever the level has no
+ * per-cell override and the scale is 1, which is what ships. */
+int32_t view_distance_fix_cut_for(int32_t engine_range)
 {
-    view_distance_fn_t original = (view_distance_fn_t)view_state.view_distance_detour.original;
-    int32_t            engine_range = original(world, out_lod_mask);
-    int32_t            range = engine_range;
-    float              limit = maximum_range();
-    float              scaled;
+    int32_t range = engine_range;
+    float   limit = maximum_range();
+    float   scaled;
 
     if (view_state.effective_view_scale <= 1.0f) {
         /* Even without a scale: the field of view alone already costs cells. */
@@ -460,6 +497,14 @@ static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
         if ((float)range < MIN_DRAW_RANGE) { range = (int32_t)MIN_DRAW_RANGE; }
         if ((float)range > MAX_DRAW_RANGE) { range = (int32_t)MAX_DRAW_RANGE; }
     }
+    return range;
+}
+
+static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
+{
+    view_distance_fn_t original = (view_distance_fn_t)view_state.view_distance_detour.original;
+    int32_t            engine_range = original(world, out_lod_mask);
+    int32_t            range = view_distance_fix_cut_for(engine_range);
 
     /* This is the only place both numbers exist at once, which is why the fog is told from here
      * rather than recomputing the cut edge from the configuration. `engine_range` is where the cut
@@ -477,7 +522,13 @@ static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
      * because the scale is applied at the end of a frame and governs the next one, so every
      * decision about it is a frame ahead of the cut that reports it. This test is made in the one
      * place that holds the scale which actually produced the number in hand. */
-    if (view_state.effective_view_scale <= view_state.config.view_range_scale) {
+    if (view_state.effective_view_scale <= view_state.config.view_range_scale ||
+        view_state.was_cutscene) {
+        /* The cutscene raise is the one case where the fog SHOULD follow the raised edge. The
+         * level opening it was written for hid the fog entirely, so reporting a raised cut there
+         * only poisoned the band the level settled to afterwards. A scripted camera keeps its fog,
+         * and a band left at the unraised edge would fog solid at 21 while the engine draws to 55,
+         * which is the raise bought and then thrown away. */
         fog_regime_note_cut(engine_range, range);
     }
     return range;
@@ -903,6 +954,9 @@ static void install_fog_regime(void)
     fog_config.inside_cut     = view_state.config.fog_inside_cut;
     fog_config.fog_scale      = view_state.config.fog_scale;
     fog_config.settle_seconds = view_state.config.fog_settle_seconds;
+    fog_config.log_band       = view_state.config.log_fog_band;
+    fog_config.open_fog_start = view_state.config.level_open_fog_start;
+    fog_config.open_fog_end   = view_state.config.level_open_fog_end;
 
     fog_regime_install(&fog_config);
 }
@@ -983,6 +1037,13 @@ void view_distance_fix_install(void)
     install_view_distance();
     install_fog_regime();
     install_npc_range();
+    if (view_state.config.cutscene_range > 0.0f) {
+        (void)cinematic_gate_install();
+    }
+    poly_bias_install(view_state.config.poly_depth_bias);
+    translucent_fog_install(view_state.config.translucent_fog);
+    device_dither_configure(view_state.config.dither);
+    scene_fade_install(view_state.config.level_fade_seconds);
     install_two_sided();
 
     /* Last, and on the same resolved site the range test uses. It is the only observer of a
@@ -1000,6 +1061,10 @@ void view_distance_fix_install(void)
 
 void view_distance_fix_shutdown(void)
 {
+    /* The capture is a rolling window now, so this is the only place it can be written
+     * out: whatever the player was doing last is what it holds. */
+    fog_trace_flush("the game is closing");
+
     draw_table_restore();
     vertex_table_restore();
 }

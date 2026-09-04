@@ -94,7 +94,9 @@ add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/window_fit.c
 )
 
-add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c)
+add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c
+    view_distance_fix/fog_trace.c
+    view_distance_fix/cell_watchdog.c)
 
 # The only encoder here that writes a whole instruction sequence rather than an operand, so it is
 # the only one whose mistakes are invisible at run time.

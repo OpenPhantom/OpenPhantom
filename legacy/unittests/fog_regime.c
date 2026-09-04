@@ -11,6 +11,18 @@
  */
 #include "unittest.h"
 
+#include <stdint.h>
+
+/* fog_regime asks view_distance_fix where the cut edge lands, because that DLL owns the scale and
+ * the radius cap. Standing that up here would drag in the whole draw-table and watchdog machinery
+ * for a number this suite never exercises: every case below drives the band through
+ * fog_regime_target_band directly, with the cut passed in. The identity is what the shipped code
+ * returns at ViewRangeScale=1, which is the configuration that ships. */
+int32_t view_distance_fix_cut_for(int32_t engine_range)
+{
+    return engine_range;
+}
+
 #include <string.h>
 
 #include "fog_regime.h"

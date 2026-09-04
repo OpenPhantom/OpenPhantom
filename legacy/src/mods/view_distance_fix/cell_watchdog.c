@@ -379,6 +379,16 @@ float cell_watchdog_ceiling(void)
     return watchdog_state.ceiling;
 }
 
+void cell_watchdog_counts(uint32_t *cells, uint32_t *vertices)
+{
+    if (cells != NULL && watchdog_state.cell_count != NULL) {
+        *cells = *watchdog_state.cell_count;
+    }
+    if (vertices != NULL && watchdog_state.vertex_count != NULL) {
+        *vertices = *watchdog_state.vertex_count;
+    }
+}
+
 void cell_watchdog_reset_ceiling(void)
 {
     watchdog_state.ceiling = CEILING_NONE;

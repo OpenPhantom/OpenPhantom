@@ -31,9 +31,10 @@ order of thing from a per-object syscall.
 | `Enabled` | `1` | | |
 | `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below |
 | `FrameBackoff` | `1` | | lower the view distance when it costs too much frame time, and give it back when it does not. Does nothing at scale 1.0 |
+| `StrictViewRange` | `0` | | hold the draw distance at exactly `ViewRangeScale` and let nothing move it: the governor, the two raises and the cell watchdog are all declined. The watchdog keeps measuring and warning, it just cannot act. See the key's comment in the ini before leaving it on |
 | `BackoffFps` | `0` | | the rate below which it backs off; `0` = three quarters of `framerate_fix`'s `TargetFps`, or 50 uncapped |
-| `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view; no effect while `AuthoredFogBand` is `1` |
-| `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
+| `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view; no effect while `AuthoredFogBand` is `1`, and overwritten by the shipped `FogInsideCut=2` |
+| `FogInsideCut` | `2` | 0-2 | where the band may end: `0` unbounded, `1` capped to the no-pop-in limit, `2` assigned from the draw distance. See the three rules below |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
 | `FogBandScale` | `1.0` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. Polled while running |
@@ -42,7 +43,8 @@ order of thing from a per-object syscall.
 | `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |
 | `FogImplementation` | `2` | 0-2 | which half of the engine draws the fog: `2` the device per pixel, `1` the engine's own per-vertex ramp, `0` neither. Read once at startup; see below |
 | `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above |
-| `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor |
+| `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor. Applies under `FogInsideCut` `0` and `1` only, and is skipped entirely under the shipped `2` |
+| `LevelFadeSeconds` | `0.4` | 0-10 | how long a level takes to fade in from black; `4.0` is the engine's own value and patches nothing |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
 | `TwoSidedSevered` | `0` | | draw severed pieces two-sided. Off by default; see the limitations |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |
@@ -137,11 +139,25 @@ with an unmoved cut edge that factor is **exactly `1.0f`**, so every level keeps
 numbers bit-for-bit. It is what makes the fog follow the FOV slider, the radius cap *and* the cell
 watchdog lowering the range mid-level.
 
-`FogInsideCut` is **absolute**: it caps the band at `edge_limit(hFOV, R_live)` regardless of what
-the level authored. That is the clamp that removes the shipped cut-edge wall in BIGCITY and
-FEDSHIP, whose fog ends 30 and 38 units *behind* their own geometry. With it on it dominates for
-all eleven shipped levels; with it off the relative coupling alone runs and every level is
-retail-exact at 60 degrees.
+`FogInsideCut` is **absolute**, and it takes three values rather than two.
+
+`0` leaves the band wherever the relative coupling put it, which at the shipped `FogScale` and
+`FogFollowFov` is exactly where the level authored it. BIGCITY and FEDSHIP then keep the cut-edge
+wall they ship with, their fog ending 30 and 38 units *behind* their own geometry.
+
+`1` caps the band at `edge_limit(hFOV, R_live)`, the depth of a cell at the **corner** of the
+frustum, so a cell arriving at the boundary is hidden before it appears. The flaw is that a
+correction computed for the corner is applied to the whole screen, and straight ahead the forward
+distance is the radial distance: on a 22 unit draw distance the end lands at 83 per cent of it at
+60 degrees, 65 at 94 and 48 at 120. A wide picture is fogged solid at half the distance the engine
+is still drawing, which reads as a washed-out level and as characters below a cliff being drawn but
+invisible. It also ties the look of the fog to the field of view slider.
+
+`2` **ships.** The end is assigned from `R_live` plus one cell rather than capped, so the fog
+reaches full opacity exactly where the world stops and never inside it. There is no cosine in this
+rule, so the field of view does not move the fog, and the assignment overwrites `FogScale` and
+`FogFollowFov` instead of combining with them. The corner may still pop, which costs a few pixels
+at the edge of the picture rather than half of everything in front of you.
 
 ### The whole band moves, and that is a correctness rule
 
@@ -160,25 +176,30 @@ precisely the fog the level's author gave depth `d`.
 ### The authored bands, and what they become
 
 Read out of the level files at the offsets the loader uses (`hdr+0x90`, `hdr+0x94`, `hdr+0x854`).
-`FogInsideCut=1`, `FogFollowFov=1`, `ViewRangeScale=1.0`:
+`FogFollowFov=1`, `ViewRangeScale=1.0`. Rule 0 is the authored column exactly, so it is not
+repeated:
 
-| Level | draw | authored | at 60 degrees | at 87.2 degrees | at 60 degrees, `FogInsideCut=0` |
+| Level | draw | authored | rule 2, ships | rule 1 at 60 degrees | rule 1 at 120 degrees |
 |---|---|---|---|---|---|
-| GUNGA | 16 | 6.0-14.0 | 5.7-13.2 | 4.7-11.1 | 6.0-14.0 |
-| GARDEN | 22 | 4.0-26.0 | 2.8-18.4 | 2.4-15.4 | 4.0-26.0 |
-| SWAMP | 22 | 6.0-30.0 | 3.7-18.4 | 3.1-15.4 | 6.0-30.0 |
-| ESPA | 22 | 8.0-32.0 | 4.6-18.4 | 3.9-15.4 | 8.0-32.0 |
-| RACE | 22 | 10.0-32.0 | 5.8-18.4 | 4.8-15.4 | 10.0-32.0 |
-| MAUL | 28 | 8.0-32.0 | 5.9-23.6 | 4.9-19.8 | 8.0-32.0 |
-| FINAL | 24 | 12.0-30.0 | 8.1-20.2 | 6.7-16.9 | 12.0-30.0 |
-| ASSAULT | 23 | 12.0-38.0 | 6.1-19.3 | 5.1-16.1 | 12.0-38.0 |
-| QUEEN | 26 | 12.0-38.0 | 6.9-21.9 | 5.8-18.3 | 12.0-38.0 |
-| BIGCITY | 20 | 20.0-50.0 | 6.7-16.7 | 5.6-14.0 | 20.0-50.0 |
-| FEDSHIP | 18 | 16.0-56.0 | 4.3-15.0 | 3.6-12.5 | 16.0-56.0 |
+| GUNGA | 16 | 6.0-14.0 | 7.2-16.7 | 5.7-13.2 | 3.3-7.6 |
+| GARDEN | 22 | 4.0-26.0 | 3.5-22.7 | 2.8-18.4 | 1.6-10.6 |
+| SWAMP | 22 | 6.0-30.0 | 4.5-22.7 | 3.7-18.4 | 2.1-10.6 |
+| ESPA | 22 | 8.0-32.0 | 5.7-22.7 | 4.6-18.4 | 2.7-10.6 |
+| RACE | 22 | 10.0-32.0 | 7.1-22.7 | 5.8-18.4 | 3.3-10.6 |
+| MAUL | 28 | 8.0-32.0 | 7.2-28.7 | 5.9-23.6 | 3.4-13.6 |
+| FINAL | 24 | 12.0-30.0 | 9.9-24.7 | 8.1-20.2 | 4.7-11.6 |
+| ASSAULT | 23 | 12.0-38.0 | 7.5-23.7 | 6.1-19.3 | 3.5-11.1 |
+| QUEEN | 26 | 12.0-38.0 | 8.4-26.7 | 6.9-21.9 | 4.0-12.6 |
+| BIGCITY | 20 | 20.0-50.0 | 8.3-20.7 | 6.7-16.7 | 3.9-9.6 |
+| FEDSHIP | 18 | 16.0-56.0 | 5.3-18.7 | 4.3-15.0 | 2.5-8.6 |
 
-**This is a real change from retail at 60 degrees for ten of the eleven levels**, and it is
-`FogInsideCut`'s doing, not the FOV coupling's. Set `FogInsideCut=0` to get the authored numbers
-back exactly and keep the FOV following.
+**This is a real change from retail for ten of the eleven levels**, and it is `FogInsideCut`'s
+doing, not the FOV coupling's. Under the shipped rule 2 it costs less than the numbers suggest:
+everything past the draw edge is the fog colour anyway, so moving the end to that edge hides
+nothing that was visible, and GUNGA is the one level whose band is pushed **out** rather than in,
+because its authored fog already ended inside its own draw distance. Set `FogInsideCut=0` to get
+the authored numbers back exactly and keep the FOV following, or `AuthoredFogBand=1` to bypass
+every term here.
 
 ### Nothing changes abruptly
 
@@ -497,8 +518,12 @@ scene, not about seeing further than that ceiling.**
   pointer into valid memory is harmless where one into freed address space is not.
 * The no-pop-in limit uses the **horizontal** field of view only. The cut test is two-dimensional
   (`dx^2 + dz^2`), so a camera with a lot of pitch sees geometry at a depth this does not model.
-* The cut edge is taken from the level's current cell, which is what `bapmat_viewDistance` returns.
-  A cell whose `bapCell+0x03` override differs from the one the camera stands in is not modelled,  the fog eases towards the new value when the camera walks into it.
+* The cut edge is taken from **the cell the player is standing in**, not the one the camera is in.
+  `bapmat_viewDistance` reads `level+0xA30`, which the ground-contact routine at `0x0044CC40`
+  writes from `player+0x2CC`, so a detached camera can be somewhere with a different
+  `bapCell+0x03` override entirely and the draw distance will not follow it. That is the engine's
+  own behaviour and it matters most during a cutscene, where the camera routinely leaves the
+  player behind. The fog eases towards the new value when the **player** walks into it.
 * **`fx_rampFog` no longer draws anything in this regime, and that predates this change.** The
   cutscene tint and the fade to black (`0x0043906E`) walk the **device's** fog start `[0x866FA8]`,
   which only table fog reads. With `FogImplementation=1` the fog is computed from `world+0x218/+0x21C`

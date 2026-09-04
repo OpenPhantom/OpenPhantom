@@ -5,7 +5,7 @@
  *
  * graphics_buildModeList 0x46C592 filters the platform's raw DirectDraw table [0x862740]
  * (count [0x862014], stride 0x54) into this device's list. The acceptance rule, in code order:
- *     1. kind == 1 && bpp == 0x10           <- the game is 16-bit, there is no 32-bit path
+ *     1. kind == 1 && bpp == 0x10           <- 16-bit only, and see mode_depth.h for why
  *     2. 640x480 is accepted unconditionally
  *     3. else: w*h*6 <= VRAM limit, w >= 640, h >= 480,
  *              AND (w == 1280 && h == 1024) OR (w/4 == h/3)      <- THE 4:3 LOCK
@@ -46,7 +46,9 @@
 #include "menu_loading_bar.h"
 #include "menu_art_source.h"
 #include "menu_scale.h"
+#include "mode_depth.h"
 #include "mode_filter.h"
+#include "sw_blit_guard.h"
 #include "ending_resolution.h"
 #include "credits_skip.h"
 #include "pointer_cage.h"
@@ -189,6 +191,7 @@ typedef struct resolution_config {
     bool widen_menu_cursor_area;
     bool clamp_menu_sprites_to_island;
     bool filter_mode_enumeration;
+    int  mode_bit_depth;
     float menu_scale;
     char  menu_art_directory[192];
 } resolution_config_t;
@@ -304,6 +307,7 @@ static void load_config(void)
      * those records are therefore spent on modes the options screen can never show, and which
      * resolutions survive depends on the order the driver enumerated in. Filtering costs nothing
      * on a driver that only reports 16 bit, because then there is nothing to filter. */
+    config->mode_bit_depth        = ini_read_int (RESOLUTION_SECTION, "ModeBitDepth", 16);
     config->filter_mode_enumeration =
         ini_read_bool(RESOLUTION_SECTION, "FilterModeEnumeration", true);
 
@@ -709,6 +713,13 @@ void enhanced_resolution_install(void)
      * order. The display mode enumeration runs once, inside graphics startup, and the filter can
      * only work on an enumeration that has not happened yet. Everything below acts on the list
      * that enumeration produced. */
+    /* BEFORE the filter, and before the aspect gate: graphics_buildModeList runs during graphics
+     * startup, and the filter has to agree with whatever depth the gates ended up at. */
+    if (mode_depth_install((uint32_t)resolution_state.config.mode_bit_depth) == 32u) {
+        /* The 2-D layer is software and writes two-byte pixels, so it has to be silenced or
+         * the first menu bitmap faults. See sw_blit_guard.h for what that costs. */
+        (void)sw_blit_guard_install();
+    }
     (void)mode_filter_install(resolution_state.config.filter_mode_enumeration);
 
     install_aspect_gate();

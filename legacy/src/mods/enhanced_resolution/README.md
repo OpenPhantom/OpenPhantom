@@ -5,9 +5,11 @@
 Modern resolutions, listed in the options screen as if they had always been there, and the window,
 the mouse pointer and the input devices kept in step with them.
 
-> The game is **16-bit only**; there is no 32-bit path anywhere in it. Which resolutions actually
-> exist is therefore up to your DirectDraw layer (dgVoodoo2, DDrawCompat). `LogModeTable=1` prints
-> the complete table the layer reported, so you can see rather than guess.
+> The game runs **16-bit**: the mode list accepts nothing else, and the 2-D layer writes two-byte
+> pixels straight into the back buffer. Which resolutions actually exist is therefore up to your
+> DirectDraw layer (dgVoodoo2, DDrawCompat). `LogModeTable=1` prints the complete table the layer
+> reported, so you can see rather than guess. `ModeBitDepth` is documented in `engine_fixes.ini`
+> and should be left at 16; see `mode_depth.h` for how far 32 was taken and where it stops.
 
 ## Supported executables
 

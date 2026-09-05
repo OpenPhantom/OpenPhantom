@@ -8,7 +8,7 @@
  * DLL_PROCESS_DETACH, and enhanced_resolution's own entry point sets exactly that precedent.
  *
  * It is the wrong place for these four. DllMain runs under the loader lock, where FreeLibrary is
- * documented as a way to deadlock, and libvlc_release joins libVLC's threads - threads that
+ * documented as a way to deadlock, and libvlc_release joins libVLC's threads, threads that
  * themselves may be sitting in a loader call. The precedent does not transfer: what
  * enhanced_resolution gives back on the way out is one ClipCursor(NULL), a single call into a
  * module that is already loaded, which is safe there and says nothing about this.
@@ -19,7 +19,7 @@
  * teardown that can only run in a case that does not happen, in a place where it can hang the
  * game, is worse than the leak it prevents.
  *
- * What IS cleaned up is the failure path: vlc_playback.c unwinds its own modules and environment
+ * What IS cleaned up is the failure path: vlc_runtime.c unwinds its own modules and environment
  * variable when initialisation gives up halfway, because that runs on an ordinary thread outside
  * the loader lock and because leaving a half-loaded libVLC in the process would be somebody else's
  * problem later.

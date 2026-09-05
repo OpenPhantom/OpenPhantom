@@ -2,33 +2,33 @@
  *
  * ==================================== SIZE NOTE ===============================================
  *
- * This file is over 600 lines. It crossed the limit when the mover call-site census was added, and
- * the census is the reason: about a third of the file is now one measurement, its side state and
- * the reporting that makes it readable, while the six observers around it are a few stores each.
- * Most of the rest is the reasoning behind two things a reader cannot see in the code, why the
- * opcode hook may detour into the middle of a function, and why the integrator has two early
- * returns that have to be told apart.
+ * This file is over 600 lines. What is left once the censuses moved out is the byte evidence and
+ * the observers that rest on it: about a third of the file is the ten signature patterns and the
+ * disassembly that proves them, and most of the rest is the reasoning behind two things a reader
+ * cannot see in the code, why the opcode hook may detour into the middle of a function, and why
+ * the integrator has two early returns that have to be told apart.
  *
- * The next seam is the census, and it is a clean one. mover_census_* touches no other state in this
- * file, shares only the tick detour that feeds it, and would move to a file of its own with one
- * function exported and one call added where hook_mover_tick already calls it. That is the cut to
- * make when this file next grows.
+ * The seam this note used to name has been taken, in two cuts. diag_world_mover_census.c is the
+ * one it named: mover_census_* touched no other state here and shared only the tick detour that
+ * feeds it. diag_world_path_census.c is the same cut applied to the four draw path and trace
+ * censuses, which as one file with the mover census would have come back near the limit. Each
+ * census file owns its counters and its reports; every hook stays here with the detour and the
+ * pattern it belongs to, and calls across.
  *
- * It is not the mover-versus-AI split, which looks obvious and was measured and rejected: both
- * halves share resolve_sites_once, the signature table and diag_install_observer, so cutting there
- * puts one table behind a translation unit boundary from half its users and buys nothing.
+ * The next seam is NOT the mover-versus-AI split, which looks obvious and was measured and
+ * rejected: both halves share resolve_sites_once, the signature table and diag_install_observer,
+ * so cutting there puts one table behind a translation unit boundary from half its users and buys
+ * nothing.
  */
 #include "diag_world.h"
 
 #include "diag_install.h"
 #include "diag_log.h"
 #include "diag_names.h"
+#include "diag_world_mover_census.h"
+#include "diag_world_path_census.h"
 
 #include "common/detour.h"
-#include "common/frame_hook.h"
-#include "common/host_image.h"
-#include "common/logging.h"
-#include "common/memory.h"
 #include "common/signature.h"
 
 #include <intrin.h>
@@ -37,7 +37,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 /* --- bapmap_openMover 0x00408B50 -------------------------------------------------------------- *
  * The open command. It fires EVERY FRAME while a body stands on a pressure plate
@@ -94,7 +93,7 @@ static const uint8_t SIG_MOVER_CLOSE[] = {
  * [0x005B5FCC] has exactly one reference in the whole image, this read, and no instruction anywhere
  * writes it, so on this build the gate is never taken. That is a census over one binary rather than
  * a proof about every path, because a bulk write reaching the cell as part of a larger structure
- * would not show up in an operand scan. The census below counts the case instead of assuming it
+ * would not show up in an operand scan. The mover census counts the case instead of assuming it
  * away, which costs one comparison per call.
  *
  * The gate cell's operand sits at +0x08 and is read out of the matched pattern rather than being
@@ -104,7 +103,6 @@ static const uint8_t SIG_MOVER_TICK[] = {
     0x00, 0x0F, 0x85, 0xC7, 0x04, 0x00, 0x00, 0x8B
 };
 #define MOVER_TICK_PROLOGUE 6u
-#define OFFSET_MOVER_GATE_CELL 0x08u
 
 /* --- ai_setMode 0x004335A5 / ai_returnMode 0x00433634 ----------------------------------------- *
  * Opcode 0x400 "Set AI Mode" = PUSH, opcode 0x401 "Return Mode" = POP of the FOUR-DEEP stack,
@@ -149,7 +147,7 @@ static const uint8_t SIG_AI_OPCODE[] = {
 #define AI_OPCODE_PROLOGUE 10u
 
 /* --- bapmap_polyToWorld 0x00419490 -------------------------------------------------------------
- * One of the two known render-path callers of bapmap_tickMover (see the census above): decompiled
+ * One of the two known render-path callers of bapmap_tickMover (see the mover census): decompiled
  * as `FUN_00419490(int world, ushort *object, float *outPos, undefined4 *outExtra)`, plain cdecl,
  * four arguments, no surprises. Counted here at its own entry so a per-frame explosion in how many
  * times the WHOLE FUNCTION runs is told apart from an explosion in what one call does once inside
@@ -223,7 +221,7 @@ enum {
  * handles the sharing correctly and never gets the chance to run.
  *
  * That is not hypothetical here: the mover integrator is wanted by a second feature, and the silent
- * loser would be whichever of the two loaded later, including the census this file provides. The
+ * loser would be whichever of the two loaded later, including the census that detour feeds. The
  * detour form falls back to the pattern's tail and proves the head is either the authored prologue
  * or a branch, so both owners resolve. */
 static signature_t sites[SITE_COUNT] = {
@@ -245,7 +243,6 @@ static signature_t sites[SITE_COUNT] = {
 #define MOVER_TYPE        0x04
 #define MOVER_ID          0x08
 #define MOVER_POSE        0x2C
-#define MOVER_TIME_BASE   0x30
 #define MOVER_DIRECTION   0x34
 
 #define CHARACTER_NAME       0x04   /* char[12] */
@@ -278,14 +275,6 @@ typedef struct diag_world_state {
 } diag_world_state_t;
 
 static diag_world_state_t world_state;
-
-/* common/frame_hook.c caps a single DLL at 4 callbacks (MAX_FRAME_CALLBACKS), shared with
- * diag_frame.c's own per-second summary and diag_present.c's hook. Five censuses each registering
- * their own callback blew straight through that and silently starved the other two, defined below,
- * after the report function it ticks is declared, and registered from every census's own install
- * function; frame_hook_add is idempotent per callback, so the five install call sites collapse to
- * exactly one slot no matter which trigger sub-levels are actually armed. */
-static void diag_world_census_tick(void);
 
 /* The opcode hook keeps its trampoline in a file-scope pointer because its only caller is inline
  * assembly, which cannot reach into a structure member by name. */
@@ -374,192 +363,6 @@ static void __cdecl hook_mover_close(void *world, int32_t index)
     }
 }
 
-/* ============================================================================================
- * The mover call-site census. Level 3, and it patches nothing.
- *
- * The design for interpolating movers assumed the integrator runs once per frame from the per-frame
- * message, so that a bracket around the world draw would contain a mover's pose but not its
- * advance. A reading of the call graph says otherwise: of the nine callers, two are reached from
- * the draw, and if either of those reaches a mover first then the mover integrates inside the
- * proposed bracket and the whole design is unbuildable. Both ways it can fail present as "the fix
- * did nothing", which is the worst possible symptom to debug.
- *
- * So this measures it instead of arguing about it. Per call site: how often it is reached, and how
- * often the mover it was handed had a clock older than the time being passed in, which is exactly
- * the condition under which the function does anything at all.
- *
- * The call sites are discovered, not written down. The tick's own address comes from the pattern,
- * and every `call rel32` in the host's code section that targets it is a call site. The census then
- * reports the count it found, which is itself a finding on any build other than the one this was
- * derived from, and no address in this file has to be right for it to work.
- *
- * What that scan found on retail WMAIN.EXE, kept here as evidence rather than as data the code
- * reads. Nine `call rel32` sites target 0x00409170 and no absolute reference to that address exists
- * anywhere, so there is no call through a pointer to miss. The return addresses are
- *
- *   00408B44  00409799  0040A33D  0040A849  0040AF2F  0040AFE8  0040C3F7
- *   004194EC  00419B31
- *
- * and the last two are the ones the whole question turns on. 0x004194E7 sits inside
- * bapmap_polyToWorld 0x00419490 and 0x00419B2C inside bapvrt_transformWorld 0x004199B0, which
- * render_prepareFrame calls at 0x0043F5AC. If either of those reaches a mover before the per-frame
- * message does, that mover integrates inside the draw. Writing those nine addresses into the code
- * would have bought nothing and would have tied the census to one build.
- * ============================================================================================ */
-#define MOVER_CALL_SITES_MAX 16u
-#define MOVER_CENSUS_FRAMES  200u
-
-typedef struct mover_census {
-    bool            armed;
-    bool            per_frame;
-    const uint32_t *gate_cell;
-
-    size_t          site_count;
-    uintptr_t       site_return[MOVER_CALL_SITES_MAX];
-    uint32_t        site_calls[MOVER_CALL_SITES_MAX];
-    uint32_t        site_stale_clock[MOVER_CALL_SITES_MAX];
-
-    uint32_t        calls_from_nowhere;
-    uint32_t        gate_closed;
-    uint32_t        frames;
-    uint32_t        calls;
-} mover_census_t;
-
-static mover_census_t mover_census;
-
-static void mover_census_find_call_sites(uintptr_t tick_address)
-{
-    uintptr_t text = host_image_text();
-    size_t    size = host_image_text_size();
-    size_t    index;
-
-    if (text == 0 || size < 5 || !memory_is_readable_range(text, size)) {
-        return;
-    }
-
-    for (index = 0; index + 5u <= size; ++index) {
-        const uint8_t *at = (const uint8_t *)(text + index);
-        int32_t        displacement;
-
-        if (*at != 0xE8) {
-            continue;
-        }
-        memcpy(&displacement, at + 1, sizeof(displacement));
-        if ((uintptr_t)((intptr_t)(text + index) + 5 + displacement) != tick_address) {
-            continue;
-        }
-        if (mover_census.site_count < MOVER_CALL_SITES_MAX) {
-            mover_census.site_return[mover_census.site_count] = text + index + 5u;
-            ++mover_census.site_count;
-        }
-    }
-}
-
-static void mover_census_record(const void *return_address, const uint8_t *mover, float now)
-{
-    size_t index;
-
-    if (!mover_census.armed) {
-        return;
-    }
-    ++mover_census.calls;
-
-    if (mover_census.gate_cell != NULL && *mover_census.gate_cell != 0) {
-        ++mover_census.gate_closed;
-    }
-
-    for (index = 0; index < mover_census.site_count; ++index) {
-        if (mover_census.site_return[index] != (uintptr_t)return_address) {
-            continue;
-        }
-        ++mover_census.site_calls[index];
-        /* The condition the function's second early return is decided on, read before the call
-         * because the call is what changes it. Equal means the mover has already integrated to
-         * this time and the call will do nothing. */
-        if (mover != NULL && *(const float *)(mover + MOVER_TIME_BASE) != now) {
-            ++mover_census.site_stale_clock[index];
-        }
-        return;
-    }
-    ++mover_census.calls_from_nowhere;
-}
-
-static void mover_census_report(void)
-{
-    uintptr_t base = host_image_base();
-    size_t    index;
-
-    if (!mover_census.armed) {
-        return;
-    }
-    ++mover_census.frames;
-    if (mover_census.frames < MOVER_CENSUS_FRAMES) {
-        return;
-    }
-
-    diag_log_write("mvr  census over %u frames: %u calls, %.2f per frame, %u through a closed "
-                   "gate, %u from an unrecognised return address",
-                   (unsigned)mover_census.frames, (unsigned)mover_census.calls,
-                   (double)mover_census.calls / (double)mover_census.frames,
-                   (unsigned)mover_census.gate_closed,
-                   (unsigned)mover_census.calls_from_nowhere);
-
-    for (index = 0; index < mover_census.site_count; ++index) {
-        if (mover_census.site_calls[index] == 0) {
-            continue;
-        }
-        diag_log_write("mvr    site %u return +%06X: %u calls, %u with a clock older than the "
-                       "time passed in (%.2f calls per frame)",
-                       (unsigned)index,
-                       (unsigned)(mover_census.site_return[index] - base),
-                       (unsigned)mover_census.site_calls[index],
-                       (unsigned)mover_census.site_stale_clock[index],
-                       (double)mover_census.site_calls[index] / (double)mover_census.frames);
-    }
-
-    mover_census.frames             = 0;
-    mover_census.calls              = 0;
-    mover_census.gate_closed        = 0;
-    mover_census.calls_from_nowhere = 0;
-    for (index = 0; index < mover_census.site_count; ++index) {
-        mover_census.site_calls[index]       = 0;
-        mover_census.site_stale_clock[index] = 0;
-    }
-}
-
-static void mover_census_install(uintptr_t tick_address)
-{
-    uint32_t gate;
-
-    if (tick_address == 0) {
-        return;
-    }
-
-    mover_census_find_call_sites(tick_address);
-    if (mover_census.site_count == 0) {
-        log_warning("the mover census found no call site for the integrator at %08X, so there is "
-                    "nothing to bucket against and it stays off",
-                    (unsigned)tick_address);
-        return;
-    }
-
-    if (memory_read_u32(tick_address + OFFSET_MOVER_GATE_CELL, &gate) &&
-        memory_is_inside_image(gate, sizeof(uint32_t))) {
-        mover_census.gate_cell = (const uint32_t *)(uintptr_t)gate;
-    }
-
-    mover_census.per_frame = frame_hook_add(diag_world_census_tick);
-    mover_census.armed     = true;
-
-    log_info("mover census armed: %u call sites for the integrator at %08X, gate cell %08X, "
-             "reporting every %u frames%s",
-             (unsigned)mover_census.site_count, (unsigned)tick_address,
-             (unsigned)(uintptr_t)mover_census.gate_cell, (unsigned)MOVER_CENSUS_FRAMES,
-             mover_census.per_frame
-                 ? ""
-                 : ". The per-frame hook is NOT available, so nothing will ever be reported");
-}
-
 static void __cdecl hook_mover_tick(void *mover, float now)
 {
     mover_tick_fn_t original = (mover_tick_fn_t)world_state.mover_tick.original;
@@ -586,200 +389,11 @@ static void __cdecl hook_mover_tick(void *mover, float now)
     }
 }
 
-/* ============================================================================================
- * The render-path census: how often the two known callers of the mover census above are entered,
- * not what they do once inside. Level 4, rides on nothing else, arms independently of the mover
- * census so it can answer on its own whether an explosion is "this function ran too many times
- * this frame" or "one run of it walked more than it should have"; the mover census cannot tell
- * those apart because it only sees calls to the integrator, not to its own two callers.
- * ============================================================================================ */
-#define RENDER_CENSUS_FRAMES 200u
-
-typedef struct render_census {
-    bool     armed;
-    bool     per_frame;
-    uint32_t poly_to_world_calls;
-    uint32_t transform_world_calls;
-    uint32_t frames;
-} render_census_t;
-
-static render_census_t render_census;
-
-static void render_census_report(void)
-{
-    if (!render_census.armed) {
-        return;
-    }
-    ++render_census.frames;
-    if (render_census.frames < RENDER_CENSUS_FRAMES) {
-        return;
-    }
-
-    diag_log_write("rdr  census over %u frames: bapmap_polyToWorld %u calls (%.2f per frame), "
-                   "bapvrt_transformWorld %u calls (%.2f per frame)",
-                   (unsigned)render_census.frames,
-                   (unsigned)render_census.poly_to_world_calls,
-                   (double)render_census.poly_to_world_calls / (double)render_census.frames,
-                   (unsigned)render_census.transform_world_calls,
-                   (double)render_census.transform_world_calls / (double)render_census.frames);
-
-    render_census.frames                 = 0;
-    render_census.poly_to_world_calls    = 0;
-    render_census.transform_world_calls  = 0;
-}
-
-/* ============================================================================================
- * Who calls bapmap_polyToWorld. Level 5, and the render census above is what earns it: with
- * bapvrt_transformWorld pinned at exactly one call a frame through the worst of a measured stall
- * while bapmap_polyToWorld climbed from a few hundred calls a frame to over five thousand, the
- * question stopped being "is the world transform re-entered" (measured, no) and became "what is
- * driving one function that is meant to run about once per visible object to run that many times
- * in one frame instead". This answers it the same way the mover census answers the same kind of
- * question about bapmap_tickMover: by finding every `call rel32` in the host's own .text that
- * targets bapmap_polyToWorld and bucketing live traffic against the site it actually came from.
- *
- * A read of the call graph (not written into the code, kept here as evidence) finds fifteen static
- * callers on retail WMAIN.EXE, clustered in two groups: eleven sit close together between 0x40c464
- * and 0x40e672, which by their addresses alone look like one family of per-object-type draw
- * routines (the engine dispatches drawing by object kind, and this is the shape that dispatch
- * takes in the binary); the other four are further out, at 0x42aafe, 0x43a5ff, 0x456e8b and
- * 0x457032. Which of those a live session actually goes through, and in what proportion, is
- * exactly what a call count without a call site cannot say, which is why the mover census took
- * the same approach rather than trusting a hand-written list. */
-#define POLY_CALL_SITES_MAX 24u
-#define POLY_CENSUS_FRAMES  200u
-
-typedef struct poly_census {
-    bool            armed;
-    bool            per_frame;
-
-    size_t          site_count;
-    uintptr_t       site_return[POLY_CALL_SITES_MAX];
-    uint32_t        site_calls[POLY_CALL_SITES_MAX];
-
-    uint32_t        calls_from_nowhere;
-    uint32_t        frames;
-    uint32_t        calls;
-} poly_census_t;
-
-static poly_census_t poly_census;
-
-static void poly_census_find_call_sites(uintptr_t poly_address)
-{
-    uintptr_t text = host_image_text();
-    size_t    size = host_image_text_size();
-    size_t    index;
-
-    if (text == 0 || size < 5 || !memory_is_readable_range(text, size)) {
-        return;
-    }
-
-    for (index = 0; index + 5u <= size; ++index) {
-        const uint8_t *at = (const uint8_t *)(text + index);
-        int32_t        displacement;
-
-        if (*at != 0xE8) {
-            continue;
-        }
-        memcpy(&displacement, at + 1, sizeof(displacement));
-        if ((uintptr_t)((intptr_t)(text + index) + 5 + displacement) != poly_address) {
-            continue;
-        }
-        if (poly_census.site_count < POLY_CALL_SITES_MAX) {
-            poly_census.site_return[poly_census.site_count] = text + index + 5u;
-            ++poly_census.site_count;
-        }
-    }
-}
-
-static void poly_census_record(const void *return_address)
-{
-    size_t index;
-
-    if (!poly_census.armed) {
-        return;
-    }
-    ++poly_census.calls;
-
-    for (index = 0; index < poly_census.site_count; ++index) {
-        if (poly_census.site_return[index] != (uintptr_t)return_address) {
-            continue;
-        }
-        ++poly_census.site_calls[index];
-        return;
-    }
-    ++poly_census.calls_from_nowhere;
-}
-
-static void poly_census_report(void)
-{
-    uintptr_t base = host_image_base();
-    size_t    index;
-
-    if (!poly_census.armed) {
-        return;
-    }
-    ++poly_census.frames;
-    if (poly_census.frames < POLY_CENSUS_FRAMES) {
-        return;
-    }
-
-    diag_log_write("ply  census over %u frames: %u calls, %.2f per frame, %u from an "
-                   "unrecognised return address",
-                   (unsigned)poly_census.frames, (unsigned)poly_census.calls,
-                   (double)poly_census.calls / (double)poly_census.frames,
-                   (unsigned)poly_census.calls_from_nowhere);
-
-    for (index = 0; index < poly_census.site_count; ++index) {
-        if (poly_census.site_calls[index] == 0) {
-            continue;
-        }
-        diag_log_write("ply    site %u return +%06X: %u calls (%.2f per frame)",
-                       (unsigned)index, (unsigned)(poly_census.site_return[index] - base),
-                       (unsigned)poly_census.site_calls[index],
-                       (double)poly_census.site_calls[index] / (double)poly_census.frames);
-    }
-
-    poly_census.frames             = 0;
-    poly_census.calls              = 0;
-    poly_census.calls_from_nowhere = 0;
-    for (index = 0; index < poly_census.site_count; ++index) {
-        poly_census.site_calls[index] = 0;
-    }
-}
-
-static void poly_census_install(uintptr_t poly_address)
-{
-    if (poly_address == 0) {
-        return;
-    }
-
-    poly_census_find_call_sites(poly_address);
-    if (poly_census.site_count == 0) {
-        log_warning("the poly-to-world census found no call site for %08X, so there is nothing "
-                    "to bucket against and it stays off",
-                    (unsigned)poly_address);
-        return;
-    }
-
-    poly_census.per_frame = frame_hook_add(diag_world_census_tick);
-    poly_census.armed     = true;
-
-    log_info("poly-to-world census armed: %u call sites for %08X, reporting every %u frames%s",
-             (unsigned)poly_census.site_count, (unsigned)poly_address,
-             (unsigned)POLY_CENSUS_FRAMES,
-             poly_census.per_frame
-                 ? ""
-                 : ". The per-frame hook is NOT available, so nothing will ever be reported");
-}
-
 static void __cdecl hook_poly_to_world(void *world, void *object, float *out_pos, void *out_extra)
 {
     poly_to_world_fn_t original = (poly_to_world_fn_t)world_state.poly_to_world.original;
 
-    if (render_census.armed) {
-        ++render_census.poly_to_world_calls;
-    }
+    render_census_count_poly_to_world();
     /* Taken before the original runs, so the address named is always the caller's own, never
      * anything the call itself might change. Nothing else in this DLL detours this function's
      * own entry, so unlike the mover census there is no second hook to be mistaken for the
@@ -792,169 +406,15 @@ static void __cdecl hook_transform_world(void *world)
 {
     transform_world_fn_t original = (transform_world_fn_t)world_state.transform_world.original;
 
-    if (render_census.armed) {
-        ++render_census.transform_world_calls;
-    }
+    render_census_count_transform_world();
     original(world);
 }
-
-static void render_census_install(void)
-{
-    render_census.per_frame = frame_hook_add(diag_world_census_tick);
-    render_census.armed     = true;
-
-    log_info("render census armed: counting entries to bapmap_polyToWorld and "
-             "bapvrt_transformWorld, reporting every %u frames%s",
-             (unsigned)RENDER_CENSUS_FRAMES,
-             render_census.per_frame
-                 ? ""
-                 : ". The per-frame hook is NOT available, so nothing will ever be reported");
-}
-
-/* ============================================================================================
- * Who calls the two traces. Level 6. The poly-to-world census named FUN_0040e06b's own call site
- * as the dominant one during the stall, and FUN_0040e06b has exactly one job: it is the per-candidate
- * distance test both FUN_0040be00 (the general, mover-aware line trace) and FUN_0040c2be (the floor
- * trace) run inside the same shared broadphase walk. Neither of those two is a callee bapmap_polyToWorld
- * chooses for itself; they are the reason it runs at all in this path, so the next question is
- * which of THEIR OWN callers, spread across player movement, AI and physics, is the one actually
- * asking for a trace thousands of times in one frame. One shared shape, two independent instances,
- * the same reason the poly-to-world census above did not just reuse the mover census's own state. */
-#define CALL_CENSUS_SITES_MAX 24u
-#define CALL_CENSUS_FRAMES    200u
-
-typedef struct call_census {
-    const char     *tag;      /* the log line prefix, e.g. "tgc" */
-    const char     *what;     /* named in the arm/report lines */
-    bool            armed;
-    bool            per_frame;
-    size_t          site_count;
-    uintptr_t       site_return[CALL_CENSUS_SITES_MAX];
-    uint32_t        site_calls[CALL_CENSUS_SITES_MAX];
-    uint32_t        calls_from_nowhere;
-    uint32_t        frames;
-    uint32_t        calls;
-} call_census_t;
-
-static void call_census_find_call_sites(call_census_t *census, uintptr_t target_address)
-{
-    uintptr_t text = host_image_text();
-    size_t    size = host_image_text_size();
-    size_t    index;
-
-    if (text == 0 || size < 5 || !memory_is_readable_range(text, size)) {
-        return;
-    }
-
-    for (index = 0; index + 5u <= size; ++index) {
-        const uint8_t *at = (const uint8_t *)(text + index);
-        int32_t        displacement;
-
-        if (*at != 0xE8) {
-            continue;
-        }
-        memcpy(&displacement, at + 1, sizeof(displacement));
-        if ((uintptr_t)((intptr_t)(text + index) + 5 + displacement) != target_address) {
-            continue;
-        }
-        if (census->site_count < CALL_CENSUS_SITES_MAX) {
-            census->site_return[census->site_count] = text + index + 5u;
-            ++census->site_count;
-        }
-    }
-}
-
-static void call_census_record(call_census_t *census, const void *return_address)
-{
-    size_t index;
-
-    if (!census->armed) {
-        return;
-    }
-    ++census->calls;
-
-    for (index = 0; index < census->site_count; ++index) {
-        if (census->site_return[index] != (uintptr_t)return_address) {
-            continue;
-        }
-        ++census->site_calls[index];
-        return;
-    }
-    ++census->calls_from_nowhere;
-}
-
-static void call_census_report(call_census_t *census)
-{
-    uintptr_t base = host_image_base();
-    size_t    index;
-
-    if (!census->armed) {
-        return;
-    }
-    ++census->frames;
-    if (census->frames < CALL_CENSUS_FRAMES) {
-        return;
-    }
-
-    diag_log_write("%s  census over %u frames: %s: %u calls, %.2f per frame, %u from an "
-                   "unrecognised return address",
-                   census->tag, (unsigned)census->frames, census->what, (unsigned)census->calls,
-                   (double)census->calls / (double)census->frames,
-                   (unsigned)census->calls_from_nowhere);
-
-    for (index = 0; index < census->site_count; ++index) {
-        if (census->site_calls[index] == 0) {
-            continue;
-        }
-        diag_log_write("%s    site %u return +%06X: %u calls (%.2f per frame)",
-                       census->tag, (unsigned)index, (unsigned)(census->site_return[index] - base),
-                       (unsigned)census->site_calls[index],
-                       (double)census->site_calls[index] / (double)census->frames);
-    }
-
-    census->frames             = 0;
-    census->calls              = 0;
-    census->calls_from_nowhere = 0;
-    for (index = 0; index < census->site_count; ++index) {
-        census->site_calls[index] = 0;
-    }
-}
-
-static void call_census_install(call_census_t *census, uintptr_t target_address)
-{
-    if (target_address == 0) {
-        return;
-    }
-
-    call_census_find_call_sites(census, target_address);
-    if (census->site_count == 0) {
-        log_warning("the %s census found no call site for %08X, so there is nothing to bucket "
-                    "against and it stays off",
-                    census->what, (unsigned)target_address);
-        return;
-    }
-
-    census->armed = true;
-
-    log_info("%s census armed: %u call sites for %08X, reporting every %u frames%s",
-             census->what, (unsigned)census->site_count, (unsigned)target_address,
-             (unsigned)CALL_CENSUS_FRAMES,
-             census->per_frame
-                 ? ""
-                 : ". The per-frame hook is NOT available, so nothing will ever be reported");
-}
-
-static call_census_t trace_general_census = { "tgc", "general trace (FUN_0040be00)" };
-static call_census_t trace_floor_census   = { "tfc", "floor trace (FUN_0040c2be)" };
-
-static void trace_general_census_report(void) { call_census_report(&trace_general_census); }
-static void trace_floor_census_report(void)   { call_census_report(&trace_floor_census); }
 
 static void __cdecl hook_trace_general(void *context, float *result)
 {
     trace_general_fn_t original = (trace_general_fn_t)world_state.trace_general.original;
 
-    call_census_record(&trace_general_census, _ReturnAddress());
+    trace_general_census_record(_ReturnAddress());
     original(context, result);
 }
 
@@ -962,26 +422,8 @@ static double __cdecl hook_trace_floor(void *context)
 {
     trace_floor_fn_t original = (trace_floor_fn_t)world_state.trace_floor.original;
 
-    call_census_record(&trace_floor_census, _ReturnAddress());
+    trace_floor_census_record(_ReturnAddress());
     return original(context);
-}
-
-static void trace_census_install(uintptr_t trace_general_address, uintptr_t trace_floor_address)
-{
-    trace_general_census.per_frame = frame_hook_add(diag_world_census_tick);
-    call_census_install(&trace_general_census, trace_general_address);
-
-    trace_floor_census.per_frame = frame_hook_add(diag_world_census_tick);
-    call_census_install(&trace_floor_census, trace_floor_address);
-}
-
-static void diag_world_census_tick(void)
-{
-    mover_census_report();
-    render_census_report();
-    poly_census_report();
-    trace_general_census_report();
-    trace_floor_census_report();
 }
 
 /* ============================================================================================ */
@@ -1087,7 +529,7 @@ int diag_trigger_install(int trigger_level)
 
     installed += diag_install_observer(sites, SITE_MOVER_OPEN, &world_state.mover_open,
                                        (const void *)hook_mover_open, MOVER_OPEN_PROLOGUE,
-                                       "mover OPEN - debounced, because pressure plates call it "
+                                       "mover OPEN, debounced because pressure plates call it "
                                        "every frame") ? 1 : 0;
     installed += diag_install_observer(sites, SITE_MOVER_CLOSE, &world_state.mover_close,
                                        (const void *)hook_mover_close, MOVER_CLOSE_PROLOGUE,

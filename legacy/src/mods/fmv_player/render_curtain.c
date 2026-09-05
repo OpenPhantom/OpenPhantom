@@ -1,7 +1,7 @@
 /* render_curtain.c: see render_curtain.h.
  *
- * Three sites, all byte-identical to ones already proven elsewhere in this tree - resolved a
- * second time rather than shared, the same way sfx_mute.c, spawn_census.c and video_overlay.c each
+ * Three sites, all byte-identical to ones already proven elsewhere in this tree, resolved a
+ * second time rather than shared, the same way sfx_mute.c, spawn_census.c and diag_flow.c each
  * carry their own copy of Plr_RunPhases' signature:
  *
  *   - the call that closes the scene, identical to dev_overlay.c's own SIG_SCENE_END. Redirected
@@ -10,11 +10,11 @@
  *     file's own hook instead. Both hooks run; whichever installed later becomes the outer one, and
  *     nothing here assumes it is the only DLL that wants this instant.
  *   - the engine's own filled-shape drawer (0x00419660), identical to
- *     dev_overlay/overlay_sites.c's own SIG_DRAW_QUAD - what the game draws its own letterbox bars
+ *     dev_overlay/overlay_sites.c's own SIG_DRAW_QUAD, what the game draws its own letterbox bars
  *     and screen tint with, four screen coordinates plus a packed ARGB.
  *   - the screen size cells, identical to overlay_sites.c's own SIG_SCREEN_SIZE.
  *
- * Drawn every real frame while armed, right before the scene closes and the page is shown - the
+ * Drawn every real frame while armed, right before the scene closes and the page is shown, so the
  * same instant dev_overlay's own panel paints into, which is why a panel opened on top of this
  * still shows on top of it: this file's hook runs as the outer wrapper (loading after
  * "dev_overlay" alphabetically), draws its own quad, THEN calls original, which is what reaches
@@ -90,7 +90,7 @@ static const uint8_t MSK_SCREEN_SIZE[] = {
 #define CALL_REL32_LENGTH  5u
 
 /* patch_read_call_target() refuses a target outside WMAIN.EXE's own image, which is exactly right
- * for validating an UNTOUCHED site - and exactly wrong here. dev_overlay.dll already redirects this
+ * for validating an UNTOUCHED site, and exactly wrong here. dev_overlay.dll already redirects this
  * same call site to its own hook, in its own module, well outside WMAIN.EXE's image, whenever it
  * loads first (alphabetically, "dev_overlay" sorts before "fmv_player"). Reading THAT as garbage
  * and refusing is what "no usable call" actually meant: not a bad site, a target that happened to
@@ -260,7 +260,7 @@ void render_curtain_install(void)
     curtain_state.resolved = true;
 
     log_info("render_curtain: drawn through the engine's own shape drawer at %08X, right before "
-             "the scene closes at %08X - part of the real rendered frame, so any capture of the "
+             "the scene closes at %08X, part of the real rendered frame, so any capture of the "
              "game shows it the same way the player's own screen does",
              (unsigned)quad_site, (unsigned)call);
 }

@@ -8,8 +8,8 @@
 
 #include <stdio.h>
 
-/* Relative to the game folder, and the same three words the installer writes. Nothing else in the
- * process knows this path, so it is spelled once. */
+/* Relative to the game folder, and the same path the installer writes. Nothing else in the
+ * process knows it, so it is spelled once. */
 #define BUNDLED_RUNTIME_SUBDIRECTORY L"mods\\fmv"
 
 #define VLC_REGISTRY_KEY L"SOFTWARE\\VideoLAN\\VLC"

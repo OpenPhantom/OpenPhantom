@@ -33,9 +33,8 @@ typedef enum debug_watch {
     DEBUG_WATCH_READ_WRITE = 3  /* 11, on data reads and writes */
 } debug_watch_t;
 
-/* The length field encodes 1, 2 and 4 bytes as 0, 1 and 3. Two is not a typo for three: the value
- * for four bytes really is 11 and the value 10 means eight bytes, which does not exist on this
- * target. */
+/* The length field encodes 1, 2 and 4 bytes as 0, 1 and 3. The 3 is not a typo for 2: the value
+ * for four bytes really is 11, and 10 means eight bytes, which does not exist on this target. */
 typedef enum debug_length {
     DEBUG_LENGTH_1 = 0,
     DEBUG_LENGTH_2 = 1,

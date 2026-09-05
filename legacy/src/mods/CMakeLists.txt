@@ -190,6 +190,8 @@ add_engine_fix(diagnostics
     diag_install.c
     diag_audio.c
     diag_world.c
+    diag_world_mover_census.c
+    diag_world_path_census.c
     diag_flow.c
     diag_frame.c
     diag_present.c
@@ -204,8 +206,9 @@ target_link_libraries(diagnostics PRIVATE winmm psapi pdh)
 # Five files, and the seams are the four different ways this feature fails. fmv_player.c is the one
 # byte-evidenced detour and decides WHEN a movie is ours. vlc_locate.c answers "is there a 32-bit
 # libVLC on this machine at all", which is the question about somebody's registry and is kept apart
-# for the same reason player_sites.c and music_sites.c are. vlc_playback.c loads that libVLC and
-# drives it. video_overlay.c owns the window it draws into. movie_path.c is the arithmetic, kept
+# for the same reason player_sites.c and music_sites.c are. vlc_runtime.c loads that libVLC and
+# resolves its exports, vlc_playback.c drives it. video_overlay.c owns the window it draws
+# into. movie_path.c is the arithmetic, kept
 # apart for the same reason fov_math.c and free_look_math.c are: it is the only part of this
 # feature a test can observe without the game, and unittests/movie_path.c links it on its own.
 # advapi32 (RegOpenKeyExW etc.) is already one of MSVC's own default libraries, linked here anyway
@@ -221,6 +224,7 @@ add_engine_fix(fmv_player
     render_curtain.c
     vlc_locate.c
     vlc_playback.c
+    vlc_runtime.c
 )
 target_link_libraries(fmv_player PRIVATE advapi32 winmm)
 

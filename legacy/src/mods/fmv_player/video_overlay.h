@@ -39,10 +39,10 @@ bool video_overlay_is_still_loading(void);
  * caller is expected to fall back to the original playback path. */
 bool video_overlay_play_blocking(const wchar_t *file_path);
 
-/* WHICH WINDOW LIBVLC DRAWS INTO. The default is "popup" on Windows and "child" under Wine, and
+/* Which window libVLC DRAWS INTO. The default is "popup" on Windows and "child" under Wine, and
  * neither needs setting: the ini is here to override a machine that disagrees.
  *
- * WHAT "child" IS ACTUALLY FOR, because it is not what it was written for. It was built to test
+ * What "child" is ACTUALLY FOR, because it is not what it was written for. It was built to test
  * whether a second full screen window was what turned the menus black under Wine. It was NOT: that
  * was libVLC's Direct3D video output taking the engine's exclusive mode device away, and it is
  * fixed by the video output setting in vlc_playback.h instead. This looked like a dead end.

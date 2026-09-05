@@ -16,7 +16,7 @@
  *
  * This file does not ask at all. It replaces the movie player wholesale, for any movie a converted
  * file exists for, with a borderless overlay window (video_overlay.c) playing through a 32-bit
- * libVLC (vlc_playback.c, found by vlc_locate.c) - a code path that never touches the game's
+ * libVLC (vlc_playback.c, found by vlc_locate.c), a code path that never touches the game's
  * DirectDraw surface, never locks anything the translation layer manages, and gets hardware video
  * decode that Bink 1 from 1999 never had. A movie with no converted file falls straight through to
  * the original Bink playback, unchanged, so this is safe to install with nothing converted: the
@@ -31,7 +31,7 @@
  *
  *   0043EB93  LEA EDX,[EBP-0x84]      ; a local buffer already filled with e.g. "movie\arena"
  *   0043EB99  PUSH EDX
- *   0043EB9A  CALL 0x0046C35A         ; the movie player - THIS is what this file detours
+ *   0043EB9A  CALL 0x0046C35A         ; the movie player, THIS is what this file detours
  *   0043EB9F  ADD ESP,0xC             ; caller cleans 12 bytes: __cdecl, 3 arguments
  *
  * `ADD ESP,0xC` after every one of the four call sites confirms the calling convention directly:
@@ -206,7 +206,7 @@ static void load_config(void)
 
     /* Which video output libVLC uses.
      *
-     * THE DEFAULT DEPENDS ON WHERE THIS IS RUNNING, and that is the whole point. On Windows the
+     * The default DEPENDS ON WHERE this is running, and that is the whole point. On Windows the
      * choice is left to libVLC, exactly as it always has been, so nothing about a Windows
      * installation changes. Under Wine the default is gdi, because libVLC's own choice there is
      * Direct3D and building a second Direct3D device takes the engine's exclusive mode one away:
@@ -245,8 +245,8 @@ static void load_config(void)
                  : "LETTERBOXED, keeping their own shape with black bars where the screen differs");
 
     /* A live probe on the player's own body around the level 6 opening cutscene measured a real
-     * position-settle transient - the player's authoritative position, not its render blend -
-     * overshooting by 1.48 units and taking about 650 ms to read flat again, entirely under an
+     * position-settle transient, the player's authoritative position rather than its render
+     * blend, overshooting by 1.48 units and taking about 650 ms to read flat again, entirely under an
      * engine position-override flag that retail's own resolution switch around every movie
      * incidentally outlives before its picture is ever shown. This DLL's own faster transition does
      * not spend that time, so this holds the picture back, still solid black, for a short beat after
@@ -362,9 +362,9 @@ static void resolve_engine_cells(uintptr_t site)
              "this DLL plays", (unsigned)in_movie_cmp);
 }
 
-/* The post-movie curtain (video_overlay.c) exists for a position-settle transient that can only
+/* The post-movie curtain (render_curtain.c) exists for a position-settle transient that can only
  * happen once a level and its player object already exist. The two startup splash movies play
- * before any level is loaded - there is nothing there for the curtain to hide, only an unwanted
+ * before any level is loaded, so there is nothing for the curtain to hide, only an unwanted
  * extra pause on every single launch. `name` is still the retail backslash-relative name at this
  * point ("movie\\logo", "movie\\bigape", "movie\\scene1", ...), so only its own base is compared. */
 static bool movie_wants_post_movie_curtain(const char *name)
@@ -418,8 +418,8 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
 
     if (!movie_path_build(host_directory(), fmv_player_state.movie_directory, name,
                           fmv_player_state.extension, ansi_path, sizeof ansi_path)) {
-        log_warning("no usable path for \"%s\" under \"%s%s\" with extension \"%s\" - too long, or "
-                    "the configuration is not usable - so the retail Bink path is used", name,
+        log_warning("no usable path for \"%s\" under \"%s%s\" with extension \"%s\": too long, or "
+                    "the configuration is not usable, so the retail Bink path is used", name,
                     host_directory(), fmv_player_state.movie_directory,
                     fmv_player_state.extension);
         return original(name, param2, param3);
@@ -466,7 +466,7 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
      * with the same cell. It is not bookkeeping: the engine's display hot keys check it before
      * changing resolution or gamma, and the game's own key hook steps aside entirely while it is
      * set. Without it a cutscene played by this DLL is, to the rest of the engine, ordinary
-     * gameplay with a window over it - which is what "it does not feel like the game" is made of.
+     * gameplay with a window over it, which is what "it does not feel like the game" is made of.
      *
      * Set immediately before and cleared immediately after, with nothing in between that can
      * return early, so it cannot be left standing. A stuck value would make the engine refuse

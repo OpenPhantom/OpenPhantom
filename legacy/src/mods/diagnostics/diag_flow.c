@@ -136,7 +136,8 @@ static const uint8_t SIG_DECAL_TABLE[] = {
 #define DECAL_OFF_POLY       0x08u
 #define DECAL_OFF_MATERIAL   0x0Cu
 #define MATERIAL_OFF_PAGE    0xB0u
-#define DECAL_CENSUS_MAX       16u  /* per-poly density is perPolyLimit * detail level = 2 * 4 */
+#define DECAL_CENSUS_MAX       16u  /* twice the per-poly density, perPolyLimit * detail level
+                                     * = 2 * 4, so a doubled-up polygon still fits the census */
 
 /* --- rdMaterial_selectCel 0x0047B9BD ---------------------------------------------------------- *
  * The second silent exit. SEVEN callers, and only 0x0041C712 is inside the decal drawer, so this
@@ -513,7 +514,7 @@ int diag_player_install(int player_level)
                                            "g_plrModeTable");
 
     if (flow_state.player_pointer_slot == NULL) {
-        log_warning("  player_run_phases OFF - pPlayer could not be derived");
+        log_warning("  player_run_phases OFF, pPlayer could not be derived");
         return 0;
     }
 

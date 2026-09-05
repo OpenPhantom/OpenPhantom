@@ -4,7 +4,7 @@
  * THE DEFECT THIS SERVES
  *
  * The message pump in vlc_playback.c is scoped to the overlay's own window, so the game window's
- * WM_MOUSEMOVE messages are no longer eaten while a movie plays - they queue up, unprocessed, for
+ * WM_MOUSEMOVE messages are no longer eaten while a movie plays; they queue up, unprocessed, for
  * as long as the movie runs. That is the correct behaviour and it made a second defect visible:
  * after the intro movies the DRAWN menu cursor, not the OS one, appeared in the wrong place.
  *
@@ -49,7 +49,7 @@
  *
  * Because the constants are wrong on a build that ships with the game. Measured over every image
  * to hand: the block above sits at 0x00460BCC in all five retail executables, including the German
- * one, and at 0x00460B6C in the Edit Tool's own recompile of the same engine - where the cells are
+ * one, and at 0x00460B6C in the Edit Tool's own recompile of the same engine, where the cells are
  * at 0x004B6C48 / 0x004B6C4C and 0x006CFD08 / 0x006CFD0C, 0x50 bytes below the retail ones. Four
  * hardcoded addresses would therefore have written two dwords into whatever else lives at
  * 0x004B6C98 on that build, silently, because a wrong address in the same data section is still
@@ -239,7 +239,7 @@ void menu_cursor_cells_recentre(void)
     }
     if (!memory_read_u32(cells.origin_x, &origin_x) ||
         !memory_read_u32(cells.origin_y, &origin_y)) {
-        return;                        /* not readable at all - best effort, say nothing */
+        return;                        /* not readable at all, best effort, say nothing */
     }
     if (origin_x > MENU_ORIGIN_MAX || origin_y > MENU_ORIGIN_MAX) {
         if (!cells.warned) {

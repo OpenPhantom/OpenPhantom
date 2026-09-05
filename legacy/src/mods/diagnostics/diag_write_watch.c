@@ -13,13 +13,13 @@
  * "nothing ever writes this field". A short lived helper thread suspends the simulation thread,
  * writes the registers into a stopped context, and resumes it. That is what a debugger does.
  *
- * THE HANDLER DOES NO FILE WORK. It runs inside an exception on the simulation thread, so it
+ * The handler does NO FILE WORK. It runs inside an exception on the simulation thread, so it
  * records into a small fixed buffer and returns. The frame callback drains that buffer afterwards.
  * Logging from inside the handler would put file IO between the faulting instruction and the
  * instruction after it, which changes the timing of the very thing being measured, and would
  * deadlock outright if the exception ever landed while the log's own lock was held.
  *
- * THIS OBSERVES AND DOES NOT CHANGE THE GAME. The handler reads the context, records, clears its
+ * This OBSERVES and does not change the game. The handler reads the context, records, clears its
  * own status bit and continues execution. It never alters a register, a flag or a game field, and
  * the write that triggered it has already happened by the time it runs.
  *

@@ -330,7 +330,7 @@ static void __cdecl hook_sound_free_channel(uint32_t channel)
         wav[1] = '\0';
     }
 
-    /* THE OWNER HANDLE, READ BEFORE THE ORIGINAL RUNS because the original clears it.
+    /* The owner handle, READ BEFORE the original runs, because the original clears it.
      *
      * bapsound_play stores the address the caller passed for its channel handle, and
      * bapsound_freeChannel writes -1 through it when the voice ends. Three call sites in the
@@ -548,7 +548,7 @@ int diag_audio_install(int audio_level, int census_milliseconds)
 
     if (census_milliseconds > 0) {
         if (audio_state.channel_bank == NULL) {
-            log_warning("  channel census OFF - the channel bank could not be derived");
+            log_warning("  channel census OFF, the channel bank could not be derived");
         } else {
             installed += diag_install_observer(sites, SITE_SOUND_PERIODIC, &audio_state.periodic,
                                           (const void *)hook_sound_periodic,

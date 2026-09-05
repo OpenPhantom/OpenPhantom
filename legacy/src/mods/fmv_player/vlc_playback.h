@@ -21,7 +21,7 @@
 
 /* Starts locating a 32-bit libVLC, loading libvlccore.dll and libvlc.dll out of it, resolving the
  * handful of exports this file calls, pointing VLC_PLUGIN_PATH at that install's plugins folder,
- * and creating one shared instance for the life of the process - ALL OF IT ON A BACKGROUND THREAD,
+ * and creating one shared instance for the life of the process, ALL OF IT on a background thread,
  * started once and never joined.
  *
  * Call as early as possible, at install time, so it has the most time to finish before the first
@@ -85,8 +85,8 @@ bool vlc_playback_is_still_loading(void);
  * opinion on window management, only on what renders inside one.
  *
  * Returns false only when playback never began, which is the caller's signal to fall back to the
- * original path. Anything after it genuinely began - the end of the file, Escape, or a rare
- * mid-playback error this file has no verified ABI to tell apart from a natural end - counts as
+ * original path. Anything after it genuinely began, whether the end of the file, Escape, or a
+ * mid-playback error this file has no verified ABI to tell apart from a natural end, counts as
  * handled, matching how the retail player itself moves on regardless of why a movie stopped.
  *
  * The pump is SCOPED TO `window`, the overlay's own handle, rather than run over the whole thread
@@ -99,16 +99,17 @@ bool vlc_playback_is_still_loading(void);
  * game's traffic simply waits, in order, for its own pump to resume.
  *
  * `game_window`, if not NULL, is looked at but never emptied. It is peeked with PM_NOREMOVE for
- * the two messages that BEGIN a close - Alt+F4 as WM_SYSKEYDOWN/VK_F4, the close box as
- * WM_NCLBUTTONDOWN/HTCLOSE - and only one of those is then removed and immediately re-posted, so
- * the request survives to be honoured by the engine's own window procedure once this returns.
+ * the one message that BEGINS a close, the close box as WM_NCLBUTTONDOWN/HTCLOSE, which is then
+ * removed and immediately re-posted, so the request survives to be honoured by the engine's own
+ * window procedure once this returns. Alt+F4 was handled here too and is not any more; see
+ * vlc_playback.c for what went wrong with it.
  * Without it the game cannot be closed until the movie ends, which for the credits is minutes and
  * which the retail Bink path does not do. WM_QUIT needs no handling here: it is a thread message
  * with no window, a scoped peek never retrieves it, and it stays queued for the game's own pump.
  *
  * What none of this touches, because it has been claimed here before and is worth stating plainly:
  * SENT messages. The MSG that PeekMessageW fills in only ever carries queued messages, while a
- * sent message - WM_ACTIVATEAPP, WM_SETCURSOR, WM_SETFOCUS, WM_WINDOWPOSCHANGED and the rest - is
+ * sent message, WM_ACTIVATEAPP, WM_SETCURSOR, WM_SETFOCUS, WM_WINDOWPOSCHANGED and the rest, is
  * delivered by the system straight to the target window procedure from inside the PeekMessageW
  * call itself and never appears in the MSG at all. So an Alt-Tab during a movie does reach the
  * engine's window procedure, re-entrantly, on the thread that is parked here, and no peek filter

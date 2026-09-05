@@ -2,13 +2,13 @@
  * one file into that popup through libVLC, in-process, blocking until it ends.
  *
  * ==============================================================================================
- * THE FULL PATH HERE, BECAUSE NONE OF THE EARLIER STEPS WERE WRONG SO MUCH AS INCOMPLETE
+ * The full path is here, because none of the earlier steps were WRONG so much as INCOMPLETE
  *
  * Design 1 played movies through Windows' own Media Foundation (MFPlay), in-process, in a window
  * owned by the game. It flickered black for the whole length of every movie. Five fixes for that,
  * each chasing a real hypothesis, each verified insufficient on its own: re-asserting
  * WS_EX_TOPMOST every 200 ms; minimizing the game window outright; a real WM_ERASEBKGND bug (the
- * overlay's own background fill racing EVR's Direct3D presentation on the same window - fixed, not
+ * overlay's own background fill racing EVR's Direct3D presentation on the same window; fixed, not
  * the cause); dropping WS_EX_TOPMOST and all Z-order reassertion; filtering the game window's own
  * messages out of the shared message loop.
  *
@@ -16,16 +16,16 @@
  * device sharing a process with the DirectDraw-to-Direct3D9 translation layer this whole redesign
  * exists to route around was the constant across all five in-process fixes. Getting the overlay to
  * render above the game at all across a process boundary needed the game's HWND passed over as the
- * overlay's OWNER (Windows keeps an owned window above its owner automatically) - which surfaced a
+ * overlay's OWNER (Windows keeps an owned window above its owner automatically), which surfaced a
  * real, independent bug: blocking the game's own thread on WaitForSingleObject(..., INFINITE)
  * while another process created a window owned by its window deadlocked the whole desktop
  * compositor once, not just the game. Once that was fixed the overlay rendered on top, but taking
  * foreground on a window sized to the whole monitor made Windows' shell treat it as switching to a
- * different fullscreen app and auto-minimize the game underneath - and the game's own WndProc
+ * different fullscreen app and auto-minimize the game underneath, and the game's own WndProc
  * fighting to restore itself raced that minimize, which is what the earlier flicker had actually
  * been. Dropping SetForegroundWindow, then WS_EX_NOACTIVATE, each closed part of that gap without
- * closing it. Disabling Windows' Fullscreen Optimizations for the executable - a genuinely
- * different, independently testable theory - changed nothing, which ruled out DWM's own
+ * closing it. Disabling Windows' Fullscreen Optimizations for the executable, a genuinely
+ * different and independently testable theory, changed nothing, which ruled out DWM's own
  * exclusive-fullscreen heuristics specifically.
  *
  * Along the way MFPlay itself was replaced with libVLC. Standalone VLC, playing the exact same
@@ -33,14 +33,14 @@
  * managed even isolated in its own process. That swap alone fixed the flicker, and it was a
  * single-variable change: same process, same window, same file, different decoder. The minimize
  * was still separate, and reading the translation layer's own source settled why: a real
- * exclusive-mode Direct3D9 device - which is what this game gets by default, translated from its
- * own DirectDraw DDSCL_EXCLUSIVE request - auto-minimizes on WM_ACTIVATEAPP(deactivate) as a
+ * exclusive-mode Direct3D9 device, which is what this game gets by default, translated from its
+ * own DirectDraw DDSCL_EXCLUSIVE request, auto-minimizes on WM_ACTIVATEAPP(deactivate) as a
  * fundamental, decades-old part of the D3D9 runtime, unrelated to and unaffected by Fullscreen
  * Optimizations. That layer has a windowed-mode override which avoids this by never requesting
  * exclusive mode at all, confirmed against the real install to eliminate both symptoms, but at a
  * real cost: this game switches its own internal DirectDraw resolution between menus (640x480) and
  * gameplay constantly, something true exclusive fullscreen never had to expose because the GPU
- * always scales the backbuffer to fill the screen - windowed mode instead physically resizes the
+ * always scales the backbuffer to fill the screen; windowed mode instead physically resizes the
  * actual window on every such change, landing on stale intermediate sizes. A structural mismatch
  * with this game, not a misconfiguration, and it was reverted.
  *
@@ -57,7 +57,7 @@
  * window procedure from inside PeekMessageW itself, and never appears in the MSG that the loop
  * filters on. An Alt-Tab during a movie therefore does reach the engine's window procedure, on the
  * thread parked inside this call. What the exclusion genuinely does is keep the game's POSTED
- * traffic - input, timers, paints - out of its window procedure while the movie plays, which is
+ * traffic, input, timers and paints alike, out of its window procedure while the movie plays,
  * worth having on its own terms and is what it is documented as now.
  * ============================================================================================== */
 #include "video_overlay.h"
@@ -97,7 +97,7 @@ static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wp
                                             LPARAM lparam)
 {
     if (message == WM_ERASEBKGND) {
-        /* A GDI fill here would race libVLC's own presentation on the same window - see the design
+        /* A GDI fill here would race libVLC's own presentation on the same window; see the design
          * history above (design 1, fix 3) for the version of this bug that cost a real debugging
          * session to find the first time. The one moment that needs a manual black fill is handled
          * once, directly, after the window is shown. */
@@ -285,7 +285,7 @@ void video_overlay_set_surface_mode(const char *mode)
  * GDI clips every drawing operation through its device context away entirely; the fill this file
  * used to do before showing the window was a no-op, and what filled that gap instead was whatever
  * a fresh DWM redirection surface happens to contain, which is not something this code gets to
- * decide. Doing it once here rather than from WM_ERASEBKGND is deliberate - see the window
+ * decide. Doing it once here rather than from WM_ERASEBKGND is deliberate; see the window
  * procedure above for why repeating it was a real bug. */
 static void fill_black_once(HWND window)
 {
@@ -426,9 +426,9 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
     /* Field-confirmed repair for a stray OS "loading" cursor left on screen after the intro
      * movies. Not a hang: the process showed as Running throughout, never Not Responding, which
      * rules out the shell's own "still starting" heuristic. What explains it is that the RETAIL
-     * Bink path visibly flashes the screen several times before the game settles - real
+     * Bink path visibly flashes the screen several times before the game settles, real
      * minimize/restore cycles, consistent with this game's exclusive-mode Direct3D9 device
-     * reacting to however Bink touches the display - while this DLL shows none of that flashing,
+     * reacting to however Bink touches the display, while this DLL shows none of that flashing,
      * which is it doing exactly what it was built to do. Something early in start-up leaves the OS
      * cursor undone, and the retail path's incidental flashing was re-triggering a full activation
      * handshake and curing it before anyone saw it. A smooth window removes that accidental cure

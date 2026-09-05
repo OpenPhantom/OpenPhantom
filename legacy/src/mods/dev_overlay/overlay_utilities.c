@@ -5,7 +5,12 @@
 #include "dev_menu_size_row.h"
 #include "fog_band_row.h"
 #include "fog_follow_row.h"
+#include "fov_row.h"
+#include "menu_extras_row.h"
+#include "sensitivity_row.h"
+#include "free_look_row.h"
 #include "open_key_row.h"
+#include "strafe_row.h"
 #include "strict_range_row.h"
 #include "overlay_key_name.h"
 #include "view_range_live_row.h"
@@ -23,6 +28,13 @@ typedef enum utilities_slot {
     UTILITIES_STRICT_RANGE,
     UTILITIES_FOG_BAND,
     UTILITIES_FOG_FOLLOW,
+    UTILITIES_FOV,
+    UTILITIES_FOV_TRACK,
+    UTILITIES_FREE_LOOK,
+    UTILITIES_STRAFE,
+    UTILITIES_SENSITIVITY,
+    UTILITIES_SENSITIVITY_TRACK,
+    UTILITIES_MENU_EXTRAS,
     UTILITIES_DEV_MENU_SIZE,
     UTILITIES_OPEN_KEY
 } utilities_slot_t;
@@ -141,6 +153,97 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         out->on = fog_follow_row_get();
         return;
 
+    case UTILITIES_FOV: {
+        /* The one row here that can be unavailable. Every other row edits a settings file and works
+         * with the DLL that reads it gone; this one needs a width in degrees that only variable_fov
+         * can publish, and inventing one would be wrong on some canvas. */
+        float degrees;
+        char  range[40];
+
+        out->kind = OVERLAY_ROW_VALUE;
+        _snprintf(range, sizeof range, "Field of view (%.0f to %.0f)",
+                  (double)fov_row_min(), (double)fov_row_max());
+        range[sizeof range - 1] = '\0';
+        copy_label(out->label, range);
+        if (fov_row_get(&degrees)) {
+            fill_typed(out, editing_text, fov_row_format, degrees);
+        } else {
+            out->available = false;
+            copy_label(out->value, "");
+        }
+        return;
+    }
+
+    case UTILITIES_FOV_TRACK: {
+        float degrees;
+        float low  = fov_row_min();
+        float high = fov_row_max();
+
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        if (!fov_row_get(&degrees)) {
+            out->available = false;    /* no published base, so nothing to place a handle against */
+            return;
+        }
+        /* Guarded rather than assumed: both ends come out of the file, and somebody who sets them
+         * equal would otherwise divide by zero here. */
+        out->fraction = (high > low) ? ((degrees - low) / (high - low)) : 0.0f;
+        /* CLAMPED FOR DRAWING, while the number on the row above is left honest. ExtraDegrees can
+         * be set in the file to a width outside the slider's own ends, and the row should say so
+         * rather than pretend; but a fraction outside 0 to 1 would put the handle beyond the track
+         * it belongs to, which reads as a slider that has broken rather than a value off the
+         * scale. */
+        if (out->fraction < 0.0f) {
+            out->fraction = 0.0f;
+        }
+        if (out->fraction > 1.0f) {
+            out->fraction = 1.0f;
+        }
+        return;
+    }
+
+    case UTILITIES_FREE_LOOK:
+        copy_label(out->label, "Free look");
+        out->on = free_look_row_get();
+        return;
+
+    case UTILITIES_STRAFE:
+        copy_label(out->label, "Strafe");
+        out->on = strafe_row_get();
+        return;
+
+    case UTILITIES_SENSITIVITY:
+        out->kind = OVERLAY_ROW_VALUE;
+        /* The name the game's own controls screen gave it, so a reader who has seen that screen
+         * recognises this one. */
+        copy_label(out->label, "Mouse speed");
+        fill_typed(out, editing_text, sensitivity_row_format, sensitivity_row_get());
+        return;
+
+    case UTILITIES_SENSITIVITY_TRACK: {
+        const float value = sensitivity_row_get();
+
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        /* No availability test, unlike the field of view: both ends of this one are fixed, so there
+         * is nothing to wait for another DLL to publish. */
+        out->fraction = (value - SENSITIVITY_MIN) / (SENSITIVITY_MAX - SENSITIVITY_MIN);
+        if (out->fraction < 0.0f) {
+            out->fraction = 0.0f;
+        }
+        if (out->fraction > 1.0f) {
+            out->fraction = 1.0f;
+        }
+        return;
+    }
+
+    case UTILITIES_MENU_EXTRAS:
+        /* Named for what a reader sees rather than for the three widgets, and it says when,
+         * because a switch that appears to do nothing is worse than one that explains itself. */
+        copy_label(out->label, "Show extra menu options (restart the game)");
+        out->on = menu_extras_row_get();
+        return;
+
     case UTILITIES_DEV_MENU_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
         copy_label(out->label, "Dev menu size (0.33 to 4.0)");
@@ -181,6 +284,8 @@ bool overlay_utilities_row_is_value(uint32_t slot)
 {
     return slot == (uint32_t)UTILITIES_VIEW_RANGE ||
            slot == (uint32_t)UTILITIES_FOG_BAND ||
+           slot == (uint32_t)UTILITIES_FOV ||
+           slot == (uint32_t)UTILITIES_SENSITIVITY ||
            slot == (uint32_t)UTILITIES_DEV_MENU_SIZE;
 }
 
@@ -201,6 +306,12 @@ bool overlay_utilities_toggle(uint32_t slot)
         return strict_range_row_set(!strict_range_row_get());
     case UTILITIES_FOG_FOLLOW:
         return fog_follow_row_set(!fog_follow_row_get());
+    case UTILITIES_FREE_LOOK:
+        return free_look_row_set(!free_look_row_get());
+    case UTILITIES_STRAFE:
+        return strafe_row_set(!strafe_row_get());
+    case UTILITIES_MENU_EXTRAS:
+        return menu_extras_row_set(!menu_extras_row_get());
     default:
         return false;
     }
@@ -223,6 +334,10 @@ bool overlay_utilities_commit(uint32_t slot, const char *text)
         return view_range_row_parse(text, &parsed) && view_range_row_set(parsed);
     case UTILITIES_FOG_BAND:
         return fog_band_row_parse(text, &parsed) && fog_band_row_set(parsed);
+    case UTILITIES_FOV:
+        return fov_row_parse(text, &parsed) && fov_row_set(parsed);
+    case UTILITIES_SENSITIVITY:
+        return sensitivity_row_parse(text, &parsed) && sensitivity_row_set(parsed);
     case UTILITIES_DEV_MENU_SIZE:
         return dev_menu_size_row_parse(text, &parsed) && dev_menu_size_row_set(parsed);
     default:
@@ -236,4 +351,36 @@ bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key)
         return false;
     }
     return open_key_row_set(virtual_key);
+}
+
+bool overlay_utilities_slider_set(uint32_t slot, float fraction)
+{
+    float low;
+    float high;
+
+    if (fraction < 0.0f) {
+        fraction = 0.0f;
+    }
+    if (fraction > 1.0f) {
+        fraction = 1.0f;
+    }
+    if ((utilities_slot_t)slot == UTILITIES_SENSITIVITY_TRACK) {
+        /* Not rounded to anything, unlike the field of view below: the band is a tenth of a degree
+         * wide and the row shows three decimals, so every position along the track is a value
+         * somebody can tell apart from the one beside it. */
+        return sensitivity_row_set(SENSITIVITY_MIN +
+                                   fraction * (SENSITIVITY_MAX - SENSITIVITY_MIN));
+    }
+    if ((utilities_slot_t)slot != UTILITIES_FOV_TRACK) {
+        return false;
+    }
+    low  = fov_row_min();
+    high = fov_row_max();
+    if (!(high > low)) {
+        return false;
+    }
+    /* Rounded to whole degrees. The row shows whole degrees, so a drag that set 96.4 would display
+     * 96 and then write 96.4 back into the file, and the two would disagree for anyone reading it.
+     * A degree is also below what the eye picks out mid-drag. */
+    return fov_row_set((float)(int)(low + fraction * (high - low) + 0.5f));
 }

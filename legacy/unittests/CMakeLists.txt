@@ -95,6 +95,8 @@ add_unit_test(menu_island_clip enhanced_resolution
 )
 
 add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c
+    view_distance_fix/fog_band.c
+    view_distance_fix/fog_regime_install.c
     view_distance_fix/fog_trace.c
     view_distance_fix/cell_watchdog.c)
 
@@ -170,6 +172,11 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/open_key_row.c
     dev_overlay/fog_follow_row.c
     dev_overlay/auto_range_row.c
+    dev_overlay/fov_row.c
+    dev_overlay/menu_extras_row.c
+    dev_overlay/sensitivity_row.c
+    dev_overlay/free_look_row.c
+    dev_overlay/strafe_row.c
     dev_overlay/strict_range_row.c
     dev_overlay/view_range_row.c
     dev_overlay/dev_menu_size_row.c
@@ -177,9 +184,10 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
     # The cheats were split by responsibility when cheats_openphantom.c passed twice the size this
-    # project allows. They still share one state record, so the test links all four together.
+    # project allows. They still share one state record, so the test links all five together.
     dev_overlay/cheats_npc_damage.c
     dev_overlay/cheats_jump_boost.c
+    dev_overlay/cheats_fall_consequences.c
     dev_overlay/cheats_free_camera.c
     dev_overlay/cheats_no_fog.c
     # Both jump boost and the free camera ask the same "is there a floor under this" question,
@@ -212,7 +220,13 @@ add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
 # either says alone, so it is worth a test of its own.
 add_unit_test(frame_governor view_distance_fix view_distance_fix/frame_governor.c)
 
+# Naming a virtual key, which the open-key row shows and the ini round-trips.
+add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)
+
 # The draw distance row's own arithmetic: the clamp, and the hand written parser that exists
 # because strtof would read a decimal point only where the locale agrees it is one.
-add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)
 add_unit_test(view_range_row dev_overlay dev_overlay/view_range_row.c)
+
+# The field of view row, which is the only one with a slider, so its ends and its rounding are
+# where a handle that cannot reach the maximum would show up.
+add_unit_test(fov_row dev_overlay dev_overlay/fov_row.c dev_overlay/view_range_row.c)

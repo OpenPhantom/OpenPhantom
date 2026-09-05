@@ -49,8 +49,17 @@ void overlay_input_pointer(float *out_x, float *out_y);
  * asks this to show which state the field is in. */
 bool overlay_input_search_focused(void);
 
+/* The slider being dragged right now and where the pointer has it, or false when nothing is being
+ * dragged.
+ *
+ * The drawer asks this so the handle follows the pointer every frame while the setting behind it is
+ * only written thirty times a second. Reading the handle's position back out of the settings file
+ * instead would move it in the same thirty steps, against a pointer moving in sixty, which reads as
+ * a slider that sticks. */
+bool overlay_input_drag(int32_t *row, float *fraction);
+
 /* Notches scrolled since the last take, positive away from the player, negative towards. Observed
- * from every message this DLL's hook sees, whether or not the panel is open - unlike everything
+ * from every message this DLL's hook sees, whether or not the panel is open, unlike everything
  * else here, which only runs while it is. Consumes: what it returns has been taken out of the
  * accumulator. */
 int32_t overlay_input_take_wheel_delta(void);

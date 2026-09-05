@@ -7,9 +7,8 @@
  * Cheats, things that configure this patch sit under Utilities.
  *
  * It is a file of its own because overlay_model.c was over its size limit before this split and its
- * own SIZE NOTE names a seam. This is a better seam than the one it named: seven rows, each
- * reading and writing one setting, with no share of the panel's navigation, search, folding or
- * typing state. What stays behind in overlay_model.c is the part that has to know which row is
+ * own SIZE NOTE names a seam. This is a better seam than the one it named: rows that read and write
+ * one setting each, with no share of the panel's navigation, search, folding or typing state. What stays behind in overlay_model.c is the part that has to know which row is
  * being typed into, because that is the panel's state rather than any row's.
  *
  * The rows here are DESCRIBED and ACTED ON here, and NUMBERED by the caller. That split is what
@@ -24,17 +23,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Seven, in the order they are drawn. The draw distance first, because it is the setting a player
- * came looking for, with a note under it saying what the game is actually running; the key binding
- * last, because it is the one nobody needs twice.
+/* In the order they are drawn. The draw distance first, because it is the setting a player came
+ * looking for, with a note under it saying what the game is actually running; the key binding
+ * last, because it is the one nobody needs twice. In between they sit next to what they affect:
+ * the draw distance with its two gates, then the fog band and whether the fog follows the draw
+ * distance, then the view and control settings, then the panel's own size.
  *
- * There were seven. A row for FogFollowFov was offered and taken out again: the fog's end floor
- * ships at the full draw distance, and the correction that setting applies is the same reach times
- * the cosine of half the picture, which is never larger, so the floor swallowed it whole and the
- * row could not change anything. Even with the floor lowered by hand it adds nothing below about
- * 106 degrees, against a field of view slider that stops at 120. The setting is still in the ini
- * for the person who lowers the floor and plays that wide. */
-#define OVERLAY_UTILITIES_ROW_COUNT 8u
+ * Three of these read no setting of their own. The live draw distance under the typed one, and
+ * the track lines under the field of view and sensitivity sliders, are there so a slider can be
+ * dragged on a line of its own without the handle covering the text it belongs to. They report
+ * and are never clicked. */
+#define OVERLAY_UTILITIES_ROW_COUNT 15u
 
 /* Fills everything about one row except `group` and `id`, which belong to the caller's numbering.
  *
@@ -58,6 +57,11 @@ bool overlay_utilities_toggle(uint32_t slot);
 /* Commits typed text to a value row. False when the slot is not a value row or the text is not a
  * number, which leaves the setting alone rather than writing a zero. */
 bool overlay_utilities_commit(uint32_t slot, const char *text);
+
+/* Drags the slot's slider to `fraction`, 0 to 1. False when the slot has no slider or the write
+ * failed. Only the field of view has one: it is the only setting here whose whole range is worth
+ * sweeping through to find a number, rather than typed once and left. */
+bool overlay_utilities_slider_set(uint32_t slot, float fraction);
 
 /* Binds a key. False when the slot is not the key row or the key was refused. */
 bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key);

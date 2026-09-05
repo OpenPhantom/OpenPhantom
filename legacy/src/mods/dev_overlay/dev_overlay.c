@@ -1,4 +1,4 @@
-/* dev_overlay.c: brings the four parts up in the order their dependencies allow.
+/* dev_overlay.c: brings the parts up in the order their dependencies allow.
  *
  * The order is not arbitrary. Drawing has to resolve before input, because a panel that can be
  * opened but not painted is a game that has gone modal with nothing on screen and no way out that
@@ -201,9 +201,9 @@ void dev_overlay_install(void)
     }
 
     /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
-     * window messages - overlay_input.c's own domain. Wired here, after both installs have run,
-     * rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name, so that
-     * linking cheats_openphantom.c on its own (the unit test built against the real cheat
+     * window messages, which are overlay_input.c's own domain. Wired here, after both installs
+     * have run, rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name,
+     * so that linking cheats_openphantom.c on its own (the unit test built against the real cheat
      * sources, see unittests/CMakeLists.txt) never has to drag in the whole message-hook
      * subsystem just to satisfy one symbol it never exercises. */
     cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);

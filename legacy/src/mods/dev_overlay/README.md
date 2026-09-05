@@ -10,7 +10,7 @@ are groups inside this same panel, and a shipped DLL cannot be renamed without b
 Two tabs under a heading that reads `Cheatmenu`.
 
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
-  the sixteen it can only run once - typed, in retail, one backspace and one line of text at a
+  the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
 * **OpenPhantom** holds two groups as well, split the same way and for the same reason the
   Original tab is: **Cheats** are the things that change the game, **Utilities** are the settings
@@ -19,10 +19,10 @@ Two tabs under a heading that reads `Cheatmenu`.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
-`OFF` in a chip; a row that only runs once shows `RUN` instead, in the same shape but never green -
+`OFF` in a chip; a row that only runs once shows `RUN` instead, in the same shape but never green;
 green would say "this is on right now", which a fire-once row never is. Either kind shows `n/a`
-with no chip when the engine site behind it never resolved, or - for the two rows this can pin the
-difficulty, see below - when running it now would be unsafe rather than merely unresolved. The
+with no chip when the engine site behind it never resolved, or, for the two rows this can pin the
+difficulty, see below, when running it now would be unsafe rather than merely unresolved. The
 pointer is the game's own cursor.
 
 ## How it draws, and why there is no window
@@ -108,7 +108,18 @@ character of every search. A click inside the field is what starts focus now, an
 it, or opening the panel fresh, ends it; the field's border and caret are only drawn while focused,
 so the box never looks ready to type into before it is.
 
-## The three cheats this project adds
+## The nine cheats this project adds
+
+In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **No fog**,
+**Invincible NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**,
+**Jump boost** and **Free camera**. They need fewer engine sites than that, because several
+pairs are two answers to one question and share a single detour.
+
+A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
+That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
+is not available on this executable.
+
+### Unlimited ammunition, unlimited health and no fog
 
 The first two are one detour on one short function each, and both work by **declining** rather than
 by topping a value up.
@@ -134,8 +145,8 @@ subtracting from it. A scripted death and the console's own `kill me now` both g
 * **No fog**, in `cheats_no_fog.c`, is a different shape from the other two because there is
   nothing to decline: fog is not spent through any function, it is state the renderer reads
   straight out of the loaded level's own record every frame. This reuses byte evidence
-  `view_distance_fix`'s `fog_regime.c` already proved in full - the same `[g_level]` world
-  pointer, resolved and cross-checked the same way - rather than re-deriving it, though the two
+  `view_distance_fix`'s `fog_regime.c` already proved in full, the same `[g_level]` world
+  pointer, resolved and cross-checked the same way, rather than re-deriving it, though the two
   DLLs never touch each other's memory: this one resolves its own copy of the site independently,
   the same isolation every feature DLL here keeps. While the cheat is on, a per-frame hook
   (`common/frame_hook.h`, the same one `fog_regime.c` uses for its own easing) pushes the level's
@@ -143,25 +154,154 @@ subtracting from it. A scripted death and the console's own `kill me now` both g
   draw-distance cull can still be showing, which is what makes it survive a level change rather
   than lasting only until the next one.
 
-  **The first version cleared `world+0x210` bit 0 instead - the level's "has fog" flag - and field
+  **The first version cleared `world+0x210` bit 0 instead, the level's "has fog" flag, and field
   testing found that breaks the renderer**: every moving actor drew as a flat, unlit silhouette,
   and setting the bit back did not undo it. Retail never toggles that bit at runtime at all, it is
   set once at level load and held fixed for the level's life, so a runtime flip exercises a
   combination of engine state nothing in 1999 ever produced. `fog_regime.c` never touches that bit
-  either - only the band - which is why this now does the same rather than the flag. See the
+  either, only the band, which is why this now does the same rather than the flag. See the
   header comment in `cheats_no_fog.c` for the full account, kept in rather than quietly fixed for
-  the same reason the graphics detail / red highlight mislabelling is kept in `cheats_original_
-  actions.c`'s own history.
+  the same reason the graphics detail / red highlight mislabelling is kept in
+  `cheats_original_actions.c`'s own history.
 
   **Turning the cheat back off restores the band the level was actually authored with**, captured
   the first frame this file ever saw that level's record, before writing to it. An even earlier
-  version declined to restore anything here, the same rule the other two cheats follow - and field
+  version declined to restore anything here, the same rule the other two cheats follow, and field
   testing found that the wrong call for fog specifically: ammunition and health decline a
   SUBTRACTION, so their own "off" is just the game's other systems carrying on from wherever they
   already were, but nothing else in the engine ever moves this band, so nothing else was ever going
   to hand it back. The remembered band survives the record being freed and reallocated on a level
   change the same way `fog_regime.c`'s own `is_the_same_level` does: by checking the record still
   holds exactly what this file itself last wrote, not just that the pointer looks the same.
+
+### Invincible NPCs and one-shot NPCs
+
+Two opposite answers to the same fifteen bytes, so they share one detour rather than taking a
+signature each. `enemy_receiveDamage` changes an NPC's health in exactly one place, at
+`0x004338EC`, and that place is five back-to-back three-byte instructions with no `rel32` and
+nothing environment-dependent in it:
+
+```
+004338EC  8B 55 08     mov edx,[ebp+8]      victim (character*)
+004338EF  8B 42 38     mov eax,[edx+0x38]   health
+004338F2  2B 45 EC     sub eax,[ebp-0x14]   minus the damage this call computed
+004338F5  8B 4D 08     mov ecx,[ebp+8]
+004338F8  89 41 38     mov [ecx+0x38],eax   health -= damage, written back
+```
+
+Traced forward to the end of the function, nothing later reads EAX, ECX or EDX left over from
+this block, and the first flag-testing instruction after it sets its own flags. That is what
+lets the hook decide whether the block runs **at all**, rather than having to preserve how it
+executed. The `+0x38` health field is the one `dismemberment.c` already established from
+retail's own death gate at `0x0043707D`.
+
+* **Invincible NPCs** skips the block, so health is untouched.
+* **One-shot NPCs (your damage)** writes health straight to zero, which is what the death gate
+  this function feeds actually tests for. It fires **only for damage that came from the
+  player**, so NPCs fighting each other are unaffected.
+
+Invincible wins if both are somehow on at once: refusing the hit outright is more obviously
+correct than a hit that is at the same time "took no damage" and "died".
+
+**One-shot is not indistinguishable from ordinary lethal damage**, and the source used to claim
+it was. It is indistinguishable to the *gate*, which only asks whether health reached zero. It
+is not indistinguishable to a script gating its own death on a health **band**: the scrapyard
+machine in Mos Espa waits for health at or below 900 of 999 with the player nearby and then runs
+its own explosion. Ordinary damage walks health down through that band and the script fires; one
+store of zero steps over the band entirely and it never does. `cheats_npc_damage.c` records what
+that costs in full.
+
+### Giant player and tiny player
+
+Also one detour for two rows, on `rdThing_Draw` at `0x0040FE70`, which is every drawn object's
+own render call. The hook acts only when the incoming thing is the player's, established by
+walking the player record to its actor and comparing that actor's `rdThing*`. Particle sprites
+reach the same function through `emitter_drawParticles` and are never touched.
+
+**The scale trick is already in the retail game.** A few instructions past this prologue, gated
+behind a cheat-flag slot and a hardcoded four-character model-name match, retail applies a flat
+3.0x scale to this exact incoming matrix through a small "compose a diagonal scale into this
+transform" utility. This calls that utility rather than reimplementing it, and finds its address
+out of the call rather than by an independent signature of its own. Giant player uses retail's
+own 3.0. Tiny player uses 0.35, which has no retail precedent in that direction and is simply a
+first guess at small but still visible and playable.
+
+The player's thing is chased off the player-record global on every call rather than cached. The
+incoming matrix is a full rebuild of the player's position and orientation for this frame, every
+frame, so scaling it is inherently transient and switching either cheat off needs no un-write:
+the next call simply stops scaling.
+
+**Field-tested, and the caveat is kept rather than quietly fixed.** `matrix` is the caller's own
+working buffer, not something owned by this call, and `bapobj_drawAll` reads it again right
+after the call returns for something that has nothing to do with rendering. So scaling it in
+place also scales the force-push ability's reach and power. A local-copy version that left the
+caller's numbers alone was written and worked, and was reverted: combat is not meaningfully
+usable at either scale anyway, so the extra copy bought correctness nothing was asking for.
+
+### Jump boost
+
+Two hooks, on the Jump mode entry and the Jedi Jump mode entry, because different characters
+route through different ones. Either alone still helps whichever characters use it, so unlike
+free camera below a partial resolve here is kept: it is a real cheat for part of the cast rather
+than half a feature that does nothing.
+
+Each hook calls the original **first and unconditionally**, which is what makes this a boost and
+not a reimplementation. The jump happens exactly as retail built it, guard check and all, and
+only once it has decided to jump and written its own vertical velocity does the cheat scale what
+is now sitting at `+0xB4`, whichever path the original took, the fallback constant or the
+per-character table value. The multiplier is a number you can type on the cheat's own row.
+
+**A higher jump is a longer fall.** While the cheat is on it also suppresses three things
+retail's own ground-contact code does to a long fall, none of which is a cheat of its own and
+none of which has a row:
+
+* the fixed ten-point landing damage every hard landing already risks, taken through this
+  module's own damage hook rather than around it, so Unlimited health still wins if both are on;
+* the outright force-kill, which retail applies unconditionally with no health check anywhere in
+  the path, either after two seconds airborne or past a second fall-distance ceiling. This one
+  was found only after a field report of a boosted jump ending in a death screen and a reload;
+* retail's dramatic-fall camera, which pitches down to watch the player from above and, because
+  nothing in its landing path ever expected a fall this big to be survived, never lets go
+  afterwards. Found the same way, after the deaths stopped.
+
+All three fire from the same "this fall just became significant" transition and stop mattering
+the instant jump boost goes off. `cheats_fall_consequences.c` owns them and carries the full
+mechanism. The same grace is granted for one landing by the free camera teleport below, because
+arriving at a camera that was flying is a fall the player did not choose to take.
+
+### Free camera
+
+Two engine sites and a hold on the simulation. It holds the world still through `sim_pause`
+rather than by any means of its own, and writes the camera pose **after** the engine has composed
+it rather than fighting the original for the fields.
+
+Both sites, the pause flag and the camera object pointer must all resolve. A partial resolve is
+not offered as half a feature here: a camera that could roam but never stopped the world moving
+underneath it is not this thing, and neither is a pause with nothing to look through.
+
+**Flying it.** `W`/`S` forward and back, `A`/`D` strafe, `E`/`Q` up and down, the mouse to look,
+the wheel to change speed. Speed moves by a constant ratio per notch rather than a constant
+amount, which is Blender's fly-mode feel: even control at both ends, where a fixed addition would
+be enormous down low and glacial up high.
+
+**Leaving it.** The bound key ends the flight and **brings the player to the camera**, which is
+usually what the camera was being flown for, so it is the action worth putting on a key of the
+player's own choosing. `F4` is fixed and means the opposite: put it back, leave without moving.
+A fallback that always means the same thing is worth more than one more thing to configure.
+Alt+F4 still closes the game, because Alt is not read here. With no key bound the cheat refuses
+to switch on at all.
+
+**One guard worth knowing about.** Mouse look measures the pointer's movement between frames
+against an anchor it re-centres each frame. Anything else that also moves the pointer, a cursor
+cage or another overlay, turns that difference into a constant that is not hand movement and that
+arrives again on the next frame, and the frame after. A steady vertical bias drives pitch onto
+its clamp and pins it there: the camera stares at the floor, `W` flies into it, and no hand
+movement lifts it. Two guards close that off. A jump larger than a quarter of the screen in one
+frame is not a hand, so it contributes no rotation and simply re-syncs the anchor; and the anchor
+follows where the pointer actually **landed** rather than where it was sent, because a cage can
+refuse the position asked for and a stale anchor then measures the same refusal for ever.
+Reported from a tester's machine and confirmed fixed there. It was never reproduced here, which
+is the point: the other writer it collides with is not something every machine has.
 
 ## The eleven original toggle codes
 
@@ -184,13 +324,13 @@ Kill self, full health, all-weapons-full-ammo, the four play-as-character swaps,
 the difficulty, one to raise it, a debug/fps toggle, a graphics detail level cycler, a red icon
 highlight toggle, and the "Tech Bonus!" message: fourteen of the sixteen codes the retail console
 understands that are not one of the eleven toggles above. Each is a row with a `RUN` chip rather
-than an `ON` / `OFF` one, because none of them are a state - typing `kill me now` does not leave
+than an `ON` / `OFF` one, because none of them are a state; typing `kill me now` does not leave
 anything switched on that a second look could find.
 
 **Two of the sixteen are held back as `n/a` on purpose, not because either failed to resolve:**
 
-* **Wavering graphics** (`drop a beat`) resolves cleanly - the flag and both apply calls all read as
-  valid addresses - and runs without crashing, but confirmed against the running game rather than
+* **Wavering graphics** (`drop a beat`) resolves cleanly, the flag and both apply calls all read as
+  valid addresses, and runs without crashing, but confirmed against the running game rather than
   assumed, it has no visible effect. What it flips is read inside two of the engine's own dense
   per-vertex model transform routines, deep enough that pinning down what it actually renders as
   would take real additional work. "Resolves and runs" is not the same claim as "does something a
@@ -199,58 +339,58 @@ anything switched on that a second look could find.
 * **View credits** (`gurshick`) also resolves cleanly and writes without crashing, but field testing
   found triggering it from this panel, mid level, misbehaves badly enough to be worth not offering
   rather than diagnosing on the spot. Retail's own path to this code is the console, which pumps its
-  own frame loop with the player never suspended - not this panel's path - so whatever the credits
+  own frame loop with the player never suspended, not this panel's path, so whatever the credits
   sequence expects to be true when it starts may simply not be, here.
 
 Both resolutions are left in `cheats_original_actions.c` rather than deleted, one line from being
 restored if either one is ever fully understood.
 
 **Most of these print the same on-screen confirmation retail's own console prints**, through the
-same message function tech bonus needs to do anything at all (`FUN_0043dc61`) - kill self, full
+same message function tech bonus needs to do anything at all (`FUN_0043dc61`): kill self, full
 health, all-weapons-full-ammo, both lower-difficulty codes, increase difficulty, the graphics detail
 cycler and the red highlight toggle all show one now. This was originally left out everywhere except
-tech bonus, on the reasoning `cheats_original.c` gives for the eleven toggles - "a panel that shows
-the state has nothing to confirm" - and that reasoning does not hold for a fire-once effect with no
+tech bonus, on the reasoning `cheats_original.c` gives for the eleven toggles, "a panel that shows
+the state has nothing to confirm", and that reasoning does not hold for a fire-once effect with no
 OTHER visible feedback: difficulty changes nothing on screen a player can look at, so without the
 message a working press and a silently-failing one looked identical. View credits and the four
-play-as codes print no message in retail either, so none is added here - that absence is retail's
+play-as codes print no message in retail either, so none is added here; that absence is retail's
 own, not an omission. The graphics detail cycler's message id is not a fixed number: retail computes
 it from the level just cycled TO (`DAT_004ac538 + 0x37`), read fresh after every press so the
 message always names the level actually landed on.
 
 **The graphics detail row is the one exception to "every action shows `RUN`".** Its chip shows the
 level itself, `1` to `4`, read live off `DAT_004ac538` on every rebuild rather than cached from the
-press that set it - the same cell the retail message above reads, so the row and the message can
+press that set it, the same cell the retail message above reads, so the row and the message can
 never disagree. It starts showing whatever level the game is already on, and each press updates it
 to the level just cycled to, which is the only one of the sixteen where a live number is more useful
 than a generic button: the confirmation message answers "did something happen", the chip answers
 "what is it right now."
 
-### The four play-as codes are queued, not run - the only actions that work this way
+### The four play-as codes are queued, not run: the only actions that work this way
 
 Field testing found these worked intermittently: same button, same character, sometimes nothing.
 The swap has its own precondition inside the retail function itself, a pointer in the player's state
-block that reads as "no active controller" whenever the player is suspended - which is the engine's
+block that reads as "no active controller" whenever the player is suspended, which is the engine's
 own idle state, and it is what `input_freeze.c` deliberately holds the player in for as long as this
 panel is open, on every frame, so the game holds still. Pressing the row while the panel is open can
 therefore land on exactly the state the swap silently declines to run in, with nothing shown for it
 either way.
 
-So a press does not call the swap. It records which character was asked for - the row shows `QUEUED`
+So a press does not call the swap. It records which character was asked for, the row shows `QUEUED`
 in place of `RUN`, and the title bar swaps its usual `Esc closes` hint for `Close applies the queued
-swap` - and `cheats_original_actions_apply_pending()` runs it once, from `overlay_input.c`, right
+swap`, and then `cheats_original_actions_apply_pending()` runs it once, from `overlay_input.c`, right
 after the panel closes and the player has been un-suspended again. Only the last press before closing
 takes effect; the four are mutually exclusive characters anyway, so replacing a pending one rather
 than queuing several is the honest behaviour. Every other action in this file still runs the instant
-its row is pressed - this is the one exception, and it exists because of a real, confirmed collision
+its row is pressed; this is the one exception, and it exists because of a real, confirmed collision
 between two of this project's own subsystems, not a general pattern the other fifteen needed too.
 
 Two of these, the graphics detail cycler and the red highlight toggle, were **field-corrected**
 after their first ship: they were named from a fan-made cheat sheet before either callee was
 actually read, on the guess that whichever mystery codes were left over must be whichever
-screenshot rows were left over. That guess was wrong twice over in one go - the two screenshot rows
+screenshot rows were left over. That guess was wrong twice over in one go: the two screenshot rows
 it leaned on turned out to already belong to the eleven toggles above, under different codes
-entirely - and both labels have since been corrected to what their callees actually do, read
+entirely, and both labels have since been corrected to what their callees actually do, read
 straight out of the decompiled functions rather than guessed again. See the header comment in
 `cheats_original_actions.c` for the full account; it is left in rather than quietly fixed, because a
 project whose whole discipline is "byte evidence over assumption" should say so when it assumed
@@ -260,7 +400,7 @@ anyway and got caught.
 `gameplay_open_cheat_console` at `0x0042fc90`, decompiled in full rather than guessed at. After the
 eleven-entry loop above, it just chains `strcmpi` tests against the typed text, each followed by
 whatever that code does. Rather than sixteen independent byte patterns, this resolves ONE signature
-for that function's own prologue and reads every site as a fixed byte offset from it - sound for the
+for that function's own prologue and reads every site as a fixed byte offset from it, sound for the
 same reason the toggle table's own `OFFSET_NAME_TABLE` is: a recompile that relocates the whole
 function moves everything inside it by the same amount, and every address is read out of the match,
 never assumed. `cheats_original_actions.c` carries the full offset table and the byte evidence for
@@ -286,15 +426,15 @@ if (0 < DAT_00872efc) local_14 = 10;      /* ANY nonzero value, not >= 10 */
 return local_14;
 ```
 
-The FIRST use of either code sets this counter to 2 or 5 - already `0 < DAT_00872efc`, already
+The FIRST use of either code sets this counter to 2 or 5, already `0 < DAT_00872efc`, already
 pinning the hardest row from that point on, and there is no gate that can prevent that while the
 effect still does anything: the pin is a cost of the code, not a defect in how it is offered. An
 earlier version of this gate read that as reason to allow only the very first press. It was correct
-about the bytes and the wrong gate anyway - it did not stop the pin, it just took away the handful
+about the bytes and the wrong gate anyway; it did not stop the pin, it just took away the handful
 of further uses retail itself always allows after that same, already-unavoidable cost, which is
 less than typing the same code into the console by hand gets you. So the gate matches retail's own
 `< 10` exactly: `cheats_original_actions_is_available()` reads this cell fresh on every paint and
-answers unavailable once it stops being under ten - the same point retail's own effect stops giving
+answers unavailable once it stops being under ten, the same point retail's own effect stops giving
 anything, for either code, since they share the one counter. A row that greys out here greyed out
 because that shared budget ran out, not because a resolve failed; the panel does not need to say
 which.
@@ -376,6 +516,79 @@ What it deliberately does **not** do is write `FrameBackoff`. Someone who had th
 strict on to look at something and turns it off again gets their governor back, rather than
 discovering that a setting they never touched has been changed for them. So the row reports the
 state the game is in and the file keeps the state the reader asked for.
+
+## The field of view row, and the two control switches
+
+Three rows that reach settings owned by other DLLs, so the panel can change them without leaving
+the game to find the screen they normally live on.
+
+`Field of view` is `[variable_fov] ExtraDegrees`, it is the only row here that shows one number and
+writes another, and it is the only one with a **slider**. That key is an offset from a base that
+depends on the canvas, the aspect mode and the engine's own projection, none of which exist in this
+DLL, so an offset is a number this row could display and nobody could read. `variable_fov` therefore
+publishes `BaseFov`, and the width of the picture is `BaseFov` plus `ExtraDegrees`.
+
+**The base is published rather than the current width, and the first version got that wrong.** The
+width moves every time the offset does, which is every frame of a drag, so working the base out as
+"width minus offset" pairs a width written a moment ago with an offset written just now. The base
+drifts by the size of the last drag step, every step is then measured from a wrong origin, and the
+value runs away past both ends of the slider. The base moves only when the resolution or the aspect
+mode changes, so publishing that half has nothing to go stale.
+
+**Each track is a row of its own, directly under the value it drives.** The first version put it in
+the gap between the name and the chip, which made it a short target within a few pixels of both,
+and at the panel's smaller sizes it read as though it were striking the name through. A line costs
+one row and buys a track running nearly the width of the panel. The chip above still shows the
+number and still opens for typing, so there are two ways to set either one.
+
+**Two rates, on purpose.** Writing a key rewrites the whole settings file, so a drag applies at
+thirty a second rather than at the frame rate; unthrottled it would be several megabytes a second of
+file traffic for one handle and the stutter would get blamed on the setting rather than the
+dragging. The handle itself is drawn from the pointer at the full frame rate, because drawing it
+from the file would move it in thirty steps against a hand moving in sixty. On the other side
+`variable_fov` polls every frame but asks the file system for its last write time before parsing
+anything, so it notices within a frame without reading ninety kilobytes sixty times a second.
+
+**It is also the only row here that can be unavailable.** Every other row edits a settings file and
+works with the DLL that reads it deleted from `mods\`. This one needs a published width, so with
+`variable_fov` absent it greys out rather than inventing a number that would be wrong on some
+canvas. Its range comes from that DLL's own `SliderMinFovDegrees` and `SliderMaxFovDegrees`, so
+widening the in-game slider widens this row with it.
+
+`Free look` and `Strafe` are `[enhanced_input] FreeLook` and `Strafe`, the two check boxes on the
+game's own controls screen. They carry that screen's own captions rather than a description this
+panel invented, so a reader who has seen it recognises these rows. **Either can be refused**, and the row cannot
+tell in advance: strafe needs mouse look and the keyboard axis reader, because the engine's
+`turnWheel` is the only turn channel and driving it sideways would clear the mouse with it; free
+look needs a follow camera that `enhanced_input` recognises. When one is declined it says why in the
+log and the row reads back off on its next rebuild, which is the honest outcome.
+
+**All three needed the owning DLL to start reading its own settings back.** Both of those screens
+pushed outward only: they applied a change and then wrote the file, and nothing ever read it. A row
+here would have done nothing until the next launch. `variable_fov` and `enhanced_input` now re-read
+these keys once a second, the way `view_distance_fix` already did, so a row takes effect within the
+second.
+
+`Mouse speed` is `[enhanced_input] MouseDegreesPerCount`, named after that screen's caption as
+well, and it has a track too. Unlike the
+field of view it needs nothing published, because both of its ends are fixed and are the same band
+the controls screen's own slider spanned. It is here because that screen no longer offers it.
+
+**And a last row decides whether any of this appears in the game's own menus.** `Show extra menu
+options (restart the game)` writes `[variable_fov] MenuSlider` and `[enhanced_input] MenuWidgets`
+together. Both ship off, so the video options and controls screens look as they did in 1999, and all
+four settings live here instead. It reads on only when both keys are on, since a half state can only
+be reached by editing the file by hand and reporting that as on would claim a screen is changed when
+it is half changed.
+
+It says "on restart" on the row itself because it means it: both screens are patched by repointing
+the engine's own widget table once while the game starts, and this project has no path that puts
+such a table back. A switch that appears to do nothing is worse than one that explains itself.
+
+**The mouse speed slider is gated with the rest, and that was the one real decision.** Mouse
+look ships on, so that slider was its only adjustment inside the game, which is exactly why the row
+above exists. Leaving one widget behind on a screen meant to look untouched would have been the
+worse answer: either the screen is the one the game shipped or it is not.
 
 ## The fog rows
 
@@ -471,13 +684,14 @@ this row works whatever else is or is not in the `mods` folder.
 
 ## What was tested
 
-`overlay_model` covers the half that can be checked without the game: the search, the folding, both
-groups on the Original tab, the tab switch, the bounds of the search box, the queued-swap sentinel
-(nothing reads as pending before `resolve()` has run) and every index that does not exist. 42 checks.
+`overlay_model` covers the half that can be checked without the game: the search, the folding,
+both groups on the Original tab, the tab switch, the bounds of the search box, the queued-swap
+sentinel (nothing reads as pending before `resolve()` has run) and every index that does not
+exist. The checks live in `unittests/overlay_model.c`.
 
-The eleven toggles and unlimited ammunition / unlimited health have been opened, drawn, and switched
-against the running game; the layout has been through several rounds of correction against
-screenshots.
+Every row in the panel has been opened, drawn and switched against the running game, and the
+layout has been through several rounds of correction against screenshots. All nine of this
+project's cheats are accepted in game, in the 1.5.0 build, which was played through by hand.
 
 **Field-tested against the running game, several rounds:** kill self, full health,
 all-weapons-full-ammo (including the shared gate greying both out together once spent, and now the
@@ -485,28 +699,28 @@ retail confirmation message on each), both difficulty codes (message confirmed),
 toggle, the graphics detail cycler (message and live chip number both confirmed), and the "Tech
 Bonus!" message all confirmed working. The four play-as codes are confirmed working through the
 queue. The red icon highlight resolves and runs but which icon it affects is still unconfirmed.
-Wavering graphics and view credits are both deliberately `n/a` - see above, the latter added after
+Wavering graphics and view credits are both deliberately `n/a`, see above, the latter added after
 field testing found it misbehaved when triggered from this panel. **No fog has had two field
 rounds, and each found a real bug.** The first version cleared the level's fog flag directly,
 which broke the renderer (every moving actor drawn as a flat, unlit silhouette, not recoverable by
-toggling the cheat back off) - rewritten to push the fog band out instead of touching the flag. The
+toggling the cheat back off); rewritten to push the fog band out instead of touching the flag. The
 second version fixed that but declined to restore the band on the way back off, so fog could be
-turned off but not back on short of a level reload - rewritten again to remember and restore the
-authored band. Confirmed off now works cleanly; back-on has not yet had its own field round.
+turned off but not back on short of a level reload; rewritten again to remember and restore the
+authored band. Both directions are confirmed working now.
 
 **Free camera has had several field rounds.** Pausing the simulation and driving the camera object
 directly through a chained detour on `updateCam` both confirmed working; the WASD-along-view-
 direction formula was field-tested wrong once (a sign error in the yaw-to-world-axis conversion,
 found by comparing against the engine's own render-eye builder and its built-in debug free-cam
 rather than guessed a second time) and is now confirmed correct; the mouse axes were field-tested
-inverted and corrected (yaw's flip stuck, pitch's did not - it was already right and got reverted
+inverted and corrected (yaw's flip stuck, pitch's did not, it was already right and got reverted
 back). The line to look for:
 ```
-[dev_overlay] free camera: pause flag at 006CCFD8, camera object pointer at 008A011C, update chained at 00418544 - WASD moves along the view, mouse looks, E/Q move vertically
+[dev_overlay] free camera: pausing through sim_pause, camera object pointer at 008A011C, update chained at 00418544; WASD moves along the view, mouse looks, E/Q move vertically
 ```
 Its absence, or a "did not resolve" warning next to it naming which of the two sites failed, means
 free camera declined entirely and is shown in the panel as unavailable. An earlier attempt at this
-feature, noclip - letting the player walk through walls and fly - was removed after free camera
+feature, noclip, letting the player walk through walls and fly, was removed after free camera
 replaced it outright; see `cheats_openphantom.h`'s own header comment for why.
 
 **The bound key teleports, F4 does not.** The key set in the panel ends the flight and brings the
@@ -523,7 +737,7 @@ Three things this needed that were each found in the field, not predicted:
   every substep, so a write to `+0x124` is simply discarded. The first attempt did exactly that and
   looked like it did nothing. Traced through j0nny's decomp of `Plr_CommitPose`.
 * The panel has to close itself on the way out. It holds the simulation just as the camera does, so
-  without that the move does not resolve until the panel is closed by hand - which read, again, as
+  without that the move does not resolve until the panel is closed by hand, which read, again, as
   the key doing nothing.
 * The panel is locked open while the camera is flying: neither Escape nor the open key will close
   it, because closing it mid-flight leaves the camera stranded with no cursor to recover it. The
@@ -565,7 +779,7 @@ somebody in from height, and still short of the falls that broke it.
 
 Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4` in the shipped
 `WMAIN.EXE`. Note that the data addresses quoted throughout these comments come from j0nny's
-`obiold.exe` and do not map to the same places in the shipped executable - in `WMAIN.EXE` that
+`obiold.exe` and do not map to the same places in the shipped executable; in `WMAIN.EXE` that
 range is inside `.rsrc`. They were read by finding the `FCOMP` instructions that reference them.
 
 Tested in game on Windows: a boosted jump onto ground (immune as before), jump boost off a ledge

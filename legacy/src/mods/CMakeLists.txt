@@ -283,6 +283,11 @@ add_engine_fix(dev_overlay
     open_key_row.c
     fog_follow_row.c
     auto_range_row.c
+    fov_row.c
+    menu_extras_row.c
+    sensitivity_row.c
+    free_look_row.c
+    strafe_row.c
     strict_range_row.c
     view_range_row.c
     dev_menu_size_row.c

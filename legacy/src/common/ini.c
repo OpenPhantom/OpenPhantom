@@ -96,3 +96,17 @@ bool ini_write_int(const char *section, const char *key, int32_t value)
 
     return WritePrivateProfileStringA(section, key, text, ini_path()) != 0;
 }
+
+uint64_t ini_generation(void)
+{
+    WIN32_FILE_ATTRIBUTE_DATA attributes;
+
+    if (!GetFileAttributesExA(ini_path(), GetFileExInfoStandard, &attributes)) {
+        return 0u;                             /* unreadable reads as unchanged; see the header */
+    }
+    /* The two halves are one FILETIME, which is a 64-bit count of 100 nanosecond ticks. Joined
+     * here rather than compared as a structure so a caller can hold it in one variable and compare
+     * it with one test. */
+    return ((uint64_t)attributes.ftLastWriteTime.dwHighDateTime << 32) |
+           (uint64_t)attributes.ftLastWriteTime.dwLowDateTime;
+}

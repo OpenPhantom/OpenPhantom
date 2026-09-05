@@ -1,6 +1,6 @@
 /* overlay_model.c: the panel's state and the list of rows that follows from it.
  *
- * There is one group per tab today and the structure carries more, on purpose: the diagnostics and
+ * Each tab holds two groups today and the structure carries more, on purpose: the diagnostics and
  * the developer tools that will hang off this panel are groups beside the cheats, not a second
  * panel, and a shape that already folds and searches them costs nothing now.
  *
@@ -16,7 +16,7 @@
  * check, which the guidance here explicitly refuses.
  *
  * A SEAM was taken, and it was not the one this note used to name. Splitting the OpenPhantom tab
- * into Cheats and Utilities moved the seven settings rows into overlay_utilities.c, which is a
+ * into Cheats and Utilities moved the settings rows into overlay_utilities.c, which is a
  * better cut than the editing state machine this note previously proposed: those rows share none
  * of this file's navigation, search, folding or typing state, so what moved is a whole
  * responsibility and what stayed is the part that has to know which row is being typed into.
@@ -71,15 +71,16 @@ typedef struct overlay_model_state {
     bool          editing_value;           /* a value row is waiting for typed digits */
     uint32_t      editing_value_row;       /* which one, an id in the OpenPhantom group */
     char          value_edit_buf[7];  /* what has been typed so far; six usable characters plus
-                                             * the terminator, sized so "<buf>_" (the display's own
-                                             * cursor, see source_row() below) still fits inside the
-                                             * row's own value[8] with room for ITS terminator too */
+                                             * the terminator, which is longer than any value this
+                                             * panel accepts. The display appends its own cursor to
+                                             * make "<buf>_" (see source_row() below), and the row's
+                                             * own value[16] holds that with room to spare */
 } overlay_model_state_t;
 
 static overlay_model_state_t model;
 
 /* The teleport-key row takes over free camera's own numeric slot in this group's id space, and
- * free camera itself moves one slot later (FREECAM_ROW_ID) - so walking ids in order puts the
+ * free camera itself moves one slot later (FREECAM_ROW_ID), so walking ids in order puts the
  * hotkey row directly BEFORE the cheat it gates rather than after it, the same order a player
  * reads the panel in. Read top to bottom, that tells the whole story on its own: set a teleport key,
  * then the toggle right below it stops reading unavailable. Neither is a cheats_own_id_t, and
@@ -97,7 +98,7 @@ _Static_assert((uint32_t)CHEATS_OWN_FREECAM == (uint32_t)CHEATS_OWN_COUNT - 1u,
  * boost's own toggle row rather than appended at the end, so a player reads "Jump boost: ON" and
  * the number it is currently multiplying by in the very next row, not somewhere else in the list.
  * Everything from here down (the hotkey row, free camera itself, the info fold) shifts one slot
- * later than before to make room, which is transparent to all three - none of them are numbered by
+ * later than before to make room, which is transparent to all three; none of them are numbered by
  * anything other than these macros. Same guard as above, one enum slot earlier: this only lines up
  * because jump boost sits directly before free camera with nothing else between them. */
 _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREECAM,
@@ -108,16 +109,16 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
 #define FREECAM_ROW_ID (HOTKEY_ROW_ID + 1u)
 
 /* One past free camera's own row: a fold, the same shape as a group's own expand/collapse but
- * scoped to one row rather than a whole section - clicking it toggles model.freecam_info_expanded,
+ * scoped to one row rather than a whole section. Clicking it toggles model.freecam_info_expanded,
  * and while that is true, FREECAM_INFO_LINE_COUNT more INFO rows are drawn directly beneath it,
  * one per line of FREECAM_INFO_LINES. They carry ids from FREECAM_LINE_FIRST_ID rather than ids
  * following this one; see openphantom_row_id() for why the two differ. Reusing
- * OVERLAY_ROW_INFO's existing rendering entirely - full width, no chip - rather than adding a
+ * OVERLAY_ROW_INFO's existing rendering entirely, full width and no chip, rather than adding a
  * second kind: the fold marker and the indent are both just characters in the label text (see
  * source_row() below), so nothing in overlay_draw.c has to change to draw this. The reason for
  * folding it at all rather than showing the lines outright: they do not fit un-wrapped on one
- * line, and several more rows permanently in a five-cheat group is disproportionate to what the
- * group otherwise costs on screen - collapsed, this reads as one more row exactly the size of any
+ * line, and several more rows permanently in the cheats group is disproportionate to what the
+ * group otherwise costs on screen; collapsed, this reads as one more row exactly the size of any
  * other cheat. The first line restates the hotkey-row ordering above in plain words, for a player
  * who opens this before noticing the row order says the same thing on its own; the last does the
  * same for the way back out, since once free camera is on, this fold is the only place left that
@@ -140,7 +141,7 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
     "  the player where they were"
 };
 
-/* "Skip to next level" - one slot after the free-camera info fold's own SUMMARY row (INFO_ROW_ID)
+/* "Skip to next level", one slot after the free-camera info fold's own SUMMARY row (INFO_ROW_ID)
  * but before its child lines, which is what keeps this row's own id fixed regardless of whether
  * that fold happens to be open: the child lines are only sometimes present in the count, so
  * anything placed after them would move every time the fold opens or closes. Nothing about this
@@ -164,10 +165,6 @@ _Static_assert(FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT <= UTILITIES_FIRS
                "the cheats group has grown into the utilities group's id space; raise "
                "UTILITIES_FIRST_ID");
 
-/* Short enough for value[8]. Letters and digits already match their own virtual-key codes; function
- * keys and the handful of others worth naming get their own case; anything else prints as hex
- * rather than silently showing nothing, since a key that was bound has to be identifiable if
- * something else on the system also happens to be using it. */
 /* ============================================================================================ */
 
 static char lower(char c)
@@ -407,6 +404,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
     out->expanded = false;
     out->pending = false;      /* only the actions group's own play-as rows ever set this */
     out->value[0] = '\0';      /* only graphics detail, among all the actions, ever sets this */
+    out->fraction = 0.0f;      /* only a SLIDER row ever sets this */
 
     switch (group) {
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
@@ -482,7 +480,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->on = false;        /* meaningless for a hotkey row; never read by the drawer */
             out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
             /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
-             * guess at - "RUN" and "OFF" are both wrong for a key binding. */
+             * guess at; "RUN" and "OFF" are both wrong for a key binding. */
             if (model.capturing_hotkey) {
                 _snprintf(out->value, sizeof out->value, "...");
             } else {
@@ -498,9 +496,9 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         }
         if (id == FREECAM_ROW_ID) {
             /* Free camera itself, one slot after its own teleport-key row now rather than at its
-             * plain cheats_own_id_t position - see HOTKEY_ROW_ID/FREECAM_ROW_ID above. Named by
+             * plain cheats_own_id_t position; see HOTKEY_ROW_ID/FREECAM_ROW_ID above. Named by
              * CHEATS_OWN_FREECAM explicitly rather than casting id the way the generic fallback
-             * below does for the other three cheats: id here is FREECAM_ROW_ID, one past the real
+             * below does for the rest of them: id here is FREECAM_ROW_ID, one past the real
              * enum's range, and casting that would ask cheats_openphantom.c about an id it never
              * offered a name for. */
             out->kind = OVERLAY_ROW_CHEAT;
@@ -508,7 +506,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
             out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
             /* Free camera specifically also needs a teleport key bound before it can be switched
-             * ON - cheats_openphantom_toggle() enforces this too, so this is display honesty
+             * ON, and cheats_openphantom_toggle() enforces this too, so this is display honesty
              * rather than the only gate: a row that looked clickable but silently refused every
              * click would be worse than one that shows why. Once it IS on, availability no longer
              * depends on this: the row is unreachable anyway with the mouse claimed, and the
@@ -554,7 +552,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         }
         /* Everything left is one of the other cheats (ammunition, health, no fog, invincible NPCs,
          * one-shot NPCs, giant player, tiny player, jump boost's own toggle), whose ids still line
-         * up 1:1 with cheats_own_id_t - only free camera's own slot was repurposed above, and jump
+         * up 1:1 with cheats_own_id_t; only free camera's own slot was repurposed above, and jump
          * boost's toggle keeps its own plain id even though the row right after it does not. */
         out->kind = OVERLAY_ROW_CHEAT;
         copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
@@ -590,6 +588,7 @@ static void append_group(overlay_group_t group)
     row.on = false;
     row.available = true;
     row.pending = false;    /* the loop above may have left these set from the last child scanned */
+    row.fraction = 0.0f;
     row.value[0] = '\0';
     row.group = (uint32_t)group;
     row.id = (uint32_t)group;
@@ -620,7 +619,7 @@ void overlay_model_rebuild(void)
          * hotkey, which flips this straight inside cheats_openphantom.c without ever going through
          * overlay_model_activate(). Catching it here, on every rebuild, is what sees the hotkey
          * path too. The mouse is fully claimed for as long as free camera flies, so this is also
-         * the only way the fold could open at all without a click reaching it - and forcing it
+         * the only way the fold could open at all without a click reaching it, and forcing it
          * shut again the instant free camera turns off is what keeps an old reading list from
          * lingering once there is nothing left it is explaining. A manual click in between still
          * wins over this: it only fires again on the NEXT genuine on/off flip, not every frame. */
@@ -669,7 +668,7 @@ bool overlay_model_activate(uint32_t index)
     if (row.kind == OVERLAY_ROW_INFO) {
         /* Only the fold's own summary row (id == INFO_ROW_ID) is interactive; the lines it
          * reveals when open are notes, not controls, the same as an ordinary INFO row always
-         * was - they just never had anything to do. */
+         * was; they just never had anything to do. */
         if (row.id == INFO_ROW_ID) {
             model.freecam_info_expanded = !model.freecam_info_expanded;
             return true;
@@ -687,7 +686,7 @@ bool overlay_model_activate(uint32_t index)
     }
     if (row.kind == OVERLAY_ROW_VALUE) {
         /* Starts a fresh typed value, discarding anything left over from a previous edit that was
-         * never committed - the same "click it again to redo it" shape the hotkey row above has.
+         * never committed, the same "click it again to redo it" shape the hotkey row above has.
          * Does not touch the stored value itself; only overlay_model_value_commit() does. */
         model.editing_value = true;
         model.editing_value_row = row.id;
@@ -695,7 +694,7 @@ bool overlay_model_activate(uint32_t index)
         return true;
     }
     if (row.kind == OVERLAY_ROW_ACTION && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
-        /* The only OpenPhantom row that is an action rather than a toggle - checked here, before
+        /* The only OpenPhantom row that is an action rather than a toggle, checked here, before
          * the switch below, for the same reason HOTKEY/VALUE are: cheats_openphantom_toggle()
          * would otherwise be asked for an id it was never given a name or an on/off for. */
         return cheats_openphantom_end_level_invoke();
@@ -712,11 +711,11 @@ bool overlay_model_activate(uint32_t index)
         return cheats_original_actions_invoke((cheats_action_id_t)row.id);
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* row.id is FREECAM_ROW_ID for free camera's own row now, not CHEATS_OWN_FREECAM - one
+        /* row.id is FREECAM_ROW_ID for free camera's own row now, not CHEATS_OWN_FREECAM, and one
          * past the real enum's range, because the hotkey row took over free camera's old slot
          * (see HOTKEY_ROW_ID/FREECAM_ROW_ID above). Casting that straight through would ask
          * cheats_openphantom_toggle() for an id its own bounds check refuses, so the click would
-         * silently do nothing - map it back to the real id here instead. Every other id in this
+         * silently do nothing; map it back to the real id here instead. Every other id in this
          * group still lines up 1:1 with cheats_own_id_t, so only this one case needs remapping. */
         (void)cheats_openphantom_toggle(
             row.id == FREECAM_ROW_ID ? CHEATS_OWN_FREECAM : (cheats_own_id_t)row.id);
@@ -760,7 +759,7 @@ void overlay_model_value_append(char digit)
     if (!model.editing_value) {
         return;
     }
-    /* Only what a positive decimal number can contain, and only one point - anything else is
+    /* Only what a positive decimal number can contain, and only one point. Anything else is
      * refused outright rather than accepted and left to fail atof() later, the same "do not accept
      * what cannot mean anything" reasoning overlay_model_search_append() above applies to its own,
      * much wider, set of allowed characters. */
@@ -827,4 +826,17 @@ void overlay_model_value_commit(void)
 void overlay_model_value_cancel(void)
 {
     model.editing_value = false;
+}
+
+bool overlay_model_slider_set(uint32_t index, float fraction)
+{
+    overlay_row_t row;
+
+    if (!overlay_model_row(index, &row) || row.kind != OVERLAY_ROW_SLIDER || !row.available) {
+        return false;
+    }
+    if (row.group != (uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES) {
+        return false;              /* nothing else offers one; see overlay_utilities_slider_set */
+    }
+    return overlay_utilities_slider_set(row.id - UTILITIES_FIRST_ID, fraction);
 }

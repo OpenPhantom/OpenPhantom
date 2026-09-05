@@ -21,7 +21,7 @@ patterns do not resolve and the feature disables itself with a log line.
 | `BaseVerticalDegrees` | `46.826` | 30-60 | the byte-native 4:3 vertical |
 | `ExtraDegrees` | `0.0` | -120-120 | the offset on top of what the aspect mode computes; the slider writes this back. **May be negative**, see below |
 | `Menu3dMode` | `0` | 0-2 | 0 fill width, 1 keep 4:3, 2 native 640 px |
-| `MenuSlider` | `1` | | add the slider to Options -> Video |
+| `MenuSlider` | `0` | | add the slider to Options -> Video. Ships off, so that screen looks as it did in 1999; the developer menu has a row that turns this and the controls screen's two check boxes on together. Read once at startup, so it takes effect on the next launch |
 | `SliderMinFovDegrees` | `60` | 30-120 | the leftmost notch, as an **absolute** horizontal angle |
 | `SliderMaxFovDegrees` | `120` | min+2-170 | the rightmost notch, likewise absolute |
 | `Language` | *(empty)* | en\|de\|fr\|it\|es | caption language; empty follows Windows |

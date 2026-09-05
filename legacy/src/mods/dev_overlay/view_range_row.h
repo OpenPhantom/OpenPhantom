@@ -22,7 +22,7 @@
 /* The range view_distance_fix itself accepts. Its own clamp is the authority; these exist so the
  * row refuses a number before writing it rather than writing something that will be silently
  * corrected later, which would leave the ini and the world disagreeing. Kept in step with the
- * clamp in view_distance_fix.c by the comment at both ends, since a header cannot be shared
+ * clamp in view_settings.c by the comment at both ends, since a header cannot be shared
  * between two DLLs without making one depend on the other. */
 #define VIEW_RANGE_MIN 1.0f
 #define VIEW_RANGE_MAX 2.5f

@@ -61,6 +61,7 @@
 #include "fov_strings.h"
 
 #include "common/detour.h"
+#include "common/frame_hook.h"
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
@@ -179,7 +180,7 @@ static void load_config(void)
          * already puts the horizontal well above 60, so selecting 60 means subtracting. */
         fov_clamp_float(ini_read_float(FOV_SECTION, "ExtraDegrees", 0.0f), -120.0f, 120.0f);
 
-    fov_state.config.menu_slider = ini_read_bool(FOV_SECTION, "MenuSlider", true);
+    fov_state.config.menu_slider = ini_read_bool(FOV_SECTION, "MenuSlider", false);
 
     /* The slider is an ABSOLUTE angle, so its ends are the numbers the caption shows. The floor is
      * 60 because that is the authored horizontal field of view at 4:3, the narrowest view the
@@ -365,16 +366,99 @@ float variable_fov_base_horizontal_degrees(void)
                                   0.0f, fov_state.last_width, fov_state.last_height);
 }
 
-void variable_fov_set_extra_degrees(float degrees)
+/* The apply half on its own, with no write back. The poll below needs it: a value that arrived
+ * FROM the file must not be written to the file again, both because it is already there and
+ * because a writer answering its own write is how two settings screens end up fighting. */
+static void apply_extra_degrees(float degrees)
 {
     fov_state.config.extra_degrees = fov_clamp_float(degrees, -120.0f, 120.0f);
-
     fov_refresh();
+}
+
+void variable_fov_set_extra_degrees(float degrees)
+{
+    apply_extra_degrees(degrees);
 
     if (!ini_write_float(FOV_SECTION, "ExtraDegrees", fov_state.config.extra_degrees, 1)) {
         log_warning("ExtraDegrees could not be written to %s (%lu), the setting is live but NOT "
                     "saved", ini_path(), (unsigned long)GetLastError());
     }
+}
+
+/* --- ExtraDegrees, re-read while the game runs -------------------------------------------------
+ *
+ * The video options slider pushes outward: it applies the value and then writes it. Nothing read
+ * the file back, so a value written by anything else, the developer overlay's own row being the
+ * reason this exists, did nothing until the next launch.
+ *
+ * EVERY FRAME, and reading the file every frame is exactly what it does not do. Parsing a ninety
+ * kilobyte ini sixty times a second to answer "has anything changed" would cost more than the
+ * feature is worth, so ini_generation() is asked first: one attribute query, no parse, and the
+ * read below only happens on a frame where the file has actually been written.
+ *
+ * A frame rather than a second because a slider being dragged in the developer overlay writes this
+ * key as it moves, and a second of latency there is not a slider, it is a series of jumps.
+ *
+ * The comparison is against the value in force rather than against the last value read, so the
+ * video options slider moving the number and this poll seeing it agree instead of taking turns.
+ * Written with one decimal, so the comparison uses a tolerance of half of that: an exact float
+ * comparison would re-apply forever, because 0.1 has no exact binary form. */
+#define EXTRA_EPSILON 0.05f
+
+/* Written by the game and never read by it, the way view_distance_fix publishes the draw distance
+ * it is really running. The developer overlay's field of view row needs to turn degrees into the
+ * offset this DLL stores, and it cannot work the base out: it depends on the canvas, the aspect
+ * mode and the engine's own projection, none of which exist in that DLL.
+ *
+ * THE BASE IS PUBLISHED, NOT THE PICTURE'S CURRENT WIDTH, and the difference is the whole reason
+ * this works. The base moves only when the canvas or the aspect mode changes. The width moves
+ * every time ExtraDegrees does, which is every frame of a slider being dragged, so a reader
+ * computing "base = width - offset" from a width written even a moment ago would pair a stale
+ * width with a current offset and get a base that drifts. Each drag step would then be measured
+ * from a wrong origin and the value would run away past both ends of the slider. Publishing the
+ * stable half removes the race rather than narrowing it.
+ *
+ * A reader wanting the current width adds ExtraDegrees to this, and both numbers are in the file.
+ * Editing this key does nothing; it is overwritten from the projection. */
+static void publish_base_fov(void)
+{
+    static float published = -1.0f;
+    float        base = variable_fov_base_horizontal_degrees();
+
+    /* No throttle, because there is nothing to throttle: this changes when the resolution or the
+     * aspect mode changes and at no other time, so the write below happens a handful of times in a
+     * session rather than once a frame. */
+    if (published >= 0.0f && base > published - 0.05f && base < published + 0.05f) {
+        return;
+    }
+    published = base;
+    (void)ini_write_float(FOV_SECTION, "BaseFov", base, 1);
+}
+
+static void poll_extra_degrees(void)
+{
+    static uint64_t seen_generation;
+    uint64_t        generation = ini_generation();
+    float           wanted;
+    float           held;
+
+    publish_base_fov();
+
+    if (generation == seen_generation) {
+        return;                                /* the file has not been written since the last look */
+    }
+    seen_generation = generation;
+
+    held   = fov_state.config.extra_degrees;
+    wanted = fov_clamp_float(ini_read_float(FOV_SECTION, "ExtraDegrees", held), -120.0f, 120.0f);
+    if (wanted > held - EXTRA_EPSILON && wanted < held + EXTRA_EPSILON) {
+        return;
+    }
+
+    apply_extra_degrees(wanted);
+    log_info("ExtraDegrees changed on disk, %.1f to %.1f. The picture is now %.1f degrees across.",
+             (double)held, (double)fov_state.config.extra_degrees,
+             (double)variable_fov_horizontal_degrees());
 }
 
 /* ============================================================================================ */
@@ -450,6 +534,17 @@ void variable_fov_install(void)
     if (fov_state.config.menu_slider) {
         fov_menu_install();
     } else {
-        log_info("MenuSlider=0, no field-of-view slider in the video options screen");
+        log_info("MenuSlider=0, which is the default: the video options screen is left as the "
+                 "game shipped it. The field of view is still set by ExtraDegrees and by "
+                 "the developer menu's own slider; this only decides whether the game's "
+                 "own screen offers it too.");
+    }
+
+    /* AFTER the menu, because the menu's own hook is the one that has to exist for the slider to
+     * preview live and this one only makes an ini edit arrive sooner. Losing it costs a restart,
+     * which is what the setting did before, so it warns rather than refusing anything. */
+    if (!frame_hook_add(poll_extra_degrees)) {
+        log_warning("no per-frame hook, so ExtraDegrees is read once at startup and an edit made "
+                    "while the game runs waits for the next launch");
     }
 }

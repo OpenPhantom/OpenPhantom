@@ -129,6 +129,7 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define MSG_CHAR            0x0102
 #define MSG_MOUSE_MOVE      0x0200
 #define MSG_LEFT_BUTTON     0x0201
+#define MSG_LEFT_BUTTON_UP  0x0202
 #define MSG_MOUSE_WHEEL     0x020A
 #define KEY_ESCAPE          0x1B
 #define KEY_BACKSPACE       0x08
@@ -211,6 +212,14 @@ typedef struct overlay_input_state {
     HWND              window;
     float             pointer_x;
     float             pointer_y;
+
+    /* A slider being dragged, and the row it belongs to. Held across frames because the pointer is
+     * read from the system cursor once a frame rather than from a mouse-move message, so a drag is
+     * "the button is still down and this row is still the one" rather than a stream of events. */
+    bool              dragging;
+    int32_t           drag_row;
+    float             drag_fraction;      /* where the POINTER is, updated every frame */
+    uint32_t          drag_last_apply_ms;
 } overlay_input_state_t;
 
 static overlay_input_state_t input_state;
@@ -326,6 +335,61 @@ void overlay_input_update_scroll(void)
     }
 }
 
+/* How often a drag is allowed to write, in milliseconds.
+ *
+ * THE THROTTLE IS THE WHOLE REASON A DRAG IS USABLE. The only channel between this DLL and the one
+ * that owns the setting is the settings file, and writing a key rewrites the file, which here is
+ * around ninety kilobytes. At sixty frames a second that is five megabytes a second of file
+ * traffic for one dragged handle, and the stutter it causes would be blamed on the setting being
+ * changed rather than on the changing of it.
+ *
+ * Thirty a second reads as continuous for a field of view, which is a slow zoom rather than
+ * anything with an edge in it, and the reader on the other side notices within a frame because it
+ * checks the file's timestamp rather than parsing it. The handle itself follows the pointer at the
+ * full frame rate whatever this is set to: what is throttled is the write, not the drawing. */
+#define DRAG_APPLY_MS 33u
+
+static void update_drag(void)
+{
+    float    fraction;
+    uint32_t now;
+
+    if (!input_state.dragging) {
+        return;
+    }
+    /* The button is polled rather than trusted to arrive as a message: the panel swallows input and
+     * a button-up can be delivered to a window that is not this one, which would otherwise leave a
+     * handle stuck to the pointer for the rest of the session. */
+    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
+        input_state.dragging = false;
+        return;
+    }
+
+    /* Mapped from the pointer's CURRENT position against the row the drag started on, not against
+     * whatever row is under the pointer now. Dragging off the row sideways or vertically keeps
+     * driving the handle it grabbed, which is what every slider does and what stops a drag from
+     * jumping to the row below when the hand wanders. */
+    if (!overlay_draw_slider_fraction(input_state.drag_row, input_state.pointer_x, &fraction)) {
+        return;
+    }
+
+    /* Recorded before the throttle, and read by the drawer, so the HANDLE follows the pointer at
+     * the full frame rate while the WRITE is throttled. Drawing the handle from the value read back
+     * out of the file was the first version, and it moved in thirty steps a second against a
+     * pointer moving in sixty, which is exactly what a slider must not do. */
+    input_state.drag_fraction = fraction;
+
+    now = (uint32_t)GetTickCount();
+    if (now - input_state.drag_last_apply_ms < DRAG_APPLY_MS) {
+        return;
+    }
+    input_state.drag_last_apply_ms = now;
+
+    if (overlay_model_slider_set((uint32_t)input_state.drag_row, fraction)) {
+        overlay_model_rebuild();
+    }
+}
+
 void overlay_input_update_pointer(void)
 {
     POINT cursor;
@@ -360,6 +424,9 @@ void overlay_input_update_pointer(void)
     if (input_state.pointer_y < 0.0f) { input_state.pointer_y = 0.0f; }
     if (input_state.pointer_x > screen_w) { input_state.pointer_x = screen_w; }
     if (input_state.pointer_y > screen_h) { input_state.pointer_y = screen_h; }
+
+    /* AFTER the pointer has moved, because a drag is entirely a function of where it now is. */
+    update_drag();
 }
 
 void overlay_input_pointer(float *out_x, float *out_y)
@@ -383,7 +450,7 @@ static void click(float x, float y)
     /* A click anywhere ends the search box's focus except a click ON it, which is what starts it.
      * That is the whole of the click-to-type rule: typing goes into the box only between these two
      * moments, never just because the panel is open. The jump-scale edit follows the same rule via
-     * the unconditional cancel below - it is cancelled on every click, then immediately re-armed by
+     * the unconditional cancel below; it is cancelled on every click, then immediately re-armed by
      * overlay_model_activate() a few lines down if and only if the click actually landed back on
      * its own row, which is exactly the "click it again to redo it" shape that row already has. */
     if (overlay_draw_search_at(x, y)) {
@@ -400,6 +467,25 @@ static void click(float x, float y)
         overlay_model_rebuild();
         return;
     }
+    /* BEFORE the row activation below, because a slider row's track and its chip are two targets on
+     * one row and the track is the one being pointed at. Landing on the chip still falls through to
+     * activate and opens the number for typing, which is the other way to set it. */
+    {
+        float   fraction;
+        int32_t track = overlay_draw_slider_at(x, y, &fraction);
+
+        if (track >= 0) {
+            input_state.dragging = true;
+            input_state.drag_row = track;
+            input_state.drag_fraction = fraction;
+            input_state.drag_last_apply_ms = 0u;   /* the first move applies immediately */
+            if (overlay_model_slider_set((uint32_t)track, fraction)) {
+                overlay_model_rebuild();
+            }
+            return;
+        }
+    }
+
     row = overlay_draw_row_at(x, y);
     if (row >= 0) {
         (void)overlay_model_activate((uint32_t)row);
@@ -428,7 +514,7 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         /* A hotkey row is waiting for exactly this. Checked before Escape and everything else
          * below, on purpose: whatever key arrives while capturing IS the binding, including
          * Escape itself, rather than closing the panel or being swallowed as ordinary navigation.
-         * Predictable this way - no separate list of keys a capture refuses to accept - and a
+         * Predictable this way, with no separate list of keys a capture refuses to accept, and a
          * player who binds something inconvenient can simply click the row again to rebind it. */
         if (overlay_model_is_capturing_hotkey()) {
             overlay_model_capture_hotkey(wparam);
@@ -493,9 +579,9 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
 
     switch (message) {
     case MSG_CHAR:
-        /* Backspace also arrives as a character and would otherwise be appended as one - it is
+        /* Backspace also arrives as a character and would otherwise be appended as one; it is
          * handled above, as a key-down, for both fields, so it is only ever excluded here. Typing
-         * reaches either field only once a click has landed on it - see click() - which is also
+         * reaches either field only once a click has landed on it, see click(), which is also
          * what stops the open key itself leaking in as a character the instant the panel opens: the
          * key-down that opens the panel is handled above and never reaches here, but Windows still
          * queues the matching WM_CHAR right behind it, and without the focus gate that character
@@ -523,6 +609,13 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         click(input_state.pointer_x, input_state.pointer_y);
         return true;
 
+    case MSG_LEFT_BUTTON_UP:
+        /* Swallowed like every other pointer message, and it ends a drag. update_drag polls the
+         * button as well, so a release delivered somewhere else still ends it; this is the path
+         * that ends it on the same frame rather than on the next one. */
+        input_state.dragging = false;
+        return true;
+
     default:
         break;
     }
@@ -531,7 +624,7 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
 
 /* Notches scrolled since the last take, positive away from the player. Free camera's own fly
  * speed (see cheats_openphantom.c) is the one consumer, and it needs the wheel while FLYING, which
- * is exactly when the panel is closed - unlike everything else in this file, gated on
+ * is exactly when the panel is closed. Unlike everything else in this file, gated on
  * input_state.open, this has to be observed unconditionally, in hook_key() itself rather than in
  * handle() below. It is never consumed: the message still reaches input_state.original()
  * afterwards exactly as if this were not here, since nothing here is known to need the wheel for
@@ -641,5 +734,15 @@ bool overlay_input_install(void)
              "from. The modal cell at %08X is read as proof this is the right function and "
              "is deliberately not written.",
              (unsigned)site, (unsigned)modal);
+    return true;
+}
+
+bool overlay_input_drag(int32_t *row, float *fraction)
+{
+    if (!input_state.dragging || row == NULL || fraction == NULL) {
+        return false;
+    }
+    *row = input_state.drag_row;
+    *fraction = input_state.drag_fraction;
     return true;
 }

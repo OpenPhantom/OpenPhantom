@@ -23,11 +23,11 @@
 /* --- 0x004338EC  enemy_receiveDamage: the NPC health write ----------------------------------- *
  * Found hunting for the enemy-side counterpart to unlimited health, starting from dismemberment.c's
  * own DEATH GATE (0x0043707D), which is reached only when an NPC's health, at character record
- * +0x38, has fallen to zero or below - established there by the retail compare at 0x437070. That
+ * +0x38, has fallen to zero or below, established there by the retail compare at 0x437070. That
  * pinned the FIELD; this pins the WRITE. Decompiling enemy_receiveDamage (0x00433803, named for the
  * six call sites Ghidra's own xrefs find into it, all message-dispatch arms) shows exactly one line
- * that ever changes it: `*(int*)(param_1+0x38) = *(int*)(param_1+0x38) - local_18;` - local_18 is
- * the damage this call computed (a flat 3, doubled to 6 for a severable-limb hit - the same doubling
+ * that ever changes it: `*(int*)(param_1+0x38) = *(int*)(param_1+0x38) - local_18;`. local_18 is
+ * the damage this call computed (a flat 3, doubled to 6 for a severable-limb hit, the same doubling
  * dismemberment.c's own header already documents at 0x4338B3, a few instructions earlier in this
  * same function). Disassembled, that line is five back-to-back three-byte instructions, an exact
  * 15-byte block with no rel32 and nothing environment-dependent in it:
@@ -39,11 +39,11 @@
  *   004338F8  89 41 38     mov [ecx+0x38],eax   health -= damage, written back
  *
  * Traced forward to the end of the function (0x00433985), NOTHING after this block ever reads EAX,
- * ECX or EDX left over from it - every later use of the victim record reloads it fresh from
+ * ECX or EDX left over from it; every later use of the victim record reloads it fresh from
  * [ebp+8], and the first flag-testing instruction after it (FCOMP/FNSTSW at 0x004338FE) sets its
  * own flags rather than reading the SUB's. That is what makes this block safe to detour as a whole
  * and either skip entirely or replace outright, rather than needing to preserve anything about how
- * it executed - unlike updateCam's chained detour above, which must run the original underneath
+ * it executed. Unlike updateCam's chained detour above, which must run the original underneath
  * every time, this site's own hook is free to decide whether the trampoline runs at all. */
 static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
     0x8B, 0x55, 0x08,             /* mov edx,[ebp+8]      victim (character*)            */
@@ -53,7 +53,7 @@ static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
     0x89, 0x41, 0x38,             /* mov [ecx+0x38],eax   health -= damage, written back */
     0xD9, 0x45, 0xF8               /* fld [ebp-8]  the next instruction, kept only for the extra
                                      * uniqueness/chaining margin every other detour site in this
-                                     * file also carries past its own prologue - never read for a
+                                     * file also carries past its own prologue; never read for a
                                      * value */
 };
 /* Fifteen, not eighteen: the trampoline may only copy what the detour target's own site comment
@@ -67,14 +67,14 @@ static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
  * with what value", so one detour answers both. Where hook_camera_update above must always run the
  * original underneath it (that site is chained, other DLLs' features depend on it happening), this
  * one is not chained by anything and its own site comment already proves nothing downstream reads
- * EAX/ECX/EDX or the SUB's flags - so this hook is free to skip the original three-instruction
+ * EAX/ECX/EDX or the SUB's flags, so this hook is free to skip the original three-instruction
  * write outright rather than only being able to run alongside it.
  *
  * A naked trampoline rather than a call-site redirect like hook_use_ammo/hook_damage above: those
  * two detour a CALL instruction, so the hook can simply BE the function and choose whether to call
  * `original`. This site is a straight-line block in the middle of enemy_receiveDamage's own body,
  * not a call, so what gets overwritten is regular code and the hook must be entered by JMP with the
- * surrounding registers intact - the same shape dismemberment.c's own death-gate hook already uses,
+ * surrounding registers intact, the same shape dismemberment.c's own death-gate hook already uses,
  * extended here with a choice of WHERE to resume: normal play calls the trampoline (the original
  * three instructions, unmodified); either cheat sets npc_damage_skip and resumes at
  * npc_damage_continue instead, immediately past the write, having already decided the outcome
@@ -226,29 +226,7 @@ static void __declspec(naked) hook_npc_damage(void)
     }
 }
 
-/* Giant player and tiny player, sharing one detour on rdThing_Draw rather than needing one each -
- * both are the same decision, "does the player's own render matrix get scaled, and by how much",
- * answered before the real draw runs. A plain typed hook, not a naked one: rdThing_Draw is a
- * regular __cdecl(thing*, matrix[12]) at the ABI boundary regardless of its own frame-pointer-
- * omitted body (see SIG_THING_DRAW's own comment), so there is nothing here that needs pushad/
- * pushfd the way the mid-function NPC-damage site above does.
- *
- * The player's own thing is chased fresh off the player-record global on every single call rather
- * than cached anywhere - this needs no rising-edge bookkeeping the way free camera's own seeding
- * does, because there is nothing here that persists between frames to begin with: the incoming
- * matrix is already a full rebuild of the player's real position and orientation for this frame,
- * every frame, so scaling it is inherently transient and switching either cheat off needs no
- * un-write, the next call simply stops scaling.
- *
- * FIELD-TESTED: scaling `matrix` in place - the caller's own working buffer for this object, not
- * something owned by this call - also scales the force-push ability's own reach and power, because
- * bapobj_drawAll reads that same buffer again right after this call returns for something that has
- * nothing to do with rendering. A local-copy version that left the caller's own numbers untouched
- * was tried and worked, but was reverted: combat is not meaningfully usable at either scale anyway,
- * so the extra copy bought correctness nothing was actually asking for. Swap back to a local copy
- * (see git history) if that ever stops being true. */
-
-/* Both NPC cheats live behind this one detour - see on_npc_damage's own comment for why one site
+/* Both NPC cheats live behind this one detour; see on_npc_damage's own comment for why one site
  * answers both. */
 void install_npc_damage(void)
 {

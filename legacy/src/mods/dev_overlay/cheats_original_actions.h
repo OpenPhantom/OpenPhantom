@@ -8,7 +8,7 @@
  * Two of them are gated, the same way the retail console itself gates them: full health and
  * all-weapons-full-ammo both raise a hidden counter, capped under ten, past which the retail
  * effect stops giving anything either. That counter has a second reader nowhere near where it is
- * written - it also pins the player's effective difficulty at its hardest row, from the FIRST
+ * written; it also pins the player's effective difficulty at its hardest row, from the FIRST
  * nonzero value it ever sees, not the tenth. See cheats_original_actions.c for the read that proved
  * this, and for why the gate still matches retail's own cap rather than trying to prevent a cost
  * that the effect itself cannot be used without paying at least once.
@@ -48,13 +48,13 @@ bool cheats_original_actions_resolve(void);
  * so the label still names them; only the id is fixed at compile time. */
 const char *cheats_original_actions_name(cheats_action_id_t id);
 
-/* False when the site never resolved, OR - for the two gated actions only - when the shared
+/* False when the site never resolved, OR, for the two gated actions only, when the shared
  * counter has already reached the retail console's own cap, the same point retail's effect stops
  * giving anything too. Both reasons show as the same unavailable row: the panel does not need to
  * say which, only that pressing it will not work. */
 bool cheats_original_actions_is_available(cheats_action_id_t id);
 
-/* Runs it once - except the four play-as codes, which this only QUEUES. Answers false when it
+/* Runs it once, except the four play-as codes, which this only QUEUES. Answers false when it
  * could not, for either reason above.
  *
  * The swap has its own precondition, read out of the retail function itself: a pointer in the
@@ -76,20 +76,20 @@ bool cheats_original_actions_is_pending(cheats_action_id_t id);
 const char *cheats_original_actions_pending_label(void);
 
 /* Runs the queued play-as swap, if any, and clears the queue either way. Safe to call with nothing
- * queued. Call this after the player has been un-suspended, not before - see the note on
+ * queued. Call this after the player has been un-suspended, not before; see the note on
  * cheats_original_actions_invoke(). */
 void cheats_original_actions_apply_pending(void);
 
 /* The graphics detail level right now, 1 to 4, read fresh every call so the panel can show it
  * living rather than as a one-off confirmation that scrolls away. Zero when the site never
- * resolved - not one of the four real levels, so a caller cannot mistake "unknown" for "level 1"
- * by forgetting to check first. */
+ * resolved, which is not one of the four real levels, so a caller cannot mistake "unknown" for
+ * "level 1" by forgetting to check first. */
 int32_t cheats_original_actions_graphics_level(void);
 
 /* DAT_00881368, the level-status cell "gurshick"/"where is gurshick" (CHEATS_ACTION_VIEW_CREDITS)
  * already resolves for its own, held-back row. Exposed read-only for cheats_openphantom.c's "Skip
- * to next level" action, which writes the SAME cell to a different value - the literal signal a
- * level's own exit trigger sends, not the credits one - so both features share the one resolution
+ * to next level" action, which writes the SAME cell to a different value, the literal signal a
+ * level's own exit trigger sends, not the credits one, so both features share the one resolution
  * rather than each finding their own copy of what is genuinely a single global cell. NULL until
  * cheats_original_actions_resolve() has run and that one cell actually resolved. */
 volatile int32_t *cheats_original_actions_level_status_cell(void);

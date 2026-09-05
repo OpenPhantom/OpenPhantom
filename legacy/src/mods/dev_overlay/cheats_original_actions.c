@@ -2,19 +2,38 @@
  * cheats_original.c's shared toggle table does not cover.
  *
  * ==============================================================================================
+ * SIZE NOTE
+ *
+ * Over the 600 line mark, under the 900 hard limit, and kept whole for now.
+ *
+ * The seam is between resolving and running. The eleven resolve_ functions, and the four small
+ * readers they lean on, are one job: work out where each code's site is, by fixed offset from
+ * the one anchor this file resolves, and cross-check every one of them. Everything after that
+ * is a different job: naming the actions, saying which are available, and running one when the
+ * panel asks.
+ *
+ * What argues against taking that cut today is the anchor itself. Every resolve_ function reads
+ * from one base address that only this file establishes, and the cross-checks that make those
+ * offsets trustworthy sit beside the offsets they check. Splitting puts the base behind an
+ * accessor and separates each check from the thing it validates, which is the arrangement this
+ * file exists to avoid; the reasoning is in the section directly below.
+ *
+ * Take the cut if a second anchor ever appears, or when this file reaches the hard limit.
+ *
+ * ==============================================================================================
  * ONE ANCHOR, NOT SIXTEEN SIGNATURES
  *
  * Every one of these lives inside a single retail function, gameplay_open_cheat_console, read in
  * full by decompiling 0x0042fc90. After the eleven-entry toggle loop cheats_original.c already
  * matches, that function just chains sixteen `strcmpi` tests against the typed text, each followed
- * by whatever that code actually does - a function call, a direct write, or both.
+ * by whatever that code actually does, whether a function call, a direct write, or both.
  *
  * Rather than write and verify sixteen independent byte patterns, this resolves ONE signature for
  * the function's own prologue and reads everything else as a FIXED BYTE OFFSET from it. That is
  * sound for the same reason cheats_original.c's OFFSET_NAME_TABLE and OFFSET_FLAG_ARRAY are: the
  * whole function is one compiled unit, so a recompile that relocates it moves every instruction
  * inside it by the same amount, and every address an instruction embeds is read out of the match
- * rather than assumed - nothing here is a hardcoded absolute address.
+ * rather than assumed; nothing here is a hardcoded absolute address.
  *
  * The prologue used as the anchor, 0x0042fc90 in retail:
  *
@@ -37,7 +56,7 @@
  * Full health and all-weapons-full-ammo both raise DAT_00872efc, capped under the console's own
  * `< 10` guard so the two effects themselves stop giving anything past a point. The first version
  * of this file read that guard as a safe BUDGET and gated on "exactly zero" instead, on the
- * strength of what the only other reader of this cell does - FUN_00457f24, which computes the
+ * strength of what the only other reader of this cell does, FUN_00457f24, which computes the
  * player's EFFECTIVE difficulty for the run:
  *
  *   local_14 = DAT_00872fa0 - local_10;
@@ -47,7 +66,7 @@
  *
  * That reading is correct about the bytes and was the wrong gate anyway. The FIRST use of either
  * code already sets this counter to 2 or 5, already satisfies "0 < DAT_00872efc", and already pins
- * the hardest row for the rest of the run - and there is no code path in this file, or anywhere
+ * the hardest row for the rest of the run, and there is no code path in this file, or anywhere
  * else, that can stop that from happening while the cheat still does anything at all. A gate that
  * only allows the very first press does not prevent the pin; it just takes away the handful of
  * further uses retail itself always allowed after paying that same, already-unavoidable cost. A
@@ -57,7 +76,7 @@
  * So the gate matches retail's own `< 10` exactly: cheats_original_actions_is_available() reads
  * this cell fresh every time and answers false once it stops being under ten, the same point
  * retail's own effect stops giving anything. What the counter's mere existence still guarantees,
- * regardless of any gate here, is that pressing either one even once pins the difficulty - which is
+ * regardless of any gate here, is that pressing either one even once pins the difficulty, which is
  * a cost of the effect itself, not a defect in how many times this panel lets you pay it.
  *
  * ==============================================================================================
@@ -75,7 +94,7 @@
  *   graphics detail level cycler, not a force power colour.
  *
  *   FUN_00462750: `DAT_006cfdc0 = (DAT_006cfdc0 == 0)`, a plain toggle. Its only other reader,
- *   FUN_004627b6, draws a shape in colour 0xF800 - RGB565 pure red - at an icon's own position when
+ *   FUN_004627b6, draws a shape in colour 0xF800, RGB565 pure red, at an icon's own position when
  *   it is set. What icon is a further question this project has not answered yet; that it draws in
  *   red at all is why the label below says "highlight" rather than claiming more.
  * ============================================================================================== */
@@ -140,7 +159,7 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
 
 /* The message ids retail's own console passes to FUN_0043dc61 after each effect, read straight off
  * the same disassembly as everything else here. Safe to carry as literals rather than resolve: each
- * is an immediate value baked into the CALL SITE'S OWN bytes, not a movable data address - the same
+ * is an immediate value baked into the CALL SITE'S OWN bytes, not a movable data address, the same
  * reasoning the tech bonus case already documents. Graphics detail is the one exception, whose
  * message id is `DAT_004ac538 + 0x37` and has to be read fresh after the level actually changes. */
 #define MSG_KILL_SELF        0x46
@@ -263,7 +282,7 @@ static void set_label(cheats_action_id_t id, const char *text)
 }
 
 /* Retail's own on-screen confirmation, the one this whole file originally left out everywhere
- * except the tech bonus message - which was the wrong call for anything else with no OTHER visible
+ * except the tech bonus message, which was the wrong call for anything else with no OTHER visible
  * feedback. A player pressing a difficulty row that changes a number nothing on screen reflects has
  * no way to tell it worked without this. Silent when the site never resolved: the effect still ran,
  * only the confirmation is missing, the same trade-off resolve_graphics_detail() already documents
@@ -342,7 +361,7 @@ static void resolve_difficulty(void)
 
 /* HELD BACK AS n/a, THE SAME WAY AND FOR THE SAME REASON AS WAVERING GRAPHICS.
  *
- * The site resolves cleanly and the write runs without crashing on its own terms - but field
+ * The site resolves cleanly and the write runs without crashing on its own terms, but field
  * testing found triggering it from this panel, mid level, behaves badly enough to be worth not
  * offering rather than diagnosing on the spot. Retail's own code path for `gurshick` is the
  * console's, which is not this panel's: the console pumps its own frame loop and the player is
@@ -362,12 +381,12 @@ static void resolve_credits(void)
 
 /* HELD BACK AS n/a ON PURPOSE, NOT BECAUSE IT FAILED TO RESOLVE.
  *
- * The site resolves cleanly - the flag and both apply calls all read as valid, in-image addresses -
+ * The site resolves cleanly, the flag and both apply calls all read as valid, in-image addresses,
  * and it runs without crashing. What it does not do, confirmed against the running game rather than
  * assumed, is anything visible. The flag it flips (`DAT_006c4d00`) is read inside two of the
  * engine's own dense per-vertex model transform routines, deep enough that saying what it actually
  * renders as would need real work, and "resolves and runs" is not the same claim as "does something
- * a player asked for" - so it stays off rather than offering a row that ticks and, as far as this
+ * a player asked for", so it stays off rather than offering a row that ticks and, as far as this
  * project can currently show, does nothing. The resolution below is left in place rather than
  * deleted: if the visible effect is ever pinned down, restoring the row is one line. */
 static void resolve_wavering_graphics(void)
@@ -555,7 +574,7 @@ bool cheats_original_actions_is_available(cheats_action_id_t id)
     if (id == CHEATS_ACTION_FULL_HEALTH || id == CHEATS_ACTION_ALL_WEAPONS_AMMO) {
         /* Read fresh every time: the retail console, a save load, or this panel itself can all
          * move this cell between one paint and the next. `< 10` is the retail console's OWN gate,
-         * matched rather than tightened - see the header comment at the top of this file for why a
+         * matched rather than tightened; see the header comment at the top of this file for why a
          * stricter gate here would not buy any additional safety. The difficulty is already pinned
          * from the first use either way; the counter's only remaining job past that point is
          * deciding how many more times the RESOURCE benefit itself still works, same as retail. */
@@ -609,7 +628,7 @@ bool cheats_original_actions_invoke(cheats_action_id_t id)
      * for on every other frame it is open. Calling the swap now can silently do nothing, with no
      * error to show for it. Queuing it instead and applying it once the panel closes and the player
      * is un-suspended again is what makes it reliable rather than "usually" reliable. Only the last
-     * press before closing wins - the four are mutually exclusive anyway, so overwriting a pending
+     * press before closing wins; the four are mutually exclusive anyway, so overwriting a pending
      * one rather than queuing several is the honest behaviour, not a limitation of the queue. */
     case CHEATS_ACTION_PLAY_OBI:
         st.pending_character = 0;
@@ -669,7 +688,7 @@ bool cheats_original_actions_invoke(cheats_action_id_t id)
 
     case CHEATS_ACTION_TECH_BONUS:
         /* 0x48 is the message id and 0x40800000 the raw dword the retail call site itself pushes
-         * for its display-seconds argument (4.0f's bit pattern) - both are immediate values baked
+         * for its display-seconds argument (4.0f's bit pattern). Both are immediate values baked
          * into the CODE at this call site, not a movable data address, so unlike everything else
          * in this file they are safe to carry as literals. */
         st.print_message(0x48, 0x40800000);

@@ -31,8 +31,10 @@ static const uint8_t SIG_CREDITS_SCREEN[] = {
 static const uint8_t MSK_CREDITS_SCREEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_CREDITS_SCREEN == sizeof MSK_CREDITS_SCREEN,
+               "the credits screen pattern and its mask are different lengths");
 #define CREDITS_SCREEN_PROLOGUE 8u
 
 /* --- 0x004476EB credits_readLine -------------------------------------------------------------
@@ -134,7 +136,7 @@ static int32_t __cdecl hook_credits_screen(void)
     skip_state.inside_credits = true;
     skip_state.skip_requested = false;
 
-    /* SEEDED FROM THE LIVE KEY, NOT CLEARED. The closing cutscene runs immediately before this and
+    /* Seeded from the live key, NOT cleared. The closing cutscene runs immediately before this and
      * is skippable with the same key, so the finger is very likely still down as the credits open.
      * Starting from the current state means only a FRESH press counts, and the credits are not
      * skipped before their first frame is drawn. */

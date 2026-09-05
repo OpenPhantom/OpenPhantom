@@ -9,7 +9,7 @@
 
 /* The ending sequence, from the push of 480 to the two arguments of the movie name call.
  *
- * ADDRESS FREE ON PURPOSE. Three operands are masked out: the two call displacements and the
+ * Address free ON PURPOSE. Three operands are masked out: the two call displacements and the
  * pointer to "movie\scene8". The string address would have been the shortest way to tell this site
  * apart from the five other places that push 640x480, and it is exactly the sort of anchor that
  * stops resolving under forced ASLR. The tail carries the distinction instead: the lea of the same
@@ -42,6 +42,8 @@ static const uint8_t MSK_ENDING_MODE_DROP[] = {
     0xFF, 0xFF,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_ENDING_MODE_DROP == sizeof MSK_ENDING_MODE_DROP,
+               "the ending mode drop pattern and its mask are different lengths");
 
 /* The call sits ten bytes into the match, after the two pushes. */
 #define OFFSET_MODE_DROP_CALL 0x0Au

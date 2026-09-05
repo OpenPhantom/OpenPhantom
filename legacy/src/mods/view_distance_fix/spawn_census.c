@@ -64,20 +64,22 @@
 
 /* The placement's own name, a null-terminated string on the record this call's own first argument
  * points to. FUN_00437250's decompile shows the byte scan seeding the new actor's name starting at
- * `param_1 + 0x2e`, but param_1 decompiles as `int *`, so that expression is already scaled by 4 -
+ * `param_1 + 0x2e`, but param_1 decompiles as `int *`, so that expression is already scaled by 4:
  * the real byte offset is 0x2e * 4 = 0xB8. (First attempt at this offset, left unscaled, printed
- * floating-point bit patterns instead of names - the tell that gave the x4 away.) Temporary: logs
+ * floating-point bit patterns instead of names, which is the tell that gave the x4 away.)
+ * Temporary: logs
  * every SUCCESSFUL spawn by name, not just refusals, so a specific encounter's placements can be
  * identified live rather than guessed at. */
 #define PLACEMENT_NAME_OFFSET 0xB8u
 #define PLACEMENT_NAME_MAX    32u
 
-/* The placement's own world position, a float[3] at +0xAC - the same field view_distance_fix.c's
+/* The placement's own world position, a float[3] at +0xAC, the same field view_distance_fix.c's
  * own SIG_ACTIVATION_SCAN comment names as the third argument to within_range ("push rec+0xAC"),
  * pushed by address rather than by value, so it is a pointer to the triple rather than one float.
- * Logged because the name alone turned out to be a reused archetype label, not a per-placement ID -
- * "enemy092" fired about twenty times in one run, including once at the very start of the level far
- * from the lift, so position is what actually tells the lift's three droids apart from everything
+ * Logged because the name alone turned out to be a reused archetype label, not a per-placement
+ * ID: "enemy092" fired about twenty times in one run, including once at the very start of the
+ * level far from the lift, so position is what actually tells the lift's three droids apart from
+ * everything
  * else this hook also sees. */
 #define PLACEMENT_POSITION_OFFSET 0xACu
 
@@ -100,7 +102,7 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
 #define PLAYER_ACTOR_OFFSET       0x0Cu   /* the same +0xC FUN_00447d18 itself reads */
 #define PLAYER_CURRENT_POS_OFFSET 0x18u
 
-#define PLAYER_POSITION_LOG_EVERY_FRAMES 10u   /* rough; small on purpose - a 90-frame throttle
+#define PLAYER_POSITION_LOG_EVERY_FRAMES 10u   /* rough, and small on purpose: a 90-frame throttle
                                                  * turned into one sample per ~13 real seconds
                                                  * during a 7 fps stall, which is exactly the
                                                  * window this needs to resolve precisely */
@@ -135,7 +137,7 @@ static uint32_t *resolve_player_pointer_slot(void)
 
 /* --- the camera object pointer, reused from enhanced_input/camera_sites.c's own SIG_CAMERA_VIEW --
  * That file resolves seven cross-checked patterns for its own free-look feature; this needs only
- * one of them, the camera object pointer, and only two READ-ONLY fields on it - the yaw offset
+ * one of them, the camera object pointer, and only two READ-ONLY fields on it; the yaw offset
  * cross-check camera_sites.c performs against its OWN recentre-write site is skipped here since
  * this never writes anything. Byte-identical pattern, reasoning quoted from that file:
  *
@@ -162,6 +164,8 @@ static const uint8_t MSK_CAMERA_VIEW[] = {
     0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_CAMERA_VIEW == sizeof MSK_CAMERA_VIEW,
+               "the camera view pattern and its mask are different lengths");
 #define OFFSET_VIEW_OBJECT         0x01u
 #define BAPVIEW_EULER_PITCH_OFFSET 0x34u
 #define BAPVIEW_EULER_YAW_OFFSET   0x38u
@@ -187,12 +191,12 @@ static uint32_t *resolve_camera_view_pointer_slot(void)
 
 /* TEMPORARY: dumps every LEVEL PLACEMENT within range of the player, not just ones that happened
  * to fire a "created" log during this capture. Matching by "recently created nearby" turned out to
- * miss the actual droids twice in a row - they can be actors that were already active before this
+ * miss the actual droids twice in a row: they can be actors that were already active before this
  * session's own capture window started, which never emit a fresh "created" line at all. This walks
  * the SAME placement table FUN_00437161 (the activation scan) itself iterates: world = *(0x8A0060),
  * count = *(world+0x204), array = *(world+0x20C), each entry the same placement record everything
  * else in this file already reads by the same offsets. 0x008A0060 is used directly rather than
- * resolved by signature - it is a fixed global read as a literal absolute operand at several
+ * resolved by signature: it is a fixed global read as a literal absolute operand at several
  * already-confirmed sites this session (FUN_0040be00, FUN_0040c2be among them), not a relocatable
  * target, and this is a one-off diagnostic rather than something meant to ship. */
 #define WORLD_POINTER_ADDRESS          0x008A0060u
@@ -255,7 +259,8 @@ static void dump_nearby_placements(const float *player_position)
             (void)memory_read((uintptr_t)placement + PLACEMENT_CREATED_FLAG_OFFSET, &created,
                               sizeof(created));
             log_info("spawn census: NEARBY \"%.*s\" at (%.1f, %.1f, %.1f), active=%d created=%u",
-                     (int)PLACEMENT_NAME_MAX, (const char *)(uintptr_t)placement + PLACEMENT_NAME_OFFSET,
+                     (int)PLACEMENT_NAME_MAX,
+                     (const char *)(uintptr_t)placement + PLACEMENT_NAME_OFFSET,
                      (double)position[0], (double)position[1], (double)position[2],
                      (flags & PLACEMENT_ACTIVE_FLAG_BIT) != 0, (unsigned)created);
         }
@@ -465,11 +470,11 @@ bool spawn_census_install(uintptr_t activation_scan, bool enabled)
 /* ============================================================================================
  * The destroy side. FUN_00437850(actor, reason): tears an actor down and, for every reason except
  * 3, writes back to its own placement (actor+0x10, the same pointer FUN_00437250 stored there at
- * creation) - reason 1 or 14 sets placement+0xC8 to 2 (blocks re-creation for good), anything else
+ * creation): reason 1 or 14 sets placement+0xC8 to 2 (blocks re-creation for good), anything else
  * sets it to 0 UNLESS the actor's own state field (actor+0x20) reads 14, in which case that too is
  * immediately overwritten back to 2. Zero is also activation_scan's own "not yet created" gate, so
- * a reason that lands on the zero path is a placement that will be recreated on the very next scan
- * tick - which is exactly the shape of what the field report described. */
+ * a reason that lands on the zero path is a placement that will be recreated on the very next
+ * scan tick, which is exactly the shape of what the field report described. */
 static const uint8_t SIG_ACTOR_DESTROY[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x08, 0x8B, 0x48, 0x14,
     0x81, 0xE1, 0x00, 0x20, 0x00, 0x00, 0x85, 0xC9
@@ -487,7 +492,7 @@ typedef struct destroy_census_state {
 static destroy_census_state_t destroy_census;
 
 /* FUN_00432bf2's own per-tick tail destroys with reason 0 when the LIVE actor position (actor+0xD0)
- * falls outside a DEACTIVATION radius read from the placement at +0x2C - a different field from the
+ * falls outside a DEACTIVATION radius read from the placement at +0x2C, a different field from the
  * ACTIVATION radius at +0x28 the scan itself uses against the placement's own STATIC position at
  * +0xAC. Measured live: for the placements that got caught in this, the two radii and the two
  * positions all agreed (deactivation radius wider than activation, proper hysteresis, position

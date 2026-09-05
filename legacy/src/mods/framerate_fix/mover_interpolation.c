@@ -177,6 +177,8 @@ static const uint8_t MSK_SUBSTEP_ALPHA_LATCH[] = {
     0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_SUBSTEP_ALPHA_LATCH == sizeof MSK_SUBSTEP_ALPHA_LATCH,
+               "the substep alpha latch pattern and its mask are different lengths");
 /* Each of these is the offset of the OPERAND, not of the instruction that carries it, and those
  * two are what an off by N here looks like: 0x14 reaches the `8B 0D` of the load rather than the
  * address behind it and yields 0xACE40D8B, which is not in the image. The opcode bytes in front of

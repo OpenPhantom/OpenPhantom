@@ -143,6 +143,8 @@ static const uint8_t MSK_SUBSTEP_COUNTER[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_SUBSTEP_COUNTER == sizeof MSK_SUBSTEP_COUNTER,
+               "the substep counter pattern and its mask are different lengths");
 #define OFFSET_SUBSTEP_COUNTER 0x01u
 
 enum {

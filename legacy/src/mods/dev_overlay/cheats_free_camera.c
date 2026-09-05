@@ -202,31 +202,38 @@ static bool    freecam_hotkey_was_down;
  * it: one position write while the simulation is still frozen, not a player simulating against its
  * own state machine while something else drags it around. */
 #define FREECAM_RETURN_KEY 0x73          /* VK_F4. Alt+F4 still closes the game: Alt is not read */
-/* How far the teleport is allowed to drop somebody, in the engine's own world units.
- *
- * A drop onto a real floor was still enough to break the game when it was high enough: the audio
- * ramps up and stays up, and the arrival never settles. That is not the void case jump boost now
- * hands back to the engine, because there is a floor. It is simply a fall longer than anything the
- * engine was ever built to run.
- *
- * The number is read off the engine's own fall thresholds rather than picked. FUN_0044F162, the
- * ground-contact resolver, compares the accumulated fall distance at player+0x360 against three
- * constants in the shipped WMAIN.EXE, read here out of the instructions that reference them:
- *
- *   0044f5a8  FCOMP [0x004a875c] = 3.5    minimum fall distance for damage
- *   0044f48b  FCOMP [0x004a86dc] = 6.0    the fall-death distance test
- *   0044f1e3  FCOMP [0x004a86f4] = 8.0    the distance at which a fall becomes "significant",
- *                                         which is what arms the 2.0 second airborne death
- *
- * So 8 units is already a serious fall to this engine and 3.5 units hurts. The cap here is TEN
- * TIMES the distance at which the engine starts treating a fall as dangerous, which is generous
- * enough for the "drop somebody in from up high" this feature is wanted for, and still well short
- * of the falls that broke it. It also lands close to where the engine's own airborne timer would
- * have ended the fall anyway: 3.4 seconds of falling, against the roughly 3 seconds that timer
- * allows once it arms, so past this point the flight is holding open a fall the engine already
- * considers finished. */
-#define FREECAM_MAX_TELEPORT_DROP 80.0f
 
+/* How far above the player the camera may be and still bring them to it, in world units.
+ *
+ * MEASURED AGAINST THE PLAYER, NOT PROBED UNDER THE CAMERA, and that is the correction. The
+ * first version of this asked the engine's floor probe what was under the camera. That probe is
+ * scoped to the cell its point sits in, and a camera flown above the level is in no cell, so it
+ * answered "no floor" for solid ground and the teleport was refused almost every time it was
+ * wanted. A field session logged twelve refusals, every one of them that false void, and the
+ * only teleports that got through were within a few units of standing height.
+ *
+ * The player is always inside the world, so their own height is a reference that cannot lie.
+ * The camera's height above it is not the exact drop, since the ground under the camera may be
+ * lower still, but it is the right shape of number and it is never wrong about the direction.
+ *
+ * EIGHTY IS MEASURED, NOT DERIVED, AND THAT DISTINCTION COST A CRASH. It was briefly raised to
+ * 350 on the reasoning that the fall grace in cheats_fall_consequences.c suppresses the landing
+ * damage and both deaths for ten seconds, and that ten seconds of falling at 40 units/s^2
+ * clamped to 40 units/s (player+0x80, and 0x004a86f8) covers 380 units. That arithmetic is
+ * correct and it answers the wrong question. The grace decides whether the player SURVIVES the
+ * landing. It says nothing about whether the engine can run the fall at all.
+ *
+ * Field evidence, from a session logged at successively greater heights: teleports at 30.0,
+ * 51.5 and 72.3 were fine, and one at 110.8 over ground at roughly 25 to 30, so a drop of
+ * about 85 units, took the game down. That sits just past this limit, which is where the
+ * earlier note had already put it from the engine's own fall thresholds.
+ *
+ * For scale, in these same units the engine takes fall damage at 3.5, kills at 6, and calls a
+ * fall significant at 8, and a level's fog band runs 8 to 32. Eighty is ten times the point at
+ * which a fall becomes serious to this engine, so every ordinary rooftop or cliff drop goes
+ * through and only a flight well above the level is refused. Do not raise it again without a
+ * session that actually survives the higher number. */
+#define FREECAM_MAX_TELEPORT_DROP 80.0f
 static bool freecam_teleport_pending = false;   /* raised by the BOUND key, read on the way out */
 static bool freecam_return_was_down  = false;
 
@@ -264,66 +271,87 @@ static void __cdecl hook_camera_update(void)
              *
              * The position is all that moves. Velocity, mode and heading keep whatever they held
              * when flight began, so stepping out mid-air is a fall from wherever the camera was
-             * left, bounded by FREECAM_MAX_TELEPORT_DROP, which is what keeps that fall one the
-             * engine can actually finish. The follow camera needs nothing either way: the very
-             * next updateCam recomputes it from the player, wherever the player now is. */
+             * left, which is the point of the key. The follow camera needs nothing either way:
+             * the very next updateCam recomputes it from the player, wherever the player now is.
+             *
+             * NOTHING IS REFUSED HERE, AND THAT IS A CORRECTION. A floor test was added and then
+             * taken back out. It asked the engine's own probe whether there was ground under the
+             * camera and declined the teleport when there was not, or when the drop was over
+             * eighty units. Both refusals fired constantly in ordinary use, because that probe is
+             * scoped to the CELL its point sits in: fly above the level and the point is in no
+             * cell, so no floor polygon is ever offered and the answer is "void" whatever is
+             * really underneath. A field session logged twelve refusals and not one was the height
+             * cap; every one was that false void, and every teleport that did go through was
+             * within a few units of standing height. Flying up and dropping the player in is what
+             * this key is for, so a guard that removes it whenever the camera leaves the level's
+             * own cells costs more than the fall it was guarding against. */
             if (freecam_teleport_pending) {
                 void **player_slot = (void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
                 uint8_t *player = (player_slot != NULL) ? (uint8_t *)*player_slot : NULL;
 
-                /* Is this somewhere a person can be put? Asked before anything is written, because
-                 * refusing has to leave the player exactly where they were, which is the same
-                 * thing the plain return key does, so a refusal simply becomes a plain return
-                 * rather than a key that appears to do nothing.
+                /* Too high to survive the arrival? Asked before anything is written, because refusing
+                 * has to leave the player exactly where they were. A refusal then falls through to the
+                 * same path the plain return key takes, so the camera snaps back to the player and the
+                 * key reads as "not from here" rather than as a key that did nothing.
                  *
-                 * An unresolved probe is NOT a refusal. On an executable this cannot be asked
-                 * about, the teleport keeps working exactly as it did before the check existed;
-                 * the alternative is a feature that silently stops working on a build nobody has
-                 * tested, which is worse than the fall it is guarding against. */
+                 * Height only. There is no floor probe here on purpose; see the note on
+                 * FREECAM_MAX_TELEPORT_DROP for the one that was tried and what it cost. */
                 if (player != NULL) {
-                    const float camera[3] = { freecam_x, freecam_y, freecam_z };
-                    float       drop = 0.0f;
+                    const float *standing = (const float *)(player + PLAYER_POSITION_OFFSET);
+                    float        above    = freecam_z - standing[2];
+                    float        player_air = 0.0f;
 
-                    switch (floor_probe_below(camera, &drop)) {
-                    case FLOOR_PROBE_NONE:
-                        log_info("the teleport was refused and the camera returned instead: there "
-                                 "is no floor under it at all, so the player would have been "
-                                 "dropped out of the world");
+                    /* The player may be off the ground themselves, mid-fall from a previous teleport or
+                     * stood on something with a long way down. Then the drop is farther than the
+                     * camera's height above them and measuring only that would wave through exactly the
+                     * fall this refuses. The probe is asked HERE, at the player, and that is the one
+                     * place it can be trusted: the player is inside the world, so the cell lookup it
+                     * depends on succeeds. Asking it about the camera is what broke this before. */
+                    if (floor_probe_below(standing, &player_air) == FLOOR_PROBE_FOUND) {
+                        above += player_air;
+                    }
+
+                    if (above > FREECAM_MAX_TELEPORT_DROP) {
+                        log_info("the teleport was refused and the camera returned instead: it is %.0f "
+                                 "units of drop, past the %.0f this engine can finish a fall from",
+                                 (double)above, (double)FREECAM_MAX_TELEPORT_DROP);
                         player = NULL;
-                        break;
-                    case FLOOR_PROBE_FOUND:
-                        if (drop > FREECAM_MAX_TELEPORT_DROP) {
-                            log_info("the teleport was refused and the camera returned instead: "
-                                     "the floor under it is %.0f units down, past the %.0f the "
-                                     "engine can finish a fall from",
-                                     (double)drop, (double)FREECAM_MAX_TELEPORT_DROP);
-                            player = NULL;
-                        }
-                        break;
-                    case FLOOR_PROBE_UNAVAILABLE:
-                    default:
-                        break;
                     }
                 }
 
                 if (player != NULL) {
-                    /* The player's live position, +0x118 (pos), which Plr_CommitPose then pushes
-                     * onto the drawn object. The desiredPos field at +0x124 is NOT the one to
-                     * write: phase 12 copies it into pos only when bMovedThisFrame is set, and a
-                     * standing player clears that every substep, so a write there is discarded.
-                     * Traced through the decomp of Plr_CommitPose after an earlier attempt on
-                     * +0x124 left the player exactly where they started.
+                    /* BOTH copies of the position, and this is the whole of why dropping from
+                     * height did not work. Plr_CommitPose (0x0044C06B) opens with
+                     *
+                     *     if (pPlayer+0xA0 != 0) { +0x118 = +0x124; ... }
+                     *
+                     * so on any frame the player is moving, pos is replaced wholesale by
+                     * desiredPos. Writing pos alone survived only while the player happened to
+                     * be standing still. The moment the movement phase ran it recomputed
+                     * desiredPos from our new position with its own ground resolution applied,
+                     * committed that back over pos, and the player arrived at the right x and y
+                     * planted on the floor. Writing desiredPos ALONE was tried even earlier and
+                     * left them where they started, which is the same bug from the other side.
+                     * Both, and neither copy can put them back.
                      *
                      * The camera's own Z, deliberately. Standing the player on the floor beneath
-                     * the camera was tried and taken back out: dropping somebody in from height is
-                     * a thing people want to do with this, and snapping to the ground removes it.
-                     * The drop is bounded instead, by the height test above, which keeps the thing
-                     * people want without keeping the fall that broke the game. */
+                     * the camera was tried and taken back out: dropping somebody in from height
+                     * is the thing people want this key for. Nothing bounds the drop either; see
+                     * the note above for the guard that was tried there and what it cost. */
                     float *position = (float *)(player + PLAYER_POSITION_OFFSET);
+                    float *desired  = (float *)(player + PLAYER_DESIRED_POSITION_OFFSET);
+                    float *vertical = (float *)(player + PLAYER_VERTICAL_VELOCITY_OFFSET);
 
-                    position[0] = freecam_x;
-                    position[1] = freecam_y;
-                    position[2] = freecam_z;
+                    position[0] = desired[0] = freecam_x;
+                    position[1] = desired[1] = freecam_y;
+                    position[2] = desired[2] = freecam_z;
+
+                    /* From rest. The resolver decays this by gravity every step and adds it to
+                     * the height, so zero is a fall that starts the instant the world resumes.
+                     * Left alone it would carry whatever the player held when flight began,
+                     * which for somebody who was running is a sideways launch rather than a
+                     * drop. */
+                    *vertical = 0.0f;
 
                     /* The arrival is a FALL, from whatever altitude the camera was flown to, and
                      * it is not one the player chose to take. The same five consequences jump

@@ -10,11 +10,19 @@
  *                                   polygon is actually found under the probe's own x/y. The whole
  *                                   block is 0x88 bytes.
  *
- * Its downward reach is unlimited, which is what makes it usable as "is there anything under this
- * point at all". The one range limit in its acceptance rule, 1.0 unit, applies to floors ABOVE the
- * feet, the step-up case, and not to drops, so a floor a thousand units below is still found.
- * That was read out of the decompiled body rather than assumed; getting it backwards would have
- * made every high drop read as a void.
+ * Its ACCEPTANCE rule has no downward limit. The 1.0 unit test at 0x004a80d0 rejects floors more
+ * than a unit ABOVE the point, the step-up case, and a floor below is taken at any depth.
+ *
+ * ITS REACH IS STILL BOUNDED, AND NOT BY THAT RULE. Before any of that runs, the function rounds
+ * the point to integers, asks the world at 0x008A0060 for the cell containing it, and then walks
+ * only the polygons that cell offers. A point outside every cell, which is what any position well
+ * above the level is, yields no candidates at all, so dist keeps its 3.4e38 seed and the answer is
+ * indistinguishable from a genuine void.
+ *
+ * So this answers "is there ground under this point" only for a point the world still contains.
+ * cheats_fall_consequences.c asks about the PLAYER, which always is. The free camera asked about
+ * the CAMERA, which often is not, and that use has been removed; see the teleport in
+ * cheats_free_camera.c for what it cost.
  */
 #include "floor_probe.h"
 

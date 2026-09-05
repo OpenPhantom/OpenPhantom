@@ -28,6 +28,24 @@
  * (ECX = pPlayer+0x118). Shared by jump boost's fall handling and by free camera's exit
  * teleport, so the one number cannot drift between them. */
 #define PLAYER_POSITION_OFFSET 0x118u
+
+/* The player's DESIRED position, the same three floats one vec3 later, read out of
+ * Plr_CommitPose (0x0044C06B), whose first act is:
+ *
+ *     if (pPlayer+0xA0 != 0) { +0x118 = +0x124; +0x11C = +0x128; +0x120 = +0x12C; }
+ *
+ * So on any frame the player is moving, desiredPos wins and pos is whatever it says. Anything
+ * that puts a player somewhere has to write both, or the movement phase quietly puts them back.
+ */
+#define PLAYER_DESIRED_POSITION_OFFSET 0x124u
+
+/* Vertical velocity, the one the ground-contact resolver integrates the height by:
+ *
+ *     if (-40.0 < +0xB4) { +0xB4 -= gravity * dt; }      the -40 is terminal velocity
+ *     +0x120 += +0xB4 * dt;                              the height follows from it
+ *
+ * Zero it and the player falls from rest. Shared with jump boost, which scales it. */
+#define PLAYER_VERTICAL_VELOCITY_OFFSET 0xB4u
 #define JUMP_BOOST_SCALE_DEFAULT 1.3f
 #define JUMP_BOOST_SCALE_MIN     0.5f
 #define JUMP_BOOST_SCALE_MAX     5.0f

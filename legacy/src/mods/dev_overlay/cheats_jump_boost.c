@@ -110,9 +110,6 @@ static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
 };
 #define JEDI_JUMP_ENTRY_PROLOGUE_SIZE 8u   /* same reasoning as JUMP_ENTRY_PROLOGUE_SIZE above */
 
-#define PLAYER_VERTICAL_VELOCITY_OFFSET 0xB4u   /* float; right after the already-confirmed +0xB0
-                                                  * PLAYER_CURRENT_SPEED, written by both functions
-                                                  * above via either of their two paths */
 /* Velocity, not height. Jump height scales with velocity SQUARED under the engine's own linear
  * gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A first guess for "noticeably
  * higher, not silly" the same way TINY_PLAYER_SCALE above is; no retail precedent either direction.

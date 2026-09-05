@@ -4,10 +4,11 @@
  * rather than code, and that is deliberate: a pattern without its listing is a magic number, and
  * splitting the two apart would put every proof one file away from the code that depends on it.
  *
- * SIZE NOTE (rule 9): 797 lines, of which about 210 are code, the whole of it being "read this
- * operand, range-check it, and cross-check it against its twin". The other 490 lines are the seven
- * disassembly listings that say WHY each pattern is the site it claims to be, which is exactly what
- * rule 8 requires at the site and what rule 9 forbids deleting to reach a line count.
+ * SIZE NOTE. Well over the 600 line mark, under the 900 hard limit. Only a small part of it is
+ * code, the whole of which is "read this operand, range-check it, and cross-check it against its
+ * twin". The rest is the seven disassembly listings that say WHY each pattern is the site it
+ * claims to be, which is what has to stand at the site, and which deleting to reach a line count
+ * would be the wrong trade.
  *
  * There is no seam worth cutting here: every listing belongs to the resolver directly beneath it,
  * and a split would sort patterns into two files by nothing more interesting than where the limit
@@ -657,7 +658,7 @@ static bool resolve_view_site(camera_sites_t *out, uint32_t offset_cell)
     /* A third, independent site has to name the same offset cell. The recentre writes it and this
      * blend reads it; if the two disagree, one of the two patterns matched the wrong place. */
     if (offset != offset_cell) {
-        log_warning("the follow blend adds [%08X] but the recentre writes [%08X] - they must be "
+        log_warning("the follow blend adds [%08X] but the recentre writes [%08X]; they must be "
                     "the same cell, so free look stays OFF",
                     (unsigned)offset, (unsigned)offset_cell);
         return false;
@@ -720,7 +721,7 @@ static void resolve_auto_aim_site(camera_sites_t *out, const void *expected_play
         return;
     }
     if ((uintptr_t)player != (uintptr_t)expected_player_pointer) {
-        log_warning("Plr_AutoAim reads the player at %08X but the steering reads it at %08X - "
+        log_warning("Plr_AutoAim reads the player at %08X but the steering reads it at %08X; "
                     "that is not the same player, so the auto-aim cone is left alone",
                     (unsigned)player, (unsigned)(uintptr_t)expected_player_pointer);
         return;
@@ -741,7 +742,7 @@ static void resolve_fire_shot_site(camera_sites_t *out, const void *expected_pla
         return;
     }
     if ((uintptr_t)player != (uintptr_t)expected_player_pointer) {
-        log_warning("the fire handler reads the player at %08X but the steering reads it at %08X - "
+        log_warning("the fire handler reads the player at %08X but the steering reads it at %08X; "
                     "not the same player, so it is left alone",
                     (unsigned)player, (unsigned)(uintptr_t)expected_player_pointer);
         return;

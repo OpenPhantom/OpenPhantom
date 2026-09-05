@@ -37,7 +37,8 @@
  * there is nothing left to twist: the weapon points where the player looks by construction, and
  * firing feels the same in both control schemes.
  *
- * SIZE NOTE (rule 9): 641 lines. The code is a few dozen stores; the rest is the reasoning, and
+ * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. The code is a few dozen stores;
+ * the rest is the reasoning, and
  * every paragraph of it records a mistake that was made or nearly made, writing from the frame
  * hook, leashing the camera to the body, treating a cutscene and a floor polygon as the same
  * release, correcting a twist against a moving reference, and four rounds of building on an
@@ -49,7 +50,7 @@
  * would have been about 120 lines and would NOT have been enough, the whole camera half was.
  * The next seam, if one is ever needed, is the configuration block: it touches nothing but its own
  * struct, so it can move behind a single call that fills a free_look_config_t and needs no shared
- * state at all. Do not make room by deleting comments; rule 9 forbids it.
+ * state at all. Do not make room by deleting comments; that is not a way of meeting the limit.
  */
 #include "free_look.h"
 
@@ -572,8 +573,8 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
                    "pulled back toward the body."
                  : "Free look is installed but switched off, so mouse look is the live control "
                    "mode. Both hooks are in place and both write nothing while it is off, the "
-                   "two camera cells stay the engine's own, which is what lets the check box on "
-                   "the controls screen switch the mode in this same session.",
+                   "two camera cells stay the engine's own, which is what lets it be switched "
+                   "on in this same session rather than at the next launch.",
              (double)(free_state.config.body_settle_seconds * MILLISECONDS_PER_SECOND),
              (double)free_state.config.body_turn_rate,
              free_state.config.aim_snap
@@ -630,7 +631,7 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
     }
 
     if (free_state.config.log_transitions) {
-        log_info("FreeLookLog=1 - one line per CHANGE of the arming gate, never one per frame, and "
+        log_info("FreeLookLog=1, one line per CHANGE of the arming gate, never one per frame, and "
                  "at most %d of them. Each names the condition that fired, the camera region under "
                  "the player and its flags, the yaw on screen against the yaw free look wants, and "
                  "the camera PITCH and EYE HEIGHT. Free look writes neither of those two: when "

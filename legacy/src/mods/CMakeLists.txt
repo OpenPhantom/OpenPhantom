@@ -118,6 +118,8 @@ add_engine_fix(enhanced_input
     input_gate.c
     input_menu.c
     input_slider.c
+    input_switches.c
+    menu_captions.c
     mouse_look.c
     mouse_config.c
     mouse_rate.c

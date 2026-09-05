@@ -12,6 +12,14 @@ void enhanced_input_install(void);
 /* True when both player phases are ours. A control that drives nothing must not be offered. */
 bool enhanced_input_is_active(void);
 
+/* Whether the keyboard turn axis reader resolved in this build. Sideways walking has no key to be
+ * driven from without it, so the switch layer asks before it lets that feature be turned on. */
+bool enhanced_input_keyboard_axis_resolved(void);
+
+/* Drops the travel angle phase 2 left for phase 7. It is one substep of lifetime, and the switch
+ * that turns sideways walking off has to drop it in the same breath as the model-root latch. */
+void enhanced_input_forget_pending_travel(void);
+
 /* The live setting, which the check box on the controls screen both seeds from and writes to. */
 bool enhanced_input_strafe_enabled(void);
 

@@ -104,16 +104,18 @@
  * touched. The chest is skipped while the auto-aim claims it, because the weapon and the blade hang
  * off that node; the head has no other writer in the image.
  *
- * SIZE NOTE: this file runs close to the nine hundred line hard limit. It installs the whole DLL:
- * two phase thunks, the menu, the sites they all depend on, and the order in which they have to
- * come up. The thunks themselves are short, and their correctness rests entirely on facts about
- * the engine that no reader can see from them, which fields the clip selector branches on, where
- * sincos_deg is taken, which modes run which phase. That evidence is the length.
- * One seam has already been taken: the CONFIGURATION half, its defaults, its clamps and the retired
- * keys, went into input_config.c, which touches the engine at no point. The next seam, measured
- * rather than guessed, is the block of setters and availability queries the controls screen calls,
- * about a hundred lines at the end that patch no byte and read no player record. The thunks are not
- * the seam: they read eleven fields of input_state between them.
+ * SIZE NOTE: this file is well over six hundred lines. It installs the whole DLL: two phase
+ * thunks, the menu, the sites they all depend on, and the order in which they have to come up. The
+ * thunks themselves are short, and their correctness rests entirely on facts about the engine that
+ * no reader can see from them, which fields the clip selector branches on, where sincos_deg is
+ * taken, which modes run which phase. That evidence is the length.
+ * Two seams have been taken. The CONFIGURATION half, its defaults, its clamps and the retired
+ * keys, went into input_config.c, which touches the engine at no point. The LIVE SWITCH half went
+ * into input_switches.c: the setters and availability queries the controls screen calls, and the
+ * once-a-second re-read that drives the same setters from the file. None of that patches a byte,
+ * reads a player record or runs on a substep, and it asks this file for the three answers it needs
+ * rather than keeping a second copy of the state. The thunks were measured as a seam and rejected:
+ * they read eleven fields of input_state between them.
  */
 #include "enhanced_input.h"
 
@@ -121,6 +123,7 @@
 #include "input_config.h"
 #include "input_menu.h"
 #include "input_gate.h"
+#include "input_switches.h"
 #include "mouse_look.h"
 #include "steer_lean.h"
 #include "steer_log.h"
@@ -130,7 +133,6 @@
 #include "view_lead.h"
 
 #include "common/host_image.h"
-#include "common/ini.h"
 #include "common/logging.h"
 #include "common/patch.h"
 
@@ -141,7 +143,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define INPUT_SECTION "enhanced_input"
 #define MILLISECONDS_PER_SECOND 1000.0f
 
 typedef void (__cdecl *phase_fn_t)(void);
@@ -739,6 +740,10 @@ void enhanced_input_install(void)
     }
     input_menu_install();
 
+    /* AFTER the controls screen, because that screen is the other writer of these two keys and
+     * this only makes an edit from somewhere else arrive sooner. */
+    input_switches_install();
+
     log_info("the live control mode is %s. Mouse look on (%.3f deg per mouse count, banked per "
              "frame=%d), strafe %s (inverted=%d, turns the body=%d, %.0f ms settle, %.0f deg/s "
              "cap). Sideways movement is the engine's own walk or run, so it matches the gait. "
@@ -785,108 +790,25 @@ void enhanced_input_install(void)
 }
 
 /* ==============================================================================================
- * What the two check boxes on the controls screen drive
+ * What the rest of the DLL is allowed to ask this file
  *
- * Both are settings of the mouse-look scheme rather than switches for the DLL itself, and both are
- * live because their machinery is installed unconditionally and gated by a plain bool: the phase
- * thunks for sideways walking, the two camera detours for free look. Neither setter patches a byte
- * of the host, and each refuses, and says why, when what it drives cannot run in this session,
- * so a switch can never claim more than the DLL can deliver.
- *
- * Neither box exists at all when MouseLook=0, because install returns before the menu is patched.
+ * Three answers, and they exist so that the switch layer in input_switches.c can refuse a setting
+ * whose machinery is not there without keeping a second copy of the install state. The setters
+ * themselves are over there: neither of them patches a byte of the host, and none of this file's
+ * thunk state is theirs to hold.
  * ============================================================================================ */
 bool enhanced_input_is_active(void)
 {
     return input_state.installed;
 }
 
-bool enhanced_input_strafe_enabled(void)
+bool enhanced_input_keyboard_axis_resolved(void)
 {
-    return input_config()->strafe;
+    return input_state.sites.read_absolute_axis != NULL;
 }
 
-/* Whether sideways walking could be switched on at all, which is a different question from whether
- * it is on. The controls screen asks it before offering the box, for the same reason free look is
- * asked: a switch that could never turn anything misleads rather than fails. */
-bool enhanced_input_strafe_available(void)
+void enhanced_input_forget_pending_travel(void)
 {
-    return input_state.installed && input_state.sites.read_absolute_axis != NULL;
-}
-
-void enhanced_input_set_strafe(bool enabled)
-{
-    if (input_config()->strafe == enabled) {
-        return;
-    }
-    if (enabled && !input_state.installed) {
-        log_warning("sideways walking was switched on, but the player phases are not hooked, so "
-                    "the setting is not applied and not saved");
-        return;
-    }
-    if (enabled && input_state.sites.read_absolute_axis == NULL) {
-        log_warning("sideways walking was switched on, but the keyboard axis reader did not "
-                    "resolve, so there is no key to read, the setting is not applied and not "
-                    "saved");
-        return;
-    }
-
-    input_config_set_strafe(enabled);
-
-    /* The angle latched in the model root belongs to the feature that is being switched off, and
-     * nothing would come back to walk it down, so it is dropped here and the next driven substep
-     * starts from zero. The pending pair is one substep of lifetime and is cleared with it. */
-    strafe_walk_reset();
     input_state.pending_valid          = false;
     input_state.pending_travel_degrees = 0.0f;
-
-    if (!ini_write_int(INPUT_SECTION, "Strafe", enabled ? 1 : 0)) {
-        log_warning("sideways walking is now %s, but the setting could not be written to the ini "
-                    "and will be back to its old value on the next launch",
-                    enabled ? "on" : "off");
-        return;
-    }
-    log_info("sideways walking switched %s from the controls screen and saved",
-             enabled ? "on" : "off");
-}
-
-bool enhanced_input_free_look_available(void)
-{
-    return input_state.installed && free_look_is_installed();
-}
-
-bool enhanced_input_free_look_enabled(void)
-{
-    return free_look_is_enabled();
-}
-
-void enhanced_input_set_free_look(bool enabled)
-{
-    if (free_look_is_enabled() == enabled) {
-        return;
-    }
-    if (!input_state.installed) {
-        log_warning("free look was switched on, but the player phases are not hooked, the "
-                    "setting is not applied and not saved");
-        return;
-    }
-
-    /* The one refusal a player could otherwise reach: the camera in this build was not recognised
-     * at install, so there is nothing to turn. The controls screen leaves the box off the screen in
-     * that case, which makes this the belt to that pair of braces. */
-    if (!free_look_set_enabled(enabled)) {
-        log_warning("free look was switched on, but the follow camera in this build is not the "
-                    "one this feature knows, the setting is not applied and not saved");
-        return;
-    }
-
-    /* No strafe_walk_reset here, unlike the strafe setter: both control schemes walk the model-root
-     * latch home on every substep they do not drive it, so the mode entered next unwinds it. */
-
-    if (!ini_write_int(INPUT_SECTION, "FreeLook", enabled ? 1 : 0)) {
-        log_warning("free look is now %s, but the setting could not be written to the ini and "
-                    "will be back to its old value on the next launch", enabled ? "on" : "off");
-        return;
-    }
-    log_info("free look switched %s from the controls screen and saved, the mouse now turns the "
-             "%s", enabled ? "on" : "off", enabled ? "camera" : "body");
 }

@@ -17,6 +17,7 @@
 #include "cheats_openphantom.h"
 #include "cheats_original_actions.h"
 #include "overlay_model.h"
+#include "overlay_utilities.h"
 #include "strict_range_row.h"
 
 #include <stdint.h>
@@ -276,8 +277,9 @@ int main(void)
        the utilities heading, which sits directly after the cheats group's last row. */
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 2u + (uint32_t)CHEATS_OWN_COUNT + 4u + 15u,
-             "both headings, the cheats group\'s own rows, and the fifteen utilities under the "
+    ut_check(overlay_model_row_count() ==
+                 2u + (uint32_t)CHEATS_OWN_COUNT + 4u + OVERLAY_UTILITIES_ROW_COUNT,
+             "both headings, the cheats group\'s own rows, and every utilities row under the "
              "second heading");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 5u, &row) &&
                  row.kind == OVERLAY_ROW_GROUP,
@@ -295,19 +297,23 @@ int main(void)
              "showing a number: every row here edits a setting file rather than the running "
              "game, so they work with no level loaded and even with the DLL that reads them gone");
 
-    ut_check(overlay_model_row(UTIL_ROW(1), &row) && row.kind == OVERLAY_ROW_INFO,
+    ut_check(overlay_model_row(UTIL_ROW(1), &row) && row.kind == OVERLAY_ROW_SLIDER,
+             "a slider track directly under the draw distance, so the handle never covers the "
+             "number it sets");
+
+    ut_check(overlay_model_row(UTIL_ROW(2), &row) && row.kind == OVERLAY_ROW_INFO,
              "a note under the draw distance, not a control: it reports what the game is actually "
              "running, which the governor and the cell watchdog can both lower without saying so");
-    ut_check(!overlay_model_activate(UTIL_ROW(1)),
+    ut_check(!overlay_model_activate(UTIL_ROW(2)),
              "and it cannot be clicked into, which is the whole point of it being a note");
 
-    ut_check(overlay_model_row(UTIL_ROW(2), &row) && row.kind == OVERLAY_ROW_CHEAT,
+    ut_check(overlay_model_row(UTIL_ROW(3), &row) && row.kind == OVERLAY_ROW_CHEAT,
              "then the automation switch, directly under the setting it governs");
     ut_check(strcmp(row.label, "Draw distance follows the frame rate") == 0,
              "named for what it does to the row above rather than for the machinery behind it");
     ut_check(row.available, "available for the same reason as the row above it");
 
-    ut_check(overlay_model_row(UTIL_ROW(3), &row) && row.kind == OVERLAY_ROW_CHEAT,
+    ut_check(overlay_model_row(UTIL_ROW(4), &row) && row.kind == OVERLAY_ROW_CHEAT,
              "then the strict switch, beside the automation switch it supersedes rather than "
              "somewhere else in the list");
     ut_check(strcmp(row.label, "Keep the draw distance (costs frame rate)") == 0,
@@ -315,18 +321,21 @@ int main(void)
              "ordinary play: the watchdog only acts above 1.00x");
     ut_check(row.available, "available for the same reason as the row above it");
 
-    ut_check(overlay_model_row(UTIL_ROW(4), &row) && row.kind == OVERLAY_ROW_VALUE,
+    ut_check(overlay_model_row(UTIL_ROW(5), &row) && row.kind == OVERLAY_ROW_VALUE,
              "then the fog thickness, a typed value since how near the fog sits is a number");
     ut_check(strcmp(row.label, "Fog thickness (0.25 to 1.0)") == 0,
              "named for what a player would call it, carrying its range like the value above");
 
-    ut_check(overlay_model_row(UTIL_ROW(5), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(6), &row) && row.kind == OVERLAY_ROW_SLIDER,
+             "and the fog thickness gets its own track the same way");
+
+    ut_check(overlay_model_row(UTIL_ROW(7), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Fog follows the draw distance") == 0,
              "then whether the band follows the draw distance, which decides what the thickness "
              "above is a share of rather than whether it applies at all");
     ut_check(row.available, "always available: it edits a setting file, like every row here");
 
-    ut_check(overlay_model_row(UTIL_ROW(6), &row) && row.kind == OVERLAY_ROW_VALUE,
+    ut_check(overlay_model_row(UTIL_ROW(8), &row) && row.kind == OVERLAY_ROW_VALUE,
              "then the field of view, a typed value like the two above it");
     ut_check(strncmp(row.label, "Field of view (", 15) == 0,
              "carrying the range variable_fov\'s own slider offers, read from the file rather than "
@@ -335,7 +344,7 @@ int main(void)
              "and it is the ONE row here that can be unavailable: it needs a width in degrees that "
              "only variable_fov can publish, and with that DLL absent there is nothing to show");
 
-    ut_check(overlay_model_row(UTIL_ROW(7), &row) && row.kind == OVERLAY_ROW_SLIDER,
+    ut_check(overlay_model_row(UTIL_ROW(9), &row) && row.kind == OVERLAY_ROW_SLIDER,
              "and its TRACK is a row of its own directly under it, rather than squeezed into the "
              "gap beside the number: a line costs one row and buys a target several times longer "
              "that cannot be mistaken for a rule struck through the name");
@@ -346,39 +355,39 @@ int main(void)
              "and it is unavailable exactly when the row it drives is, so a handle is never "
              "offered for a value that cannot be shown");
 
-    ut_check(overlay_model_row(UTIL_ROW(8), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(10), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Free look") == 0,
              "then free look, under the name the game\'s own controls screen gave it, so a reader "
              "who has seen that screen recognises this row");
     ut_check(row.available, "always available: it edits a settings file, like every row but one");
 
-    ut_check(overlay_model_row(UTIL_ROW(9), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(11), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Strafe") == 0,
              "then sideways walking, under the game\'s own name for it as well, rather than a "
              "description this panel invented");
 
-    ut_check(overlay_model_row(UTIL_ROW(10), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(12), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Mouse speed") == 0,
              "then the mouse speed, which is here because the game\'s own controls screen no "
              "longer offers it and mouse look still ships on, and which carries that screen\'s "
              "name too");
-    ut_check(overlay_model_row(UTIL_ROW(11), &row) && row.kind == OVERLAY_ROW_SLIDER &&
+    ut_check(overlay_model_row(UTIL_ROW(13), &row) && row.kind == OVERLAY_ROW_SLIDER &&
                  row.available,
              "with a track of its own beneath it, and unlike the field of view it is always "
              "available: both of its ends are fixed, so nothing has to be published first");
 
-    ut_check(overlay_model_row(UTIL_ROW(12), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(14), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Show extra menu options (restart the game)") == 0,
              "then the switch that puts all four of those widgets back onto the game\'s own "
              "screens, which ships off so those screens look as they did in 1999");
     ut_check(!row.on,
              "and it reads off with no settings file, matching both of the keys it writes");
 
-    ut_check(overlay_model_row(UTIL_ROW(13), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(15), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "then the dev menu size, the last of the typed values");
 
-    ut_check(overlay_model_row(UTIL_ROW(14), &row) && row.kind == OVERLAY_ROW_HOTKEY,
+    ut_check(overlay_model_row(UTIL_ROW(16), &row) && row.kind == OVERLAY_ROW_HOTKEY,
              "and the key binding last, a capture rather than a value");
     ut_check(strcmp(row.label, "Key that opens this menu") == 0,
              "named for what it binds, in the words a player would use for it");
@@ -392,16 +401,16 @@ int main(void)
        settings file, which is the only channel these rows have, and puts it back afterwards. */
     if (strict_range_row_set(true)) {
         overlay_model_rebuild();
-        ut_check(overlay_model_row(UTIL_ROW(2), &row) && !row.available,
+        ut_check(overlay_model_row(UTIL_ROW(3), &row) && !row.available,
                  "with strict on, the frame-rate switch is greyed rather than left reading ON "
                  "over a governor that is no longer acting");
         ut_check(!row.on, "and it reports off, which is the state the game is actually in");
-        ut_check(!overlay_model_activate(UTIL_ROW(2)),
+        ut_check(!overlay_model_activate(UTIL_ROW(3)),
                  "and it cannot be clicked, so the two can never both be on");
 
         ut_check(strict_range_row_set(false), "strict goes back off");
         overlay_model_rebuild();
-        ut_check(overlay_model_row(UTIL_ROW(2), &row) && row.available,
+        ut_check(overlay_model_row(UTIL_ROW(3), &row) && row.available,
                  "and the frame-rate switch comes back, because strict never wrote its key: a "
                  "reader who turns strict on to look at something gets their governor back");
     } else {

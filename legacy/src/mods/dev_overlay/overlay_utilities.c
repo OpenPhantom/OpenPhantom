@@ -23,10 +23,12 @@
  * reading decision and whoever changes it should have to change one list. */
 typedef enum utilities_slot {
     UTILITIES_VIEW_RANGE = 0,
+    UTILITIES_VIEW_RANGE_TRACK,
     UTILITIES_VIEW_RANGE_LIVE,
     UTILITIES_AUTO_RANGE,
     UTILITIES_STRICT_RANGE,
     UTILITIES_FOG_BAND,
+    UTILITIES_FOG_BAND_TRACK,
     UTILITIES_FOG_FOLLOW,
     UTILITIES_FOV,
     UTILITIES_FOV_TRACK,
@@ -71,6 +73,20 @@ static void fill_typed(overlay_row_t *out, const char *editing_text,
     out->value[sizeof out->value - 1] = '\0';
 }
 
+/* A handle belongs on its track. A value outside the slider's own ends is left honest on the row
+ * above, because a setting typed into the file should read as what it is, but a fraction outside
+ * 0 to 1 would draw the handle past the end of the track and read as a broken slider rather than
+ * a value off the scale. Three rows want this, so it is written once. */
+static void clamp_fraction(overlay_row_t *out)
+{
+    if (out->fraction < 0.0f) {
+        out->fraction = 0.0f;
+    }
+    if (out->fraction > 1.0f) {
+        out->fraction = 1.0f;
+    }
+}
+
 void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
                            overlay_row_t *out)
 {
@@ -97,6 +113,17 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
            a number refused. */
         copy_label(out->label, "Draw distance (1.0 to 2.5)");
         fill_typed(out, editing_text, view_range_row_format, view_range_row_get());
+        return;
+
+    case UTILITIES_VIEW_RANGE_TRACK:
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        /* Both ends are compile-time constants here, unlike the field of view, whose ends come
+         * out of the settings file. So there is no divide-by-zero to guard and no way for a
+         * player to set them equal. */
+        out->fraction = (view_range_row_get() - VIEW_RANGE_MIN) /
+                        (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
+        clamp_fraction(out);
         return;
 
     case UTILITIES_VIEW_RANGE_LIVE: {
@@ -148,6 +175,13 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         fill_typed(out, editing_text, fog_band_row_format, fog_band_row_get());
         return;
 
+    case UTILITIES_FOG_BAND_TRACK:
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        out->fraction = (fog_band_row_get() - FOG_BAND_MIN) / (FOG_BAND_MAX - FOG_BAND_MIN);
+        clamp_fraction(out);
+        return;
+
     case UTILITIES_FOG_FOLLOW:
         copy_label(out->label, "Fog follows the draw distance");
         out->on = fog_follow_row_get();
@@ -188,17 +222,10 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         /* Guarded rather than assumed: both ends come out of the file, and somebody who sets them
          * equal would otherwise divide by zero here. */
         out->fraction = (high > low) ? ((degrees - low) / (high - low)) : 0.0f;
-        /* CLAMPED FOR DRAWING, while the number on the row above is left honest. ExtraDegrees can
-         * be set in the file to a width outside the slider's own ends, and the row should say so
-         * rather than pretend; but a fraction outside 0 to 1 would put the handle beyond the track
-         * it belongs to, which reads as a slider that has broken rather than a value off the
-         * scale. */
-        if (out->fraction < 0.0f) {
-            out->fraction = 0.0f;
-        }
-        if (out->fraction > 1.0f) {
-            out->fraction = 1.0f;
-        }
+        /* ExtraDegrees can be set in the file to a width outside the slider's own ends; see
+         * clamp_fraction above for why the row keeps the honest number and the handle does
+         * not. */
+        clamp_fraction(out);
         return;
     }
 
@@ -363,6 +390,27 @@ bool overlay_utilities_slider_set(uint32_t slot, float fraction)
     }
     if (fraction > 1.0f) {
         fraction = 1.0f;
+    }
+    if ((utilities_slot_t)slot == UTILITIES_VIEW_RANGE_TRACK) {
+        /* Rounded to a HUNDREDTH, which is exactly what the row's own formatter shows (%.2f).
+         * Without it a drag writes more decimals than the text beside it displays and the two
+         * disagree about what was set.
+         *
+         * A fiftieth was tried and is wrong, because the grid has to contain both ends of
+         * every row that uses it. Fog thickness starts at 0.25, which is not a multiple of a
+         * fiftieth, so dragging fully left rounded up to 0.26 and the documented minimum
+         * could not be reached at all. Caught in a log, not in a test. */
+        float scale = VIEW_RANGE_MIN + fraction * (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
+
+        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
+        return view_range_row_set(scale);
+    }
+    if ((utilities_slot_t)slot == UTILITIES_FOG_BAND_TRACK) {
+        /* The same hundredth grid; see the draw distance above for why it is not a fiftieth. */
+        float scale = FOG_BAND_MIN + fraction * (FOG_BAND_MAX - FOG_BAND_MIN);
+
+        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
+        return fog_band_row_set(scale);
     }
     if ((utilities_slot_t)slot == UTILITIES_SENSITIVITY_TRACK) {
         /* Not rounded to anything, unlike the field of view below: the band is a tenth of a degree

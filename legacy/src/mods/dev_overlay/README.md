@@ -446,6 +446,16 @@ distance, typed
 in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`, so it
 is learned from the row rather than by having a number refused.
 
+**It has a slider on the line directly beneath it**, on its own line so the handle never covers the
+number it sets, which is the same shape the field of view and mouse speed rows use. The track spans
+`VIEW_RANGE_MIN` to `VIEW_RANGE_MAX`, both compile-time constants here rather than settings, so
+unlike the field of view there is no way for a reader to set the two ends equal and nothing to guard
+against dividing by zero. A drag rounds to a fiftieth, because the row's own formatter shows two
+decimals and a value with more than that would leave the number and the handle disagreeing about
+what had been set. A fiftieth was tried first and is wrong: the grid has to contain both ends of
+every row using it, and fog thickness starts at `0.25`, which a fiftieth rounds up to `0.26`, so
+the documented minimum could not be reached. That was caught in a log rather than by a test.
+
 **It writes the ini rather than calling `view_distance_fix`.** Feature DLLs here never depend on
 each other at run time, which is what lets any one of them be deleted from the `mods` folder without breaking
 the rest. The ini is a channel both already have and neither owns, `view_distance_fix` re-reads the
@@ -594,6 +604,9 @@ worse answer: either the screen is the one the game shipped or it is not.
 
 Two rows under **Utilities**, both `[view_distance_fix]` keys the fog reads while the game runs, so
 each takes effect within about a second and neither needs a restart.
+
+`Fog thickness` carries a slider on the line beneath it, on the same terms as the draw distance
+above: `FOG_BAND_MIN` to `FOG_BAND_MAX`, rounded to a hundredth on a drag.
 
 `Fog thickness` is `FogBandScale`, and it is the only setting in the whole fog path that can bring
 the band NEARER. Every other term decides where the fog has to be so that it is solid before the

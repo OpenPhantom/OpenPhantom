@@ -73,6 +73,16 @@ typedef struct free_look_config {
     float passive_settle_seconds;
     float passive_rate;
     float passive_hold_seconds;   /* the beat before it starts, after the player stops looking */
+
+    /* Steering a jump. The engine is already willing: Plr_UpdateJump moves only the vertical,
+     * and the horizontal is the ordinary facing times curSpeed, with both the steer and the
+     * integrate running in the air. What stops it is this file's own Stand gate, which holds
+     * the body's heading outside Stand and leaves the player flying wherever they launched.
+     * Slower than the body's own turn on the ground, because a jump that can be pivoted is a
+     * different game rather than a repair. */
+    bool  air_control;
+    float air_settle_seconds;
+    float air_turn_rate;
 } free_look_config_t;
 
 typedef struct free_look_state {
@@ -91,6 +101,12 @@ typedef struct free_look_state {
     bool  armed;
     bool  camera_yaw_valid;
     float camera_yaw;
+    /* Which constants the pending body target was built with. The aim stance and the ground
+     * travel turn at the body's own rate; a jump turns at the air rate, and the integrate that
+     * consumes the target cannot tell which it was handed without being told. */
+    float target_settle_seconds;
+    float target_turn_rate;
+
     bool  look_seen;          /* set by any look input, consumed by the drift on the next frame */
     float look_idle_seconds;  /* how long since the last of it, in real time                    */
 

@@ -38,6 +38,9 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `MenuWidgets` | `0` | | put this project's three widgets on the game's own controls screen: the two check boxes and the mouse sensitivity slider. Ships off so that screen looks as it did in 1999. Nothing is lost by it: all three are keys here and the developer menu has a row for each, sensitivity included. Read once at startup, so it takes effect on the next launch |
 | `StrafeInvert` | `0` | | |
 | `StrafeTurnsBody` | `1` | | turn the model to face the way it travels |
+| `AirControl` | `0` | | turn the body toward the stick while off the ground, so a jump can be aimed after it has left. Needs `FreeLook=1`; see **Steering a jump** |
+| `AirControlSettleMs` | `400` | 0-3000 | how long 90 % of the gap takes to close in the air |
+| `AirControlRate` | `180` | 15-1000 | degrees per second, the ceiling on turning in the air |
 | `PadStick` | `1` | | read the left stick from XInput as a direction and a magnitude instead of through the engine's own joystick path. See **The left stick** below for what that path does to a pad |
 | `PadControllerIndex` | `0` | 0-3 | which XInput slot |
 | `PadDeadzone` | `0.24` | 0-0.9 | radial, so the boundary is a circle and feels the same in every direction |
@@ -604,6 +607,31 @@ would rotate the stick out from under the player's thumb. It takes `CameraFollow
 angle, capped at `CameraFollowMaxDeg`, so the view never turns far enough to invert the mapping. The
 two can never both run.
 
+## Steering a jump
+
+`AirControl=1` turns the body toward the stick while the player is off the ground. Off by
+default, because it changes how the game plays rather than repairing a fault and the jump
+puzzles were authored against a body that flies wherever it launched.
+
+The engine was always willing. `Plr_UpdateJump` moves only the vertical, the horizontal is the
+ordinary facing times `curSpeed`, and both the steer and the integrate phases run in Jump,
+JediJump and Fall. Under plain mouse look the view turn already steers a jump. What stops it is
+this feature's own Stand gate, so air control is reachable only with `FreeLook=1`.
+
+The Stand gate is not loosened. Its two reasons are a forced move bit locking the crate shove
+for good, and a backward key outside Stand being a negative speed along an unchanged facing
+rather than a half turn. Neither reaches a body in flight, and **nothing is forced here**: no
+move bit is written and no drive renewed, so this redirects the speed the player launched with
+rather than adding to it, and a jump cannot be flown further than it would have gone.
+
+Only the three modes that are a body in flight with the ordinary integrate under them. A
+scripted jump follows an authored arc and its descriptor skips the steer phase, so it never
+reaches this at all.
+
+`AirControlSettleMs` ships at 400 against the body's own 150 on the ground, and
+`AirControlRate` at 180 against 540. The difference is the point: a jump that can be pivoted in
+place is a different game, and this is meant to be a lean.
+
 ## Known limitations
 
 **Under `FreeLook=1` the walk-backward clip never plays.** Holding back is a half turn and a forward
@@ -657,13 +685,14 @@ substitutes. With `FreeLook=0` the backward clip plays exactly as it shipped.
   values, not a compromise, so the release hands the cut to the engine whole. No shipped region
   carries bit 2 on its own, the three that carry it are `flags 12`, world-fixed as well, so this
   is a rule about what the mask means rather than an observable difference.
-* **The body does not turn outside Stand, unless an attack is live.** In the air, in a launched
-  sidestep and while swimming the mouse moves the camera and the body holds its heading. That is not
-  conservatism about animation: outside Stand the forced forward drive is not in force, so a
-  backward key is still a *negative speed along an unchanged facing* rather than a half turn, and
-  building the camera-relative angle there would double-count the reversal and send the player the
-  wrong way. The body comes round of its own accord on the next Stand substep in which a movement
-  key is held.
+* **The body does not turn outside Stand, unless an attack is live or `AirControl=1`.** In a
+  launched sidestep and while swimming the mouse moves the camera and the body holds its heading.
+  That is not conservatism about animation: outside Stand the forced forward drive is not in
+  force, so a backward key is still a *negative speed along an unchanged facing* rather than a
+  half turn, and building the camera-relative angle there would double-count the reversal and
+  send the player the wrong way. The body comes round of its own accord on the next Stand substep
+  in which a movement key is held. **Steering a jump** is the one case carved out of this, and
+  only because neither reason reaches it: see below.
 * **The turn penalty is off and stays off.** `Plr_Integrate` scales the displacement from
   `|turnWheel|`, and mouse look clears `turnWheel`. Under free look the body turns fast and often and
   the penalty, which exists to stop exactly that, never bites. It cannot be restored by writing

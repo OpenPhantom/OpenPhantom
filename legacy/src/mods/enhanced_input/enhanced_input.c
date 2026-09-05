@@ -222,6 +222,7 @@ static void __cdecl steer_thunk(void)
     float    pad_strafe  = 0.0f;
     float    steer_forward = 0.0f;
     bool     pad_driving = false;
+    bool     air_mode    = false;
     float    strafe;
     float    engine_rate = 0.0f;
     bool     phase_active = false;
@@ -306,6 +307,8 @@ static void __cdecl steer_thunk(void)
              * bit and is untouched. That is a real change in which clip plays, and it is named
              * rather than hidden. */
             stand_mode = (mode == PLAYER_MODE_STAND);
+            air_mode   = (mode == PLAYER_MODE_JUMP || mode == PLAYER_MODE_JEDI_JUMP ||
+                          mode == PLAYER_MODE_FALL);
             mode_for_log = mode;
         }
     }
@@ -375,7 +378,7 @@ static void __cdecl steer_thunk(void)
         steer_forward = (bits & 1u) ? 1.0f : ((bits & 2u) ? -1.0f : 0.0f);
     }
 
-    if (free_look_steer(record, mouse_step, strafe, steer_forward, stand_mode)) {
+    if (free_look_steer(record, mouse_step, strafe, steer_forward, stand_mode, air_mode)) {
         /* The cell is zeroed AFTER the lean has read it, not before: free look turns the CAMERA
          * with the mouse, and a turn rate left standing would make the engine turn the BODY's
          * heading on top of it in phase 7, the very coupling free look exists to break. */

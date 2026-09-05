@@ -71,6 +71,15 @@
  * relaxed push walks and a deliberate one runs; the hysteresis is half the width of the band
  * either side of it, so a stick resting on the boundary cannot flicker the clip and the speed
  * cap on and off. */
+/* Deliberately lazier than the body's own 150 ms and 540 deg/s on the ground. A jump that can
+ * be pivoted in place is a different game; this is meant to be a lean, enough to make a gap
+ * that was aimed slightly wrong reachable. */
+#define DEFAULT_AIR_SETTLE_MS          400.0f
+#define MAX_AIR_SETTLE_MS             3000.0f
+#define DEFAULT_AIR_TURN_RATE          180.0f
+#define MIN_AIR_TURN_RATE               15.0f
+#define MAX_AIR_TURN_RATE             1000.0f
+
 #define DEFAULT_PAD_DEADZONE           0.24f
 #define DEFAULT_PAD_RUN_THRESHOLD      0.70f
 #define DEFAULT_PAD_RUN_HYSTERESIS     0.05f
@@ -167,6 +176,14 @@ void input_config_load(void)
                                DEFAULT_CAMERA_FOLLOW_HOLD_MS);
     config.camera_follow_hold_seconds =
         clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_HOLD_MS) / MILLISECONDS_PER_SECOND;
+
+    config.air_control = ini_read_bool(INPUT_SECTION, "AirControl", false);
+    settle_ms = ini_read_float(INPUT_SECTION, "AirControlSettleMs", DEFAULT_AIR_SETTLE_MS);
+    config.air_settle_seconds =
+        clamp_float(settle_ms, 0.0f, MAX_AIR_SETTLE_MS) / MILLISECONDS_PER_SECOND;
+    config.air_turn_rate =
+        clamp_float(ini_read_float(INPUT_SECTION, "AirControlRate", DEFAULT_AIR_TURN_RATE),
+                    MIN_AIR_TURN_RATE, MAX_AIR_TURN_RATE);
 
     config.pad_stick = ini_read_bool(INPUT_SECTION, "PadStick", true);
     config.pad_controller_index =

@@ -75,7 +75,7 @@ bool free_look_set_enabled(bool enabled);
  * only ever say +1, -1 or 0. Mixing an analog sideways value with a quantised forward one is
  * what pulled every diagonal on a pad toward straight ahead. */
 bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, float forward,
-                     bool stand_mode);
+                     bool stand_mode, bool air_mode);
 
 /* Phase 7, BEFORE the original: turn the body toward the direction phase 2 asked for. The write
  * is not undone afterwards, unlike the sideways walk's travel offset this heading change is

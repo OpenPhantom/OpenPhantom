@@ -212,6 +212,9 @@ void free_look_load_config(void)
     free_state.config.passive_settle_seconds = input_config()->camera_follow_settle_seconds;
     free_state.config.passive_rate           = input_config()->camera_follow_rate;
     free_state.config.passive_hold_seconds   = input_config()->camera_follow_hold_seconds;
+    free_state.config.air_control            = input_config()->air_control;
+    free_state.config.air_settle_seconds     = input_config()->air_settle_seconds;
+    free_state.config.air_turn_rate          = input_config()->air_turn_rate;
 }
 
 bool free_look_is_installed(void)
@@ -385,7 +388,7 @@ static int32_t __cdecl hook_auto_aim(int32_t kind)
 }
 
 bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, float forward,
-                     bool stand_mode)
+                     bool stand_mode, bool air_mode)
 {
     float input_angle = 0.0f;
 
@@ -420,9 +423,11 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
      * air has to point where the player is looking just as much as one started on the ground.
      * That is why this block sits above the Stand test rather than below it. */
     if (free_state.aim_hold_seconds > 0.0f && free_state.config.aim_snap) {
-        free_state.body_target       = free_state.camera_yaw;
-        free_state.body_target_valid = true;
-        free_state.aim_stance        = free_state.config.aim_keeps_movement;
+        free_state.body_target         = free_state.camera_yaw;
+        free_state.body_target_valid   = true;
+        free_state.target_settle_seconds = free_state.config.body_settle_seconds;
+        free_state.target_turn_rate      = free_state.config.body_turn_rate;
+        free_state.aim_stance          = free_state.config.aim_keeps_movement;
     } else {
         free_state.aim_stance = false;
     }
@@ -435,8 +440,29 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
      * forward drive is not in force, so a backward key is still a NEGATIVE SPEED along an
      * unchanged facing rather than a half turn, building the camera-relative angle there would
      * double-count the reversal and send the player the wrong way. Outside Stand the mouse
-     * therefore moves the camera while the body holds its heading, unless an attack is live. */
+     * therefore moves the camera while the body holds its heading, unless an attack is live or
+     * air control is on and the body is genuinely in flight. */
     if (!stand_mode) {
+        /* AIR CONTROL, and it is the only thing that may happen outside Stand.
+         *
+         * The gate above it stays exactly as strict as it was, for the reasons alongside it: a
+         * forced move bit outside Stand would lock the crate shove for good, and a backward key
+         * outside Stand is still a negative speed along an unchanged facing rather than a half
+         * turn. NOTHING is forced here and no move bit is written. This turns the heading and
+         * stops, so the speed the player launched with is redirected rather than renewed, and a
+         * jump cannot be flown further than it would have gone.
+         *
+         * Only the three modes that are genuinely a body in flight with the ordinary integrate
+         * under it. A scripted jump follows an authored arc and its descriptor skips the steer
+         * phase, so it never reaches here at all. */
+        if (free_state.config.air_control && air_mode && !free_state.body_target_valid &&
+            free_look_input_angle(strafe, forward, &input_angle)) {
+            free_state.body_target           = free_look_wrap360(free_state.camera_yaw +
+                                                                 input_angle);
+            free_state.body_target_valid     = true;
+            free_state.target_settle_seconds = free_state.config.air_settle_seconds;
+            free_state.target_turn_rate      = free_state.config.air_turn_rate;
+        }
         return true;
     }
 
@@ -458,8 +484,10 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
      * so this must not turn the body a second time. */
     if (!free_state.body_target_valid &&
         free_look_input_angle(strafe, forward, &input_angle)) {
-        free_state.body_target       = free_look_wrap360(free_state.camera_yaw + input_angle);
-        free_state.body_target_valid = true;
+        free_state.body_target           = free_look_wrap360(free_state.camera_yaw + input_angle);
+        free_state.body_target_valid     = true;
+        free_state.target_settle_seconds = free_state.config.body_settle_seconds;
+        free_state.target_turn_rate      = free_state.config.body_turn_rate;
     }
     return true;
 }
@@ -502,8 +530,8 @@ void free_look_integrate(uint8_t *record, float substep_seconds)
 
     heading = read_field(record, PLAYER_HEADING);
     step    = strafe_walk_damp_step(0.0f, free_look_wrap180(free_state.body_target - heading),
-                                    substep_seconds, free_state.config.body_settle_seconds,
-                                    free_state.config.body_turn_rate);
+                                    substep_seconds, free_state.target_settle_seconds,
+                                    free_state.target_turn_rate);
     if (!isfinite(step) || !isfinite(heading)) {
         return;
     }

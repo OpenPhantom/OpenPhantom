@@ -52,6 +52,12 @@ typedef struct input_config {
      * several times a second and reads as jitter. */
     float camera_follow_hold_seconds;
 
+    /* Steering a jump. Off by default: it changes how the game plays rather than repairing a
+     * fault, and jump puzzles were authored against a body that flies where it launched. */
+    bool  air_control;
+    float air_settle_seconds;
+    float air_turn_rate;
+
     /* The left stick, read from XInput rather than through the engine's own joystick path.
      * pad_stick.h sets out why that path cannot be used for a direction: a square deadzone of
      * thirty per cent cut without rescaling, each half axis bound to its control twice so the

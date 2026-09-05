@@ -47,6 +47,20 @@
 #define DEFAULT_STRAFE_TURN_RATE   240.0f
 #define MIN_STRAFE_TURN_RATE        30.0f
 #define MAX_STRAFE_TURN_RATE      2000.0f
+
+/* 0.24 is close to XInput's own left-thumb recommendation and is the value controller_input.dll
+ * already uses for the right stick, so the two sticks feel the same at rest. It replaces the
+ * engine's thirty per cent SQUARE cut rather than adding to it.
+ *
+ * The run threshold is a taste value and the reason it is a key. 0.70 of the stick means a
+ * relaxed push walks and a deliberate one runs; the hysteresis is half the width of the band
+ * either side of it, so a stick resting on the boundary cannot flicker the clip and the speed
+ * cap on and off. */
+#define DEFAULT_PAD_DEADZONE           0.24f
+#define DEFAULT_PAD_RUN_THRESHOLD      0.70f
+#define DEFAULT_PAD_RUN_HYSTERESIS     0.05f
+#define MAX_PAD_CONTROLLER_INDEX          3
+#define MAX_CAMERA_FOLLOW_RATE          1000.0f
 #define MILLISECONDS_PER_SECOND   1000.0f
 
 /* The steer log writes one line per substep, so it is a burst of lines and not a running trace.
@@ -106,6 +120,20 @@ void input_config_load(void)
         ini_read_float(INPUT_SECTION, "StrafeTurnRate", DEFAULT_STRAFE_TURN_RATE);
     config.strafe_turn_rate = clamp_float(config.strafe_turn_rate,
                                           MIN_STRAFE_TURN_RATE, MAX_STRAFE_TURN_RATE);
+
+    config.pad_stick = ini_read_bool(INPUT_SECTION, "PadStick", true);
+    config.pad_controller_index =
+        (int)clamp_float((float)ini_read_int(INPUT_SECTION, "PadControllerIndex", 0),
+                         0.0f, (float)MAX_PAD_CONTROLLER_INDEX);
+    config.pad_deadzone =
+        clamp_float(ini_read_float(INPUT_SECTION, "PadDeadzone", DEFAULT_PAD_DEADZONE),
+                    0.0f, 0.9f);
+    config.pad_run_threshold =
+        clamp_float(ini_read_float(INPUT_SECTION, "PadRunThreshold",
+                                   DEFAULT_PAD_RUN_THRESHOLD), 0.0f, 1.0f);
+    config.pad_run_hysteresis =
+        clamp_float(ini_read_float(INPUT_SECTION, "PadRunHysteresis",
+                                   DEFAULT_PAD_RUN_HYSTERESIS), 0.0f, 0.25f);
 
     config.key_turn_rate =
         ini_read_float(INPUT_SECTION, "KeyTurnRate", DEFAULT_KEY_TURN_RATE);

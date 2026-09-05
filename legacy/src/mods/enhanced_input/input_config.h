@@ -28,6 +28,16 @@ typedef struct input_config {
     float strafe_settle_seconds;
     float strafe_turn_rate;    /* degrees per second, the damper's hard rate cap */
 
+    /* The left stick, read from XInput rather than through the engine's own joystick path.
+     * pad_stick.h sets out why that path cannot be used for a direction: a square deadzone of
+     * thirty per cent cut without rescaling, each half axis bound to its control twice so the
+     * sum doubles, and a clamp that then saturates it at half the stick's travel. */
+    bool  pad_stick;
+    int   pad_controller_index;
+    float pad_deadzone;
+    float pad_run_threshold;      /* magnitude at which a push means run rather than walk   */
+    float pad_run_hysteresis;     /* half the width of the band, so the gait cannot chatter */
+
     /* Degrees per second A and D turn the player while sideways walking is off. It exists because
      * mouse look has to clear the engine's own turn cell; that cell carries the mouse too, so
      * the keyboard's share has to be re-applied from here or the keys go dead. */
@@ -46,5 +56,6 @@ const input_config_t *input_config(void);
  * business, because only the caller knows whether the change came from a player or from a
  * dependency check that the player never asked for. */
 void input_config_set_strafe(bool enabled);
+void input_config_set_camera_follow(bool enabled);
 
 #endif /* INPUT_CONFIG_H */

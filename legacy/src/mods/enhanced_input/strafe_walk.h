@@ -56,6 +56,20 @@ void strafe_walk_force_forward(uint8_t *record, bool clear_backward);
  * the displacement, the feet have to go where the body points. */
 float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds);
 
+/* The same, with a REAL forward component rather than one rebuilt from the move bits. Only the
+ * pad has one to give; a keyboard's is always exactly +1, -1 or 0, which is what the call above
+ * is for. Mixing an analog sideways value with a quantised forward one is what made every
+ * diagonal on a stick come out compressed toward straight ahead. */
+float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
+                               float substep_seconds);
+
+/* Write the move bits and the drive from the stick, replacing what the engine's own read of the
+ * pad put there. Needed because that read cuts a thirty per cent deadzone, so a light push
+ * leaves no bit and no drive and the player does not move at all. The drive is full whichever
+ * gait is running: the clips play at a fixed rate, so two gaits at their authored speeds keep
+ * the feet planted where a variable pace would slide them. */
+void strafe_walk_apply_stick_move(uint8_t *record, float forward, float strafe);
+
 /* Either thunk, on a substep that does not drive the walk: bring the latched body angle home.
  *
  * The root node is a latch, and the walk is driven in Stand only, so without this the last angle

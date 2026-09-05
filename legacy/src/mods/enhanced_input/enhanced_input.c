@@ -119,6 +119,9 @@
  */
 #include "enhanced_input.h"
 
+#include "pad_run.h"
+#include "pad_stick.h"
+
 #include "free_look.h"
 #include "input_config.h"
 #include "input_menu.h"
@@ -214,6 +217,9 @@ static void __cdecl steer_thunk(void)
     float    keyboard_axis = 0.0f;
     float    substep_seconds = 0.0f;
     float    axis;
+    float    pad_forward = 0.0f;
+    float    pad_strafe  = 0.0f;
+    bool     pad_driving = false;
     float    strafe;
     float    engine_rate = 0.0f;
     bool     phase_active = false;
@@ -335,6 +341,16 @@ static void __cdecl steer_thunk(void)
      * for every key bound to it. */
     axis   = -clamp_float(keyboard_axis, -1.0f, 1.0f);
     strafe = input_config()->strafe_invert ? -axis : axis;
+
+    /* The pad replaces both components of the input, or neither. pad_stick.h sets out why the
+     * engine's own read of the same stick cannot be used for a direction. A substep it has
+     * nothing to say about leaves the engine's own numbers exactly as they were, which is what
+     * keeps the keyboard, and a pad the player has bound by hand, working unchanged. */
+    pad_driving = pad_stick_take_substep(record, stand_mode, input_config()->strafe_invert,
+                                         &pad_strafe, &pad_forward);
+    if (pad_driving) {
+        strafe = pad_strafe;
+    }
 
     /* The mutual exclusion between free look and the mouse-TO-BODY PATH, and it is the reason free
      * look lives in this DLL rather than beside it. Free look turns the CAMERA with the mouse and
@@ -466,6 +482,9 @@ static void __cdecl steer_thunk(void)
         /* Not driving the walk this substep, so the model root has to come home rather than keep
          * the last angle Stand wrote into it. */
         strafe_walk_release(record, substep_seconds);
+    } else if (pad_driving) {
+        input_state.pending_travel_degrees =
+            strafe_walk_drive_vector(record, strafe, pad_forward, substep_seconds);
     } else {
         input_state.pending_travel_degrees = strafe_walk_drive(record, strafe, substep_seconds);
     }
@@ -569,6 +588,7 @@ static void __cdecl integrate_thunk(void)
         }
 
         travel = input_state.pending_travel_degrees;
+
         if (isfinite(travel) && travel != 0.0f && frame_delta > 0.0f && frame_delta < 0.5f) {
             heading_before = read_field(record, PLAYER_HEADING);
             if (isfinite(heading_before)) {
@@ -718,6 +738,15 @@ void enhanced_input_install(void)
      * and still works one substep at a time, and says so, so a future reordering degrades rather
      * than doubling the turn. */
     (void)free_look_install(&input_state.sites, input_config()->strafe);
+
+    /* After free_look_install, because that is what resolves the camera sites this borrows, and
+     * it installs whatever the free look setting says. */
+    pad_stick_configure(input_config()->pad_stick, input_config()->pad_controller_index,
+                        input_config()->pad_deadzone, input_config()->pad_run_threshold,
+                        input_config()->pad_run_hysteresis);
+    if (input_config()->pad_stick) {
+        pad_run_install();
+    }
 
     /* The delivery filter is a DEPENDENCY of the per-frame view path, not a taste setting, and it
      * is wired here because this is the first point at which it is known that the path is really

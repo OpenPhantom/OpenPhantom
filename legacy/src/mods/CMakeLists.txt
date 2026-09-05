@@ -119,6 +119,8 @@ add_engine_fix(enhanced_input
     input_menu.c
     input_slider.c
     input_switches.c
+    pad_stick.c
+    pad_run.c
     menu_captions.c
     mouse_look.c
     mouse_config.c

@@ -3,6 +3,7 @@
 
 #include "auto_range_row.h"
 #include "dev_menu_size_row.h"
+#include "cheats_no_fog.h"
 #include "fog_band_row.h"
 #include "fog_follow_row.h"
 #include "fov_row.h"
@@ -27,6 +28,7 @@ typedef enum utilities_slot {
     UTILITIES_VIEW_RANGE_LIVE,
     UTILITIES_AUTO_RANGE,
     UTILITIES_STRICT_RANGE,
+    UTILITIES_NO_FOG,
     UTILITIES_FOG_BAND,
     UTILITIES_FOG_BAND_TRACK,
     UTILITIES_FOG_FOLLOW,
@@ -167,6 +169,18 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
          * the ini and in strict_range_row.h rather than in 47 characters. */
         copy_label(out->label, "Keep the draw distance (costs frame rate)");
         out->on = strict_range_row_get();
+        return;
+
+    case UTILITIES_NO_FOG:
+        /* The only row in this group that is a cheat by origin. It sits here rather than with
+         * the cheats because a player looking for it is looking at the fog, and the two rows
+         * under it are the rest of that answer: this one removes the fog, the next decides how
+         * thick it is, and the last decides what it is measured against. Split across two
+         * groups they read as unrelated. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "No fog");
+        out->on = cheats_no_fog_is_on();
+        out->available = cheats_no_fog_is_available();
         return;
 
     case UTILITIES_FOG_BAND:
@@ -331,6 +345,8 @@ bool overlay_utilities_toggle(uint32_t slot)
         return auto_range_row_set(!auto_range_row_get());
     case UTILITIES_STRICT_RANGE:
         return strict_range_row_set(!strict_range_row_get());
+    case UTILITIES_NO_FOG:
+        return cheats_no_fog_toggle();
     case UTILITIES_FOG_FOLLOW:
         return fog_follow_row_set(!fog_follow_row_get());
     case UTILITIES_FREE_LOOK:

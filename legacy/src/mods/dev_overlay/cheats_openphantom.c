@@ -1,10 +1,11 @@
-/* cheats_openphantom.c: unlimited ammunition, unlimited health, no fog, invincible NPCs, one-shot
- * NPCs, giant player, tiny player, and free camera. The third cheat this project adds, no fog, is
- * a different enough shape, see cheats_no_fog.h, that it lives in its own file and this one only
- * dispatches CHEATS_OWN_NO_FOG's queries to it. Free camera is documented next to its own two
- * signatures below rather than up here, the two sites it needs each carrying their own byte
- * evidence at the point they are used; invincible NPCs and one-shot NPCs are the same, documented
- * next to SIG_NPC_DAMAGE_APPLY, and giant/tiny player next to SIG_THING_DRAW.
+/* cheats_openphantom.c: unlimited ammunition, unlimited health, invincible NPCs, one-shot NPCs,
+ * giant player, tiny player, jump boost and free camera. No fog was here too and is not: it never
+ * shared this file's shape, it lives in cheats_no_fog.c, and its row moved to the Utilities group
+ * so that it sits with the other fog settings rather than away from them. Nothing here dispatches
+ * to it any more. Free camera is documented next to its own two signatures below rather than up
+ * here, the two sites it needs each carrying their own byte evidence at the point they are used;
+ * invincible NPCs and one-shot NPCs are the same, documented next to SIG_NPC_DAMAGE_APPLY, and
+ * giant/tiny player next to SIG_THING_DRAW.
  *
  * ==============================================================================================
  * THE TWO SITES, READ OUT OF THE RETAIL EXECUTABLE
@@ -373,7 +374,6 @@ bool cheats_openphantom_install(void)
 
     own_state.cheats[CHEATS_OWN_UNLIMITED_AMMO].name = "Unlimited ammunition";
     own_state.cheats[CHEATS_OWN_UNLIMITED_HEALTH].name = "Unlimited health";
-    own_state.cheats[CHEATS_OWN_NO_FOG].name = "No fog";
     own_state.cheats[CHEATS_OWN_INVINCIBLE_NPCS].name = "Invincible NPCs";
     own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].name = "One-shot NPCs (your damage)";
     own_state.cheats[CHEATS_OWN_GIANT_PLAYER].name = "Giant player";
@@ -434,9 +434,6 @@ const char *cheats_openphantom_name(cheats_own_id_t id)
 
 bool cheats_openphantom_is_available(cheats_own_id_t id)
 {
-    if (id == CHEATS_OWN_NO_FOG) {
-        return cheats_no_fog_is_available();
-    }
     if ((unsigned)id >= (unsigned)CHEATS_OWN_COUNT) {
         return false;
     }
@@ -445,9 +442,6 @@ bool cheats_openphantom_is_available(cheats_own_id_t id)
 
 bool cheats_openphantom_is_on(cheats_own_id_t id)
 {
-    if (id == CHEATS_OWN_NO_FOG) {
-        return cheats_no_fog_is_on();
-    }
     if ((unsigned)id >= (unsigned)CHEATS_OWN_COUNT) {
         return false;
     }
@@ -472,9 +466,6 @@ void cheats_openphantom_jump_boost_set_scale(float scale)
 
 bool cheats_openphantom_toggle(cheats_own_id_t id)
 {
-    if (id == CHEATS_OWN_NO_FOG) {
-        return cheats_no_fog_toggle();
-    }
     if ((unsigned)id >= (unsigned)CHEATS_OWN_COUNT ||
         !own_state.cheats[id].available) {
         return false;

@@ -1,4 +1,4 @@
-/* cheats_openphantom.h: the nine codes this project adds: unlimited ammunition, unlimited
+/* cheats_openphantom.h: the eight codes this project adds: unlimited ammunition, unlimited
  * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, jump boost, and free
  * camera.
  *
@@ -107,7 +107,7 @@
  * it is bound, see cheats_openphantom_toggle()'s own gate, because turning it on without one is
  * a door with no handle on the inside.
  *
- * "Skip to next level" is not a toggle either, and not one of the nine cheats above: a debug-only
+ * "Skip to next level" is not a toggle either, and not one of the eight cheats above: a debug-only
  * action row, for iterating on a specific level without replaying everything before it. It writes
  * DAT_00881368 (cheats_original_actions.c's own OP_CREDITS_VAR, exposed read-only from there) to
  * the SAME value the level's own exit trigger writes, script opcode 0x606, sub-command 1, which
@@ -124,7 +124,6 @@
 typedef enum cheats_own_id {
     CHEATS_OWN_UNLIMITED_AMMO = 0,
     CHEATS_OWN_UNLIMITED_HEALTH,
-    CHEATS_OWN_NO_FOG,
     CHEATS_OWN_INVINCIBLE_NPCS,
     CHEATS_OWN_ONE_SHOT_NPCS,
     CHEATS_OWN_GIANT_PLAYER,

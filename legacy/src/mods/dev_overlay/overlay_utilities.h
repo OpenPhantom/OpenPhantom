@@ -33,7 +33,7 @@
  * and is never clicked; the other four are slider tracks, under the draw distance, the fog
  * thickness, the field of view and the sensitivity. Each track sits on its own line so the
  * handle never covers the number it sets. */
-#define OVERLAY_UTILITIES_ROW_COUNT 17u
+#define OVERLAY_UTILITIES_ROW_COUNT 18u
 
 /* Fills everything about one row except `group` and `id`, which belong to the caller's numbering.
  *

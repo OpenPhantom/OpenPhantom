@@ -108,18 +108,24 @@ character of every search. A click inside the field is what starts focus now, an
 it, or opening the panel fresh, ends it; the field's border and caret are only drawn while focused,
 so the box never looks ready to type into before it is.
 
-## The nine cheats this project adds
+## The eight cheats this project adds
 
-In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **No fog**,
-**Invincible NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**,
-**Jump boost** and **Free camera**. They need fewer engine sites than that, because several
-pairs are two answers to one question and share a single detour.
+In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **Invincible
+NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **Jump boost** and
+**Free camera**. They need fewer engine sites than that, because several pairs are two answers to
+one question and share a single detour.
+
+**No fog was a ninth and now lives under Utilities**, at the head of the fog settings. It is still
+the same code in `cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A
+player looking for it is looking at the fog, and the two rows under it are the rest of that
+answer: this one removes the fog, the next says how thick it is, and the last says what it is
+measured against. Split across two groups they read as unrelated.
 
 A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
 That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
 is not available on this executable.
 
-### Unlimited ammunition, unlimited health and no fog
+### Unlimited ammunition and unlimited health
 
 The first two are one detour on one short function each, and both work by **declining** rather than
 by topping a value up.
@@ -703,7 +709,7 @@ sentinel (nothing reads as pending before `resolve()` has run) and every index t
 exist. The checks live in `unittests/overlay_model.c`.
 
 Every row in the panel has been opened, drawn and switched against the running game, and the
-layout has been through several rounds of correction against screenshots. All nine of this
+layout has been through several rounds of correction against screenshots. All of this
 project's cheats are accepted in game, in the 1.5.0 build, which was played through by hand.
 
 **Field-tested against the running game, several rounds:** kill self, full health,

@@ -80,7 +80,7 @@ bool diag_log_open(int max_lines_per_second, bool also_to_main_log)
     GetLocalTime(&now);
     fprintf(diag_state.file,
             "OpenPhantom engine fixes / diagnostics  %04d-%02d-%02d %02d:%02d:%02d\n"
-            "Times are seconds since the diagnostics started. Every line is an OBSERVATION -\n"
+            "Times are seconds since the diagnostics started. Every line is an OBSERVATION;\n"
             "no hook in this DLL changes the game.\n"
             "-------------------------------------------------------------------------------\n",
             now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);

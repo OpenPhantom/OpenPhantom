@@ -45,6 +45,7 @@
 #include "framerate_fix.h"
 
 #include "camera_compensation.h"
+#include "common/cinematic_gate.h"
 #include "draw_interpolation.h"
 #include "face_latch.h"
 #include "frame_delta.h"
@@ -213,6 +214,7 @@ typedef struct framerate_config {
     int   target_fps;            /* 0 = uncapped (clears g_frameLimiterOn) */
     bool  compensate_camera;
     bool  compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
+    bool  compensate_camera_in_cutscenes;
     bool  compensate_animation;
     bool  spin_sleep;
     bool  pin_simulation_rate;
@@ -253,6 +255,8 @@ static void load_config(void)
     config->compensate_camera      = ini_read_bool(FRAMERATE_SECTION, "CompensateCamera", true);
     config->compensate_camera_anchor =
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraAnchor", true);
+    config->compensate_camera_in_cutscenes =
+        ini_read_bool(FRAMERATE_SECTION, "CompensateCameraInCutscenes", false);
     config->compensate_animation   = ini_read_bool(FRAMERATE_SECTION, "CompensateAnimation", true);
     config->spin_sleep             = ini_read_bool(FRAMERATE_SECTION, "SpinSleep", false);
     config->pin_simulation_rate    = ini_read_bool(FRAMERATE_SECTION, "PinSimulationRate", true);
@@ -536,7 +540,10 @@ static void on_frame(void)
     if (framerate_state.config.compensate_camera) {
         scale = framerate_state.smoothed_delta * 30.0f;
         scale = (float)((int32_t)(scale * SCALE_QUANTISATION + 0.5f)) / SCALE_QUANTISATION;
-        camera_compensation_update(scale);
+
+        camera_compensation_update(scale,
+                                   !framerate_state.config.compensate_camera_in_cutscenes &&
+                                   cinematic_gate_script_owns_camera());
     }
 
     /* THE ANIMATION CLOCK, and it is a genuine choice rather than a fix.
@@ -649,6 +656,12 @@ void framerate_fix_install(void)
 
     if (framerate_state.config.compensate_camera) {
         camera_compensation_install(framerate_state.config.compensate_camera_anchor);
+        if (framerate_state.config.compensate_camera_in_cutscenes) {
+            log_info("CompensateCameraInCutscenes=1, a scripted camera is smoothed the same way "
+                     "the player's is");
+        } else {
+            (void)cinematic_gate_install();
+        }
     } else {
         log_info("CompensateCamera=0, the camera will feel rigid above 30 fps");
     }

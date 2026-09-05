@@ -76,6 +76,10 @@ static signature_t sites[SITE_COUNT] = {
 #define CELL_PANIC_FRACTION 0x1D00u   /* 90.6 %  of 0x2000 */
 #define VIEW_SCALE_STEP        0.15f
 
+/* Above any scale ViewRangeScale will accept (it is clamped to 2.5), so "no ceiling" needs no
+ * separate flag and every reader can simply take the smaller of the two numbers. */
+#define CEILING_NONE           1000.0f
+
 #define VERTEX_CACHE_LIMIT 0x4000u
 /* 75 %, earlier than for the cells, because the damage here survives until the level reloads. */
 #define VERTEX_CACHE_ALARM 0x3000u
@@ -91,11 +95,14 @@ typedef struct cell_watchdog_state {
     uint32_t        vertex_alarm;      /* scales with vertex_limit, same ratio as retail's 75 % */
     bool            overflow_reported;
     bool            vertex_warned;
+    /* LAST, deliberately: the initialiser below is positional, so a field inserted anywhere above
+     * this line silently shifts every value after it onto the wrong member. */
+    float           ceiling;           /* lowest scale imposed; CEILING_NONE = never had to */
 } cell_watchdog_state_t;
 
 static cell_watchdog_state_t watchdog_state = { NULL, NULL, CELL_LIMIT_RETAIL, 1.0f, 0, 0,
                                                 VERTEX_CACHE_LIMIT, VERTEX_CACHE_ALARM,
-                                                false, false };
+                                                false, false, CEILING_NONE };
 
 /* ============================================================================================ */
 static void lower_cell_limit(bool relocation_active)
@@ -143,9 +150,9 @@ static bool resolve_cell_counter(void)
     uint32_t  table;
 
     if (site == 0) {
-        log_warning("gather_append did not resolve - NO cell watchdog. The view distance is "
-                    "therefore held at 1.0, because an overflow would otherwise silently "
-                    "overwrite the bucket list heads.");
+        log_warning("gather_append did not resolve, so there is NO cell watchdog. The view "
+                    "distance is therefore held at 1.0, because an overflow would otherwise "
+                    "silently overwrite the bucket list heads.");
         return false;
     }
 
@@ -235,9 +242,9 @@ void cell_watchdog_set_vertex_limit(uint32_t new_limit)
         return;
     }
     watchdog_state.vertex_limit = new_limit;
-    /* Same 75 % ratio the retail-sized alarm already used, not a fixed offset from the new limit -
-     * a fixed offset would mean the alarm fires later, proportionally, exactly where more headroom
-     * makes a JUMP in the counter (see vertex_table.c, section 1) more dangerous, not less. */
+    /* Same 75 % ratio the retail-sized alarm already used, not a fixed offset from the new
+     * limit; a fixed offset would mean the alarm fires later, proportionally, exactly where more
+     * headroom makes a JUMP in the counter (see vertex_table.c) more dangerous, not less. */
     watchdog_state.vertex_alarm = (uint32_t)(((uint64_t)new_limit * VERTEX_CACHE_ALARM) /
                                              VERTEX_CACHE_LIMIT);
 
@@ -273,6 +280,10 @@ static void watch_vertex_cache(float *effective_view_scale)
                   "The view scale goes to 1.00 immediately.",
                   (unsigned)used, (unsigned)limit);
         *effective_view_scale = 1.0f;
+        /* Recorded, like every other brake here. Without it the frame governor is entitled to
+         * hand this scale back thirty seconds later, and this particular brake was applied
+         * because the geometry is ALREADY torn and stays torn until the level reloads. */
+        watchdog_state.ceiling = 1.0f;
         return;
     }
 
@@ -283,6 +294,7 @@ static void watch_vertex_cache(float *effective_view_scale)
         if (*effective_view_scale < 1.0f) {
             *effective_view_scale = 1.0f;
         }
+        watchdog_state.ceiling = *effective_view_scale;
         log_warning("%u of %u vertex cache slots (peak %u), view scale %.2f -> %.2f. Braking "
                     "earlier than for the cells, because an overflow here tears the geometry "
                     "until the level reloads.",
@@ -306,17 +318,19 @@ void cell_watchdog_on_frame(float *effective_view_scale)
     /* An earlier version bailed out silently above four times the limit ("obviously not a counter
      * any more"), and thereby hid exactly the case that matters. bapdraw_gatherCellMovers and
      * bapdraw_emitFace hang on with NO limit; the 8192 check is only at gatherCell's entry. The
-     * counter CAN stand far above the limit, and that has to be in the log rather than swallowed. */
+     * counter CAN stand far above the limit, and that has to be in the log rather than
+     * swallowed. */
     if (used > watchdog_state.cell_limit) {
         if (!watchdog_state.overflow_reported) {
             watchdog_state.overflow_reported = true;
-            log_error("CELL COUNTER %u IS ABOVE THE LIMIT %u. The table has already overflowed - "
+            log_error("CELL COUNTER %u IS ABOVE THE LIMIT %u. The table has already overflowed; "
                       "gatherCellMovers and emitFace hang on unchecked. From here the bucket list "
                       "heads are destroyed.", (unsigned)used, (unsigned)watchdog_state.cell_limit);
         }
         if (*effective_view_scale > 1.0f) {
             log_warning("view scale %.2f -> 1.00 (overflow)", (double)*effective_view_scale);
             *effective_view_scale = 1.0f;
+            watchdog_state.ceiling = 1.0f;
         }
         if (used > watchdog_state.cell_high_water && used < 0x10000000u) {
             watchdog_state.cell_high_water = used;
@@ -338,11 +352,12 @@ void cell_watchdog_on_frame(float *effective_view_scale)
     panic = (watchdog_state.cell_limit / CELL_LIMIT_RETAIL) * CELL_PANIC_FRACTION;
 
     if (used >= panic && *effective_view_scale > 1.0f) {
-        log_error("%u of %u cells - EMERGENCY BRAKE, view scale %.2f -> 1.00. An overflow would "
+        log_error("%u of %u cells: EMERGENCY BRAKE, view scale %.2f -> 1.00. An overflow would "
                   "have overwritten the bucket list heads. Peak %u.",
                   (unsigned)used, (unsigned)watchdog_state.cell_limit,
                   (double)*effective_view_scale, (unsigned)watchdog_state.cell_high_water);
         *effective_view_scale = 1.0f;
+        watchdog_state.ceiling = 1.0f;
     } else if (used >= alarm && *effective_view_scale > 1.0f) {
         float previous = *effective_view_scale;
 
@@ -350,6 +365,7 @@ void cell_watchdog_on_frame(float *effective_view_scale)
         if (*effective_view_scale < 1.0f) {
             *effective_view_scale = 1.0f;
         }
+        watchdog_state.ceiling = *effective_view_scale;
         log_warning("%u of %u cells (peak %u), view scale %.2f -> %.2f. The engine checks its "
                     "limit only on entry to gatherCell and the counter jumps, so this brakes "
                     "early and in coarse steps.",
@@ -357,4 +373,24 @@ void cell_watchdog_on_frame(float *effective_view_scale)
                     (unsigned)watchdog_state.cell_high_water,
                     (double)previous, (double)*effective_view_scale);
     }
+}
+
+float cell_watchdog_ceiling(void)
+{
+    return watchdog_state.ceiling;
+}
+
+void cell_watchdog_counts(uint32_t *cells, uint32_t *vertices)
+{
+    if (cells != NULL && watchdog_state.cell_count != NULL) {
+        *cells = *watchdog_state.cell_count;
+    }
+    if (vertices != NULL && watchdog_state.vertex_count != NULL) {
+        *vertices = *watchdog_state.vertex_count;
+    }
+}
+
+void cell_watchdog_reset_ceiling(void)
+{
+    watchdog_state.ceiling = CEILING_NONE;
 }

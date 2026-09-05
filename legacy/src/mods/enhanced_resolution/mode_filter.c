@@ -147,7 +147,10 @@ _Static_assert(sizeof(SIG_ENUM_CALLBACK) == sizeof(MSK_ENUM_CALLBACK),
 #define DESC_BIT_COUNT    0x54u
 
 #define DDPF_RGB          0x40u
-#define ENGINE_BIT_COUNT  16u
+/* The depth the engine's own gates are set to. Read rather than defined, so widening the gates
+   and widening the filter cannot disagree: one of those without the other either wastes every
+   record on modes the list will refuse, or refuses every mode the list would have taken. */
+#include "mode_depth.h"
 
 /* DDENUMRET_OK. Returning this without calling the engine's callback is exactly "I have seen this
  * mode, carry on", which is what skipping means here. */
@@ -248,7 +251,7 @@ static int32_t __stdcall hook_enum_callback(void *desc, void *context)
         return original(desc, context);
     }
 
-    if ((flags & DDPF_RGB) == 0u || bits != ENGINE_BIT_COUNT) {
+    if ((flags & DDPF_RGB) == 0u || bits != mode_depth_bits()) {
         ++filter_state.skipped_format;
         return DDENUMRET_OK;
     }

@@ -25,7 +25,8 @@ typedef struct diagnostics_config {
     int  music;               /* 1 = state/sequence/volume                                     */
     int  trigger;             /* 1 = mover commands, 2 = plus every integrator phase change,
                                *     3 = plus the census of which call site reaches the
-                               *     integrator, which patches nothing further                  */
+                               *     integrator, which patches nothing further. 4 to 6 add the
+                               *     path censuses; see diagnostics.c for what each one asks  */
     int  fsm;                 /* 1 = AI mode changes, 2 = plus every executed opcode           */
     int  level;               /* 1 = level loading + the cutscene lock                          */
     int  player;              /* 1 = mode changes of the 14-mode state machine                  */

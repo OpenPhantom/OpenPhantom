@@ -10,6 +10,51 @@
 cmake_minimum_required(VERSION 3.15)
 project(engine_fixes C)
 
+# RC is enabled for one reason: every shipped binary carries a version resource, so a log or a
+# properties dialog can name the build it came from. Before this, a DLL reported nothing at all and
+# a bug report could not say which patch it was against.
+enable_language(RC)
+
+# THE PROJECT'S VERSION, and the only copy of it in this tree.
+#
+# One number covers the patch and the installer that carries it. They have never been released
+# apart: every patch release to date has an installer release on the same day. The first two
+# digits move when the installer's own behaviour changes, or when the payload changes enough
+# that a player would notice it without being told; the third when the payload changes and the
+# game looks the same afterwards.
+#
+# The installer keeps its own copy in AppVer, because Inno cannot read a CMake variable and wiring
+# the build system into the installer would couple two things that are otherwise independent. The
+# comment at AppVer says the same, and the two are kept in step by hand.
+set(OPENPHANTOM_VERSION_MAJOR 1)
+set(OPENPHANTOM_VERSION_MINOR 5)
+set(OPENPHANTOM_VERSION_PATCH 0)
+set(OPENPHANTOM_VERSION
+    "${OPENPHANTOM_VERSION_MAJOR}.${OPENPHANTOM_VERSION_MINOR}.${OPENPHANTOM_VERSION_PATCH}")
+
+# Gives one target the project's version resource. The module name goes into the description and
+# the original file name, so a properties dialog names the file it is actually looking at rather
+# than the project. Called by add_engine_fix and by the loader, which is the whole set of shipped
+# binaries; the unit tests are console programs that ship nowhere and do not get one.
+function(add_version_resource target)
+    set(OP_MODULE_NAME ${target})
+    if(ARGC GREATER 1)
+        set(OP_MODULE_ROLE ${ARGV1})
+    else()
+        set(OP_MODULE_ROLE "OpenPhantom engine fix")
+    endif()
+    set(generated ${CMAKE_BINARY_DIR}/generated/${target}_version.rc)
+    configure_file(${CMAKE_SOURCE_DIR}/src/common/version.rc.in ${generated} @ONLY)
+    target_sources(${target} PRIVATE ${generated})
+endfunction()
+
+# Generated into the build tree so no generated file is ever committed, and reached as
+# "common/version.h" like every other shared header.
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/common/version.h.in
+    ${CMAKE_BINARY_DIR}/generated/common/version.h
+    @ONLY)
+
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR
         "This project targets a 32-bit game. Configure with: cmake -S . -B build -A Win32")

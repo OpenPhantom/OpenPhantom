@@ -1,6 +1,6 @@
 /* vertex_table.h: move the vertex cache out of the BSS into a buffer with a guard page behind it.
  *
- * WHY: cell_watchdog.h already names this "WALL 2, and it is the nastier one" - 16384 slots of
+ * WHY: cell_watchdog.h already names this "WALL 2, and it is the nastier one": 16384 slots of
  * 0x40 bytes, and unlike the cell table's silent corruption this one aborts cleanly but leaves
  * torn geometry that survives until the level reloads. Raising the view distance runs into this
  * wall before the cell table's own (relocated) one. This is the same answer draw_table.c already
@@ -29,6 +29,7 @@ void vertex_table_relocate(void);
 void vertex_table_restore(void);
 
 bool     vertex_table_is_active(void);
-uint32_t vertex_table_limit(void);   /* the new vertex-cache limit, or the retail one when inactive */
+/* the new vertex-cache limit, or the retail one when this is not active */
+uint32_t vertex_table_limit(void);
 
 #endif /* VERTEX_TABLE_H */

@@ -10,9 +10,10 @@
  * delta to a value this DLL has no way to know, so where the drawn cursor lands depends on session
  * state. Writing the cells is deterministic; warping is not.
  *
- * One responsibility, kept apart for the same reason vlc_locate.c and movie_path.c are: this is
- * the only part of fmv_player that reads or writes the engine's own memory, and it is the only
- * part that needs a signature.
+ * One responsibility, kept apart for the same reason vlc_locate.c and movie_path.c are: the
+ * cursor cells are nothing to do with playing a movie, and nothing else here needs to know they
+ * exist. It is not the only part of fmv_player that resolves a signature; fmv_player.c,
+ * render_curtain.c and sfx_mute.c each own their own sites too.
  * ============================================================================================ */
 #ifndef MENU_CURSOR_CELLS_H
 #define MENU_CURSOR_CELLS_H

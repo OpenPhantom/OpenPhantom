@@ -19,6 +19,7 @@ function(add_engine_fix name)
         RUNTIME_OUTPUT_DIRECTORY_DEBUG ${ENGINE_FIX_OUTPUT}/mods
         RUNTIME_OUTPUT_DIRECTORY_RELEASE ${ENGINE_FIX_OUTPUT}/mods
     )
+    add_version_resource(${name})
 endfunction()
 
 
@@ -57,9 +58,17 @@ add_engine_fix(enhanced_resolution
     focus_guard.c
     menu_island_clip.c
     menu_scale.c
+    menu_scale_sites.c
+    menu_scale_install.c
+    menu_scale_3d.c
+    menu_preview.c
     menu_loading_bar.c
     menu_art_source.c
+    mode_depth.c
     mode_filter.c
+    sw_blit_guard.c
+    ending_resolution.c
+    credits_skip.c
 )
 
 add_engine_fix(hud_ratio_scaling
@@ -73,10 +82,21 @@ add_engine_fix(hud_ratio_scaling
 add_engine_fix(view_distance_fix
     dll_main.c
     view_distance_fix.c
+    view_settings.c
+    view_range.c
+    two_sided_faces.c
     cell_watchdog.c
+    frame_governor.c
     draw_table.c
     vertex_table.c
     fog_regime.c
+    fog_band.c
+    fog_regime_install.c
+    fog_trace.c
+    poly_bias.c
+    translucent_fog.c
+    device_dither.c
+    scene_fade.c
     spawn_census.c
 )
 
@@ -98,6 +118,8 @@ add_engine_fix(enhanced_input
     input_gate.c
     input_menu.c
     input_slider.c
+    input_switches.c
+    menu_captions.c
     mouse_look.c
     mouse_config.c
     mouse_rate.c
@@ -170,6 +192,8 @@ add_engine_fix(diagnostics
     diag_install.c
     diag_audio.c
     diag_world.c
+    diag_world_mover_census.c
+    diag_world_path_census.c
     diag_flow.c
     diag_frame.c
     diag_present.c
@@ -184,8 +208,9 @@ target_link_libraries(diagnostics PRIVATE winmm psapi pdh)
 # Five files, and the seams are the four different ways this feature fails. fmv_player.c is the one
 # byte-evidenced detour and decides WHEN a movie is ours. vlc_locate.c answers "is there a 32-bit
 # libVLC on this machine at all", which is the question about somebody's registry and is kept apart
-# for the same reason player_sites.c and music_sites.c are. vlc_playback.c loads that libVLC and
-# drives it. video_overlay.c owns the window it draws into. movie_path.c is the arithmetic, kept
+# for the same reason player_sites.c and music_sites.c are. vlc_runtime.c loads that libVLC and
+# resolves its exports, vlc_playback.c drives it. video_overlay.c owns the window it draws
+# into. movie_path.c is the arithmetic, kept
 # apart for the same reason fov_math.c and free_look_math.c are: it is the only part of this
 # feature a test can observe without the game, and unittests/movie_path.c links it on its own.
 # advapi32 (RegOpenKeyExW etc.) is already one of MSVC's own default libraries, linked here anyway
@@ -201,6 +226,7 @@ add_engine_fix(fmv_player
     render_curtain.c
     vlc_locate.c
     vlc_playback.c
+    vlc_runtime.c
 )
 target_link_libraries(fmv_player PRIVATE advapi32 winmm)
 
@@ -250,6 +276,19 @@ target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
+    fog_band_row.c
+    view_range_live_row.c
+    overlay_key_name.c
+    overlay_utilities.c
+    open_key_row.c
+    fog_follow_row.c
+    auto_range_row.c
+    fov_row.c
+    menu_extras_row.c
+    sensitivity_row.c
+    free_look_row.c
+    strafe_row.c
+    strict_range_row.c
     view_range_row.c
     dev_menu_size_row.c
     overlay_model.c
@@ -264,8 +303,10 @@ add_engine_fix(dev_overlay
     cheats_openphantom.c
     cheats_npc_damage.c
     cheats_jump_boost.c
+    cheats_fall_consequences.c
     cheats_free_camera.c
     cheats_no_fog.c
+    floor_probe.c
 )
 
 # A field investigation found that Xidi, a third-party wrapper this project used to install to

@@ -60,8 +60,9 @@
  * the ordinal in 3251/3251 nodes. g_msgContactNode and the return value of 0x412E22 live in the
  * SAME space (both are pNode->+0x44), so the substitution is type-safe.
  *
- * SIZE NOTE (rule 9): 721 lines, of which 460 are code and 173 are the byte evidence above.
- * The evidence is what makes the six gates reviewable, and rule 8 requires it at the site.
+ * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. Most of the excess is the byte
+ * evidence above rather than code: it is what makes the six gates reviewable, and it has to
+ * stand at the site rather than only in a document.
  */
 #include "dismemberment.h"
 

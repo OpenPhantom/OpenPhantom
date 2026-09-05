@@ -29,7 +29,7 @@
  * g_menuOrigin = ((W-canvas)/2) in the draw path and the hit test, and clips every canvas blit
  * against the canvas size.
  *
- * THE CANVAS IS NOT ALWAYS 640x480. menu_scale.c widens it to fit the converted artwork, and it
+ * The canvas is NOT always 640x480. menu_scale.c widens it to fit the converted artwork, and it
  * moves the engine's own clip immediates and origin arithmetic to match, so the island this clamps
  * to has to be told what the canvas actually is. Clamping to 640x480 while the menus draw on a
  * 3840x2160 canvas cuts real widgets off at a border that no longer exists. These two remain the

@@ -94,7 +94,11 @@ add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/window_fit.c
 )
 
-add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c)
+add_unit_test(fog_regime view_distance_fix view_distance_fix/fog_regime.c
+    view_distance_fix/fog_band.c
+    view_distance_fix/fog_regime_install.c
+    view_distance_fix/fog_trace.c
+    view_distance_fix/cell_watchdog.c)
 
 # The only encoder here that writes a whole instruction sequence rather than an operand, so it is
 # the only one whose mistakes are invisible at run time.
@@ -161,17 +165,35 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 # executable neither of them could resolve.
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
+    dev_overlay/fog_band_row.c
+    dev_overlay/view_range_live_row.c
+    dev_overlay/overlay_key_name.c
+    dev_overlay/overlay_utilities.c
+    dev_overlay/open_key_row.c
+    dev_overlay/fog_follow_row.c
+    dev_overlay/auto_range_row.c
+    dev_overlay/fov_row.c
+    dev_overlay/menu_extras_row.c
+    dev_overlay/sensitivity_row.c
+    dev_overlay/free_look_row.c
+    dev_overlay/strafe_row.c
+    dev_overlay/strict_range_row.c
     dev_overlay/view_range_row.c
     dev_overlay/dev_menu_size_row.c
     dev_overlay/cheats_original.c
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
     # The cheats were split by responsibility when cheats_openphantom.c passed twice the size this
-    # project allows. They still share one state record, so the test links all four together.
+    # project allows. They still share one state record, so the test links all five together.
     dev_overlay/cheats_npc_damage.c
     dev_overlay/cheats_jump_boost.c
+    dev_overlay/cheats_fall_consequences.c
     dev_overlay/cheats_free_camera.c
     dev_overlay/cheats_no_fog.c
+    # Both jump boost and the free camera ask the same "is there a floor under this" question,
+    # so the module that owns it has to be linked beside them. It resolves nothing in a test
+    # process either, and answers UNAVAILABLE, which is the case both callers must survive.
+    dev_overlay/floor_probe.c
     # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
     # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
     # resolved site every entry point returns immediately, which is exactly what a test process wants.
@@ -193,6 +215,18 @@ add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
 # keeping its velocity, matters as much as the case that must.
 add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
 
+# The frame-time governor's one decision. The dead zone between its two thresholds is the property
+# that stops it oscillating, and it is a relationship between two settings rather than anything
+# either says alone, so it is worth a test of its own.
+add_unit_test(frame_governor view_distance_fix view_distance_fix/frame_governor.c)
+
+# Naming a virtual key, which the open-key row shows and the ini round-trips.
+add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)
+
 # The draw distance row's own arithmetic: the clamp, and the hand written parser that exists
 # because strtof would read a decimal point only where the locale agrees it is one.
 add_unit_test(view_range_row dev_overlay dev_overlay/view_range_row.c)
+
+# The field of view row, which is the only one with a slider, so its ends and its rounding are
+# where a handle that cannot reach the maximum would show up.
+add_unit_test(fov_row dev_overlay dev_overlay/fov_row.c dev_overlay/view_range_row.c)

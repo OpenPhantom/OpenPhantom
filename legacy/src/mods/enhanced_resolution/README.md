@@ -5,9 +5,11 @@
 Modern resolutions, listed in the options screen as if they had always been there, and the window,
 the mouse pointer and the input devices kept in step with them.
 
-> The game is **16-bit only**; there is no 32-bit path anywhere in it. Which resolutions actually
-> exist is therefore up to your DirectDraw layer (dgVoodoo2, DDrawCompat). `LogModeTable=1` prints
-> the complete table the layer reported, so you can see rather than guess.
+> The game runs **16-bit**: the mode list accepts nothing else, and the 2-D layer writes two-byte
+> pixels straight into the back buffer. Which resolutions actually exist is therefore up to your
+> DirectDraw layer (dgVoodoo2, DDrawCompat). `LogModeTable=1` prints the complete table the layer
+> reported, so you can see rather than guess. `ModeBitDepth` is documented in `engine_fixes.ini`
+> and should be left at 16; see `mode_depth.h` for how far 32 was taken and where it stops.
 
 ## Supported executables
 
@@ -35,7 +37,7 @@ the mode table that the aspect gate anchors.
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
 | `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole display mode instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. **Reported cost, not reproduced here yet:** the pause screens repair themselves through damage rectangles clipped to the same hard-coded 640x480 canvas, so a cursor moved past the island's edge cannot be erased and may stamp its blue glow onto the border until the screen closes. Every clickable widget is inside the island either way, so set this to `0` if you see that |
 | `ClampMenuSpritesToIsland` | `1` | the erase-side companion of `MenuKeepsResolution`: clamp the menu toolkit's sprite draws to the 640x480 island, gated on the engine's own widget-pass flag so the HUD and the frozen pause backdrop pass through untouched. Closes the reported blue stamp the hovered button's halo left on the island's border (drawn against the screen, repaired against the canvas). Bit-identical for every sprite that fits the island, and a sprite drawn with a partial fill is passed through untouched |
-| `MenuScale` | `1` | how many times its authored size to draw the 640x480 menu canvas at, 1 to 4. `1` is off. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. Only half a feature without upscaled artwork: the blitter copies one source pixel to one destination pixel, so the layout spreads but the bitmaps do not grow |
+| `MenuScale` | `0` | how many times its authored size to draw the 640x480 menu canvas at. `0` ships and is the point of it: the ratio is READ FROM the converted artwork rather than set here, so the layout and the pictures cannot disagree about the number, and with no converted artwork there is no scale and the menus are the ones that shipped. A number instead sets it by hand, up to the 4095/640 ceiling the engine's own canvas imposes. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. Only half a feature without upscaled artwork: the blitter copies one source pixel to one destination pixel, so the layout spreads but the bitmaps do not grow |
 
 ## Engine locations
 
@@ -304,7 +306,7 @@ walks a whole session of Alt-Tabs, a Win key and a minimise asserting that no fr
 the pointer confined and the foreground gone.
 
 `unittests/window_fit.c` is new and covers the monitor rule, 17 checks, including the -1920,0
-regression itself. It is **not wired into `CMakeLists.txt` yet**; it was compiled and run by hand
+regression itself. It is wired into `CMakeLists.txt` and runs with the rest of the suite
 under `/W4 /WX` against the built `engine_fixes_common.lib` and all 17 pass.
 
 Offline signature verification passes on both retail builds. `SIG_SET_MODE_ENTRY` resolves
@@ -352,5 +354,5 @@ current width and height, never by adding a delta, so repeating it cannot drift.
 At 640x480 the computed clamp is bit-identical to the constants the engine ships with. That is
 asserted by a unit test and is the reason this may default to on.
 
-**Testing status:** the arithmetic is unit-tested (25 checks). The patch itself has **not** been
+**Testing status:** the arithmetic is unit-tested. The patch itself has **not** been
 run in the game.

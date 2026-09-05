@@ -128,7 +128,7 @@ void free_look_log_transition(bool armed, free_look_release_t reason, const char
              "state %d, module %d, mode %d.",
              armed ? "ARMED" : "RELEASED",
              free_look_release_name(reason),
-             (note[0] != '\0') ? " - " : "", note,
+             (note[0] != '\0') ? ", " : "", note,
              (double)shown_yaw, wanted, (double)pitch, (double)eye_height,
              view_read ? "" : " (the camera object was unreadable, so those three read 0)",
              (unsigned)(uintptr_t)region, (unsigned)gate->region_flags,

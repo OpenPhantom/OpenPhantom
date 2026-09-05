@@ -19,6 +19,22 @@
  * with a Deck can test.
  *
  * ==============================================================================================
+ * SIZE NOTE
+ *
+ * Over the 600 line mark, under the 900 hard limit, and kept whole on purpose.
+ *
+ * The seam is plain and it is named here so nobody has to find it twice: convert_menu and
+ * everything it needs, bitmap scaling and the lab directory reader, on one side; convert_movies
+ * and everything it needs, the Bink frame size and the ffmpeg command line, on the other. They
+ * share nothing but the small helpers at the top, the three loggers, the file reader and the
+ * two integer helpers.
+ *
+ * That sharing is the reason it is one file today. Cutting at the seam produces two halves and a
+ * third file for the helpers, which is three files where the program is one executable with one
+ * argument parser, and none of the three would be doing enough to earn its own name yet. Take the
+ * cut the moment either half grows a second responsibility of its own, or the moment this file
+ * reaches the hard limit, whichever comes first.
+ * ==============================================================================================
  * What it must stay in step with
  *
  * This is now the third implementation of the same two jobs, which is a real hazard rather than a
@@ -146,7 +162,7 @@ static void write_u32(unsigned char *p, unsigned value)
 
 /* Nearest neighbour on a 24 bpp bottom-up BI_RGB bitmap.
  *
- * NEAREST NEIGHBOUR IS NOT LAZINESS. After the engine converts a bitmap to 16 bit, a pixel that is
+ * Nearest neighbour is NOT laziness. After the engine converts a bitmap to 16 bit, a pixel that is
  * exactly zero is a SKIP, i.e. transparent. A smoothing filter invents near-black where black was
  * transparent, and new exact-zero pixels where there were none, so it would halo every button and
  * punch holes in dark artwork. Whole pixel replication cannot invent a colour that was not already
@@ -470,7 +486,7 @@ static int convert_menu(const char *game, const char *output, int screen_width, 
         }
         loaded[archive].count = count;
         total += count;
-        note("  %s - %d pictures", archives[archive], count);
+        note("  %s: %d pictures", archives[archive], count);
     }
 
     if (quiet) {
@@ -730,7 +746,7 @@ static int convert_movies(const char *game, const char *output, const char *ffmp
 static void usage(void)
 {
     fputs(
-        "openphantom_convert - makes bigger copies of the pictures and films in your own game.\n"
+        "openphantom_convert: makes bigger copies of the pictures and films in your own game.\n"
         "\n"
         "  openphantom_convert menu   --game DIR --width W --height H [--uniform]\n"
         "                             [--output DIR] [--keep-resolution] [--quiet]\n"

@@ -214,7 +214,7 @@ static bool resolve_phase_table(player_sites_t *out)
     }
 
     out->phase_table = table;
-    log_info("phase table %08X - steer=%08X integrate=%08X", (unsigned)table_address,
+    log_info("phase table %08X, steer=%08X integrate=%08X", (unsigned)table_address,
              (unsigned)table[PHASE_STEER], (unsigned)table[PHASE_INTEGRATE]);
     return true;
 }
@@ -297,7 +297,7 @@ static bool resolve_axis_readers(player_sites_t *out)
     }
     callee = mouse_site + OFFSET_MOUSE_AXIS_CALL + 4 + displacement;
     if (!memory_is_inside_image(callee, 1)) {
-        log_warning("the relative axis reader would be at %08X - refused", (unsigned)callee);
+        log_warning("the relative axis reader would be at %08X, refused", (unsigned)callee);
         return false;
     }
     out->read_relative_axis = (input_axis_fn_t)callee;
@@ -308,7 +308,7 @@ static bool resolve_axis_readers(player_sites_t *out)
         if (memory_is_inside_image(callee, 1)) {
             out->read_absolute_axis = (input_axis_fn_t)callee;
         } else {
-            log_warning("the absolute axis reader would be at %08X - strafe stays OFF",
+            log_warning("the absolute axis reader would be at %08X, strafe stays OFF",
                         (unsigned)callee);
         }
     } else {

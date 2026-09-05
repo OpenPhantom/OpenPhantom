@@ -1,8 +1,8 @@
 /* diag_names.h: names instead of numbers.
  *
- * Where a name table exists, the name is printed: 86 music states and 82 music sequences (from
- * IMUSE.DLL's muscript tables), 60 FSM opcodes (the obiold opcode picker at 0x58FD34), the 14
- * player modes, the 16 enemy reaction states, the mover types and phases, and the SNDF_* bits.
+ * Where a name table exists, the name is printed: the music states and music sequences (from
+ * IMUSE.DLL's muscript tables), the FSM opcodes (the obiold opcode picker at 0x58FD34), the
+ * player modes, the enemy reaction states, the mover types and phases, and the SNDF_* bits.
  *
  * The NUMBER is always printed alongside, so a missing name can never be mistaken for a different
  * value.

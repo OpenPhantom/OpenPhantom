@@ -4,13 +4,14 @@
 ; install time. What sits in dist is already only the pieces these rows install: the patch as it
 ; comes out of its release archive, and 33 files of the 851 in VideoLAN's zip.
 
-; PatchVersion records which release dist\patch was taken from, and is the only thing to change when
-; it is refreshed. Nothing derives a URL from it any more, so the tag-versus-version trap that used
-; to live here is gone with the download.
+; PatchVersion records which release dist\patch was taken from. It is the same number as AppVer,
+; because the installer and the patch are one release; see the comment at AppVer for why they were
+; merged and why the patch's old v0.x line joined this one rather than the other way round. Keep the
+; two in step, and nothing derives a URL or a path from either.
 ;
-; To refresh: take the files out of OpenPhantom-patch-vX.Y.Z.zip into dist\patch, keeping the folder
+; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "v0.2.1"
+#define PatchVersion       "1.5.0"
 #define PatchSrc           "dist\patch"
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the
@@ -165,7 +166,7 @@ Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
 ; DLL mounts and reads the scale out of. Without it MenuScale finds no converted artwork and leaves
 ; the menus exactly as they shipped, so the two halves install together or the feature is absent.
 ;
-; FOUR FILES BECAUSE OF LINUX. "Convert Menu Art.bat" drives convert_menu.ps1, which resamples with
+; Four files because of Linux. "Convert Menu Art.bat" drives convert_menu.ps1, which resamples with
 ; GDI+; neither half works under Proton, where Wine ships no PowerShell and System.Drawing.Common is
 ; Windows-only on .NET Core. convert_menu.sh drives convert_menu.py, which needs nothing but Python
 ; 3 and is already on the Steam Deck. The two produce byte-identical output from the same input.
@@ -182,7 +183,7 @@ Source: "{#PatchSrc}\tools\convert_menu.py";       DestDir: "{app}\tools"; \
 Source: "{#PatchSrc}\tools\convert_menu.sh";       DestDir: "{app}\tools"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 
-; THE CONVERTER SETUP ITSELF RUNS, for both the menu artwork and the cutscenes, which is why it
+; The converter Setup itself runs, for both the menu artwork and the cutscenes, which is why it
 ; carries both components and installs once rather than twice. It is a plain Win32 console program
 ; and therefore the only one of the five converters that works everywhere: Wine runs it exactly as
 ; Windows does, so an installation under Proton or Lutris converts during Setup instead of leaving

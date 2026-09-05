@@ -34,7 +34,8 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `KeyTurnRate` | `120` | 15-720 | degrees per second for the turn keys. The engine's own value is 120 and it is clamped there internally, so raising this also lifts that clamp |
 | `MouseSpikeLimitDegPerSec` | `3000` | 360-20000 | degrees per second. At **delivery** a step past it is held back and paid out on the next frame rather than deleted; at the **door** a single frame's sample past it is cut to it before it is banked at all. A guard against a broken device, not against your hand |
 | `MouseLog` | `0` | | one line per sample the door bolt had to cut. A healthy session cuts nothing and logs nothing |
-| `Strafe` | `0` | | requires `MouseLook=1`; also settable from the controls screen |
+| `Strafe` | `0` | | requires `MouseLook=1`; also settable from the developer menu, and from the controls screen when `MenuWidgets=1` |
+| `MenuWidgets` | `0` | | put this project's three widgets on the game's own controls screen: the two check boxes and the mouse sensitivity slider. Ships off so that screen looks as it did in 1999. Nothing is lost by it: all three are keys here and the developer menu has a row for each, sensitivity included. Read once at startup, so it takes effect on the next launch |
 | `StrafeInvert` | `0` | | |
 | `StrafeTurnsBody` | `1` | | turn the model to face the way it travels |
 | `StrafeSettleMs` | `250` | 0-1000 | how long the travel angle takes to close 90 % of a change. `0` = no damping, the old instant step |
@@ -45,7 +46,7 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `FreeLookAimKeepsMovement` | `1` | | while the fire button is held, your keys keep steering the walk. The shot is aimed by the engine's own offset cell instead of by turning the body, so it still goes where you look, and the upper body turns into the shot, because the engine drives the chest from that same cell |
 | `SteerLog` | `0` | 0-4000 | measurement: that many substep lines in which the player is steering, then it stops |
 | `SteerLeanTestDegrees` | `0` | +/-90 | measurement: force a fixed twist on chest and head, ignoring the turn. Answers whether a node rotation reaches the screen at all |
-| `FreeLook` | `0` | | **the second control mode.** The mouse turns the camera and no longer turns the body. Requires `MouseLook=1`; mutually exclusive with the mouse-to-body path; also settable from the controls screen |
+| `FreeLook` | `0` | | **the second control mode.** The mouse turns the camera and no longer turns the body. Requires `MouseLook=1`; mutually exclusive with the mouse-to-body path; also settable from the developer menu, and from the controls screen when `MenuWidgets=1` |
 | `FreeLookBodyTurnMs` | `150` | 0-1000 | how long the body takes to close 90 % of a turn toward its travel. `0` = snap |
 | `FreeLookBodyTurnMaxDegPerSec` | `540` | 60-2000 | the body turn's hard rate cap, deliberately above the engine's own 120 degrees per second clamp |
 | `FreeLookAimSnap` | `1` | | while an attack is live, drive the body to the camera yaw |
@@ -75,9 +76,9 @@ tuned `720` would have carried the defect forward invisibly.
 ### ...and the same limit has to sit at the door, which the first version of that repair missed
 
 Holding motion back instead of deleting it is right for **input** and wrong for a **fault**, and the
-old limiter had been deleting both. The only bound on a single sample was `MAX_PLAUSIBLE_AXIS_SAMPLE`
-, a million axis units, which at the shipped sensitivity is a **hundred thousand degrees in one
-frame**. Once clipped motion started being paid out instead of dropped, one bad sample from the
+old limiter had been deleting both. The only bound on a single sample was
+`MAX_PLAUSIBLE_AXIS_SAMPLE`, a million axis units, which at the shipped sensitivity is a **hundred
+thousand degrees in one frame**. Once clipped motion started being paid out instead of dropped, one bad sample from the
 device or its driver became a **guaranteed full turn, delivered in about a tenth of a second**. That
 is what "press a direction key, move the mouse, and the view suddenly whips right round" was, and it
 affected **both** control modes, free look merely shows it first, because it drains every rendered
@@ -160,7 +161,8 @@ read its own caller's frame.
 Free look and `framerate_fix` cannot collide on the recentre rate. `framerate_fix` rewrites the
 `mov dword ptr [rate], imm32` **immediates** at the tail of the same function; free look writes the
 **cell**. The 34-byte window free look anchors on is disjoint from all four sites `framerate_fix`
-patches, and the current-region pattern ends exactly where `framerate_fix`'s lag immediates begin,so neither DLL's pattern can be broken by the other having loaded first.
+patches, and the current-region pattern ends exactly where `framerate_fix`'s lag immediates begin,
+so neither DLL's pattern can be broken by the other having loaded first.
 
 `bapobj_setNodeYaw`'s pattern runs the full 63 bytes of the function, and that length is not
 thoroughness. `bapobj_setNodePitch` at `0x414789` is byte-identical except for its `jae`
@@ -173,7 +175,8 @@ controls screen the authored ids 2, 3 and a CANCEL 4.
 
 ## Why it costs no mode tests of our own
 
-Five of the fourteen player modes skip these phases already, because their descriptors say so,hanging, shimmy, auto-vault, death and turret. Swimming has its own phase-2 pointer in its
+Five of the fourteen player modes skip these phases already, because their descriptors say so:
+hanging, shimmy, auto-vault, death and turret. Swimming has its own phase-2 pointer in its
 descriptor. Only Sidle and FixedJump are excluded by hand, because they build their displacement
 from a launch velocity rather than from the run speed.
 
@@ -194,10 +197,10 @@ phase 2. With `MouseRawInput` the sample comes from the device rather than from 
 which is what makes the count of reports in a frame knowable at all; and with `NewMouseInput` the
 drawn angle is advanced once per rendered frame and the simulation is handed the total one step
 later, so the camera turns by what the hand did on that frame instead of by a fifth of what it did
-over the last step. The body still owns the heading and receives every degree. The total turn over any interval becomes "degrees per count times the counts the hand actually
-produced", independent of frame rate and of how many substeps fell where. It costs no latency: the
-substeps already consumed the previous frame's input, and they still do; nothing is delayed that
-was not already delayed.
+over the last step. The body still owns the heading and receives every degree. The total turn over
+any interval becomes "degrees per count times the counts the hand actually produced", independent of
+frame rate and of how many substeps fell where. It costs no latency: the substeps already consumed
+the previous frame's input, and they still do; nothing is delayed that was not already delayed.
 
 **The one arithmetic hazard, stated correctly.** A heading step of exactly 180 degrees is ambiguous and
 anything past it turns the short way round. There is exactly **one** route to it and it is the
@@ -217,8 +220,8 @@ and covers the cutscene case (polled, never consumed) with the same rule.
 ## Walking sideways
 
 The DLL does not move the player sideways. It tells the engine the player is **walking**, the
-forward bit of `moveInput` and the `moveDrive` the engine itself computes for a fully deflected axis
-, and then turns the direction that walk comes out in. The walk and run clips, the footsteps, the
+forward bit of `moveInput` and the `moveDrive` the engine itself computes for a fully deflected
+axis, and then turns the direction that walk comes out in. The walk and run clips, the footsteps, the
 speed caps and their ramp, the acceleration, the turn penalty and the collision all follow, because
 all of it is the engine walking rather than this DLL shoving.
 
@@ -389,9 +392,9 @@ four options screens, and all three are control-scheme settings.
 
 | widget | id | string id | rect | drives |
 |---|---|---|---|---|
-| backdrop plate | `0x74` |, | `0, 0, 640, 480` | `volume.bmp`, appended **first** |
-| mouse speed slider | `0x72` |, | `365, 20, 255, 50` | `[enhanced_input] MouseDegreesPerCount` |
-| its caption | `0x73` |, | `368, 74, 255, 50` | shows the setting multiplied by 1000, so `0.030` is `30` |
+| backdrop plate | `0x74` | | `0, 0, 640, 480` | `volume.bmp`, appended **first** |
+| mouse speed slider | `0x72` | | `365, 20, 255, 50` | `[enhanced_input] MouseDegreesPerCount` |
+| its caption | `0x73` | | `368, 74, 255, 50` | shows the setting multiplied by 1000, so `0.030` is `30` |
 | sideways walking | `0x70` | `0x7655` | `368, 124, 255, 50` | `[enhanced_input] Strafe` |
 | free look | `0x71` | `0x7656` | `368, 174, 255, 50` | `[enhanced_input] FreeLook` |
 
@@ -497,7 +500,6 @@ second box is a second entry in the *same* patch, appended to the one copy taken
 walk toward the camera, so the forward move bit is set and the backward one cleared; that is what
 makes the body face its travel. It is deliberate, and it is the one animation the free-look scheme
 substitutes. With `FreeLook=0` the backward clip plays exactly as it shipped.
-
 
 * **`Strafe` requires `MouseLook`.** `turnWheel` is the only turn channel in the engine. Mouse and
   keyboard exclude each other in the original, but both land there, so turning the keyboard axis
@@ -610,8 +612,9 @@ with the sixty-frames flag, so at most seven substeps can run on one poll, and 7
 under 180 in the worst case the engine can build. At 32 Hz it is still 800 degrees per second of allowance. The log
 line states the degraded behaviour, not the intended one.
 
-**Free look refuses rather than half-installs.** If any of the four cells it cannot run without,the yaw offset, the recentre rate, the interpolated heading's two inputs, the camera object, fails
-to resolve or fails one of its cross-checks, or if the camera update cannot be detoured, free look
+**Free look refuses rather than half-installs.** If any of the four cells it cannot run without, the
+yaw offset, the recentre rate, the interpolated heading's two inputs, the camera object, fails to
+resolve or fails one of its cross-checks, or if the camera update cannot be detoured, free look
 **cannot be offered at all in that session**: not from the ini, not from the controls screen. It
 says which check failed, its box is left off the screen, and today's mouse look runs untouched.
 There is no honest half of it: writing the offset without freezing the recentre gives a camera that
@@ -711,8 +714,8 @@ covers:
   case the retired leash used to drag the camera through;
 * the arming gate, with each of its conditions closed one at a time, plus the two cases that
   must **not** close it (the fast-lag bit alone, and a region that could not be resolved);
-* which condition the gate **names**, that no two of them share a name, and, the load-bearing pair
-; that a script forcing a region outranks the region it forced and that a snap outranks the camera
+* which condition the gate **names**, that no two of them share a name, and the load-bearing pair:
+  that a script forcing a region outranks the region it forced and that a snap outranks the camera
   state it produced. Those two orderings are what keep a cutscene out of the family that gets its
   yaw handed back;
 * the bounded recovery: taken back on either side of the limit, exactly at it, refused one degree
@@ -728,16 +731,18 @@ ids were also confirmed against the retail image directly: the controls table us
 a census of every widget in every screen puts the highest authored string id at 414, with neither
 `0x7655` nor `0x7656` in use.
 
-**Not accepted in game. Offline only.** Nothing in this change has been run inside the engine.
-Neither check box has been seen on the screen, no toggle has been clicked, and no claim here about
-how it feels, the 150 ms body settle, the 540 degrees per second cap, the one-frame region latency, the 25 degrees region
-recovery, the camera's swing home when free look is switched off, is anything but a prediction.
-That the free-look switch takes effect live is established from the code path, not from play: the
-arming gate reads the switch on every camera update, and the phase thunks read the same gate on
-every substep.
+**Accepted in game**, in the 1.5.0 build, which was played through by hand. Both check boxes have
+been seen and clicked, and both switches take effect live: the arming gate reads them on every
+camera update and the phase thunks read the same gate on every substep, which is what the code
+path predicted and what play confirms.
 
-**What has not been observed, and what would settle it.** That an authored camera region is what
-released the gate during ordinary walking is an inference from the bytes, not a field observation.
+The check boxes are behind `MenuExtras` and ship off, so the vanilla menu is the one the game
+shipped with. The same two switches are always reachable from the dev menu's Utilities page,
+which is where they were exercised.
+
+**One inference that play does not settle.** That an authored camera region is what released the
+gate during ordinary walking is read out of the bytes, and no amount of ordinary play tells the
+two apart from the outside.
 It is the only one of the gate's conditions that *can* fire while merely walking, the other five are
 scripted (`gOver` has seven call sites, all cutscene, scene-op or set-piece code), or level
 transitions (`reset` is set to 3 by `bapview_newView` and to 1 by the save restore, and is

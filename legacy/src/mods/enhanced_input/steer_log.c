@@ -34,7 +34,7 @@ void steer_log_configure(int max_lines)
     log_state.substep    = 0;
 
     if (log_state.lines_left > 0) {
-        log_info("SteerLog=%d - one line per substep in which the player is steering, then it "
+        log_info("SteerLog=%d, one line per substep in which the player is steering, then it "
                  "stops. It names the branch that took the substep, what the lean wrote and why "
                  "it did not, and the fire gates, so a silent feature can be told apart from an "
                  "absent one.", max_lines);
@@ -94,7 +94,7 @@ void steer_log_substep(const uint8_t *record, steer_branch_t branch, float subst
     steer_lean_last_report(&lean);
 
     if (record == NULL) {
-        log_info("steer #%d %s sub=%.5f yaw=%+.3f travel=%+.1f - NO PLAYER RECORD",
+        log_info("steer #%d %s sub=%.5f yaw=%+.3f travel=%+.1f, NO PLAYER RECORD",
                  log_state.substep, branch_name(branch), (double)substep_seconds,
                  (double)yaw_degrees, (double)travel_degrees);
         return;

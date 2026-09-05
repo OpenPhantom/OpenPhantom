@@ -50,7 +50,7 @@
  *   0046BDB9  8B 88 4C 27 86 00      mov  ecx,[eax + g_aRawMode + 0x0C]     height
  *
  * The remaining two fields are the acceptance rule graphics_buildModeList applies: only
- * kind == 1 && bpp == 0x10 is a mode this 16-bit engine can use at all.
+ * kind == 1 && bpp == 0x10 is accepted, which is one of the three sites mode_depth.h describes.
  *
  * They live in this header because two places read that table, the fit below, to learn how big a
  * REQUESTED mode is, and the mode dump in enhanced_resolution.c, and one layout written down twice is

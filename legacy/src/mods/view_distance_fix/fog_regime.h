@@ -73,12 +73,42 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* The three answers `inside_cut` selects between. Named because a bare 0/1/2 in an ini and in a
+ * comparison is the kind of thing that gets misread as a boolean by whoever comes next. */
+#define FOG_END_UNBOUNDED      0
+#define FOG_END_NO_POP_IN      1
+#define FOG_END_NO_SATURATION  2
+
 typedef struct fog_regime_config {
+    /* Capture what the band was computed from, frame by frame, for the first seconds of a level
+     * and write the run out in one block. A diagnostic for the reported flashing at level start;
+     * off unless somebody is looking. */
+    bool  log_band;
+
+    /* The band the opening window holds, in world units, owed to nothing the level says. An end
+     * of 0 pushes the band past everything the renderer still has in view, which is the original
+     * behaviour and reads as no fog at all. Anything else is laid at exactly these distances from
+     * the camera and held there for the whole window, which is the point: it does not follow the
+     * cut, the field of view or the level's own band, so it cannot move while the window runs. */
+    float open_fog_start;
+    float open_fog_end;
     bool  vertex_fog;       /* run the fog on the engine's own per-vertex ramp */
     bool  follow_fov;       /* scale the authored band as the picture widens or the cut moves in */
-    bool  inside_cut;       /* additionally cap the band to the no-pop-in limit */
+    /* WHERE THE BAND ENDS RELATIVE TO THE CUT. Three answers to one question, so it is a choice
+     * and not a stack: see fog_regime_depth_limit for why two of them can never both hold.
+     *   0  neither. The authored band, followed by the field of view if FogFollowFov is on.
+     *   1  the no-pop-in cap: end at (cut - margin) * cos(hFOV/2), so a cell arriving at the
+     *      frustum CORNER is already fully fogged. Everything nearer is fogged solid too.
+     *   2  the no-saturation end: end at (cut + margin), so nothing DRAWN is ever fully fogged.
+     */
+    int   inside_cut;
     float fog_scale;        /* >1 pushes the authored fog out; 1 leaves it alone */
     float settle_seconds;   /* how long a change takes; 0 means step immediately */
+    bool  pixel_fog;        /* hand fog to the device per pixel, where it can measure eye-space w */
+    bool  authored_band;    /* use each level's own band untouched, ignoring every term below */
+    float min_end_fraction; /* least the fog end may be, as a share of the cut edge; 0 disables */
+    float band_scale;       /* the whole band, nearer, after every term above; 1 leaves it */
+    float open_seconds;     /* how long a level opens with the fog switched off; 0 disables */
 } fog_regime_config_t;
 
 typedef struct fog_regime_band {
@@ -94,6 +124,24 @@ typedef struct fog_regime_band {
  * `cut_units` and a horizontal field of view of `horizontal_fov_degrees`. Zero when the cut edge
  * is too short to mean anything. */
 float fog_regime_edge_limit(float horizontal_fov_degrees, float cut_units);
+
+/* The DEEPEST any drawn geometry can be, in view depth, for a radial cut of `cut_units`.
+ *
+ * Same geometry as the edge limit, z = r * cos(theta), evaluated at the other end of both of its
+ * variables. The edge limit asks how SHALLOW newly gathered geometry can arrive, so it takes the
+ * screen edge, theta = hFOV/2, and subtracts the cell margin because a dropped cell centre can
+ * still hold geometry nearer than itself. This asks how DEEP drawn geometry can reach, so it takes
+ * the view axis, theta = 0 where cos is 1, and ADDS the margin because a kept centre can hold
+ * geometry further than itself. Hence no field of view argument: the axis is always in the picture.
+ *
+ * Ending the band here means nothing on screen is ever fully fogged, which matters because a flat
+ * region of exactly one colour is what the engine's own level fade bands against on a 16-bit frame
+ * buffer, and that was measured as a flashing line where the flat region met lit geometry.
+ *
+ * The two limits are MUTUALLY EXCLUSIVE: (cut - margin) * cos(hFOV/2) < cut + margin for every
+ * legal field of view and every cut, so a rule that capped and then floored would make the cap dead
+ * at every field of view on every level. That is why inside_cut selects rather than accumulates. */
+float fog_regime_depth_limit(float cut_units);
 
 /* How much of the authored band survives, as a fraction in (0, 1]. EXACTLY 1.0f when the field of
  * view is the one the levels were authored at and the cut edge is where the engine put it; both
@@ -124,6 +172,34 @@ void fog_regime_install(const fog_regime_config_t *config);
 
 /* The horizontal field of view now in force, observed from the camera the engine rebuilt. */
 void fog_regime_set_fov(float horizontal_fov_degrees);
+
+/* The Direct3D device this module already resolved, or NULL. Exposed because it is the one place
+ * in the project that finds it, and it is read out of an instruction operand rather than written
+ * down, so nobody else should be resolving it a second time. */
+void *fog_regime_device(void);
+
+/* Switches the authored-band mode while the game runs, which is how the developer overlay's own
+ * row reaches it. The next frame's target is computed the new way and eased to like any other
+ * change, so the two can be compared without a restart. */
+void fog_regime_set_authored_band(bool authored);
+
+/* How near the band sits, as a share of where every other term put it, while the game runs. Below
+ * 1 the fog arrives sooner and is denser at a given distance, and it is the last term applied in
+ * both modes, so whether the band follows the draw distance decides what this is a share OF and
+ * never whether it applies. Ignored when not positive, so a missing or nonsense value leaves the
+ * band where it was rather than collapsing it onto the camera.
+ *
+ * There is deliberately no live switch for the fog DELIVERY beside it. See consider_pixel_fog():
+ * going from the device back to the engine's ramp needs the device reprogrammed, and this engine
+ * only programs it from inside applyLevelFog, which runs at a level load. That is chosen once,
+ * from FogImplementation. */
+void fog_regime_set_band_scale(float scale);
+
+/* True while a level is still opening: the window the fog spends switched off, so that the band
+ * settling to its real value is not watched happening. Public because the draw distance is raised
+ * over the same window and that lives in another file, so the two have to begin and end together.
+ */
+bool fog_regime_level_opening(void);
 
 /* The cut edge, both as the engine would have had it and as it actually is after the radius cap
  * and the watchdog. Called from the draw-distance detour, which is the only place both numbers

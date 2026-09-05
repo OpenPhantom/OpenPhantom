@@ -37,6 +37,7 @@ typedef enum overlay_group {
     OVERLAY_GROUP_ORIGINAL_TOGGLES = 0,
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
     OVERLAY_GROUP_OPENPHANTOM,
+    OVERLAY_GROUP_OPENPHANTOM_UTILITIES,
     OVERLAY_GROUP_COUNT
 } overlay_group_t;
 
@@ -48,8 +49,14 @@ typedef enum overlay_row_kind {
                                   * see overlay_model_is_capturing_hotkey() */
     OVERLAY_ROW_VALUE,          /* a typed-in number, shown as a chip that starts free text entry on
                                   * click; see overlay_model_is_editing_value() */
-    OVERLAY_ROW_INFO            /* plain text, no chip, not clickable - a note attached to the row
+    OVERLAY_ROW_INFO,           /* plain text, no chip, not clickable, a note attached to the row
                                   * above it rather than a cheat of its own */
+    OVERLAY_ROW_SLIDER          /* a track and nothing else, on its own line under the value row it
+                                  * belongs to. It gets a line of its own rather than sharing one so
+                                  * that it can run the width of the panel: a track squeezed into
+                                  * the gap between a name and its chip is both hard to hit and
+                                  * close enough to the text to read as though it were striking it
+                                  * through. `fraction` is where the handle sits. */
 } overlay_row_kind_t;
 
 typedef struct overlay_row {
@@ -60,19 +67,32 @@ typedef struct overlay_row {
     bool               available;   /* cheats and actions: false when its site never resolved,
                                       * or when it is gated safe and running it now would not be */
     bool               pending;     /* actions only: queued to run when the panel closes, not yet
-                                      * run - see cheats_original_actions.h for why the four
+                                      * run; see cheats_original_actions.h for why the four
                                       * play-as codes work this way and nothing else does */
-    char               value[8];    /* actions: only for the one that has a number worth showing on
+    /* Sixteen, not eight. Eight fitted "2.50x" and every state word, and then the dev menu
+     * size row began reporting "auto 1.33x" and a player read "auto 1.", a truncation with no
+     * ellipsis, in the one place a number was the whole point of the row. Nothing here is a fixed
+     * width in the file format sense, so the cost of the slack is a few bytes per row. */
+    char               value[16];   /* actions: only for the one that has a number worth showing on
                                       * its own chip instead of RUN. hotkeys: the bound key's short
                                       * name, "..." while capturing, or empty when unbound. Empty
                                       * otherwise. */
     uint32_t           group;       /* an overlay_group_t value, groups included */
     uint32_t           id;          /* index within that group's own source */
+
+    /* Where a SLIDER row's handle sits: 0 at the row's minimum and 1 at its maximum. Read only for
+     * that kind. */
+    float              fraction;
 } overlay_row_t;
 
 /* Forgets the typed text and folds every group. Called when the panel closes, so that opening it
  * again is always the same picture rather than wherever the last session was left. */
 void overlay_model_reset(void);
+
+/* Drags a slider row to `fraction`, 0 to 1, clamped. False when the row is not a slider or the
+ * write failed, which the caller shows by leaving the handle where it was rather than reporting a
+ * value the game is not in. */
+bool overlay_model_slider_set(uint32_t index, float fraction);
 
 overlay_tab_t overlay_model_tab(void);
 void overlay_model_set_tab(overlay_tab_t tab);
@@ -94,6 +114,22 @@ void overlay_model_rebuild(void);
 
 uint32_t overlay_model_row_count(void);
 
+/* WHICH ROW IS DRAWN FIRST, so a list taller than the screen can still be reached.
+ *
+ * `visible` is what the layout worked out fits. The answer is clamped against it on every ask
+ * rather than corrected when the list changes: the row count moves with every keystroke in the
+ * search field and every fold, and a stored index would be stale between the change and the next
+ * correction. Clamping where it is read means it can never point past the end.
+ *
+ * Scrolling is by whole rows because the rows are what the hit test divides by; a smooth offset
+ * would put half a row under the pointer and give the click nowhere honest to land. */
+uint32_t overlay_model_scroll(uint32_t visible);
+
+/* Moves the first drawn row by `rows`, negative toward the top. Clamped at the top here and at the
+ * bottom by the reader above, which is the only place the row count and the visible count are both
+ * known. */
+void overlay_model_scroll_by(int32_t rows);
+
 /* Copies one row out. False for an index past the end, and then `out` is untouched. */
 bool overlay_model_row(uint32_t index, overlay_row_t *out);
 
@@ -108,7 +144,7 @@ bool overlay_model_matches(const char *label, const char *needle);
 
 /* Whether a hotkey row is waiting for its next keypress. While true, overlay_input.c routes the
  * very next key-down here instead of its usual handling (Escape, typing, and so on), including
- * Escape itself and system key combinations - the capture is unconditional by design, so binding
+ * Escape itself and system key combinations; the capture is unconditional by design, so binding
  * is predictable rather than needing its own list of exceptions. */
 bool overlay_model_is_capturing_hotkey(void);
 
@@ -117,7 +153,7 @@ void overlay_model_capture_hotkey(int32_t virtual_key);
 
 /* Whether the jump-boost scale row is waiting for typed digits. While true, overlay_input.c routes
  * WM_CHAR here (via overlay_model_value_append()) instead of the search box, and gives Enter/
- * Escape/Backspace their own meaning (commit/cancel/delete) instead of their usual one - the same
+ * Escape/Backspace their own meaning (commit/cancel/delete) instead of their usual one, the same
  * kind of unconditional redirect overlay_model_is_capturing_hotkey() above already gets, for the
  * same reason: predictable is better than a second list of keys this refuses. */
 bool overlay_model_is_editing_value(void);
@@ -129,7 +165,7 @@ void overlay_model_value_append(char digit);
 void overlay_model_value_backspace(void);
 
 /* Parses what has been typed and, if it is a usable positive number, hands it to
- * cheats_openphantom_jump_boost_set_scale() - which clamps it - and ends the capture either way.
+ * cheats_openphantom_jump_boost_set_scale(), which clamps it, and ends the capture either way.
  * An empty field commits nothing, leaving whatever scale was already set untouched rather than
  * zeroing it out. */
 void overlay_model_value_commit(void);

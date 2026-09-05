@@ -67,10 +67,10 @@
  * at 0x0045DC6F in retail and at 0x0045DC0F in the Edit Tool's own recompile, with the flag cell
  * moving from 0x008BFBA0 to 0x008BFB40 with it. The cross-check passes in both.
  *
- * The island origin is not read from the engine's origin cells: pointer_cage may have repointed
- * the one instruction block that names them. It is recomputed the way the engine computes it,
- * ((W-640)/2, (H-480)/2) from the mode accessor window_fit already resolved, which is the same
- * "one owner per question" rule the cage follows. It is recomputed per sprite rather than cached
+ * The island origin is not read from the engine's origin cells. It is recomputed the way the
+ * engine computes it, ((W-canvas)/2) on each axis from the mode accessor window_fit already
+ * resolved, against the canvas menu_scale settled on rather than the authored one. That is the
+ * same "one owner per question" rule the cage follows. It is recomputed per sprite rather than cached
  * per widget pass, and that is deliberate: caching it needs the pass's rising edge, this hook only
  * observes the flag on the sprites it happens to be handed, and a pass whose first sprite is
  * missed would then run on a stale origin. The accessor reads two engine globals, which is not
@@ -87,7 +87,7 @@
  * sprite) the compression is invisible, and a sprite that fits the island, which is every
  * authored widget, is passed through bit-identical.
  *
- * A SPRITE DRAWN WITH fill < 1 IS LEFT ALONE ENTIRELY, and that is not caution but arithmetic.
+ * A sprite drawn with fill < 1 is LEFT ALONE entirely, and that is not caution but arithmetic.
  * The blitter's first act is a left-anchored wipe,
  *
  *     0042967C  ...                    xRight = (xRight - xLeft) * fill + xLeft

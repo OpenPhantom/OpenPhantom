@@ -1,5 +1,9 @@
 # Nothing built ever goes in. The DLLs are produced from these sources with CMake; see README.md.
-build/
+# The wildcard covers a second configure alongside the first, build-audit or build-x86 or
+# whatever it gets called; those are as untrackable as build/ itself and easy to commit by
+# accident, because git shows them and the reviewer sees one more directory rather than
+# thirty megabytes.
+build*/
 *.obj
 *.pdb
 *.exp

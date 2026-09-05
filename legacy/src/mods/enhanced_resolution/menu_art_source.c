@@ -72,6 +72,8 @@ static const uint8_t MSK_RES_PROMOTE_SOURCE[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_RES_PROMOTE_SOURCE == sizeof MSK_RES_PROMOTE_SOURCE,
+               "the menu art source pattern and its mask are different lengths");
 
 /* ---------------------------------------------------------------------------------------------
  * swmenu_startup

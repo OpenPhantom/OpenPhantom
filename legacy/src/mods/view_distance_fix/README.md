@@ -29,14 +29,24 @@ order of thing from a per-object syscall.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `ViewRangeScale` | `1.0` | 1.0-2.5 | the watchdog only ever lowers this |
-| `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view |
-| `FogInsideCut` | `1` | | additionally cap the band to the no-pop-in limit |
+| `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below |
+| `FrameBackoff` | `1` | | lower the view distance when it costs too much frame time, and give it back when it does not. Does nothing at scale 1.0 |
+| `StrictViewRange` | `0` | | hold the draw distance at exactly `ViewRangeScale` and let nothing move it: the governor, the two raises and the cell watchdog are all declined. The watchdog keeps measuring and warning, it just cannot act. See the key's comment in the ini before leaving it on |
+| `BackoffFps` | `0` | | the rate below which it backs off; `0` = three quarters of `framerate_fix`'s `TargetFps`, or 50 uncapped |
+| `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view; no effect while `AuthoredFogBand` is `1`, and overwritten by the shipped `FogInsideCut=2` |
+| `FogInsideCut` | `2` | 0-2 | where the band may end: `0` unbounded, `1` capped to the no-pop-in limit, `2` assigned from the draw distance. See the three rules below |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
-| `VertexFog` | `1` | | run the fog on the engine's own per-vertex ramp, see below |
+| `FogBandScale` | `1.0` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. Polled while running |
+| `LevelOpenSeconds` | `0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0`, the default, leaves the engine's own behaviour alone |
+| `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it |
+| `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |
+| `FogImplementation` | `2` | 0-2 | which half of the engine draws the fog: `2` the device per pixel, `1` the engine's own per-vertex ramp, `0` neither. Read once at startup; see below |
+| `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above |
+| `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor. Applies under `FogInsideCut` `0` and `1` only, and is skipped entirely under the shipped `2` |
+| `LevelFadeSeconds` | `0.4` | 0-10 | how long a level takes to fade in from black; `4.0` is the engine's own value and patches nothing |
 | `NpcRangeScale` | `1.0` | 1.0-2.0 | the one setting here that touches GAME BEHAVIOUR, so it ships at the engine's own value |
-| `TwoSidedSevered` | `1` | | draw dismembered bodies two-sided |
+| `TwoSidedSevered` | `0` | | draw severed pieces two-sided. Off by default; see the limitations |
 | `TwoSidedMax` | `8` | 1-64 | at most N per frame |
 | `RelocateDrawTable` | `1` | | move the cell table, raise its limit to 32768 (raised again from 16384; see `draw_table.c` section 2) |
 | `LowerCellLimit` | `1` | | lower it to 7168 instead; skipped when the relocation is active |
@@ -124,16 +134,31 @@ that is there either way.
 min(1, edge_limit(hFOV, R_live) / edge_limit(60 degrees, R_engine))
 ```
 
-where `R_engine` is where the cut edge would have been and `R_live` is where we actually put it,both read out of the draw-distance detour, which is the only place the two exist at once. At 60 degrees
-with an unmoved cut edge that factor is **exactly `1.0f`**, so every level keeps its shipped
+where `R_engine` is where the cut edge would have been and `R_live` is where we actually put it,
+both read out of the draw-distance detour, which is the only place the two exist at once. At 60
+degrees with an unmoved cut edge that factor is **exactly `1.0f`**, so every level keeps its shipped
 numbers bit-for-bit. It is what makes the fog follow the FOV slider, the radius cap *and* the cell
 watchdog lowering the range mid-level.
 
-`FogInsideCut` is **absolute**: it caps the band at `edge_limit(hFOV, R_live)` regardless of what
-the level authored. That is the clamp that removes the shipped cut-edge wall in BIGCITY and
-FEDSHIP, whose fog ends 30 and 38 units *behind* their own geometry. With it on it dominates for
-all eleven shipped levels; with it off the relative coupling alone runs and every level is
-retail-exact at 60 degrees.
+`FogInsideCut` is **absolute**, and it takes three values rather than two.
+
+`0` leaves the band wherever the relative coupling put it, which at the shipped `FogScale` and
+`FogFollowFov` is exactly where the level authored it. BIGCITY and FEDSHIP then keep the cut-edge
+wall they ship with, their fog ending 30 and 38 units *behind* their own geometry.
+
+`1` caps the band at `edge_limit(hFOV, R_live)`, the depth of a cell at the **corner** of the
+frustum, so a cell arriving at the boundary is hidden before it appears. The flaw is that a
+correction computed for the corner is applied to the whole screen, and straight ahead the forward
+distance is the radial distance: on a 22 unit draw distance the end lands at 83 per cent of it at
+60 degrees, 65 at 94 and 48 at 120. A wide picture is fogged solid at half the distance the engine
+is still drawing, which reads as a washed-out level and as characters below a cliff being drawn but
+invisible. It also ties the look of the fog to the field of view slider.
+
+`2` **ships.** The end is assigned from `R_live` plus one cell rather than capped, so the fog
+reaches full opacity exactly where the world stops and never inside it. There is no cosine in this
+rule, so the field of view does not move the fog, and the assignment overwrites `FogScale` and
+`FogFollowFov` instead of combining with them. The corner may still pop, which costs a few pixels
+at the edge of the picture rather than half of everything in front of you.
 
 ### The whole band moves, and that is a correctness rule
 
@@ -152,33 +177,39 @@ precisely the fog the level's author gave depth `d`.
 ### The authored bands, and what they become
 
 Read out of the level files at the offsets the loader uses (`hdr+0x90`, `hdr+0x94`, `hdr+0x854`).
-`FogInsideCut=1`, `FogFollowFov=1`, `ViewRangeScale=1.0`:
+`FogFollowFov=1`, `ViewRangeScale=1.0`. Rule 0 is the authored column exactly, so it is not
+repeated:
 
-| Level | draw | authored | at 60 degrees | at 87.2 degrees | at 60 degrees, `FogInsideCut=0` |
+| Level | draw | authored | rule 2, ships | rule 1 at 60 degrees | rule 1 at 120 degrees |
 |---|---|---|---|---|---|
-| GUNGA | 16 | 6.0-14.0 | 5.7-13.2 | 4.7-11.1 | 6.0-14.0 |
-| GARDEN | 22 | 4.0-26.0 | 2.8-18.4 | 2.4-15.4 | 4.0-26.0 |
-| SWAMP | 22 | 6.0-30.0 | 3.7-18.4 | 3.1-15.4 | 6.0-30.0 |
-| ESPA | 22 | 8.0-32.0 | 4.6-18.4 | 3.9-15.4 | 8.0-32.0 |
-| RACE | 22 | 10.0-32.0 | 5.8-18.4 | 4.8-15.4 | 10.0-32.0 |
-| MAUL | 28 | 8.0-32.0 | 5.9-23.6 | 4.9-19.8 | 8.0-32.0 |
-| FINAL | 24 | 12.0-30.0 | 8.1-20.2 | 6.7-16.9 | 12.0-30.0 |
-| ASSAULT | 23 | 12.0-38.0 | 6.1-19.3 | 5.1-16.1 | 12.0-38.0 |
-| QUEEN | 26 | 12.0-38.0 | 6.9-21.9 | 5.8-18.3 | 12.0-38.0 |
-| BIGCITY | 20 | 20.0-50.0 | 6.7-16.7 | 5.6-14.0 | 20.0-50.0 |
-| FEDSHIP | 18 | 16.0-56.0 | 4.3-15.0 | 3.6-12.5 | 16.0-56.0 |
+| GUNGA | 16 | 6.0-14.0 | 7.2-16.7 | 5.7-13.2 | 3.3-7.6 |
+| GARDEN | 22 | 4.0-26.0 | 3.5-22.7 | 2.8-18.4 | 1.6-10.6 |
+| SWAMP | 22 | 6.0-30.0 | 4.5-22.7 | 3.7-18.4 | 2.1-10.6 |
+| ESPA | 22 | 8.0-32.0 | 5.7-22.7 | 4.6-18.4 | 2.7-10.6 |
+| RACE | 22 | 10.0-32.0 | 7.1-22.7 | 5.8-18.4 | 3.3-10.6 |
+| MAUL | 28 | 8.0-32.0 | 7.2-28.7 | 5.9-23.6 | 3.4-13.6 |
+| FINAL | 24 | 12.0-30.0 | 9.9-24.7 | 8.1-20.2 | 4.7-11.6 |
+| ASSAULT | 23 | 12.0-38.0 | 7.5-23.7 | 6.1-19.3 | 3.5-11.1 |
+| QUEEN | 26 | 12.0-38.0 | 8.4-26.7 | 6.9-21.9 | 4.0-12.6 |
+| BIGCITY | 20 | 20.0-50.0 | 8.3-20.7 | 6.7-16.7 | 3.9-9.6 |
+| FEDSHIP | 18 | 16.0-56.0 | 5.3-18.7 | 4.3-15.0 | 2.5-8.6 |
 
-**This is a real change from retail at 60 degrees for ten of the eleven levels**, and it is
-`FogInsideCut`'s doing, not the FOV coupling's. Set `FogInsideCut=0` to get the authored numbers
-back exactly and keep the FOV following.
+**This is a real change from retail for ten of the eleven levels**, and it is `FogInsideCut`'s
+doing, not the FOV coupling's. Under the shipped rule 2 it costs less than the numbers suggest:
+everything past the draw edge is the fog colour anyway, so moving the end to that edge hides
+nothing that was visible, and GUNGA is the one level whose band is pushed **out** rather than in,
+because its authored fog already ended inside its own draw distance. Set `FogInsideCut=0` to get
+the authored numbers back exactly and keep the FOV following, or `AuthoredFogBand=1` to bypass
+every term here.
 
 ### Nothing changes abruptly
 
-Every change, the FOV slider moved, the watchdog lowering the range, the level's fog re-applied,is eased rather than stepped. The exponent comes from the engine's own `g_frameDelta`, read out of
+Every change, the FOV slider moved, the watchdog lowering the range, the level's fog re-applied, is
+eased rather than stepped. The exponent comes from the engine's own `g_frameDelta`, read out of
 `render_frameEnd`'s first operand, so a given amount of *real* time produces the same result at 30
 and at 144 fps. A level **load** snaps instead: there is nothing on screen to ease away from.
 
-## Why the distance fog does not render, and what `VertexFog` does about it
+## Why the distance fog does not render, and what `FogImplementation` does about it
 
 The engine carries **two fog regimes** and chooses between them once per frame, from a single
 device capability bit.
@@ -208,9 +239,92 @@ device measures that world-unit band against a **device-space** depth confined t
 pixel lands before `FOGSTART`, the fog factor clamps to "clear", and nothing reports a problem:
 all five fog render states are issued exactly as the engine intends and are accepted.
 
-`VertexFog=1` answers the capability question with "no table fog" and sets `FOGTABLEMODE` to
+`FogImplementation=1` answers the capability question with "no table fog" and sets `FOGTABLEMODE` to
 `D3DFOG_NONE` at **both** writers, so the specular alpha the ramp produces is what the device
 blends with.
+
+### The band was never the wrong thing to hand over
+
+This section used to say the engine passes its band in the wrong units. It does not, and the
+distinction matters because it is the difference between a workaround and a fix.
+
+Direct3D chooses between **w-based** and **z-based** fog by inspecting the fourth column of the
+**projection matrix**: an affine one selects device depth, a non-affine one selects the reciprocal
+of `rhw`. In this engine `rhw` is `1 / cam.y`, so `w` is a distance in world units, which is
+exactly what the authored band is written in. The engine's table-fog branch is a **correct w-fog
+configuration**.
+
+What is missing is the matrix. Cross-referencing every use of the device pointer shows vtable slot
+`+0x64`, `SetTransform`, is **never called anywhere in the image**, and `rdCamera_updateProjection`
+builds frustum plane constants rather than a `D3DMATRIX`. With none set the runtime sees the
+identity, decides it is affine, measures device depth in `[0,1]`, and a world-unit band against it
+fogs nothing. On period hardware without `D3DPRASTERCAPS_FOGTABLE` this never mattered, because the
+software ramp ran instead, which is presumably why it shipped.
+
+`FogImplementation=2` supplies that matrix and hands the branch back. It reads the device's own caps first
+and requires both `D3DPRASTERCAPS_FOGTABLE` (`0x100`) and `D3DPRASTERCAPS_WFOG` (`0x00100000`),
+which live in the same dword the engine already tests; if either is missing, or `SetTransform` is
+refused, nothing changes and the ramp above stays in charge. The matrix is only ever a fog
+configuration channel, since the geometry is pre-transformed and is never multiplied by it: the
+fourth column is what selects the w path, and the near and far values behind it do not reach the
+fog factor.
+
+Two things it buys. The fog factor is computed **per pixel** rather than as an 8-bit value at each
+vertex interpolated across polygons, so large sparsely tessellated surfaces stop shimmering as the
+camera moves. And the band needs **no conversion at all**, so everything below that reasons in
+world units keeps doing so.
+
+**It is chosen once, at startup, and this was learned the hard way.** `1` and `2` differ in device
+state, and the only place this engine programs the device's fog is inside `baplight_applyLevelFog`,
+which runs at a level load. Reverting the three writes changes the byte that function will push
+*next time* and nothing else, so a switch made while a level is up leaves the engine computing a
+per-vertex factor the device has been told to ignore, and nothing is fogged at all. Three fixes
+were tried in the game and none worked: reverting the writes alone, additionally handing back an
+identity projection, and additionally calling `applyLevelFog`'s original by hand to reprogram the
+device. Tested by a person each time, no fog each time. What remains unexplained is why the third
+did not work, since it is what a level load does; the honest reading is that something else in the
+device or wrapper state is also one-way, and it was not worth more attempts to find out. So the
+setting waits for a restart, and the dev menu carries only the band terms, which are arithmetic.
+
+One thing it costs, and it is worth knowing before touching this file: with the ramp the engine
+re-read `world+0x218/+0x21C` every frame, so writing those two floats was enough for anyone. On the
+device path they only reach `FOGSTART`/`FOGEND` through `applyLevelFog`, so every writer has to be
+pushed. There are two: this file, and the developer overlay's no-fog cheat, which holds the band
+out past everything drawn. The frame tick pushes **their** value when it sees one that is not ours,
+and treats "settled" as meaning both that our band has not moved and that the device is showing it.
+Without that second half the fog could be switched off and never back on.
+
+### What a level opens with, and what the band follows
+
+Two behaviours worth knowing, both from chasing a reported flicker in the first seconds of a level.
+
+**A level opens on its own authored band.** At a load nothing has walked the new world yet, so
+there is no cut edge to reason from. The fallback used to substitute the level's authored view
+distance for the cut and compute a band from it, which is a guess, and with `ViewRangeScale` above
+1 it is wrong in the direction that shows: one level authors 22 while the real cut at 2.5 turned
+out to be 39, so the band sat far nearer the camera than it belonged and stayed there until the
+first frame that walked the world. The authored band is the one value known to be right for that
+level, so it is what a level gets until the renderer says otherwise, and the move to ours is eased
+rather than snapped.
+
+**The band follows a settled draw distance, not the instantaneous one.** The cut edge is not
+steady: the frame governor moves the view scale whenever a scene costs too much, in steps of its
+own every half second, and every step changes the distance the band is computed from. Measured
+during one level's opening, where the governor works hardest because the frame rate is worst:
+
+```
+fov 120.0  cut ref 22  live 39  -> band 6.0..19.2   (band was at 3.3..10.7)
+fov 120.0  cut ref 22  live 34  -> band 5.2..16.7   (band was at 3.7..11.9)
+fov 120.0  cut ref 22  live 33  -> band 5.0..16.2   (band was at 4.6..14.6)
+fov 120.0  cut ref 22  live 32  -> band 4.9..15.7   (band was at 5.0..16.2)
+```
+
+The field of view never moved and neither did the reference. The live cut fell, and the band spent
+the whole sequence chasing a target that had already moved again. Easing the **cut** rather than
+only the band is what fixes it: a step becomes a slope, several steps inside one settle become one
+slope, and the fog ends where the draw distance ended without visiting every value on the way. It
+is deliberately slower than the band's own settle, because smoothing an input faster than its
+consumer only moves the problem.
 
 **The three writes are all-or-nothing, and that is not tidiness.** With the ramp disarmed, the
 world pass writes a **constant zero** into the specular of every world vertex (`0x00402459`), and
@@ -233,6 +347,88 @@ it runs from `std3D_open`, from `graphics_setMode` itself (`0x0046BD8B`: `getRen
 `setRenderFlags` -> commit) and from every level load through `baplight_applyLevelFog`
 (`0x0041F200`). Fog cannot be lost to a stale shadow.
 
+## What the range costs, and the governor that watches it
+
+Issue #35 was reported as "the tank at the beginning of the gardens of theed makes the fps drop
+considerably". It is not the tank. Measured on the reporter's machine in GARDEN, across the
+cutscene the tank drives out of, with a 100 fps cap:
+
+| | `ViewRangeScale` 2.50 | `ViewRangeScale` 1.00 |
+|---|---|---|
+| frame time | 14.5-15.4 ms | 10.00 ms |
+| frame rate | 64-69 fps | 100.0, flat |
+| CPU per frame | 21-26 ms | 12-13 ms |
+| GPU | 15-27 % | unchanged |
+
+**The graphics card did not move, and that is the whole mechanism.** This engine transforms world
+geometry on the CPU, so a longer view is more work per frame for the processor and none at all for
+the card. Frame time is the only instrument that can see this: a card sitting at 20 % busy at both
+settings says nothing.
+
+Neither watchdog below fired during that run. Peak cell usage never came near the alarm, nothing
+overflowed, nothing was in danger. Those two guard against corruption, and a scale that is merely
+expensive walks straight past them, which is what `FrameBackoff` is for.
+
+It measures the median frame of each window, a median so that one 250 ms level load cannot move
+it, and sizes each step by how far off target that window was: a 3 % miss only nudges, a 40 %
+miss moves four times as far. Recovery is deliberately slower than backing off, the first step
+back needing thirty consecutive healthy seconds and the rest coming every ten. It never goes below
+1.0 and never above what is configured, and it yields to the cell watchdog wherever the two
+disagree, because that one is a correctness guard and this one is only a comfort guard.
+
+**It decides twice a second, on the window just finished.** The first version decided once a
+second against a ring it never emptied, so its median covered the last 256 frames, two and a half
+seconds at 100 fps, and lagged the scene by over a second. Between that and steps sized for a
+gentler cost curve than this setting actually has, it took **fourteen seconds** to walk 2.50 down
+to 1.00 in a cutscene that is about thirteen seconds long: it arrived after the thing it was
+reacting to had finished, which is what a field run reported as "better but still drops". The
+window is now emptied after each decision and a decision is every half second.
+
+**An attribution test was tried here and removed; it is worth knowing why.** The first run walked
+2.50 down to 1.15 in nine consecutive seconds, and its log shows the first three steps made the
+frame time *worse*:
+
+```
+2.50 -> 2.35   16.1 ms       2.05 -> 1.90   16.8 ms
+2.35 -> 2.20   16.6 ms       1.90 -> 1.75   16.1 ms
+2.20 -> 2.05   16.9 ms       ... on down to 1.15
+```
+
+so a version was tried that refused to step again until a step had measurably helped. It made
+things worse, and its own log says how:
+
+```
+14.7 ms (68 fps)  View scale 2.05 -> 1.90.
+15.7 ms (64 fps)  ... the last step to 1.90 did not improve it (14.7 ms then)
+18.9 ms (53 fps)  ... the last step to 1.90 did not improve it (14.7 ms then)
+19.1 ms (52 fps)  ... the last step to 1.90 did not improve it (14.7 ms then)
+```
+
+It held at 52 fps for seven consecutive seconds. The comparison is against the frame time at the
+moment of the step, and in a scene whose own cost is rising that measures **the scene, not the
+step**, so it blames the step for the scene and refuses to act exactly when it is needed most.
+The confound has no fix: there is no way to hold a moving scene still while attributing a quarter
+of a millisecond to one step. The test is gone and the size of the step does its job instead.
+
+It is worth keeping written down, because the reasoning behind it is appealing and somebody will
+think of it again. Note also what the same log disproves: the first run walking to 1.15 was **not**
+over-correction. That scene measured 13.8 ms even at 1.15, so the target was not reachable at any
+scale and there was no setting it could have stopped at and been right. `unittests/frame_governor.c`
+replays both runs.
+
+The two thresholds are deliberately apart, backing off below `BackoffFps` and recovering only
+above it plus 15 %. The band between them is a dead zone it settles into rather than crosses; with
+the thresholds touching, a scale landing between them would be lowered, recover, be raised and be
+lowered again for as long as the level lasted. `unittests/frame_governor.c` pins that band down,
+including both edges and the inverted-threshold case that would have no band at all.
+
+To check in game: set `ViewRangeScale=2.5`, play the GARDEN tank cutscene, and read the log.
+
+```
+[view_distance_fix] frame governor active: the view distance backs off below 75 fps (13.3 ms a frame) ...
+[view_distance_fix] frame governor: 15.2 ms a frame (66 fps), past the 13.3 ms this is allowed to cost. View scale 2.50 -> 2.35.
+```
+
 ## The two walls
 
 * **The cell table.** `bapdraw_gatherCell` checks its 8192-entry limit exactly once, on entry. The
@@ -250,7 +446,7 @@ it runs from `std3D_open`, from `graphics_setMode` itself (`0x0046BD8B`: `getRen
   cell table, in `vertex_table.c`. Both relocations are independent and either can be turned off
   without the other.
 
-Both counters are watched per frame, and the watchdog adopts whichever limit is actually in force -
+Both counters are watched per frame, and the watchdog adopts whichever limit is actually in force,
 16384 or 32768, matching whether `RelocateVertexCache` ran. The effective scale is only ever
 lowered, never raised again: better a permanently shorter view than a crash ten minutes later.
 
@@ -263,13 +459,13 @@ arithmetically proven 1.93x reserve over the worst possible single-frame oversho
 left once relocated is the vertex cache above, which this file's own watchdog already backs off
 from *earlier* than the cells (75% against 90%), because its failure is a frame of torn geometry
 rather than the cell table's proven crash. All of that is true, and it was raised to 4.0 on the
-strength of it - matching `FogScale`'s own existing range.
+strength of it, matching `FogScale`'s own existing range.
 
 **Field testing at 3.0 and 4.0 showed exactly the failure the watchdog was supposed to prevent**:
 torn, stretched geometry that did not correct itself, matching this file's own description of a
 vertex-cache overshoot to the letter. What the argument above missed is that these counters do not
-climb, they **jump** - the cell watchdog's own comments already document a jump from under 7680 to
-8189 in ONE frame, "the gentle back-off never got its turn, only the emergency brake" - and the
+climb, they **jump**. The cell watchdog's own comments already document a jump from under 7680 to
+8189 in ONE frame, "the gentle back-off never got its turn, only the emergency brake", and the
 same is true of the vertex cache on entering open geometry. The watchdog's backoff protects the
 *next* frame; it cannot undo the frame that already overshot, and unlike the cell table, a
 vertex-cache overshoot does not clear itself. A larger `ViewRangeScale` does not make that jump
@@ -280,8 +476,8 @@ Reverted to 2.0, the value that is actually field-confirmed. `NpcRangeScale` was
 in this file that changes how the game plays rather than how far it is drawn.
 
 **The vertex cache itself was relocated afterwards** (`vertex_table.c`, `RelocateVertexCache=1`),
-doubling it to 32768 slots the same way the cell table was already doubled - a straight capacity
-increase, not a reserve against overshoot, because all three of the vertex cache's own gates check
+doubling it to 32768 slots the same way the cell table was already doubled, a straight capacity
+increase rather than a reserve against overshoot, because all three of the vertex cache's own gates check
 before every write. That removes the specific wall the 4.0 field test hit. `ViewRangeScale`'s
 ceiling was deliberately left at 2.0 regardless: raising it again on the strength of a code-level
 argument is exactly the mistake this section exists to remember. If it is revisited, it needs its
@@ -289,23 +485,35 @@ own field test against a build that actually carries this relocation, not a reas
 
 **That field test happened, and it raised a different wall.** With the vertex cache relocated,
 `ViewRangeScale` was stepped to 2.5 (not back to 4.0) and field-tested: no torn geometry, but the
-**cell** watchdog braked hard in a dense scene (QUEEN palace gardens, 120 degree FOV) - peak 13616
+**cell** watchdog braked hard in a dense scene (QUEEN palace gardens, 120 degree FOV): peak 13616
 of the cell table's 16384-slot limit, and the effective scale was walked all the way down to 1.00
 for the rest of the session, exactly as designed ("better a permanently shorter view than a crash
 ten minutes later"). That is not the vertex-cache failure mode; it is the watchdog correctly
 protecting a table that is, again, too small for what this configuration asks of it. The cell
 table was therefore doubled a second time, 16384 -> 32768 (`draw_table.c` section 2), leaving that
 measured peak at 41% of the new limit instead of 83% of the old one. `ViewRangeScale`'s ceiling
-moved to 2.5 to match. **Neither raise moves `MAX_DRAW_RANGE` (64 world units, view_distance_fix.c)
-- both are about the watchdog reliably delivering the range the formula already allows in a dense
+moved to 2.5 to match. **Neither raise moves `MAX_DRAW_RANGE` (64 world units, view_range.c);
+both are about the watchdog reliably delivering the range the formula already allows in a dense
 scene, not about seeing further than that ceiling.**
 
 ## Known limitations
 
 * `NpcRangeScale` changes gameplay: an actor created earlier thinks earlier. 1127 of 1315 scannable
-  placements activate inside the visible picture already, so this is the knob that removes pop-in,  and the reason its cap is 2.0 against a 128-slot character pool.
+  placements activate inside the visible picture already, so this is the knob that removes pop-in,
+  and the reason its cap is 2.0 against a 128-slot character pool.
 * Two-sided drawing **softens** the see-through look; it does not close the hole. A severed limb is
   not a cut mesh, `bapobj_detachNode` only hides a node, there is no cap and no cut geometry.
+* **`TwoSidedSevered` ships off, and it has never been on in a released build.** `dev_overlay` hooks
+  `rdThing_Draw` as well and loads first, so until the site was declared in the detour form the
+  pattern found nothing and the feature switched itself off with a warning nobody read. The first
+  session in which it did run drew a bright sliver out of the player's hand across the whole level:
+  the predicate counted any hidden node as a cut, and `Plr_RebindWeaponModel` hides the children of
+  the weapon mount, which is the hand, on every spawn and every weapon change. It now tests
+  `pMeshHidden` alone, which only `bapobj_hideMeshesBelow` writes, so a holstered blaster can no
+  longer be mistaken for a severed limb. That narrowing costs the corpse: `bapobj_detachNode` marks
+  the piece through `+0x2C` and the body it came off through `+0x28`, so the piece is drawn two-sided
+  and the body is not. Tested in game to the extent that the sliver is gone with the fix and returns
+  without it; the cut itself has not been re-examined since.
 * Without the per-frame hook there is no watchdog, and the range is then **held at 1.0** rather than
   trusted.
 * Both relocated buffers are never freed, not even at detach: the cell table's bucket heads and any
@@ -313,11 +521,15 @@ scene, not about seeing further than that ceiling.**
   pointer into valid memory is harmless where one into freed address space is not.
 * The no-pop-in limit uses the **horizontal** field of view only. The cut test is two-dimensional
   (`dx^2 + dz^2`), so a camera with a lot of pitch sees geometry at a depth this does not model.
-* The cut edge is taken from the level's current cell, which is what `bapmat_viewDistance` returns.
-  A cell whose `bapCell+0x03` override differs from the one the camera stands in is not modelled,  the fog eases towards the new value when the camera walks into it.
+* The cut edge is taken from **the cell the player is standing in**, not the one the camera is in.
+  `bapmat_viewDistance` reads `level+0xA30`, which the ground-contact routine at `0x0044CC40`
+  writes from `player+0x2CC`, so a detached camera can be somewhere with a different
+  `bapCell+0x03` override entirely and the draw distance will not follow it. That is the engine's
+  own behaviour and it matters most during a cutscene, where the camera routinely leaves the
+  player behind. The fog eases towards the new value when the **player** walks into it.
 * **`fx_rampFog` no longer draws anything in this regime, and that predates this change.** The
   cutscene tint and the fade to black (`0x0043906E`) walk the **device's** fog start `[0x866FA8]`,
-  which only table fog reads. With `VertexFog=1` the fog is computed from `world+0x218/+0x21C`
+  which only table fog reads. With `FogImplementation=1` the fog is computed from `world+0x218/+0x21C`
   instead, so those effects are inert. Nothing here made that worse and nothing here fixes it; it
   is a consequence of the regime switch and belongs in its own change.
 
@@ -351,14 +563,16 @@ edge 2-64, the authored profile survives every ratio, the easing agrees between 
 repeated evaluation is bit-identical. Offline verification passes on both retail builds,
 including the table/bucket cross-check and the three-hit count on the ecx append blocks.
 
-**Not accepted in game; nothing here has been run.** The fog-regime change in particular has been
-proven only on the bytes: the vertex format, the capability bit, the two `FOGTABLEMODE` writers and
-the constant-zero specular fallback are all read out of the image, but whether the fog is then
-visible on screen can only be established by running the game. The lines to look for are:
+**Accepted in game**, in the 1.5.0 build, which was played through by hand. The fog regime in
+particular was settled by running it rather than by reading it: the vertex format, the capability
+bit, the two `FOGTABLEMODE` writers and the constant-zero specular fallback are all read out of
+the image, but whether the fog is then visible on screen is only answerable in play, and it is.
+The band reported in a real log matches the arithmetic exactly, which is also what proved the
+field-of-view cosine had stopped being applied. The lines to look for are:
 
 ```
 [view_distance_fix] distance fog runs on the engine's own per-vertex ramp: ...
-[view_distance_fix] fog tick active - g_level ........, g_frameDelta ........, settle 1.50 s
+[view_distance_fix] fog tick active, g_level ........, g_frameDelta ........, settle 1.50 s
 [view_distance_fix] fog band coupled at 0041F14A: ...
 [view_distance_fix] level fog 6.0..14.0 -> 5.7..13.2 (draw distance 16, 60.0 degrees)
 ```
@@ -369,7 +583,7 @@ declined.
 
 ### `RelocateVertexCache`, added later
 
-Built and linked, `/W4 /WX` clean, full solution and all 28 existing unit tests still pass.
+Built and linked, `/W4 /WX` clean, full solution and the whole unit test suite still passes.
 **Not yet run in game.** The twelve address operands and the three gate immediates were confirmed
 byte-for-byte against the running retail image rather than assumed from a disassembly view's
 mnemonics (the `ADD EAX,imm32` short-form encoding in particular would have been guessed wrong),
@@ -381,5 +595,5 @@ by running the game. The line to look for:
 ```
 
 Its absence, or a "NOT ONE BYTE patched" / "unexpected match count, unknown image" warning next to
-it, means the relocation declined and the vertex cache stays at its retail 16384-slot limit -
-everything else in this DLL keeps working exactly as it did before this feature existed.
+it, means the relocation declined and the vertex cache stays at its retail 16384-slot limit.
+Everything else in this DLL keeps working exactly as it did before this feature existed.

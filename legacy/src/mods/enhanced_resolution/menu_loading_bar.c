@@ -100,6 +100,8 @@ static const uint8_t MSK_TEXT_ORIGIN[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_TEXT_ORIGIN == sizeof MSK_TEXT_ORIGIN,
+               "the loading bar text origin pattern and its mask are different lengths");
 
 #define TEXT_X_OFFSET 0x08u
 #define TEXT_Y_OFFSET 0x38u

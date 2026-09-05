@@ -1,8 +1,9 @@
 /* limb_flight.c: the flight, the rest state, and the prevRot maintenance the engine forgot.
  * The reverse-engineering account of WHY each of these exists is in limb_flight.h.
  *
- * SIZE NOTE (rule 9): 666 lines, of which 434 are code and 147 are the measurements and byte
- * evidence that justify each constant. Removing them to reach 600 is explicitly forbidden.
+ * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. The excess is the measurements
+ * and byte evidence that justify each constant. Deleting those to get under the mark is not a
+ * way of meeting it.
  */
 #include "limb_flight.h"
 

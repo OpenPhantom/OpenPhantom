@@ -1,4 +1,4 @@
-/* dev_overlay.c: brings the four parts up in the order their dependencies allow.
+/* dev_overlay.c: brings the parts up in the order their dependencies allow.
  *
  * The order is not arbitrary. Drawing has to resolve before input, because a panel that can be
  * opened but not painted is a game that has gone modal with nothing on screen and no way out that
@@ -18,6 +18,7 @@
 #include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
+#include "overlay_key_name.h"
 #include "overlay_model.h"
 
 #include "common/patch.h"
@@ -95,6 +96,7 @@ static void __cdecl hook_scene_end(void)
             overlay_input_close();
         } else {
             overlay_input_update_pointer();
+            overlay_input_update_scroll();
             overlay_model_rebuild();
         }
     }
@@ -147,7 +149,26 @@ void dev_overlay_install(void)
     }
 
     overlay_model_reset();
-    overlay_input_set_key(ini_read_int(DEV_OVERLAY_SECTION, "OpenKey", 0));
+    /* Read as TEXT, so the file can be typed into. A person who cannot open the panel cannot use
+     * the row inside it that binds a key, and that is exactly the person this setting is for, so
+     * "F8" and "numpad +" have to work as well as a number. A bare number still means what it
+     * always did. Anything unreadable is reported and falls back to the default rather than being
+     * taken as zero, which would have been indistinguishable from asking for the default. */
+    {
+        char    text[32];
+        int32_t key = 0;
+
+        if (ini_read_string(DEV_OVERLAY_SECTION, "OpenKey", "", text, sizeof(text)) &&
+            text[0] != '\0') {
+            if (!overlay_key_from_name(text, &key)) {
+                key = 0;
+                log_warning("OpenKey=%s is not a key this understands, so the panel opens on its "
+                            "default: F6, or whichever key sits below Escape. A name like F8, "
+                            "numpad + or backtick works, and so does a virtual key code.", text);
+            }
+        }
+        overlay_input_set_key(key);
+    }
     overlay_draw_set_align(ini_read_int(DEV_OVERLAY_SECTION, "TextAlign", 1));
 
     /* Either half is worth having on its own, so both are attempted and neither decides the
@@ -180,9 +201,9 @@ void dev_overlay_install(void)
     }
 
     /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
-     * window messages - overlay_input.c's own domain. Wired here, after both installs have run,
-     * rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name, so that
-     * linking cheats_openphantom.c on its own (the unit test built against the real cheat
+     * window messages, which are overlay_input.c's own domain. Wired here, after both installs
+     * have run, rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name,
+     * so that linking cheats_openphantom.c on its own (the unit test built against the real cheat
      * sources, see unittests/CMakeLists.txt) never has to drag in the whole message-hook
      * subsystem just to satisfy one symbol it never exercises. */
     cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);

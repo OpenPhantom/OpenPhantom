@@ -30,4 +30,22 @@ bool ini_read_string(const char *section, const char *key, const char *default_v
 bool ini_write_float(const char *section, const char *key, float value, int decimal_places);
 bool ini_write_int  (const char *section, const char *key, int32_t value);
 
+/* A number that changes whenever the file has been written, and does not change while it has not.
+ *
+ * WHY THIS EXISTS. Reading a key means parsing the whole file, and this project's ini is around
+ * ninety kilobytes. A feature that wants to notice an edit within a frame rather than within a
+ * second cannot afford to do that every frame, and until now the only way to notice one at all was
+ * to read the key and compare. This asks the file system for the last write time instead, which
+ * costs one attribute query and no parse, so a poll can run every frame and only read when there
+ * is something new to read.
+ *
+ * The value is opaque: compare it with the last one you saw and do not interpret it. It is zero
+ * when the file cannot be examined at all, which is the same answer as "it has not changed", and
+ * that is deliberate: a file that has gone missing should leave a feature on the last settings it
+ * successfully read rather than reverting it to defaults.
+ *
+ * It says the file changed, not which key did. The caller still reads and compares its own key.
+ */
+uint64_t ini_generation(void);
+
 #endif /* COMMON_INI_H */

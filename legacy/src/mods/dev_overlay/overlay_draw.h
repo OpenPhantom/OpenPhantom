@@ -39,6 +39,22 @@ bool overlay_draw_paint(void);
 /* Which row the pointer is over, or -1. The coordinates are the screen pixels the paint uses. */
 int32_t overlay_draw_row_at(float x, float y);
 
+/* The row whose slider track is under (x, y), and where along it, 0 at the left end and 1 at the
+ * right. -1 when that row has no track or the point is past either end of it.
+ *
+ * Answered from what the last paint actually drew rather than recomputed, because a track's ends
+ * depend on the fitted label and the chip beside it, and a second derivation of that would drift
+ * from the first. */
+int32_t overlay_draw_slider_at(float x, float y, float *fraction);
+
+/* Where `x` falls along the track drawn for row `index` on the last paint, ignoring the pointer's
+ * height entirely. False when that row had no track or has scrolled out of the panel.
+ *
+ * A drag in progress uses this rather than the hit test above: once a handle has been grabbed it
+ * keeps following the pointer even when the hand wanders off the row, which is what every slider
+ * does and what stops a drag from jumping to the row below. */
+bool overlay_draw_slider_fraction(int32_t index, float x, float *fraction);
+
 /* Which tab the pointer is over, or -1. */
 int32_t overlay_draw_tab_at(float x, float y);
 

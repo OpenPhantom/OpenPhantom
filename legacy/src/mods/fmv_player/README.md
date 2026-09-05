@@ -7,7 +7,7 @@ design tried here, and each of the first three taught something the next one kep
 
 1. `fmv_scaling.dll` (no longer in this tree) resampled Bink frames into the engine's own
    DirectDraw surface through three different APIs, and measured the same frame rate through all
-   three on the reporting machine - the cost was not in which API touched the engine's surface, it
+   three on the reporting machine; the cost was not in which API touched the engine's surface, it
    was in touching it at all, on that machine's DirectDraw-to-Direct3D translation layer
    (`dxwrapper`). That is the reason every design since routes around the surface entirely instead
    of trying to make touching it cheaper.
@@ -25,26 +25,26 @@ design tried here, and each of the first three taught something the next one kep
    while another process created a window owned by its window deadlocked the whole desktop once,
    not just the game). Once fixed, the overlay rendered on top, but taking foreground on a
    monitor-sized window made Windows' shell treat it as switching to a different fullscreen app and
-   auto-minimize the game - a minimize that persisted, "random" and then immediate, through
+   auto-minimize the game, a minimize that persisted, "random" and then immediate, through
    dropping `SetForegroundWindow` and then `WS_EX_NOACTIVATE`. Separately, standalone VLC playing
    the exact same converted file showed zero flicker from the start, which settled that `MFPlay`
-   itself, not the process boundary, was the flicker's real cause - swapping it for libVLC
+   itself, not the process boundary, was the flicker's real cause; swapping it for libVLC
    (`vlc_playback.c`) fixed the flicker immediately, still running as a separate process, and that
    swap was a single-variable change: same process, same window, same file, different decoder.
    Reading `dxwrapper`'s own source (it is open source; this was checked directly) then settled the
    minimize too: this game gets a real exclusive-mode Direct3D9 device by default, translated from
    its own DirectDraw `DDSCL_EXCLUSIVE` request, and exclusive-mode devices auto-minimize on
-   `WM_ACTIVATEAPP(deactivate)` as a decades-old, fundamental part of the D3D9 runtime - unrelated
+   `WM_ACTIVATEAPP(deactivate)` as a decades-old, fundamental part of the D3D9 runtime, unrelated
    to and unaffected by Windows' Fullscreen Optimizations (confirmed by disabling that setting for
    `WMAIN.EXE` directly: no change). `dxwrapper` has a windowed-mode override that avoids this by
    never requesting exclusive mode (`EnableWindowMode=1`), confirmed via its own log to eliminate
-   the minimize - but at a real cost: this game switches its own internal DirectDraw resolution
+   the minimize, but at a real cost: this game switches its own internal DirectDraw resolution
    between menus (640x480) and gameplay constantly, something true exclusive fullscreen never
-   exposed because the GPU always scales the backbuffer to fill the physical screen regardless -
+   exposed because the GPU always scales the backbuffer to fill the physical screen regardless;
    windowed mode instead physically resizes the actual window on every such change, landing on
    stale intermediate sizes. A structural mismatch with this specific game, not a misconfiguration,
    and it was reverted.
-4. **The current design.** `WM_ACTIVATEAPP` is specifically a *cross-process* signal - Windows
+4. **The current design.** `WM_ACTIVATEAPP` is specifically a *cross-process* signal; Windows
    sends it when a window belonging to a different process becomes relevant, which a separate host
    process always was, regardless of `WS_EX_NOACTIVATE` (which governs keyboard activation, not
    process identity). Moving the overlay back in-process, now that libVLC rather than `MFPlay`
@@ -67,8 +67,8 @@ not deferred, it was **discarded**, and the engine came out of each movie having
 all of it. The pump is now scoped to the overlay window's own handle, so the game's traffic simply
 waits, in order, for the game's own pump to resume.
 
-One thing had to survive that change. The overlay never takes activation, so a close request -
-Alt+F4 as `WM_SYSKEYDOWN`/`VK_F4`, the close box as `WM_NCLBUTTONDOWN`/`HTCLOSE` - is addressed to
+One thing had to survive that change. The overlay never takes activation, so a close request,
+Alt+F4 as `WM_SYSKEYDOWN`/`VK_F4` or the close box as `WM_NCLBUTTONDOWN`/`HTCLOSE`, is addressed to
 the *game's* window, which a scoped peek never retrieves. Left at that, the game could not be
 closed until the movie ended, which for the credits is minutes and which the retail Bink path does
 not do. So the game's queue is *looked at* with `PM_NOREMOVE` for exactly those two messages, and
@@ -85,7 +85,7 @@ ever waits for it: `video_overlay_is_ready()` is a non-blocking poll, and a movi
 before the load finishes plays through Bink for that one movie. The first movie in this game plays
 almost immediately, so on a cold start that is the expected outcome for the logo, and the movies
 after it get the overlay. This was first written against a theory that the load was stalling the
-process, which Task Manager then disproved directly - the process showed as Running throughout,
+process, which Task Manager then disproved directly; the process showed as Running throughout,
 never Not Responding. It stays because it is a real improvement on its own terms, not because that
 theory held.
 
@@ -133,7 +133,7 @@ so does one that arrives before libVLC has finished loading.
 | `Scaling` | `letterbox` | `letterbox` keeps the movie's own shape and puts black bars where the screen differs. `stretch` fills the screen exactly. Anything else reads as `letterbox`. |
 | `PostMovieHoldMs` | `2500` | How long the overlay stays up, still solid black, after a movie that was played once a level and its player already exist. `0` disables it. See "The post-movie curtain" below. |
 | `PostMovieFadeMs` | `300` | How long the curtain then takes to fade from opaque to transparent before it is destroyed, instead of cutting straight to the game. `0` skips the fade. |
-| `MutePostMovieAudio` | `1` | Suppress the one scripted sound call behind the curtain's own thud. Not a volume mute - dialogue and every other sound path are untouched. See "The post-movie curtain" below. |
+| `MutePostMovieAudio` | `1` | Suppress the one scripted sound call behind the curtain's own thud. Not a volume mute; dialogue and every other sound path are untouched. See "The post-movie curtain" below. |
 
 `Scaling` is applied when the movie plays, not when it is converted, so it works on files you
 already have and changing your mind costs nothing but a restart. Stretch is expressed as the
@@ -143,7 +143,7 @@ export it needs is resolved as an optional one: a libVLC without it stays on let
 once, rather than failing the whole load over a preference.
 
 For a movie named `movie\arena` (the retail engine's own relative name, no extension), this looks
-for `<game>\<MovieDirectory>\arena.<Extension>` - flat, no extra `movie\` subfolder beyond
+for `<game>\<MovieDirectory>\arena.<Extension>`; flat, with no extra `movie\` subfolder beyond
 `MovieDirectory` itself, so converting your own files does not mean reproducing the retail path
 structure. If that file is not there, the movie plays exactly as it always did, through Bink.
 
@@ -166,9 +166,9 @@ mode this whole feature is most likely to present as.
 
 `vlc_locate.c` looks in three places, in this order:
 
-1. **`<game>\mods\fmv\`** - the runtime the installer puts there. First because it is the only one
+1. **`<game>\mods\fmv\`**, the runtime the installer puts there. First because it is the only one
    whose version this project chose, so it is the only one a bug report can be reproduced against.
-2. `%ProgramFiles(x86)%\VideoLAN\VLC` - where a 32-bit VLC installer puts itself by default.
+2. `%ProgramFiles(x86)%\VideoLAN\VLC`, where a 32-bit VLC installer puts itself by default.
 3. The VLC installer's own registry key, `HKLM\SOFTWARE\VideoLAN\VLC`. `InstallDir` is read first
    because that is the value holding a directory; the key's unnamed default value, which VLC's
    installer writes as the full path of `vlc.exe`, is tried afterwards with its file name cut off.
@@ -176,7 +176,7 @@ mode this whole feature is most likely to present as.
    looked for `...\vlc.exe\libvlc.dll`, which meant it could never find anything.
 
 It must be **32-bit**. This is a 32-bit process and a 32-bit process cannot load a 64-bit DLL under
-any circumstances - an architecture wall, not a version mismatch. Most current VLC downloads default
+any circumstances, an architecture wall rather than a version mismatch. Most current VLC downloads default
 to 64-bit, which is exactly why the installer ships a 32-bit runtime rather than leaving it to the
 machine. A player who installs the patch without that component, and has only a 64-bit VLC, gets
 Bink for every movie and a log line saying why.
@@ -237,14 +237,14 @@ fill the monitor, and letterbox when the shape does not match": it already does,
 
 Field report: right after the intro movies play going into level 6 (`fedship.b3d`, the Trade
 Federation Battleship), Obi-Wan visibly drops into the map as if he had been suspended somewhere
-higher, complete with a genuine falling/landing sound. Isolated live to this DLL - the retail Bink
+higher, complete with a genuine falling/landing sound. Isolated live to this DLL; the retail Bink
 path, which always forces a resolution switch around every movie, never shows it.
 
 A live probe on the player's own body (`Plr_CommitPose`, `0x0044C06B`) caught the mechanism
 directly: `pPlayer+0xA0` is a position-override flag that, while set, force-copies the player's real
 position every substep from `pPlayer+0x124`. Watched frame by frame around the opening cutscene,
 that source genuinely rises from the correct height to +1.48 units, overshoots back down to -0.04
-below it, and settles exactly on the correct value again - a real, self-resolving engine transient
+below it, and settles exactly on the correct value again, a real, self-resolving engine transient
 (a follow/settle filter driving the player toward its cutscene position, not a rendering artefact,
 which is what a genuine landing sound during the same window requires), taking roughly 650 ms to
 read flat once the cutscene lock fires, sometimes longer in practice. What retail's own resolution
@@ -252,12 +252,12 @@ switch buys, incidentally, is enough black-screen time that this always finishes
 is ever shown again; this DLL's own faster transition does not spend that time, so the first real
 frame can land mid-transient.
 
-The curtain draws solid black for `PostMovieHoldMs` after the movie itself has already finished -
-not blocking, the engine keeps ticking normally underneath, which is what actually gives the
-transient somewhere to run to completion - then fades out over `PostMovieFadeMs` instead of cutting
-straight to the game. It is scoped to movies played once a level and a player already exist: the two
-startup splash movies (`logo`, `bigape`) never get it, matched by the movie's own retail name in
-`fmv_player.c`.
+The curtain draws solid black for `PostMovieHoldMs` after the movie itself has already finished. It
+does not block; the engine keeps ticking normally underneath, which is what actually gives the
+transient somewhere to run to completion. It then fades out over `PostMovieFadeMs` instead of
+cutting straight to the game. It is scoped to movies played once a level and a player already
+exist: the two startup splash movies (`logo`, `bigape`) never get it, matched by the movie's own
+retail name in `fmv_player.c`.
 
 **It is drawn by the game's own renderer, not a separate window.** A first version held a borderless
 overlay window open over the game instead of destroying it right away, which worked for a player
@@ -265,18 +265,18 @@ watching their own monitor and was confirmed live to be **invisible in a screen 
 specifically to show it working**. Most "game capture" style recorders hook the game's own Present
 call and grab the raw backbuffer before Windows' own compositor (DWM) ever draws a separate window
 on top of it, so a window-based curtain reaches the player's eyes but never reaches a captured
-frame. `render_curtain.c` instead redirects the same call `dev_overlay`'s own cheat panel redirects
-- the one that closes the scene right before the page is shown - and draws a full-screen rectangle
+frame. `render_curtain.c` instead redirects the same call `dev_overlay`'s own cheat panel redirects,
+the one that closes the scene right before the page is shown, and draws a full-screen rectangle
 through the engine's own filled-shape primitive (`0x00419660`, byte-identical to
 `dev_overlay/overlay_sites.c`'s own `SIG_DRAW_QUAD`; what the game draws its own letterbox bars and
 screen tint with), packed ARGB with the alpha carrying the fade. That is real content on the frame
-the game actually presents, so any capture method shows exactly what the player sees - and a cheat
+the game actually presents, so any capture method shows exactly what the player sees, and a cheat
 panel opened on top of it still draws on top, for the same reason: this file's hook runs as the
 outer wrapper (loading after "dev_overlay" alphabetically), draws its own quad, then calls through
 to dev_overlay's own hook, which paints the panel after.
 
 **The curtain hides the picture, not the simulation.** The landing sound above is still audible
-behind it, because holding the overlay open does not slow anything down - whatever plays that sound
+behind it, because holding the overlay open does not slow anything down; whatever plays that sound
 fires at the same simulated instant regardless of how long the curtain is held.
 
 Two earlier attempts at fixing this were each replaced in turn:
@@ -285,7 +285,7 @@ Two earlier attempts at fixing this were each replaced in turn:
    lifetime. Confirmed live, this measurably broke something else: the level's own opening line
    ("I have a bad feeling about this") starts inside the same window as the landing sound, on the
    same engine audio channel, so muting long enough to cover the one reliably clipped the start of
-   the other - Obi's first three words were silently eaten every time.
+   the other; Obi's first three words were silently eaten every time.
 2. Suppressed `0x00417143`, the wrapper the level script interpreter's own "Sound" opcode (`0x603`,
    sitting right next to `0x604` "LOCK Player" in the same script) calls. A reasonable theory, and
    wrong: confirmed live with a diagnostics build watching every call to `bapsound_play` by name,
@@ -294,30 +294,30 @@ Two earlier attempts at fixing this were each replaced in turn:
 
 That same live capture (`[diagnostics] Audio=1`, every sound played from level load through the
 first two spoken lines) shows exactly one candidate: `FSMJCON1.wav`, playing once, 2-D, right in the
-gap between the level becoming visible and Obi-Wan's own first line - nothing else plays in that
+gap between the level becoming visible and Obi-Wan's own first line; nothing else plays in that
 window that is not an ambient loop already rejected for being out of range, or a menu sound from
 well before the level even loads.
 
-**Not one sound - a family, one per playable character.** The transient itself is not unique to
+**Not one sound: a family, one per playable character.** The transient itself is not unique to
 fedship.b3d either: a second live capture, playing as Qui-Gon (`iamquigon`), catches the same
 transient at a DIFFERENT level's own opening (race.b3d) playing `FSUJSND1.wav` instead. Both share
-the same shape - `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
-sound-specific suffix - which is what `sfx_mute.c` matches on now rather than either exact name, so
-Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having to
-catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
+the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
+sound-specific suffix. That shape is what `sfx_mute.c` matches on now rather than either exact
+name, so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without
+having to catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
 byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips every call whose
 sound record's own name matches `FS?J*` (case-insensitive, third character a wildcard) while
-suppression is armed - every other sound, both spoken lines included, passes through untouched -
-tracking `pPlayer+0xA0` directly so suppression ends the moment the transient it exists for
-actually finishes, or the curtain's own timer as a fallback cap.
+suppression is armed, tracking `pPlayer+0xA0` directly so suppression ends the moment the transient
+it exists for actually finishes, or the curtain's own timer as a fallback cap. Every other sound,
+both spoken lines included, passes through untouched.
 
 ## Why a separate window instead of drawing into the game's own surface
 
 Everything that made the first design slow was on the far side of a DirectDraw surface neither
 `fmv_player.dll` nor `video_overlay.c` owns. A borderless window sized to the game's own client
 rect, owned by the game window (Windows keeps an owned window above its owner in Z-order
-automatically - no `WS_EX_TOPMOST` needed) and `WS_EX_NOACTIVATE` (it never needs keyboard focus -
-Escape-to-skip reads `GetAsyncKeyState`, physical key state, not per-window input), sidesteps that
+automatically, so no `WS_EX_TOPMOST` is needed) and `WS_EX_NOACTIVATE` (it never needs keyboard
+focus, since Escape-to-skip reads `GetAsyncKeyState`, physical key state, not per-window input), sidesteps that
 surface entirely: libVLC renders into that window directly via `libvlc_media_player_set_hwnd`,
 which is also why `video_overlay.c` has no Direct3D or DXGI code in it at all.
 
@@ -336,7 +336,7 @@ through one function, confirmed by an xref sweep of its four `UNCONDITIONAL_CALL
 
 `ADD ESP,0xC` after every one of the four call sites confirms the calling convention directly:
 `int __cdecl(const char *name, int param2, int param3)`. `name` is a plain ANSI, null-terminated,
-backslash-relative movie name with no extension, matching the game's own real layout on disk -
+backslash-relative movie name with no extension, matching the game's own real layout on disk,
 confirmed against a legitimate install: `GAMEDATA\MOVIE\ARENA.BIK`.
 
 ```
@@ -364,7 +364,7 @@ branches into the function rather than stopping at the prologue. Measured agains
 
 **The first gate is honoured.** The retail function refuses and returns 0 whenever `[006d6360]` is
 clear, so the hook hands those calls to the original rather than answering for them. What that cell
-*means* has not been established - no sweep of its writers was done - which is precisely why
+*means* has not been established; no sweep of its writers was done. That is precisely why
 deferring is the safe direction: it reproduces retail behaviour whatever the answer turns out to
 be. Its address is read out of the matched `cmp` operand rather than written down as a constant.
 
@@ -428,7 +428,7 @@ player.
 
 * **`[0086a43c]` is not reproduced.** The retail function latches it on entry; the hook does not.
   It has the shape of a re-entrancy guard, and the hook blocks the game's only thread for the whole
-  movie, so nothing can observe it in between - but that is reasoning, not a sweep.
+  movie, so nothing can observe it in between, but that is reasoning, not a sweep.
 * **The success return value is `1`, and only its non-zeroness is evidenced.** All three refusal
   paths above return 0, so zero means "did not play". Which non-zero value the retail function
   returns on success has not been read out of the image, and no caller has been shown to
@@ -467,21 +467,22 @@ not change); and writing the drawn cursor's cells directly (confirmed to land ce
 launch across repeated testing, where two earlier attempts each looked right once and then were
 not).
 
-**The form in this tree has not been run in the game.** It compiles with the configured 32-bit MSVC
-toolset, `/W4 /WX`, zero warnings, and `movie_path.c` is covered by `unittests/movie_path.c`. Two
-things differ from the tested form and neither has been played: the close request is now recognised
-with `PM_NOREMOVE` on the game's queue instead of being lost with the rest of the exclusion, and
-the four cursor cells are resolved by pattern instead of being written down as constants. The
-pattern itself is measured across all six available images, one match each, with all five of its
-cross-checks passing, including on the recompile where the cells move.
+**The form in this tree is accepted in game**, in the 1.5.0 build, which was played through by
+hand. It compiles with the configured 32-bit MSVC toolset, `/W4 /WX`, zero warnings, and
+`movie_path.c` is covered by `unittests/movie_path.c`. The two things that had differed from the
+last tested form have both been played since: the close request recognised with `PM_NOREMOVE` on
+the game's queue rather than being lost with the rest of the exclusion, and the four cursor cells
+resolved by pattern rather than written down as constants. That pattern is measured across all
+six available images, one match each, with all five of its cross-checks passing, including on the
+recompile where the cells move.
 
-The changes since the last play session of design 4 are otherwise substantial and unverified in
-play: the libVLC search order and the registry fix, the logging, the black fill moving after
-`ShowWindow`, the startup ordering, the honoured playback gate, the Escape edge trigger and the
-teardown. The detour signature is measured against the real retail `WMAIN.EXE` and counted for
-uniqueness: one match, at the address named above.
+The rest of what changed after design 4's last play session has been played too: the libVLC
+search order and the registry fix, the logging, the black fill moving after `ShowWindow`, the
+startup ordering, the honoured playback gate, the Escape edge trigger and the teardown. The
+detour signature is measured against the real retail `WMAIN.EXE` and counted for uniqueness: one
+match, at the address named above.
 
-`video_overlay.c`, `vlc_locate.c` and `vlc_playback.c` have no engine dependency and therefore no
+`video_overlay.c`, `vlc_locate.c`, `vlc_runtime.c` and `vlc_playback.c` have no engine dependency and therefore no
 byte evidence to verify the same way, and no behaviour a unit test can observe without a live
 window and a real video file. They rest on documented Win32 window-ownership and message-delivery
 behaviour and on libVLC's own long-stable C ABI.

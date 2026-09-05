@@ -3,6 +3,17 @@
  * The entry points it paints through are resolved in overlay_sites.c; what is here is only
  * what the panel looks like. Every proportion is a multiple of the measured text height and
  * lives in overlay_layout.c, so this file holds colour, order and the shapes themselves.
+ *
+ * SIZE NOTE. Over six hundred lines, and it crossed on the change that made the panel size itself
+ * to its widest name and chip rather than to a fixed allowance. What is long is the reasoning
+ * attached to the colours and the shapes: why a chip is absent rather than grey, why an inactive
+ * tab gets no fill, why the leader is drawn only across the gap it belongs to. Each of those was
+ * arrived at by trying the other thing, and deleting the account of it would leave a wall of
+ * rectangles nobody can safely change.
+ *
+ * THE SEAM, if it grows again, is overlay_draw_paint() itself: the title band, the tabs and the
+ * search field are three blocks that share nothing with the row list below them but the layout
+ * they are measured against, and any of them would move out whole.
  */
 #include "overlay_draw.h"
 
@@ -17,6 +28,7 @@
 #include "overlay_sites.h"
 
 #include <stdbool.h>
+#include <string.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -85,6 +97,24 @@
 #define GROUP_X      1.50f
 #define EDGE_PAD     0.75f
 #define CHIP_PAD     0.50f
+
+/* Where each visible row's slider track was drawn, so a click can be turned back into a fraction.
+ *
+ * Filled while painting and read by overlay_draw_slider_at below, which is the same relationship
+ * overlay_draw_row_at already has with the layout: the geometry is settled once, while drawing,
+ * and the hit test asks what was settled rather than recomputing it from the label widths and
+ * hoping the two agree. They would not for long, since the track's ends depend on the fitted label,
+ * which depends on the panel width.
+ *
+ * Indexed by position down the panel, not by row, and cleared on every paint, so a row that
+ * scrolled away cannot be grabbed through a stale entry. */
+#define TRACK_SLOTS 128u
+
+static struct {
+    bool  present;
+    float x0;
+    float x1;
+} tracks[TRACK_SLOTS];
 #define GUTTER_MIN   2.00f
 
 static const char *const TAB_TITLE[OVERLAY_TAB_COUNT] = { "Original", "OpenPhantom" };
@@ -115,10 +145,8 @@ bool overlay_draw_screen(float *out_width, float *out_height)
  * it there and the third ends it there. Rather than guess twice, it is a setting. */
 static int32_t align_mode = 1;
 
-/* Clamped rather than refused: a number somebody typed into an ini should move the panel toward
- * what they meant, and a panel that silently kept its old size because the value was out of range
- * would read as the setting not working at all. Below a third the text stops being legible and
- * above four the panel stops fitting anything, so those are the ends. */
+/* Not validated here. The three modes are the whole range and the caller is this DLL's own ini
+ * read, which has already decided what an out-of-range number means. */
 void overlay_draw_set_align(int32_t mode)
 {
     align_mode = mode;
@@ -182,9 +210,6 @@ static float measured_text_height(void)
     }
     return height;
 }
-
-/* The widest thing the list is about to draw, so the box can be built to hold it. Measured with the
- * font's own metric rather than counted in characters, because the font is proportional. */
 
 /* THE SIXTH ARGUMENT IS A FLAG, NOT A LAYER, and this had it backwards once. Non zero draws the
  * shape there and then; zero puts it into the engine's deferred, sorted queue, which is not where a
@@ -311,19 +336,90 @@ static const char *openphantom_name(uint32_t i)
     return cheats_openphantom_name((cheats_own_id_t)i);
 }
 
-/* The widest NAME the tab can ever show, over ALL its rows rather than the visible ones. Measured
- * over the visible ones, the panel would change width on every keystroke and every fold. The
- * Original tab holds two groups now, so both are measured whether or not either is folded open. */
+/* The width the panel has to find room for, measured from the rows that are ON SCREEN rather than
+ * from any one source's list.
+ *
+ * It used to ask the cheat sources for their names, which was right while every row in a tab was a
+ * cheat and quietly wrong afterwards: the rows this panel adds itself, the settings and the
+ * actions and the folded notes, were never measured, so the panel was sized to fit the names it
+ * knew about and drew the rest clipped. Reported as an ellipsis in the middle of four rows.
+ *
+ * Asking the model instead means a label added anywhere is measured by the fact of being drawn,
+ * which is the only version of this that cannot fall out of step again. The cheat lists are still
+ * measured underneath it so that a folded tab is no narrower than an open one, which keeps the
+ * panel from changing width as groups are opened. */
 static float widest_name(void)
 {
-    float widest = 0.0f;
+    float    widest = 0.0f;
+    uint32_t count  = overlay_model_row_count();
+    uint32_t i;
 
     if (overlay_model_tab() == OVERLAY_TAB_ORIGINAL) {
         widest = widen_over(widest, cheats_original_count(), original_toggle_name);
         widest = widen_over(widest, (uint32_t)CHEATS_ACTION_COUNT, original_action_name);
-        return widest;
+    } else {
+        widest = widen_over(widest, (uint32_t)CHEATS_OWN_COUNT, openphantom_name);
     }
-    return widen_over(widest, (uint32_t)CHEATS_OWN_COUNT, openphantom_name);
+
+    for (i = 0; i < count; ++i) {
+        overlay_row_t row;
+
+        if (!overlay_model_row(i, &row)) {
+            continue;
+        }
+        /* A group heading is indented less than a row is, so it needs less room for the same
+         * text; measuring it against a row's indent is the safe direction to be wrong in. */
+        if (text_width(row.label) > widest) {
+            widest = text_width(row.label);
+        }
+    }
+    return widest;
+}
+
+/* The word in a row's chip. One function because two places need it and they have to agree: the
+ * drawing below, and the measurement above it that sizes the panel to fit. They were two copies of
+ * the same conditional for one commit, which is one commit longer than that is safe. */
+static const char *chip_word(const overlay_row_t *row)
+{
+    const bool is_action = (row->kind == OVERLAY_ROW_ACTION || row->kind == OVERLAY_ROW_HOTKEY ||
+                            row->kind == OVERLAY_ROW_VALUE);
+
+    return !row->available    ? "n/a"
+         : row->pending       ? "QUEUED"
+         : row->value[0] != 0 ? row->value    /* e.g. the graphics detail level */
+         : is_action          ? "RUN"
+         : row->on            ? "ON" : "OFF";
+}
+
+/* The widest CHIP the tab can show, which the panel has to find room for beside the widest name.
+ *
+ * Measured rather than assumed, because the assumption was wrong by a factor of four. The layout
+ * used to fold "the widest state chip" into one fixed allowance, which fits a chip reading "RUN"
+ * and does not fit one reading "auto 1.00x", so the longest label was drawn clipped even after the
+ * width ceiling was raised for it. The words are chosen exactly as the row drawing below chooses
+ * them, so what is measured is what is drawn. */
+static float widest_chip(void)
+{
+    float    widest = 0.0f;
+    uint32_t count  = overlay_model_row_count();
+    uint32_t i;
+
+    for (i = 0; i < count; ++i) {
+        overlay_row_t row;
+        float         w;
+
+        if (!overlay_model_row(i, &row)) {
+            continue;
+        }
+        if (row.kind == OVERLAY_ROW_GROUP || row.kind == OVERLAY_ROW_INFO) {
+            continue;              /* neither draws a chip: full width text */
+        }
+        w = text_width(chip_word(&row));
+        if (w > widest) {
+            widest = w;
+        }
+    }
+    return widest;
 }
 
 bool overlay_draw_paint(void)
@@ -336,6 +432,7 @@ bool overlay_draw_paint(void)
     float       pointer_y = 0.0f;
     int32_t     hot;
     uint32_t    i;
+    uint32_t    first;             /* the row drawn at the top, see the list below */
     const char *typed;
     char        scratch[OVERLAY_LABEL_MAX + 4];
 
@@ -346,8 +443,9 @@ bool overlay_draw_paint(void)
     for (i = 0; i < OVERLAY_LAYOUT_TABS; ++i) {
         tab_word[i] = text_width(TAB_TITLE[i]);
     }
-    overlay_layout_build(measured_text_height(), widest_name(), overlay_model_row_count(),
-                         tab_word, *draw_state.screen_w, *draw_state.screen_h);
+    overlay_layout_build(measured_text_height(), widest_name() + widest_chip(),
+                         overlay_model_row_count(), tab_word,
+                         *draw_state.screen_w, *draw_state.screen_h);
 
     lay = *overlay_layout();
     left = lay.left;
@@ -407,7 +505,7 @@ bool overlay_draw_paint(void)
     /* --- the search field. Opaque with a light border rather than a translucent black rectangle:
      * the same shape, and the difference between a well and a hole.
      *
-     * Typing only reaches this box once it has been clicked into - see overlay_input.c's click()
+     * Typing only reaches this box once it has been clicked into; see overlay_input.c's click()
      * and the focus gate in handle(). The border and the caret are what say so: the accent border
      * and the caret both only appear once a click actually landed here, so the box never LOOKS
      * ready to type into before it is. --- */
@@ -435,13 +533,19 @@ bool overlay_draw_paint(void)
     }
     fill(left, lay.top + lay.rows_top - lay.rule, right, lay.top + lay.rows_top, C_RULE);
 
-    /* --- the list ---------------------------------------------------------------------- */
-    for (i = 0; i < overlay_model_row_count(); ++i) {
-        overlay_row_t row;
-        const float   y = lay.top + lay.rows_top + (float)i * lay.row_h;
-        const bool    is_hot = ((int32_t)i == hot);
+    /* --- the list ------------------------------------------------------------------------------
+     * DRAWN BY POSITION, INDEXED BY ROW. `i` counts down the panel and `index` counts down the tab,
+     * and they differ by wherever the list is scrolled to. Everything below keys off `row`, so only
+     * the two lines that turn a position into a row have to know scrolling exists. */
+    first = overlay_model_scroll(lay.visible_rows);
+    memset(tracks, 0, sizeof tracks);
+    for (i = 0; i < lay.visible_rows; ++i) {
+        overlay_row_t  row;
+        const uint32_t index = first + i;
+        const float    y = lay.top + lay.rows_top + (float)i * lay.row_h;
+        const bool     is_hot = ((int32_t)index == hot);
 
-        if (!overlay_model_row(i, &row)) {
+        if (!overlay_model_row(index, &row)) {
             break;
         }
 
@@ -465,10 +569,55 @@ bool overlay_draw_paint(void)
             continue;
         }
 
+        if (row.kind == OVERLAY_ROW_SLIDER) {
+            /* A LINE OF ITS OWN, under the value it drives, and running nearly the panel's width.
+             * The first version squeezed the track into the gap between the name and the chip,
+             * which put it within a few pixels of both: it was fiddly to grab, and at the panel's
+             * smaller sizes it read as though it were striking the name through. A row costs one
+             * line and buys a target several times longer.
+             *
+             * Indented to the same column as the note under the draw distance, so it is plainly
+             * attached to the row above rather than a control of its own. */
+            const float x0   = left + NAME_X * lay.text_h;
+            const float x1   = right - EDGE_PAD * lay.text_h;
+            const float mid  = y + lay.row_h * 0.5f;
+            const float half = lay.rule * 1.5f;
+            const float grip = lay.text_h * 0.30f;
+            float       shown = row.fraction;
+            int32_t     drag_row = -1;
+            float       drag_fraction = 0.0f;
+            float       at;
+
+            if (!row.available || !(x1 > x0)) {
+                continue;
+            }
+            /* While THIS row is the one being dragged the handle comes from the pointer rather than
+             * from the value read back out of the settings file. The write is throttled and the
+             * pointer is not, so drawing from the file would move the handle in thirty steps a
+             * second against a hand moving in sixty. */
+            if (overlay_input_drag(&drag_row, &drag_fraction) && drag_row == (int32_t)index) {
+                shown = drag_fraction;
+            }
+            at = x0 + (x1 - x0) * shown;
+
+            fill(x0, mid - half, x1, mid + half, C_CHIP_OFF);
+            fill(x0, mid - half, at, mid + half, is_hot ? C_ACCENT : C_CHIP_OFF_TEXT);
+            fill(at - grip * 0.5f, y + 0.22f * lay.row_h, at + grip * 0.5f, y + 0.78f * lay.row_h,
+                 is_hot ? C_ACCENT : C_CHIP_OFF_TEXT);
+
+            if (i < TRACK_SLOTS) {
+                tracks[i].present = true;
+                tracks[i].x0 = x0;
+                tracks[i].x1 = x1;
+            }
+            continue;
+        }
+
         if (row.kind == OVERLAY_ROW_INFO) {
-            /* Full row width, no chip and no hover fill - it is a note attached to the row above
-             * it, not a control of its own, and dimmed the same way an unavailable row's name is
-             * so it reads as secondary at a glance rather than as another cheat to look for. */
+            /* Full row width, no chip and no hover fill, because it is a note attached to the row
+             * above it, not a control of its own, and dimmed the same way an unavailable row's
+             * name is so it reads as secondary at a glance rather than as another cheat to look
+             * for. */
             const float name_x = left + NAME_X * lay.text_h;
             const float room = right - EDGE_PAD * lay.text_h - name_x;
             const char *label = fit(row.label, room, scratch, sizeof scratch);
@@ -483,19 +632,15 @@ bool overlay_draw_paint(void)
         }
 
         {
-            /* A hotkey row, and now a value row too, get the action's own chip styling - both are
-             * buttons that start something rather than a plain switch, the same as ACTION - but
+            /* A hotkey row, and now a value row too, get the action's own chip styling, since both are
+             * buttons that start something rather than a plain switch, the same as ACTION, but
              * never fall through to "RUN": source_row() always populates value for either kind
              * (the bound key's name / "Set" / "...", or the current number / what is being typed),
              * so that arm of the word choice below is dead for both and kept only because ACTION
              * still needs it. */
             const bool  is_action = (row.kind == OVERLAY_ROW_ACTION || row.kind == OVERLAY_ROW_HOTKEY ||
                                      row.kind == OVERLAY_ROW_VALUE);
-            const char *word = !row.available    ? "n/a"
-                             : row.pending        ? "QUEUED"
-                             : row.value[0] != 0  ? row.value    /* e.g. the graphics detail level */
-                             : is_action          ? "RUN"
-                             : row.on             ? "ON" : "OFF";
+            const char *word = chip_word(&row);
             const float chip_w = text_width(word) + lay.text_h;
             const float chip_x1 = right - EDGE_PAD * lay.text_h;
             const float chip_x0 = chip_x1 - chip_w;
@@ -520,7 +665,7 @@ bool overlay_draw_paint(void)
                 write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_STATE_NA);
             } else if (row.pending) {
                 /* Queued reads as "this will happen", the same claim ON already makes, so it gets
-                 * ON's own colour rather than a third one - a fourth chip colour buys nothing a
+                 * ON's own colour rather than a third one; a fourth chip colour buys nothing a
                  * different WORD does not already say on its own. */
                 fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h, C_CHIP_ON);
                 write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_CHIP_ON_TEXT);
@@ -534,6 +679,37 @@ bool overlay_draw_paint(void)
                 write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h,
                          row.on ? C_CHIP_ON_TEXT : C_CHIP_OFF_TEXT);
             }
+        }
+    }
+
+    /* --- the scroll indicator, and only when there is something to indicate -----------------------
+     * A thumb on the inside of the right border, as long a fraction of the track as the visible
+     * rows are of all of them, and as far down it as the list is scrolled. It is drawn rather than
+     * clickable on purpose: the wheel and the keys already move the list, and a draggable bar this
+     * thin would be a target the game's own pointer is not precise enough to hit.
+     *
+     * Absent entirely when everything fits, so the ordinary panel is exactly what it always was. */
+    {
+        const uint32_t count = overlay_model_row_count();
+
+        if (count > lay.visible_rows && lay.visible_rows > 0u) {
+            const float track_y0 = lay.top + lay.rows_top;
+            const float track_y1 = track_y0 + (float)lay.visible_rows * lay.row_h;
+            const float track_h  = track_y1 - track_y0;
+            const float w        = lay.rule * 3.0f;
+            const float x1       = right - lay.rule;
+            const float x0       = x1 - w;
+            float       thumb_h  = track_h * (float)lay.visible_rows / (float)count;
+            float       thumb_y;
+
+            if (thumb_h < lay.text_h) {
+                thumb_h = lay.text_h;         /* never so short it reads as a speck */
+            }
+            thumb_y = track_y0 + (track_h - thumb_h) *
+                      ((float)first / (float)(count - lay.visible_rows));
+
+            fill(x0, track_y0, x1, track_y1, C_RULE);
+            fill(x0, thumb_y, x1, thumb_y + thumb_h, C_ACCENT);
         }
     }
 
@@ -553,4 +729,68 @@ bool overlay_draw_paint(void)
              C_POINTER);
     }
     return true;
+}
+
+/* The track drawn for `index` on the last paint, or false when that row had none or has scrolled
+ * out of the panel since. */
+static bool track_for_row(int32_t index, float *x0, float *x1)
+{
+    const layout_t *lay = overlay_layout();
+    uint32_t        first;
+    uint32_t        slot;
+
+    if (index < 0 || lay == NULL || lay->visible_rows == 0u) {
+        return false;
+    }
+    first = overlay_model_scroll(lay->visible_rows);
+    if ((uint32_t)index < first) {
+        return false;
+    }
+    slot = (uint32_t)index - first;
+    if (slot >= TRACK_SLOTS || !tracks[slot].present) {
+        return false;
+    }
+    if (!(tracks[slot].x1 > tracks[slot].x0)) {
+        return false;
+    }
+    *x0 = tracks[slot].x0;
+    *x1 = tracks[slot].x1;
+    return true;
+}
+
+bool overlay_draw_slider_fraction(int32_t index, float x, float *fraction)
+{
+    float x0;
+    float x1;
+
+    if (fraction == NULL || !track_for_row(index, &x0, &x1)) {
+        return false;
+    }
+    *fraction = (x - x0) / (x1 - x0);
+    if (*fraction < 0.0f) {
+        *fraction = 0.0f;
+    }
+    if (*fraction > 1.0f) {
+        *fraction = 1.0f;
+    }
+    return true;
+}
+
+int32_t overlay_draw_slider_at(float x, float y, float *fraction)
+{
+    const layout_t *lay = overlay_layout();
+    int32_t         index = overlay_draw_row_at(x, y);
+    float           x0;
+    float           x1;
+
+    if (fraction == NULL || lay == NULL || !track_for_row(index, &x0, &x1)) {
+        return -1;
+    }
+    /* Grabbing is allowed a little outside each end, because the handle is drawn centred on the end
+     * when the value is at it, and half of it then sits beyond the track. Without this the two
+     * extremes would be the only values that could not be started from. */
+    if (x < x0 - lay->text_h || x > x1 + lay->text_h) {
+        return -1;
+    }
+    return overlay_draw_slider_fraction(index, x, fraction) ? index : -1;
 }

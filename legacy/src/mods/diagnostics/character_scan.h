@@ -17,7 +17,8 @@
  * array; each slot is a link word followed by the payload the caller sees.
  *
  *   header[1]  the head of the singly linked list of occupied slots, threaded through link words
- *   header[2]  the iteration cursor, which is why this file never uses the engine's own iterator
+ *   header[2]  the iteration cursor, which is why diag_characters.c walks the pool itself rather
+ *              than using the engine's own iterator
  *   header[3]  the payload size in bytes
  *   header[4]  the number of slots
  *   header[6]  the first slot

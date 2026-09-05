@@ -101,26 +101,31 @@
  * DLL offers is appended to that same copy. A widget whose append fails is simply absent, the
  * others are unaffected, because each one's value is read back through its own recorded index.
  *
- * SIZE NOTE (rule 9): over 800 lines. It appends a whole widget group to a screen the engine
+ * SIZE NOTE: well over eight hundred lines. It appends a whole widget group to a screen the engine
  * authored, which means the widget records, the string ids, the check-box plumbing and the install
  * order all live here. A reader who cannot see why the string getter is hooked
  * BEFORE a widget exists cannot review this file at all, and that fact lives nowhere in the code.
  *
- * The slider moved to input_slider.c when this file reached 920 lines, past the hard limit, along
- * the seam this note had already named. What stayed here is the LAYOUT of the whole group, boxes,
+ * Two seams have been taken, both along the line this note had already named. The slider moved to
+ * input_slider.c when the file reached 920 lines, past the hard limit. The WORDING then moved to
+ * menu_captions.c: the five-language table and the language pick knew nothing about this file
+ * except the two slots they were written into, and nothing in the widget group has to be re-read
+ * when a caption changes. What stayed here both times is the LAYOUT of the whole group, boxes,
  * slider, caption, because a group needs one owner and one place where its rectangles can be
  * checked against the region they have to fit in.
  *
- * 16 lines under the hard limit. The next thing to leave, if this file has to grow again, is the
- * five-language caption table and resolve_captions(), about 60 lines that depend on nothing here
- * except the two slots they are written into.
+ * The next seam, if this file has to grow again, is the check-box layer itself: the spec table,
+ * the slots, the string-getter hook and the seed, poll and read-back path, which would leave the
+ * same shape input_slider.c already has and would take the file well under six hundred lines.
  */
 #include "input_menu.h"
 
 #include "enhanced_input.h"
 #include "input_slider.h"
+#include "menu_captions.h"
 #include "mouse_look.h"
 
+#include "common/ini.h"
 #include "common/detour.h"
 #include "common/engine_types.h"
 #include "common/frame_hook.h"
@@ -128,8 +133,6 @@
 #include "common/memory.h"
 #include "common/menu_patcher.h"
 #include "common/signature.h"
-
-#include <windows.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -165,6 +168,10 @@ static const uint8_t MSK_OPTIONS_CONTROLS[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF
 };
+
+/* The section this DLL owns, spelled here as it is in enhanced_input.c: the two files do not
+ * share a header for one string, and one copy each is cheaper than a header that exists for it. */
+#define INPUT_SECTION "enhanced_input"
 #define OPTIONS_CONTROLS_PROLOGUE      6u
 #define OPTIONS_CONTROLS_PUSH_OFFSET  22u   /* the 0x68 opcode, verified before the operand */
 #define OPTIONS_CONTROLS_TABLE_OFFSET 23u
@@ -375,61 +382,6 @@ typedef int32_t (__cdecl *options_controls_fn_t)(void);
 typedef void    (__cdecl *get_string_fn_t)(int32_t string_id, char *destination);
 
 /* ==============================================================================================
- * The captions, in five languages
- *
- * ASCII only, and that is not laziness: the menu fonts are bitmap fonts and their coverage above
- * 0x7F has never been read out of the assets. SEITWAERTS rather than the umlaut, PAS CHASSE and
- * CAMERA LIBRE rather than the accents.
- *
- * Neither German caption may be the English word. "Strafe" is German for punishment, and it is the
- * one word in this feature that machine-translates into nonsense. FREIE KAMERA rather than FREIER
- * BLICK because the feature turns the camera; the gaze is a separate field this DLL never writes.
- * ============================================================================================ */
-typedef enum menu_language {
-    MENU_LANGUAGE_EN,
-    MENU_LANGUAGE_DE,
-    MENU_LANGUAGE_FR,
-    MENU_LANGUAGE_IT,
-    MENU_LANGUAGE_ES,
-    MENU_LANGUAGE_COUNT
-} menu_language_t;
-
-static const char *const STRAFE_CAPTION[MENU_LANGUAGE_COUNT] = {
-    "STRAFE",
-    "SEITWAERTS LAUFEN",
-    "PAS CHASSE",
-    "PASSO LATERALE",
-    "PASO LATERAL"
-};
-
-static const char *const FREE_LOOK_CAPTION[MENU_LANGUAGE_COUNT] = {
-    "FREE LOOK",
-    "FREIE KAMERA",
-    "CAMERA LIBRE",
-    "TELECAMERA LIBERA",
-    "CAMARA LIBRE"
-};
-
-/* The mouse caption is a FORMAT, and its one conversion is the setting in thousandths of a degree
- * per count, 0.030 shows as 30. That is the same number the ini carries with the decimal point
- * moved, so a player who reads the caption and then opens engine_fixes.ini finds what they expect.
- * A raw 0.030 on screen would be three characters of noise at this font size. */
-static const char *const MOUSE_SPEED_CAPTION[MENU_LANGUAGE_COUNT] = {
-    "MOUSE SPEED %d",
-    "MAUSGESCHWINDIGKEIT %d",
-    "VITESSE SOURIS %d",
-    "VELOCITA MOUSE %d",
-    "VELOCIDAD RATON %d"
-};
-
-/* The primary language identifier of a LANGID, per the Windows LANGID layout. */
-#define PRIMARY_LANGUAGE_MASK 0x3FFu
-#define LANG_PRIMARY_GERMAN   0x07u
-#define LANG_PRIMARY_FRENCH   0x0Cu
-#define LANG_PRIMARY_ITALIAN  0x10u
-#define LANG_PRIMARY_SPANISH  0x0Au
-
-/* ==============================================================================================
  * One description per box
  *
  * The two boxes differ only in their id, their row, their wording and the pair of functions they
@@ -438,14 +390,15 @@ static const char *const MOUSE_SPEED_CAPTION[MENU_LANGUAGE_COUNT] = {
  * places where the two could drift apart, and the read-back is the one this DLL cannot afford to
  * get wrong.
  * ============================================================================================ */
-typedef bool (*read_setting_fn_t)(void);
-typedef void (*write_setting_fn_t)(bool enabled);
+typedef bool        (*read_setting_fn_t)(void);
+typedef void        (*write_setting_fn_t)(bool enabled);
+typedef const char *(*caption_fn_t)(void);   /* the label, in the language this machine runs in */
 
 typedef struct checkbox_spec {
     int32_t            widget_id;
     int32_t            string_id;
     int32_t            y;
-    const char *const *captions;      /* MENU_LANGUAGE_COUNT entries */
+    caption_fn_t       caption;
     read_setting_fn_t  read_setting;
     write_setting_fn_t write_setting;
 } checkbox_spec_t;
@@ -457,9 +410,9 @@ enum {
 };
 
 static const checkbox_spec_t CHECKBOX_SPEC[BOX_COUNT] = {
-    { WIDGET_ID_STRAFE,    STRING_ID_STRAFE,    CHECKBOX_Y_STRAFE,    STRAFE_CAPTION,
+    { WIDGET_ID_STRAFE,    STRING_ID_STRAFE,    CHECKBOX_Y_STRAFE,    menu_captions_strafe,
       enhanced_input_strafe_enabled,   enhanced_input_set_strafe },
-    { WIDGET_ID_FREE_LOOK, STRING_ID_FREE_LOOK, CHECKBOX_Y_FREE_LOOK, FREE_LOOK_CAPTION,
+    { WIDGET_ID_FREE_LOOK, STRING_ID_FREE_LOOK, CHECKBOX_Y_FREE_LOOK, menu_captions_free_look,
       enhanced_input_free_look_enabled, enhanced_input_set_free_look }
 };
 
@@ -473,6 +426,7 @@ typedef struct checkbox_slot {
 
 typedef struct input_menu_state {
     bool                 attempted;
+    bool                 show_widgets;      /* whether the game's own screen offers them */
     bool                 armed;         /* at least one box is on the screen and is read back */
     bool                 screen_open;
     bool                 live_preview;
@@ -488,31 +442,21 @@ typedef struct input_menu_state {
 static input_menu_state_t menu_state;
 
 /* ============================================================================================ */
-/* An approximation, and it is named as one: the game has no language selector to ask. Every
- * language was a separate release with its own LOCALIZE.LAB. */
+/* The wording itself, and which language it comes out in, is menu_captions.c. What is done here is
+ * the copy into the buffer the string-getter hook answers from, which is this file's own memory. */
 static void resolve_captions(void)
 {
-    LANGID          ui_language = GetUserDefaultUILanguage();
-    menu_language_t language    = MENU_LANGUAGE_EN;
-    size_t          index;
-
-    switch (ui_language & PRIMARY_LANGUAGE_MASK) {
-    case LANG_PRIMARY_GERMAN:  language = MENU_LANGUAGE_DE; break;
-    case LANG_PRIMARY_FRENCH:  language = MENU_LANGUAGE_FR; break;
-    case LANG_PRIMARY_ITALIAN: language = MENU_LANGUAGE_IT; break;
-    case LANG_PRIMARY_SPANISH: language = MENU_LANGUAGE_ES; break;
-    default:                   language = MENU_LANGUAGE_EN; break;
-    }
+    size_t index;
 
     for (index = 0; index < BOX_COUNT; ++index) {
         char  *caption = menu_state.boxes[index].caption;
         size_t size    = sizeof(menu_state.boxes[index].caption);
 
-        _snprintf(caption, size, "%s", CHECKBOX_SPEC[index].captions[language]);
+        _snprintf(caption, size, "%s", CHECKBOX_SPEC[index].caption());
         caption[size - 1] = '\0';
     }
 
-    input_slider_set_caption_format(MOUSE_SPEED_CAPTION[language]);
+    input_slider_set_caption_format(menu_captions_mouse_speed_format());
 }
 
 /* Answers a reserved id from our own buffer whether or not its box was appended: the ids are
@@ -671,7 +615,7 @@ static bool read_widget_table(uintptr_t site, uintptr_t *out_table, uintptr_t *o
     uint32_t  table       = 0;
 
     if (!memory_read_u8(push_opcode, &opcode) || opcode != OPCODE_PUSH_IMM32) {
-        log_warning("expected `push imm32` (68) at %08X on the controls screen, found %02X - no "
+        log_warning("expected `push imm32` (68) at %08X on the controls screen, found %02X, so no "
                     "check box is added", (unsigned)push_opcode, opcode);
         return false;
     }
@@ -695,8 +639,8 @@ static bool read_bitmap_name_table(uintptr_t site, uintptr_t *out_table)
     uint32_t  table       = 0;
 
     if (!memory_read_u8(push_opcode, &opcode) || opcode != OPCODE_PUSH_IMM32) {
-        log_warning("expected `push imm32` (68) for the bitmap-name table at %08X, found %02X - "
-                    "no check box is added", (unsigned)push_opcode, opcode);
+        log_warning("expected `push imm32` (68) for the bitmap-name table at %08X, found %02X, "
+                    "so no check box is added", (unsigned)push_opcode, opcode);
         return false;
     }
     if (!memory_read_u32(site + OPTIONS_CONTROLS_BMP_TABLE_OFFSET, &table) || table == 0) {
@@ -757,7 +701,14 @@ static bool build_widgets(uintptr_t site)
     /* Sideways walking gets a box only when there is a key it could be driven from. The keyboard
      * axis reader is what supplies that key, and on a build where its signature missed, the switch
      * would refuse every time it was clicked. */
-    if (enhanced_input_strafe_available()) {
+    if (!menu_state.show_widgets) {
+        /* OFF BY DEFAULT. All three of the widgets this file adds are settings the game shipped
+         * without, so a player who wants the game as it was should not have to look at them.
+         *
+         * Nothing is lost by hiding them: all three are ini keys and the developer menu carries a
+         * row for each, sensitivity included. This decides only whether the game's own controls
+         * screen offers them too. */
+    } else if (enhanced_input_strafe_available()) {
         appended += append_checkbox(BOX_STRAFE) ? 1u : 0u;
     } else {
         log_warning("no sideways walking check box: the keyboard turn axis was not recognised in "
@@ -768,14 +719,22 @@ static bool build_widgets(uintptr_t site)
     /* Free look gets a box only when its camera machinery stands. It is installed whether the
      * feature is on or off, so this asks whether the follow camera in this build was recognised at
      * all, and a switch for a camera that cannot be turned would mislead rather than fail. */
-    if (enhanced_input_free_look_available()) {
+    if (!menu_state.show_widgets) {
+        /* See above. Both boxes are gated together: one of the pair on its own would be a stranger
+         * shape than either both or neither. */
+    } else if (enhanced_input_free_look_available()) {
         appended += append_checkbox(BOX_FREE_LOOK) ? 1u : 0u;
     } else {
         log_warning("no free look check box: the follow camera in this build was not recognised, "
                     "so the box could never turn anything.");
     }
 
-    {
+    /* The sensitivity slider is gated with the two boxes rather than kept apart from them. It was
+     * tempting to leave it, because mouse look ships ON and this is its only adjustment inside the
+     * game; the answer to that is the developer menu's own sensitivity slider, not a widget on a
+     * screen that is meant to look untouched. Either the screen is the one the game shipped or it
+     * is not, and three quarters of the way is a worse answer than either. */
+    if (menu_state.show_widgets) {
         const input_slider_layout_t slider_layout = {
             SLIDER_X, SLIDER_Y, SLIDER_WIDTH, SLIDER_HEIGHT,
             SLIDER_LABEL_Y, SLIDER_LABEL_HEIGHT,
@@ -805,6 +764,21 @@ void input_menu_install(void)
         return;
     }
 
+    /* Read here rather than in the config loader beside the rest of this DLL's settings, because
+     * this is the only place that acts on it and the screen is built exactly once. */
+    menu_state.show_widgets = ini_read_bool(INPUT_SECTION, "MenuWidgets", false);
+    if (!menu_state.show_widgets) {
+        /* SAID RATHER THAN LEFT SILENT. Without this the screen is untouched and the log
+         * carries no line about it, which reads exactly like a signature that missed. The
+         * reader has to be able to tell a deliberate default from a broken resolve. */
+        log_info("MenuWidgets=0, which is the default: the controls screen is left as the "
+                 "game shipped it, with none of this project's three widgets on it. Free "
+                 "look, sideways walking and mouse speed are still settings here and each "
+                 "has a row in the developer menu; this only decides whether the game's own "
+                 "screen offers them too.");
+        return;
+    }
+
     resolve_captions();
     (void)signature_resolve_table(sites, SITE_COUNT);
 
@@ -813,7 +787,7 @@ void input_menu_install(void)
     if (sites[SITE_GET_STRING].address == 0 ||
         !detour_install(&menu_state.get_string_detour, sites[SITE_GET_STRING].address,
                         (const void *)hook_get_string, GET_STRING_PROLOGUE)) {
-        log_warning("the menu string getter could not be hooked, so no check box is added - "
+        log_warning("the menu string getter could not be hooked, so no check box is added; "
                     "sideways walking and free look stay ini settings");
         return;
     }

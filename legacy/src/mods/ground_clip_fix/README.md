@@ -123,6 +123,7 @@ suppressed.
 actually reached a player: a character whose velocity is unchanged either side of the handler is
 left alone whatever its mode.
 
-**What has not been tested** is a whole game. The risk this design still carries is a contact that
-is supposed to move something the engine does not test. If something that used to be knocked about
-by walking into it now refuses to budge, that is this fix overreaching and worth reporting.
+**Accepted in game**, in the 1.5.0 build, which was played through by hand. The risk this design
+still carries is a contact that is supposed to move something the engine does not test, and no
+single playthrough covers every one of those. If something that used to be knocked about by
+walking into it now refuses to budge, that is this fix overreaching and worth reporting.

@@ -382,7 +382,7 @@ bool imuse_guard_install(const imuse_sites_t *sites)
             /* Rolled back on purpose. An atomic raise against a racy lower is not half a repair,
              * it is a different imbalance: it would make the increment reliable while the
              * decrement can still be lost, which is the same failure with better odds of
-             * arriving. Section 17 of the rules, a partially installed feature stays inactive. */
+             * arriving. A partially installed feature stays inactive. */
             uint8_t  plain[8];
             uint32_t operand = (uint32_t)(uintptr_t)sites->gate;
 

@@ -4,8 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Widen the DRAWN menu cursor's clamp from the 640x480 island it ships with to the whole display
- * mode, and keep it there when the mode changes.
+/* Widen the DRAWN menu cursor's clamp from the 640x480 island it ships with to the menu canvas,
+ * whatever size that canvas is being drawn at.
  *
  * This is not the same thing as the pointer confinement in focus_guard.c, which is a ClipCursor on
  * the real OS pointer. This one is about the cursor the MENUS draw for themselves: the engine
@@ -18,10 +18,11 @@
  * touched here.
  *
  * `enabled` false leaves the engine exactly as it shipped and says so once. */
-/* `menu_scale` is the multiple the menu canvas is drawn at, 1 when it is not scaled. The cage is
- * CANVAS relative, not screen relative: the engine clamps to `g_menuOriginX + immediate`, and the
- * canvas is what the menus can erase. A cursor allowed outside it stamps itself on every pixel it
- * crosses, because nothing there ever repaints. At scale 1 this writes the values that shipped. */
+/* `canvas_width` and `canvas_height` are the size the menu canvas is drawn at, 640x480 when it is
+ * not scaled. The cage is CANVAS relative, not screen relative: the engine clamps to
+ * `g_menuOriginX + immediate`, and the canvas is what the menus can erase. A cursor allowed
+ * outside it stamps itself on every pixel it crosses, because nothing there ever repaints. At the
+ * authored canvas this writes the values that shipped. */
 void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height);
 
 /* True when the clamp really was widened, for the caller's own log. */
@@ -30,17 +31,15 @@ bool pointer_cage_is_active(void);
 
 /* ---- the arithmetic, exposed because it is the part that can be checked without a display -----
  *
- * The clamp the engine should carry for a given display mode. The engine's own constants are
+ * The clamp the engine should carry for a canvas of a given size. The engine's own constants are
  * 640-33 and 480-33: the cursor quad is 32 pixels wide and the clamp leaves one more, so that the
- * cursor is still drawn whole at the far edge. Keeping the same margin at every mode is what makes
- * the widened clamp identical to the shipped one at 640x480, which is the reason this may
- * default to on.
+ * cursor is still drawn whole at the far edge. Keeping the same margin at every size is what makes
+ * the widened clamp identical to the shipped one at 640x480, which is the reason this may default
+ * to on.
  *
- * Returns false, writing nothing, for a mode too small to hold a cursor at all. That is not a
- * theoretical case: the size accessor reports zeroes before a mode is configured and the shutdown
- * path leaves the globals negative, and a clamp computed from either would be a box the cursor
- * could never be inside. */
-bool pointer_cage_extent(int mode_width, int mode_height,
+ * Returns false, writing nothing, for a canvas too small to hold a cursor at all, which would be
+ * a box the cursor could never be inside. */
+bool pointer_cage_extent(int canvas_width, int canvas_height,
                          int *out_clamp_width, int *out_clamp_height);
 
 /* The margin above, so a test states the same number the code does rather than a copy of it. */

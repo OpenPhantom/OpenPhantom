@@ -183,8 +183,8 @@ is the expensive part, not the detour.
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. Offline verification passes for every observer pattern on all
-both retail builds.
+Built and linked, `/W4 /WX` clean. Offline verification passes for every observer pattern on both
+retail builds.
 
 **The audio observers are accepted in game.** They were used to find a live defect: the channel
 release observer reported three voices holding an owner handle that pointed into the calling

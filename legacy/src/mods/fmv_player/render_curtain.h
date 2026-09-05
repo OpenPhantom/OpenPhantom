@@ -1,6 +1,6 @@
 /* render_curtain.h: a black rectangle drawn straight into the game's own rendered frame for a
- * while after a movie, so the position-settle transient video_overlay.c's own header documents has
- * somewhere to finish before the player sees it - and so does anything recording the game.
+ * while after a movie, so the position-settle transient fmv_player.c documents has somewhere to
+ * finish before the player sees it, and so does anything recording the game.
  *
  * The first version of this was a separate overlay window. It worked for a player watching their
  * own monitor and was invisible to a recording made specifically to show it working: most "game
@@ -30,7 +30,7 @@ void render_curtain_set_fade_ms(unsigned milliseconds);
 void render_curtain_set_mute_enabled(bool enabled);
 
 /* Arms the curtain: opaque starting on the next real frame drawn, for HoldMs, then fading for
- * FadeMs, then gone. Idempotent while already armed - a second call before the first finishes does
+ * FadeMs, then gone. Idempotent while already armed: a second call before the first finishes does
  * not restart or extend it. */
 void render_curtain_begin(void);
 

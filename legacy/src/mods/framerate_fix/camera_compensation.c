@@ -164,6 +164,7 @@ typedef struct camera_compensation_state {
     uintptr_t yaw_lag_normal;
     uintptr_t pitch_lag;
     float     last_scale;
+    bool      last_scripted;
 } camera_compensation_state_t;
 
 static camera_compensation_state_t camera_state = { false, false, 0, 0, 0, 0, 0, -1.0f };
@@ -386,7 +387,7 @@ bool camera_compensation_install(bool compensate_anchor)
     lag   = sites[SITE_CAMERA_LAG_CONSTANTS].address;
     pitch = sites[SITE_CAMERA_PITCH_LAG].address;
     if (lag == 0 || pitch == 0) {
-        log_warning("camera lag sites unresolved (lag=%08X pitch=%08X), the four remaining "
+        log_warning("camera lag sites unresolved (lag=%08X pitch=%08X), the five remaining "
                     "dampers are NOT compensated and will feel rigid above 30 fps",
                     (unsigned)lag, (unsigned)pitch);
         return camera_state.anchor_patched;
@@ -403,7 +404,7 @@ bool camera_compensation_install(bool compensate_anchor)
      * exists separately from patch_write_*. */
     if (!memory_make_writable(lag, CAMERA_LAG_PAGE_BYTES) ||
         !memory_make_writable(pitch, PITCH_LAG_PAGE_BYTES)) {
-        log_error("the camera lag pages could not be unprotected, the four immediate-operand "
+        log_error("the camera lag pages could not be unprotected, the five immediate-operand "
                   "dampers are NOT compensated");
         return camera_state.anchor_patched;
     }
@@ -419,7 +420,7 @@ bool camera_compensation_install(bool compensate_anchor)
     return true;
 }
 
-void camera_compensation_update(float smoothed_seconds_scale)
+void camera_compensation_update(float smoothed_seconds_scale, bool scripted_camera)
 {
     float k;
 
@@ -431,15 +432,19 @@ void camera_compensation_update(float smoothed_seconds_scale)
     if (!(smoothed_seconds_scale > 0.0f)) {
         return;
     }
-    if (camera_state.last_scale == smoothed_seconds_scale) {
+    if (camera_state.last_scale == smoothed_seconds_scale &&
+        camera_state.last_scripted == scripted_camera) {
         return;                                    /* the common case: nothing to do at all */
     }
-    camera_state.last_scale = smoothed_seconds_scale;
+    camera_state.last_scale    = smoothed_seconds_scale;
+    camera_state.last_scripted = scripted_camera;
 
     /* The anchor weight is a plain data cell, so it needs neither a writable code page nor a
-     * cache flush, and it is written even when the four immediate-operand dampers are absent. */
+     * cache flush, and it is written even when the five immediate-operand dampers are absent. */
     if (camera_state.anchor_patched) {
-        anchor_k = powf(BLEND_HALF, smoothed_seconds_scale);
+        /* Zero for a placed camera: see the header. The lag cells below are left compensated,
+         * because they damp the rig and the euler rather than the gather origin. */
+        anchor_k = scripted_camera ? 0.0f : powf(BLEND_HALF, smoothed_seconds_scale);
     }
     if (!camera_state.patchable) {
         return;

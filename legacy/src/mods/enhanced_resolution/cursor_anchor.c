@@ -91,8 +91,8 @@
  * for as long as the hand is off the mouse; the first mouse movement then brings it back through
  * the hook below. That is a transient, and it is named here rather than hidden.
  *
- * SIZE NOTE (rule 9): 461 lines, of which 263 are code. The excess over the preferred 400 is the
- * listing above: a pattern without the disassembly it was cut from is a magic number, and the
+ * SIZE NOTE: over the preferred 400 lines, and the excess is the listing above: a pattern
+ * without the disassembly it was cut from is a magic number, and the
  * asymmetry between "compare in client space" and "warp in screen space" is invisible in the C.
  * ============================================================================================ */
 #include "cursor_anchor.h"

@@ -95,8 +95,9 @@
  * this survives a build that places the global somewhere else. Writing the address into the
  * pattern would have defeated the point of searching for it.
  *
- * IT HAS TO RUN THIS FAR. The first twenty bytes alone match twice in the retail image: a second
- * function at 0x00415B38 opens identically against a different global, 0x005BB4B8, and a pattern
+ * The pattern HAS TO run this far. The first twenty bytes alone match twice in the retail image:
+ * a second function at 0x00415B38 opens identically against a different global, 0x005BB4B8, and a
+ * pattern
  * that matched both would have resolved to nothing and switched this observer off. The two
  * diverge at the instruction after the jump, where this one loads the global it just tested and
  * the other stores a zero somewhere else, so the pattern runs on to that A1 opcode. Counted
@@ -113,6 +114,8 @@ static const uint8_t MASK_CHARACTER_POOL[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00,
     0x00, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_CHARACTER_POOL == sizeof MASK_CHARACTER_POOL,
+               "the character pool pattern and its mask are different lengths");
 #define OFFSET_CHARACTER_POOL_POINTER 0x08u
 
 /* --- Plr_RunPhases 0x00448297, a data site only, never hooked here ---------------------------- *

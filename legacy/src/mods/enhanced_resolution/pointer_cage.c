@@ -26,9 +26,9 @@
  * 640x480 island simply hits nothing, which is already true today for everything outside it.
  *
  * ==============================================================================================
- * The known cost, reported but not yet reproduced here: the engine's clamp may be load-bearing
+ * WHY THE CAGE IS THE CANVAS AND NOT THE SCREEN. The engine's clamp is load-bearing.
  *
- * The paragraph above is true and possibly incomplete, and the missing half would be the ERASE.
+ * The paragraph above is true and it is incomplete, and the missing half is the ERASE.
  * The pause screens do not repaint every pixel every frame; they repair themselves through the
  * menu toolkit's damage rectangles, which live in canvas coordinates and are clipped against the
  * same hard-coded 640x480 every blit in that toolkit clips against. A cursor quad that sits
@@ -40,15 +40,15 @@
  * The front end would never show it, because its 3-D room repaints every pixel every frame; the
  * pause subpages are exactly the screens that do not.
  *
- * If that reproduces, the shipped clamp is not a small-mindedness to correct but the guarantee
- * that the cursor never goes where the erase cannot follow, and this setting becomes opt-in for
- * whoever accepts the stamps. Every clickable widget lives inside the island either way, so
- * nothing is lost by turning it off. It is still ON here because the report has not been
- * reproduced on this tree yet, and a default is not flipped on a symptom nobody here has seen.
+ * So the shipped clamp is not a small-mindedness to correct. It is the guarantee that the cursor
+ * never goes where the erase cannot follow, and this file keeps that guarantee rather than
+ * breaking it: the cage is widened to the CANVAS, which is exactly the region that repaints, and
+ * never to the screen. An earlier version of this file did widen it to the display mode, which
+ * is the fault above, and that was invisible only for as long as the feature never armed.
  * menu_island_clip.c repairs the same class of defect for the sprites the WIDGETS draw; that one
- * IS reproduced, and the two are independent - the widget smears survive WidenMenuCursorArea=0.
+ * IS reproduced, and the two are independent: the widget smears survive WidenMenuCursorArea=0.
  *
- * The block, and every offset this file writes to, measured from the match base S:
+ * The block, and every offset this file reads or writes, measured from the match base S:
  *
  *   S+0x00  A1 <originX>          mov eax,[g_menuOriginX]        <- operand at S+0x01
  *   S+0x05  89 45 F8              [ebp-8] = it
@@ -69,29 +69,15 @@
  *   S+0x6F  05 BF 01 00 00        add eax,0x1BF                  <- OPCODE S+0x6F, IMM S+0x70
  *   S+0x74  A3 <cursorY>
  *
- * So the whole repair is four immediates and two operands:
+ * So the whole repair is the four immediates:
  *
- *     the four immediates 0x25F/0x1BF  ->  W-33 and H-33
- *     the two origin operands          ->  cells of our own holding 0
+ *     the four immediates 0x25F/0x1BF  ->  canvas width - 33 and canvas height - 33
  *
- * ==============================================================================================
- * The order is forced, and it is the biggest hazard in this file
- *
- * Immediates first, operands second. Neither half is harmful on its own, but only one of the two
- * partial states is survivable:
- *
- *   immediates only   the cage becomes [origin, origin + W - 33]. Bigger than it was, anchored
- *                     where it always was, every widget still reachable. Usable.
- *   operands only     the cage becomes [0, 607] while the widgets sit centred around (640,300) on
- *                     a 1080p screen. not one widget is reachable. The menus are dead.
- *
- * A partial install must therefore fall into the first state, which is why the immediates go in
- * first and why a failure to repoint the operands rolls back both halves, the immediates AND any
- * operand that had already been written, rather than leaving a half-done job standing. The second
- * half of that matters as much as the first: the two operand writes are sequenced, so a failure on
- * the vertical one happens only after the horizontal one has succeeded, and restoring the
- * immediates alone would leave the cursor caged to x 0..607 with the widgets centred from x=640.
- * Rule 17: a partially installed feature must not be reported as success.
+ * The two origin operands are read back before anything is written, as proof that the block is
+ * the one the listing describes, and are never written to. An earlier version repointed them at
+ * zero cells to make the clamp screen relative, which is the fault described above; removing
+ * that removed the only partial state this feature could be left in, and the ordering hazard
+ * with it. There is one write step now, and it either happens or it does not.
  *
  * ==============================================================================================
  * The signature contains the immediates it overwrites
@@ -99,8 +85,8 @@
  * 0x25F and 0x1BF are part of the pattern; they are what identifies this as the 640x480 cage
  * rather than some other pair of clamps, so after a successful install the pattern no longer
  * matches anything. The addresses are therefore cached at install time and the site is never
- * re-resolved. A refresh recomputes ABSOLUTELY from the current width and height and never adds a
- * delta to what is there, so repeating it is harmless however many times it runs.
+ * re-resolved. The clamps are computed ABSOLUTELY from the canvas size and never as a delta on
+ * what is already there, so writing them twice writes the same numbers.
  *
  * A consequence worth naming: if an earlier generation of this DLL is already in the process and
  * has already patched the block, this resolve finds nothing and the feature declines with a log
@@ -108,13 +94,12 @@
  * silently treated as a failure to find the engine.
  *
  * ==============================================================================================
- * Why the refresh is a poll and not a detour
+ * There is nothing to refresh
  *
- * The obvious site is the message the engine broadcasts to its widgets on a mode change. It is the
- * wrong one: the loading screen calls swmenu_setSuppressModeSwitch, and enterMenuMode then RETURNS
- * BEFORE that broadcast. A detour there would miss exactly the mode changes that matter. So the
- * width and height are read once per rendered frame and the four immediates are rewritten only
- * when they have actually changed; two integer compares in the common case, and no write at all.
+ * The canvas does not change while the game runs; the display mode does. Sizing the cage from
+ * the canvas is therefore a single write at install time, with no per-frame poll, no mode change
+ * detour and nothing to resolve out of the graphics layer. An earlier version needed all three,
+ * and needed them because it was sizing the cage from the wrong thing.
  */
 #include "pointer_cage.h"
 
@@ -123,7 +108,6 @@
 
 #include "window_fit.h"
 
-#include "common/frame_hook.h"
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
@@ -292,14 +276,14 @@ static bool opcode_matches(uintptr_t address, const uint8_t *expected, size_t si
                            const char *what)
 {
     if (!patch_validate_bytes(address, expected, size)) {
-        log_warning("the menu cursor clamp: %s at %08X is not the instruction it should be - "
+        log_warning("the menu cursor clamp: %s at %08X is not the instruction it should be, so "
                     "nothing is patched", what, (unsigned)address);
         return false;
     }
     return true;
 }
 
-/* Every byte this file will write to, proved before the first of them is written. The pattern
+/* Every byte this file reads or writes, proved before the first write. The pattern
  * already matched, so this is belt and braces, but the four offsets are hand-derived from a
  * listing and that is exactly the class of thing that is wrong silently. */
 static bool cage_offsets_are_sane(uintptr_t site)
@@ -324,8 +308,8 @@ static bool cage_offsets_are_sane(uintptr_t site)
                           "the second height clamp");
 }
 
-/* Writes the four clamps ABSOLUTELY from the current mode. Never `imm += delta`: a refresh that
- * accumulated would drift by exactly as many mode changes as the session had. */
+/* Writes the four clamps ABSOLUTELY from the canvas size. Never `imm += delta`, so writing them
+ * a second time writes the same numbers rather than drifting. */
 static bool write_clamps(int32_t width, int32_t height)
 {
     int      clamp_width = 0;
@@ -355,14 +339,9 @@ static bool write_clamps(int32_t width, int32_t height)
 /* ============================================================================================ */
 static bool install_cage(uintptr_t site, int32_t width, int32_t height)
 {
-    /* The two operands are one step, so the rollback has to undo both. `||` short-circuits, so
-     * the second write is only attempted when the first SUCCEEDED, and a rollback that put only
-     * the immediates back would leave the horizontal operand pointing at our zero while the
-     * vertical one still reads the menu origin. That is the catastrophic half of the table above,
-     * applied to one axis: on a 1080p screen the cursor would be caged to x 0..607 while every
-     * widget sits centred from x=640, and nothing would be clickable. The shipped values are read
-     * back out of the operands rather than assumed, because they are the two cells the engine
-     * itself writes and this file has no other claim on their contents. */
+    /* Read, not written. The two origin operands name the cells the engine itself maintains, and
+     * reading them back is the last check that this block is the one the listing describes before
+     * any immediate is touched. Nothing here has a claim on their contents. */
     uint32_t shipped_origin_x = 0;
     uint32_t shipped_origin_y = 0;
 
@@ -379,24 +358,16 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
         return false;
     }
 
-    /* Step one of two, and the order is not a style choice. After this alone the cage is
-     * [origin, origin + W - 33]: larger than it shipped, still anchored at the menu origin, and
-     * every widget still reachable. That is the only partial state this feature may ever be left
-     * in, which is why it is the one that happens first. */
+    /* The whole of it. The cage becomes [origin, origin + canvas - 33]: larger than it shipped,
+     * still anchored at the menu origin, and every widget still reachable. */
     if (!write_clamps(width, height)) {
         log_error("the menu cursor clamp could not be widened, nothing has been changed and the "
                   "cursor still moves in a 640x480 island");
         return false;
     }
 
-    /* There is no step two any more. This used to repoint the two origin operands at zero cells,
-     * turning a canvas relative clamp into a screen relative one so the cursor could leave the
-     * menu. That was the wrong idea: outside the canvas nothing repaints, so the cursor stamped a
-     * copy of itself on every pixel it crossed. Keeping the engine's own origin is both correct
-     * and simpler, and it removes the one partial state this feature could be left in.
-     *
-     * shipped_origin_x and shipped_origin_y are still read above, as a proof the operands are
-     * readable before anything is written; nothing is done with them now. */
+    /* The operands were read as a check and are not written; see the file header for what used
+     * to happen here and why it stopped. */
     (void)shipped_origin_x;
     (void)shipped_origin_y;
 

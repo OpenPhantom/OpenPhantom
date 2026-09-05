@@ -11,9 +11,10 @@
  * The parts are separate on purpose, and each one can be read without the others. overlay_model
  * owns what is shown and is the only half that can be tested without the game. overlay_layout turns
  * a measured text height into bands. overlay_draw turns those into shapes and text, through the
- * entry points overlay_sites resolves. overlay_input owns the detour that opens the panel, and
- * input_freeze holds the player while it is up. The two cheat files own their own engine sites and
- * know nothing about any of the rest.
+ * entry points overlay_sites resolves. overlay_utilities describes the rows that configure this
+ * patch rather than the game. overlay_input owns the detour that opens the panel, input_freeze
+ * holds the player while it is up and sim_pause holds the world. The cheat files own their own
+ * engine sites and know nothing about any of the rest.
  */
 #ifndef DEV_OVERLAY_H
 #define DEV_OVERLAY_H

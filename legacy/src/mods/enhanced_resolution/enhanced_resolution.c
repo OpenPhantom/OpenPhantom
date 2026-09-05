@@ -5,7 +5,7 @@
  *
  * graphics_buildModeList 0x46C592 filters the platform's raw DirectDraw table [0x862740]
  * (count [0x862014], stride 0x54) into this device's list. The acceptance rule, in code order:
- *     1. kind == 1 && bpp == 0x10           <- the game is 16-bit, there is no 32-bit path
+ *     1. kind == 1 && bpp == 0x10           <- 16-bit only, and see mode_depth.h for why
  *     2. 640x480 is accepted unconditionally
  *     3. else: w*h*6 <= VRAM limit, w >= 640, h >= 480,
  *              AND (w == 1280 && h == 1024) OR (w/4 == h/3)      <- THE 4:3 LOCK
@@ -33,10 +33,10 @@
  *      allocator.
  *
  * ==============================================================================================
- * SIZE NOTE (rule 9): a little over 600 lines, of which about 400 are code. The rest is the byte
- * evidence above and at each hooked site. Rule 8 requires that evidence at the site, and it is what
- * makes a patch that rewrites a conditional jump reviewable at all: without the acceptance rule
- * written out in code order, `EB 32` is an unaccountable two bytes.
+ * SIZE NOTE: past the 600 line mark, and about half of it is the byte evidence above and at each
+ * hooked site. That evidence belongs at the site, and it is what makes a patch that rewrites a
+ * conditional jump reviewable at all: without the acceptance rule written out in code order,
+ * `EB 32` is an unaccountable two bytes.
  */
 #include "enhanced_resolution.h"
 
@@ -46,7 +46,11 @@
 #include "menu_loading_bar.h"
 #include "menu_art_source.h"
 #include "menu_scale.h"
+#include "mode_depth.h"
 #include "mode_filter.h"
+#include "sw_blit_guard.h"
+#include "ending_resolution.h"
+#include "credits_skip.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
 
@@ -54,6 +58,8 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+
+#include <intrin.h>          /* _ReturnAddress, for LogResolutionCalls */
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
@@ -172,6 +178,9 @@ typedef struct resolution_config {
     bool widescreen_modes;
     int  max_menu_modes;
     int  force_width;
+    bool log_resolution_calls;
+    bool ending_keeps_resolution;
+    bool skip_credits;
     int  force_height;
     bool log_mode_table;
     bool menu_keeps_resolution;
@@ -182,6 +191,7 @@ typedef struct resolution_config {
     bool widen_menu_cursor_area;
     bool clamp_menu_sprites_to_island;
     bool filter_mode_enumeration;
+    int  mode_bit_depth;
     float menu_scale;
     char  menu_art_directory[192];
 } resolution_config_t;
@@ -215,6 +225,12 @@ static void load_config(void)
     config->widescreen_modes      = ini_read_bool(RESOLUTION_SECTION, "WidescreenModes", true);
     config->max_menu_modes        = ini_read_int (RESOLUTION_SECTION, "MaxMenuModes", 63);
     config->force_width           = ini_read_int (RESOLUTION_SECTION, "ForceWidth", 0);
+    config->log_resolution_calls  = ini_read_bool(RESOLUTION_SECTION,
+                                                  "LogResolutionCalls", false);
+    config->ending_keeps_resolution = ini_read_bool(RESOLUTION_SECTION,
+                                                    "EndingKeepsResolution", true);
+    config->skip_credits          = ini_read_bool(RESOLUTION_SECTION,
+                                                  "SkipCredits", true);
     config->force_height          = ini_read_int (RESOLUTION_SECTION, "ForceHeight", 0);
     /* Off, like every other diagnostic in this tree. A release ships nothing switched on that
      * only writes to the log, so the default has to be off in the code as well as in the shipped
@@ -291,6 +307,7 @@ static void load_config(void)
      * those records are therefore spent on modes the options screen can never show, and which
      * resolutions survive depends on the order the driver enumerated in. Filtering costs nothing
      * on a driver that only reports 16 bit, because then there is nothing to filter. */
+    config->mode_bit_depth        = ini_read_int (RESOLUTION_SECTION, "ModeBitDepth", 16);
     config->filter_mode_enumeration =
         ini_read_bool(RESOLUTION_SECTION, "FilterModeEnumeration", true);
 
@@ -471,6 +488,9 @@ static int32_t __cdecl hook_enum_modes(mode_label_t *out)
 /* ============================================================================================ */
 #define RESOLUTION_READ_INI 0xFFFFFFFFu
 
+/* Enough to cover a whole session's mode changes and nowhere near enough to be a flood. */
+#define RESOLUTION_CALL_LOG_MAX 32u
+
 static int32_t __cdecl hook_set_resolution(uint32_t width, uint32_t height)
 {
     set_resolution_fn_t original =
@@ -479,6 +499,26 @@ static int32_t __cdecl hook_set_resolution(uint32_t width, uint32_t height)
     /* This detour exists for ForceWidth/ForceHeight and nothing else. The window fit used to be
      * driven from here and that was the defect: this function is not the choke point, and the mode
      * changes a player triggers do not pass through it. */
+    /* MEASUREMENT, off unless asked for. graphics_setResolution has SIX callers and
+     * MenuKeepsResolution neutralises exactly one of them, the gate inside swmenu_enterMenuMode.
+     * A screen that drops to 640x480 while every other menu holds its size is therefore reaching
+     * this function by one of the other five, and the only way to know WHICH is to ask the call
+     * itself. The return address is the caller: a detour is entered through a jump patched over
+     * the prologue, so the stack still carries the address the engine will return to.
+     *
+     * Capped, because a mode change is rare but a runaway log is not worth risking. */
+    if (resolution_state.config.log_resolution_calls) {
+        static unsigned reported = 0;
+
+        if (reported < RESOLUTION_CALL_LOG_MAX) {
+            ++reported;
+            log_info("graphics_setResolution(%u, %u) called from %08X%s",
+                     (unsigned)width, (unsigned)height,
+                     (unsigned)(uintptr_t)_ReturnAddress(),
+                     (reported == RESOLUTION_CALL_LOG_MAX) ? " (last one reported)" : "");
+        }
+    }
+
     if (resolution_state.config.force_width > 0 && resolution_state.config.force_height > 0 &&
         width == RESOLUTION_READ_INI && height == RESOLUTION_READ_INI) {
         log_info("startup resolution forced to %dx%d (was 'read obi.ini')",
@@ -588,7 +628,7 @@ static void install_enum_modes_cap(void)
         log_info("hooked graphics_enumModes at %08X (cap %d entries)",
                  (unsigned)site, resolution_state.config.max_menu_modes);
     } else {
-        log_error("the graphics_enumModes detour FAILED - with the 4:3 lock lifted the options "
+        log_error("the graphics_enumModes detour FAILED. With the 4:3 lock lifted the options "
                   "screen can overflow its %d-slot array", MENU_LABEL_SLOTS);
     }
 }
@@ -597,7 +637,10 @@ static void install_forced_startup_resolution(void)
 {
     uintptr_t site = sites[SITE_SET_RESOLUTION].address;
 
-    if (resolution_state.config.force_width <= 0 || resolution_state.config.force_height <= 0) {
+    const bool forcing = (resolution_state.config.force_width > 0 &&
+                          resolution_state.config.force_height > 0);
+
+    if (!forcing && !resolution_state.config.log_resolution_calls) {
         /* Named rather than skipped in silence: this used to be hooked whenever window fitting was
          * on, and it no longer is. A reader comparing two logs has to be able to see that the
          * detour is absent because nothing asked for it, not because it failed. */
@@ -606,20 +649,27 @@ static void install_forced_startup_resolution(void)
         return;
     }
     if (site == 0) {
-        log_warning("graphics_set_resolution did not resolve - ForceWidth/ForceHeight are IGNORED "
-                    "and obi.ini decides the startup resolution");
+        log_warning("graphics_set_resolution did not resolve, so ForceWidth/ForceHeight are "
+                    "IGNORED, LogResolutionCalls can report nothing, and obi.ini decides the "
+                    "startup resolution");
         return;
     }
 
     if (detour_install(&resolution_state.set_resolution_detour, site,
                        (const void *)hook_set_resolution, SET_RESOLUTION_PROLOGUE_SIZE)) {
-        log_info("hooked graphics_setResolution at %08X - the startup resolution is forced to "
-                 "%dx%d instead of being read from obi.ini",
-                 (unsigned)site, resolution_state.config.force_width,
-                 resolution_state.config.force_height);
+        if (forcing) {
+            log_info("hooked graphics_setResolution at %08X: the startup resolution is forced to "
+                     "%dx%d instead of being read from obi.ini",
+                     (unsigned)site, resolution_state.config.force_width,
+                     resolution_state.config.force_height);
+        } else {
+            log_info("hooked graphics_setResolution at %08X for LogResolutionCalls only: every "
+                     "call is reported with the address that made it, and nothing is changed",
+                     (unsigned)site);
+        }
     } else {
-        log_error("the graphics_setResolution detour at %08X FAILED - ForceWidth/ForceHeight are "
-                  "IGNORED", (unsigned)site);
+        log_error("the graphics_setResolution detour at %08X FAILED, so ForceWidth/ForceHeight "
+                  "are IGNORED", (unsigned)site);
     }
 }
 
@@ -660,14 +710,22 @@ void enhanced_resolution_install(void)
     resolution_state.installed = true;
 
     /* FIRST of all the patches here, and that is an ordering constraint rather than a reading
-     * order. The display mode enumeration runs once, inside graphics startup, and the filter can
-     * only work on an enumeration that has not happened yet. Everything below acts on the list
-     * that enumeration produced. */
+     * order. The display mode enumeration runs once, inside graphics startup, so the depth choice
+     * and the filter can only work on an enumeration that has not happened yet, and the filter has
+     * to agree with whatever depth this settled on. Everything below acts on the list that
+     * enumeration produced. */
+    if (mode_depth_install((uint32_t)resolution_state.config.mode_bit_depth) == 32u) {
+        /* The 2-D layer is software and writes two-byte pixels, so it has to be silenced or
+         * the first menu bitmap faults. See sw_blit_guard.h for what that costs. */
+        (void)sw_blit_guard_install();
+    }
     (void)mode_filter_install(resolution_state.config.filter_mode_enumeration);
 
     install_aspect_gate();
     install_enum_modes_cap();
     install_forced_startup_resolution();
+    ending_resolution_install(resolution_state.config.ending_keeps_resolution);
+    credits_skip_install(resolution_state.config.skip_credits);
     install_menu_resolution_gate();
 
     /* LAST, and this is an ordering constraint and not merely a reading order: both features below
@@ -689,13 +747,6 @@ void enhanced_resolution_install(void)
         focus_config.window_is_moved = window_is_moved;
         (void)focus_guard_install(&focus_config);
 
-        /* AFTER install_window_fit(), and this is an ordering constraint rather than a reading
-         * order: the cage asks window_fit_current_mode_size() for the display mode, and that
-         * accessor is resolved inside window_fit_install(). Installing the cage first would find
-         * it unresolved and decline for a reason that has nothing to do with the cage.
-         *
-         * The two are otherwise unrelated: this one is about the cursor the MENUS draw and is
-         * useful whether or not the window is ever moved. */
         /* The artwork mount comes first of all, because menu_scale reads the converted
          * artwork's own size to decide the canvas, and that file lives in this folder. The mount
          * itself happens later, when the engine starts its menu system; this only arms it. */
@@ -703,7 +754,7 @@ void enhanced_resolution_install(void)
                                       resolution_state.config.menu_art_directory);
 
         /* menu_scale FIRST now, because the cage is sized from the canvas it draws and
-         * asks menu_scale_current() for the multiple. The two used to be the other way
+         * asks menu_scale_canvas() for the size. The two used to be the other way
          * round, when the cage widened to the display mode and the scale had to ask
          * whether it had armed. */
         (void)menu_scale_install(resolution_state.config.menu_scale,
@@ -714,6 +765,15 @@ void enhanced_resolution_install(void)
             int32_t canvas_height;
 
             menu_scale_canvas(&canvas_width, &canvas_height);
+
+            /* AFTER install_window_fit(), and this is an ordering constraint rather than a
+             * reading order: the cage asks window_fit_current_mode_size() for the display mode,
+             * and that accessor is resolved inside window_fit_install(). Installing the cage
+             * first would find it unresolved and decline for a reason that has nothing to do
+             * with the cage.
+             *
+             * The two are otherwise unrelated: this one is about the cursor the MENUS draw and
+             * is useful whether or not the window is ever moved. */
             pointer_cage_install(resolution_state.config.widen_menu_cursor_area,
                                  canvas_width, canvas_height);
 

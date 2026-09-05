@@ -15,11 +15,11 @@ bool diag_install_observer(signature_t *table, int index, detour_t *detour, cons
     uintptr_t site = table[index].address;
 
     if (site == 0) {
-        log_info("  %-22s OFF - the site did not resolve (%s)", table[index].name, what);
+        log_info("  %-22s OFF, the site did not resolve (%s)", table[index].name, what);
         return false;
     }
     if (!detour_install(detour, site, hook, prologue_size)) {
-        log_warning("  %-22s OFF - the detour at %08X failed",
+        log_warning("  %-22s OFF, the detour at %08X failed",
                     table[index].name, (unsigned)site);
         return false;
     }

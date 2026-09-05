@@ -74,7 +74,7 @@ static void test_horizontal(void)
 
 static void test_focal_and_vertical(void)
 {
-    /* The second retail cross-CHECK: 640x480 at 60 degrees is the 3-D menu's own constant. */
+    /* The second retail cross-check: 640x480 at 60 degrees is the 3-D menu's own constant. */
     ut_near(fov_focal_pixels(60.0f, 320.0f), 554.256f, 0.01f,
                 "focal at 640x480 / 60 deg is the hard-coded 554.256");
 

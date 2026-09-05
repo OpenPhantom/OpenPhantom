@@ -4,7 +4,7 @@
  * a `do { ... local_10 = local_c; } while (true)` loop over a global linked list, head at
  * DAT_00872fb8, next pointer at the record's own +0x00, walked once per simulation step for every
  * live entry regardless of what kind of object it turns out to be. The record carries gravity,
- * velocity, a lifetime timer and a bounce/impact callback - the shape of a generic ballistic
+ * velocity, a lifetime timer and a bounce/impact callback, which is the shape of a generic
  * physics object, not something the engine's own naming ties to "projectile" specifically. Blaster
  * bolts are the confirmed inhabitant; whether anything else (a dropped weapon, a settling ragdoll)
  * shares the same list is exactly the question this measures rather than assumes.
@@ -119,7 +119,7 @@ static void projectile_census_tick(void)
     sampled = 0;
     while (entry != 0 && count < PROJECTILE_WALK_MAX) {
         if (count < PROJECTILE_SAMPLE_THRESHOLD || sampled >= PROJECTILE_SAMPLE_COUNT) {
-            /* not yet over threshold, or already sampled enough this report - just keep counting */
+            /* Below the threshold, or already sampled enough for this report. */
         } else {
             float position[3];
 

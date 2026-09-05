@@ -152,14 +152,13 @@ not hold the value this DLL expects.
 
 ## Testing status
 
-**A unit test for the size validation, and not accepted in game.** Nothing here was compiled or run
-while it was written, so treat the pattern work below as what has actually been established and
-nothing beyond it. The module this was ported from builds and links in its own tree; the same is not
-a claim about this copy until somebody builds it.
+**A unit test for the size validation, and accepted in game**, in the 1.5.0 build, which was
+played through by hand. This copy builds and links here, `/W4 /WX` clean, and ships in the
+patch. The pattern work below is what establishes where it acts.
 
 * `unittests/texture_size.c` covers what a requested size is allowed to do: the identity case, both
   clamps and the values on either side of them, a size that is not a power of two, a negative one,
-  and the two numbers the engine's own instructions hold. It was written rather than run, so it is a
+  and the two numbers the engine's own instructions hold. It runs with the rest of the suite, so it is a
   statement about the arithmetic and not yet evidence that the arithmetic passes.
 * The clamp site was located in all three builds and its operand read out of the image in each:
   `0x00488757` in the retail `WMAIN.EXE` and in `wmain.exe`, `0x004886F7` in `obi.exe`, all three

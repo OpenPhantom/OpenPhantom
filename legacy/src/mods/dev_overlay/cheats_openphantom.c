@@ -1,9 +1,9 @@
 /* cheats_openphantom.c: unlimited ammunition, unlimited health, no fog, invincible NPCs, one-shot
  * NPCs, giant player, tiny player, and free camera. The third cheat this project adds, no fog, is
- * a different enough shape - see cheats_no_fog.h - that it lives in its own file and this one only
+ * a different enough shape, see cheats_no_fog.h, that it lives in its own file and this one only
  * dispatches CHEATS_OWN_NO_FOG's queries to it. Free camera is documented next to its own two
  * signatures below rather than up here, the two sites it needs each carrying their own byte
- * evidence at the point they are used - invincible NPCs and one-shot NPCs are the same, documented
+ * evidence at the point they are used; invincible NPCs and one-shot NPCs are the same, documented
  * next to SIG_NPC_DAMAGE_APPLY, and giant/tiny player next to SIG_THING_DRAW.
  *
  * ==============================================================================================
@@ -82,6 +82,7 @@
 
 #include "cheats_no_fog.h"
 #include "cheats_original_actions.h"
+#include "overlay_input.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -168,27 +169,27 @@ _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
 #define STATUS_PROLOGUE_SIZE 10u
 
 /* --- 0x0040FE70  rdThing_Draw: every drawn object's own render call, including the player ------
- * SUB ESP,0x48 / MOV ECX,0xC / PUSH EBP / MOV EBP,[ESP+0x50] - no push-ebp;mov-ebp,esp frame at
+ * SUB ESP,0x48 / MOV ECX,0xC / PUSH EBP / MOV EBP,[ESP+0x50], with no push-ebp;mov-ebp,esp frame at
  * all: this is one of the frame-pointer-omitted /O2 translation units this game's own toolchain
  * analysis (see engine/engine-identification.md) already found this build mixes with /Od per
  * source file. Still plain __cdecl(thing*, matrix[12]) at the ABI boundary regardless of how the
- * callee itself addresses its own params internally - the caller pushes two dwords and cleans its
+ * callee itself addresses its own params internally; the caller pushes two dwords and cleans its
  * own stack afterward (ADD ESP,8), the same shape hook_use_ammo/hook_damage above already detour,
  * so a normally-typed hook works here too, no naked-asm trick needed.
  *
- * Confirmed via xrefs to have exactly two callers: FUN_00417930's own switch(kind==1) arm - the
- * path every ordinary object takes, the player included - and emitter_drawParticles, for particle
- * sprites. Detouring the function's own entry rather than either call site catches both without
- * needing two patches; the particle path is untouched regardless, since this hook only ever acts
- * when the incoming thing is the player's own (see hook_thing_draw below).
+ * Confirmed via xrefs to have exactly two callers: FUN_00417930's own switch(kind==1) arm, which
+ * is the path every ordinary object takes, the player included, and emitter_drawParticles, for
+ * particle sprites. Detouring the function's own entry rather than either call site catches both
+ * without needing two patches; the particle path is untouched regardless, since this hook only
+ * ever acts when the incoming thing is the player's own (see hook_thing_draw below).
  *
  * THE SCALE TRICK IS ALREADY IN THE RETAIL GAME. A few instructions past this prologue, gated
- * behind a specific cheat-flag slot and a hardcoded four-character model-name match - neither of
- * which this feature depends on, touches, or needs to fully identify - retail applies a flat 3.0x
+ * behind a specific cheat-flag slot and a hardcoded four-character model-name match, neither of
+ * which this feature depends on, touches, or needs to fully identify, retail applies a flat 3.0x
  * scale to this exact incoming matrix, via a small, self-contained "compose a diagonal scale into
  * this transform" utility that this file calls directly rather than reimplementing: not something
  * built for this feature, something the shipped game already trusts to do this correctly for its
- * own reasons. See THING_DRAW_TO_SCALE_CALL_OFFSET below for how its address is found - not its
+ * own reasons. See THING_DRAW_TO_SCALE_CALL_OFFSET below for how its address is found, not its
  * own independent signature, deliberately. */
 static const uint8_t SIG_THING_DRAW[] = {
     0x83, 0xEC, 0x48,                    /* sub esp,0x48                */
@@ -203,19 +204,19 @@ static const uint8_t SIG_THING_DRAW[] = {
  * from disassembly text rather than raw bytes, is exactly the kind of thing that fails silently -
  * signature_find_unique just answers zero, indistinguishable from "this build does not have it" -
  * and a first attempt at exactly that here did fail silently. This is lower-risk: the CALL sits at
- * a fixed, confirmed offset from rdThing_Draw's own entry (0x67 bytes - measured directly off two
+ * a fixed, confirmed offset from rdThing_Draw's own entry (0x67 bytes, measured directly off two
  * addresses already trusted for the detour above: entry 0x0040FE70, call instruction 0x0040FED7),
  * well past the eight bytes this file's own detour ever overwrites, so it reads correctly whether
  * this file's detour installed first or chained onto an existing one. The opcode byte is checked
  * before the operand is trusted, rather than assuming the offset is still right on some future
- * build - a wrong offset landing on a non-CALL byte would read a plausible but meaningless address,
+ * build; a wrong offset landing on a non-CALL byte would read a plausible but meaningless address,
  * and calling through that blind would be worse than refusing outright. */
 #define THING_DRAW_TO_SCALE_CALL_OFFSET 0x67u
 
-/* The player record pointer's own global cell - cross-confirmed by input_freeze.c/
+/* The player record pointer's own global cell, cross-confirmed by input_freeze.c/
  * framerate_stats.c as pPlayer, and independently here by disassembling Plr_AutoAim, which reads
  * [0x4B5220] then [that+0xC] and passes the result straight into bapobj_setNodeYaw's own bapObj
- * argument with no further resolution - so despite the "hActor" name at that offset, it is already
+ * argument with no further resolution, so despite the "hActor" name at that offset, it is already
  * a raw bapObj pointer, not a handle needing translation through some pool lookup first. */
 #define PLAYER_ACTOR_OFFSET    0x0Cu   /* bapObj*, confirmed via Plr_AutoAim as above            */
 #define THING_OBJECT_OFFSET    0x9Cu   /* bapObj -> rdThing*, same OBJECT_THING dismemberment.c
@@ -223,7 +224,7 @@ static const uint8_t SIG_THING_DRAW[] = {
                                         * this file does not otherwise depend on that one */
 
 #define GIANT_PLAYER_SCALE 3.0f    /* the exact factor retail's own hardcoded special case uses */
-#define TINY_PLAYER_SCALE  0.35f   /* a first guess for "small but still visible and playable" -
+#define TINY_PLAYER_SCALE  0.35f   /* a first guess for "small but still visible and playable";
                                     * no retail precedent for this direction, unlike giant */
 
 
@@ -247,6 +248,27 @@ void __cdecl hook_damage(int32_t amount)
     own_state.damage_original(amount);
 }
 
+/* Giant player and tiny player, sharing one detour on rdThing_Draw rather than needing one
+ * each; both are the same decision, "does the player's own render matrix get scaled, and by how
+ * much", answered before the real draw runs. A plain typed hook, not a naked one: rdThing_Draw
+ * is a regular __cdecl(thing*, matrix[12]) at the ABI boundary regardless of its own
+ * frame-pointer-omitted body (see SIG_THING_DRAW's own comment), so there is nothing here that
+ * needs pushad/pushfd the way the mid-function NPC-damage site in cheats_npc_damage.c does.
+ *
+ * The player's own thing is chased fresh off the player-record global on every single call rather
+ * than cached anywhere; this needs no rising-edge bookkeeping the way free camera's own seeding
+ * does, because there is nothing here that persists between frames to begin with: the incoming
+ * matrix is already a full rebuild of the player's real position and orientation for this frame,
+ * every frame, so scaling it is inherently transient and switching either cheat off needs no
+ * un-write, the next call simply stops scaling.
+ *
+ * FIELD-TESTED: scaling `matrix` in place, the caller's own working buffer for this object, not
+ * something owned by this call, also scales the force-push ability's own reach and power, because
+ * bapobj_drawAll reads that same buffer again right after this call returns for something that has
+ * nothing to do with rendering. A local-copy version that left the caller's own numbers untouched
+ * was tried and worked, but was reverted: combat is not meaningfully usable at either scale anyway,
+ * so the extra copy bought correctness nothing was actually asking for. Swap back to a local copy
+ * (see git history) if that ever stops being true. */
 static int32_t __cdecl hook_thing_draw(void *thing, float *matrix)
 {
     if (own_state.scale_matrix_compose != NULL && thing != NULL) {
@@ -272,12 +294,6 @@ static int32_t __cdecl hook_thing_draw(void *thing, float *matrix)
     return own_state.thing_draw_original(thing, matrix);
 }
 
-/* Jump boost. Calling the original FIRST and unconditionally is what makes this a boost and not a
- * reimplementation: the jump still happens exactly as retail built it, guard check and all, and
- * only once it has already decided to jump and written its own velocity does this cheat touch
- * anything, scaling whatever value is now sitting at +0xB4 - the fallback constant or the
- * per-character table value, whichever path the original just took. See SIG_JUMP_ENTRY's own
- * comment for why this needs two hooks rather than one. */
 /* ============================================================================================ */
 
 /* THE one state record, declared extern in cheats_internal.h and defined here because this file is
@@ -310,7 +326,7 @@ bool cheats_install_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
     return true;
 }
 
-/* Both player-scale cheats live behind this one detour - see hook_thing_draw's own comment for why
+/* Both player-scale cheats live behind this one detour; see hook_thing_draw's own comment for why
  * one site answers both. Needs its own matrix-scale composer resolved first: a cheat that could
  * intercept the draw call but had nothing to scale with would not be half a feature, it would be a
  * detour doing nothing, so this refuses the whole thing rather than offering that. */
@@ -388,7 +404,7 @@ bool cheats_openphantom_install(void)
         own_state.cheats[CHEATS_OWN_FREECAM].available = true;
     }
 
-    /* A different shape - see cheats_no_fog.h - so it owns its own state and this only asks it. */
+    /* A different shape, see cheats_no_fog.h, so it owns its own state and this only asks it. */
     (void)cheats_no_fog_install();
 
     own_state.installed = true;
@@ -463,7 +479,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
         !own_state.cheats[id].available) {
         return false;
     }
-    /* Turning free camera ON without an exit hotkey bound is a one-way door: the mouse it claims
+    /* Turning free camera ON without a key bound is a one-way door: the mouse it claims
      * is also what the dev panel and the game's own pause menu need, and there is no way to close
      * this cheat again without one. The authoritative gate lives here rather than only in the
      * panel's own row.available, so nothing that reaches this function directly can bypass it. */
@@ -490,7 +506,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
  * off its own per-level table, keyed by an index at DAT_0088136c, then busy-polls
  * `while (DAT_00881368 == 2) sys_frame();` for as long as that level is actually running. When that
  * loop exits it reads DAT_00881368 again and, if it is 3, treats it as "level complete": broadcasts
- * task 6, increments its own level index, and loads the next entry off its own table - exactly the
+ * task 6, increments its own level index, and loads the next entry off its own table, exactly the
  * housekeeping a real level exit needs, done by the driver itself.
  *
  * DAT_00881368 is written to 3 from exactly one place in the whole binary: FUN_00429880, case
@@ -499,7 +515,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
  * sub-command 1 - `FUN_00429880(param_1, *local_c, local_c[1], local_c[2])` when `*local_c == 1`.
  * That is almost certainly the literal command a level's own exit trigger/volume issues.
  *
- * This writes DAT_00881368 = 3 directly - the same value that one script command produces - rather
+ * This writes DAT_00881368 = 3 directly, the same value that one script command produces, rather
  * than calling FUN_00429880 (which needs a live script-context pointer this panel does not have) or
  * campaign_loadLevel (which needs the NEXT level's own path string, something
  * main_game_movie_sequencer_loop already works out for itself from its own table). The cell itself
@@ -508,7 +524,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
  * second one that happens to share a value.
  *
  * FIELD-UNTESTED. "gurshick" (the SAME cell, value 1) is confirmed to misbehave when triggered from
- * this panel rather than the retail console's own blocking loop - see
+ * this panel rather than the retail console's own blocking loop; see
  * cheats_original_actions.c's own resolve_credits() comment. Value 3 takes a structurally different
  * path with no credits-sequence startup involved, so that specific failure mode should not apply,
  * but that is reasoning, not a field result. */
@@ -524,6 +540,47 @@ bool cheats_openphantom_end_level_invoke(void)
     if (cell == NULL) {
         return false;
     }
+
+    /* THE PANEL CLOSES ITSELF, and this is a repair rather than tidiness.
+     *
+     * The panel is toggled from the game's own key handler at 0043F603, which is on the GAMEPLAY
+     * path. Skipping the LAST level does not load another one: the campaign driver runs the closing
+     * cutscene and then credits_screen, and neither of those pumps messages through that handler.
+     * A panel left open across that transition can no longer be closed by the key that opened it,
+     * so it sits over the credits for good and the process has to be killed. Field confirmed.
+     *
+     * Closing on EVERY skip rather than only on the last level is deliberate. Telling the two apart
+     * means reading the campaign's level index, and the only address available for it is an
+     * adjacency guess against the status cell above; a skip is also a transition out of the level
+     * the panel was opened in, so there is nothing to preserve. It costs one key press to reopen,
+     * and after the credits it opens exactly as it always did: this closes the panel, it does not
+     * disable it. */
+    overlay_input_close();
+
+    /* And the fall the player is in the middle of, if any, belongs to the level being left.
+     *
+     * jump_boost asks whether a fall has anywhere to land when the fall BEGINS, and only a landing
+     * answers the question again. Skipping out of a level in mid air therefore carried "nothing to
+     * land on" into the next one, which switches off all five fall suppressions, and the engine's
+     * own fall-distance death fired the moment the new level started. Reported from a test build as
+     * jump boost plus level skip killing the player on arrival.
+     *
+     * Reset rather than switching jump boost off, which was the other way to stop it: the player
+     * asked for the cheat and this is the one moment its whole purpose applies. */
+    cheats_openphantom_reset_fall_state();
+
+    /* And jump boost goes off across the transition, to be put back when the next level is up.
+     * Asked for directly after the fall reset alone was not trusted to cover it: whatever else a
+     * level change does to a boosted jump, it now does it with the boost switched off.
+     *
+     * Only where the no fog cheat resolved, because its per-frame tick is the one thing in this
+     * DLL that already watches the world pointer and it is what lifts the suspend. Without it the
+     * cheat would go off here and never come back, which is worse than not suspending at all. The
+     * fall reset above is the half that always runs. */
+    if (cheats_no_fog_is_available()) {
+        cheats_openphantom_suspend_jump_boost();
+    }
+
     *cell = 3;
     return true;
 }

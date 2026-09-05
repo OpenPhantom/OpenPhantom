@@ -19,7 +19,7 @@
  *   83 E0 01                and eax,1                bit 0 = "this world has fog"
  *
  * This is a SEPARATE DLL from view_distance_fix, so the pattern, the mask and the cross check are
- * carried here again rather than shared at run time - the two never touch each other's memory, the
+ * carried here again rather than shared at run time; the two never touch each other's memory, the
  * same isolation every other feature DLL in this project keeps. What is not repeated is the
  * research: this project's own rule is byte evidence over assumption, and byte evidence already
  * proven correct in one file does not need proving a second time in another, only citing.
@@ -27,12 +27,12 @@
  * ==============================================================================================
  * FIRST VERSION CLEARED THE FLAG BIT. FIELD TESTING FOUND THAT BREAKS THE RENDERER.
  *
- * The first version of this cheat cleared world+0x210 bit 0 every frame - "this world has fog",
+ * The first version of this cheat cleared world+0x210 bit 0 every frame, "this world has fog",
  * off. Field testing found that leaves every moving actor (the player, fish, foliage) drawn as a
  * flat, unlit silhouette, and the damage does not undo when the bit is set back: something reads
  * that bit once and latches a rendering path this project has not identified, not something a
- * flipped bit alone reverses. Retail never toggles this bit at runtime at all - it is set once,
- * at level load, from the level file header, and held fixed for the level's whole life - so a
+ * flipped bit alone reverses. Retail never toggles this bit at runtime at all. It is set once,
+ * at level load, from the level file header, and held fixed for the level's whole life, so a
  * runtime flip exercises a combination of engine state nothing in 1999 ever produced.
  *
  * fog_regime.c never touches that bit either. What it changes, continuously, every frame, in a
@@ -44,7 +44,7 @@
  * authored it, which is the one thing field testing showed matters.
  *
  * ==============================================================================================
- * WHY A PER-FRAME FORCE, NOT ONE WRITE - AND WHY IT REMEMBERS THE BAND RATHER THAN DECLINING
+ * WHY A PER-FRAME FORCE, NOT ONE WRITE, AND WHY IT REMEMBERS THE BAND RATHER THAN DECLINING
  *
  * Ammunition and health are each spent through one function this project can decline. Fog is not
  * spent through anything: it is two floats the renderer reads directly out of the level record
@@ -58,20 +58,23 @@
  * "never invent a value" rule the ammunition and health cheats follow. Field testing found that
  * the wrong call here: those two cheats decline a SUBTRACTION, so "off" is simply "stop declining"
  * and the game's own systems carry on from wherever they already were. Fog has no such systems to
- * hand back to mid-level - nothing else in the engine ever restores this band, because nothing else
- * ever moves it - so declining to restore left the player able to turn fog off but never back on
+ * hand back to mid-level; nothing else in the engine ever restores this band, because nothing else
+ * ever moves it, so declining to restore left the player able to turn fog off but never back on
  * again short of a level reload, which is not a toggle.
  *
- * So this remembers the band it found BEFORE ever touching it, once per level - the same
+ * So this remembers the band it found BEFORE ever touching it, once per level, the same
  * `is_the_same_level` / `remember_level` shape fog_regime.c already uses to survive the record
  * being freed and reallocated, simplified down to what a plain on/off needs: is this still the
  * record we last wrote to, checked by BOTH the pointer and the two floats still holding exactly
  * what we last put there. A level that fails either check is treated as new, and whatever band it
- * is holding right now - before this file does anything to it - becomes the value "off" restores.
+ * is holding right now, before this file does anything to it, becomes the value "off" restores.
  * ============================================================================================== */
 #include "cheats_no_fog.h"
 
+#include "cheats_openphantom.h"
+
 #include "common/frame_hook.h"
+#include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
@@ -101,17 +104,23 @@ _Static_assert(sizeof(SIG_LEVEL_POINTER) == sizeof(MSK_LEVEL_POINTER),
 #define OFFSET_LEVEL_POINTER_MOV 0x0Fu   /* operand of `mov edx,[g_level]`, must be the same */
 #define WORLD_RENDER_FLAGS       0x210u  /* the world record's render-flag word, READ ONLY here */
 #define WORLD_FOG_BIT            0x001u  /* bit 0 = this level authored fog at all */
-#define WORLD_FOG_START          0x218u  /* float, world units - never written past this level's */
-#define WORLD_FOG_END            0x21Cu  /* float, world units - own authored band without asking */
+#define WORLD_FOG_START          0x218u  /* float, world units; never written past this level's */
+#define WORLD_FOG_END            0x21Cu  /* float, world units; own authored band without asking */
 #define WORLD_PROBE_SIZE         (WORLD_FOG_END + sizeof(float))
 
 /* Comfortably past the world walk's own draw-distance clamp of [2,64] world units (0x00404F33,
- * documented in fog_regime.c's clamp_cut) - nothing the renderer still has in view at these depths,
+ * documented in fog_regime.c's clamp_cut); nothing the renderer still has in view at these depths,
  * so the per-vertex ramp never finds anything left to fog. Not an astronomical number: the ramp's
  * own math divides by the band width, and keeping this within a few thousand units leaves that
  * comfortably inside float32's precision. */
 #define NO_FOG_START 4000.0f
 #define NO_FOG_END   5000.0f
+
+/* Where the answer is kept between runs. The panel's other rows write their setting and let the
+ * owning DLL read it back; this one owns its own setting, so it reads and writes the same key
+ * itself and nothing has to poll. */
+#define NO_FOG_SECTION "dev_overlay"
+#define NO_FOG_KEY     "NoFog"
 
 typedef struct no_fog_state {
     bool             installed;
@@ -119,9 +128,10 @@ typedef struct no_fog_state {
     void *volatile  *level_pointer;   /* [g_level], the same site fog_regime.c reads */
 
     /* The level currently remembered, the band it was authored with (captured once, before this
-     * file ever wrote to it), and the band this file itself last wrote - which is what tells the
+     * file ever wrote to it), and the band this file itself last wrote, which is what tells the
      * next frame whether the record still holds ours or has been freed and reallocated under us. */
     void            *remembered_level;
+    void            *last_seen_level;   /* only to notice a level change; see the tick */
     bool             have_authored;
     float            authored_start;
     float            authored_end;
@@ -151,6 +161,23 @@ static void tick(void)
         return;
     }
     level = *st.level_pointer;
+
+    /* A level change, noticed here because this is the only cheat that already reads the world
+     * pointer every frame and resolving a second copy of that site would buy nothing.
+     *
+     * What it is for belongs to jump boost rather than to fog: that cheat is switched off across a
+     * level skip and this is what puts it back once the next level is up. The call does nothing
+     * unless a suspend is outstanding, so it costs a compare on every other frame.
+     *
+     * A pointer comparison rather than the fuller identity below: an allocator handing the new
+     * level the old address would miss it, and the cost of missing it is a cheat left off, which
+     * the player can switch on again. The cost of getting it wrong the other way is a cheat
+     * switching itself on during play. */
+    if (level != st.last_seen_level) {
+        st.last_seen_level = level;
+        cheats_openphantom_resume_jump_boost();
+    }
+
     if (level == NULL || !memory_is_readable_range((uintptr_t)level, WORLD_PROBE_SIZE)) {
         forget_level();
         return;
@@ -165,9 +192,9 @@ static void tick(void)
         return;
     }
 
-    /* Is this still the record we last touched? The pointer alone is not an identity - the record
+    /* Is this still the record we last touched? The pointer alone is not an identity; the record
      * is freed and reallocated on every level load, and an allocator hands out the same address
-     * more often than not - so a level that no longer holds exactly what we last wrote has been
+     * more often than not, so a level that no longer holds exactly what we last wrote has been
      * through a load since, whatever its address says. */
     is_the_same_record = st.have_authored && level == st.remembered_level &&
                          band[0] == st.written_start && band[1] == st.written_end;
@@ -222,10 +249,16 @@ bool cheats_no_fog_install(void)
     }
 
     st.level_pointer = (void *volatile *)(uintptr_t)from_cmp;
+
+    /* Read only here, once, rather than per frame. Everything after this point is the player's
+     * own flipping, and the file is written from the toggle rather than re-read, so a panel that
+     * disagrees with the file is not a state this can reach. */
+    st.on = ini_read_bool(NO_FOG_SECTION, NO_FOG_KEY, false);
+
     log_info("no fog: world pointer at %08X, pushing world+0x218/0x21C out to %.0f/%.0f every "
-             "frame while on and restoring the level's own band while off. The fog flag at "
-             "world+0x210 is never touched.",
-             (unsigned)from_cmp, (double)NO_FOG_START, (double)NO_FOG_END);
+             "frame while on and restoring the level's own band while off, starting %s from the "
+             "last run. The fog flag at world+0x210 is never touched.",
+             (unsigned)from_cmp, (double)NO_FOG_START, (double)NO_FOG_END, st.on ? "on" : "off");
     return true;
 }
 
@@ -245,5 +278,14 @@ bool cheats_no_fog_toggle(void)
         return false;
     }
     st.on = !st.on;
+
+    /* Remembered for the next run, and deliberately not conditional on the write succeeding. This
+     * is a cheat rather than a setting: its point is the effect on the picture in front of the
+     * player, so a read-only ini costs the memory of the choice and nothing else. The rows that
+     * refuse on a failed write are the ones whose whole effect IS the file. */
+    if (!ini_write_int(NO_FOG_SECTION, NO_FOG_KEY, st.on ? 1 : 0)) {
+        log_warning("no fog: switched %s, but %s could not be written, so this run is the only one "
+                    "that has it", st.on ? "on" : "off", NO_FOG_KEY);
+    }
     return st.on;
 }

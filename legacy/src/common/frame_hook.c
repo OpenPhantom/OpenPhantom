@@ -90,7 +90,7 @@ bool frame_hook_add(frame_hook_callback_t callback)
         }
     }
     if (frame_state.callback_count >= MAX_FRAME_CALLBACKS) {
-        log_error("frame: more than %d callbacks in one DLL - the last one is dropped",
+        log_error("frame: more than %d callbacks in one DLL; the last one is dropped",
                   MAX_FRAME_CALLBACKS);
         return false;
     }

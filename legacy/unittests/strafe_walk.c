@@ -23,8 +23,9 @@
  *     family it belongs to. A cutscene filed as an authored region would have a minute-old mouse
  *     angle restored on top of a deliberately placed shot.
  *
- * SIZE NOTE (rule 9): 512 lines. It is one test binary for one DLL's pure logic, and splitting it
- * would put the travel angle and free look's input angle, which are the same trap seen from two
+ * SIZE NOTE: past the preferred 400 lines. It is one test binary for one DLL's pure logic, and
+ * splitting it would put the travel angle and free look's input angle, which are the same trap
+ * seen from two
  * sides, and which are only meaningful next to each other, into different files. Each check
  * carries the sentence that says what breaks when it fails, because a test named `case_17` teaches
  * the next reader nothing; that prose is most of the length.

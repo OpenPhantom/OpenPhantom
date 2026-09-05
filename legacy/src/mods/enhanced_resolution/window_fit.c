@@ -67,8 +67,8 @@
  * RETRY_FRAMES times, a permanent duel would be worse than the problem.
  *
  * ==============================================================================================
- * SIZE NOTE (rule 9): a little over 600 lines, of which about 380 are code. The rest is the byte
- * evidence above and at each hooked site, which rule 8 requires there. It is one responsibility,
+ * SIZE NOTE: a little over the 600 line mark, and most of it is not code. The rest is the byte
+ * evidence above and at each hooked site, which is where it belongs. It is one responsibility,
  * keep the window on the mode, and splitting the engine site away from the window arithmetic was
  * tried and rejected: the two halves have nothing to say to each other except a width and a
  * height, and the split bought two more files and one more indirection for exactly that.
@@ -599,13 +599,13 @@ bool window_fit_install(const window_fit_config_t *config)
 
     if (!detour_install(&window_state.set_mode_detour, site, (const void *)hook_set_mode,
                         SET_MODE_PROLOGUE)) {
-        log_error("the graphics_setMode detour at %08X FAILED - the window is NOT fitted to the "
-                  "display mode", (unsigned)site);
+        log_error("the graphics_setMode detour at %08X FAILED, so the window is NOT fitted to "
+                  "the display mode", (unsigned)site);
         return false;
     }
     window_state.active = true;
 
-    log_info("hooked graphics_setMode at %08X - the window follows the display mode in BOTH "
+    log_info("hooked graphics_setMode at %08X: the window follows the display mode in BOTH "
              "directions from there. It is the only site that sees every valid mode change: eight "
              "callers reach it and just one of them is graphics_setResolution, which is why a fit "
              "driven from graphics_setResolution heard a menu drop the mode to 640x480 and never "

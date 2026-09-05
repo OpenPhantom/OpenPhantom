@@ -82,7 +82,7 @@ static bool bitmap_index_is_usable(const menu_patch_context_t *context, int32_t 
         return false;
     }
     if ((size_t)highest >= context->bitmap_name_count) {
-        log_error("menu: %s needs bitmap index %d but this screen's table holds only %u names - "
+        log_error("menu: %s needs bitmap index %d but this screen's table holds only %u names; "
                   "refused, because the engine would read past it without noticing",
                   what, (int)highest, (unsigned)context->bitmap_name_count);
         return false;
@@ -407,7 +407,7 @@ bool menu_patcher_commit(menu_patch_context_t *context)
 
     if (patch_write_pointer32(context->table_pointer_address, context->widgets)
         != PATCH_RESULT_OK) {
-        log_error("menu: could not repoint the widget table at %08X - the screen keeps its own "
+        log_error("menu: could not repoint the widget table at %08X; the screen keeps its own "
                   "%u widgets and nothing we built is reachable",
                   (unsigned)context->table_pointer_address, (unsigned)context->original_count);
         return false;

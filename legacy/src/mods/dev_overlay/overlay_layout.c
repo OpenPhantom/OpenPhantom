@@ -9,11 +9,19 @@
 
 #include <stdint.h>
 
-/* The glyph box is one H, so a row of 1.375H carries 0.375H of leading, three pixels above and
- * three below at the normal size. Two words of this font stop merging at about four pixels of
- * separation, so six is one comfortable step past that and nothing more. Wider than this and a
- * list of single words starts reading as paragraphs, which is what made it feel sparse. */
-#define ROW_H       1.375f
+/* The glyph box is one H, so a row of 1.875H carries 0.875H of leading, seven pixels above and
+ * seven below at the normal size, which is about two millimetres of gap between one row's text and
+ * the next on a desktop monitor.
+ *
+ * It was 1.375H, chosen when this tab held five cheats and a list of single words did start
+ * reading as paragraphs once the leading went past that. Nineteen rows in two groups is a
+ * different problem: there the eye has to track along a row to its chip and back down to the next
+ * one, and the tighter spacing made neighbouring rows hard to tell apart. Lines between the rows
+ * were tried first and looked worse than the problem.
+ *
+ * In H rather than pixels, so it scales with the dev menu size like everything else here: raising
+ * that setting widens this gap in proportion rather than leaving it fixed while the text grows. */
+#define ROW_H       1.875f
 
 /* A band holds one word. It is a band, not a room. */
 #define TITLE_H     1.75f
@@ -24,11 +32,28 @@
 #define BOTTOM_PAD  0.50f
 #define EDGE_PAD    0.75f
 
-/* The fixed furniture beside a name: its indent, the smallest gap worth bridging to the state, the
- * widest state chip, and the right hand padding. */
-#define FURNITURE   8.00f
+/* The furniture beside a name AND its chip: the name's indent, the smallest gap worth bridging
+ * between the two, one H of padding inside the chip, and the right hand padding. It is
+ * NAME_X + GUTTER_MIN + 1 + EDGE_PAD from overlay_draw.c, and it is exact rather than an estimate.
+ *
+ * It was 8.00 and it included "the widest state chip" as part of that guess, which is what left a
+ * label clipped after the width ceiling was raised: a chip reading "RUN" costs about 2.4H, one
+ * reading "auto 1.00x" costs nearly 9, and no single number covers both. The caller now measures
+ * the widest chip as well and hands both in, so what is left here is only the part that really is
+ * fixed. */
+#define FURNITURE   6.00f
 #define WIDTH_MIN  24.00f
-#define WIDTH_MAX  32.00f
+
+/* The ceiling on the panel's width, and it is a ceiling rather than a size: a tab whose longest
+ * label is short still gets a narrow panel. It was 32, which was enough while the widest label was
+ * a cheat name, and then rows arrived whose labels are half again as long and the longest of them
+ * were drawn clipped, with the end of the sentence replaced by an ellipsis in the middle of the
+ * panel.
+ *
+ * Raised to fit the longest name and chip this panel can produce together, with the unit test for
+ * that in unittests/overlay_model.c so text written past it fails a build rather than reaching a
+ * screenshot. */
+#define WIDTH_MAX  46.00f
 
 /* A tab is its word plus one H of padding on each side. */
 #define TAB_PAD     1.00f
@@ -70,7 +95,25 @@ void overlay_layout_build(float text_height, float content_width, uint32_t row_c
     out.search_h = SEARCH_H * out.text_h;
     out.rows_top = out.search_top + out.search_h;
     out.row_h = ROW_H * out.text_h;
-    out.height = out.rows_top + (float)row_count * out.row_h + BOTTOM_PAD * out.text_h;
+    /* The rows that fit, and the panel is built around THAT rather than around the row count.
+     * One text height is kept back at each end so the panel never sits flush against the screen
+     * edge, which is the same margin the repositioning below uses. At least one row is always
+     * shown: a panel with no rows at all would be a worse answer than a cramped one. */
+    {
+        const float chrome    = out.rows_top + BOTTOM_PAD * out.text_h;
+        const float available = screen_height - 2.0f * out.text_h - chrome;
+        uint32_t    fits      = 1u;
+
+        if (available > 0.0f && out.row_h > 0.0f) {
+            fits = (uint32_t)(available / out.row_h);
+            if (fits < 1u) {
+                fits = 1u;
+            }
+        }
+        out.visible_rows = (row_count < fits) ? row_count : fits;
+    }
+
+    out.height = out.rows_top + (float)out.visible_rows * out.row_h + BOTTOM_PAD * out.text_h;
 
     x = EDGE_PAD * out.text_h;
     for (i = 0; i < OVERLAY_LAYOUT_TABS; ++i) {
@@ -132,7 +175,14 @@ int32_t overlay_draw_row_at(float x, float y)
         return -1;
     }
     index = (int32_t)((y - top) / built.row_h);
-    if (index < 0 || (uint32_t)index >= overlay_model_row_count()) {
+    /* Only the rows on screen are targets, and the first of them is wherever the list is scrolled
+     * to. Without the second test a click below the last drawn row would land on whatever row the
+     * arithmetic ran on to. */
+    if (index < 0 || (uint32_t)index >= built.visible_rows) {
+        return -1;
+    }
+    index += (int32_t)overlay_model_scroll(built.visible_rows);
+    if ((uint32_t)index >= overlay_model_row_count()) {
         return -1;
     }
     return index;

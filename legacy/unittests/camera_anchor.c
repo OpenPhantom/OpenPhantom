@@ -149,7 +149,8 @@ static void test_blend_matches_the_mean_at_30fps(void)
      * always between the two inputs. Substituting k into the mean gives weights summing to 2k,
      * which is what made an earlier build lose the world at a high frame rate. */
     blend = (anchor - target) * 0.999f + target;
-    ut_check(blend >= anchor && blend <= target, "k near 1 leaves the anchor essentially where it was");
+    ut_check(blend >= anchor && blend <= target,
+             "k near 1 keeps the blend between the anchor and the target");
     blend = (anchor - target) * 0.001f + target;
     ut_check(blend >= anchor && blend <= target, "k near 0 snaps the anchor onto the target");
 }

@@ -17,7 +17,7 @@
  * does, and why it is only half a feature on its own.
  *
  * ==============================================================================================
- * The four things that have to move together
+ * The things that have to move together
  *
  * 1. The canvas clip. swrle_blit reads the destination surface's real width and height into two
  *    locals and then overwrites both with 640 and 480 before it clips anything. Those two
@@ -44,12 +44,12 @@
  *    focus outline, the slider grab box and the list box row arithmetic follow for free. That is
  *    the reason this is done to the rect data and not at the blitter: intercepting the draw would
  *    leave every one of those input paths behind, and there is no survivable half of that.
-
+ *
  * 5. The four animated previews on the main menu. Those are Bink clips decoded at run time into
  *    232x100 surfaces the game creates itself, so unlike every other menu bitmap they are not
  *    touched by converting the artwork. They are upscaled at draw time instead, into a buffer of
- *    ours, leaving the engine's surface alone. See the note by preview_upscale in menu_scale.c for
- *    why enlarging that surface would have been the wrong answer.
+ *    ours, leaving the engine's surface alone. See the note by preview_upscale in menu_preview.c
+ *    for why enlarging that surface would have been the wrong answer.
  *
  * ==============================================================================================
  * Why this refuses to install without the cursor cage
@@ -64,18 +64,17 @@
  * rather than install into it.
  *
  * ==============================================================================================
- * What this does NOT do yet
+ * What this does NOT do
  *
- * * The pause panel writes its own widget rectangles every frame, in canvas units, as part of its
- *   slide animation. Those writes land after this has scaled, so the pause panel is the one screen
- *   that will be wrong. Every other screen goes through a build that happens once.
- * * The SW_3D widgets project about a hard-coded canvas centre of 320 and 240, so with a scaled
- *   canvas they land in the wrong place. All 27 of them are on the pause screens, so this shares
- *   its fate with the point above.
- * * The drawn cursor quad stays 32 pixels, and the cage's margin stays 33.
- * * The loading bar is drawn by hand rather than as widgets, and keeps its own geometry.
- * * Nothing here upscales the artwork. The ratio is READ FROM the artwork instead, see below, so
- *   the two can never disagree about it.
+ * Nothing here upscales the artwork. The ratio is READ FROM the artwork instead, see below, so
+ * the two can never disagree about it. The four animated previews are the exception, because they
+ * are decoded at run time and have no converted file to read a ratio from.
+ *
+ * Four other gaps used to be listed here and were closed afterwards, each in a file of its own:
+ * the pause panel's per-frame rectangle writes (the rectangle shadow in menu_scale.c), the SW_3D
+ * widgets projecting about a fixed 320 by 240 (menu_scale_3d.c), the 32 pixel cursor quad (scaled
+ * by ratio_y in menu_scale_install.c) and the loading bar's hand-placed geometry
+ * (menu_loading_bar.c).
  */
 #ifndef MENU_SCALE_H
 #define MENU_SCALE_H

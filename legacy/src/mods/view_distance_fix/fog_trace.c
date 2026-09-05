@@ -10,16 +10,19 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/* Six seconds at a hundred frames a second. It captures every frame in that window whether the
- * band moved or not: an earlier version stopped at the first settled frame, and once a level began
- * opening on its final band that was frame zero, so it recorded nothing of the window it was built
- * to look at. A frame where nothing happened is evidence too. */
-/* Forty seconds. Three passes at the same opening cutscene fit, which is the point: the first
- * load shows the fault and the second and third do not, so the three runs are the same scene with
- * and without it and the difference between them is the whole of the evidence. */
+/* Forty seconds at a hundred frames a second. Three passes at the same opening cutscene fit,
+ * which is the point: the first load shows the fault and the second and third do not, so the
+ * three runs are the same scene with and without it and the difference between them is the whole
+ * of the evidence.
+ *
+ * It captures every frame in that window whether the band moved or not. An earlier version
+ * stopped at the first settled frame, and once a level began opening on its final band that was
+ * frame zero, so it recorded nothing of the window it was built to look at. A frame where
+ * nothing happened is evidence too. */
 #define TRACE_CAPACITY 4000u
 
-/* The draw path's own ceilings, none of which this project measures. Every one of them can drop
+/* The draw path's own ceilings, only one of which this project already measures elsewhere (the
+ * deferred array, which render_guard watches). Every one of them can drop
  * geometry with no error and no dip in anything we already watch: the two vertex gates abandon the
  * rest of the frame BEFORE incrementing their counter, and the sort heap accepts a face into the
  * deferred array and its vertices into the pool and then never inserts it into the queue.
@@ -277,7 +280,7 @@ static bool counters_ready;
  *   83 3D <materials> 00    cmp dword [materialCount],0
  *   7F 05                   jg ...
  *
- * Sampling had to move here. Five of the ten counters read ZERO on every frame of the first
+ * Sampling had to move here. Five of the counters read ZERO on every frame of the first
  * capture, and that was the instrument's fault: the tick that recorded them runs on
  * render_frameEnd, by which time this flush and the deferred drain have already reset every
  * cursor. The values only exist between the draw and the reset, so they are read on ENTRY to the
@@ -311,8 +314,9 @@ static void sample_peaks(void)
         }
         now = *(const volatile uint32_t *)COUNTERS[i].address;
 
-        /* The last two are a float band, where a maximum of the raw bits means nothing. Everything
-         * before them is a cursor, where the peak between resets is the whole point. */
+        /* The last three are not cursors: two are a float band, where a maximum of the raw bits
+         * means nothing, and the third is a flag. Everything before them is a cursor, where the
+         * peak between resets is the whole point. */
         if (i >= COUNTER_COUNT - 3u || now > peak[i]) {
             peak[i] = now;
         }
@@ -432,10 +436,10 @@ void fog_trace_flush(const char *why)
     first = (trace.write > TRACE_CAPACITY) ? (trace.write - TRACE_CAPACITY) : 0u;
     held  = trace.write - first;
 
-    log_info("fog trace: the last %u frames of %u since the level loaded, %s. Columns are the frame, the "
-             "horizontal field of view this module was last told about, the reference cut, the "
-             "live cut as reported, the live cut after easing, then the target band and the eased "
-             "band, then W where the tick wrote and . where it found nothing to do.",
+    log_info("fog trace: the last %u frames of %u since the level loaded, %s. Columns are the "
+             "frame, the horizontal field of view this module was last told about, the reference "
+             "cut, the live cut as reported, the live cut after easing, then the target band and "
+             "the eased band, then W where the tick wrote and . where it found nothing to do.",
              held, trace.write, (why != NULL) ? why : "no reason given");
 
     for (index = 0; index < held; ++index) {

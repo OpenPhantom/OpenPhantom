@@ -150,9 +150,9 @@ static bool resolve_cell_counter(void)
     uint32_t  table;
 
     if (site == 0) {
-        log_warning("gather_append did not resolve - NO cell watchdog. The view distance is "
-                    "therefore held at 1.0, because an overflow would otherwise silently "
-                    "overwrite the bucket list heads.");
+        log_warning("gather_append did not resolve, so there is NO cell watchdog. The view "
+                    "distance is therefore held at 1.0, because an overflow would otherwise "
+                    "silently overwrite the bucket list heads.");
         return false;
     }
 
@@ -242,9 +242,9 @@ void cell_watchdog_set_vertex_limit(uint32_t new_limit)
         return;
     }
     watchdog_state.vertex_limit = new_limit;
-    /* Same 75 % ratio the retail-sized alarm already used, not a fixed offset from the new limit -
-     * a fixed offset would mean the alarm fires later, proportionally, exactly where more headroom
-     * makes a JUMP in the counter (see vertex_table.c, section 1) more dangerous, not less. */
+    /* Same 75 % ratio the retail-sized alarm already used, not a fixed offset from the new
+     * limit; a fixed offset would mean the alarm fires later, proportionally, exactly where more
+     * headroom makes a JUMP in the counter (see vertex_table.c) more dangerous, not less. */
     watchdog_state.vertex_alarm = (uint32_t)(((uint64_t)new_limit * VERTEX_CACHE_ALARM) /
                                              VERTEX_CACHE_LIMIT);
 
@@ -318,11 +318,12 @@ void cell_watchdog_on_frame(float *effective_view_scale)
     /* An earlier version bailed out silently above four times the limit ("obviously not a counter
      * any more"), and thereby hid exactly the case that matters. bapdraw_gatherCellMovers and
      * bapdraw_emitFace hang on with NO limit; the 8192 check is only at gatherCell's entry. The
-     * counter CAN stand far above the limit, and that has to be in the log rather than swallowed. */
+     * counter CAN stand far above the limit, and that has to be in the log rather than
+     * swallowed. */
     if (used > watchdog_state.cell_limit) {
         if (!watchdog_state.overflow_reported) {
             watchdog_state.overflow_reported = true;
-            log_error("CELL COUNTER %u IS ABOVE THE LIMIT %u. The table has already overflowed - "
+            log_error("CELL COUNTER %u IS ABOVE THE LIMIT %u. The table has already overflowed; "
                       "gatherCellMovers and emitFace hang on unchecked. From here the bucket list "
                       "heads are destroyed.", (unsigned)used, (unsigned)watchdog_state.cell_limit);
         }
@@ -351,7 +352,7 @@ void cell_watchdog_on_frame(float *effective_view_scale)
     panic = (watchdog_state.cell_limit / CELL_LIMIT_RETAIL) * CELL_PANIC_FRACTION;
 
     if (used >= panic && *effective_view_scale > 1.0f) {
-        log_error("%u of %u cells - EMERGENCY BRAKE, view scale %.2f -> 1.00. An overflow would "
+        log_error("%u of %u cells: EMERGENCY BRAKE, view scale %.2f -> 1.00. An overflow would "
                   "have overwritten the bucket list heads. Peak %u.",
                   (unsigned)used, (unsigned)watchdog_state.cell_limit,
                   (double)*effective_view_scale, (unsigned)watchdog_state.cell_high_water);

@@ -134,8 +134,9 @@ that is there either way.
 min(1, edge_limit(hFOV, R_live) / edge_limit(60 degrees, R_engine))
 ```
 
-where `R_engine` is where the cut edge would have been and `R_live` is where we actually put it,both read out of the draw-distance detour, which is the only place the two exist at once. At 60 degrees
-with an unmoved cut edge that factor is **exactly `1.0f`**, so every level keeps its shipped
+where `R_engine` is where the cut edge would have been and `R_live` is where we actually put it,
+both read out of the draw-distance detour, which is the only place the two exist at once. At 60
+degrees with an unmoved cut edge that factor is **exactly `1.0f`**, so every level keeps its shipped
 numbers bit-for-bit. It is what makes the fog follow the FOV slider, the radius cap *and* the cell
 watchdog lowering the range mid-level.
 
@@ -203,7 +204,8 @@ every term here.
 
 ### Nothing changes abruptly
 
-Every change, the FOV slider moved, the watchdog lowering the range, the level's fog re-applied,is eased rather than stepped. The exponent comes from the engine's own `g_frameDelta`, read out of
+Every change, the FOV slider moved, the watchdog lowering the range, the level's fog re-applied, is
+eased rather than stepped. The exponent comes from the engine's own `g_frameDelta`, read out of
 `render_frameEnd`'s first operand, so a given amount of *real* time produces the same result at 30
 and at 144 fps. A level **load** snaps instead: there is nothing on screen to ease away from.
 
@@ -367,16 +369,16 @@ Neither watchdog below fired during that run. Peak cell usage never came near th
 overflowed, nothing was in danger. Those two guard against corruption, and a scale that is merely
 expensive walks straight past them, which is what `FrameBackoff` is for.
 
-It measures the median frame of each window - a median so that one 250 ms level load cannot move
-it - and sizes each step by how far off target that window was: a 3 % miss only nudges, a 40 %
+It measures the median frame of each window, a median so that one 250 ms level load cannot move
+it, and sizes each step by how far off target that window was: a 3 % miss only nudges, a 40 %
 miss moves four times as far. Recovery is deliberately slower than backing off, the first step
 back needing thirty consecutive healthy seconds and the rest coming every ten. It never goes below
 1.0 and never above what is configured, and it yields to the cell watchdog wherever the two
 disagree, because that one is a correctness guard and this one is only a comfort guard.
 
 **It decides twice a second, on the window just finished.** The first version decided once a
-second against a ring it never emptied, so its median covered the last 256 frames - two and a half
-seconds at 100 fps - and lagged the scene by over a second. Between that and steps sized for a
+second against a ring it never emptied, so its median covered the last 256 frames, two and a half
+seconds at 100 fps, and lagged the scene by over a second. Between that and steps sized for a
 gentler cost curve than this setting actually has, it took **fourteen seconds** to walk 2.50 down
 to 1.00 in a cutscene that is about thirteen seconds long: it arrived after the thing it was
 reacting to had finished, which is what a field run reported as "better but still drops". The
@@ -404,7 +406,7 @@ things worse, and its own log says how:
 
 It held at 52 fps for seven consecutive seconds. The comparison is against the frame time at the
 moment of the step, and in a scene whose own cost is rising that measures **the scene, not the
-step** - so it blames the step for the scene and refuses to act exactly when it is needed most.
+step**, so it blames the step for the scene and refuses to act exactly when it is needed most.
 The confound has no fix: there is no way to hold a moving scene still while attributing a quarter
 of a millisecond to one step. The test is gone and the size of the step does its job instead.
 
@@ -444,7 +446,7 @@ To check in game: set `ViewRangeScale=2.5`, play the GARDEN tank cutscene, and r
   cell table, in `vertex_table.c`. Both relocations are independent and either can be turned off
   without the other.
 
-Both counters are watched per frame, and the watchdog adopts whichever limit is actually in force -
+Both counters are watched per frame, and the watchdog adopts whichever limit is actually in force,
 16384 or 32768, matching whether `RelocateVertexCache` ran. The effective scale is only ever
 lowered, never raised again: better a permanently shorter view than a crash ten minutes later.
 
@@ -457,13 +459,13 @@ arithmetically proven 1.93x reserve over the worst possible single-frame oversho
 left once relocated is the vertex cache above, which this file's own watchdog already backs off
 from *earlier* than the cells (75% against 90%), because its failure is a frame of torn geometry
 rather than the cell table's proven crash. All of that is true, and it was raised to 4.0 on the
-strength of it - matching `FogScale`'s own existing range.
+strength of it, matching `FogScale`'s own existing range.
 
 **Field testing at 3.0 and 4.0 showed exactly the failure the watchdog was supposed to prevent**:
 torn, stretched geometry that did not correct itself, matching this file's own description of a
 vertex-cache overshoot to the letter. What the argument above missed is that these counters do not
-climb, they **jump** - the cell watchdog's own comments already document a jump from under 7680 to
-8189 in ONE frame, "the gentle back-off never got its turn, only the emergency brake" - and the
+climb, they **jump**. The cell watchdog's own comments already document a jump from under 7680 to
+8189 in ONE frame, "the gentle back-off never got its turn, only the emergency brake", and the
 same is true of the vertex cache on entering open geometry. The watchdog's backoff protects the
 *next* frame; it cannot undo the frame that already overshot, and unlike the cell table, a
 vertex-cache overshoot does not clear itself. A larger `ViewRangeScale` does not make that jump
@@ -474,8 +476,8 @@ Reverted to 2.0, the value that is actually field-confirmed. `NpcRangeScale` was
 in this file that changes how the game plays rather than how far it is drawn.
 
 **The vertex cache itself was relocated afterwards** (`vertex_table.c`, `RelocateVertexCache=1`),
-doubling it to 32768 slots the same way the cell table was already doubled - a straight capacity
-increase, not a reserve against overshoot, because all three of the vertex cache's own gates check
+doubling it to 32768 slots the same way the cell table was already doubled, a straight capacity
+increase rather than a reserve against overshoot, because all three of the vertex cache's own gates check
 before every write. That removes the specific wall the 4.0 field test hit. `ViewRangeScale`'s
 ceiling was deliberately left at 2.0 regardless: raising it again on the strength of a code-level
 argument is exactly the mistake this section exists to remember. If it is revisited, it needs its
@@ -483,21 +485,22 @@ own field test against a build that actually carries this relocation, not a reas
 
 **That field test happened, and it raised a different wall.** With the vertex cache relocated,
 `ViewRangeScale` was stepped to 2.5 (not back to 4.0) and field-tested: no torn geometry, but the
-**cell** watchdog braked hard in a dense scene (QUEEN palace gardens, 120 degree FOV) - peak 13616
+**cell** watchdog braked hard in a dense scene (QUEEN palace gardens, 120 degree FOV): peak 13616
 of the cell table's 16384-slot limit, and the effective scale was walked all the way down to 1.00
 for the rest of the session, exactly as designed ("better a permanently shorter view than a crash
 ten minutes later"). That is not the vertex-cache failure mode; it is the watchdog correctly
 protecting a table that is, again, too small for what this configuration asks of it. The cell
 table was therefore doubled a second time, 16384 -> 32768 (`draw_table.c` section 2), leaving that
 measured peak at 41% of the new limit instead of 83% of the old one. `ViewRangeScale`'s ceiling
-moved to 2.5 to match. **Neither raise moves `MAX_DRAW_RANGE` (64 world units, view_distance_fix.c)
-- both are about the watchdog reliably delivering the range the formula already allows in a dense
+moved to 2.5 to match. **Neither raise moves `MAX_DRAW_RANGE` (64 world units, view_range.c);
+both are about the watchdog reliably delivering the range the formula already allows in a dense
 scene, not about seeing further than that ceiling.**
 
 ## Known limitations
 
 * `NpcRangeScale` changes gameplay: an actor created earlier thinks earlier. 1127 of 1315 scannable
-  placements activate inside the visible picture already, so this is the knob that removes pop-in,  and the reason its cap is 2.0 against a 128-slot character pool.
+  placements activate inside the visible picture already, so this is the knob that removes pop-in,
+  and the reason its cap is 2.0 against a 128-slot character pool.
 * Two-sided drawing **softens** the see-through look; it does not close the hole. A severed limb is
   not a cut mesh, `bapobj_detachNode` only hides a node, there is no cap and no cut geometry.
 * **`TwoSidedSevered` ships off, and it has never been on in a released build.** `dev_overlay` hooks
@@ -560,14 +563,16 @@ edge 2-64, the authored profile survives every ratio, the easing agrees between 
 repeated evaluation is bit-identical. Offline verification passes on both retail builds,
 including the table/bucket cross-check and the three-hit count on the ecx append blocks.
 
-**Not accepted in game; nothing here has been run.** The fog-regime change in particular has been
-proven only on the bytes: the vertex format, the capability bit, the two `FOGTABLEMODE` writers and
-the constant-zero specular fallback are all read out of the image, but whether the fog is then
-visible on screen can only be established by running the game. The lines to look for are:
+**Accepted in game**, in the 1.5.0 build, which was played through by hand. The fog regime in
+particular was settled by running it rather than by reading it: the vertex format, the capability
+bit, the two `FOGTABLEMODE` writers and the constant-zero specular fallback are all read out of
+the image, but whether the fog is then visible on screen is only answerable in play, and it is.
+The band reported in a real log matches the arithmetic exactly, which is also what proved the
+field-of-view cosine had stopped being applied. The lines to look for are:
 
 ```
 [view_distance_fix] distance fog runs on the engine's own per-vertex ramp: ...
-[view_distance_fix] fog tick active - g_level ........, g_frameDelta ........, settle 1.50 s
+[view_distance_fix] fog tick active, g_level ........, g_frameDelta ........, settle 1.50 s
 [view_distance_fix] fog band coupled at 0041F14A: ...
 [view_distance_fix] level fog 6.0..14.0 -> 5.7..13.2 (draw distance 16, 60.0 degrees)
 ```
@@ -578,7 +583,7 @@ declined.
 
 ### `RelocateVertexCache`, added later
 
-Built and linked, `/W4 /WX` clean, full solution and all 28 existing unit tests still pass.
+Built and linked, `/W4 /WX` clean, full solution and the whole unit test suite still passes.
 **Not yet run in game.** The twelve address operands and the three gate immediates were confirmed
 byte-for-byte against the running retail image rather than assumed from a disassembly view's
 mnemonics (the `ADD EAX,imm32` short-form encoding in particular would have been guessed wrong),
@@ -590,5 +595,5 @@ by running the game. The line to look for:
 ```
 
 Its absence, or a "NOT ONE BYTE patched" / "unexpected match count, unknown image" warning next to
-it, means the relocation declined and the vertex cache stays at its retail 16384-slot limit -
-everything else in this DLL keeps working exactly as it did before this feature existed.
+it, means the relocation declined and the vertex cache stays at its retail 16384-slot limit.
+Everything else in this DLL keeps working exactly as it did before this feature existed.

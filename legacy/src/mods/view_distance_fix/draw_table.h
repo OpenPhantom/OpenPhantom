@@ -3,7 +3,7 @@
  * WHY: the cell table's end IS the start of the bucket list heads, and gatherCell only checks its
  * limit on entry (see cell_watchdog.h for the full account). Lowering the limit is one answer and
  * costs view distance. This is the other: give the table a much larger buffer with a PAGE_NOACCESS
- * page behind it, then the limit may RISE (16384 instead of 8192) and the overflow becomes
+ * page behind it, then the limit may RISE (32768 instead of 8192) and the overflow becomes
  * structurally unreachable.
  *
  * ORDERING CONSTRAINT, and it is not a matter of taste:

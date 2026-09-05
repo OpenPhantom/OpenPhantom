@@ -74,7 +74,7 @@
  *
  *     Worst case total = 135 + 4117 = 4252 entries, a property of the game's own shipped content
  *     (largest single cell, largest level's total mover faces) and NOT of where the limit itself
- *     is set - raising the limit does not raise this number, so the SAME 8192-entry reserve still
+ *     is set. Raising the limit does not raise this number, so the SAME 8192-entry reserve still
  *     carries a 1.93x margin over it at 32768 as it did at 16384. The guard page is therefore
  *     never touched in normal operation; if it ever is, something happened that none of the three
  *     analyses foresaw, and then it faults at the CAUSING instruction instead of ten minutes later
@@ -85,10 +85,10 @@
  * since moved (vertex_table.c relocates it to 32768 slots too), and a field session at
  * ViewRangeScale=2.5, 120 degree FOV, in a geometrically dense scene (the QUEEN palace gardens)
  * measured a peak of 13616 of 16384 cells before the watchdog collapsed the effective scale to
- * 1.00 to stay under it - real demand already within 17% of the OLD ceiling. Doubling again, to
+ * 1.00 to stay under it: real demand already within 17% of the OLD ceiling. Doubling again, to
  * the same 32768 the vertex cache now carries, leaves that measured peak at 41% of the new limit
  * rather than raising blind. This does not raise the visible draw distance past what
- * MAX_DRAW_RANGE (view_distance_fix.c) already allows - it lets the watchdog actually deliver that
+ * MAX_DRAW_RANGE (view_distance_fix.c) already allows; it lets the watchdog actually deliver that
  * distance in a dense scene instead of collapsing back toward retail.
  *
  * Why a guard page and not "a few thousand more entries": additional committed entries would
@@ -114,7 +114,7 @@
  * restored from the backup. If THAT fails too, it is a state with no way back, then all that is
  * left is the log and a controlled exit.
  *
- * SIZE NOTE (rule 9): 645 lines, of which 419 are code and 155 are the arithmetic that proves
+ * SIZE NOTE: past the 600 line mark, and most of the excess is the arithmetic that proves
  * the buffer size, the reserve and the single guard page. That proof cannot live elsewhere.
  */
 #include "draw_table.h"
@@ -220,18 +220,18 @@ static bool allocate_buffer(void)
     reserved = (uint8_t *)VirtualAlloc(NULL, BUFFER_BYTES + GUARD_BYTES, MEM_RESERVE,
                                        PAGE_NOACCESS);
     if (reserved == NULL) {
-        log_error("VirtualAlloc(RESERVE %u B) failed (%lu) - NOT ONE BYTE patched",
+        log_error("VirtualAlloc(RESERVE %u B) failed (%lu), NOT ONE BYTE patched",
                   (unsigned)(BUFFER_BYTES + GUARD_BYTES), (unsigned long)GetLastError());
         return false;
     }
     if (VirtualAlloc(reserved, BUFFER_BYTES, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        log_error("VirtualAlloc(COMMIT %u B) failed (%lu) - NOT ONE BYTE patched",
+        log_error("VirtualAlloc(COMMIT %u B) failed (%lu), NOT ONE BYTE patched",
                   (unsigned)BUFFER_BYTES, (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
     if (VirtualAlloc(reserved + BUFFER_BYTES, GUARD_BYTES, MEM_COMMIT, PAGE_NOACCESS) == NULL) {
-        log_error("the guard page at %08X could not be committed (%lu) - NOT ONE BYTE patched",
+        log_error("the guard page at %08X could not be committed (%lu), NOT ONE BYTE patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES), (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
@@ -242,7 +242,7 @@ static bool allocate_buffer(void)
             != sizeof(information) ||
         information.Protect != PAGE_NOACCESS || information.State != MEM_COMMIT) {
         log_error("the guard page at %08X does not carry PAGE_NOACCESS (State %08lX, "
-                  "Protect %08lX) - NOT ONE BYTE patched",
+                  "Protect %08lX), NOT ONE BYTE patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)information.State, (unsigned long)information.Protect);
         VirtualFree(reserved, 0, MEM_RELEASE);
@@ -252,13 +252,13 @@ static bool allocate_buffer(void)
     /* Without LARGE_ADDRESS_AWARE this cannot happen; the check costs nothing and pins the
      * assumption down instead of believing it. */
     if ((uintptr_t)reserved >= 0x80000000u) {
-        log_error("the buffer at %08X lies above 2 GiB - refused", (unsigned)(uintptr_t)reserved);
+        log_error("the buffer at %08X lies above 2 GiB, refused", (unsigned)(uintptr_t)reserved);
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
 
     /* The buffer is left as MEM_COMMIT hands it over: zero-filled. Behaviour is identical to the
-     * BSS from frame one, and a memset would touch 288 KiB the engine may never need. */
+     * BSS from frame one, and a memset would touch 480 KiB the engine may never need. */
     table_state.buffer        = reserved;
     table_state.guard_address = (uintptr_t)(reserved + BUFFER_BYTES);
     return true;
@@ -371,8 +371,8 @@ static bool check_ecx_anchors(const uintptr_t *append_ecx, uint32_t table)
             return false;
         }
         if (plus_four != table + 4 || base != table) {
-            log_warning("ecx anchor %08X carries %08X/%08X instead of %08X/%08X - NOT ONE BYTE "
-                        "patched", (unsigned)append_ecx[index], (unsigned)plus_four,
+            log_warning("ecx anchor %08X carries %08X/%08X instead of %08X/%08X, NOT ONE "
+                        "BYTE patched", (unsigned)append_ecx[index], (unsigned)plus_four,
                         (unsigned)base, (unsigned)(table + 4), (unsigned)table);
             return false;
         }
@@ -388,13 +388,13 @@ static bool check_gate_immediate(uintptr_t gate_immediate, uint32_t *out_value)
         return false;
     }
     if (value == GATE_NEW) {
-        log_info("the limit at %08X already reads %u - ALREADY RELOCATED, nothing to do",
+        log_info("the limit at %08X already reads %u: ALREADY RELOCATED, nothing to do",
                  (unsigned)gate_immediate, (unsigned)value);
         return false;
     }
     if (value != GATE_RETAIL && value != GATE_LOWERED) {
         log_warning("the limit at %08X reads %u; expected %u (shipped) or %u (lowered by the cell "
-                    "watchdog) - NOT ONE BYTE patched",
+                    "watchdog), NOT ONE BYTE patched",
                     (unsigned)gate_immediate, (unsigned)value,
                     (unsigned)GATE_RETAIL, (unsigned)GATE_LOWERED);
         return false;
@@ -457,7 +457,7 @@ static bool build_word_list(const uintptr_t *append_ecx, uintptr_t append_edx,
     add_word(gate_immediate, gate_value, false, "the limit");
 
     if (table_state.word_count != WORD_COUNT) {
-        log_error("%u instead of %u sites collected - NOT ONE BYTE patched",
+        log_error("%u instead of %u sites collected, NOT ONE BYTE patched",
                   (unsigned)table_state.word_count, (unsigned)WORD_COUNT);
         table_state.word_count = 0;
         return false;
@@ -470,8 +470,8 @@ static bool build_word_list(const uintptr_t *append_ecx, uintptr_t append_edx,
             return false;
         }
         if (table_state.words[index].old_value != table_state.words[index].expected) {
-            log_warning("pre-flight: site %u/%u (%s) at %08X carries %08X, expected %08X - NOT "
-                        "ONE BYTE patched",
+            log_warning("pre-flight: site %u/%u (%s) at %08X carries %08X, expected %08X, "
+                        "NOT ONE BYTE patched",
                         (unsigned)(index + 1), (unsigned)WORD_COUNT,
                         table_state.words[index].description,
                         (unsigned)table_state.words[index].address,
@@ -515,7 +515,7 @@ static bool write_all_words(void)
 
         /* The buffer is DELIBERATELY not freed: if a frame did run between the first write and
          * the rollback, the bucket list heads still hold pointers into it. A freed page turns a
-         * harmless stale pointer into an access violation. 288 KiB of address space is cheaper. */
+         * harmless stale pointer into an access violation. 480 KiB of address space is cheaper. */
         table_state.word_count = 0;
         return false;
     }
@@ -595,12 +595,13 @@ void draw_table_relocate(void)
              "of 4252 (135 cell slots QUEEN + 4117 mover faces GUNGA) = factor 1.93. A SINGLE "
              "mover carries up to 855 faces and appends them all in one call, that is why this "
              "size and not 256 or 1024.", (unsigned)(BUFFER_ENTRIES - GATE_NEW));
-    log_info("the bucket heads and the counter are UNCHANGED - the heads store pointers, not "
+    log_info("the bucket heads and the counter are UNCHANGED: the heads store pointers, not "
              "indices, and point into the new buffer by themselves. The old BSS table stays put; "
              "it now belongs to baplight_applyLight, which keeps using it as a light batch and "
              "stays cleanly inside it.");
-    log_warning("the next wall is now the vertex cache (16384 slots of 0x40 B). It aborts "
-                "cleanly but leaves torn geometry until the level reloads.");
+    log_warning("the next wall is now the vertex cache, at 16384 slots of 0x40 B unless "
+                "RelocateVertexCache raises it to 32768 (it is on by default and runs after "
+                "this). It aborts cleanly but leaves torn geometry until the level reloads.");
 }
 
 void draw_table_restore(void)

@@ -52,8 +52,8 @@
  * times, so the governor eases into the target from a near miss and moves properly when a scene
  * turns sharply heavier.
  *
- * These were both twice as timid to begin with, and the field runs said so. A 10 % miss - 14.7 ms
- * against 13.3 - took a step of 0.077, and at that size crossing the range this setting actually
+ * These were both twice as timid to begin with, and the field runs said so. A 10 % miss, 14.7 ms
+ * against 13.3, took a step of 0.077, and at that size crossing the range this setting actually
  * has takes longer than the scene being reacted to lasts. The measured gain is real and large:
  * the same cutscene runs at about 15 ms at 2.50 and a flat 10.00 ms at 1.00, so a governor being
  * delicate about a 10 % miss is being delicate about the wrong thing. */
@@ -84,7 +84,8 @@ typedef struct {
     float    raise_below_ms;
     float    ceiling;              /* the scale THIS governor allows; never below 1.0 */
     uint32_t healthy_seconds;
-    uint32_t healthy_needed;       /* 30 for the first step back, 10 for the ones after it */
+    uint32_t healthy_needed;       /* in DECISIONS, not seconds: 30 seconds' worth for the first
+                                    * step back, 10 seconds' worth for the ones after it */
 
     float    samples[GOVERNOR_RING];
     uint32_t sample_count;         /* how many of the ring are valid, saturates at GOVERNOR_RING */
@@ -209,8 +210,8 @@ void frame_governor_on_frame(float *effective_view_scale, float configured_scale
     }
     governor.last_frame_at = now.QuadPart;
 
-    /* Decisions are once a second, on the whole window, not per frame. Per-frame steering on a
-     * per-frame measurement is how a governor becomes an oscillator. */
+    /* Decisions are once per GOVERNOR_DECISION_MS, on the whole window, not per frame. Per-frame
+     * steering on a per-frame measurement is how a governor becomes an oscillator. */
     if (governor.second_began_at == 0) {
         governor.second_began_at = now.QuadPart;
     }
@@ -262,7 +263,8 @@ void frame_governor_on_frame(float *effective_view_scale, float configured_scale
                 }
                 log_info("frame governor: %u s at %.1f ms a frame (%.0f fps), so the view distance "
                          "is given a step back. View scale %.2f -> %.2f, ceiling %.2f.",
-                         governor.healthy_needed * GOVERNOR_DECISION_MS / 1000u, (double)median, (double)(1000.0f / median),
+                         governor.healthy_needed * GOVERNOR_DECISION_MS / 1000u,
+                         (double)median, (double)(1000.0f / median),
                          (double)previous, (double)governor.ceiling, (double)configured_scale);
                 governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS_AGAIN);
             }

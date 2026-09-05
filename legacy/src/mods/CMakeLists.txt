@@ -78,11 +78,16 @@ add_engine_fix(hud_ratio_scaling
 add_engine_fix(view_distance_fix
     dll_main.c
     view_distance_fix.c
+    view_settings.c
+    view_range.c
+    two_sided_faces.c
     cell_watchdog.c
     frame_governor.c
     draw_table.c
     vertex_table.c
     fog_regime.c
+    fog_band.c
+    fog_regime_install.c
     fog_trace.c
     poly_bias.c
     translucent_fog.c

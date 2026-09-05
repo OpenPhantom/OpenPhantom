@@ -6,8 +6,8 @@
  * were unreliable on the hardware this was written for.
  *
  * The consequence is not old. The level-of-detail cross-fade makes geometry translucent WHILE IT
- * CROSSES, so a surface loses its fog for the length of the transition and comes back with it. Where
- * the band saturates inside the draw cut the background behind that surface is already pure fog
+ * CROSSES, so a surface loses its fog for the length of the transition and comes back with it.
+ * Where the band saturates inside the draw cut the background behind that surface is already fog
  * colour, so an unfogged face reads at full brightness against it. That is a band at a fixed
  * distance from the camera, which moves with the camera, is invisible when the band saturates
  * beyond the cut because there is then no fog-coloured background to stand out against, and is

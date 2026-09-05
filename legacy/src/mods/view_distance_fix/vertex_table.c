@@ -9,21 +9,21 @@
  *
  * The cache is not a table of pointers or structs Ghidra ever named as one; it is addressed by
  * three DIFFERENT literal forms, all baked directly into instruction operands rather than read
- * from a pointer variable - `SHL reg,6` then `ADD reg,0x5bf9f0` (five call sites, two encodings
+ * from a pointer variable: `SHL reg,6` then `ADD reg,0x5bf9f0` (five call sites, two encodings
  * of ADD depending on which register: `81 /0 id` for EDX/ESI, the EAX-only short form `05 id` for
  * EAX), one direct `MOV byte ptr [reg+0x5bf9f1],1` (the per-slot "touched" flag, offset +1), and
  * one seed pointer `MOV ECX,0x5bf9f2` walked with `ADD ECX,0x40` per iteration (offset +2, the
  * per-frame touched-flag RESET loop). Twelve address-bearing sites in total, found by exhaustive
  * xref census across the three functions that read or write the cache
  * (0x004199B0, 0x0041B070, 0x0041BAF0) and confirmed byte-for-byte against the running retail
- * image rather than assumed from the disassembly view's mnemonics alone - the EAX short form in
+ * image rather than assumed from the disassembly view's mnemonics alone; the EAX short form in
  * particular would have been guessed wrong (the long form was the default assumption) had the
  * actual bytes not been checked.
  *
  * NOT touched, and why:
  *   * The trailer record at 0x006bf9f0. Nothing here reserves or reads it; it is a wholly
  *     different structure that starts exactly where the cache's declared span ends, is written by
- *     eight different functions, and has ZERO slack - the first byte past the cache is the first
+ *     eight different functions, and has ZERO slack: the first byte past the cache is the first
  *     byte OF something else. This is why the buffer is relocated whole rather than grown in
  *     place; growing in place would corrupt the trailer on the very first extra slot.
  *   * The counter itself, 0x005bb5c0 (g_numVertCache). It is a counter, not an address, exactly
@@ -32,7 +32,7 @@
  * ==============================================================================================
  * 1. THE THREE GATES, and why unlike the cell table this one aborts clean
  *
- * cell_watchdog.h already documents this precisely - "unlike the cell table the vertex cache
+ * cell_watchdog.h already documents this precisely, "unlike the cell table the vertex cache
  * aborts CLEANLY (all three gates branch to a return before every write)". That is confirmed here
  * again, independently, because it is the fact this whole relocation leans on:
  *
@@ -42,7 +42,7 @@
  *           would be the ONE PAST the last valid slot. No slot beyond 0x3FFF is ever written.
  *   gate 2  0x0041B6CC  FUN_0041B070: computes count-to-add + current counter BEFORE the loop and
  *           bails the WHOLE function (return 0, untouched) if the sum would exceed 0x4000. This is
- *           the gate cell_watchdog.h names as the dangerous one - bailing here jumps behind the
+ *           the gate cell_watchdog.h names as the dangerous one; bailing here jumps behind the
  *           per-frame touched-flag RESET loop at the end of the same function, so vertices this
  *           frame could not cache keep last frame's stale touched flag into the NEXT frame, and
  *           FUN_004199B0 then wrongly reuses whatever was in their old cache slot. That is the
@@ -52,7 +52,7 @@
  * All three are genuine pre-checks, not entry-only checks with unchecked appends after (the cell
  * table's own failure mode). That is why this file needs NO reserve the way draw_table.c's 8192
  * entries do: the retail code itself never writes past whatever limit these three gates enforce.
- * Raise all three together and the buffer's true capacity is exactly what gets used - a straight
+ * Raise all three together and the buffer's true capacity is exactly what gets used: a straight
  * multiplication, not an overshoot allowance.
  *
  * ==============================================================================================
@@ -63,11 +63,11 @@
  *     limit   0x4000 = 16384 -> 0x8000 = 32768
  *
  * Double, matching the ratio draw_table.c already field-proved for the cell table, rather than a
- * larger multiple with no field measurement behind it - the lesson of the ViewRangeScale 2.0 -> 4.0
- * revert (view_distance_fix.c) is that an argument sound on paper is not the same as one confirmed
- * in play. The guard page is not sized to absorb an overshoot (there is none to absorb, see above);
- * it exists so that a site this census missed, if one exists, faults at the causing instruction
- * instead of corrupting whatever memory happens to sit next.
+ * larger multiple with no field measurement behind it. The lesson of the ViewRangeScale 2.0 to
+ * 4.0 revert (view_distance_fix.c) is that an argument sound on paper is not the same as one
+ * confirmed in play. The guard page is not sized to absorb an overshoot (there is none to absorb,
+ * see above); it exists so that a site this census missed, if one exists, faults at the causing
+ * instruction instead of corrupting whatever memory happens to sit next.
  *
  * ==============================================================================================
  * 3. ALL OR NOTHING, same discipline as draw_table.c
@@ -108,9 +108,9 @@ _Static_assert((BUFFER_BYTES % ENTRY_STRIDE) == 0,
  * IS the evidence that a site belongs to the cache at all, so a pattern that matched with any
  * other value would be matching something else. Confirmed byte-for-byte against the running
  * retail image; see the file header for how the EAX short form was resolved rather than guessed. */
-static const uint8_t PAT_ADD_EDX[] = { 0x81, 0xC2, 0xF0, 0xF9, 0x5B, 0x00 };            /* +0x0041A0*/
+static const uint8_t PAT_ADD_EDX[] = { 0x81, 0xC2, 0xF0, 0xF9, 0x5B, 0x00 };   /* +0x0041A0 */
 static const uint8_t PAT_ADD_ESI[] = { 0x81, 0xC6, 0xF0, 0xF9, 0x5B, 0x00 };
-static const uint8_t PAT_ADD_EAX[] = { 0x05, 0xF0, 0xF9, 0x5B, 0x00 };                  /* short form*/
+static const uint8_t PAT_ADD_EAX[] = { 0x05, 0xF0, 0xF9, 0x5B, 0x00 };         /* short form */
 static const uint8_t PAT_TOUCHED_STORE[] = { 0xC6, 0x82, 0xF1, 0xF9, 0x5B, 0x00, 0x01 };
 static const uint8_t PAT_SEED_POINTER[]  = { 0xB9, 0xF2, 0xF9, 0x5B, 0x00 };
 
@@ -119,18 +119,20 @@ static const uint8_t PAT_SEED_POINTER[]  = { 0xB9, 0xF2, 0xF9, 0x5B, 0x00 };
  * address as part of the anchor rather than as a separate cross-checked operand: 0x005bb5c0 is a
  * plain global that nothing in this codebase ever relocates, so pinning it in the pattern makes
  * the match MORE specific, not more fragile. */
-static const uint8_t PAT_GATE1[] = {                       /* 0x0041A0DF, cmp edx,0x4000 /        */
-    0x81, 0xFA, 0x00, 0x40, 0x00, 0x00, 0x89, 0x15          /* mov [counter],edx - the same 8-byte  */
-};                                                           /* anchor cell_watchdog.c already ships */
-static const uint8_t PAT_GATE2[] = {                        /* 0x0041B6C3..0x0041B6CC:              */
-    0x8B, 0x0D, 0xC0, 0xB5, 0x5B, 0x00,                      /*   mov ecx,[0x005bb5c0]               */
-    0x8D, 0x14, 0x08,                                        /*   lea edx,[eax+ecx]                  */
-    0x81, 0xFA, 0x00, 0x40, 0x00, 0x00                       /*   cmp edx,0x4000                     */
+/* 0x0041A0DF: `cmp edx,0x4000` then `mov [counter],edx`, the same 8-byte anchor
+ * cell_watchdog.c already ships. */
+static const uint8_t PAT_GATE1[] = {
+    0x81, 0xFA, 0x00, 0x40, 0x00, 0x00, 0x89, 0x15
 };
-static const uint8_t PAT_GATE3[] = {                        /* 0x0041C0CC..0x0041C0D5:               */
-    0x8B, 0x15, 0xC0, 0xB5, 0x5B, 0x00,                      /*   mov edx,[0x005bb5c0]                */
-    0x8D, 0x0C, 0x10,                                        /*   lea ecx,[eax+edx]                   */
-    0x81, 0xF9, 0x00, 0x40, 0x00, 0x00                       /*   cmp ecx,0x4000                      */
+static const uint8_t PAT_GATE2[] = {              /* 0x0041B6C3..0x0041B6CC:  */
+    0x8B, 0x0D, 0xC0, 0xB5, 0x5B, 0x00,           /*   mov ecx,[0x005bb5c0]   */
+    0x8D, 0x14, 0x08,                             /*   lea edx,[eax+ecx]      */
+    0x81, 0xFA, 0x00, 0x40, 0x00, 0x00            /*   cmp edx,0x4000         */
+};
+static const uint8_t PAT_GATE3[] = {              /* 0x0041C0CC..0x0041C0D5:  */
+    0x8B, 0x15, 0xC0, 0xB5, 0x5B, 0x00,           /*   mov edx,[0x005bb5c0]   */
+    0x8D, 0x0C, 0x10,                             /*   lea ecx,[eax+edx]      */
+    0x81, 0xF9, 0x00, 0x40, 0x00, 0x00            /*   cmp ecx,0x4000         */
 };
 
 typedef struct address_pattern {
@@ -197,19 +199,19 @@ static bool allocate_buffer(void)
     reserved = (uint8_t *)VirtualAlloc(NULL, BUFFER_BYTES + GUARD_BYTES, MEM_RESERVE,
                                        PAGE_NOACCESS);
     if (reserved == NULL) {
-        log_error("vertex table: VirtualAlloc(RESERVE %u B) failed (%lu) - NOT ONE BYTE patched",
+        log_error("vertex table: VirtualAlloc(RESERVE %u B) failed (%lu), NOT ONE BYTE patched",
                   (unsigned)(BUFFER_BYTES + GUARD_BYTES), (unsigned long)GetLastError());
         return false;
     }
     if (VirtualAlloc(reserved, BUFFER_BYTES, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        log_error("vertex table: VirtualAlloc(COMMIT %u B) failed (%lu) - NOT ONE BYTE patched",
+        log_error("vertex table: VirtualAlloc(COMMIT %u B) failed (%lu), NOT ONE BYTE patched",
                   (unsigned)BUFFER_BYTES, (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
     if (VirtualAlloc(reserved + BUFFER_BYTES, GUARD_BYTES, MEM_COMMIT, PAGE_NOACCESS) == NULL) {
-        log_error("vertex table: the guard page at %08X could not be committed (%lu) - NOT ONE "
-                  "BYTE patched", (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
+        log_error("vertex table: the guard page at %08X could not be committed (%lu), NOT "
+                  "ONE BYTE patched", (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
@@ -218,14 +220,14 @@ static bool allocate_buffer(void)
             != sizeof(information) ||
         information.Protect != PAGE_NOACCESS || information.State != MEM_COMMIT) {
         log_error("vertex table: the guard page at %08X does not carry PAGE_NOACCESS "
-                  "(State %08lX, Protect %08lX) - NOT ONE BYTE patched",
+                  "(State %08lX, Protect %08lX), NOT ONE BYTE patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)information.State, (unsigned long)information.Protect);
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
     if ((uintptr_t)reserved >= 0x80000000u) {
-        log_error("vertex table: the buffer at %08X lies above 2 GiB - refused",
+        log_error("vertex table: the buffer at %08X lies above 2 GiB, refused",
                   (unsigned)(uintptr_t)reserved);
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
@@ -347,7 +349,7 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
     }
 
     if (table_state.word_count != WORD_COUNT) {
-        log_error("vertex table: %u instead of %u sites collected - NOT ONE BYTE patched",
+        log_error("vertex table: %u instead of %u sites collected, NOT ONE BYTE patched",
                   (unsigned)table_state.word_count, (unsigned)WORD_COUNT);
         table_state.word_count = 0;
         return false;
@@ -361,7 +363,7 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
         }
         if (table_state.words[word_index].old_value != table_state.words[word_index].expected) {
             log_warning("vertex table: pre-flight: site %u/%u (%s) at %08X carries %08X, "
-                        "expected %08X - NOT ONE BYTE patched", (unsigned)(word_index + 1),
+                        "expected %08X, NOT ONE BYTE patched", (unsigned)(word_index + 1),
                         (unsigned)WORD_COUNT, table_state.words[word_index].description,
                         (unsigned)table_state.words[word_index].address,
                         (unsigned)table_state.words[word_index].old_value,

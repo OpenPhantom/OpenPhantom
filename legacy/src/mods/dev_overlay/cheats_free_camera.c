@@ -3,6 +3,27 @@
  * It holds the simulation through sim_pause rather than by any means of its own, and writes the
  * camera pose after the engine has composed it rather than fighting the original for the fields.
  *
+ * ==============================================================================================
+ * SIZE NOTE
+ *
+ * Over the 600 line mark, under the 900 hard limit, and the size is not really the file's.
+ * One function, hook_camera_update, is most of it. The rest of the file is a pair of signatures,
+ * the hotkey, the wheel source and the install pass, and none of that is large.
+ *
+ * So the honest seam is not between two halves of this file, it is inside that function, which
+ * is itself well past the 150 line mark where the rules say split. It reads input, decides a
+ * mode, moves an eye, asks the floor probe whether there is ground under the player, and then
+ * writes the pose the engine has just composed. Those are four jobs and they could be four
+ * functions.
+ *
+ * That is a decomposition rather than a move: it changes where state lives between steps that
+ * currently share one stack frame, so it can change behaviour, and the free camera is flown by
+ * hand rather than covered by a test. It is left whole here deliberately, and named so the next
+ * person does not have to work out why the file is long.
+ *
+ * Unrelated to the size, and worth a separate pass: this file's own evidence for the two camera
+ * sites is duplicated in cheats_jump_boost.c, left there when these were one file.
+ *
  * Split out of cheats_openphantom.c; nothing changed in the move. */
 #include "cheats_openphantom.h"
 #include "cheats_internal.h"
@@ -41,7 +62,7 @@ _Static_assert(sizeof(SIG_CAMERA_VIEW) == sizeof(MSK_CAMERA_VIEW),
                "the camera-view pattern and its mask are different lengths");
 #define OFFSET_CAMERA_VIEW_OBJECT   0x01u   /* operand of mov eax,[gView]                       */
 
-/* 0x00418544, nine bytes: push ebp / mov ebp,esp / sub esp,0x88 - identical to camera_sites.c's
+/* 0x00418544, nine bytes: push ebp / mov ebp,esp / sub esp,0x88, identical to camera_sites.c's
  * own CAMERA_UPDATE_PROLOGUE_SIZE, deliberately, since a mismatched prologue size on the SAME
  * chained site would misplace the trampoline for whichever DLL installs second. */
 static const uint8_t SIG_CAMERA_UPDATE[] = {
@@ -95,9 +116,9 @@ _Static_assert(sizeof(SIG_CAMERA_UPDATE) == sizeof(MSK_CAMERA_UPDATE),
 /* eyeX/Y/Z, view+0x24/0x28/0x2c: eyeX = anchorX + (the local rig offset, view+0x04/0x08, rotated
  * by the current euler); eyeZ = anchorZ + offsetZ(view+0x0c), unrotated. Confirmed directly by
  * decompiling FUN_004181b9, the function that builds these every rendered frame from the anchor
- * and the euler updateCam just wrote - not taken on the strength of an earlier report alone.
+ * and the euler updateCam just wrote, and not taken on the strength of an earlier report alone.
  * Read only once, at free camera's own rising edge, to compute a look-at rather than to drive
- * anything ongoing - see that site's own comment for why. */
+ * anything ongoing; see that site's own comment for why. */
 #define CAMERA_EYE_X_OFFSET      0x24u
 #define CAMERA_EYE_Y_OFFSET      0x28u
 #define CAMERA_EYE_Z_OFFSET      0x2Cu
@@ -117,6 +138,10 @@ _Static_assert(sizeof(SIG_CAMERA_UPDATE) == sizeof(MSK_CAMERA_UPDATE),
                                             * and the fast end, where a constant per-notch ADD would
                                             * feel enormous down low and glacial up high */
 
+/* GetAsyncKeyState reads the physical key regardless of which window has it, so without this the
+ * player would drift while the game sits alt-tabbed in the background and something else entirely
+ * is holding E or Q. Compares the foreground window's owning process to this one instead of
+ * tracking a HWND of our own, which needs nothing set up anywhere else in this DLL. */
 static bool is_game_foreground(void)
 {
     HWND  foreground = GetForegroundWindow();
@@ -129,7 +154,7 @@ static bool is_game_foreground(void)
     return owner_pid == GetCurrentProcessId();
 }
 
-/* NULL until dev_overlay.c wires it in - see this pointer's own type, declared in
+/* NULL until dev_overlay.c wires it in; see this pointer's own type, declared in
  * cheats_openphantom.h, for why it is a pointer rather than a direct call. */
 static cheats_openphantom_wheel_source_fn_t wheel_source;
 
@@ -160,7 +185,7 @@ static POINT         freecam_cursor_anchor;
  * key first; the teleport is the thing worth binding, and F4 covers leaving without moving.
  *
  * Free camera's own mouse look claims the cursor, which leaves both the dev panel
- * and the game's own pause menu unreachable - no cursor, no click, and Escape does not work either
+ * and the game's own pause menu unreachable: no cursor, no click, and Escape does not work either
  * while the simulation this cheat paused is what would normally answer it. Without a keyboard-only
  * way out, turning this cheat on is a one-way door. 0 = unbound; the panel's hotkey row (see
  * overlay_model.c) is how a key gets into this. */
@@ -220,7 +245,7 @@ void cheats_openphantom_freecam_set_hotkey(int32_t virtual_key)
 /* Chained: this file's own override runs strictly AFTER the original updateCam, on every DLL's
  * behalf whichever order they loaded in (see common/detour.h). Calling the original unconditionally,
  * before even looking at whether the cheat is on, is what keeps this a well-behaved link in that
- * chain rather than a break in it - enhanced_input's own free-look feature is chained on this exact
+ * chain rather than a break in it; enhanced_input's own free-look feature is chained on this exact
  * same site and must keep running underneath this one regardless of what this cheat is doing. */
 static void __cdecl hook_camera_update(void)
 {
@@ -321,7 +346,7 @@ static void __cdecl hook_camera_update(void)
             }
             freecam_teleport_pending = false;
 
-            /* Falling edge: hand the world back. The camera itself needs no un-write - the very
+            /* Falling edge: hand the world back. The camera itself needs no un-write, because the very
              * next updateCam call recomputes it from the player the ordinary way, since nothing
              * here touches state (+0x00) or anything else the follow logic reads. */
             sim_pause_hold(SIM_PAUSE_FREE_CAMERA, false);
@@ -345,7 +370,7 @@ static void __cdecl hook_camera_update(void)
 
     if (!freecam_valid) {
         /* Rising edge: seed POSITION from wherever the camera already is, so switching on never
-         * snaps the view, and pause the simulation - see sim_pause.h for why
+         * snaps the view, and pause the simulation; see sim_pause.h for why
          * this one flag is enough to stop the player and the whole world simulating out from
          * under a camera that is no longer looking through the player's own eyes. */
         freecam_teleport_pending = false;
@@ -354,12 +379,12 @@ static void __cdecl hook_camera_update(void)
         freecam_y = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Y_OFFSET);
         freecam_z = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Z_OFFSET);
 
-        /* ORIENTATION is computed fresh - a look-at from the retail camera's own eye position
+        /* ORIENTATION is computed fresh, a look-at from the retail camera's own eye position
          * toward its anchor (which tracks the player every frame; see updateCam's own site
-         * comment above) - rather than copied from the raw euler fields the way position is.
+         * comment above), rather than copied from the raw euler fields the way position is.
          * Field-reported: switching free camera on could start it pointing "at the sky". The raw
          * pitch is periodic (FUN_004181b9 wraps it every frame, confirmed by decompiling it) so
-         * that alone should not have caused it - sin/cos already handle any wrap correctly - which
+         * that alone should not have caused it, since sin/cos already handle any wrap correctly, which
          * points instead at the retail camera's own momentary rotation (lag catching up, a look at
          * something tall) simply not being a sensible starting orientation for a DIFFERENT
          * camera's use. Anchor and eye are both positions, immune to whatever the retail camera's
@@ -401,7 +426,7 @@ static void __cdecl hook_camera_update(void)
         GetCursorPos(&freecam_cursor_anchor);
         ShowCursor(FALSE);
         freecam_cursor_hidden = true;
-        /* Discard whatever the wheel accumulated while this cheat was off - overlay_input.c
+        /* Discard whatever the wheel accumulated while this cheat was off; overlay_input.c
          * observes it unconditionally, panel open or closed, cheat on or off, so without this a
          * scroll from minutes ago would show up as a sudden speed jump on the very first frame. */
         if (wheel_source != NULL) {
@@ -413,14 +438,14 @@ static void __cdecl hook_camera_update(void)
     /* Panel-aware mouse handling was tried here (skip look/movement and leave the cursor alone
      * while the dev panel is open) and REVERTED after a field-reported regression: closing the
      * panel left freecam_yaw climbing on its own every frame with no mouse input at all, and
-     * looking unresponsive at the same time - both symptoms of the OS cursor being unable to reach
+     * looking unresponsive at the same time, both symptoms of the OS cursor being unable to reach
      * this cheat's anchor point, most likely enhanced_resolution's own ClipCursor confinement
      * (focus_guard.c) interacting with the re-anchor on panel close. Reverted to the simple,
      * previously-working shape rather than chase that live.
      *
      * That attempt was solving the wrong problem anyway. The actual complaint was not "I want the
      * panel usable while flying", it was "I have no way OUT of free camera once the mouse is
-     * claimed" - the panel is unreachable without a working cursor and Escape does nothing while
+     * claimed"; the panel is unreachable without a working cursor and Escape does nothing while
      * this cheat has the simulation paused, so a player who did not already know a hotkey existed
      * was simply stuck. The bound key below is the actual fix: keyboard only, needs no cursor at
      * all, and does not touch how the mouse behaves while flying. Whether the panel itself is ever
@@ -488,11 +513,60 @@ static void __cdecl hook_camera_update(void)
             long dx = cursor_now.x - freecam_cursor_anchor.x;
             long dy = cursor_now.y - freecam_cursor_anchor.y;
 
+            /* THIS CHEAT IS NOT THE ONLY THING THAT MOVES THE POINTER, and every unrecoverable
+             * dive reported against this camera has come from assuming it is.
+             *
+             * Three others write it. focus_guard.c confines it with ClipCursor, so a warp to a
+             * point outside the cage lands somewhere else entirely. The engine recentres it
+             * itself: control_recentreMouse at 0x0046A115 ends in `push 0xF0 / push 0x140 /
+             * call SetCursorPos`, a fixed screen point that cursor_anchor.c repoints at the
+             * window but does not remove. And the panel is now held open for the whole flight,
+             * so its own pointer handling runs alongside this.
+             *
+             * Either of those turns the difference below into a CONSTANT that is not hand
+             * movement and that arrives again on the next frame, and the frame after. A steady
+             * dy drives pitch onto its own clamp and pins it there: the camera stares at the
+             * floor, W flies into it, and no hand movement lifts it because the bias comes back
+             * before the next frame is drawn. It reads as the camera diving under the map and
+             * refusing to come up, which is exactly how it was reported, and the reporter
+             * confirmed these two guards fixed it on the rig it happened on. It was never
+             * reproduced here, which is the point: the writer this collides with is not
+             * something every machine has.
+             *
+             * A file-level comment further up already records this failing once before, when
+             * panel-aware handling left the yaw climbing on its own with no mouse input. It was
+             * reverted rather than fixed, so the trap stayed set.
+             *
+             * Two guards, and between them they close it whoever else is writing:
+             *
+             * ONE, a jump this large is not a hand. A quarter of the screen in a single frame
+             * is around seventy degrees of turn at this sensitivity, which nobody asks for on
+             * purpose, while somebody else's warp clears it easily. Such a frame contributes no
+             * rotation at all and simply re-syncs the anchor, so the next frame measures real
+             * movement from wherever the pointer was put.
+             *
+             * TWO, the anchor follows the pointer rather than the request. Where SetCursorPos
+             * actually landed is read back below, because a cage can refuse the position asked
+             * for and a stale anchor then measures the same refusal for ever.
+             *
+             * The floor of 64 keeps this sane if the metrics come back as nothing, which they
+             * do on a session with no desktop to ask about. */
+            long limit_x = (long)GetSystemMetrics(SM_CXSCREEN) / 4;
+            long limit_y = (long)GetSystemMetrics(SM_CYSCREEN) / 4;
+
+            if (limit_x < 64) { limit_x = 64; }
+            if (limit_y < 64) { limit_y = 64; }
+            if ((dx > limit_x) || (dx < -limit_x) || (dy > limit_y) || (dy < -limit_y)) {
+                freecam_cursor_anchor = cursor_now;
+                dx = 0;
+                dy = 0;
+            }
+
             if (dx != 0 || dy != 0) {
                 /* Yaw (X) field-tested inverted from the first build and flipped, and stayed
-                 * flipped - confirmed correct. Pitch (Y) was flipped in that same round on the
+                 * flipped, confirmed correct. Pitch (Y) was flipped in that same round on the
                  * assumption both axes were backward together; field testing showed that guess
-                 * wrong - X's flip was right, Y's undid a pitch sign that was already correct - so
+                 * wrong: X's flip was right, Y's undid a pitch sign that was already correct, so
                  * this puts pitch back to its first-build sign while keeping yaw's fix. */
                 freecam_yaw   -= (float)dx * FREECAM_MOUSE_DEGREES_PER_COUNT;
                 freecam_pitch -= (float)dy * FREECAM_MOUSE_DEGREES_PER_COUNT;
@@ -503,18 +577,20 @@ static void __cdecl hook_camera_update(void)
                     freecam_pitch = -FREECAM_PITCH_LIMIT;
                 }
                 SetCursorPos(freecam_cursor_anchor.x, freecam_cursor_anchor.y);
+                /* Where it LANDED, which is not always where it was sent; see above. */
+                (void)GetCursorPos(&freecam_cursor_anchor);
             }
         }
 
         /* Scroll wheel adjusts fly speed, the same feel Blender's own fly/walk navigation uses.
          * overlay_input.c observes WM_MOUSEWHEEL unconditionally (panel open or closed) precisely
-         * because this needs it while FLYING, which is exactly when the panel is closed - see that
+         * because this needs it while FLYING, which is exactly when the panel is closed; see that
          * file's own comment for how it confirmed the message actually reaches its hook (the
          * engine's top-level window procedure special-cases only four message types and falls
          * through to the same registered-handler chain for everything else, wheel included).
          * Multiplicative per notch rather than additive, so the same scroll feels proportionate
          * whether the current speed is barely-crawling or already fast. wheel_source is NULL if
-         * dev_overlay.c never wired it in (its own site did not resolve) - then this simply never
+         * dev_overlay.c never wired it in (its own site did not resolve), and then this simply never
          * fires, the same as every other optional site in this file failing quietly. */
         if (wheel_source != NULL) {
             int32_t wheel = wheel_source();
@@ -533,7 +609,7 @@ static void __cdecl hook_camera_update(void)
         }
 
         /* WASD along the full 3D view direction (so looking up while holding W climbs, exactly
-         * the free-fly feel the pitch-redirect attempt on the PLAYER tried and failed at - the
+         * the free-fly feel the pitch-redirect attempt on the PLAYER tried and failed at; the
          * difference is that nothing here is fighting a third-person camera's own resting angle,
          * because nothing here is a third-person camera anymore, it is this cheat's own camera).
          * E/Q add a world-vertical on top, independent of pitch, for straight up/down without
@@ -542,7 +618,7 @@ static void __cdecl hook_camera_update(void)
          * FIELD-TESTED, WRONG, THEN FIXED FROM THE ENGINE'S OWN CODE RATHER THAN A SECOND GUESS.
          * The first build of this used fwd_x=+sin(yaw)*cos(pitch) and right_y=-sin(yaw), a self-
          * consistent guess with no independent evidence behind it. Field test: "W doesn't always
-         * go forward" - correct near yaw=0, where sin(0)=0 hides the error, and increasingly wrong
+         * go forward". Correct near yaw=0, where sin(0)=0 hides the error, and increasingly wrong
          * as yaw grew. Rather than guess a second time, this is now read out of the engine itself:
          * FUN_004181b9 (the function that builds the render eye position every frame) calls
          * FUN_0047cfbc, a generic euler-degrees-to-rotation-matrix utility used at roughly fifty
@@ -600,7 +676,7 @@ static void __cdecl hook_camera_update(void)
 }
 
 
-/* Free camera needs both sites - the pause flag and the camera object pointer - to mean anything:
+/* Free camera needs both sites, the pause flag and the camera object pointer, to mean anything:
  * a camera that could roam but never stopped the world moving underneath it is not this feature,
  * and neither is a pause with nothing to look through. A partial resolve here is not offered as
  * half a feature; either both resolve or the cheat says why and stays unavailable. */
@@ -648,7 +724,7 @@ bool install_freecam(void)
     own_state.camera_view_address    = (uintptr_t)view_address;
 
     log_info("free camera: pausing through sim_pause, camera object pointer at %08X, update "
-             "chained at %08X - WASD moves along the view, mouse looks, E/Q move vertically",
+             "chained at %08X; WASD moves along the view, mouse looks, E/Q move vertically",
              (unsigned)view_address, (unsigned)update_site);
     return true;
 }

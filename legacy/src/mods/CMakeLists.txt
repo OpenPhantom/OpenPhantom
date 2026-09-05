@@ -119,6 +119,8 @@ add_engine_fix(enhanced_input
     input_menu.c
     input_slider.c
     input_switches.c
+    camera_follow.c
+    free_look_follow.c
     pad_stick.c
     pad_run.c
     menu_captions.c
@@ -290,6 +292,7 @@ add_engine_fix(dev_overlay
     sensitivity_row.c
     free_look_row.c
     strafe_row.c
+    camera_follow_row.c
     strict_range_row.c
     view_range_row.c
     dev_menu_size_row.c

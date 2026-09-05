@@ -177,6 +177,7 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/sensitivity_row.c
     dev_overlay/free_look_row.c
     dev_overlay/strafe_row.c
+    dev_overlay/camera_follow_row.c
     dev_overlay/strict_range_row.c
     dev_overlay/view_range_row.c
     dev_overlay/dev_menu_size_row.c

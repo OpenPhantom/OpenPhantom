@@ -57,6 +57,22 @@ typedef struct free_look_config {
     float body_settle_seconds;
     float body_turn_rate;
     float region_recover_degrees;
+
+    /* THE PASSIVE CAMERA. Drift the camera back behind the body while the player is not
+     * looking, which is the whole of what a console third-person camera does that this game
+     * never did.
+     *
+     * The target is the BODY'S HEADING, and it may never be the travel angle. Under free look
+     * the stick is measured against the camera, so a camera that chased the travel direction
+     * would close a loop with a gain of one: push sideways, the camera follows, the direction
+     * the stick means rotates with it, and the player spins for as long as they hold it. The
+     * heading closes no loop, because nothing measures the stick against the heading. And once
+     * the body has been turned to face its travel, behind the body and behind the direction of
+     * travel are the same place, which is why this reads as following the movement. */
+    bool  passive_follow;
+    float passive_settle_seconds;
+    float passive_rate;
+    float passive_hold_seconds;   /* the beat before it starts, after the player stops looking */
 } free_look_config_t;
 
 typedef struct free_look_state {
@@ -75,6 +91,8 @@ typedef struct free_look_state {
     bool  armed;
     bool  camera_yaw_valid;
     float camera_yaw;
+    bool  look_seen;          /* set by any look input, consumed by the drift on the next frame */
+    float look_idle_seconds;  /* how long since the last of it, in real time                    */
 
     /* Carried across an AUTHORED-REGION release and across nothing else. It is the yaw the player
      * had when he stepped onto the region's floor, and it is taken once at the transition rather

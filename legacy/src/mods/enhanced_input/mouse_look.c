@@ -834,6 +834,11 @@ float mouse_look_take_substep_degrees(float substep_seconds)
     return degrees;
 }
 
+float mouse_look_frame_seconds(void)
+{
+    return (mouse_state.frame_delta != NULL) ? *mouse_state.frame_delta : 0.0f;
+}
+
 float mouse_look_take_frame_degrees(void)
 {
     float frame_seconds = (mouse_state.frame_delta != NULL) ? *mouse_state.frame_delta : 0.0f;

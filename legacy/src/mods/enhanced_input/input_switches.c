@@ -16,6 +16,7 @@
 #include "enhanced_input.h"
 #include "free_look.h"
 #include "input_config.h"
+#include "camera_follow.h"
 #include "strafe_walk.h"
 
 #include "common/frame_hook.h"
@@ -78,6 +79,16 @@ void enhanced_input_set_strafe(bool enabled)
     strafe_walk_reset();
     enhanced_input_forget_pending_travel();
 
+    /* The camera follow is armed from the strafe setting as it stood at LAUNCH, and without
+     * this it would keep that answer for the rest of the session: ticking sideways walking on
+     * here would leave the follow refusing to run, having already said so in the install log,
+     * with nothing to explain why. */
+    camera_follow_configure(input_config()->camera_follow, enabled,
+                            input_config()->camera_follow_settle_seconds,
+                            input_config()->camera_follow_rate,
+                            input_config()->camera_follow_strength,
+                            input_config()->camera_follow_max_degrees);
+
     if (!ini_write_int(INPUT_SECTION, "Strafe", enabled ? 1 : 0)) {
         log_warning("sideways walking is now %s, but the setting could not be written to the ini "
                     "and will be back to its old value on the next launch",
@@ -96,6 +107,50 @@ bool enhanced_input_free_look_available(void)
 bool enhanced_input_free_look_enabled(void)
 {
     return free_look_is_enabled();
+}
+
+void enhanced_input_set_camera_follow(bool enabled)
+{
+    if (input_config()->camera_follow == enabled) {
+        return;
+    }
+
+    /* THE DEPENDENCY IS NOT ENFORCED HERE, and the reason is worth keeping.
+     *
+     * The passive camera is built on free look, so the two have to move together, and the obvious
+     * place to do it is right here: ask free look to switch on before arming this. That was tried
+     * and it desynced. Free look REFUSES while the player phases are not running, which is exactly
+     * the state the game is in while the developer menu is open, so the one moment a player is ever
+     * going to tick this box is the one moment free look will not take it. The row then read ON
+     * with the feature off, and the poll below had already recorded the new value so it never
+     * retried.
+     *
+     * The dependency lives in the ini instead: the menu row writes BOTH keys, and the poll applies
+     * them in order once the phases are running again, using the refusal handling it already has.
+     * What is left here is only the half that can never refuse. */
+
+    /* TWO HOLDERS OF ONE SETTING, and both have to be told. camera_follow.c owns the answer for
+     * the sideways walk's own lean, and free_look.c keeps a copy of the same switch because it
+     * reads it on the render clock, where reaching for the ini would be wrong. Telling only one
+     * of them is what made the developer menu's row look dead: it wrote the file, the file was
+     * not read back, and the feature kept whatever it had been given at launch. */
+    input_config_set_camera_follow(enabled);
+    camera_follow_configure(enabled, input_config()->strafe,
+                            input_config()->camera_follow_settle_seconds,
+                            input_config()->camera_follow_rate,
+                            input_config()->camera_follow_strength,
+                            input_config()->camera_follow_max_degrees);
+    free_look_set_passive_follow(enabled);
+
+    if (!ini_write_int(INPUT_SECTION, "CameraFollow", enabled ? 1 : 0)) {
+        log_warning("the passive camera is now %s, but the setting could not be written to the ini "
+                    "and will be back to its old value on the next launch",
+                    enabled ? "on" : "off");
+        return;
+    }
+    log_info("the passive camera is now %s: once you stop turning the camera it drifts back behind "
+             "the body, and since free look has already turned the body to face where it travels, "
+             "that is behind the direction of travel", enabled ? "on" : "off");
 }
 
 void enhanced_input_set_free_look(bool enabled)
@@ -128,6 +183,14 @@ void enhanced_input_set_free_look(bool enabled)
     }
     log_info("free look switched %s from the controls screen and saved, the mouse now turns the "
              "%s", enabled ? "on" : "off", enabled ? "camera" : "body");
+
+    /* The passive camera cannot outlive it: it is built on free look turning the body to face its
+     * travel, so with free look gone it would be aiming the camera at a heading that no longer
+     * follows the player anywhere. Safe to do from here, unlike the other direction, because
+     * switching something OFF never refuses. */
+    if (!enabled && input_config()->camera_follow) {
+        enhanced_input_set_camera_follow(false);
+    }
 }
 
 /* --- Strafe and FreeLook, re-read while the game runs -------------------------------------------
@@ -152,21 +215,25 @@ static void poll_switches(void)
     static bool     seeded;
     static bool     seen_strafe;
     static bool     seen_free_look;
+    static bool     seen_camera_follow;
     bool            strafe;
     bool            free_look;
+    bool            camera_follow;
 
     if (!seeded) {
-        seen_strafe    = input_config()->strafe;
-        seen_free_look = free_look_is_enabled();
-        seeded         = true;
+        seen_strafe        = input_config()->strafe;
+        seen_free_look     = free_look_is_enabled();
+        seen_camera_follow = input_config()->camera_follow;
+        seeded             = true;
     }
     if (++frames < SWITCH_POLL_FRAMES) {
         return;
     }
     frames = 0;
 
-    strafe    = ini_read_bool(INPUT_SECTION, "Strafe", seen_strafe);
-    free_look = ini_read_bool(INPUT_SECTION, "FreeLook", seen_free_look);
+    strafe        = ini_read_bool(INPUT_SECTION, "Strafe", seen_strafe);
+    free_look     = ini_read_bool(INPUT_SECTION, "FreeLook", seen_free_look);
+    camera_follow = ini_read_bool(INPUT_SECTION, "CameraFollow", seen_camera_follow);
 
     if (strafe != seen_strafe) {
         seen_strafe = strafe;
@@ -176,12 +243,16 @@ static void poll_switches(void)
         seen_free_look = free_look;
         enhanced_input_set_free_look(free_look);
     }
+    if (camera_follow != seen_camera_follow) {
+        seen_camera_follow = camera_follow;
+        enhanced_input_set_camera_follow(camera_follow);
+    }
 }
 
 void input_switches_install(void)
 {
     if (!frame_hook_add(poll_switches)) {
-        log_warning("no per-frame hook, so Strafe and FreeLook are read once at startup and an "
-                    "edit made while the game runs waits for the next launch");
+        log_warning("no per-frame hook, so Strafe, FreeLook and CameraFollow are read once at "
+                    "startup and an edit made while the game runs waits for the next launch");
     }
 }

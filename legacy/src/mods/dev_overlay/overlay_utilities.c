@@ -3,6 +3,7 @@
 
 #include "auto_range_row.h"
 #include "dev_menu_size_row.h"
+#include "camera_follow_row.h"
 #include "cheats_no_fog.h"
 #include "fog_band_row.h"
 #include "fog_follow_row.h"
@@ -36,6 +37,7 @@ typedef enum utilities_slot {
     UTILITIES_FOV_TRACK,
     UTILITIES_FREE_LOOK,
     UTILITIES_STRAFE,
+    UTILITIES_CAMERA_FOLLOW,
     UTILITIES_SENSITIVITY,
     UTILITIES_SENSITIVITY_TRACK,
     UTILITIES_MENU_EXTRAS,
@@ -253,6 +255,17 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         out->on = strafe_row_get();
         return;
 
+    case UTILITIES_CAMERA_FOLLOW:
+        /* Directly under strafe, because it is the only row here whose availability depends on
+         * another row rather than on an engine site. Unavailable rather than hidden while
+         * strafe is off: the walk never leaves the heading then, so there is nothing to follow,
+         * and a reader hunting for it should find out why instead of wondering if it exists. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "Camera follows you (turns on free look)");
+        out->on = camera_follow_row_get();
+        out->available = camera_follow_row_available();
+        return;
+
     case UTILITIES_SENSITIVITY:
         out->kind = OVERLAY_ROW_VALUE;
         /* The name the game's own controls screen gave it, so a reader who has seen that screen
@@ -353,6 +366,11 @@ bool overlay_utilities_toggle(uint32_t slot)
         return free_look_row_set(!free_look_row_get());
     case UTILITIES_STRAFE:
         return strafe_row_set(!strafe_row_get());
+    case UTILITIES_CAMERA_FOLLOW:
+        if (!camera_follow_row_available()) {
+            return false;      /* nothing to follow without strafe; the row already says so */
+        }
+        return camera_follow_row_set(!camera_follow_row_get());
     case UTILITIES_MENU_EXTRAS:
         return menu_extras_row_set(!menu_extras_row_get());
     default:

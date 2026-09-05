@@ -370,28 +370,34 @@ int main(void)
              "then sideways walking, under the game\'s own name for it as well, rather than a "
              "description this panel invented");
 
-    ut_check(overlay_model_row(UTIL_ROW(13), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(13), &row) && row.kind == OVERLAY_ROW_CHEAT,
+             "the camera follow sits directly under the strafe row it depends on");
+    ut_check(!row.available,
+             "and is unavailable with strafe off, because the walk never leaves the heading "
+             "then, so there would be nothing for the camera to follow");
+
+    ut_check(overlay_model_row(UTIL_ROW(14), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Mouse speed") == 0,
              "then the mouse speed, which is here because the game\'s own controls screen no "
              "longer offers it and mouse look still ships on, and which carries that screen\'s "
              "name too");
-    ut_check(overlay_model_row(UTIL_ROW(14), &row) && row.kind == OVERLAY_ROW_SLIDER &&
+    ut_check(overlay_model_row(UTIL_ROW(15), &row) && row.kind == OVERLAY_ROW_SLIDER &&
                  row.available,
              "with a track of its own beneath it, and unlike the field of view it is always "
              "available: both of its ends are fixed, so nothing has to be published first");
 
-    ut_check(overlay_model_row(UTIL_ROW(15), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(16), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Show extra menu options (restart the game)") == 0,
              "then the switch that puts all four of those widgets back onto the game\'s own "
              "screens, which ships off so those screens look as they did in 1999");
     ut_check(!row.on,
              "and it reads off with no settings file, matching both of the keys it writes");
 
-    ut_check(overlay_model_row(UTIL_ROW(16), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(17), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "then the dev menu size, the last of the typed values");
 
-    ut_check(overlay_model_row(UTIL_ROW(17), &row) && row.kind == OVERLAY_ROW_HOTKEY,
+    ut_check(overlay_model_row(UTIL_ROW(18), &row) && row.kind == OVERLAY_ROW_HOTKEY,
              "and the key binding last, a capture rather than a value");
     ut_check(strcmp(row.label, "Key that opens this menu") == 0,
              "named for what it binds, in the words a player would use for it");

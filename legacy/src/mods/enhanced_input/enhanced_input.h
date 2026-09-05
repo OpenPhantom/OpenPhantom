@@ -43,4 +43,9 @@ bool enhanced_input_free_look_enabled(void);
  * machinery is not installed, exactly as the strafe setter refuses when its axis is missing. */
 void enhanced_input_set_free_look(bool enabled);
 
+/* The passive camera. Two places hold this setting, camera_follow.c for the sideways
+ * walk's lean and free_look.c for the drift behind the body, and this is what keeps them
+ * in step with the file when the developer menu writes it mid-session. */
+void enhanced_input_set_camera_follow(bool enabled);
+
 #endif /* ENHANCED_INPUT_H */

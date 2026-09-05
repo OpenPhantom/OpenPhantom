@@ -28,6 +28,30 @@ typedef struct input_config {
     float strafe_settle_seconds;
     float strafe_turn_rate;    /* degrees per second, the damper's hard rate cap */
 
+    /* The passive camera follow, which only means anything while strafe is on: without it the
+     * walk never leaves the heading and there is nothing to follow. Its own settle time,
+     * rather than the body's, because the camera wants to lag noticeably further behind than
+     * the model does; a camera that settles as fast as the body is the snap this replaces. */
+    bool  camera_follow;
+    float camera_follow_settle_seconds;
+    float camera_follow_rate;  /* degrees per second, so a right angle cannot whip the view */
+
+    /* HOW FAR the camera is allowed to drift, which is the setting that decides whether this
+     * feels passive or fights the player. The walk's travel angle reaches a right angle on a
+     * held sidestep, and a camera that follows all of it has turned the sidestep into a turn:
+     * the stick is heading-relative, so once the view has swung round, the direction that
+     * moves the player sideways on screen has rotated out from under the player's thumb.
+     * A fraction of the angle, hard-capped well short of that, is what reads as the camera
+     * drifting with the movement rather than replacing it. */
+    float camera_follow_strength;     /* 0 to 1, the share of the travel angle taken       */
+    float camera_follow_max_degrees;  /* and the ceiling on the result                    */
+
+    /* How long after the player stops turning the camera before it starts drifting back. Real
+     * time, and it exists because the right stick arrives as synthesized mouse motion that
+     * lands on some frames and not others: without a hold-off the drift starts and stops
+     * several times a second and reads as jitter. */
+    float camera_follow_hold_seconds;
+
     /* The left stick, read from XInput rather than through the engine's own joystick path.
      * pad_stick.h sets out why that path cannot be used for a direction: a square deadzone of
      * thirty per cent cut without rescaling, each half axis bound to its control twice so the

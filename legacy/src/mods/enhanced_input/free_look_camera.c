@@ -12,6 +12,16 @@
  * pulls it home, with no byte written anywhere in the pitch path. The camera pitch is a
  * different field, built from a different lerp with a different rate that is pushed as an
  * immediate rather than read from the frozen cell, and the eye height is composed by adding an
+ *
+ * SIZE NOTE: this file is over six hundred lines and almost none of it is code. It writes
+ * three engine cells and reads eight more, and every one of them needed a fact about the
+ * camera establishing before the write could be called correct: which of two yaw arms the
+ * engine takes and what selects it, why the recentre rate needs no restore path, why an
+ * authored region is noticed a frame late, and which release conditions are scripted rather
+ * than authored. That evidence is the length, and deleting it would leave a file that looks
+ * simple and cannot be changed safely. One seam has been taken: the passive camera, which
+ * decides what the wanted yaw drifts toward when nobody is driving it, went into
+ * free_look_follow.c with its own clock, its own settings and its own reasons.
  * UNROTATED Z, so a horizontal free look provably cannot tilt the view or raise the eye.
  *
  * ==============================================================================================
@@ -115,9 +125,12 @@
 #include "camera_watch.h"
 #include "free_look.h"
 #include "free_look_log.h"
+#include "camera_follow.h"
+#include "free_look_follow.h"
 #include "free_look_math.h"
 #include "enhanced_input.h"
 #include "mouse_look.h"
+#include "strafe_walk.h"
 #include "player_record.h"
 #include "player_sites.h"
 #include "view_lead.h"
@@ -263,7 +276,13 @@ static void build_gate(free_look_gate_t *gate, uint8_t **out_record, const uint8
     void             *view   = *free_state->camera.view;
     const uint8_t    *region = NULL;
 
-    gate->enabled         = free_state->installed && free_state->config.enabled;
+    /* Either driver may want the hold. Free look is the player asking for it directly; the
+     * camera follow is strafe asking on their behalf, and camera_follow_wants_camera() already
+     * yields to free look, so the two can never both be true. Everything past this point, the
+     * recentre freeze, the authored-region release and the arm select, is shared and neither
+     * driver needs its own copy of any of it. */
+    gate->enabled         = free_state->installed &&
+                            (free_state->config.enabled || camera_follow_wants_camera());
     gate->record_valid    = (record != NULL);
     gate->module_state    = (record != NULL) ? *(const int32_t *)(record + PLAYER_MODULE_STATE) : 0;
     gate->mode_index      = player_sites_mode_index(free_state->player, record);
@@ -307,7 +326,11 @@ static float update_camera_yaw(void)
      * while the feature is off and this hook then runs on every rendered frame. build_gate reads
      * eight cells to answer a question the switch has already answered, so it is called here only
      * on the one frame the switch actually changes, and only when the log is asked for. */
-    if (!free_look_is_enabled()) {
+    /* The camera follow drives the same hold, so the early-out has to let it through or the
+     * hold is released on every frame free look is off, which is every frame the follow is
+     * for. Below this point nothing else asks whether free look itself is on; the gate takes
+     * either driver and the wanted yaw is set from whichever it is. */
+    if (!free_look_is_enabled() && !camera_follow_wants_camera()) {
         if (free_look_log_is_new(false, FREE_LOOK_RELEASE_SWITCHED_OFF)) {
             build_gate(&gate, &record, &region);
             free_look_log_transition(false, FREE_LOOK_RELEASE_SWITCHED_OFF, "", &gate, region,
@@ -319,9 +342,10 @@ static float update_camera_yaw(void)
          *
          * Forcing the plain yaw arm was built for free look and gated on free look, on the reading
          * that the eased arm only misbehaves once the camera is decoupled from the body. That was
-         * half the truth. The eased arm carries the camera toward the body at about a fifth of the
-         * remaining gap per frame, fine when the body turns at the engine's own 120 deg/s ceiling,
-         * which is all a keyboard could ever ask for. MOUSE LOOK writes the heading directly and can
+         * half the truth. The eased arm carries the camera toward the body at HALF the remaining
+         * gap per frame, the same 0.5 the anchor mean uses, fine when the body turns at the
+         * engine's own 120 deg/s ceiling, which is all a keyboard could ever ask for. MOUSE
+         * LOOK writes the heading directly and can
          * turn the body a quarter turn in a single substep, so the camera falls hundreds of degrees
          * behind and then spends a third of a second catching up. Measured in the field with free
          * look OFF and the yaw offset at exactly zero: the camera 225 degrees off the body, hauling
@@ -409,6 +433,16 @@ static float update_camera_yaw(void)
         }
     }
 
+    /* When the camera follow is driving, the wanted yaw is not accumulated from the player's
+     * hand at all: it is the heading the camera is about to use, turned by however far the walk
+     * is currently going off it. Setting it here rather than anywhere earlier is deliberate,
+     * because `interpolated` is the same value the offset is measured against a few lines
+     * below, so the pair cannot drift apart by a frame. */
+    if (camera_follow_wants_camera()) {
+        free_state->camera_yaw = free_look_wrap360(interpolated +
+                                                   camera_follow_offset_degrees());
+    }
+
     /* Frames that ran no substep banked mouse motion nobody has taken. Taking it here is what
      * makes the camera advance on EVERY rendered frame instead of only on the roughly one frame
      * in five that runs a substep at a high frame rate.
@@ -423,10 +457,26 @@ static float update_camera_yaw(void)
      *
      * It is safe only because the bank consumes and ZEROES. On the degraded path the axis is read
      * live and unzeroed, both readers would receive the same sample, and this is switched off. */
-    if (free_state->drain_per_frame) {
-        free_state->camera_yaw =
-            free_look_wrap360(free_state->camera_yaw + mouse_look_take_frame_degrees());
+    /* NOT WHILE THE CAMERA FOLLOW IS DRIVING, and this is the difference between the two drivers
+     * rather than a special case. Under free look the mouse IS the camera, so the banked motion
+     * belongs here and accumulates into the wanted yaw. Under the follow the mouse turns the BODY,
+     * so `interpolated` already carries it; adding it a second time turns the camera twice and the
+     * offset computed below then fights the damped angle the follow asked for.
+     *
+     * The theft is the worse half. This drain CONSUMES and zeroes the bank, so taking it here also
+     * took motion phase 2 was going to turn the body with, and the player's own look went weak on
+     * the same frames the camera lurched. One writer: when the follow is driving, the wanted yaw is
+     * set absolutely a few lines above and nothing may add to it. */
+    if (free_state->drain_per_frame && !camera_follow_wants_camera()) {
+        float banked = mouse_look_take_frame_degrees();
+
+        if (banked != 0.0f) {
+            free_state->look_seen = true;
+        }
+        free_state->camera_yaw = free_look_wrap360(free_state->camera_yaw + banked);
     }
+
+    free_look_follow_step(free_state, interpolated);
 
     /* Nothing clamps the camera against the body here, and nothing may.
      *

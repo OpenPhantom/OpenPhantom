@@ -119,6 +119,7 @@
  */
 #include "enhanced_input.h"
 
+#include "camera_follow.h"
 #include "pad_run.h"
 #include "pad_stick.h"
 
@@ -219,6 +220,7 @@ static void __cdecl steer_thunk(void)
     float    axis;
     float    pad_forward = 0.0f;
     float    pad_strafe  = 0.0f;
+    float    steer_forward = 0.0f;
     bool     pad_driving = false;
     float    strafe;
     float    engine_rate = 0.0f;
@@ -358,7 +360,22 @@ static void __cdecl steer_thunk(void)
      * heading, the mouse would turn body and camera together, the decoupling would be exactly
      * zero, and every log line would still claim a working feature. So when free look takes the
      * substep, nothing else here writes a view yaw or a travel angle. */
-    if (free_look_steer(record, mouse_step, strafe, stand_mode)) {
+    /* The forward component is derived HERE rather than inside free look, because only this side
+     * knows where the substep's input came from. From a stick it is a real magnitude and its sign
+     * carries the whole lower half of the circle; from keys it can only ever be +1, -1 or 0. Free
+     * look's own angle is a signed atan2 that reaches a full half turn either way, so given an
+     * honest pair it turns the body anywhere the stick points, which is what makes a smooth 360
+     * possible at all. */
+    if (pad_driving) {
+        steer_forward = pad_stick_y();      /* the RAW component, not the back-pedal deadbanded one:
+                                             * facing your travel has no backward case to protect */
+    } else {
+        uint32_t bits = *(const uint32_t *)(record + PLAYER_MOVE_INPUT);
+
+        steer_forward = (bits & 1u) ? 1.0f : ((bits & 2u) ? -1.0f : 0.0f);
+    }
+
+    if (free_look_steer(record, mouse_step, strafe, steer_forward, stand_mode)) {
         /* The cell is zeroed AFTER the lean has read it, not before: free look turns the CAMERA
          * with the mouse, and a turn rate left standing would make the engine turn the BODY's
          * heading on top of it in phase 7, the very coupling free look exists to break. */
@@ -436,8 +453,10 @@ static void __cdecl steer_thunk(void)
         /* ---- The turn cell, and why it is no longer touched -----------------------------------
          *
          * turnWheel is not just the integrator's input. Nine readers take it as the TURN PENALTY on
-         * speed, and Plr_PublishGround hands it to the camera, where its zero test decides whether
-         * the follow camera eases or tracks rigidly. Writing 0 switched all of that off. */
+         * speed. It does NOT reach the follow camera's own zero test, though, and this used to say
+         * it did: Plr_PublishGround hands the cell over, and updateCam overwrites it with its own
+         * measurement of the interpolated heading before anything looks at it. Writing 0 still
+         * switched off every one of the nine. */
         /* READ BEFORE OVERWRITING. This is the value the original just computed, the ramped
          * keyboard turn or the clamped mouse accumulation, and it is the authentic input for the
          * upper-body twist. Two lines further down the cell stops holding it. */
@@ -589,6 +608,11 @@ static void __cdecl integrate_thunk(void)
 
         travel = input_state.pending_travel_degrees;
 
+        /* One damper step for the camera follow. This writes nothing into the engine; it only
+         * updates the angle that free_look_camera.c reads when it is the one driving the
+         * hold, so it cannot disturb the walk, the clips or the collision the fold below
+         * exists for. */
+        camera_follow_step(travel, frame_delta);
         if (isfinite(travel) && travel != 0.0f && frame_delta > 0.0f && frame_delta < 0.5f) {
             heading_before = read_field(record, PLAYER_HEADING);
             if (isfinite(heading_before)) {
@@ -747,6 +771,12 @@ void enhanced_input_install(void)
     if (input_config()->pad_stick) {
         pad_run_install();
     }
+
+    camera_follow_configure(input_config()->camera_follow, input_config()->strafe,
+                            input_config()->camera_follow_settle_seconds,
+                            input_config()->camera_follow_rate,
+                            input_config()->camera_follow_strength,
+                            input_config()->camera_follow_max_degrees);
 
     /* The delivery filter is a DEPENDENCY of the per-frame view path, not a taste setting, and it
      * is wired here because this is the first point at which it is known that the path is really

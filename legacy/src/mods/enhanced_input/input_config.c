@@ -48,6 +48,21 @@
 #define MIN_STRAFE_TURN_RATE        30.0f
 #define MAX_STRAFE_TURN_RATE      2000.0f
 
+/* The camera follow's own damping, deliberately slower than the body's 250 ms above. The point
+ * of it is that the camera arrives noticeably after you do; matching the body would reproduce the
+ * snap it exists to replace. 600 ms is a first guess and is meant to be tuned by feel, which is
+ * why it is a key rather than a constant. The rate cap is lower than the body's for the same
+ * reason: a right angle should swing, not whip. */
+#define DEFAULT_CAMERA_FOLLOW_SETTLE_MS  600.0f
+#define MAX_CAMERA_FOLLOW_SETTLE_MS     3000.0f
+#define DEFAULT_CAMERA_FOLLOW_RATE       120.0f
+#define DEFAULT_CAMERA_FOLLOW_STRENGTH     0.35f
+#define DEFAULT_CAMERA_FOLLOW_MAX_DEG     25.0f
+#define DEFAULT_CAMERA_FOLLOW_HOLD_MS    250.0f
+#define MAX_CAMERA_FOLLOW_HOLD_MS       5000.0f
+#define MAX_CAMERA_FOLLOW_MAX_DEG         90.0f
+#define MIN_CAMERA_FOLLOW_RATE            15.0f
+
 /* 0.24 is close to XInput's own left-thumb recommendation and is the value controller_input.dll
  * already uses for the right stick, so the two sticks feel the same at rest. It replaces the
  * engine's thirty per cent SQUARE cut rather than adding to it.
@@ -85,6 +100,11 @@ const input_config_t *input_config(void)
     return &config;
 }
 
+void input_config_set_camera_follow(bool enabled)
+{
+    config.camera_follow = enabled;
+}
+
 void input_config_set_strafe(bool enabled)
 {
     config.strafe = enabled;
@@ -120,6 +140,33 @@ void input_config_load(void)
         ini_read_float(INPUT_SECTION, "StrafeTurnRate", DEFAULT_STRAFE_TURN_RATE);
     config.strafe_turn_rate = clamp_float(config.strafe_turn_rate,
                                           MIN_STRAFE_TURN_RATE, MAX_STRAFE_TURN_RATE);
+
+    /* Off by default: it changes how the game is played rather than repairing a fault, which
+     * is the same reason free look ships off. */
+    config.camera_follow = ini_read_bool(INPUT_SECTION, "CameraFollow", false);
+    settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowSettleMs",
+                               DEFAULT_CAMERA_FOLLOW_SETTLE_MS);
+    settle_ms = clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_SETTLE_MS);
+    config.camera_follow_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
+    config.camera_follow_rate =
+        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowRate",
+                                   DEFAULT_CAMERA_FOLLOW_RATE),
+                    MIN_CAMERA_FOLLOW_RATE, MAX_CAMERA_FOLLOW_RATE);
+    config.camera_follow_strength =
+        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowStrength",
+                                   DEFAULT_CAMERA_FOLLOW_STRENGTH), 0.0f, 1.0f);
+    config.camera_follow_max_degrees =
+        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowMaxDeg",
+                                   DEFAULT_CAMERA_FOLLOW_MAX_DEG),
+                    0.0f, MAX_CAMERA_FOLLOW_MAX_DEG);
+
+    /* On by default, unlike the two features above it, because this is a REPAIR rather than a
+     * change of scheme: it gives the pad the direction and the magnitude the engine's own path
+     * throws away, and a machine with no pad plugged in never reaches any of it. */
+    settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowHoldMs",
+                               DEFAULT_CAMERA_FOLLOW_HOLD_MS);
+    config.camera_follow_hold_seconds =
+        clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_HOLD_MS) / MILLISECONDS_PER_SECOND;
 
     config.pad_stick = ini_read_bool(INPUT_SECTION, "PadStick", true);
     config.pad_controller_index =

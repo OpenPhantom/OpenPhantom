@@ -1,0 +1,77 @@
+# Builds both C projects and runs the unit tests on every push and pull request.
+#
+# WHY THIS EXISTS. Two claims in this repository were made by nothing but prose until now:
+# legacy/README.md says the tree "builds clean with MSVC x86 at /W4 /WX, no warnings", and
+# legacy/CONTRIBUTING.md lists a green ctest run as a gate before handing work over. Both are true
+# today and neither was checked by anything, so the day one stopped being true, the README would
+# have gone on saying it.
+#
+# It also catches a failure this project has actually had: an edit that silently did not apply.
+# Warnings-as-errors and a test suite only help if something runs them on a clean checkout rather
+# than in a working tree where the previous build is still lying around.
+#
+# WHAT IT DOES NOT CHECK YET. Two assertions are described elsewhere as things CI does: that
+# every shipped DLL carries a version resource, and that the extractor imports no C runtime.
+#
+# The first is now true of the code and is not asserted here. Every feature DLL and the loader
+# carry VERSIONINFO, so the check would pass and is worth adding.
+#
+# The second is still false. legacy/CMakeLists.txt selects the static CRT for the patch, but
+# installer/src/is3_extract does not, so the extractor links the dynamic one. Asserting it here
+# would fail every run from the first, and making it true means changing that build rather than
+# adding a check. Named rather than quietly skipped.
+
+name: build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -A Win32 is not optional. Every offset and pointer patch in legacy/ assumes a 32-bit
+      # process, and the CMakeLists refuses any other word size rather than producing a binary that
+      # cannot load beside a 1999 executable.
+      - name: Configure the patch, 32-bit
+        run: cmake -S legacy -B legacy/build -A Win32
+
+      # /W4 /WX comes from the CMakeLists, so a new warning fails this step. That is the point.
+      - name: Build the patch
+        run: cmake --build legacy/build --config Release
+
+      # None of these needs the game, a window or a graphics device, so the whole suite runs in
+      # about two seconds. --output-on-failure so a red run says which check text failed rather
+      # than only which executable did.
+      - name: Run the unit tests
+        run: ctest --test-dir legacy/build -C Release --output-on-failure
+
+      - name: Configure the installer's extractor, 32-bit
+        run: cmake -S installer/src/is3_extract -B installer/src/is3_extract/build -A Win32
+
+      - name: Build the installer's extractor
+        run: cmake --build installer/src/is3_extract/build --config Release
+
+      # Proof the build produced what it claims to, rather than succeeding with nothing to show.
+      # A configure step that silently matches no sources still exits zero.
+      - name: Check the artefacts exist
+        shell: pwsh
+        run: |
+          $loader = 'legacy/build/dist/dinput.dll'
+          $mods = Get-ChildItem 'legacy/build/dist/mods/*.dll' -ErrorAction SilentlyContinue
+          $extractor = 'installer/src/is3_extract/build/Release/is3_extract.exe'
+
+          if (-not (Test-Path $loader)) { throw "the loader was not built: $loader" }
+          if (-not (Test-Path $extractor)) { throw "the extractor was not built: $extractor" }
+          if ($mods.Count -lt 1) { throw 'no feature DLLs were built' }
+
+          Write-Output "loader:    $loader"
+          Write-Output "extractor: $extractor"
+          Write-Output "feature DLLs built: $($mods.Count)"
+          $mods | ForEach-Object { Write-Output ("  " + $_.Name) }

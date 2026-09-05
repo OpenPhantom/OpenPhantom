@@ -16,7 +16,7 @@
  * Menu text and the mouse cursor are textured quads through Direct3D and are unaffected, so the
  * menus stay readable and navigable.
  *
- * This is a DIAGNOSTIC, not a port, and IT IS NOT ENOUGH. It was written to get far enough into a
+ * This is a DIAGNOSTIC, not a port, and it is NOT ENOUGH. It was written to get far enough into a
  * 32-bit session to look at the sky, and it does silence these two, but the next site along assumes
  * the same thing: the save-game thumbnail loader copies a literal byte count into a buffer built
  * from a stack raster description and runs off the end of the stack. Two bytes a pixel is spread

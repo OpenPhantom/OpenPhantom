@@ -28,7 +28,7 @@
  * by asking the call itself: enhanced_resolution's LogResolutionCalls reported
  * "graphics_setResolution(640, 480) called from 0043EF1E" on the first run of the ending.
  *
- * THIS IS RETAIL BEHAVIOUR, NOT SOMETHING THIS PROJECT BROKE. graphics_setResolution has seven
+ * This is RETAIL BEHAVIOUR, not something this project broke. graphics_setResolution has seven
  * callers; six push 640x480 and the seventh pushes -1,-1, which means "re-read obi.ini". There is
  * no restore-to-the-previous-mode call anywhere in the image, so the retail game also ran its
  * ending and its credits at 640x480 and only recovered when the front end re-read the ini. On a

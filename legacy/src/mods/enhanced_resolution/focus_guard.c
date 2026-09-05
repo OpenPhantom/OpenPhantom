@@ -73,10 +73,10 @@
  *
  * The last two are the interesting ones, and both are dead:
  *
- *   * 0x0048D629 IS NEVER REGISTERED. The little-endian dword `29 D6 48 00` does not occur once
+ *   * 0x0048D629 is NEVER registered. The little-endian dword `29 D6 48 00` does not occur once
  *     in the whole 829,952-byte image, and no `call`/`jmp rel32` targets it either. So WM_ACTIVATE
  *     reaches nothing.
- *   * MESSAGES 0x12 AND 0x13 ARE NEVER SENT. All 24 call sites of module_broadcast 0x0046F3C3 and
+ *   * Messages 0x12 and 0x13 are NEVER sent. All 24 call sites of module_broadcast 0x0046F3C3 and
  *     all 14 of module_broadcastDt 0x0046F4A9 push their message id as an immediate, and the
  *     complete set is {3,4,5,6,7,0x10,0x16,0x17,0x18,0x19} and {8,9,0x0C,0x0D,0x0E,0x11,0x15}.
  *     0x12 and 0x13 are in neither.
@@ -113,7 +113,7 @@
  * from the frame hook instead of taken from a message: a message can be filtered, GetForegroundWindow
  * cannot.
  *
- * SIZE NOTE (rule 9): the file is over the preferred 400 lines and the excess is the three
+ * SIZE NOTE: the file is over the preferred 400 lines and the excess is the three
  * listings above. They are what make a feature that holds process-global OS state reviewable:
  * without them "we clip the cursor" is a decision with no stated cause, and the claim that the
  * engine has no resume path is a claim about ABSENCE, which cannot be checked from the C at all.
@@ -531,7 +531,7 @@ bool focus_guard_install(const focus_guard_config_t *config)
         return false;
     }
 
-    log_info("the foreground is watched once per frame (GetForegroundWindow, not WM_ACTIVATEAPP - "
+    log_info("the foreground is watched once per frame (GetForegroundWindow, not WM_ACTIVATEAPP, "
              "a graphics wrapper in front of the window procedure can filter that message, and one "
              "was measured doing exactly that). Pointer "
              "confinement %s, input re-acquire %s. The engine's own confinement is a warp on every "

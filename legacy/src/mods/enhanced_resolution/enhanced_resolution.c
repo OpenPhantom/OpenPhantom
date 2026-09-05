@@ -33,10 +33,10 @@
  *      allocator.
  *
  * ==============================================================================================
- * SIZE NOTE (rule 9): a little over 600 lines, of which about 400 are code. The rest is the byte
- * evidence above and at each hooked site. Rule 8 requires that evidence at the site, and it is what
- * makes a patch that rewrites a conditional jump reviewable at all: without the acceptance rule
- * written out in code order, `EB 32` is an unaccountable two bytes.
+ * SIZE NOTE: past the 600 line mark, and about half of it is the byte evidence above and at each
+ * hooked site. That evidence belongs at the site, and it is what makes a patch that rewrites a
+ * conditional jump reviewable at all: without the acceptance rule written out in code order,
+ * `EB 32` is an unaccountable two bytes.
  */
 #include "enhanced_resolution.h"
 
@@ -628,7 +628,7 @@ static void install_enum_modes_cap(void)
         log_info("hooked graphics_enumModes at %08X (cap %d entries)",
                  (unsigned)site, resolution_state.config.max_menu_modes);
     } else {
-        log_error("the graphics_enumModes detour FAILED - with the 4:3 lock lifted the options "
+        log_error("the graphics_enumModes detour FAILED. With the 4:3 lock lifted the options "
                   "screen can overflow its %d-slot array", MENU_LABEL_SLOTS);
     }
 }
@@ -649,16 +649,16 @@ static void install_forced_startup_resolution(void)
         return;
     }
     if (site == 0) {
-        log_warning("graphics_set_resolution did not resolve - ForceWidth/ForceHeight are IGNORED, "
-                    "LogResolutionCalls can report nothing, and obi.ini decides the startup "
-                    "resolution");
+        log_warning("graphics_set_resolution did not resolve, so ForceWidth/ForceHeight are "
+                    "IGNORED, LogResolutionCalls can report nothing, and obi.ini decides the "
+                    "startup resolution");
         return;
     }
 
     if (detour_install(&resolution_state.set_resolution_detour, site,
                        (const void *)hook_set_resolution, SET_RESOLUTION_PROLOGUE_SIZE)) {
         if (forcing) {
-            log_info("hooked graphics_setResolution at %08X - the startup resolution is forced to "
+            log_info("hooked graphics_setResolution at %08X: the startup resolution is forced to "
                      "%dx%d instead of being read from obi.ini",
                      (unsigned)site, resolution_state.config.force_width,
                      resolution_state.config.force_height);
@@ -668,8 +668,8 @@ static void install_forced_startup_resolution(void)
                      (unsigned)site);
         }
     } else {
-        log_error("the graphics_setResolution detour at %08X FAILED - ForceWidth/ForceHeight are "
-                  "IGNORED", (unsigned)site);
+        log_error("the graphics_setResolution detour at %08X FAILED, so ForceWidth/ForceHeight "
+                  "are IGNORED", (unsigned)site);
     }
 }
 
@@ -710,11 +710,10 @@ void enhanced_resolution_install(void)
     resolution_state.installed = true;
 
     /* FIRST of all the patches here, and that is an ordering constraint rather than a reading
-     * order. The display mode enumeration runs once, inside graphics startup, and the filter can
-     * only work on an enumeration that has not happened yet. Everything below acts on the list
-     * that enumeration produced. */
-    /* BEFORE the filter, and before the aspect gate: graphics_buildModeList runs during graphics
-     * startup, and the filter has to agree with whatever depth the gates ended up at. */
+     * order. The display mode enumeration runs once, inside graphics startup, so the depth choice
+     * and the filter can only work on an enumeration that has not happened yet, and the filter has
+     * to agree with whatever depth this settled on. Everything below acts on the list that
+     * enumeration produced. */
     if (mode_depth_install((uint32_t)resolution_state.config.mode_bit_depth) == 32u) {
         /* The 2-D layer is software and writes two-byte pixels, so it has to be silenced or
          * the first menu bitmap faults. See sw_blit_guard.h for what that costs. */
@@ -748,13 +747,6 @@ void enhanced_resolution_install(void)
         focus_config.window_is_moved = window_is_moved;
         (void)focus_guard_install(&focus_config);
 
-        /* AFTER install_window_fit(), and this is an ordering constraint rather than a reading
-         * order: the cage asks window_fit_current_mode_size() for the display mode, and that
-         * accessor is resolved inside window_fit_install(). Installing the cage first would find
-         * it unresolved and decline for a reason that has nothing to do with the cage.
-         *
-         * The two are otherwise unrelated: this one is about the cursor the MENUS draw and is
-         * useful whether or not the window is ever moved. */
         /* The artwork mount comes first of all, because menu_scale reads the converted
          * artwork's own size to decide the canvas, and that file lives in this folder. The mount
          * itself happens later, when the engine starts its menu system; this only arms it. */
@@ -762,7 +754,7 @@ void enhanced_resolution_install(void)
                                       resolution_state.config.menu_art_directory);
 
         /* menu_scale FIRST now, because the cage is sized from the canvas it draws and
-         * asks menu_scale_current() for the multiple. The two used to be the other way
+         * asks menu_scale_canvas() for the size. The two used to be the other way
          * round, when the cage widened to the display mode and the scale had to ask
          * whether it had armed. */
         (void)menu_scale_install(resolution_state.config.menu_scale,
@@ -773,6 +765,15 @@ void enhanced_resolution_install(void)
             int32_t canvas_height;
 
             menu_scale_canvas(&canvas_width, &canvas_height);
+
+            /* AFTER install_window_fit(), and this is an ordering constraint rather than a
+             * reading order: the cage asks window_fit_current_mode_size() for the display mode,
+             * and that accessor is resolved inside window_fit_install(). Installing the cage
+             * first would find it unresolved and decline for a reason that has nothing to do
+             * with the cage.
+             *
+             * The two are otherwise unrelated: this one is about the cursor the MENUS draw and
+             * is useful whether or not the window is ever moved. */
             pointer_cage_install(resolution_state.config.widen_menu_cursor_area,
                                  canvas_width, canvas_height);
 

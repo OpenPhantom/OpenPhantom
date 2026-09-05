@@ -34,7 +34,7 @@
  * bEofRight++`, and one scroll step later bEofRight sends it into the arm that sets bAtEnd. Answer
  * 0 and the game ends its own credits, by its own path, releasing its own resources.
  *
- * THE COST IS THAT IT IS NOT INSTANT. Two scroll steps to latch the end, then the authored four
+ * The cost is that it is NOT INSTANT. Two scroll steps to latch the end, then the authored four
  * second music fade. That is the game's own bow-out and it is the right shape for credits; a hard
  * cut would need the exitCode write this deliberately avoids.
  *

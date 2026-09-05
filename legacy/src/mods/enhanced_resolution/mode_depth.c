@@ -50,8 +50,8 @@ static const uint8_t SIG_FIND_MODE_DEPTH[] = {
  * returns the highest scorer rather than nothing, so a template asking for 16 against a table of
  * 32-bit modes scores every entry alike and hands back an arbitrary resolution.
  *
- * THE THREE FIVES ARE LEFT ALONE ON PURPOSE. The obvious reading is that 5/5/5 should become 8/8/8,
- * and it should not: the channel widths only decide the scorer's exact-match early exit, never
+ * The three fives are left alone ON PURPOSE. The obvious reading is that 5/5/5 should become
+ * 8/8/8, and it should not: the channel widths only decide the scorer's exact-match early exit, never
  * which entry wins the partial match, and changing them would be a guess dressed as a fix. */
 static const uint8_t SIG_FALLBACK_TEMPLATE[] = {
     0xC7, 0x45, 0xC0, 0x01, 0x00, 0x00, 0x00,

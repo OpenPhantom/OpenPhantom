@@ -16,8 +16,8 @@
  * the top left corner, because scaling the canvas to fill the screen drives the origin to 0,0 and
  * there is nothing left to carry them down and right.
  *
- * WHAT IS ALREADY RIGHT AND IS NOT TOUCHED HERE. The text SIZE, because ui_progress sets the glyph
- * scale from g_menuTextScale, which menu_scale already grows with the canvas. The picture behind
+ * What is already right and is NOT touched here. The text SIZE, because ui_progress sets the
+ * glyph scale from g_menuTextScale, which menu_scale already grows with the canvas. The picture behind
  * it, because it is an ordinary SW_PIC. Only the ten position and size numbers are wrong.
  */
 #ifndef MENU_LOADING_BAR_H

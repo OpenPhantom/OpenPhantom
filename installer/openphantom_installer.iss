@@ -8,8 +8,9 @@
 ; includes FFmpeg, which the cutscene converter would otherwise download on first use.
 ;
 ; Executables carried here: the archive extractor built from src\is3_extract\, FFmpeg for the
-; cutscene converter, and Microsoft's Visual C++ redistributable, which is run only when the
-; runtime it installs is genuinely absent.
+; cutscene converter, and the converter itself. Nothing is executed after installation; there is
+; no [Run] section at all. Microsoft's Visual C++ redistributable used to be carried and is not:
+; every binary this project builds links the static runtime, so there is nothing to install.
 ;
 ; The disc is copied with Flags: external rather than by a helper process, which is what lets Inno
 ; record every file it wrote. The uninstaller then removes exactly those and leaves the rest, so it
@@ -17,7 +18,7 @@
 
 #define GameName "Star Wars Episode I: The Phantom Menace"
 
-; THE SAME TITLE WITH THE COLON TAKEN OUT, AND IT EXISTS ONLY TO BE PART OF A FILENAME.
+; The same title with the colon taken out, and it exists only to be part of a filename.
 ;
 ; A shortcut is a file, and a colon cannot be in a Windows filename. NTFS does not reject one: it
 ; reads what follows as an alternate data stream, so `{commondesktop}\{#GameName}` asked for a file
@@ -43,7 +44,7 @@
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
 ;
-; ONE NUMBER FOR THE WHOLE PROJECT. The installer and the patch it carries share this version and
+; One number for the whole project. The installer and the patch it carries share this version and
 ; are released together, which is what has always happened in practice: every patch release to date
 ; has an installer release on the same day, twice over on one of them. Two numbers were tracking one
 ; event, so PatchVersion in src\openphantom_patch.iss now repeats this one rather than running its
@@ -52,7 +53,7 @@
 ; The patch's old v0.x line ends at v0.4.0 and joins this one here. It goes up rather than this one
 ; coming down, because a version that moves backwards reads as a downgrade in Add/Remove Programs
 ; and in the file properties, and would sit below five releases already published.
-#define AppVer "1.4.1"
+#define AppVer "1.5.0"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
@@ -114,7 +115,7 @@ PrivilegesRequired=admin
 ; Back button, and nothing installs before the ready page.
 UsePreviousSetupType=no
 
-; A LOG IS WRITTEN, ALWAYS, to the user's temp folder. This installer writes into a folder that
+; A log is written, always, to the user's temp folder. This installer writes into a folder that
 ; belongs to somebody else, and two of the things it decides there are invisible afterwards: which
 ; saved games it carried out and back around a clean reinstall, and which of the bundled chapter
 ; saves it skipped because a slot was already in use. Both are recorded, and neither leaves any
@@ -183,7 +184,7 @@ Source: "{code:DiscPath}\GAMEDATA\JCG\*"; DestDir: "{app}\JCG"; \
 Source: "{code:DiscPath}\GAMEDATA\MUSIC\*"; DestDir: "{app}\MUSIC"; \
     Flags: external ignoreversion recursesubdirs createallsubdirs
 
-; The localisation archive, at the root rather than in GOBS. VOICE.LAB is not on every pressing --
+; The localisation archive, at the root rather than in GOBS. VOICE.LAB is not on every pressing;
 ; some releases keep the spoken lines inside big.lab instead, so it is the one file here allowed
 ; to be absent, and this is the only place in the tree where that flag is correct.
 Source: "{code:DiscPath}\GAMEDATA\GOBS\LOCALIZE.LAB"; DestDir: "{app}"; \
@@ -196,7 +197,7 @@ Source: "{code:DiscPath}\GAMEDATA\GOBS\VOICE.LAB"; DestDir: "{app}"; \
 ; and the game then finds GAMEDATA where it expects to find it on the disc.
 ;
 ; Two files are held back, and together they are about 747 MB of the disc:
-;   BIG.Z       is 711 MB on the pressing although its archive is only the first 81 MB of that --
+;   BIG.Z       is 711 MB on the pressing although its archive is only the first 81 MB of that;
 ;               the rest is filler that exists to shape the disc, and the useful part has already
 ;               been expanded into big.lab.
 ;   MENACE.DAT  begins with byte-identical content to BIG.Z but stops short of the archive's end,
@@ -265,7 +266,7 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\TPM.EXE
 ; setting changes the coordinate space a window is placed in, which is the same thing the
 ; resolution fix works in, and the two have never been tried together.
 
-; WMAIN.EXE IS WHAT RUNS, AND TPM.EXE IS WHAT THE ICON COMES FROM. Those have to be two different
+; WMAIN.EXE is what runs, and TPM.EXE is what the icon comes from. Those have to be two different
 ; files here. A shortcut with no IconFilename takes its icon from whatever it points at, and
 ; WMAIN.EXE has no resource directory at all: no icon, no version information, nothing. Windows then
 ; falls back to the blank page it shows for a file type it does not know, which is what the desktop
@@ -1441,7 +1442,7 @@ begin
   end;
 end;
 
-{ Called once per line the converter writes. Its -Quiet mode prints one machine-readable line per
+{ Called once per line the converter writes. Its --quiet mode prints one machine-readable line per
   movie, which is what makes a progress bar possible without guessing how long anything takes.
 
   Machine lines go to stdout and anything written for a human to stderr, so Error tells them apart. }
@@ -1577,7 +1578,7 @@ end;
   the same reason the movie half uses that copy: [Dirs] grants users-modify on the game folder,
   because the game keeps its settings and saves inside it, and this runs with Setup's rights.
 
-  IT IS A NATIVE EXECUTABLE, AND THAT IS THE WHOLE POINT. This step used to be PowerShell driving
+  It is a native executable, and that is the whole point. This step used to be PowerShell driving
   GDI+, which meant it did nothing at all under Proton or Lutris: Wine ships no PowerShell. The
   executable is a plain Win32 console program, so Wine runs it exactly as Windows does and a Steam
   Deck installation now converts its artwork during Setup like any other. The .ps1, .py and .sh
@@ -1678,7 +1679,7 @@ begin
     doing, because an elevated process should run the binary it just verified rather than whichever
     one a search settles on. The player-started "Convert Movies.bat" passes nothing and is neither
     elevated nor silent. }
-  // RUN IT FROM {tmp}, NOT FROM WHERE IT WAS JUST INSTALLED. [Dirs] grants users-modify on {app},
+  // Run it from {tmp}, not from where it was just installed. [Dirs] grants users-modify on {app},
   // because the game keeps its settings and saves inside its own folder and cannot run otherwise,
   // and Windows passes that grant down by inheritance to everything created underneath it, which
   // includes mods\fmv\ffmpeg.exe. This step runs inside an elevated process, so running a file
@@ -1783,7 +1784,7 @@ begin
   if not DirExists(SrcDir) then
     Exit;
 
-  { A SLOT THAT ALREADY HOLDS A SAVE IS NEVER WRITTEN. This used to hand the whole set to
+  { A slot that already holds a save is never written. This used to hand the whole set to
     CopyFilesInFolder, which copies with FailIfExists false because that is what the carry-over
     restore needs, and the restore is putting the player's own files back. Here it meant a returning
     player who reran Setup to update a patch lost slots 1 to 11: complete_saves is part of the
@@ -1978,7 +1979,7 @@ begin
     MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
 end;
 
-{ D-PAD UP IS HELD DOWN FOR EVER UNDER WINE, AND THIS UNBINDS IT.
+{ D-pad up is held down for ever under Wine, and this unbinds it.
 
   P0JOY is the game's binding for D-pad up. The POV hat on a pad reports a DIRECTION when it is
   pressed and a centred value when it is not, and Windows and Wine do not agree on what centred is:

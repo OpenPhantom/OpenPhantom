@@ -80,4 +80,5 @@ At most 64 DLLs; beyond that the surplus is skipped and reported.
 Built and linked (MSVC x86, `/W4 /WX`, clean). Exports verified against the built PE: all seven
 present, PE32. The entry-point stub was disassembled out of the built DLL and is exactly
 `pushad / pushfd / call restore_and_load / popfd / popad / jmp dword ptr [saved entry]`.
-**Not accepted in game.**
+**Accepted in game.** Every DLL in the patch reaches the process through this loader, so any
+played build exercises it by definition, and the 1.5.0 build was played through by hand.

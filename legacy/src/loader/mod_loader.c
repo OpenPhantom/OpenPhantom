@@ -191,12 +191,12 @@ void mod_loader_run_once(void)
      * legitimate way to run, but it must not look like the settings were read. */
     if (GetFileAttributesA(ini_path()) == INVALID_FILE_ATTRIBUTES) {
         log_warning("there is no configuration file at that path. Every feature is running on its "
-                    "built-in defaults. Copy dist/engine_fixes.ini next to WMAIN.EXE to change "
+                    "built-in defaults. Put engine_fixes.ini next to WMAIN.EXE to change "
                     "anything.");
     }
 
     if (!ini_read_bool(LOADER_SECTION, "Enabled", true)) {
-        log_warning("Enabled=0 in [%s] - no mod is loaded, the game runs exactly as before",
+        log_warning("Enabled=0 in [%s]; no mod is loaded, the game runs exactly as before",
                     LOADER_SECTION);
         return;
     }

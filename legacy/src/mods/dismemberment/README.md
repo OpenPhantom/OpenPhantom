@@ -52,7 +52,8 @@ reached only when health has already fallen to zero.
 
 ## The six safety gates
 
-Mailbox discriminator (1,0), identity of attacker and victim, the node bound (**mandatory**,`bapobj_detachNode` checks nothing, and an out-of-range index has roughly a 50 % chance of instant
+Mailbox discriminator (1,0), identity of attacker and victim, the node bound (**mandatory**,
+`bapobj_detachNode` checks nothing, and an out-of-range index has roughly a 50 % chance of instant
 death through `partIo`), not already severed, the authored body-part mask, with the engine's own
 `part > 4` as a documented fallback for the 255 rigs that carry no mask, and a mesh must exist
 somewhere in the node's subtree.
@@ -85,7 +86,8 @@ that *could* produce the symptom is not a cause; only a measurement that sees it
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes on both retail builds.
-**Not accepted in game**, the `prevRot` fix in particular is unverified.
+**Accepted in game**, in the 1.5.0 build, which was played through by hand.
 
-To check in game: decapitate an enemy and watch without moving. The piece must fall, tumble briefly,
-and then **really** lie still. Then set `Diagnostics=0`.
+To re-check the `prevRot` fix after any change here: decapitate an enemy and watch without
+moving. The piece must fall, tumble briefly, and then **really** lie still. Then set
+`Diagnostics=0`.

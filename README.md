@@ -1,4 +1,4 @@
-# OpenPhantom - Star Wars Episode I: The Phantom Menace PC fixes and modding tools
+# OpenPhantom: Star Wars Episode I, The Phantom Menace PC fixes and modding tools
 
 [![Latest Release](https://img.shields.io/github/v/release/OpenPhantom/OpenPhantom?style=for-the-badge&label=Latest-Release)](https://github.com/OpenPhantom/OpenPhantom/releases/latest)
 [![All Downloads](https://img.shields.io/github/downloads/OpenPhantom/OpenPhantom/total?style=for-the-badge&label=Downloads)](https://github.com/OpenPhantom/OpenPhantom/releases)

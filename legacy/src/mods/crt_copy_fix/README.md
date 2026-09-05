@@ -42,7 +42,8 @@ as well; this repairs a picture, not only a crash.
 ## The replacement
 
 Not an insertion: the whole loop is replaced. 25 bytes are available, 11 are needed. The result
-reads `[0 .. N-4]`, writes `[0 .. N-4]`, runs `N/4` iterations and descends in steps of four,**the same order as the original**, which matters because the backwards direction is what makes
+reads `[0 .. N-4]`, writes `[0 .. N-4]`, runs `N/4` iterations and descends in steps of four, **the
+same order as the original**, which matters because the backwards direction is what makes
 overlapping ranges safe. The only difference is the removed load at -4.
 
 ## Why the site is deliberately not unique
@@ -57,4 +58,4 @@ Idempotent: a second run no longer finds the rewritten sequence.
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification confirms exactly 40 matches on all four
-retail executables. **Not accepted in game.**
+retail executables. **Accepted in game**, in the 1.5.0 build, which was played through by hand.

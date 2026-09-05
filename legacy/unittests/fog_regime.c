@@ -1,6 +1,6 @@
 /* fog_regime.c: the fog band as a pure function of the picture.
  *
- * The eleven tables below are the SHIPPED numbers, read out of the level files at the header
+ * The eleven levels below are the SHIPPED numbers, read out of the level files at the header
  * offsets the loader uses (fog start hdr+0x90, fog end hdr+0x94, draw distance hdr+0x854). They
  * are what "per level, exact" has to be checked against: a coupling that is only correct on a
  * made-up band is not correct.

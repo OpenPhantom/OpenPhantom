@@ -138,10 +138,10 @@ The resolution is a starting value and not a limit, which the same run demonstra
 player changed it in the game's own video options afterwards and the new mode stuck.
 
 **The DLL counts recorded above are of the build tested at the time, and are left as they were
-observed rather than raised.** The patch now carries twenty one fixes: `ground_clip_fix` was added
-after both of those installations were run. `dist/patch/` has since been refreshed from a build
-that includes it, the script compiles with no warnings, all twenty one file rows have a file and
-all twenty one staged files have a row. **No installation has been run from this bundle.** The two
+observed rather than raised.** The patch now carries twenty two fixes: `ground_clip_fix` and
+`sound_lifetime_fix` were both added after those installations were run. `dist/patch/` has since
+been refreshed from a build that includes them, the script compiles with no warnings, all twenty
+two file rows have a file and all twenty two staged files have a row. **No installation has been run from this bundle.** The two
 runs recorded above installed the twenty DLL build and nothing has been installed since, so those
 paragraphs describe a bundle that is no longer the one in the tree.
 

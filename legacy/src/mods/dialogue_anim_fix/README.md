@@ -70,8 +70,8 @@ A per-frame correction while it is armed, and it is only ever armed for this one
    to a name starting `obinpc` or `pquigon`. No other actor in Mos Espa, dialogue or not, is ever
    touched.
 3. Once armed and watching, an actor who is not the current global speaker and whose own
-   talk-animation target is still non-idle is switched to idle through `FUN_0042E3AD` - exactly
-   what a correctly authored "Animation: idle" node would do - but only **once** per stale streak,
+   talk-animation target is still non-idle is switched to idle through `FUN_0042E3AD`, exactly
+   what a correctly authored "Animation: idle" node would do, but only **once** per stale streak,
    not every frame. `actor+0x1BC` is then kept in sync with whatever `actor+0x1C0` the superseded
    actor's own script node keeps rewriting every frame, without calling the trigger again, so their
    own next visit to that node sees no change and does not retrigger anything itself either. The
@@ -89,13 +89,13 @@ A per-frame correction while it is armed, and it is only ever armed for this one
 
 ## Two mistakes already made here, so nobody repeats them
 
-**Correcting every frame by calling the real trigger every frame.** The obvious-looking fix - the
-instant a different actor's line starts, force the previous speaker's target to idle and call the
-real trigger - has no visible effect, because the superseded actor's own script node rewrites
+**Correcting every frame by calling the real trigger every frame.** The obvious-looking fix, forcing the previous
+speaker's target to idle and calling the real trigger the instant a different actor's line starts,
+has no visible effect, because the superseded actor's own script node rewrites
 `actor+0x1C0` right back on the very next frame and the correction was one-shot. Making the
 correction run every frame instead, but still calling the real trigger every time, produces a worse
 symptom: the superseded actor's own node and this fix's own correction each retrigger a fresh
-animation from its own first frame, every single frame, forever, in an endless tug of war - which
+animation from its own first frame, every single frame, forever, in an endless tug of war, which
 reads as the actor freezing solid rather than talking, because neither pose ever gets past its
 opening frame. The fix is to trigger for real exactly once and then only keep the engine's own
 bookkeeping quietly satisfied afterward, described in step 3 above.
@@ -103,8 +103,8 @@ bookkeeping quietly satisfied afterward, described in step 3 above.
 **No expiry on "not the current speaker".** A first working version of the correction above had no
 scope at all: it watched every actor who had ever spoken a line, anywhere in the game, and kept
 correcting them for the rest of the session whenever they were not the current speaker, which is
-true of them forever after their one line. Opcode `0x202` "Animation" is not dialogue-specific - a
-level's own script reaches for it for ordinary gameplay animation too - and that unscoped rule was
+true of them forever after their one line. Opcode `0x202` "Animation" is not dialogue-specific, since a
+level's own script reaches for it for ordinary gameplay animation too, and that unscoped rule was
 overwriting *that* the instant it landed on `actor+0x1C0`. The symptom was other, unrelated
 characters going completely static well after this cutscene had ended. Arming only for `espa.b3d`
 and watching only two specific names, both described above, is the fix: this cannot act on

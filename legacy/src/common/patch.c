@@ -107,7 +107,7 @@ patch_result_t patch_repoint_operand(uintptr_t operand_address, uint32_t expecte
         return PATCH_RESULT_UNEXPECTED_BYTES;
     }
     if (current != expected_old) {
-        log_warning("operand at %08X holds %08X, expected %08X - refused",
+        log_warning("operand at %08X holds %08X, expected %08X, refused",
                     (unsigned)operand_address, (unsigned)current, (unsigned)expected_old);
         return PATCH_RESULT_UNEXPECTED_BYTES;
     }

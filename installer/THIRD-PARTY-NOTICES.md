@@ -10,7 +10,7 @@ The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover 
 
 | Component | Version | Licence | Upstream |
 |---|---|---|---|
-| OpenPhantom patch | v0.2.1 | this project's | https://github.com/OpenPhantom/OpenPhantom |
+| OpenPhantom patch | 1.5.0 | this project's | https://github.com/OpenPhantom/OpenPhantom |
 | VLC / libVLC | 3.0.23 | **GPL v2** | https://www.videolan.org/vlc/ |
 | DSOAL | r694 | **LGPL 2.1** | https://github.com/kcat/dsoal |
 | OpenAL Soft (inside DSOAL) | as shipped in DSOAL r694 | **LGPL 2** | https://github.com/kcat/openal-soft |

@@ -387,7 +387,7 @@ bool camera_compensation_install(bool compensate_anchor)
     lag   = sites[SITE_CAMERA_LAG_CONSTANTS].address;
     pitch = sites[SITE_CAMERA_PITCH_LAG].address;
     if (lag == 0 || pitch == 0) {
-        log_warning("camera lag sites unresolved (lag=%08X pitch=%08X), the four remaining "
+        log_warning("camera lag sites unresolved (lag=%08X pitch=%08X), the five remaining "
                     "dampers are NOT compensated and will feel rigid above 30 fps",
                     (unsigned)lag, (unsigned)pitch);
         return camera_state.anchor_patched;
@@ -404,7 +404,7 @@ bool camera_compensation_install(bool compensate_anchor)
      * exists separately from patch_write_*. */
     if (!memory_make_writable(lag, CAMERA_LAG_PAGE_BYTES) ||
         !memory_make_writable(pitch, PITCH_LAG_PAGE_BYTES)) {
-        log_error("the camera lag pages could not be unprotected, the four immediate-operand "
+        log_error("the camera lag pages could not be unprotected, the five immediate-operand "
                   "dampers are NOT compensated");
         return camera_state.anchor_patched;
     }
@@ -440,7 +440,7 @@ void camera_compensation_update(float smoothed_seconds_scale, bool scripted_came
     camera_state.last_scripted = scripted_camera;
 
     /* The anchor weight is a plain data cell, so it needs neither a writable code page nor a
-     * cache flush, and it is written even when the four immediate-operand dampers are absent. */
+     * cache flush, and it is written even when the five immediate-operand dampers are absent. */
     if (camera_state.anchor_patched) {
         /* Zero for a placed camera: see the header. The lag cells below are left compensated,
          * because they damp the rig and the euler rather than the gather origin. */

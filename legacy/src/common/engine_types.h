@@ -23,7 +23,7 @@ _Static_assert(sizeof(void *) == 4,
  *
  * A swift screen is pure .data: a tSwWidget[] terminated by type == -1, plus a bitmap-name table
  * and a font-name table. swmenu_build 0x45e7a3 walks the array once to the terminator, counts,
- * records the default/cancel widgets, stamps SWACTION_STATIC onto the terminator slot and stores
+ * records the default/cancel widgets, stamps SW_ACTION_STATIC onto the terminator slot and stores
  * the pointer. It allocates nothing per widget.
  *
  * The 0x38 stride is byte-proven everywhere the engine walks such an array.
@@ -39,7 +39,7 @@ typedef struct sw_rect {
 typedef struct sw_widget {
     int32_t   type;        /* SW_* below; -1 terminates the array                               */
     int32_t   id;          /* the key swmenu_findWidgetByMenu takes                             */
-    int32_t   action;      /* SWACTION_* below                                                  */
+    int32_t   action;      /* SW_ACTION_* below                                                 */
     int32_t   visible;     /* 0 = no draw, no hit-test, no focus                                */
     int32_t   start;       /* SLIDER: notch count, TEXT: base string id                        */
     int32_t   state;       /* SLIDER: current notch, TEXT: string offset                       */

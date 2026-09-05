@@ -1,6 +1,6 @@
 # hud_ratio_scaling
 
-**Produces:** `hud_ratio_scaling.dll` -> `mods\` ,  replaces the earlier `text_aspect_fix.dll`
+**Produces:** `hud_ratio_scaling.dll` -> `mods\`, replacing the earlier `text_aspect_fix.dll`
 
 One size knob for the whole HUD, and square glyphs everywhere the engine draws text.
 Delete `text_aspect_fix.dll` from `mods\` when you install this one; they hook the same function.
@@ -75,8 +75,8 @@ narrower. Nothing leaves the screen at either of those two modes.
 ### The digits
 
 Inside the HUD the glyph pair becomes `(sx*mW, sy*mH)`. The renderer draws at `(sx*W/640,
-sy*H/480)`, so that is what makes the digits grow by `H/480`, the factor the squared bars grow by
-, instead of by `W/640`. At 1920x1080 the HUD's authored `(0.8, 0.8)` becomes `(0.6, 0.8)` and the
+sy*H/480)`, so that is what makes the digits grow by `H/480`, the factor the squared bars grow by,
+instead of by `W/640`. At 1920x1080 the HUD's authored `(0.8, 0.8)` becomes `(0.6, 0.8)` and the
 drawn glyph is `1.80 x 1.80` px: square, and 2.25 times its 480p size, like the bars.
 
 Outside the HUD the older rule is unchanged: `sy = sx * 3W/4H`. It raises the vertical rather than
@@ -157,8 +157,8 @@ engine's size.
   uniquely at every mode; both numbers landing on the exact centre of their own block at every
   mode; and the two identities, measured as a **bit-exact deviation of 0.0**, `SquareHud=0` with
   `HudScale=1.0` at every mode, and both `SquareHud` values at every 4:3 mode.
-* **Every byte pattern verified offline** against both retail builds with
-  All six patterns resolve uniquely on each.
+* **Every byte pattern verified offline** against both retail builds. All six patterns resolve
+  uniquely on each.
 * **Accepted in game**, at 3840x2160, which is a 16:9 canvas and therefore the case this exists
   for: the HUD blocks stay square and the text is not stretched. The bit exact identities above
   are what say it changes nothing at 4:3.

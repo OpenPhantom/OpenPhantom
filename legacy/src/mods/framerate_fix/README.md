@@ -124,7 +124,6 @@ It does not: a load takes a fraction of ten seconds, so the measured value is wr
 engine is better off with that value or with its own has not been measured, so the bound stays at
 what shipped.
 
-
 `InterpolateMovers`, `InterpolateParticles`, `PreciseFrameTime` and `RebaseSimClock` were played
 and accepted by the maintainer, which is why they now default to on. That is a judgement about how
 they feel; the numbers in their own files are still a byte census and arithmetic rather than a
@@ -155,4 +154,5 @@ through the detour with 6,960 poses blended and none refused, so the interpolati
 job rather than having quietly stopped. That last check is the point: the call count did not fall,
 only the cost per call.
 
-Everything else in this DLL is still only reviewed and built, not accepted in game.
+The rest of this DLL is accepted in game too, in the 1.5.0 build, which was played through by
+hand.

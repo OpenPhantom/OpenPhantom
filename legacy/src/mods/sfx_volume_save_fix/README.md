@@ -58,10 +58,10 @@ The engine already keeps a reliable copy of the true value. `bapsound_setMasterV
 ```
 
 `[0x004AA970]` is not a write-only shadow: the per-channel attenuation at `0x004169BD`, which runs
-on every sample start, reads it back - `base * scale * g_sfxMasterVolume` - so this cell has to
+on every sample start, reads it back, `base * scale * g_sfxMasterVolume`, so this cell has to
 stay correct for in-game volume to be right at all.
 
-**Fix:** `bapsound_getMasterVolume` is entirely replaced (not wrapped - calling through to the AIL
+**Fix:** `bapsound_getMasterVolume` is entirely replaced (not wrapped: calling through to the AIL
 query first would just reintroduce the bug) with a detour that computes the same 0..127 integer
 the engine itself derived the mirror from, clamped to `[0, scale]`. Both data addresses are read
 out of `bapsound_setMasterVolume`'s own instruction stream rather than hardcoded, and range
@@ -70,13 +70,13 @@ checked against the host image before they are followed.
 **The replacement keeps the original's own guard branch,** and that is not a detail. The function
 answers `0`, not a volume, while `g_soundReady` is still `0`. A replacement that skipped that
 branch would answer with the mirror instead, and the mirror reads `1.0` at that point for exactly
-the reason bug 2 describes - so on a machine whose sound never initialises, the options screen
+the reason bug 2 describes, so on a machine whose sound never initialises, the options screen
 would seed its slider at full and write `SVOL=127` over the player's saved value. That is the very
 symptom this DLL exists to remove, reintroduced for the no-sound case.
 
 **This bug is real and was confirmed in game** with a temporary diagnostic build: dragging the
 slider to 33 and closing the menu correctly produced `SVOL=33` in `obi.ini`. But fixing it alone
-did **not** fix "resets on reload" - that symptom survived unchanged, which is what led to bug 2.
+did **not** fix "resets on reload"; that symptom survived unchanged, which is what led to bug 2.
 
 ## Bug 2: the loaded value was never applied (the actual cause of "resets to full on reload")
 
@@ -98,11 +98,11 @@ g_soundReady = 1;                         // set AFTER the call above, not befor
 ```
 
 At the exact moment `bapsound_moduleInit` calls the setter with the value it just loaded,
-`g_soundReady` is **still 0** - it is not set to `1` until several instructions later, in the same
+`g_soundReady` is **still 0**; it is not set to `1` until several instructions later, in the same
 function. The load-time apply is therefore a **guaranteed silent no-op on every single launch**,
 regardless of what `SVOL` says in the file. The mirror simply keeps its compiled-in startup value
 (measured as `1.0`, i.e. full) until the player manually touches the slider. One statement in the
-wrong place in the original 1999 code - this is the actual cause of the reported symptom.
+wrong place in the original 1999 code, and it is the actual cause of the reported symptom.
 
 The setter's own caller census says the same thing: two `E8` call sites in the whole image,
 `0x00415A78` inside `bapsound_moduleInit` and `0x0044249C` inside `options_audio`. One start-up
@@ -110,14 +110,14 @@ apply that cannot work, and one live slider that can.
 
 **Confirmed** with a temporary diagnostic build across two separate sessions: the very first call
 to `bapsound_setMasterVolume` in each run showed the mirror ending up at `1.0` regardless of the
-argument passed in (`120` in one run, `0` in the other) - exactly what "the guard blocked the
+argument passed in (`120` in one run, `0` in the other), exactly what "the guard blocked the
 write and the mirror kept its old value" looks like from outside the function.
 
-**Fix:** `bapsound_setMasterVolume` is tapped (not replaced - the live path must keep working
+**Fix:** `bapsound_setMasterVolume` is tapped (not replaced: the live path must keep working
 unchanged). If it is called while `g_soundReady` is still `0`, the intended value is remembered
 instead of lost. A per-frame check (`common/frame_hook.h`, the same "call me once per rendered
 frame" site every other feature in this tree uses for a live slider preview) re-applies that
-value the instant `g_soundReady` actually becomes `1` - which happens a handful of instructions
+value the instant `g_soundReady` actually becomes `1`, which happens a handful of instructions
 later in the very same function, so in practice this resolves within the same frame `sys_frame`
 is next pumped. Nothing about live control changes; this only rescues the one call the original
 code was never going to honour.
@@ -132,7 +132,7 @@ code was never going to honour.
 | `g_sfxMasterVolume` | `0x004AA970` | read only; the engine's own live volume, `0..1` |
 | `g_sfxVolumeScale` | `0x004A8150` | read only; the `0..127` conversion factor |
 | `g_soundReady` | `0x005BB4B8` | read only; taken from both sites' own guard operands and cross-checked, not hardcoded |
-| `bapsound_moduleInit` | `0x004159F0` | not touched - the fix works around it rather than editing its instruction order |
+| `bapsound_moduleInit` | `0x004159F0` | not touched; the fix works around it rather than editing its instruction order |
 | `options_audio` | `0x00441FA4` | not touched |
 
 ## A slider notch is not the test
@@ -150,18 +150,15 @@ build: one match each, at the addresses this file names. The `master_get` prolog
 twice (`0x00417459` and `0x0041778C`), which is why the whole 30-byte body is the pattern.
 
 Bug 1 (wrong saved value) was confirmed fixed in game before the guard branch was restored. Bug 2
-(dropped load-time apply) is diagnosed from two real runs' logs and fixed per the analysis above;
-**neither the restored guard branch nor the bug-2 re-apply has been run in the game since.**
-Reviewed statically and compiled, not played.
+(dropped load-time apply) was diagnosed from two real runs' logs and fixed per the analysis
+above. **Both the restored guard branch and the bug-2 re-apply are accepted in game**, in the
+1.5.0 build, which was played through by hand.
 
 The log line to look for is `startup SFX volume (N) applied`. The actual test is whether the value
 in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.
 
-## Relationship to `ini_path_fix`
+## Why this is SFX and not a general save or load problem
 
-Independent bugs, independent fixes. `ini_path_fix` makes sure `obi.ini` is the same file on
-every read and write; this makes sure the value written there is correct (bug 1) and that a
-correct value in the file is actually the value the game starts at (bug 2). Music volume was
-unaffected by either bug - it round-trips through a simple engine-side float with no driver query
-and no ordering dependency on a "ready" flag - which is what pointed at these two SFX-specific
-sites rather than a general save/load problem.
+Music volume is unaffected by either bug. It round-trips through a simple engine-side float with
+no driver query and no ordering dependency on a "ready" flag, which is what pointed at these two
+SFX-specific sites rather than at the settings file or the code that reads it.

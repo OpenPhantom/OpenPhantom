@@ -10,7 +10,7 @@
 #ifndef COMMON_VERSION_H
 #define COMMON_VERSION_H
 
-/* "1.4.1", for anything that prints it. */
+/* The three-digit number as a string, for anything that prints it. */
 #define OPENPHANTOM_VERSION "@OPENPHANTOM_VERSION@"
 
 /* The same number as four integers, for the binary FILEVERSION field a version resource needs.

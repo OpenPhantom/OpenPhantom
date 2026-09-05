@@ -147,17 +147,17 @@ path, where a range check would cost a system call per frame.
 
 ## Testing status
 
-**Built here and not run here.** This tree builds it `/W4 /WX` clean and the unit test suite is
-green, but neither of those says anything about the patch: they say the code compiles and that
-the tests which exist still pass. The behaviour was accepted in the game from the tree these
-files were written from, not from this one.
+**Accepted in game**, in the 1.5.0 build from this tree, which was played through by hand. It
+also builds `/W4 /WX` clean here with the unit test suite green, though neither of those says
+anything about the patch on its own: they say the code compiles and that the tests which exist
+still pass.
 
 **The mixers are unit tested.** The two replacement generators are pure arithmetic and are exactly the
 kind of thing this project expects to be testable without the game: same tick and same ordinal must
 give the same answer, a different tick must give an unrelated one, and every answer must land in 0
-to 32767 so the engine's own scaling still holds. `unittests/substep_noise.c` drives them: the range the engine's own scaling depends on, that one
-substep answers alike across its frames while the next re-rolls, that two objects in one frame do
-not agree, and the cancellation the comments name.
+to 32767 so the engine's own scaling still holds. `unittests/substep_noise.c` drives them: the range
+the engine's own scaling depends on, that one substep answers alike across its frames while the next
+re-rolls, that two objects in one frame do not agree, and the cancellation the comments name.
 
 Every byte level claim above is read out of the shipped executables, and the pattern resolution was
 re-run against all three builds while preparing this tree rather than taken from the source it

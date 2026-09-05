@@ -11,7 +11,7 @@
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "1.4.1"
+#define PatchVersion       "1.5.0"
 #define PatchSrc           "dist\patch"
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the
@@ -166,7 +166,7 @@ Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
 ; DLL mounts and reads the scale out of. Without it MenuScale finds no converted artwork and leaves
 ; the menus exactly as they shipped, so the two halves install together or the feature is absent.
 ;
-; FOUR FILES BECAUSE OF LINUX. "Convert Menu Art.bat" drives convert_menu.ps1, which resamples with
+; Four files because of Linux. "Convert Menu Art.bat" drives convert_menu.ps1, which resamples with
 ; GDI+; neither half works under Proton, where Wine ships no PowerShell and System.Drawing.Common is
 ; Windows-only on .NET Core. convert_menu.sh drives convert_menu.py, which needs nothing but Python
 ; 3 and is already on the Steam Deck. The two produce byte-identical output from the same input.
@@ -183,7 +183,7 @@ Source: "{#PatchSrc}\tools\convert_menu.py";       DestDir: "{app}\tools"; \
 Source: "{#PatchSrc}\tools\convert_menu.sh";       DestDir: "{app}\tools"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 
-; THE CONVERTER SETUP ITSELF RUNS, for both the menu artwork and the cutscenes, which is why it
+; The converter Setup itself runs, for both the menu artwork and the cutscenes, which is why it
 ; carries both components and installs once rather than twice. It is a plain Win32 console program
 ; and therefore the only one of the five converters that works everywhere: Wine runs it exactly as
 ; Windows does, so an installation under Proton or Lutris converts during Setup instead of leaving

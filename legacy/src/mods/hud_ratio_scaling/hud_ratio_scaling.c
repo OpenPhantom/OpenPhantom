@@ -20,8 +20,8 @@
  * mode-change hook is optional: it exists for the log line and for re-reading the knob, not for
  * correctness.
  *
- * SIZE NOTE (rule 9): 640 lines, of which 409 are code. The remainder is the byte evidence at the
- * six engine sites, which rule 8 requires to stand at the site rather than only in a document.
+ * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. The remainder is the byte evidence
+ * at the six engine sites, which has to stand at the site rather than only in a document.
  */
 #include "hud_ratio_scaling.h"
 

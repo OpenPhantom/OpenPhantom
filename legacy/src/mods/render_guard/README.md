@@ -113,12 +113,13 @@ the queue's entry ceiling, `0x2004`, which is the count the same function tests 
 instruction, and that is a derivation rather than a measurement.
 
 A census was attempted and did not settle it. Scanning `.text` for dword literals landing between
-the pool's base at `0x00734C10` and a generous end at `0x00790000` returns 74 hits at byte alignment,
-15 of them dword aligned and only 6 real instruction operands, so most are coincidences inside
-instructions rather than addresses. From the other side, the nearest address above the pool's base
-that anything else is known to use is `0x008439AC`, which is 1.06 MB higher, so the pool is not immediately followed by anything identified. The derived capacity,
-`0x2004` vertices of 32 bytes each, which is `0x40080` bytes ending at `0x00774C90`, is consistent
-with that gap but not proven by it.
+the pool's base at `0x00734C10` and a generous end at `0x00790000` returns 74 hits at byte
+alignment, 15 of them dword aligned and only 6 real instruction operands, so most are coincidences
+inside instructions rather than addresses. From the other side, the nearest address above the pool's
+base that anything else is known to use is `0x008439AC`, which is 1.06 MB higher, so the pool is not
+immediately followed by anything identified. The derived capacity, `0x2004` vertices of 32 bytes
+each, which is `0x40080` bytes ending at `0x00774C90`, is consistent with that gap but not proven by
+it.
 
 So a refusal on this bound during ordinary play is evidence that the pool is bigger than the
 derivation, not evidence that the scene is too complex. The log says exactly that the first time it

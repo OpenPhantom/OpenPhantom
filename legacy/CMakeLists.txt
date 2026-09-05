@@ -18,15 +18,17 @@ enable_language(RC)
 # THE PROJECT'S VERSION, and the only copy of it in this tree.
 #
 # One number covers the patch and the installer that carries it. They have never been released
-# apart: every patch release to date has an installer release on the same day. The first two digits
-# move when the installer's own behaviour changes, the third when only the payload does.
+# apart: every patch release to date has an installer release on the same day. The first two
+# digits move when the installer's own behaviour changes, or when the payload changes enough
+# that a player would notice it without being told; the third when the payload changes and the
+# game looks the same afterwards.
 #
 # The installer keeps its own copy in AppVer, because Inno cannot read a CMake variable and wiring
 # the build system into the installer would couple two things that are otherwise independent. The
 # comment at AppVer says the same, and the two are kept in step by hand.
 set(OPENPHANTOM_VERSION_MAJOR 1)
-set(OPENPHANTOM_VERSION_MINOR 4)
-set(OPENPHANTOM_VERSION_PATCH 1)
+set(OPENPHANTOM_VERSION_MINOR 5)
+set(OPENPHANTOM_VERSION_PATCH 0)
 set(OPENPHANTOM_VERSION
     "${OPENPHANTOM_VERSION_MAJOR}.${OPENPHANTOM_VERSION_MINOR}.${OPENPHANTOM_VERSION_PATCH}")
 

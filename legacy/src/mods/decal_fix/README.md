@@ -15,9 +15,9 @@ match, the DLL changes nothing and says so.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `DepthBias` | `0.00015` | 0-0.01 | how far a decal is pulled towards the camera, in device depth |
+| `DepthBias` | `0.0` | 0-0.01 | how far a decal is pulled towards the camera, in device depth. Ships at 0, meaning off: pulling the vertex was measured and changed nothing, and the fix that does the work is `NeutraliseZBias` below |
 
-`DepthBias=0` is the same as `Enabled=0`: it is the amount, not a switch.
+`DepthBias=0` is the same as `Enabled=0`: it is the amount, not a switch. It ships at 0, so this row documents a lever rather than something the patch is doing for you.
 
 ## Engine locations
 
@@ -61,10 +61,11 @@ to invent the conversion itself. The engine cannot influence the result and is n
 ## What this does instead
 
 It stops asking the device for a favour and moves the geometry. Every polygon in this game is
-submitted **pre-transformed**, the vertex format literal is `0x1C4` = `XYZRHW|DIFFUSE|SPECULAR|TEX1`
-, so `z` is already the device-space depth in `[0,1]`, which is exactly the quantity `ZBIAS` was
-meant to shift. Subtracting a small constant from it is what `ZBIAS` did, done one layer earlier and
-on our side of the wrapper. Negative results are clamped to `0`.
+submitted **pre-transformed**, the vertex format literal is `0x1C4` =
+`XYZRHW|DIFFUSE|SPECULAR|TEX1`, so `z` is already the device-space depth in `[0,1]`, which is
+exactly the quantity `ZBIAS` was meant to shift. Subtracting a small constant from it is what
+`ZBIAS` did, done one layer earlier and on our side of the wrapper. Negative results are clamped to
+`0`.
 
 **The site is exclusive, and that is the whole reason this is safe.** An `E8 rel32` sweep of the
 entire `.text` finds `0x00487F40` has exactly **one** caller, `0x0041C87D`, inside

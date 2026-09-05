@@ -32,8 +32,8 @@ int main(void)
              "15 ms a frame, the 66 fps the field report measured, lowers the scale");
     ut_check(frame_governor_decide(15.0f, LOWER_ABOVE_MS, RAISE_BELOW_MS, NEEDED, NEEDED) ==
                  FRAME_GOVERNOR_LOWER,
-             "and it lowers however many healthy seconds came before it - pain is not outvoted "
-             "by a good history");
+             "and it lowers however many healthy seconds came before it, because pain is not "
+             "outvoted by a good history");
     ut_check(frame_governor_decide(13.4f, LOWER_ABOVE_MS, RAISE_BELOW_MS, 0u, NEEDED) ==
                  FRAME_GOVERNOR_LOWER,
              "just past the threshold is past it");
@@ -83,8 +83,9 @@ int main(void)
              "governor holding one threshold and not the other is worse than one holding neither");
 
     ut_section("thresholds the wrong way round are refused, not obeyed");
-    /* Inverted thresholds have no dead zone at all, since every frame time is both too slow and fast
-       enough - so this is the configuration that would oscillate hardest. It must be rejected. */
+    /* Inverted thresholds have no dead zone at all, since every frame time is both too slow and
+       fast enough, so this is the configuration that would oscillate hardest. It must be
+       rejected. */
     ut_check(frame_governor_decide(12.0f, RAISE_BELOW_MS, LOWER_ABOVE_MS, NEEDED, NEEDED) ==
                  FRAME_GOVERNOR_HOLD,
              "swapped thresholds leave no dead zone, so the decision refuses to act at all");
@@ -138,7 +139,7 @@ int main(void)
         }
         run_one_end = scale;
         /* It still walks a long way down, and that is CORRECT: in that scene the target was not
-           reachable at any scale - the field run measured 13.8 ms even at 1.15 - so there was no
+           reachable at any scale, the field run measured 13.8 ms even at 1.15, so there was no
            setting the governor could have stopped at and been right. Sizing the step is not a way
            of pretending a scene is cheaper than it is. */
         ut_checkf(run_one_end < 1.40f,
@@ -168,7 +169,7 @@ int main(void)
         }
         ut_checkf(scale > 1.90f,
                   "nine windows only just past the target still cost far less, ending at %.2f, "
-                  "where nine seconds well past it ended at %.2f - which is the whole point of "
+                  "where nine seconds well past it ended at %.2f, which is the whole point of "
                   "sizing the step rather than fixing it", scale, run_one_end);
     }
 

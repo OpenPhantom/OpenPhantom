@@ -1,6 +1,11 @@
 # Nothing built ever goes in. The installer is produced from openphantom_installer.iss with
 # Inno Setup and the extractor from src/is3_extract with CMake; see README.md.
-build/
+#
+# The wildcard covers a second configure alongside the first, build-audit or build-x86 or
+# whatever it gets called. Those are as untrackable as build/ itself and easy to commit by
+# accident, because git shows them and the reviewer sees one more directory rather than
+# thirty megabytes.
+build*/
 *.obj
 *.pdb
 *.exp
@@ -9,8 +14,8 @@ build/
 *.exe
 
 # ...but dist/ is shipped content, not build output. Everything the installer carries lives
-# there and is tracked on purpose, including Microsoft's redistributable, which the rule above
-# would otherwise swallow without saying so.
+# there and is tracked on purpose, third-party binaries included, which the rule above would
+# otherwise swallow without saying so.
 !dist/**
 
 # Inno Setup writes these beside a script while it works.

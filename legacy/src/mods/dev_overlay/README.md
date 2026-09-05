@@ -768,14 +768,42 @@ immunity it had rather than quietly starting to kill people.
 A time limit was tried first and was the wrong shape: it cannot tell a high jump from a void fall,
 so any value that spares the jump also lets the void fall run long enough to break.
 
+**The teleport writes both copies of the position.** The player carries `pos` at `+0x118` and
+`desiredPos` at `+0x124`, and `Plr_CommitPose` (`0x0044C06B`) opens by copying the second over the
+first on any frame the player is moving. Writing `pos` alone survived only while the player happened
+to be standing still: the moment the movement phase ran it recomputed `desiredPos` from the new
+position with its own ground resolution applied and committed that back, so the player arrived at
+the right x and y planted on the floor. Writing `desiredPos` alone was tried even earlier and left
+them where they started, which is the same fault from the other side. Both are written, and the
+vertical velocity at `+0xB4` is zeroed so the fall starts from rest rather than carrying whatever
+the player had when the flight began.
+
 **The teleport will not drop the player further than the engine can cope with.** A drop onto a real
-floor still broke it if it was high enough, so the drop is capped at 80 world units and a teleport
-past that ends the flight without moving anybody, exactly as F4 does. The number is read off the
-engine's own thresholds rather than picked: `FUN_0044F162` compares accumulated fall distance at
-`player+0x360` against 3.5 (minimum distance for damage), 6.0 (the fall-death test) and 8.0 (the
-distance at which a fall becomes significant, which arms the 2.0 second airborne death). Eight
-units is already a serious fall to this engine, so the cap is ten times that: generous for dropping
-somebody in from height, and still short of the falls that broke it.
+floor still breaks it if it is high enough, so the drop is capped at 80 world units and a teleport
+past that ends the flight without moving anybody, exactly as F4 does.
+
+**Eighty is measured, and it was briefly raised to 350 with a crash to show for it.** The reasoning
+for raising it was that the fall grace above suppresses the damage and both deaths for ten seconds,
+and that ten seconds of falling at 40 units/s^2 clamped to 40 units/s covers 380 units. That
+arithmetic is right and it answers the wrong question: the grace decides whether the player survives
+the landing, not whether the engine can run the fall. A session logged teleports at 30.0, 51.5 and
+72.3 which were fine, then one at 110.8 over ground at roughly 25 to 30, a drop of about 85 units,
+which took the game down. **Do not raise it again without a session that survives the higher
+number.**
+
+Eighty also matches what the engine's own thresholds suggest: `FUN_0044F162` compares accumulated
+fall distance at `player+0x360` against 3.5 (minimum distance for damage), 6.0 (the fall-death test)
+and 8.0 (the distance at which a fall becomes significant, which arms the 2.0 second airborne
+death). Eight units is already a serious fall here, so the cap is ten times that.
+
+**The drop is measured against the player, not probed under the camera.** The first version asked
+the engine's floor probe what was beneath the camera. That probe is scoped to the cell its point
+sits in, so a camera flown above the level is in no cell and it reports "no floor" for solid ground.
+A field session logged twelve refusals and every one was that false void, with the only teleports
+getting through within a few units of standing height, which is to say the feature did not work at
+all. The player is always inside the world, so the measurement is the camera's height above the
+player plus the player's own height above their floor, and the probe is asked only at the player,
+where its cell lookup succeeds.
 
 Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4` in the shipped
 `WMAIN.EXE`. Note that the data addresses quoted throughout these comments come from j0nny's
@@ -783,10 +811,11 @@ Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4` in the
 range is inside `.rsrc`. They were read by finding the `FCOMP` instructions that reference them.
 
 Tested in game on Windows: a boosted jump onto ground (immune as before), jump boost off a ledge
-into the void (dies promptly, death screen loads correctly, audio normal), a free camera teleport
-into the void (refused, camera returns), and a teleport from very high onto a real floor (refused
-the same way). The log lines to look for:
+into the void (dies promptly, death screen loads correctly, audio normal), and, after the
+measurement was corrected, drops from real height that land properly alongside a refusal past the
+cap. The log lines to look for:
 ```
 [dev_overlay] the floor probe resolved: falls and teleports can both be asked about
-[dev_overlay] the teleport was refused and the camera returned instead: the floor under it is 214 units down, past the 80 the engine can finish a fall from
+[dev_overlay] the free camera teleport key dropped the player at 38.2 127.1 101.0
+[dev_overlay] the teleport was refused and the camera returned instead: it is 104 units of drop, past the 80 this engine can finish a fall from
 ```

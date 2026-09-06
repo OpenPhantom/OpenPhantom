@@ -53,7 +53,7 @@
 ; The patch's old v0.x line ends at v0.4.0 and joins this one here. It goes up rather than this one
 ; coming down, because a version that moves backwards reads as a downgrade in Add/Remove Programs
 ; and in the file properties, and would sit below five releases already published.
-#define AppVer "1.6.1"
+#define AppVer "1.7.0"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"

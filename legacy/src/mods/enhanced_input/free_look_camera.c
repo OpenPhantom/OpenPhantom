@@ -322,6 +322,21 @@ static float update_camera_yaw(void)
     float                interpolated;
     float                offset;
 
+    /* WHOSE CAMERA IS IT, asked every frame and independently of our own switch.
+     *
+     * This is not free look's question and it is not answered for free look's benefit. The
+     * sideways walk and the pad stick need to know whether the level author has placed a camera
+     * here, so they can hand the player back to the engine's own movement where one is; and they
+     * need it whether or not free look is switched on, which is why the gate is asked with
+     * `enabled` forced true rather than being read off the switch.
+     *
+     * It costs the eight cell reads the note below was avoiding. That note was right when free
+     * look was the only consumer and the switch already answered for it; it is not right now that
+     * something else is asking a different question of the same cells. */
+    build_gate(&gate, &record, &region);
+    gate.enabled           = true;
+    free_state->world_gate = free_look_gate_refusal(&gate);
+
     /* The switch is tested before anything is gathered, because the machinery is installed even
      * while the feature is off and this hook then runs on every rendered frame. build_gate reads
      * eight cells to answer a question the switch has already answered, so it is called here only

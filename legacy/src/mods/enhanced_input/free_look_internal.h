@@ -2,6 +2,7 @@
 #define FREE_LOOK_INTERNAL_H
 
 #include "camera_sites.h"
+#include "free_look_math.h"
 #include "player_sites.h"
 
 #include "common/detour.h"
@@ -108,6 +109,12 @@ typedef struct free_look_state {
     float target_turn_rate;
 
     bool  look_seen;          /* set by any look input, consumed by the drift on the next frame */
+
+    /* The gate's answer about the WORLD, asked every rendered frame with this feature's own
+     * switch forced on, so it says whether the level has taken the camera rather than whether
+     * free look happens to be running. The sideways walk and the pad stick read it: where the
+     * author placed a camera, both hand the player back to the engine's own scheme. */
+    free_look_release_t world_gate;
     float look_idle_seconds;  /* how long since the last of it, in real time                    */
 
     /* Carried across an AUTHORED-REGION release and across nothing else. It is the yaw the player

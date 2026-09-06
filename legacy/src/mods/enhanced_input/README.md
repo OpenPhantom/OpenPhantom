@@ -565,6 +565,28 @@ The gait is two steps rather than a slide because the clips play at a fixed rate
 them by how fast the body is really moving. A continuously variable pace would slide the feet along
 the ground, and the harder the player pushed the worse it would look.
 
+### Standing down when the bindings are not ours
+
+Going around the engine's joystick path means going around everything that path was doing for us,
+and one of those things matters. A conversation with a choice menu stops the player moving so the
+stick can pick an answer, and the pause menu does the same. The engine does that by swapping the
+whole binding set through `input_setMode`, not by testing a flag anywhere the movement code can
+see: the mode cell it keeps is read nowhere else in the image. A stick read straight from XInput
+is bound by nothing and sailed past it, so the menu scrolled and the player walked at once.
+
+So `pad_stick.c` asks which binding set is live and reports nothing at all when it is not the
+gameplay one. That is done in the poll rather than at the one place that writes movement, because
+the run button and the air steer read this stick without going through that place, and a gate each
+of them has to remember is a gate one of them will not.
+
+Only eight places in the game set the mode. Three set 4 and three set 0, all of them the dialogue;
+the other two are `swmenu_open` and `swmenu_close`, which set 2 and then restore whatever was live
+before. No gameplay state uses anything but 0, which is what makes "only 0 drives" safe rather
+than merely tidy.
+
+A site that does not resolve answers YES. The cost of being wrong that way is one awkward
+conversation; the cost of being wrong the other way is a player who cannot move at all.
+
 ## The passive camera
 
 **`CameraFollow` switches `FreeLook` on with it**, and the dependency is one way: free look on its

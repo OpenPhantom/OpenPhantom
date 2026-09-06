@@ -237,6 +237,11 @@ bool free_look_is_enabled(void)
     return free_state.installed && free_state.config.enabled;
 }
 
+bool free_look_level_owns_camera(void)
+{
+    return free_state.installed && free_look_release_is_authored_region(free_state.world_gate);
+}
+
 bool free_look_set_enabled(bool enabled)
 {
     if (!free_state.installed) {

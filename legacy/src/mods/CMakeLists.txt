@@ -122,6 +122,8 @@ add_engine_fix(enhanced_input
     camera_follow.c
     frame_clock.c
     free_look_follow.c
+    input_mode.c
+    input_steer.c
     pad_stick.c
     pad_run.c
     menu_captions.c

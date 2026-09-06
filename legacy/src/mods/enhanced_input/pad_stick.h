@@ -103,6 +103,25 @@ float pad_stick_magnitude(void);
 bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert,
                             float *out_strafe, float *out_forward);
 
+/* The same stick, spent the way the SHIPPED GAME spends it: sideways turns, forward walks.
+ *
+ * For where the level author has placed a camera. Our own scheme reads the stick as a
+ * direction and relies on free look to turn the body to face it, and free look lets go of an
+ * authored camera. What was left in that case was a body lean clamped at ninety degrees and
+ * nothing at all that rotates the player, which is how a balcony in the palace became a place
+ * you could walk down to and not get out of.
+ *
+ * `out_turn` is the raw sideways deflection, for the caller to spend on the view the way it
+ * spends the keyboard's turn. Only the forward and back move bits are written here, with no
+ * sideways component at all, which is exactly what the engine's own scheme puts in them.
+ *
+ * The stick is still read from XInput rather than handed back to the engine's own joystick
+ * path, and that is deliberate: on a pad that reaches XInput but never WinMM, handing it back
+ * would hand back nothing and the player would still be stuck. This restores the BEHAVIOUR the
+ * shipped game has, from a reading that works. */
+bool pad_stick_take_handback(uint8_t *record, bool stand_mode, float *out_turn,
+                             float *out_forward);
+
 /* True while the push is hard enough to mean run. Hysteresis is applied inside, so the answer does
  * not chatter while the stick sits on the boundary. */
 bool pad_stick_wants_run(void);

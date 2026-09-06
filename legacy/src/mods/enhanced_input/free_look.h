@@ -55,6 +55,16 @@ bool free_look_is_enabled(void);
  * here as well, or the copy stands for the rest of the session and the feature looks dead. */
 void free_look_set_passive_follow(bool enabled);
 
+/* True while the LEVEL AUTHOR's own camera is on the player, by the same test free look uses to
+ * let go of it. Answered whether or not free look is switched on, because it is a fact about the
+ * room rather than about this feature.
+ *
+ * The sideways walk and the pad stick stand down while it holds. Free look already did, and the
+ * three of them not agreeing is what trapped a player on a balcony in the palace: the camera was
+ * the author's, free look had let go, and the pad went on spending the stick on a direction
+ * instead of a turn, so there was no way to turn round and jump back up. */
+bool free_look_level_owns_camera(void);
+
 /* Steering a jump, kept here for the same reason: it is read on the substep clock and must not
  * reach for the ini there. */
 void free_look_set_air_control(bool enabled);
@@ -83,7 +93,8 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
 
 /* Phase 7, BEFORE the original: turn the body toward the direction phase 2 asked for. The write
  * is not undone afterwards, unlike the sideways walk's travel offset this heading change is
- * real and every downstream consumer must see it. Does nothing unless free look took the substep. */
+ * real and every downstream consumer must see it. Does nothing unless free look took the
+ * substep. */
 void free_look_integrate(uint8_t *record, float substep_seconds);
 
 /* True while the trigger is held: the body is pointed at the camera and the feet strafe relative

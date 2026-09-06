@@ -1,6 +1,7 @@
 /* pad_stick.c: see pad_stick.h. */
 #include "pad_stick.h"
 
+#include "input_mode.h"
 #include "strafe_walk.h"
 
 #include "common/logging.h"
@@ -63,6 +64,21 @@ void pad_stick_poll(void)
     pad_state.active = false;
 
     if (!pad_state.enabled) {
+        return;
+    }
+
+    /* THE BINDINGS ARE NOT OURS TO IGNORE, and this is where taking the stick has to pay for
+     * itself. A dialogue with a choice menu stops the player moving so the stick can pick an
+     * answer, and the engine does that by swapping the whole binding set rather than by testing
+     * anything. Reading XInput directly is not bound by anything and sailed straight past it: the
+     * menu scrolled and the player walked at the same time.
+     *
+     * Standing down here rather than at the one place that WRITES movement, because the run
+     * button and the air steer read this stick without going through that place, and a gate they
+     * each have to remember is a gate one of them will not. A stick with nothing to say is a
+     * state every consumer already handles, so this says exactly that. */
+    if (!input_mode_is_gameplay()) {
+        pad_state.running = false;
         return;
     }
     if (pad_state.absent && GetTickCount64() < pad_state.absent_next_tick) {
@@ -143,6 +159,31 @@ bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert
 
     *out_forward = forward;
     *out_strafe  = strafe_invert ? -strafe : strafe;
+    return true;
+}
+
+bool pad_stick_take_handback(uint8_t *record, bool stand_mode, float *out_turn,
+                             float *out_forward)
+{
+    float forward;
+
+    pad_stick_poll();
+    if (!pad_stick_is_active() || !stand_mode || record == NULL ||
+        out_turn == NULL || out_forward == NULL) {
+        return false;
+    }
+
+    forward = pad_stick_y();
+    if (forward < 0.0f && forward > -PAD_BACKWARD_THRESHOLD) {
+        forward = 0.0f;
+    }
+
+    /* No sideways component, so the move bits say walk or back-pedal and nothing else. The
+     * sideways deflection leaves here as a turn instead. */
+    strafe_walk_apply_stick_move(record, forward, 0.0f);
+
+    *out_forward = forward;
+    *out_turn    = pad_stick_x();
     return true;
 }
 

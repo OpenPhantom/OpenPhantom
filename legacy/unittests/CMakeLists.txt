@@ -225,6 +225,11 @@ add_unit_test(creeping_mover ground_clip_fix ground_clip_fix/creeping_mover.c)
 # which reads as the engine misbehaving rather than as this module doing it.
 add_unit_test(handback_rule camera_handback_fix camera_handback_fix/handback_rule.c)
 
+# Whether the pad stick may drive at all. It runs every substep of every session, so the
+# unresolved case is the one that matters: too strict there is not a subtle fault, it is a
+# player who cannot move.
+add_unit_test(input_mode enhanced_input enhanced_input/input_mode.c)
+
 # The frame-time governor's one decision. The dead zone between its two thresholds is the property
 # that stops it oscillating, and it is a relationship between two settings rather than anything
 # either says alone, so it is worth a test of its own.

@@ -55,6 +55,10 @@ bool free_look_is_enabled(void);
  * here as well, or the copy stands for the rest of the session and the feature looks dead. */
 void free_look_set_passive_follow(bool enabled);
 
+/* Steering a jump, kept here for the same reason: it is read on the substep clock and must not
+ * reach for the ini there. */
+void free_look_set_air_control(bool enabled);
+
 /* Switches the live control mode. Returns false, changing nothing, when the machinery is not
  * installed: there would be no camera to turn and no honest half of the feature to offer.
  *

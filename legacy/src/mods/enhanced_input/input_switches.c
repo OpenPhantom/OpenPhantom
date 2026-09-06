@@ -153,6 +153,26 @@ void enhanced_input_set_camera_follow(bool enabled)
              "that is behind the direction of travel", enabled ? "on" : "off");
 }
 
+void enhanced_input_set_air_control(bool enabled)
+{
+    if (input_config()->air_control == enabled) {
+        return;
+    }
+
+    input_config_set_air_control(enabled);
+    free_look_set_air_control(enabled);
+
+    if (!ini_write_int(INPUT_SECTION, "AirControl", enabled ? 1 : 0)) {
+        log_warning("steering a jump is now %s, but the setting could not be written to the "
+                    "ini and will be back to its old value on the next launch",
+                    enabled ? "on" : "off");
+        return;
+    }
+    log_info("steering a jump is now %s. It turns the body toward the stick while you are off "
+             "the ground and forces nothing, so the speed you launched with is redirected "
+             "rather than renewed", enabled ? "on" : "off");
+}
+
 void enhanced_input_set_free_look(bool enabled)
 {
     if (free_look_is_enabled() == enabled) {
@@ -191,6 +211,9 @@ void enhanced_input_set_free_look(bool enabled)
     if (!enabled && input_config()->camera_follow) {
         enhanced_input_set_camera_follow(false);
     }
+    if (!enabled && input_config()->air_control) {
+        enhanced_input_set_air_control(false);
+    }
 }
 
 /* --- Strafe and FreeLook, re-read while the game runs -------------------------------------------
@@ -216,14 +239,17 @@ static void poll_switches(void)
     static bool     seen_strafe;
     static bool     seen_free_look;
     static bool     seen_camera_follow;
+    static bool     seen_air_control;
     bool            strafe;
     bool            free_look;
     bool            camera_follow;
+    bool            air_control;
 
     if (!seeded) {
         seen_strafe        = input_config()->strafe;
         seen_free_look     = free_look_is_enabled();
         seen_camera_follow = input_config()->camera_follow;
+        seen_air_control   = input_config()->air_control;
         seeded             = true;
     }
     if (++frames < SWITCH_POLL_FRAMES) {
@@ -234,6 +260,7 @@ static void poll_switches(void)
     strafe        = ini_read_bool(INPUT_SECTION, "Strafe", seen_strafe);
     free_look     = ini_read_bool(INPUT_SECTION, "FreeLook", seen_free_look);
     camera_follow = ini_read_bool(INPUT_SECTION, "CameraFollow", seen_camera_follow);
+    air_control   = ini_read_bool(INPUT_SECTION, "AirControl", seen_air_control);
 
     if (strafe != seen_strafe) {
         seen_strafe = strafe;
@@ -246,6 +273,10 @@ static void poll_switches(void)
     if (camera_follow != seen_camera_follow) {
         seen_camera_follow = camera_follow;
         enhanced_input_set_camera_follow(camera_follow);
+    }
+    if (air_control != seen_air_control) {
+        seen_air_control = air_control;
+        enhanced_input_set_air_control(air_control);
     }
 }
 

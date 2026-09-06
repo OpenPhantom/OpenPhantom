@@ -628,6 +628,10 @@ Only the three modes that are a body in flight with the ordinary integrate under
 scripted jump follows an authored arc and its descriptor skips the steer phase, so it never
 reaches this at all.
 
+There is a row for it in the developer menu's **Utilities**, beside the passive camera's, which
+is the only way to reach it on a handheld: it was a key alone at first, and the one control that
+most needed reaching easily was the one that could not be reached at all.
+
 `AirControlSettleMs` ships at 400 against the body's own 150 on the ground, and
 `AirControlRate` at 180 against 540. The difference is the point: a jump that can be pivoted in
 place is a different game, and this is meant to be a lean.

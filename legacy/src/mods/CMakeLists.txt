@@ -293,6 +293,7 @@ add_engine_fix(dev_overlay
     sensitivity_row.c
     free_look_row.c
     strafe_row.c
+    air_control_row.c
     camera_follow_row.c
     strict_range_row.c
     view_range_row.c

@@ -222,6 +222,11 @@ bool free_look_is_installed(void)
     return free_state.installed;
 }
 
+void free_look_set_air_control(bool enabled)
+{
+    free_state.config.air_control = enabled;
+}
+
 void free_look_set_passive_follow(bool enabled)
 {
     free_state.config.passive_follow = enabled;

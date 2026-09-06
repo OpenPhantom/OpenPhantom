@@ -109,6 +109,11 @@ const input_config_t *input_config(void)
     return &config;
 }
 
+void input_config_set_air_control(bool enabled)
+{
+    config.air_control = enabled;
+}
+
 void input_config_set_camera_follow(bool enabled)
 {
     config.camera_follow = enabled;

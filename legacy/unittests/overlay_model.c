@@ -11,6 +11,15 @@
  * its rows with no site behind them, which is exactly the state a player sees on an unsupported
  * executable. That is worth pinning down: it is the case where the panel must still
  * open and still be usable.
+
+ *
+ * SIZE NOTE: a little over six hundred lines, and it grows by a few every time a row is
+ * added to a panel. Almost all of it is one assertion per row per tab, and each one is
+ * written as a claim in English because this is the only place the panel's intended order,
+ * its captions and its availability rules are stated at all. Splitting it by tab was
+ * considered and refused: the checks that matter most are the ones that compare a row
+ * against its NEIGHBOURS, and those stop being writable once the neighbours live in another
+ * file.
  */
 #include "unittest.h"
 
@@ -376,28 +385,34 @@ int main(void)
              "and is unavailable with strafe off, because the walk never leaves the heading "
              "then, so there would be nothing for the camera to follow");
 
-    ut_check(overlay_model_row(UTIL_ROW(14), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(14), &row) && row.kind == OVERLAY_ROW_CHEAT,
+             "steering a jump sits beside the camera follow, since both are built on free look");
+    ut_check(!row.available,
+             "and is unavailable with strafe off too, because the angle it steers by is built "
+             "from the sideways input and there would be nothing to aim with");
+
+    ut_check(overlay_model_row(UTIL_ROW(15), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Mouse speed") == 0,
              "then the mouse speed, which is here because the game\'s own controls screen no "
              "longer offers it and mouse look still ships on, and which carries that screen\'s "
              "name too");
-    ut_check(overlay_model_row(UTIL_ROW(15), &row) && row.kind == OVERLAY_ROW_SLIDER &&
+    ut_check(overlay_model_row(UTIL_ROW(16), &row) && row.kind == OVERLAY_ROW_SLIDER &&
                  row.available,
              "with a track of its own beneath it, and unlike the field of view it is always "
              "available: both of its ends are fixed, so nothing has to be published first");
 
-    ut_check(overlay_model_row(UTIL_ROW(16), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+    ut_check(overlay_model_row(UTIL_ROW(17), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Show extra menu options (restart the game)") == 0,
              "then the switch that puts all four of those widgets back onto the game\'s own "
              "screens, which ships off so those screens look as they did in 1999");
     ut_check(!row.on,
              "and it reads off with no settings file, matching both of the keys it writes");
 
-    ut_check(overlay_model_row(UTIL_ROW(17), &row) && row.kind == OVERLAY_ROW_VALUE &&
+    ut_check(overlay_model_row(UTIL_ROW(18), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "then the dev menu size, the last of the typed values");
 
-    ut_check(overlay_model_row(UTIL_ROW(18), &row) && row.kind == OVERLAY_ROW_HOTKEY,
+    ut_check(overlay_model_row(UTIL_ROW(19), &row) && row.kind == OVERLAY_ROW_HOTKEY,
              "and the key binding last, a capture rather than a value");
     ut_check(strcmp(row.label, "Key that opens this menu") == 0,
              "named for what it binds, in the words a player would use for it");

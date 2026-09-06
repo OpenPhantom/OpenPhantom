@@ -3,6 +3,7 @@
 
 #include "auto_range_row.h"
 #include "dev_menu_size_row.h"
+#include "air_control_row.h"
 #include "camera_follow_row.h"
 #include "cheats_no_fog.h"
 #include "fog_band_row.h"
@@ -38,6 +39,7 @@ typedef enum utilities_slot {
     UTILITIES_FREE_LOOK,
     UTILITIES_STRAFE,
     UTILITIES_CAMERA_FOLLOW,
+    UTILITIES_AIR_CONTROL,
     UTILITIES_SENSITIVITY,
     UTILITIES_SENSITIVITY_TRACK,
     UTILITIES_MENU_EXTRAS,
@@ -266,6 +268,17 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         out->available = camera_follow_row_available();
         return;
 
+    case UTILITIES_AIR_CONTROL:
+        /* Next to the camera follow because it shares its dependency: both are built on free
+         * look and both switch it on. It is a key as well, but a key alone was no use to the
+         * player who wanted it, since a pad on a handheld has no comfortable way to open an
+         * ini. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "Steer a jump in the air (free look)");
+        out->on = air_control_row_get();
+        out->available = air_control_row_available();
+        return;
+
     case UTILITIES_SENSITIVITY:
         out->kind = OVERLAY_ROW_VALUE;
         /* The name the game's own controls screen gave it, so a reader who has seen that screen
@@ -371,6 +384,11 @@ bool overlay_utilities_toggle(uint32_t slot)
             return false;      /* nothing to follow without strafe; the row already says so */
         }
         return camera_follow_row_set(!camera_follow_row_get());
+    case UTILITIES_AIR_CONTROL:
+        if (!air_control_row_available()) {
+            return false;      /* nothing to steer by without strafe; the row already says so */
+        }
+        return air_control_row_set(!air_control_row_get());
     case UTILITIES_MENU_EXTRAS:
         return menu_extras_row_set(!menu_extras_row_get());
     default:

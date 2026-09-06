@@ -372,6 +372,20 @@ static void __cdecl steer_thunk(void)
     if (pad_driving) {
         steer_forward = pad_stick_y();      /* the RAW component, not the back-pedal deadbanded one:
                                              * facing your travel has no backward case to protect */
+    } else if (air_mode && pad_stick_is_active()) {
+        /* THE VECTOR IS WANTED IN THE AIR TOO, and only the move bits are not.
+         *
+         * pad_stick_take_substep is gated on Stand because that is where it WRITES, and a
+         * forced bit outside Stand is what would lock the crate shove. Reading is a different
+         * question and this used to conflate them, so a jump fell back to the engine's own
+         * degraded read of the same stick. That is coarse everywhere, and on a machine where
+         * the pad reaches XInput but never the engine's WinMM joystick path it is nothing at
+         * all: walking worked and steering a jump did not, on the same stick.
+         *
+         * It polled above whatever it answered, so the vector is already here. Nothing is
+         * written, exactly as before. */
+        steer_forward = pad_stick_y();
+        strafe        = input_config()->strafe_invert ? -pad_stick_x() : pad_stick_x();
     } else {
         uint32_t bits = *(const uint32_t *)(record + PLAYER_MOVE_INPUT);
 

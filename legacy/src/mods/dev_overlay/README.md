@@ -579,11 +579,30 @@ tell in advance: strafe needs mouse look and the keyboard axis reader, because t
 look needs a follow camera that `enhanced_input` recognises. When one is declined it says why in the
 log and the row reads back off on its next rebuild, which is the honest outcome.
 
+**Two rows below those are the pad's, and both are built on free look.** `Camera follows you`
+writes `[enhanced_input] CameraFollow` and `Steer a jump in the air` writes `AirControl`. Each
+**writes `FreeLook=1` with itself**, because both are built on free look turning the body to
+face where it travels: the camera drifts at the body's heading, and the jump is steered by an
+angle measured against the camera. Without free look neither has anything to work with. The
+dependency is one way, so switching either off leaves free look alone, and switching free look
+off takes both down with it.
+
+**The row writes both keys rather than calling the feature**, and that is not tidiness. Free
+look refuses while the player phases are stopped, which is exactly the state the game is in
+while this panel is open, so a row that asked it directly would be refused every time it was
+clicked. Written to the file instead, the once-a-second re-read applies them in its own order
+once play resumes, with the refusal handling it already has.
+
+Both are **unavailable rather than hidden while `Strafe` is off**, because both are steered by
+the sideways input and there would be nothing to aim with.
+
 **All three needed the owning DLL to start reading its own settings back.** Both of those screens
 pushed outward only: they applied a change and then wrote the file, and nothing ever read it. A row
 here would have done nothing until the next launch. `variable_fov` and `enhanced_input` now re-read
 these keys once a second, the way `view_distance_fix` already did, so a row takes effect within the
-second.
+second. **A key is only re-read if it is named in that poll**, which is worth knowing before adding
+a row: one added without it writes the file, nothing reads it back, and the row looks dead until the
+next launch. `CameraFollow` and `AirControl` are both in it.
 
 `Mouse speed` is `[enhanced_input] MouseDegreesPerCount`, named after that screen's caption as
 well, and it has a track too. Unlike the

@@ -87,5 +87,6 @@ const input_config_t *input_config(void);
  * dependency check that the player never asked for. */
 void input_config_set_strafe(bool enabled);
 void input_config_set_camera_follow(bool enabled);
+void input_config_set_air_control(bool enabled);
 
 #endif /* INPUT_CONFIG_H */

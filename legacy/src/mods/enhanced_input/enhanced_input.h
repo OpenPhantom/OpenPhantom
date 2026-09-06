@@ -48,4 +48,8 @@ void enhanced_input_set_free_look(bool enabled);
  * in step with the file when the developer menu writes it mid-session. */
 void enhanced_input_set_camera_follow(bool enabled);
 
+/* Steering a jump. Like the passive camera it is built on free look, and free look switching
+ * off takes it down too. */
+void enhanced_input_set_air_control(bool enabled);
+
 #endif /* ENHANCED_INPUT_H */

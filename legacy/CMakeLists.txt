@@ -27,7 +27,7 @@ enable_language(RC)
 # the build system into the installer would couple two things that are otherwise independent. The
 # comment at AppVer says the same, and the two are kept in step by hand.
 set(OPENPHANTOM_VERSION_MAJOR 1)
-set(OPENPHANTOM_VERSION_MINOR 5)
+set(OPENPHANTOM_VERSION_MINOR 6)
 set(OPENPHANTOM_VERSION_PATCH 0)
 set(OPENPHANTOM_VERSION
     "${OPENPHANTOM_VERSION_MAJOR}.${OPENPHANTOM_VERSION_MINOR}.${OPENPHANTOM_VERSION_PATCH}")

@@ -40,6 +40,7 @@ add_unit_test(strafe_walk enhanced_input
 # shows up over a run of drains with uneven frame times.
 add_unit_test(mouse_look enhanced_input
     enhanced_input/mouse_look.c
+    enhanced_input/frame_clock.c
     enhanced_input/input_gate.c
     enhanced_input/mouse_config.c
     enhanced_input/input_slider.c

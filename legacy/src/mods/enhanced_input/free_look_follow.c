@@ -3,6 +3,7 @@
 
 #include "free_look.h"
 #include "free_look_math.h"
+#include "frame_clock.h"
 #include "mouse_look.h"
 #include "player_record.h"
 #include "strafe_walk.h"
@@ -43,7 +44,7 @@
  * second. That stutter was the other half of the jitter. */
 void free_look_follow_step(free_look_state_t *state, float interpolated)
 {
-    float frame_seconds = mouse_look_frame_seconds();
+    float frame_seconds = frame_clock_seconds();
     float target;
     float step;
 

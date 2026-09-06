@@ -156,6 +156,7 @@
 #include "input_gate.h"
 
 #include "mouse_config.h"
+#include "frame_clock.h"
 #include "mouse_rate.h"
 #include "menu_cursor.h"
 #include "raw_mouse.h"
@@ -292,7 +293,6 @@ typedef struct step_census {
 
 typedef struct mouse_look_state {
     input_axis_fn_t reader;
-    const float    *frame_delta;      /* the engine's own g_frameDelta, read at frame end */
 
     bool  accumulating;               /* the collector is live; false = the degraded path */
     bool  raw_source;                 /* the samples come from raw input, not from the engine */
@@ -615,8 +615,8 @@ static void collect_frame_sample(void)
     float sample = 0.0f;
     float seconds = 0.0f;
 
-    if (mouse_state.frame_delta != NULL) {
-        seconds = *mouse_state.frame_delta;
+    if (frame_clock_seconds() > 0.0f) {
+        seconds = frame_clock_seconds();
     }
 
     /* Read first and unconditionally, whatever happens next. The raw reader CONSUMES, so skipping
@@ -660,22 +660,6 @@ static void collect_frame_sample(void)
 /* g_frameDelta, out of the operand of render_frameEnd's own first instruction. Read rather than
  * hard-coded, and it is the frame time here: the substep driver overwrites that cell with the
  * substep and restores the frame's own value before the frame ends. */
-static const float *resolve_frame_delta(void)
-{
-    uintptr_t site = frame_hook_site();
-    uint32_t  address = 0;
-
-    if (site == 0) {
-        return NULL;
-    }
-    if (!memory_read_u32(site + FRAME_HOOK_FRAME_DELTA_OPERAND_OFFSET, &address) ||
-        !memory_is_inside_image(address, sizeof(float))) {
-        log_warning("g_frameDelta would be at %08X, outside the image", (unsigned)address);
-        return NULL;
-    }
-    return (const float *)(uintptr_t)address;
-}
-
 void mouse_look_install(input_axis_fn_t reader)
 {
     if (reader == NULL) {
@@ -702,8 +686,7 @@ void mouse_look_install(input_axis_fn_t reader)
         return;
     }
 
-    mouse_state.frame_delta = resolve_frame_delta();
-    if (mouse_state.frame_delta == NULL) {
+    if (!frame_clock_install()) {
         /* Without a clock there is no span to measure the rate against AND no way to park the
          * collector during a pause, which is the one state where the axis reader keeps answering a
          * sample nobody refreshed. Both of those are load-bearing, so the bank is not used. */
@@ -834,14 +817,9 @@ float mouse_look_take_substep_degrees(float substep_seconds)
     return degrees;
 }
 
-float mouse_look_frame_seconds(void)
-{
-    return (mouse_state.frame_delta != NULL) ? *mouse_state.frame_delta : 0.0f;
-}
-
 float mouse_look_take_frame_degrees(void)
 {
-    float frame_seconds = (mouse_state.frame_delta != NULL) ? *mouse_state.frame_delta : 0.0f;
+    float frame_seconds = frame_clock_seconds();
 
     if (drop_while_locked()) {
         return 0.0f;

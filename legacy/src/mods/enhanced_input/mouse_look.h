@@ -84,11 +84,6 @@ void mouse_look_install(input_axis_fn_t reader);
  * would be doubled: free look tests mouse_look_is_accumulating() and does not take a second time
  * there. Any future third consumer has to answer the same question. */
 float mouse_look_take_substep_degrees(float substep_seconds);
-/* The engine's own frame delta in seconds, or 0 when the cell did not resolve. This is the
- * RENDER clock, not the 32 Hz simulation one, and anything that moves the camera every drawn
- * frame has to step on it or it staircases. */
-float mouse_look_frame_seconds(void);
-
 float mouse_look_take_frame_degrees(void);
 
 

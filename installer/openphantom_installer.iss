@@ -44,16 +44,24 @@
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
 ;
-; One number for the whole project. The installer and the patch it carries share this version and
-; are released together, which is what has always happened in practice: every patch release to date
-; has an installer release on the same day, twice over on one of them. Two numbers were tracking one
-; event, so PatchVersion in src\openphantom_patch.iss now repeats this one rather than running its
-; own series.
+; THE INSTALLER'S OWN NUMBER, and the last digit counts installer builds. Build a new one, add one:
+; 1.4.1, 1.4.2, and so on. It is not a judgement about how much changed.
 ;
-; The patch's old v0.x line ends at v0.4.0 and joins this one here. It goes up rather than this one
-; coming down, because a version that moves backwards reads as a downgrade in Add/Remove Programs
-; and in the file properties, and would sit below five releases already published.
-#define AppVer "1.7.0"
+; The patch has a number of its own again, 0.4.x, at j0nny's asking. The two were merged into one at
+; 1.5.0 on the reasoning that they had never been released apart; that is being undone rather than
+; argued with, and PatchVersion in src\openphantom_patch.iss carries the patch's line again.
+;
+; THE ONE MERGED RELEASE IS BEING RE-RELEASED INTO THIS LINE. Only i1.5.0 ever shipped under the
+; merged number, and it becomes i1.4.1, so the sequence reads i1.4, i1.4.1, i1.4.2 with no gap and
+; nothing moving backwards. That matters because Inno writes AppVersion into Add/Remove Programs;
+; without the renumbering a 1.4.x installer would have sat below something people already held.
+;
+; Nothing here compares versions. An existing installation is found by AppId and the player is asked
+; what to do with it, so no number decides whether an install is allowed.
+;
+; Tagged i1.4.2, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
+; tagged v0.4.2 on its own line.
+#define AppVer "1.4.2"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"

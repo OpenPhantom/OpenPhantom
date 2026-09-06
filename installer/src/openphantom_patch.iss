@@ -4,14 +4,14 @@
 ; install time. What sits in dist is already only the pieces these rows install: the patch as it
 ; comes out of its release archive, and 33 files of the 851 in VideoLAN's zip.
 
-; PatchVersion records which release dist\patch was taken from. It is the same number as AppVer,
-; because the installer and the patch are one release; see the comment at AppVer for why they were
-; merged and why the patch's old v0.x line joined this one rather than the other way round. Keep the
-; two in step, and nothing derives a URL or a path from either.
+; PatchVersion records which release dist\patch was taken from, on the PATCH's own line, 0.4.x. It
+; is not AppVer: the two numbers were merged at 1.5.0 and have been split again at j0nny's asking,
+; so this counts patch releases while AppVer counts installer builds. Nothing derives a URL or a
+; path from either, and the binaries inside dist\patch carry AppVer's line, not this one.
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "1.7.0"
+#define PatchVersion       "0.4.2"
 #define PatchSrc           "dist\patch"
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the

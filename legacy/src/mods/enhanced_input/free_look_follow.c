@@ -8,7 +8,70 @@
 #include "player_record.h"
 #include "strafe_walk.h"
 
+#include "common/logging.h"
+
 #include <math.h>
+
+
+/* ---- Why the drift stopped ------------------------------------------------------------------
+ *
+ * The arming gate has a transition log of its own and it does not cover this. That log answers
+ * "the camera was released", and the four tests below can all refuse on a frame where the gate is
+ * perfectly armed and free look is still turning the camera by hand. From the player's side the
+ * two are one symptom, the drift stops, so a report of it is exactly as likely to be either, and
+ * a session logged with only the first half can come back silent and cost a test run.
+ *
+ * The hold-off is deliberately NOT one of the states. It changes several times a second while
+ * anybody is looking around, which is the feature working, and logging it would bury the one line
+ * that matters under hundreds that do not. Waiting and stepping are both RUNNING here. */
+typedef enum follow_stall {
+    FOLLOW_RUNNING = 0,     /* stepping, or holding off, which is the same health */
+    FOLLOW_SWITCHED_OFF,
+    FOLLOW_FREE_LOOK_OFF,
+    FOLLOW_AIM_STANCE,
+    FOLLOW_NO_CAMERA_YAW,
+    FOLLOW_FRAME_UNUSABLE
+} follow_stall_t;
+
+static const char *const FOLLOW_STALL_TEXT[] = {
+    "is drifting again",
+    "is switched off",
+    "is idle because free look is off, which it is built on and cannot run without",
+    "is standing off because the aim trigger is held and the body is pointed at the camera",
+    "has no camera yaw to move, so the arming gate has released and its own log names why",
+    "saw a frame it could not use: either no time passed or the gap was long enough to be a "
+    "level load"
+};
+
+/* One line per CHANGE, never one per frame, and capped for the same reason the arming log is:
+ * a player standing exactly on a boundary can flip this every frame, and then the COUNT is the
+ * finding rather than any one line. */
+#define FOLLOW_STALL_LINES 200
+
+static struct {
+    follow_stall_t last;
+    int            lines;
+} stall_log = { FOLLOW_RUNNING, 0 };
+
+static void note_stall(const free_look_state_t *state, follow_stall_t stall)
+{
+    if (!state->config.log_transitions || stall == stall_log.last) {
+        return;
+    }
+    stall_log.last = stall;
+
+    stall_log.lines++;
+    if (stall_log.lines > FOLLOW_STALL_LINES) {
+        if (stall_log.lines == FOLLOW_STALL_LINES + 1) {
+            log_warning("the passive camera has changed state %d times and reports no more this "
+                        "session. A count that high is itself the finding: it is flapping rather "
+                        "than stopping, and the lines above name what between",
+                        FOLLOW_STALL_LINES);
+        }
+        return;
+    }
+    log_info("the passive camera %s", FOLLOW_STALL_TEXT[stall]);
+}
 
 
 /* THE PASSIVE CAMERA: one damped step toward the body, once per DRAWN FRAME.
@@ -48,13 +111,28 @@ void free_look_follow_step(free_look_state_t *state, float interpolated)
     float target;
     float step;
 
-    if (!state->config.passive_follow || !free_look_is_enabled() ||
-        free_look_aim_stance() || !state->camera_yaw_valid) {
+    if (!state->config.passive_follow) {
+        note_stall(state, FOLLOW_SWITCHED_OFF);
+        return;
+    }
+    if (!free_look_is_enabled()) {
+        note_stall(state, FOLLOW_FREE_LOOK_OFF);
+        return;
+    }
+    if (free_look_aim_stance()) {
+        note_stall(state, FOLLOW_AIM_STANCE);
+        return;
+    }
+    if (!state->camera_yaw_valid) {
+        note_stall(state, FOLLOW_NO_CAMERA_YAW);
         return;
     }
     if (!(frame_seconds > 0.0f) || !(frame_seconds < 0.5f)) {
-        return;                 /* no time passed, or a hitch long enough to be a level load */
+        /* No time passed, or a hitch long enough to be a level load. */
+        note_stall(state, FOLLOW_FRAME_UNUSABLE);
+        return;
     }
+    note_stall(state, FOLLOW_RUNNING);
 
     if (state->look_seen) {
         state->look_seen         = false;

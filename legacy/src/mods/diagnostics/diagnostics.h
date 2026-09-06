@@ -48,6 +48,11 @@ typedef struct diagnostics_config {
      * few once the count passes a threshold. See diag_projectiles.c's own header. */
     int  projectiles;         /* 1 = on, no further levels                                      */
 
+    /* Every time a script takes the camera away from the player and every time one gives it
+     * back, with the caller that asked. A take that is never released strands the camera on a
+     * shot the player has walked away from until the level reloads. See diag_camera_owner.c. */
+    int  camera_owner;        /* 1 = on, no further levels                                      */
+
     /* The engine's own character pool, walked read only: who is standing near the player, what the
      * engine calls them, and whether they are gaining or losing height. See diag_characters.c. */
     int  characters;          /* 1 = the ones near the player, 2 = every live one               */

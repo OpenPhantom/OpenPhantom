@@ -54,6 +54,7 @@ typedef struct diagnostics_config {
     int  characters_radius;   /* world units around the player that level 1 reports             */
     char characters_watch[16];/* a character name: put a hardware write watch on it              */
     int  characters_watch_velocity; /* 1 = watch its velocity Z, 0 = its position Z             */
+    int  player_body_watch;         /* watch the player's DRAWN body height, not a character */
 
     int  audio_census_ms;     /* >0: list the occupied sound channels every N ms                */
     int  max_lines_per_second;

@@ -128,7 +128,29 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x3C, 0x85, 0x28, 0x52, 0x4B, 0x00, 0x01, 0x0F, 0x84, 0x95, 0x00, 0x00,
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
+/* SEARCHED AS A DETOUR TARGET even though nothing here hooks it, and that is the whole of why
+ * this census used to switch itself off.
+ *
+ * diag_flow.c detours this same function, and with [diagnostics] Player=1 it gets there
+ * first: the prologue is replaced by a jump before this table is resolved, so a search for
+ * the prologue found nothing and the census declined with a warning that named the symptom
+ * rather than the cause. Searching as a detour target finds the site by its tail instead,
+ * which is what every other already-detoured site in this project does.
+ *
+ * The operand read below is at +0x27, well past the six bytes a detour overwrites, so the
+ * address it yields is the same either way. */
+#define PLAYER_RUN_PHASES_PROLOGUE 6u
 #define OFFSET_PLAYER_POINTER 0x27u
+
+/* THE DRAWN BODY, which is a different object from the record that owns it.
+ *
+ * The player record holds its body at +0x0C, and a bapObj carries its own world position at
+ * +0x18. That position is what the frame arm draws from, and it is NOT the position the
+ * simulation keeps: on a level whose player phases never run, nothing copies one onto the
+ * other, so the body can walk away from the record and the record never knows. Watching the
+ * body's Z is the only way to name the instruction doing it. */
+#define PLAYER_RECORD_BODY_OFFSET 0x0Cu
+#define BODY_POSITION_OFFSET      0x18u
 
 enum {
     SITE_CHARACTER_POOL,
@@ -138,7 +160,8 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("character_pool", SIG_CHARACTER_POOL, MASK_CHARACTER_POOL),
-    SIGNATURE_ENTRY("player_run_phases", SIG_PLAYER_RUN_PHASES)
+    SIGNATURE_ENTRY_DETOUR("player_run_phases", SIG_PLAYER_RUN_PHASES,
+                           PLAYER_RUN_PHASES_PROLOGUE)
 };
 
 #define CHARACTER_NAME_OFFSET    0x04u
@@ -188,6 +211,7 @@ typedef struct character_census {
     uint32_t  frame_count;
     uint32_t *pool_slot;           /* the global that holds the pool pointer */
     uint32_t *player_slot;         /* the global that holds the player pointer */
+    int       watch_body;          /* arm on the player's BODY height instead of a character */
     uint32_t  tracked_pool;        /* the pool the table below belongs to */
     char      watch_name[16];      /* empty: watch nothing */
     bool      watch_velocity;      /* watch the velocity Z rather than the position Z */
@@ -327,6 +351,30 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     return true;
 }
 
+/* Arms the write watch on the player's own drawn body rather than on a character.
+ *
+ * Two hops, and each can fail on a frame where no level is up: the player pointer out of the
+ * global the census already derives, then the body out of the record. Four bytes at the body's
+ * Z, because the four watchable bytes have to be exactly the four being written or the report
+ * names the wrong instruction. */
+static void arm_body_watch(void)
+{
+    uint32_t record = 0;
+    uint32_t body   = 0;
+
+    if (character_census.player_slot == NULL ||
+        !memory_try_read((uintptr_t)character_census.player_slot, &record, sizeof(record)) ||
+        record == 0) {
+        return;
+    }
+    if (!memory_try_read((uintptr_t)record + PLAYER_RECORD_BODY_OFFSET, &body, sizeof(body)) ||
+        body == 0) {
+        return;
+    }
+    (void)diag_write_watch_arm((uintptr_t)body + BODY_POSITION_OFFSET + (2u * sizeof(float)),
+                               "the player's drawn body, position Z");
+}
+
 static void character_census_tick(void)
 {
     uint32_t pool = 0;
@@ -349,8 +397,13 @@ static void character_census_tick(void)
 
     /* Prepared from here because this callback runs on the simulation thread, which is the only
        thread whose debug registers are worth anything. */
-    if (character_census.watch_name[0] != '\0' && !character_census.watch_prepared) {
+    if ((character_census.watch_name[0] != '\0' || character_census.watch_body) &&
+        !character_census.watch_prepared) {
         character_census.watch_prepared = diag_write_watch_prepare();
+    }
+    if (character_census.watch_body && character_census.watch_prepared &&
+        !diag_write_watch_is_armed()) {
+        arm_body_watch();
     }
     diag_write_watch_report();
 
@@ -421,11 +474,13 @@ static void character_census_tick(void)
 }
 
 int diag_characters_install(int characters_level, int radius, const char *watch_name,
-                            int watch_velocity)
+                            int watch_velocity, int watch_body)
 {
     if (characters_level <= 0) {
         return 0;
     }
+
+    character_census.watch_body = watch_body;
 
     signature_resolve_table(sites, SITE_COUNT);
 

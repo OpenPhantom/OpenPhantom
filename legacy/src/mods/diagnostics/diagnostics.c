@@ -84,6 +84,8 @@ static void load_config(void)
                           sizeof(diagnostics_state.characters_watch));
     diagnostics_state.characters_watch_velocity =
         ini_read_bool(DIAGNOSTICS_SECTION, "CharacterWatchVelocity", false) ? 1 : 0;
+    diagnostics_state.player_body_watch =
+        ini_read_bool(DIAGNOSTICS_SECTION, "PlayerBodyWatch", false) ? 1 : 0;
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
@@ -179,7 +181,8 @@ void diagnostics_install(void)
     observers += diag_characters_install(diagnostics_state.characters,
                                          diagnostics_state.characters_radius,
                                          diagnostics_state.characters_watch,
-                                         diagnostics_state.characters_watch_velocity);
+                                         diagnostics_state.characters_watch_velocity,
+                                         diagnostics_state.player_body_watch);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

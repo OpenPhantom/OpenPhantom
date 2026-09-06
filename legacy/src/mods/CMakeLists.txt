@@ -281,6 +281,15 @@ add_engine_fix(dialogue_anim_fix
 )
 target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 
+# A spoken line that names a camera group takes the camera and the dialogue only gives it back
+# when a choice MENU was open, which an ordinary line never has. The camera then stays on that
+# shot until the level is reloaded. Found in Otoh Gunga, present in every level that talks.
+add_engine_fix(camera_handback_fix
+    dll_main.c
+    camera_handback_fix.c
+    handback_rule.c
+)
+
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c

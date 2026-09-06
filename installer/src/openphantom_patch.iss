@@ -92,6 +92,7 @@ Name: "patch\variable_fov";        Description: "{cm:CompFov}";         Types: e
 Name: "patch\hud_ratio_scaling";   Description: "{cm:CompHud}";         Types: everything full custom
 Name: "patch\decal_fix";           Description: "{cm:CompDecal}";       Types: everything full custom
 Name: "patch\dialogue_anim_fix";   Description: "{cm:CompDialogueAnim}"; Types: everything full custom
+Name: "patch\camera_handback_fix"; Description: "{cm:CompCameraHandback}"; Types: everything full custom
 Name: "patch\view_distance_fix";   Description: "{cm:CompViewDist}";    Types: everything full custom
 
 ; ---- offered ---------------------------------------------------------------------------------------
@@ -217,6 +218,8 @@ Source: "{#PatchSrc}\mods\decal_fix.dll";           DestDir: "{app}\mods"; \
     Components: patch\decal_fix;           Flags: ignoreversion
 Source: "{#PatchSrc}\mods\dialogue_anim_fix.dll";   DestDir: "{app}\mods"; \
     Components: patch\dialogue_anim_fix;   Flags: ignoreversion
+Source: "{#PatchSrc}\mods\camera_handback_fix.dll"; DestDir: "{app}\mods"; \
+    Components: patch\camera_handback_fix; Flags: ignoreversion
 Source: "{#PatchSrc}\mods\render_guard.dll";        DestDir: "{app}\mods"; \
     Components: patch\render_guard;        Flags: ignoreversion
 ; effect_clock is part of framerate_fix rather than a choice of its own: at 30 fps it changes nothing

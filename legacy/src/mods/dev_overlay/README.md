@@ -672,6 +672,26 @@ both things at once rather than one of them.
 arrows, which drive the panel itself, and F4, so that Alt+F4 stays a way to quit. Keys the game uses
 are allowed, and both things then happen.
 
+## The subtitle size row
+
+Directly above the dev menu size, and it edits `[enhanced_resolution] SubtitleScale`: how big the
+subtitles are, as a multiple of the size they have at 640x480. Typed in like the rows above it, with
+the band in the label, and **dragged on the track beneath it**.
+
+**A track is right here, unlike the panel's own size.** That one was tried and taken back out,
+because dragging it moved the panel being dragged. This changes text somewhere else on the screen,
+which is exactly what a slider is for: bring up a line of dialogue and drag until it reads well.
+
+**It goes through the ini, like the rows beside it.** The setting belongs to
+`enhanced_resolution.dll`, feature DLLs here never depend on each other at run time, and either can
+be deleted from `mods\` without breaking the other. That DLL re-reads the key once a second, so a
+drag shows up on the next subtitle drawn.
+
+**`0` is not shown and cannot be dragged to.** It is that DLL's spelling for "leave the engine's own
+shrinking size alone", it sits outside the band this row offers, and there is no honest place to put
+a handle for it. The row reports the default instead, and anyone who wants the engine's behaviour
+back sets `0` in the file, where the comment explains it.
+
 ## The dev menu size row
 
 The last row but one under **Utilities** edits `[dev_overlay] DevMenuSize`, which is how much bigger

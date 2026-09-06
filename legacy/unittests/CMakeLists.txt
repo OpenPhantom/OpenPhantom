@@ -183,6 +183,7 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/strict_range_row.c
     dev_overlay/view_range_row.c
     dev_overlay/dev_menu_size_row.c
+    dev_overlay/subtitle_size_row.c
     dev_overlay/cheats_original.c
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c

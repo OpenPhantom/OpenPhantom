@@ -15,6 +15,7 @@
 #include "open_key_row.h"
 #include "strafe_row.h"
 #include "strict_range_row.h"
+#include "subtitle_size_row.h"
 #include "overlay_key_name.h"
 #include "view_range_live_row.h"
 #include "view_range_row.h"
@@ -43,6 +44,8 @@ typedef enum utilities_slot {
     UTILITIES_SENSITIVITY,
     UTILITIES_SENSITIVITY_TRACK,
     UTILITIES_MENU_EXTRAS,
+    UTILITIES_SUBTITLE_SIZE,
+    UTILITIES_SUBTITLE_SIZE_TRACK,
     UTILITIES_DEV_MENU_SIZE,
     UTILITIES_OPEN_KEY
 } utilities_slot_t;
@@ -311,6 +314,27 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         out->on = menu_extras_row_get();
         return;
 
+    case UTILITIES_SUBTITLE_SIZE:
+        out->kind = OVERLAY_ROW_VALUE;
+        /* Named for what it changes rather than for the key it writes, with the band in the label
+         * so it need not be found by having a value refused. */
+        copy_label(out->label, "Subtitle size (0.50 to 3.0)");
+        fill_typed(out, editing_text, subtitle_size_row_format, subtitle_size_row_get());
+        return;
+
+    case UTILITIES_SUBTITLE_SIZE_TRACK: {
+        const float value = subtitle_size_row_get();
+
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        /* No availability test: both ends are fixed, so unlike the field of view nothing has to be
+         * published by another DLL first. With enhanced_resolution absent the drag writes a key
+         * nothing reads, which is how every cross-DLL row here already behaves. */
+        out->fraction = (value - SUBTITLE_SIZE_MIN) / (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
+        clamp_fraction(out);
+        return;
+    }
+
     case UTILITIES_DEV_MENU_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
         copy_label(out->label, "Dev menu size (0.33 to 4.0)");
@@ -353,6 +377,7 @@ bool overlay_utilities_row_is_value(uint32_t slot)
            slot == (uint32_t)UTILITIES_FOG_BAND ||
            slot == (uint32_t)UTILITIES_FOV ||
            slot == (uint32_t)UTILITIES_SENSITIVITY ||
+           slot == (uint32_t)UTILITIES_SUBTITLE_SIZE ||
            slot == (uint32_t)UTILITIES_DEV_MENU_SIZE;
 }
 
@@ -417,6 +442,8 @@ bool overlay_utilities_commit(uint32_t slot, const char *text)
         return fov_row_parse(text, &parsed) && fov_row_set(parsed);
     case UTILITIES_SENSITIVITY:
         return sensitivity_row_parse(text, &parsed) && sensitivity_row_set(parsed);
+    case UTILITIES_SUBTITLE_SIZE:
+        return subtitle_size_row_parse(text, &parsed) && subtitle_size_row_set(parsed);
     case UTILITIES_DEV_MENU_SIZE:
         return dev_menu_size_row_parse(text, &parsed) && dev_menu_size_row_set(parsed);
     default:
@@ -470,6 +497,15 @@ bool overlay_utilities_slider_set(uint32_t slot, float fraction)
          * somebody can tell apart from the one beside it. */
         return sensitivity_row_set(SENSITIVITY_MIN +
                                    fraction * (SENSITIVITY_MAX - SENSITIVITY_MIN));
+    }
+    if ((utilities_slot_t)slot == UTILITIES_SUBTITLE_SIZE_TRACK) {
+        /* The same hundredth grid the draw distance uses, and for the same reason: the row beside
+         * this one shows two decimals, so a drag writing more would disagree with the text it is
+         * meant to be setting. */
+        float scale = SUBTITLE_SIZE_MIN + fraction * (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
+
+        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
+        return subtitle_size_row_set(scale);
     }
     if ((utilities_slot_t)slot != UTILITIES_FOV_TRACK) {
         return false;

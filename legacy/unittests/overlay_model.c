@@ -409,10 +409,17 @@ int main(void)
              "and it reads off with no settings file, matching both of the keys it writes");
 
     ut_check(overlay_model_row(UTIL_ROW(18), &row) && row.kind == OVERLAY_ROW_VALUE &&
+                 strcmp(row.label, "Subtitle size (0.50 to 3.0)") == 0,
+             "the subtitle size, named for what it changes rather than for the key it writes");
+    ut_check(overlay_model_row(UTIL_ROW(19), &row) && row.kind == OVERLAY_ROW_SLIDER,
+             "with a track of its own beneath it: unlike the panel's own size, this "
+             "one moves text somewhere else on the screen, which is what a slider is for");
+
+    ut_check(overlay_model_row(UTIL_ROW(20), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
              "then the dev menu size, the last of the typed values");
 
-    ut_check(overlay_model_row(UTIL_ROW(19), &row) && row.kind == OVERLAY_ROW_HOTKEY,
+    ut_check(overlay_model_row(UTIL_ROW(21), &row) && row.kind == OVERLAY_ROW_HOTKEY,
              "and the key binding last, a capture rather than a value");
     ut_check(strcmp(row.label, "Key that opens this menu") == 0,
              "named for what it binds, in the words a player would use for it");

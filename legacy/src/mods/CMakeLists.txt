@@ -313,6 +313,7 @@ add_engine_fix(dev_overlay
     strict_range_row.c
     view_range_row.c
     dev_menu_size_row.c
+    subtitle_size_row.c
     overlay_model.c
     overlay_draw.c
     overlay_sites.c

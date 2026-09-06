@@ -12,7 +12,8 @@
  *     riderPos = R * (riderPos - pivot) + pivot + translationDelta
  *
  * and the numbers coming out of it are real work rather than noise: the mover's pose advances about
- * 0.45 of its 29 units of travel every tick, its rotation delta is exactly zero, and its translation
+ * 0.45 of its 29 units of travel every tick, its rotation delta is exactly zero, and its
+ * translation
  * delta is a steady -0.0008 in Z. Over the full run that is the five centimetres, and the carry is
  * faithfully applying it. Nothing afterwards puts the character back: the tick re-probes the floor
  * immediately after the carry, but only stores the result, so the descent stands.

@@ -113,9 +113,10 @@ characters riding it down is the game working as built; it simply reads as sinki
 the fall from five centimetres to one and a half rather than stopping it, because
 `move_snapToGround` pulls an actor onto any floor within 0.35 units below their feet, every tick,
 and the crusher's polygon is that floor. A character released by the carry is snapped straight back
-down onto it. So the ground snap exempts a character standing on a crusher, which is the shape that
-function already uses: it exempts a corpse and anything with a move mode of 2 or more outright, and
-both keep their authored Z.
+down onto it. So the ground snap exempts a character standing on the same mover the carry refused,
+recognised by id, because the snap is handed no delta of its own and cannot measure the rate itself.
+That is the shape the function already uses: it exempts a corpse and anything with a move mode of 2
+or more outright, and both keep their authored Z.
 
 An earlier attempt guarded the wrong invariant, refusing to leave a rider below the floor its own
 contact had selected. It never fired once, and that is itself the evidence: the floor under them

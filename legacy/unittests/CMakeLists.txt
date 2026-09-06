@@ -217,6 +217,7 @@ add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
 # live level rather than invented, and the case that must NOT change, a collision tested character
 # keeping its velocity, matters as much as the case that must.
 add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
+add_unit_test(creeping_mover ground_clip_fix ground_clip_fix/creeping_mover.c)
 
 # The frame-time governor's one decision. The dead zone between its two thresholds is the property
 # that stops it oscillating, and it is a relationship between two settings rather than anything

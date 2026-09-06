@@ -71,6 +71,7 @@
 #include "ground_clip_fix.h"
 
 #include "move_mode.h"
+#include "rider_floor.h"
 
 #include "common/detour.h"
 #include "common/host_image.h"
@@ -264,4 +265,9 @@ void ground_clip_fix_install(void)
     log_info("armed on the contact handler at %08X, reading the contacted body from %08X: a "
              "contact can no longer push a character the engine does not collision test",
              (unsigned)sites[SITE_CONTACT].address, (unsigned)(uintptr_t)clip_state.body_slot);
+
+    /* The second route to the same wrong outcome, and independent of the first: a character
+     * carried by a mover rather than pushed by a contact. Installed after it, and optional,
+     * so a failure there leaves the contact guard standing. */
+    (void)rider_floor_install();
 }

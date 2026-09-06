@@ -182,6 +182,7 @@ add_engine_fix(ground_clip_fix
     dll_main.c
     ground_clip_fix.c
     move_mode.c
+    rider_floor.c
 )
 
 add_engine_fix(sound_lifetime_fix

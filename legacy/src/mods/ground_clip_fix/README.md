@@ -67,11 +67,66 @@ It restores the previous value rather than zero, so a flying character contacted
 the course it arrived with instead of stopping dead. Everything else the handler does, damage
 included, is left exactly as the engine wrote it.
 
+## The second route: a crusher takes its riders down with it
+
+Found in the final level's opening cutscene, where two characters stand still and descend five
+centimetres into the floor over about two seconds, then return to it when the cutscene ends and the
+script repositions them. Nothing in this project causes it: it happens with every mod disabled, and
+it is identical at 30 frames a second and at 100.
+
+**What is under them is a crusher.** Mover 87 in that level is a `kMover_Kervorkian`, and one of its
+collision polygons sits at floor height in that room. The floor probe selects it as the surface they
+are standing on, so when the mover runs its 29 units of travel they ride it down through the floor
+that is actually drawn there. A hardware write watch named every writer of their height, which is
+how the mover was identified rather than guessed at.
+
+**The carry is not doing anything wrong.** Its numbers are real work: the pose advances about 0.45
+of its travel each tick, the rotation delta is exactly zero, and the translation delta is a steady
+-0.0008 in Z. That is also exactly what a genuinely descending platform looks like, so the
+translation cannot be refused on its own account without freezing every rider on every lift.
+
+**The mover's type is not the test, and assuming it was would have broken real platforms.** The
+first version refused every carry a crusher made. Decoding every shipped level's animated-object
+records showed why that was wrong: there are about sixty four crushers in the game, and fifteen of
+them carry walkable faces and descend. Several are plainly transport, including an articulated
+ninety unit lift in BIGCITY.
+
+**What separates them is the rate, and the levels separate cleanly.** Units of descent per tick:
+
+| | units per tick |
+|---|---|
+| FINAL 87, the one at fault | 0.00081 |
+| slowest genuine platform (BIGCITY 76, GUNGA 4, BIGCITY 65) | 0.03233 |
+| fastest (BIGCITY 49, the ninety unit lift) | 0.58195 |
+
+A factor of forty, with nothing in between. So the test is what the mover is *doing*: one creeping
+down at less than a fiftieth of a unit a tick is transporting nobody anywhere, and the only thing
+carrying a rider on it achieves is to sink them. The limit sits six times above the fault and six
+times below the slowest real platform, so neither side is near it, and a crusher moving upward is
+left alone regardless.
+
+FINAL 87's five centimetre displacement is byte-proven in the level and matches the rate measured in
+the running game, so the level really does author a floor panel that drops five centimetres. The
+characters riding it down is the game working as built; it simply reads as sinking.
+
+**Both routes have to be closed, and this cost a wrong fix first.** Refusing the carry alone reduced
+the fall from five centimetres to one and a half rather than stopping it, because
+`move_snapToGround` pulls an actor onto any floor within 0.35 units below their feet, every tick,
+and the crusher's polygon is that floor. A character released by the carry is snapped straight back
+down onto it. So the ground snap exempts a character standing on a crusher, which is the shape that
+function already uses: it exempts a corpse and anything with a move mode of 2 or more outright, and
+both keep their authored Z.
+
+An earlier attempt guarded the wrong invariant, refusing to leave a rider below the floor its own
+contact had selected. It never fired once, and that is itself the evidence: the floor under them
+descends with them, so by that measure nothing was ever wrong.
+
 ## Configuration: `[ground_clip_fix]`
 
 | Key | Default | Meaning |
 |---|---|---|
 | `Enabled` | `1` | off leaves the engine's own behaviour, and says so in the log |
+| `CrusherCarry` | `1` | guard both routes by which a crusher takes a character down with it. Off restores the engine's own behaviour, including the descent through the floor. Installed both-or-neither: either half alone leaves the fault in place, so a partial install would report success and change nothing |
 
 ## Engine locations
 

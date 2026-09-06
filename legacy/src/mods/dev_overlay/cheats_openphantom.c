@@ -378,6 +378,7 @@ bool cheats_openphantom_install(void)
     own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].name = "One-shot NPCs (your damage)";
     own_state.cheats[CHEATS_OWN_GIANT_PLAYER].name = "Giant player";
     own_state.cheats[CHEATS_OWN_TINY_PLAYER].name = "Tiny player";
+    own_state.cheats[CHEATS_OWN_NOCLIP].name = "No clip";
     own_state.cheats[CHEATS_OWN_JUMP_BOOST].name = "Jump boost";
     own_state.cheats[CHEATS_OWN_FREECAM].name = "Free camera";
 
@@ -399,6 +400,7 @@ bool cheats_openphantom_install(void)
     install_player_scale();
     install_jump_boost();
     install_fall_punishment_immunity();
+    install_noclip();
 
     if (install_freecam()) {
         own_state.cheats[CHEATS_OWN_FREECAM].available = true;
@@ -409,8 +411,9 @@ bool cheats_openphantom_install(void)
 
     own_state.installed = true;
 
-    /* All six stand for the life of the process whether used or not: each detour costs one
-     * comparison per call while off, and the fog tick costs one comparison per frame while off.
+    /* Every one of them stands for the life of the process whether used or not: each detour
+     * costs one comparison per call while off, and the fog tick costs one comparison per
+     * frame while off.
      * That is the price of being able to switch any of them from the panel at any moment. If none
      * resolved there is nothing to switch, and the caller says so once. */
     return own_state.cheats[CHEATS_OWN_UNLIMITED_AMMO].available ||
@@ -419,6 +422,7 @@ bool cheats_openphantom_install(void)
            own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].available ||
            own_state.cheats[CHEATS_OWN_GIANT_PLAYER].available ||
            own_state.cheats[CHEATS_OWN_TINY_PLAYER].available ||
+           own_state.cheats[CHEATS_OWN_NOCLIP].available ||
            own_state.cheats[CHEATS_OWN_JUMP_BOOST].available ||
            own_state.cheats[CHEATS_OWN_FREECAM].available ||
            cheats_no_fog_is_available();
@@ -486,6 +490,19 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
             own_state.cheats[CHEATS_OWN_TINY_PLAYER].on = false;
         } else if (id == CHEATS_OWN_TINY_PLAYER) {
             own_state.cheats[CHEATS_OWN_GIANT_PLAYER].on = false;
+        }
+        /* Free camera and no clip are mutually exclusive for a harder reason than
+         * giant and tiny above, which merely look wrong together. These two both write the
+         * player's POSITION, from the same per-frame site, in the same frame. Free camera freezes
+         * the simulation and, on the way out, teleports the player to where the camera was; the
+         * glide holds the player's height every frame. Left on together the glide would fight the
+         * teleport it knows nothing about, and the position the player ends up at would depend on
+         * which of them wrote last. Whichever is switched on wins outright and the other goes off,
+         * so there is never a frame with two owners of one field. */
+        if (id == CHEATS_OWN_FREECAM) {
+            own_state.cheats[CHEATS_OWN_NOCLIP].on = false;
+        } else if (id == CHEATS_OWN_NOCLIP) {
+            own_state.cheats[CHEATS_OWN_FREECAM].on = false;
         }
     }
     return own_state.cheats[id].on;

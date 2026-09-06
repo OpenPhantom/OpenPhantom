@@ -108,12 +108,12 @@ character of every search. A click inside the field is what starts focus now, an
 it, or opening the panel fresh, ends it; the field's border and caret are only drawn while focused,
 so the box never looks ready to type into before it is.
 
-## The eight cheats this project adds
+## The nine cheats this project adds
 
 In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **Invincible
-NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **Jump boost** and
-**Free camera**. They need fewer engine sites than that, because several pairs are two answers to
-one question and share a single detour.
+NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **No clip**,
+**Jump boost** and **Free camera**. They need fewer engine sites than that, because
+several pairs are two answers to one question and share a single detour.
 
 **No fog was a ninth and now lives under Utilities**, at the head of the fog settings. It is still
 the same code in `cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A
@@ -243,6 +243,82 @@ after the call returns for something that has nothing to do with rendering. So s
 place also scales the force-push ability's reach and power. A local-copy version that left the
 caller's numbers alone was written and worked, and was reverted: combat is not meaningfully
 usable at either scale anyway, so the extra copy bought correctness nothing was asking for.
+
+### No clip
+
+Everything the player can be stopped by, except the floor. `cheats_noclip.c` owns it, across five
+small hooks and one per-frame tick.
+
+**This is not the noclip this project removed.** That one detoured `0x0044C36D`, which turns out
+not to be a collision routine at all: it is phase 9 of the player's own locomotion phase table.
+Suppressing it suppressed a whole phase of a state machine, only while the dispatch happened to be
+in that phase, and the floor went with it. Everything recorded against it, falling through
+modelled floors most of all, followed from the site rather than from the idea.
+
+**Five things can stop the player, and each needed its own site.** Four of the five were found by
+measuring the running game rather than by reading it, which is why they are listed here: the set
+is not recoverable from any one of them.
+
+| what stops you | site | what it is |
+|---|---|---|
+| walls, on the ground | `0x0040C1AE` | the universal wall raycast |
+| walls, in the air | `0x0040C870` | its stationary sibling, which the airborne tick uses instead |
+| air-block fences and low ceilings | `0x0044C59D` | `Plr_AirMoveGate`, the veto on a move made in the air |
+| edges catching you as you pass | `0x0044C78E` | phase 8 of mode Fall, the ledge grab |
+| people | `0x004131EB` | `bapobj_cylinderPush`, bodies being solid to each other |
+
+That the set is complete is checkable rather than hopeful: every write of zero into the player's
+moved flag was enumerated in the image, eleven sites in all. Four are the ones above, three are
+irrelevant (death, the tripod turret, non-player code) and the rest were already covered.
+
+**The floor is a different function and is never touched.** `bapmap_probeFloor` is not on this
+list and nothing here goes near it, which is what keeps the player standing on ground throughout.
+
+**The air-block fences are not a rare case**, which is why the third hook matters: 73,360 faces
+across the eleven levels carry that flag, 22 per cent of every face in the game, and another
+29,968 carry the low-ceiling one. Without that hook clipping works on the ground and then stops
+working the moment the player leaves it.
+
+**The ledge grab was the subtlest.** It is not a collision test at all, so no wall probe can reach
+it: it looks half a unit ahead for an edge and puts the player on it. A glide keeps the player in
+mode Fall the whole time they are clipping, so every edge they pass is a candidate, and the walls
+that appeared not to work were the ones with a grabbable lip. They were not being blocked, they
+were being caught.
+
+**People are not geometry.** A character in a doorway is a cylinder, not a polygon, so no wall
+probe could ever see one. NPCs stay solid to each other; only the player stops being part of the
+crowd. An NPC walking into the player can still shove them, left alone deliberately because
+suppressing it means reaching into everyone else's collision loop to hide one body from it.
+
+**The glide is what stops the player falling out of the world.** Beyond a wall there is often no
+floor at all, because geometry is only modelled where the player was meant to go, so a working
+floor probe correctly reports none and gravity does the rest. Height is therefore held for exactly
+as long as there is nothing to stand on, and released the moment there is, so ordinary movement
+over real floor is not touched at all. "Nothing to stand on" means nothing within a sane drop
+rather than nothing whatsoever, because a lower storey far below is not somewhere to be set down.
+
+**NPCs and the AI stay solid to the world.** They walk the same wall raycast for their locomotion,
+line of sight and path checks, so every hook answers only for the player, identified by the
+address of a field in the one player record rather than by any position value.
+
+**Buttons and push blocks still work**, because those probes ask the same function a different
+question, looking for a face to act on rather than one to be stopped by, and are excluded by mask.
+
+**Free camera and this are mutually exclusive.** Both write the player's position from the same
+per-frame site in the same frame: free camera freezes the simulation and teleports the player to
+the camera on the way out, and this holds the player's height every frame. Switching either on
+turns the other off, and this one also declines to act while the camera is flying, since the
+toggle rule can be bypassed by a saved state or a level change and the check costs a comparison.
+Free camera is the one that wins, because it is the one you cannot leave without its own hotkey.
+
+**Four of the five hooks are optional.** Only the ground wall probe is required; if any of the
+others stops resolving the cheat loses that one behaviour and says so in the log, rather than
+disappearing. An earlier build made one of them required and a signature that matched two
+functions instead of one took the whole cheat down with it.
+
+**A doors-only variant was built, tested and dropped.** It identified a door leaf by the mover
+owning the polygon, which worked and was proven against the shipped levels. It is described at the
+head of `cheats_noclip.c` with what bringing it back would need.
 
 ### Jump boost
 

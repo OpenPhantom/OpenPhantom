@@ -1,6 +1,6 @@
-/* cheats_openphantom.h: the eight codes this project adds: unlimited ammunition, unlimited
- * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, jump boost, and free
- * camera.
+/* cheats_openphantom.h: the nine codes this project adds: unlimited ammunition, unlimited
+ * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip,
+ * jump boost, and free camera.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -128,6 +128,7 @@ typedef enum cheats_own_id {
     CHEATS_OWN_ONE_SHOT_NPCS,
     CHEATS_OWN_GIANT_PLAYER,
     CHEATS_OWN_TINY_PLAYER,
+    CHEATS_OWN_NOCLIP,
     CHEATS_OWN_JUMP_BOOST,
     CHEATS_OWN_FREECAM,   /* MUST stay last; overlay_model.c's row layout relies on it, and its
                             * own _Static_assert fails the build if this ever stops being true */

@@ -188,10 +188,11 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
     # The cheats were split by responsibility when cheats_openphantom.c passed twice the size this
-    # project allows. They still share one state record, so the test links all five together.
+    # project allows. They still share one state record, so the test links them all together.
     dev_overlay/cheats_npc_damage.c
     dev_overlay/cheats_jump_boost.c
     dev_overlay/cheats_fall_consequences.c
+    dev_overlay/cheats_noclip.c
     dev_overlay/cheats_free_camera.c
     dev_overlay/cheats_no_fog.c
     # Both jump boost and the free camera ask the same "is there a floor under this" question,

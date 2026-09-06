@@ -262,6 +262,10 @@ static void __cdecl hook_camera_update(void)
 
     own_state.camera_update_original();
 
+    /* Not free camera's own business, but this is the group's per-frame site and the glide
+     * needs one; it costs a flag test unless no clip is actually on. */
+    cheats_noclip_tick();
+
     if (!own_state.cheats[CHEATS_OWN_FREECAM].on) {
         if (freecam_valid) {
             /* The teleport, if the bound key asked for it, and before the simulation is released: one

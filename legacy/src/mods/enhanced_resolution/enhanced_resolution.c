@@ -51,6 +51,7 @@
 #include "sw_blit_guard.h"
 #include "ending_resolution.h"
 #include "credits_skip.h"
+#include "subtitle_scale.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
 
@@ -726,6 +727,7 @@ void enhanced_resolution_install(void)
     install_forced_startup_resolution();
     ending_resolution_install(resolution_state.config.ending_keeps_resolution);
     credits_skip_install(resolution_state.config.skip_credits);
+    subtitle_scale_install();
     install_menu_resolution_gate();
 
     /* LAST, and this is an ordering constraint and not merely a reading order: both features below

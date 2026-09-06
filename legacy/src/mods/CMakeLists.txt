@@ -69,6 +69,7 @@ add_engine_fix(enhanced_resolution
     sw_blit_guard.c
     ending_resolution.c
     credits_skip.c
+    subtitle_scale.c
 )
 
 add_engine_fix(hud_ratio_scaling

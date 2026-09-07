@@ -37,7 +37,7 @@ order of thing from a per-object syscall.
 | `FogInsideCut` | `2` | 0-2 | where the band may end: `0` unbounded, `1` capped to the no-pop-in limit, `2` assigned from the draw distance. See the three rules below |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
-| `FogBandScale` | `1.0` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. Polled while running |
+| `FogBandScale` | `0.60` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. 1.0 is the computed limit, where the fog is guaranteed to hide the edge; the shipped 0.60 is taste inside it. Polled while running |
 | `LevelOpenSeconds` | `0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0`, the default, leaves the engine's own behaviour alone |
 | `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it |
 | `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |

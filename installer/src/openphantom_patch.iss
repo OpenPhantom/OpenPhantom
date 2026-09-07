@@ -11,7 +11,7 @@
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "0.4.2"
+#define PatchVersion       "0.4.3"
 #define PatchSrc           "dist\patch"
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the

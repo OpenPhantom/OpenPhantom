@@ -6,6 +6,7 @@
 #define INPUT_SECTION  "enhanced_input"
 #define FREE_LOOK_KEY  "FreeLook"
 #define CAMERA_FOLLOW_KEY "CameraFollow"
+#define AIR_CONTROL_KEY   "AirControl"
 
 bool free_look_row_get(void)
 {
@@ -20,11 +21,17 @@ bool free_look_row_set(bool enabled)
         return false;
     }
 
-    /* The passive camera is built on this and cannot outlive it, so it goes off here too rather
-     * than being left reading ON with nothing under it. One way only: switching free look ON does
-     * not switch the passive camera on. */
+    /* Both of the features built on this go off with it, rather than being left reading ON with
+     * nothing under them. One way only: switching free look ON switches neither of them on.
+     *
+     * The air steer was missing here and that is what was reported. enhanced_input turns it off
+     * correctly when it sees free look go, but that is a poll a second later, so until it ran the
+     * row read ON while doing nothing, and with that DLL absent it would have read ON forever.
+     * Writing it here means the row tells the truth the instant free look is switched off, and it
+     * means one click brings the air steer back rather than two. */
     if (!enabled) {
         (void)ini_write_int(INPUT_SECTION, CAMERA_FOLLOW_KEY, 0);
+        (void)ini_write_int(INPUT_SECTION, AIR_CONTROL_KEY, 0);
     }
     return true;
 }

@@ -69,6 +69,7 @@ add_engine_fix(enhanced_resolution
     sw_blit_guard.c
     ending_resolution.c
     credits_skip.c
+    subtitle_scale.c
 )
 
 add_engine_fix(hud_ratio_scaling
@@ -119,6 +120,13 @@ add_engine_fix(enhanced_input
     input_menu.c
     input_slider.c
     input_switches.c
+    camera_follow.c
+    frame_clock.c
+    free_look_follow.c
+    input_mode.c
+    input_steer.c
+    pad_stick.c
+    pad_run.c
     menu_captions.c
     mouse_look.c
     mouse_config.c
@@ -177,6 +185,8 @@ add_engine_fix(ground_clip_fix
     dll_main.c
     ground_clip_fix.c
     move_mode.c
+    creeping_mover.c
+    rider_floor.c
 )
 
 add_engine_fix(sound_lifetime_fix
@@ -198,6 +208,7 @@ add_engine_fix(diagnostics
     diag_frame.c
     diag_present.c
     diag_projectiles.c
+    diag_camera_owner.c
     diag_characters.c
     character_scan.c
     debug_register.c
@@ -273,6 +284,15 @@ add_engine_fix(dialogue_anim_fix
 )
 target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 
+# A spoken line that names a camera group takes the camera and the dialogue only gives it back
+# when a choice MENU was open, which an ordinary line never has. The camera then stays on that
+# shot until the level is reloaded. Found in Otoh Gunga, present in every level that talks.
+add_engine_fix(camera_handback_fix
+    dll_main.c
+    camera_handback_fix.c
+    handback_rule.c
+)
+
 add_engine_fix(dev_overlay
     dll_main.c
     dev_overlay.c
@@ -288,9 +308,12 @@ add_engine_fix(dev_overlay
     sensitivity_row.c
     free_look_row.c
     strafe_row.c
+    air_control_row.c
+    camera_follow_row.c
     strict_range_row.c
     view_range_row.c
     dev_menu_size_row.c
+    subtitle_size_row.c
     overlay_model.c
     overlay_draw.c
     overlay_sites.c
@@ -304,6 +327,7 @@ add_engine_fix(dev_overlay
     cheats_npc_damage.c
     cheats_jump_boost.c
     cheats_fall_consequences.c
+    cheats_noclip.c
     cheats_free_camera.c
     cheats_no_fog.c
     floor_probe.c

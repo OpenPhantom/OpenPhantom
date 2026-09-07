@@ -47,6 +47,44 @@
 #define DEFAULT_STRAFE_TURN_RATE   240.0f
 #define MIN_STRAFE_TURN_RATE        30.0f
 #define MAX_STRAFE_TURN_RATE      2000.0f
+
+/* The camera follow's own damping, deliberately slower than the body's 250 ms above. The point
+ * of it is that the camera arrives noticeably after you do; matching the body would reproduce the
+ * snap it exists to replace. 600 ms is a first guess and is meant to be tuned by feel, which is
+ * why it is a key rather than a constant. The rate cap is lower than the body's for the same
+ * reason: a right angle should swing, not whip. */
+#define DEFAULT_CAMERA_FOLLOW_SETTLE_MS  600.0f
+#define MAX_CAMERA_FOLLOW_SETTLE_MS     3000.0f
+#define DEFAULT_CAMERA_FOLLOW_RATE       120.0f
+#define DEFAULT_CAMERA_FOLLOW_STRENGTH     0.35f
+#define DEFAULT_CAMERA_FOLLOW_MAX_DEG     25.0f
+#define DEFAULT_CAMERA_FOLLOW_HOLD_MS    250.0f
+#define MAX_CAMERA_FOLLOW_HOLD_MS       5000.0f
+#define MAX_CAMERA_FOLLOW_MAX_DEG         90.0f
+#define MIN_CAMERA_FOLLOW_RATE            15.0f
+
+/* 0.24 is close to XInput's own left-thumb recommendation and is the value controller_input.dll
+ * already uses for the right stick, so the two sticks feel the same at rest. It replaces the
+ * engine's thirty per cent SQUARE cut rather than adding to it.
+ *
+ * The run threshold is a taste value and the reason it is a key. 0.70 of the stick means a
+ * relaxed push walks and a deliberate one runs; the hysteresis is half the width of the band
+ * either side of it, so a stick resting on the boundary cannot flicker the clip and the speed
+ * cap on and off. */
+/* Deliberately lazier than the body's own 150 ms and 540 deg/s on the ground. A jump that can
+ * be pivoted in place is a different game; this is meant to be a lean, enough to make a gap
+ * that was aimed slightly wrong reachable. */
+#define DEFAULT_AIR_SETTLE_MS          400.0f
+#define MAX_AIR_SETTLE_MS             3000.0f
+#define DEFAULT_AIR_TURN_RATE          180.0f
+#define MIN_AIR_TURN_RATE               15.0f
+#define MAX_AIR_TURN_RATE             1000.0f
+
+#define DEFAULT_PAD_DEADZONE           0.24f
+#define DEFAULT_PAD_RUN_THRESHOLD      0.70f
+#define DEFAULT_PAD_RUN_HYSTERESIS     0.05f
+#define MAX_PAD_CONTROLLER_INDEX          3
+#define MAX_CAMERA_FOLLOW_RATE          1000.0f
 #define MILLISECONDS_PER_SECOND   1000.0f
 
 /* The steer log writes one line per substep, so it is a burst of lines and not a running trace.
@@ -69,6 +107,16 @@ static float clamp_float(float value, float minimum, float maximum)
 const input_config_t *input_config(void)
 {
     return &config;
+}
+
+void input_config_set_air_control(bool enabled)
+{
+    config.air_control = enabled;
+}
+
+void input_config_set_camera_follow(bool enabled)
+{
+    config.camera_follow = enabled;
 }
 
 void input_config_set_strafe(bool enabled)
@@ -106,6 +154,55 @@ void input_config_load(void)
         ini_read_float(INPUT_SECTION, "StrafeTurnRate", DEFAULT_STRAFE_TURN_RATE);
     config.strafe_turn_rate = clamp_float(config.strafe_turn_rate,
                                           MIN_STRAFE_TURN_RATE, MAX_STRAFE_TURN_RATE);
+
+    /* Off by default: it changes how the game is played rather than repairing a fault, which
+     * is the same reason free look ships off. */
+    config.camera_follow = ini_read_bool(INPUT_SECTION, "CameraFollow", false);
+    settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowSettleMs",
+                               DEFAULT_CAMERA_FOLLOW_SETTLE_MS);
+    settle_ms = clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_SETTLE_MS);
+    config.camera_follow_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
+    config.camera_follow_rate =
+        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowRate",
+                                   DEFAULT_CAMERA_FOLLOW_RATE),
+                    MIN_CAMERA_FOLLOW_RATE, MAX_CAMERA_FOLLOW_RATE);
+    config.camera_follow_strength =
+        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowStrength",
+                                   DEFAULT_CAMERA_FOLLOW_STRENGTH), 0.0f, 1.0f);
+    config.camera_follow_max_degrees =
+        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowMaxDeg",
+                                   DEFAULT_CAMERA_FOLLOW_MAX_DEG),
+                    0.0f, MAX_CAMERA_FOLLOW_MAX_DEG);
+
+    /* On by default, unlike the two features above it, because this is a REPAIR rather than a
+     * change of scheme: it gives the pad the direction and the magnitude the engine's own path
+     * throws away, and a machine with no pad plugged in never reaches any of it. */
+    settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowHoldMs",
+                               DEFAULT_CAMERA_FOLLOW_HOLD_MS);
+    config.camera_follow_hold_seconds =
+        clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_HOLD_MS) / MILLISECONDS_PER_SECOND;
+
+    config.air_control = ini_read_bool(INPUT_SECTION, "AirControl", false);
+    settle_ms = ini_read_float(INPUT_SECTION, "AirControlSettleMs", DEFAULT_AIR_SETTLE_MS);
+    config.air_settle_seconds =
+        clamp_float(settle_ms, 0.0f, MAX_AIR_SETTLE_MS) / MILLISECONDS_PER_SECOND;
+    config.air_turn_rate =
+        clamp_float(ini_read_float(INPUT_SECTION, "AirControlRate", DEFAULT_AIR_TURN_RATE),
+                    MIN_AIR_TURN_RATE, MAX_AIR_TURN_RATE);
+
+    config.pad_stick = ini_read_bool(INPUT_SECTION, "PadStick", true);
+    config.pad_controller_index =
+        (int)clamp_float((float)ini_read_int(INPUT_SECTION, "PadControllerIndex", 0),
+                         0.0f, (float)MAX_PAD_CONTROLLER_INDEX);
+    config.pad_deadzone =
+        clamp_float(ini_read_float(INPUT_SECTION, "PadDeadzone", DEFAULT_PAD_DEADZONE),
+                    0.0f, 0.9f);
+    config.pad_run_threshold =
+        clamp_float(ini_read_float(INPUT_SECTION, "PadRunThreshold",
+                                   DEFAULT_PAD_RUN_THRESHOLD), 0.0f, 1.0f);
+    config.pad_run_hysteresis =
+        clamp_float(ini_read_float(INPUT_SECTION, "PadRunHysteresis",
+                                   DEFAULT_PAD_RUN_HYSTERESIS), 0.0f, 0.25f);
 
     config.key_turn_rate =
         ini_read_float(INPUT_SECTION, "KeyTurnRate", DEFAULT_KEY_TURN_RATE);

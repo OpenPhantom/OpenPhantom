@@ -7,6 +7,6 @@
 /* `watch_velocity` chooses which four bytes the write watch is armed on: the character's velocity
  * Z when nonzero, its position Z otherwise. */
 int diag_characters_install(int characters_level, int radius, const char *watch_name,
-                            int watch_velocity);
+                            int watch_velocity, int watch_body);
 
 #endif /* DIAG_CHARACTERS_H */

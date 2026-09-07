@@ -3,6 +3,9 @@
 
 #include "auto_range_row.h"
 #include "dev_menu_size_row.h"
+#include "air_control_row.h"
+#include "camera_follow_row.h"
+#include "cheats_no_fog.h"
 #include "fog_band_row.h"
 #include "fog_follow_row.h"
 #include "fov_row.h"
@@ -12,6 +15,7 @@
 #include "open_key_row.h"
 #include "strafe_row.h"
 #include "strict_range_row.h"
+#include "subtitle_size_row.h"
 #include "overlay_key_name.h"
 #include "view_range_live_row.h"
 #include "view_range_row.h"
@@ -23,18 +27,25 @@
  * reading decision and whoever changes it should have to change one list. */
 typedef enum utilities_slot {
     UTILITIES_VIEW_RANGE = 0,
+    UTILITIES_VIEW_RANGE_TRACK,
     UTILITIES_VIEW_RANGE_LIVE,
     UTILITIES_AUTO_RANGE,
     UTILITIES_STRICT_RANGE,
+    UTILITIES_NO_FOG,
     UTILITIES_FOG_BAND,
+    UTILITIES_FOG_BAND_TRACK,
     UTILITIES_FOG_FOLLOW,
     UTILITIES_FOV,
     UTILITIES_FOV_TRACK,
     UTILITIES_FREE_LOOK,
     UTILITIES_STRAFE,
+    UTILITIES_CAMERA_FOLLOW,
+    UTILITIES_AIR_CONTROL,
     UTILITIES_SENSITIVITY,
     UTILITIES_SENSITIVITY_TRACK,
     UTILITIES_MENU_EXTRAS,
+    UTILITIES_SUBTITLE_SIZE,
+    UTILITIES_SUBTITLE_SIZE_TRACK,
     UTILITIES_DEV_MENU_SIZE,
     UTILITIES_OPEN_KEY
 } utilities_slot_t;
@@ -71,6 +82,20 @@ static void fill_typed(overlay_row_t *out, const char *editing_text,
     out->value[sizeof out->value - 1] = '\0';
 }
 
+/* A handle belongs on its track. A value outside the slider's own ends is left honest on the row
+ * above, because a setting typed into the file should read as what it is, but a fraction outside
+ * 0 to 1 would draw the handle past the end of the track and read as a broken slider rather than
+ * a value off the scale. Three rows want this, so it is written once. */
+static void clamp_fraction(overlay_row_t *out)
+{
+    if (out->fraction < 0.0f) {
+        out->fraction = 0.0f;
+    }
+    if (out->fraction > 1.0f) {
+        out->fraction = 1.0f;
+    }
+}
+
 void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
                            overlay_row_t *out)
 {
@@ -97,6 +122,17 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
            a number refused. */
         copy_label(out->label, "Draw distance (1.0 to 2.5)");
         fill_typed(out, editing_text, view_range_row_format, view_range_row_get());
+        return;
+
+    case UTILITIES_VIEW_RANGE_TRACK:
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        /* Both ends are compile-time constants here, unlike the field of view, whose ends come
+         * out of the settings file. So there is no divide-by-zero to guard and no way for a
+         * player to set them equal. */
+        out->fraction = (view_range_row_get() - VIEW_RANGE_MIN) /
+                        (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
+        clamp_fraction(out);
         return;
 
     case UTILITIES_VIEW_RANGE_LIVE: {
@@ -142,10 +178,29 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         out->on = strict_range_row_get();
         return;
 
+    case UTILITIES_NO_FOG:
+        /* The only row in this group that is a cheat by origin. It sits here rather than with
+         * the cheats because a player looking for it is looking at the fog, and the two rows
+         * under it are the rest of that answer: this one removes the fog, the next decides how
+         * thick it is, and the last decides what it is measured against. Split across two
+         * groups they read as unrelated. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "No fog");
+        out->on = cheats_no_fog_is_on();
+        out->available = cheats_no_fog_is_available();
+        return;
+
     case UTILITIES_FOG_BAND:
         out->kind = OVERLAY_ROW_VALUE;
         copy_label(out->label, "Fog thickness (0.25 to 1.0)");
         fill_typed(out, editing_text, fog_band_row_format, fog_band_row_get());
+        return;
+
+    case UTILITIES_FOG_BAND_TRACK:
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        out->fraction = (fog_band_row_get() - FOG_BAND_MIN) / (FOG_BAND_MAX - FOG_BAND_MIN);
+        clamp_fraction(out);
         return;
 
     case UTILITIES_FOG_FOLLOW:
@@ -188,17 +243,10 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         /* Guarded rather than assumed: both ends come out of the file, and somebody who sets them
          * equal would otherwise divide by zero here. */
         out->fraction = (high > low) ? ((degrees - low) / (high - low)) : 0.0f;
-        /* CLAMPED FOR DRAWING, while the number on the row above is left honest. ExtraDegrees can
-         * be set in the file to a width outside the slider's own ends, and the row should say so
-         * rather than pretend; but a fraction outside 0 to 1 would put the handle beyond the track
-         * it belongs to, which reads as a slider that has broken rather than a value off the
-         * scale. */
-        if (out->fraction < 0.0f) {
-            out->fraction = 0.0f;
-        }
-        if (out->fraction > 1.0f) {
-            out->fraction = 1.0f;
-        }
+        /* ExtraDegrees can be set in the file to a width outside the slider's own ends; see
+         * clamp_fraction above for why the row keeps the honest number and the handle does
+         * not. */
+        clamp_fraction(out);
         return;
     }
 
@@ -210,6 +258,28 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
     case UTILITIES_STRAFE:
         copy_label(out->label, "Strafe");
         out->on = strafe_row_get();
+        return;
+
+    case UTILITIES_CAMERA_FOLLOW:
+        /* Directly under strafe, because it is the only row here whose availability depends on
+         * another row rather than on an engine site. Unavailable rather than hidden while
+         * strafe is off: the walk never leaves the heading then, so there is nothing to follow,
+         * and a reader hunting for it should find out why instead of wondering if it exists. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "Camera follows you (turns on free look)");
+        out->on = camera_follow_row_get();
+        out->available = camera_follow_row_available();
+        return;
+
+    case UTILITIES_AIR_CONTROL:
+        /* Next to the camera follow because it shares its dependency: both are built on free
+         * look and both switch it on. It is a key as well, but a key alone was no use to the
+         * player who wanted it, since a pad on a handheld has no comfortable way to open an
+         * ini. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "Steer a jump in the air (free look)");
+        out->on = air_control_row_get();
+        out->available = air_control_row_available();
         return;
 
     case UTILITIES_SENSITIVITY:
@@ -243,6 +313,27 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "Show extra menu options (restart the game)");
         out->on = menu_extras_row_get();
         return;
+
+    case UTILITIES_SUBTITLE_SIZE:
+        out->kind = OVERLAY_ROW_VALUE;
+        /* Named for what it changes rather than for the key it writes, with the band in the label
+         * so it need not be found by having a value refused. */
+        copy_label(out->label, "Subtitle size (0.50 to 3.0)");
+        fill_typed(out, editing_text, subtitle_size_row_format, subtitle_size_row_get());
+        return;
+
+    case UTILITIES_SUBTITLE_SIZE_TRACK: {
+        const float value = subtitle_size_row_get();
+
+        out->kind = OVERLAY_ROW_SLIDER;
+        copy_label(out->label, "");
+        /* No availability test: both ends are fixed, so unlike the field of view nothing has to be
+         * published by another DLL first. With enhanced_resolution absent the drag writes a key
+         * nothing reads, which is how every cross-DLL row here already behaves. */
+        out->fraction = (value - SUBTITLE_SIZE_MIN) / (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
+        clamp_fraction(out);
+        return;
+    }
 
     case UTILITIES_DEV_MENU_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
@@ -286,6 +377,7 @@ bool overlay_utilities_row_is_value(uint32_t slot)
            slot == (uint32_t)UTILITIES_FOG_BAND ||
            slot == (uint32_t)UTILITIES_FOV ||
            slot == (uint32_t)UTILITIES_SENSITIVITY ||
+           slot == (uint32_t)UTILITIES_SUBTITLE_SIZE ||
            slot == (uint32_t)UTILITIES_DEV_MENU_SIZE;
 }
 
@@ -304,12 +396,24 @@ bool overlay_utilities_toggle(uint32_t slot)
         return auto_range_row_set(!auto_range_row_get());
     case UTILITIES_STRICT_RANGE:
         return strict_range_row_set(!strict_range_row_get());
+    case UTILITIES_NO_FOG:
+        return cheats_no_fog_toggle();
     case UTILITIES_FOG_FOLLOW:
         return fog_follow_row_set(!fog_follow_row_get());
     case UTILITIES_FREE_LOOK:
         return free_look_row_set(!free_look_row_get());
     case UTILITIES_STRAFE:
         return strafe_row_set(!strafe_row_get());
+    case UTILITIES_CAMERA_FOLLOW:
+        if (!camera_follow_row_available()) {
+            return false;      /* nothing to follow without strafe; the row already says so */
+        }
+        return camera_follow_row_set(!camera_follow_row_get());
+    case UTILITIES_AIR_CONTROL:
+        if (!air_control_row_available()) {
+            return false;      /* nothing to steer by without strafe; the row already says so */
+        }
+        return air_control_row_set(!air_control_row_get());
     case UTILITIES_MENU_EXTRAS:
         return menu_extras_row_set(!menu_extras_row_get());
     default:
@@ -338,6 +442,8 @@ bool overlay_utilities_commit(uint32_t slot, const char *text)
         return fov_row_parse(text, &parsed) && fov_row_set(parsed);
     case UTILITIES_SENSITIVITY:
         return sensitivity_row_parse(text, &parsed) && sensitivity_row_set(parsed);
+    case UTILITIES_SUBTITLE_SIZE:
+        return subtitle_size_row_parse(text, &parsed) && subtitle_size_row_set(parsed);
     case UTILITIES_DEV_MENU_SIZE:
         return dev_menu_size_row_parse(text, &parsed) && dev_menu_size_row_set(parsed);
     default:
@@ -364,12 +470,42 @@ bool overlay_utilities_slider_set(uint32_t slot, float fraction)
     if (fraction > 1.0f) {
         fraction = 1.0f;
     }
+    if ((utilities_slot_t)slot == UTILITIES_VIEW_RANGE_TRACK) {
+        /* Rounded to a HUNDREDTH, which is exactly what the row's own formatter shows (%.2f).
+         * Without it a drag writes more decimals than the text beside it displays and the two
+         * disagree about what was set.
+         *
+         * A fiftieth was tried and is wrong, because the grid has to contain both ends of
+         * every row that uses it. Fog thickness starts at 0.25, which is not a multiple of a
+         * fiftieth, so dragging fully left rounded up to 0.26 and the documented minimum
+         * could not be reached at all. Caught in a log, not in a test. */
+        float scale = VIEW_RANGE_MIN + fraction * (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
+
+        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
+        return view_range_row_set(scale);
+    }
+    if ((utilities_slot_t)slot == UTILITIES_FOG_BAND_TRACK) {
+        /* The same hundredth grid; see the draw distance above for why it is not a fiftieth. */
+        float scale = FOG_BAND_MIN + fraction * (FOG_BAND_MAX - FOG_BAND_MIN);
+
+        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
+        return fog_band_row_set(scale);
+    }
     if ((utilities_slot_t)slot == UTILITIES_SENSITIVITY_TRACK) {
         /* Not rounded to anything, unlike the field of view below: the band is a tenth of a degree
          * wide and the row shows three decimals, so every position along the track is a value
          * somebody can tell apart from the one beside it. */
         return sensitivity_row_set(SENSITIVITY_MIN +
                                    fraction * (SENSITIVITY_MAX - SENSITIVITY_MIN));
+    }
+    if ((utilities_slot_t)slot == UTILITIES_SUBTITLE_SIZE_TRACK) {
+        /* The same hundredth grid the draw distance uses, and for the same reason: the row beside
+         * this one shows two decimals, so a drag writing more would disagree with the text it is
+         * meant to be setting. */
+        float scale = SUBTITLE_SIZE_MIN + fraction * (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
+
+        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
+        return subtitle_size_row_set(scale);
     }
     if ((utilities_slot_t)slot != UTILITIES_FOV_TRACK) {
         return false;

@@ -10,6 +10,7 @@
 #include "diag_log.h"
 #include "diag_present.h"
 #include "diag_characters.h"
+#include "diag_camera_owner.h"
 #include "diag_projectiles.h"
 #include "diag_world.h"
 
@@ -76,6 +77,8 @@ static void load_config(void)
     diagnostics_state.present  = read_level("Present");
     diagnostics_state.projectiles = ini_read_bool(DIAGNOSTICS_SECTION, "Projectiles", false) ? 1
                                                                                               : 0;
+    diagnostics_state.camera_owner =
+        ini_read_bool(DIAGNOSTICS_SECTION, "CameraOwner", false) ? 1 : 0;
     diagnostics_state.characters = read_level_max("Characters", 2);
     diagnostics_state.characters_radius =
         ini_read_int(DIAGNOSTICS_SECTION, "CharactersRadius", DEFAULT_CHARACTERS_RADIUS);
@@ -84,6 +87,8 @@ static void load_config(void)
                           sizeof(diagnostics_state.characters_watch));
     diagnostics_state.characters_watch_velocity =
         ini_read_bool(DIAGNOSTICS_SECTION, "CharacterWatchVelocity", false) ? 1 : 0;
+    diagnostics_state.player_body_watch =
+        ini_read_bool(DIAGNOSTICS_SECTION, "PlayerBodyWatch", false) ? 1 : 0;
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
@@ -127,7 +132,8 @@ static bool any_area_enabled(void)
             diagnostics_state.level    != 0 || diagnostics_state.player   != 0 ||
             diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
             diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
-            diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0);
+            diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0 ||
+            diagnostics_state.camera_owner != 0);
 }
 
 void diagnostics_install(void)
@@ -157,11 +163,12 @@ void diagnostics_install(void)
     diagnostics_installed = true;
 
     log_info("areas audio=%d music=%d trigger=%d fsm=%d level=%d player=%d dialogue=%d fx=%d "
-             "frame=%d present=%d projectiles=%d | census=%dms max=%d lines/s",
+             "frame=%d present=%d projectiles=%d cameraOwner=%d | census=%dms max=%d lines/s",
              diagnostics_state.audio, diagnostics_state.music, diagnostics_state.trigger,
              diagnostics_state.fsm, diagnostics_state.level, diagnostics_state.player,
              diagnostics_state.dialogue, diagnostics_state.fx, diagnostics_state.frame,
              diagnostics_state.present, diagnostics_state.projectiles,
+             diagnostics_state.camera_owner,
              diagnostics_state.audio_census_ms, diagnostics_state.max_lines_per_second);
 
     observers += diag_audio_install(diagnostics_state.audio, diagnostics_state.audio_census_ms);
@@ -176,10 +183,12 @@ void diagnostics_install(void)
                                     diagnostics_state.frame_hitch_percent);
     observers += diag_present_install(diagnostics_state.present);
     observers += diag_projectiles_install(diagnostics_state.projectiles);
+    observers += diag_camera_owner_install(diagnostics_state.camera_owner);
     observers += diag_characters_install(diagnostics_state.characters,
                                          diagnostics_state.characters_radius,
                                          diagnostics_state.characters_watch,
-                                         diagnostics_state.characters_watch_velocity);
+                                         diagnostics_state.characters_watch_velocity,
+                                         diagnostics_state.player_body_watch);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

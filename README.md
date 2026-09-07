@@ -31,6 +31,33 @@ OpenPhantom has two parts that will run side by side for a long time. The legacy
 | `editor/` | Tools for maps, assets and game content. Not started |
 | `architecture/` | How the original engine is put together, written down. Not started |
 
+## Version numbers
+
+The patch and the installer carry **two numbers**, and they always did apart from one release.
+
+| | numbering | tags |
+|---|---|---|
+| the patch, `legacy/` | `0.4.x` | `v0.4.0`, `v0.4.1`, ... |
+| the installer that carries it | `1.4.x` | `i1.4`, `i1.4.1`, ... |
+
+Both last digits move together on a release. The DLLs carry the **patch's** number, so a file's
+properties and the first line of `engine_fixes.log` read `0.4.2` while the installer that delivered
+them reads `1.4.2`. That is two numbers on one machine, which is what having two lines costs.
+
+**One release was made with the two merged into a single number**, published as `v1.5.0` and
+`i1.5.0`. That has been undone and the two lines are separate again, so on GitHub that release is
+renamed to **`v0.4.1` and `i1.4.1`**, which is where it belongs in both sequences. The release after
+it is `v0.4.2` and `i1.4.2`.
+
+**The rename is presentational and nothing was rebuilt.** The installer inside that release still
+reports `1.5.0` in its own properties and in Add and Remove Programs, because it is the same file
+that was published and re-cutting it would change every hash for no functional gain. If you have it
+installed, that is why the number you see does not match the name of the release you downloaded.
+
+Nothing in the installer compares version numbers. An existing installation is found by its
+application id and you are asked what to do with it, so no number decides whether an install is
+allowed.
+
 ## Documentation
 
 Full guides for installation, usage and configuration are in the

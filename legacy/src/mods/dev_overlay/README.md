@@ -110,16 +110,22 @@ so the box never looks ready to type into before it is.
 
 ## The nine cheats this project adds
 
-In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **No fog**,
-**Invincible NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**,
-**Jump boost** and **Free camera**. They need fewer engine sites than that, because several
-pairs are two answers to one question and share a single detour.
+In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **Invincible
+NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **No clip**,
+**Jump boost** and **Free camera**. They need fewer engine sites than that, because
+several pairs are two answers to one question and share a single detour.
+
+**No fog was a ninth and now lives under Utilities**, at the head of the fog settings. It is still
+the same code in `cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A
+player looking for it is looking at the fog, and the two rows under it are the rest of that
+answer: this one removes the fog, the next says how thick it is, and the last says what it is
+measured against. Split across two groups they read as unrelated.
 
 A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
 That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
 is not available on this executable.
 
-### Unlimited ammunition, unlimited health and no fog
+### Unlimited ammunition and unlimited health
 
 The first two are one detour on one short function each, and both work by **declining** rather than
 by topping a value up.
@@ -237,6 +243,82 @@ after the call returns for something that has nothing to do with rendering. So s
 place also scales the force-push ability's reach and power. A local-copy version that left the
 caller's numbers alone was written and worked, and was reverted: combat is not meaningfully
 usable at either scale anyway, so the extra copy bought correctness nothing was asking for.
+
+### No clip
+
+Everything the player can be stopped by, except the floor. `cheats_noclip.c` owns it, across five
+small hooks and one per-frame tick.
+
+**This is not the noclip this project removed.** That one detoured `0x0044C36D`, which turns out
+not to be a collision routine at all: it is phase 9 of the player's own locomotion phase table.
+Suppressing it suppressed a whole phase of a state machine, only while the dispatch happened to be
+in that phase, and the floor went with it. Everything recorded against it, falling through
+modelled floors most of all, followed from the site rather than from the idea.
+
+**Five things can stop the player, and each needed its own site.** Four of the five were found by
+measuring the running game rather than by reading it, which is why they are listed here: the set
+is not recoverable from any one of them.
+
+| what stops you | site | what it is |
+|---|---|---|
+| walls, on the ground | `0x0040C1AE` | the universal wall raycast |
+| walls, in the air | `0x0040C870` | its stationary sibling, which the airborne tick uses instead |
+| air-block fences and low ceilings | `0x0044C59D` | `Plr_AirMoveGate`, the veto on a move made in the air |
+| edges catching you as you pass | `0x0044C78E` | phase 8 of mode Fall, the ledge grab |
+| people | `0x004131EB` | `bapobj_cylinderPush`, bodies being solid to each other |
+
+That the set is complete is checkable rather than hopeful: every write of zero into the player's
+moved flag was enumerated in the image, eleven sites in all. Four are the ones above, three are
+irrelevant (death, the tripod turret, non-player code) and the rest were already covered.
+
+**The floor is a different function and is never touched.** `bapmap_probeFloor` is not on this
+list and nothing here goes near it, which is what keeps the player standing on ground throughout.
+
+**The air-block fences are not a rare case**, which is why the third hook matters: 73,360 faces
+across the eleven levels carry that flag, 22 per cent of every face in the game, and another
+29,968 carry the low-ceiling one. Without that hook clipping works on the ground and then stops
+working the moment the player leaves it.
+
+**The ledge grab was the subtlest.** It is not a collision test at all, so no wall probe can reach
+it: it looks half a unit ahead for an edge and puts the player on it. A glide keeps the player in
+mode Fall the whole time they are clipping, so every edge they pass is a candidate, and the walls
+that appeared not to work were the ones with a grabbable lip. They were not being blocked, they
+were being caught.
+
+**People are not geometry.** A character in a doorway is a cylinder, not a polygon, so no wall
+probe could ever see one. NPCs stay solid to each other; only the player stops being part of the
+crowd. An NPC walking into the player can still shove them, left alone deliberately because
+suppressing it means reaching into everyone else's collision loop to hide one body from it.
+
+**The glide is what stops the player falling out of the world.** Beyond a wall there is often no
+floor at all, because geometry is only modelled where the player was meant to go, so a working
+floor probe correctly reports none and gravity does the rest. Height is therefore held for exactly
+as long as there is nothing to stand on, and released the moment there is, so ordinary movement
+over real floor is not touched at all. "Nothing to stand on" means nothing within a sane drop
+rather than nothing whatsoever, because a lower storey far below is not somewhere to be set down.
+
+**NPCs and the AI stay solid to the world.** They walk the same wall raycast for their locomotion,
+line of sight and path checks, so every hook answers only for the player, identified by the
+address of a field in the one player record rather than by any position value.
+
+**Buttons and push blocks still work**, because those probes ask the same function a different
+question, looking for a face to act on rather than one to be stopped by, and are excluded by mask.
+
+**Free camera and this are mutually exclusive.** Both write the player's position from the same
+per-frame site in the same frame: free camera freezes the simulation and teleports the player to
+the camera on the way out, and this holds the player's height every frame. Switching either on
+turns the other off, and this one also declines to act while the camera is flying, since the
+toggle rule can be bypassed by a saved state or a level change and the check costs a comparison.
+Free camera is the one that wins, because it is the one you cannot leave without its own hotkey.
+
+**Four of the five hooks are optional.** Only the ground wall probe is required; if any of the
+others stops resolving the cheat loses that one behaviour and says so in the log, rather than
+disappearing. An earlier build made one of them required and a signature that matched two
+functions instead of one took the whole cheat down with it.
+
+**A doors-only variant was built, tested and dropped.** It identified a door leaf by the mover
+owning the polygon, which worked and was proven against the shipped levels. It is described at the
+head of `cheats_noclip.c` with what bringing it back would need.
 
 ### Jump boost
 
@@ -446,6 +528,16 @@ distance, typed
 in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`, so it
 is learned from the row rather than by having a number refused.
 
+**It has a slider on the line directly beneath it**, on its own line so the handle never covers the
+number it sets, which is the same shape the field of view and mouse speed rows use. The track spans
+`VIEW_RANGE_MIN` to `VIEW_RANGE_MAX`, both compile-time constants here rather than settings, so
+unlike the field of view there is no way for a reader to set the two ends equal and nothing to guard
+against dividing by zero. A drag rounds to a fiftieth, because the row's own formatter shows two
+decimals and a value with more than that would leave the number and the handle disagreeing about
+what had been set. A fiftieth was tried first and is wrong: the grid has to contain both ends of
+every row using it, and fog thickness starts at `0.25`, which a fiftieth rounds up to `0.26`, so
+the documented minimum could not be reached. That was caught in a log rather than by a test.
+
 **It writes the ini rather than calling `view_distance_fix`.** Feature DLLs here never depend on
 each other at run time, which is what lets any one of them be deleted from the `mods` folder without breaking
 the rest. The ini is a channel both already have and neither owns, `view_distance_fix` re-reads the
@@ -563,11 +655,30 @@ tell in advance: strafe needs mouse look and the keyboard axis reader, because t
 look needs a follow camera that `enhanced_input` recognises. When one is declined it says why in the
 log and the row reads back off on its next rebuild, which is the honest outcome.
 
+**Two rows below those are the pad's, and both are built on free look.** `Camera follows you`
+writes `[enhanced_input] CameraFollow` and `Steer a jump in the air` writes `AirControl`. Each
+**writes `FreeLook=1` with itself**, because both are built on free look turning the body to
+face where it travels: the camera drifts at the body's heading, and the jump is steered by an
+angle measured against the camera. Without free look neither has anything to work with. The
+dependency is one way, so switching either off leaves free look alone, and switching free look
+off takes both down with it.
+
+**The row writes both keys rather than calling the feature**, and that is not tidiness. Free
+look refuses while the player phases are stopped, which is exactly the state the game is in
+while this panel is open, so a row that asked it directly would be refused every time it was
+clicked. Written to the file instead, the once-a-second re-read applies them in its own order
+once play resumes, with the refusal handling it already has.
+
+Both are **unavailable rather than hidden while `Strafe` is off**, because both are steered by
+the sideways input and there would be nothing to aim with.
+
 **All three needed the owning DLL to start reading its own settings back.** Both of those screens
 pushed outward only: they applied a change and then wrote the file, and nothing ever read it. A row
 here would have done nothing until the next launch. `variable_fov` and `enhanced_input` now re-read
 these keys once a second, the way `view_distance_fix` already did, so a row takes effect within the
-second.
+second. **A key is only re-read if it is named in that poll**, which is worth knowing before adding
+a row: one added without it writes the file, nothing reads it back, and the row looks dead until the
+next launch. `CameraFollow` and `AirControl` are both in it.
 
 `Mouse speed` is `[enhanced_input] MouseDegreesPerCount`, named after that screen's caption as
 well, and it has a track too. Unlike the
@@ -594,6 +705,9 @@ worse answer: either the screen is the one the game shipped or it is not.
 
 Two rows under **Utilities**, both `[view_distance_fix]` keys the fog reads while the game runs, so
 each takes effect within about a second and neither needs a restart.
+
+`Fog thickness` carries a slider on the line beneath it, on the same terms as the draw distance
+above: `FOG_BAND_MIN` to `FOG_BAND_MAX`, rounded to a hundredth on a drag.
 
 `Fog thickness` is `FogBandScale`, and it is the only setting in the whole fog path that can bring
 the band NEARER. Every other term decides where the fog has to be so that it is solid before the
@@ -633,6 +747,26 @@ both things at once rather than one of them.
 **Seven keys are refused**, all of which would lock a player out: Escape and Return and the four
 arrows, which drive the panel itself, and F4, so that Alt+F4 stays a way to quit. Keys the game uses
 are allowed, and both things then happen.
+
+## The subtitle size row
+
+Directly above the dev menu size, and it edits `[enhanced_resolution] SubtitleScale`: how big the
+subtitles are, as a multiple of the size they have at 640x480. Typed in like the rows above it, with
+the band in the label, and **dragged on the track beneath it**.
+
+**A track is right here, unlike the panel's own size.** That one was tried and taken back out,
+because dragging it moved the panel being dragged. This changes text somewhere else on the screen,
+which is exactly what a slider is for: bring up a line of dialogue and drag until it reads well.
+
+**It goes through the ini, like the rows beside it.** The setting belongs to
+`enhanced_resolution.dll`, feature DLLs here never depend on each other at run time, and either can
+be deleted from `mods\` without breaking the other. That DLL re-reads the key once a second, so a
+drag shows up on the next subtitle drawn.
+
+**`0` is not shown and cannot be dragged to.** It is that DLL's spelling for "leave the engine's own
+shrinking size alone", it sits outside the band this row offers, and there is no honest place to put
+a handle for it. The row reports the default instead, and anyone who wants the engine's behaviour
+back sets `0` in the file, where the comment explains it.
 
 ## The dev menu size row
 
@@ -690,7 +824,7 @@ sentinel (nothing reads as pending before `resolve()` has run) and every index t
 exist. The checks live in `unittests/overlay_model.c`.
 
 Every row in the panel has been opened, drawn and switched against the running game, and the
-layout has been through several rounds of correction against screenshots. All nine of this
+layout has been through several rounds of correction against screenshots. All of this
 project's cheats are accepted in game, in the 1.5.0 build, which was played through by hand.
 
 **Field-tested against the running game, several rounds:** kill self, full health,

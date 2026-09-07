@@ -15,20 +15,32 @@ project(engine_fixes C)
 # a bug report could not say which patch it was against.
 enable_language(RC)
 
-# THE PROJECT'S VERSION, and the only copy of it in this tree.
+# THE PATCH'S VERSION, and the only copy of it in this tree.
 #
-# One number covers the patch and the installer that carries it. They have never been released
-# apart: every patch release to date has an installer release on the same day. The first two
-# digits move when the installer's own behaviour changes, or when the payload changes enough
-# that a player would notice it without being told; the third when the payload changes and the
-# game looks the same afterwards.
+# The project carries two numbers again, at j0nny's asking: the patch releases as 0.4.x and the
+# installer that carries it as 1.4.x. They were merged into one for 1.5.0 on the reasoning that they
+# had never been released apart, and that is being undone rather than argued with.
 #
-# The installer keeps its own copy in AppVer, because Inno cannot read a CMake variable and wiring
-# the build system into the installer would couple two things that are otherwise independent. The
-# comment at AppVer says the same, and the two are kept in step by hand.
-set(OPENPHANTOM_VERSION_MAJOR 1)
-set(OPENPHANTOM_VERSION_MINOR 5)
-set(OPENPHANTOM_VERSION_PATCH 0)
+# THIS IS THE PATCH'S NUMBER. These DLLs are the patch, so they carry the patch's line: it is what
+# every binary's version resource is stamped with, what the log header prints, and what version.h
+# hands to any code that wants to say which build it is. The installer's own 1.4.x is a separate
+# number and lives in AppVer.
+#
+# THE LAST DIGIT COUNTS RELEASES. A new release, patch and installer together, adds one to both
+# lines. It is not a judgement about how much changed, which is what the old rule here tried to be.
+#
+# Inno cannot read a CMake variable, and wiring the build system into the installer would couple two
+# things that are otherwise independent, so AppVer keeps its own copy and the two move together by
+# hand.
+#
+# The tags keep the prefixes they always had: this is v0.4.2 for the patch and i1.4.2 for the
+# installer, continuing v0.2.0..v0.4.0 and i1.0..i1.4. The one release made under the merged number,
+# v1.5.0 and i1.5.0, is renamed on GitHub into the two lines as v0.4.1 and i1.4.1, so the sequence
+# has no gap. That rename is presentational and nothing was rebuilt, so the binaries inside it still
+# report 1.5.0.
+set(OPENPHANTOM_VERSION_MAJOR 0)
+set(OPENPHANTOM_VERSION_MINOR 4)
+set(OPENPHANTOM_VERSION_PATCH 2)
 set(OPENPHANTOM_VERSION
     "${OPENPHANTOM_VERSION_MAJOR}.${OPENPHANTOM_VERSION_MINOR}.${OPENPHANTOM_VERSION_PATCH}")
 

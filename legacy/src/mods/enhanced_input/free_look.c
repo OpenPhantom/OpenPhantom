@@ -60,6 +60,7 @@
 #include "camera_watch.h"
 #include "free_look_log.h"
 #include "free_look_math.h"
+#include "input_config.h"
 #include "mouse_look.h"
 #include "player_record.h"
 #include "player_sites.h"
@@ -203,6 +204,17 @@ void free_look_load_config(void)
         clamp_float(free_state.config.region_recover_degrees, 0.0f, MAX_REGION_RECOVER_DEG);
 
     free_state.config.log_transitions = ini_read_bool(INPUT_SECTION, "FreeLookLog", false);
+
+    /* Shared with the other camera follow rather than given keys of its own. The two are the
+     * same feature answered two different ways and they can never both run: that one needs
+     * free look OFF, this one needs it ON. One switch, one settle time, one rate cap. */
+    free_state.config.passive_follow         = input_config()->camera_follow;
+    free_state.config.passive_settle_seconds = input_config()->camera_follow_settle_seconds;
+    free_state.config.passive_rate           = input_config()->camera_follow_rate;
+    free_state.config.passive_hold_seconds   = input_config()->camera_follow_hold_seconds;
+    free_state.config.air_control            = input_config()->air_control;
+    free_state.config.air_settle_seconds     = input_config()->air_settle_seconds;
+    free_state.config.air_turn_rate          = input_config()->air_turn_rate;
 }
 
 bool free_look_is_installed(void)
@@ -210,9 +222,24 @@ bool free_look_is_installed(void)
     return free_state.installed;
 }
 
+void free_look_set_air_control(bool enabled)
+{
+    free_state.config.air_control = enabled;
+}
+
+void free_look_set_passive_follow(bool enabled)
+{
+    free_state.config.passive_follow = enabled;
+}
+
 bool free_look_is_enabled(void)
 {
     return free_state.installed && free_state.config.enabled;
+}
+
+bool free_look_level_owns_camera(void)
+{
+    return free_state.installed && free_look_release_is_authored_region(free_state.world_gate);
 }
 
 bool free_look_set_enabled(bool enabled)
@@ -277,13 +304,32 @@ static float aim_offset_for(const uint8_t *record, float lock)
     return total;
 }
 
+/* WHAT `armed` MEANS, and it is not what these four callers want.
+ *
+ * `armed` says the CAMERA HOLD is taken: the recentre is frozen, the yaw arm is forced and the
+ * authored regions are being watched. The camera follow takes that same hold, because building a
+ * second copy of it would be the largest piece of duplication in this directory, so `armed` is now
+ * true in a session where the player never switched free look on at all.
+ *
+ * Free look's STEERING is a separate thing: the mouse turning the camera instead of the body, the
+ * body pointed at the camera under the trigger, the walk driven only in the aim stance. That
+ * belongs to the player having asked for free look, and to nothing else. Running it because the
+ * follow borrowed the camera took the substep away from the ordinary path, left the travel angle
+ * at zero and so starved the very feature that borrowed it.
+ *
+ * So the camera side keeps asking `armed`, and the four steering sites ask this instead. */
+static bool free_look_is_steering(void)
+{
+    return free_state.installed && free_state.armed && free_state.config.enabled;
+}
+
 static void __cdecl hook_fire_shot(void)
 {
     fire_shot_fn_t original = (fire_shot_fn_t)free_state.fire_shot_detour.original;
     uint8_t       *record;
     float          total;
 
-    if (free_state.armed && free_state.camera_yaw_valid &&
+    if (free_look_is_steering() && free_state.camera_yaw_valid &&
         free_state.config.aim_keeps_movement) {
         record = player_sites_record(free_state.player);
         if (record != NULL) {
@@ -320,7 +366,7 @@ static int32_t __cdecl hook_auto_aim(int32_t kind)
     free_state.aim_hold_seconds = free_state.config.aim_snap ? AIM_SNAP_TAIL_SECONDS : 0.0f;
 
     record = player_sites_record(free_state.player);
-    if (!free_state.armed || !free_state.camera_yaw_valid || record == NULL) {
+    if (!free_look_is_steering() || !free_state.camera_yaw_valid || record == NULL) {
         return original(kind);
     }
 
@@ -351,19 +397,28 @@ static int32_t __cdecl hook_auto_aim(int32_t kind)
     return result;
 }
 
-bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bool stand_mode)
+bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, float forward,
+                     bool stand_mode, bool air_mode)
 {
-    uint32_t move_input;
-    float    forward;
-    float    input_angle = 0.0f;
+    float input_angle = 0.0f;
 
-    if (!free_state.installed || !free_state.armed || !free_state.camera_yaw_valid ||
+    if (!free_look_is_steering() || !free_state.camera_yaw_valid ||
         record == NULL) {
         return false;
     }
 
     /* The mouse turns the camera here and nowhere else. */
     free_state.camera_yaw = free_look_wrap360(free_state.camera_yaw + mouse_step_degrees);
+
+    /* Noted for the passive drift, which must never move the camera while the player is moving
+     * it themselves. A camera that keeps sliding home under the hand is the exact fault the
+     * first attempt at this feature had, and camera_sites.h warns of it in as many words.
+     *
+     * A LATCH rather than a per-substep answer, because the camera half runs on the render
+     * clock and would otherwise sample this between the substeps that set it. */
+    if (mouse_step_degrees != 0.0f) {
+        free_state.look_seen = true;
+    }
 
     /* The model-root latch is NOT walked home here, and it used to be. The caller takes exactly one
      * damper step per substep, either driving the walk or releasing it, and a release taken here as
@@ -378,9 +433,11 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bo
      * air has to point where the player is looking just as much as one started on the ground.
      * That is why this block sits above the Stand test rather than below it. */
     if (free_state.aim_hold_seconds > 0.0f && free_state.config.aim_snap) {
-        free_state.body_target       = free_state.camera_yaw;
-        free_state.body_target_valid = true;
-        free_state.aim_stance        = free_state.config.aim_keeps_movement;
+        free_state.body_target         = free_state.camera_yaw;
+        free_state.body_target_valid   = true;
+        free_state.target_settle_seconds = free_state.config.body_settle_seconds;
+        free_state.target_turn_rate      = free_state.config.body_turn_rate;
+        free_state.aim_stance          = free_state.config.aim_keeps_movement;
     } else {
         free_state.aim_stance = false;
     }
@@ -393,13 +450,31 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bo
      * forward drive is not in force, so a backward key is still a NEGATIVE SPEED along an
      * unchanged facing rather than a half turn, building the camera-relative angle there would
      * double-count the reversal and send the player the wrong way. Outside Stand the mouse
-     * therefore moves the camera while the body holds its heading, unless an attack is live. */
+     * therefore moves the camera while the body holds its heading, unless an attack is live or
+     * air control is on and the body is genuinely in flight. */
     if (!stand_mode) {
+        /* AIR CONTROL, and it is the only thing that may happen outside Stand.
+         *
+         * The gate above it stays exactly as strict as it was, for the reasons alongside it: a
+         * forced move bit outside Stand would lock the crate shove for good, and a backward key
+         * outside Stand is still a negative speed along an unchanged facing rather than a half
+         * turn. NOTHING is forced here and no move bit is written. This turns the heading and
+         * stops, so the speed the player launched with is redirected rather than renewed, and a
+         * jump cannot be flown further than it would have gone.
+         *
+         * Only the three modes that are genuinely a body in flight with the ordinary integrate
+         * under it. A scripted jump follows an authored arc and its descriptor skips the steer
+         * phase, so it never reaches here at all. */
+        if (free_state.config.air_control && air_mode && !free_state.body_target_valid &&
+            free_look_input_angle(strafe, forward, &input_angle)) {
+            free_state.body_target           = free_look_wrap360(free_state.camera_yaw +
+                                                                 input_angle);
+            free_state.body_target_valid     = true;
+            free_state.target_settle_seconds = free_state.config.air_settle_seconds;
+            free_state.target_turn_rate      = free_state.config.air_turn_rate;
+        }
         return true;
     }
-
-    move_input = *(const uint32_t *)(record + PLAYER_MOVE_INPUT);
-    forward    = (move_input & 1u) ? 1.0f : ((move_input & 2u) ? -1.0f : 0.0f);
 
     /* Tell the engine a forward walk is under way when the input does not already say so: a lone
      * sideways key leaves both move bits clear, and a backward key has to become a forward walk
@@ -419,8 +494,10 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bo
      * so this must not turn the body a second time. */
     if (!free_state.body_target_valid &&
         free_look_input_angle(strafe, forward, &input_angle)) {
-        free_state.body_target       = free_look_wrap360(free_state.camera_yaw + input_angle);
-        free_state.body_target_valid = true;
+        free_state.body_target           = free_look_wrap360(free_state.camera_yaw + input_angle);
+        free_state.body_target_valid     = true;
+        free_state.target_settle_seconds = free_state.config.body_settle_seconds;
+        free_state.target_turn_rate      = free_state.config.body_turn_rate;
     }
     return true;
 }
@@ -429,7 +506,7 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bo
  * thunk asks this to decide whether the feet belong to the sideways walk this substep. */
 bool free_look_aim_stance(void)
 {
-    return free_state.installed && free_state.armed && free_state.aim_stance;
+    return free_look_is_steering() && free_state.aim_stance;
 }
 
 void free_look_integrate(uint8_t *record, float substep_seconds)
@@ -463,8 +540,8 @@ void free_look_integrate(uint8_t *record, float substep_seconds)
 
     heading = read_field(record, PLAYER_HEADING);
     step    = strafe_walk_damp_step(0.0f, free_look_wrap180(free_state.body_target - heading),
-                                    substep_seconds, free_state.config.body_settle_seconds,
-                                    free_state.config.body_turn_rate);
+                                    substep_seconds, free_state.target_settle_seconds,
+                                    free_state.target_turn_rate);
     if (!isfinite(step) || !isfinite(heading)) {
         return;
     }

@@ -340,6 +340,55 @@ void strafe_walk_force_forward(uint8_t *record, bool clear_backward)
                 read_field(record, PLAYER_DT_SCALE30) * FORWARD_DRIVE_SCALE);
 }
 
+void strafe_walk_apply_stick_move(uint8_t *record, float forward, float strafe)
+{
+    uint32_t move_input;
+
+    if (record == NULL) {
+        return;
+    }
+
+    /* THE ENGINE'S OWN READ OF THE PAD HAS ALREADY RUN AND IS WRONG, which is why this writes
+     * rather than adds. Its axis 1 is cut by a thirty per cent square deadzone, so a light push
+     * sets no move bit and no drive at all and the player simply does not move; and past half
+     * the stick's travel it is saturated, so it cannot tell a walk from a run either. This
+     * replaces both bits and the drive from the vector pad_stick.c read straight from the
+     * device. It runs after the original steer, so there is nothing to undo.
+     *
+     * The drive is FULL whichever gait is chosen, and that is deliberate. The clips play at a
+     * fixed rate with nothing scaling them by speed, so a continuously variable pace would slide
+     * the feet along the ground. Two gaits at their authored speeds keep the feet planted, and
+     * the speed cap that separates them is the engine's own: 2.0 for a walk, 3.5 for a run. */
+    move_input = *(const uint32_t *)(record + PLAYER_MOVE_INPUT) & ~3u;
+    if (forward > 0.0f) {
+        move_input |= 1u;
+    } else if (forward < 0.0f) {
+        move_input |= 2u;
+    } else if (strafe != 0.0f) {
+        /* A push with no forward component at all still has to tell the engine a walk is
+         * under way, or neither bit is set, the drive decays and the player stands still
+         * while the travel angle points politely sideways. The keyboard path forces the same
+         * bit for the same reason; it is only reachable here on an exact zero, because any
+         * real stick leaves a little forward component in a sideways push. */
+        move_input |= 1u;
+    }
+
+    *(uint32_t *)(record + PLAYER_MOVE_INPUT) = move_input;
+
+    /* THE DRIVE CARRIES THE SIGN, and leaving it positive for a backward push is a whole broken
+     * half of the stick. The engine writes dtScale30 * 0.6 * axis with a SIGNED axis, and that sign
+     * is what takes curSpeed negative; the backward move bit only chooses the clip and the speed
+     * cap. Written positive with the backward bit set, the player plays the back-pedal clip while
+     * travelling forwards, and the travel angle is negated on top of it by the drive sign, so the
+     * lower half of the stick went somewhere between wrong and nowhere.
+     *
+     * The MAGNITUDE stays full either way, which is the gait decision made in pad_run.h: the clips
+     * play at a fixed rate, so two gaits at their authored speeds keep the feet planted. */
+    write_field(record, PLAYER_MOVE_DRIVE,
+                read_field(record, PLAYER_DT_SCALE30) * FORWARD_DRIVE_SCALE *
+                ((forward < 0.0f) ? -1.0f : 1.0f));
+}
+
 float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds)
 {
     uint32_t move_input = *(const uint32_t *)(record + PLAYER_MOVE_INPUT);
@@ -356,6 +405,34 @@ float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds)
     if (strafe != 0.0f && forward == 0.0f) {
         strafe_walk_force_forward(record, false);
         drive_sign = 1.0f;
+    }
+
+    target = strafe_walk_travel_offset(strafe, forward, drive_sign);
+    target = clamp_float(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
+
+    open_substep(record);
+    strafe_state.theta_degrees = strafe_walk_damp_step(
+        strafe_state.theta_degrees, target, substep_seconds,
+        strafe_state.settle_seconds, strafe_state.max_rate_deg_per_second);
+
+    turn_body(record, strafe_state.theta_degrees);
+    return strafe_state.theta_degrees;
+}
+
+float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
+                               float substep_seconds)
+{
+    float drive_sign = (forward < 0.0f) ? -1.0f : 1.0f;
+    float target;
+
+    /* THE ONLY DIFFERENCE FROM strafe_walk_drive IS THAT `forward` IS REAL, and it is the whole
+     * point of the pad path. The other one rebuilds it as exactly +1, -1 or 0 from the move
+     * bits, because a keyboard has nothing finer to give. Handing atan2 a quantised 1 against an
+     * analog sideways value pulls every diagonal toward forward: a true forty five degree push
+     * came out at thirty five degrees, and at half deflection at nineteen. With both components
+     * honest the angle is the direction the stick is actually pointing. */
+    if (record == NULL) {
+        return strafe_state.theta_degrees;
     }
 
     target = strafe_walk_travel_offset(strafe, forward, drive_sign);

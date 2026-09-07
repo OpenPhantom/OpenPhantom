@@ -2,6 +2,7 @@
 #define FREE_LOOK_INTERNAL_H
 
 #include "camera_sites.h"
+#include "free_look_math.h"
 #include "player_sites.h"
 
 #include "common/detour.h"
@@ -57,6 +58,32 @@ typedef struct free_look_config {
     float body_settle_seconds;
     float body_turn_rate;
     float region_recover_degrees;
+
+    /* THE PASSIVE CAMERA. Drift the camera back behind the body while the player is not
+     * looking, which is the whole of what a console third-person camera does that this game
+     * never did.
+     *
+     * The target is the BODY'S HEADING, and it may never be the travel angle. Under free look
+     * the stick is measured against the camera, so a camera that chased the travel direction
+     * would close a loop with a gain of one: push sideways, the camera follows, the direction
+     * the stick means rotates with it, and the player spins for as long as they hold it. The
+     * heading closes no loop, because nothing measures the stick against the heading. And once
+     * the body has been turned to face its travel, behind the body and behind the direction of
+     * travel are the same place, which is why this reads as following the movement. */
+    bool  passive_follow;
+    float passive_settle_seconds;
+    float passive_rate;
+    float passive_hold_seconds;   /* the beat before it starts, after the player stops looking */
+
+    /* Steering a jump. The engine is already willing: Plr_UpdateJump moves only the vertical,
+     * and the horizontal is the ordinary facing times curSpeed, with both the steer and the
+     * integrate running in the air. What stops it is this file's own Stand gate, which holds
+     * the body's heading outside Stand and leaves the player flying wherever they launched.
+     * Slower than the body's own turn on the ground, because a jump that can be pivoted is a
+     * different game rather than a repair. */
+    bool  air_control;
+    float air_settle_seconds;
+    float air_turn_rate;
 } free_look_config_t;
 
 typedef struct free_look_state {
@@ -75,6 +102,20 @@ typedef struct free_look_state {
     bool  armed;
     bool  camera_yaw_valid;
     float camera_yaw;
+    /* Which constants the pending body target was built with. The aim stance and the ground
+     * travel turn at the body's own rate; a jump turns at the air rate, and the integrate that
+     * consumes the target cannot tell which it was handed without being told. */
+    float target_settle_seconds;
+    float target_turn_rate;
+
+    bool  look_seen;          /* set by any look input, consumed by the drift on the next frame */
+
+    /* The gate's answer about the WORLD, asked every rendered frame with this feature's own
+     * switch forced on, so it says whether the level has taken the camera rather than whether
+     * free look happens to be running. The sideways walk and the pad stick read it: where the
+     * author placed a camera, both hand the player back to the engine's own scheme. */
+    free_look_release_t world_gate;
+    float look_idle_seconds;  /* how long since the last of it, in real time                    */
 
     /* Carried across an AUTHORED-REGION release and across nothing else. It is the yaw the player
      * had when he stepped onto the region's floor, and it is taken once at the transition rather

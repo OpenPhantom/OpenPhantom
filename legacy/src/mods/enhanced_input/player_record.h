@@ -42,6 +42,13 @@
 /* Index 0 of the mode table at [0x4B54B0], which lists the fourteen descriptors in the order of the
  * mode enum. Stand is the only mode whose own tick is the walk/run clip selector. */
 #define PLAYER_MODE_STAND       0
+/* The three modes the body is off the ground in and the engine still runs the steer and the
+ * integrate: horizontal motion there is the ordinary facing times curSpeed, so turning the
+ * heading redirects the flight. FixedJump is deliberately not among them, it follows an
+ * authored arc and its descriptor skips the steer phase outright. */
+#define PLAYER_MODE_JUMP        6
+#define PLAYER_MODE_JEDI_JUMP   7
+#define PLAYER_MODE_FALL        8
 #define PLAYER_MODE_SIDLE      10    /* builds its displacement from launchVel, not curSpeed */
 #define PLAYER_MODE_FIXED_JUMP 11    /* follows a ballistic arc                              */
 #define PLAYER_MODE_MAX        13

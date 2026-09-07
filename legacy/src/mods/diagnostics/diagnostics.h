@@ -48,12 +48,18 @@ typedef struct diagnostics_config {
      * few once the count passes a threshold. See diag_projectiles.c's own header. */
     int  projectiles;         /* 1 = on, no further levels                                      */
 
+    /* Every time a script takes the camera away from the player and every time one gives it
+     * back, with the caller that asked. A take that is never released strands the camera on a
+     * shot the player has walked away from until the level reloads. See diag_camera_owner.c. */
+    int  camera_owner;        /* 1 = on, no further levels                                      */
+
     /* The engine's own character pool, walked read only: who is standing near the player, what the
      * engine calls them, and whether they are gaining or losing height. See diag_characters.c. */
     int  characters;          /* 1 = the ones near the player, 2 = every live one               */
     int  characters_radius;   /* world units around the player that level 1 reports             */
     char characters_watch[16];/* a character name: put a hardware write watch on it              */
     int  characters_watch_velocity; /* 1 = watch its velocity Z, 0 = its position Z             */
+    int  player_body_watch;         /* watch the player's DRAWN body height, not a character */
 
     int  audio_census_ms;     /* >0: list the occupied sound channels every N ms                */
     int  max_lines_per_second;

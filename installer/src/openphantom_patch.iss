@@ -4,14 +4,14 @@
 ; install time. What sits in dist is already only the pieces these rows install: the patch as it
 ; comes out of its release archive, and 33 files of the 851 in VideoLAN's zip.
 
-; PatchVersion records which release dist\patch was taken from. It is the same number as AppVer,
-; because the installer and the patch are one release; see the comment at AppVer for why they were
-; merged and why the patch's old v0.x line joined this one rather than the other way round. Keep the
-; two in step, and nothing derives a URL or a path from either.
+; PatchVersion records which release dist\patch was taken from, on the PATCH's own line, 0.4.x. It
+; is not AppVer: the two numbers were merged at 1.5.0 and have been split again at j0nny's asking,
+; so this counts patch releases while AppVer counts installer builds. Nothing derives a URL or a
+; path from either, and the binaries inside dist\patch carry AppVer's line, not this one.
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "1.5.0"
+#define PatchVersion       "0.4.2"
 #define PatchSrc           "dist\patch"
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the
@@ -92,6 +92,7 @@ Name: "patch\variable_fov";        Description: "{cm:CompFov}";         Types: e
 Name: "patch\hud_ratio_scaling";   Description: "{cm:CompHud}";         Types: everything full custom
 Name: "patch\decal_fix";           Description: "{cm:CompDecal}";       Types: everything full custom
 Name: "patch\dialogue_anim_fix";   Description: "{cm:CompDialogueAnim}"; Types: everything full custom
+Name: "patch\camera_handback_fix"; Description: "{cm:CompCameraHandback}"; Types: everything full custom
 Name: "patch\view_distance_fix";   Description: "{cm:CompViewDist}";    Types: everything full custom
 
 ; ---- offered ---------------------------------------------------------------------------------------
@@ -217,6 +218,8 @@ Source: "{#PatchSrc}\mods\decal_fix.dll";           DestDir: "{app}\mods"; \
     Components: patch\decal_fix;           Flags: ignoreversion
 Source: "{#PatchSrc}\mods\dialogue_anim_fix.dll";   DestDir: "{app}\mods"; \
     Components: patch\dialogue_anim_fix;   Flags: ignoreversion
+Source: "{#PatchSrc}\mods\camera_handback_fix.dll"; DestDir: "{app}\mods"; \
+    Components: patch\camera_handback_fix; Flags: ignoreversion
 Source: "{#PatchSrc}\mods\render_guard.dll";        DestDir: "{app}\mods"; \
     Components: patch\render_guard;        Flags: ignoreversion
 ; effect_clock is part of framerate_fix rather than a choice of its own: at 30 fps it changes nothing

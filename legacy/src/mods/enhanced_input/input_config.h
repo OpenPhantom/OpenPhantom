@@ -28,6 +28,46 @@ typedef struct input_config {
     float strafe_settle_seconds;
     float strafe_turn_rate;    /* degrees per second, the damper's hard rate cap */
 
+    /* The passive camera follow, which only means anything while strafe is on: without it the
+     * walk never leaves the heading and there is nothing to follow. Its own settle time,
+     * rather than the body's, because the camera wants to lag noticeably further behind than
+     * the model does; a camera that settles as fast as the body is the snap this replaces. */
+    bool  camera_follow;
+    float camera_follow_settle_seconds;
+    float camera_follow_rate;  /* degrees per second, so a right angle cannot whip the view */
+
+    /* HOW FAR the camera is allowed to drift, which is the setting that decides whether this
+     * feels passive or fights the player. The walk's travel angle reaches a right angle on a
+     * held sidestep, and a camera that follows all of it has turned the sidestep into a turn:
+     * the stick is heading-relative, so once the view has swung round, the direction that
+     * moves the player sideways on screen has rotated out from under the player's thumb.
+     * A fraction of the angle, hard-capped well short of that, is what reads as the camera
+     * drifting with the movement rather than replacing it. */
+    float camera_follow_strength;     /* 0 to 1, the share of the travel angle taken       */
+    float camera_follow_max_degrees;  /* and the ceiling on the result                    */
+
+    /* How long after the player stops turning the camera before it starts drifting back. Real
+     * time, and it exists because the right stick arrives as synthesized mouse motion that
+     * lands on some frames and not others: without a hold-off the drift starts and stops
+     * several times a second and reads as jitter. */
+    float camera_follow_hold_seconds;
+
+    /* Steering a jump. Off by default: it changes how the game plays rather than repairing a
+     * fault, and jump puzzles were authored against a body that flies where it launched. */
+    bool  air_control;
+    float air_settle_seconds;
+    float air_turn_rate;
+
+    /* The left stick, read from XInput rather than through the engine's own joystick path.
+     * pad_stick.h sets out why that path cannot be used for a direction: a square deadzone of
+     * thirty per cent cut without rescaling, each half axis bound to its control twice so the
+     * sum doubles, and a clamp that then saturates it at half the stick's travel. */
+    bool  pad_stick;
+    int   pad_controller_index;
+    float pad_deadzone;
+    float pad_run_threshold;      /* magnitude at which a push means run rather than walk   */
+    float pad_run_hysteresis;     /* half the width of the band, so the gait cannot chatter */
+
     /* Degrees per second A and D turn the player while sideways walking is off. It exists because
      * mouse look has to clear the engine's own turn cell; that cell carries the mouse too, so
      * the keyboard's share has to be re-applied from here or the keys go dead. */
@@ -46,5 +86,7 @@ const input_config_t *input_config(void);
  * business, because only the caller knows whether the change came from a player or from a
  * dependency check that the player never asked for. */
 void input_config_set_strafe(bool enabled);
+void input_config_set_camera_follow(bool enabled);
+void input_config_set_air_control(bool enabled);
 
 #endif /* INPUT_CONFIG_H */

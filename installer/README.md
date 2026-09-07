@@ -42,6 +42,35 @@ set of finished saved games, and a starting controller layout and display mode.
 What each fix does is in [`legacy/README.md`](../legacy/README.md), and each has a `README.md` beside
 its own source. This directory does not repeat those.
 
+## Version numbers
+
+This installer is numbered `1.4.x` and the patch it carries is numbered `0.4.x`. They are two
+different numbers on purpose, and both are set by hand:
+
+| where | what it holds | now |
+|---|---|---|
+| `AppVer` in `openphantom_installer.iss` | the installer's own number | `1.4.2` |
+| `PatchVersion` in `src/openphantom_patch.iss` | which patch release `dist/patch` was taken from | `0.4.2` |
+| `OPENPHANTOM_VERSION` in `legacy/CMakeLists.txt` | the patch's number: every DLL's version resource, and the log header | `0.4.2` |
+
+**The last digit of the installer counts installer builds.** Build a new one, add one. It is not a
+judgement about how much changed, which is what an earlier rule here tried to be.
+
+**The binaries carry the patch's number.** The DLLs are the patch, so their version resources and
+the first line of `engine_fixes.log` both read `0.4.2`, while the installer that delivered them
+reads `1.4.2`. Two numbers on one machine is the cost of two lines, which is why both are written
+down here.
+
+**One release was published with the two merged**, as `v1.5.0` and `i1.5.0`. The lines are separate
+again, so that release is renamed on GitHub to `v0.4.1` and `i1.4.1`, which puts it where it belongs
+in both sequences and leaves no gap. The rename is presentational: the installer in that release was
+not rebuilt and still reports `1.5.0` in its own properties, because re-cutting it would change
+every hash and the file is already referenced from ModDB and PCGW.
+
+Nothing in the script compares versions. An existing installation is found by `AppId` and the player
+is asked what to do with it, so no number decides whether an install is allowed, and the renumbering
+cannot block anybody.
+
 ## Building
 
 ```sh
@@ -138,10 +167,14 @@ The resolution is a starting value and not a limit, which the same run demonstra
 player changed it in the game's own video options afterwards and the new mode stuck.
 
 **The DLL counts recorded above are of the build tested at the time, and are left as they were
-observed rather than raised.** The patch now carries twenty two fixes: `ground_clip_fix` and
-`sound_lifetime_fix` were both added after those installations were run. `dist/patch/` has since
-been refreshed from a build that includes them, the script compiles with no warnings, all twenty
-two file rows have a file and all twenty two staged files have a row. **No installation has been run from this bundle.** The two
+observed rather than raised.** The patch now carries twenty three fixes: `ground_clip_fix` and
+`sound_lifetime_fix` were added after those installations were run, and `camera_handback_fix`
+is newer still. `dist/patch/` has since been refreshed from a build that includes all three, all
+twenty three file rows have a file and all twenty three staged files have a row, and every row
+names a component that exists. The script compiles clean apart from one hint, that `FileCopy`
+has been renamed to `CopyFile`, which is Inno's own deprecation notice and not a fault here.
+
+**No installation has been run from this bundle.** The two
 runs recorded above installed the twenty DLL build and nothing has been installed since, so those
 paragraphs describe a bundle that is no longer the one in the tree.
 

@@ -40,6 +40,7 @@ add_unit_test(strafe_walk enhanced_input
 # shows up over a run of drains with uneven frame times.
 add_unit_test(mouse_look enhanced_input
     enhanced_input/mouse_look.c
+    enhanced_input/frame_clock.c
     enhanced_input/input_gate.c
     enhanced_input/mouse_config.c
     enhanced_input/input_slider.c
@@ -177,17 +178,21 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/sensitivity_row.c
     dev_overlay/free_look_row.c
     dev_overlay/strafe_row.c
+    dev_overlay/air_control_row.c
+    dev_overlay/camera_follow_row.c
     dev_overlay/strict_range_row.c
     dev_overlay/view_range_row.c
     dev_overlay/dev_menu_size_row.c
+    dev_overlay/subtitle_size_row.c
     dev_overlay/cheats_original.c
     dev_overlay/cheats_original_actions.c
     dev_overlay/cheats_openphantom.c
     # The cheats were split by responsibility when cheats_openphantom.c passed twice the size this
-    # project allows. They still share one state record, so the test links all five together.
+    # project allows. They still share one state record, so the test links them all together.
     dev_overlay/cheats_npc_damage.c
     dev_overlay/cheats_jump_boost.c
     dev_overlay/cheats_fall_consequences.c
+    dev_overlay/cheats_noclip.c
     dev_overlay/cheats_free_camera.c
     dev_overlay/cheats_no_fog.c
     # Both jump boost and the free camera ask the same "is there a floor under this" question,
@@ -214,6 +219,18 @@ add_unit_test(debug_register diagnostics diagnostics/debug_register.c)
 # live level rather than invented, and the case that must NOT change, a collision tested character
 # keeping its velocity, matters as much as the case that must.
 add_unit_test(move_mode ground_clip_fix ground_clip_fix/move_mode.c)
+
+add_unit_test(creeping_mover ground_clip_fix ground_clip_fix/creeping_mover.c)
+
+# The camera hand-back's one decision, and it is mostly about what it refuses. Being too
+# permissive here does not fail loudly, it takes the camera off a cutscene or a death shot,
+# which reads as the engine misbehaving rather than as this module doing it.
+add_unit_test(handback_rule camera_handback_fix camera_handback_fix/handback_rule.c)
+
+# Whether the pad stick may drive at all. It runs every substep of every session, so the
+# unresolved case is the one that matters: too strict there is not a subtle fault, it is a
+# player who cannot move.
+add_unit_test(input_mode enhanced_input enhanced_input/input_mode.c)
 
 # The frame-time governor's one decision. The dead zone between its two thresholds is the property
 # that stops it oscillating, and it is a relationship between two settings rather than anything

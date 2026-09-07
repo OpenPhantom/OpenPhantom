@@ -33,10 +33,12 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `FrameGpuCounter` | the graphics counter path | the performance counter the graphics load is read from. Windows localises these names, which is the only reason this is a setting |
 | `Present` | `0` | 1 names which output path is live, 2 also times the flip and says whether it blocks in the driver or spins |
 | `Projectiles` | `0` | 1 counts the engine's own ballistic-physics list every 30 frames, and past 10 live entries also names the first few by position, so a pileup reads as stacked or spread at a glance |
+| `CameraOwner` | `0` | 1 reports every take and release of the engine's scripted-camera flag with the caller that asked and a running depth. Seven places set that flag and six clear it, so a take with no release is possible, and it strands the camera on a forced region until the level reloads. This is the census that found the fault `camera_handback_fix` repairs; the two cannot both run, because the functions they share are too small for a second detour to anchor behind the first |
 | `Characters` | `0` | 1 names the characters within `CharactersRadius` of the player every 60 frames, with position, state, AI mode and the height each gained or lost since the previous report; 2 reports every live character in the level and ignores the radius |
 | `CharactersRadius` | `12` | world units around the player that `Characters=1` reports. Ignored at level 2, and a value below 1 falls back to the default |
 | `CharacterWatch` | empty | a character name from `Characters` above. Places a hardware write breakpoint on that character's height and logs the address of every instruction that writes it. Needs `Characters` on |
 | `CharacterWatchVelocity` | `0` | which field the watch is armed on: 0 the character's position height, 1 its velocity height. Position names what moved it, velocity names what decided it should move |
+| `PlayerBodyWatch` | `0` | arm the same write watch on the player's DRAWN body height instead of on a character. The body is a different object from the record that owns it, and on a level whose player phases never run nothing copies one onto the other, so a body can descend visibly while the record it belongs to never moves. Only one watch exists, so this and `CharacterWatch` are alternatives |
 | `AudioCensusMilliseconds` | `0` | >0 lists the occupied channels every N ms (minimum 100) |
 | `MaxLinesPerSecond` | `60` | 0 = unlimited |
 | `AlsoToMainLog` | `0` | mirror into `engine_fixes.log` as well |

@@ -31,6 +31,7 @@ the mode table that the aspect gate anchors.
 | `ForceWidth` / `ForceHeight` | `0` | 0 = leave `obi.ini` alone |
 | `LogModeTable` | `0` | dump the raw DirectDraw table on the first enumeration. A diagnostic, so it is off in a release |
 | `MenuKeepsResolution` | `1` | stop menus switching to 640x480 |
+| `SubtitleScale` | `1.0` | how big the subtitles are, as a multiple of the size they have at 640x480. `1.0` is exactly the authored size and proportions at any resolution, `0.5` to `3.0` either side of it, and `0` leaves the engine's own shrinking behaviour alone. Settable from the developer menu and applied within a second; only `0` needs a relaunch. See **Subtitles that scale** below |
 | `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which is what its own pointer handling assumes. |
 | `KeepCursorInWindow` | `1` | re-centre the mouse pointer in the window's client area instead of at screen (320,240) |
 | `ClipPointerToWindow` | `1` | hold the pointer inside the client area while the game window is in front, and let go the instant it is not |
@@ -218,6 +219,49 @@ one entry, 800x600.
 
 `hook_enum_modes` logs every mode it hands to the options screen, unconditionally. That line is
 what tells the two cases apart, and it is not behind a verbose flag for that reason.
+
+## Subtitles that scale
+
+Subtitles shrink as the resolution rises: at 640x480 they read correctly, at 4K they are a fifth of
+that on screen. It is not a font size problem. The engine lays the whole thing out in a **640x480
+box of fixed pixels** and centres it, so everything inside, the 18 pixel row pitch, the 450
+baseline, the 580 wrap, stays the same number of pixels however big the display is.
+
+**The change is the mapping, not one constant inside the box.** The box reaches the screen through
+two things only: the centring, which asks how big the screen is, and the position scale, which
+divides by the same. Tell both that the screen is `k` times smaller than it is and the whole box
+lands `k` times bigger with every proportion inside it untouched. That matters beyond tidiness: the
+row pitch, the baseline, the wrap and the two nudges live in the one part of that function the
+decompilation admits it never reconstructed, so this way none of them has to be understood.
+
+`k` is fitted by **height**, `k = H/480`. By width it would be `W/640`, which on 16:9 makes a 4:3
+box taller than the display and pushes the baseline off the bottom. By height the box comes out
+1.333xH wide, narrower than the screen, so it pillarboxes as the layout expects. At 640x480 with a
+scale of 1 every number is the one the engine already had.
+
+**Ten writes, all or nothing.** Three grow the box, two put it back where it belongs, two keep the
+line breaks with it, two let it hang off the top edge once it is taller than the screen, and one
+detour moves the backdrop quad to match. Each of those was found by a screenshot of what breaks
+without it:
+
+* glyphs alone, and the rows stayed 18 pixels apart while the letters grew, so three lines landed on
+  top of each other
+* the wrap left behind, and lines broke after two or three words inside a box four times wider than
+  they were using, because `font3d_measureChar` hands the glyph scale to the measurement while the
+  limit is a bare constant that does not move
+* the two offset clamps left in, and at any scale above the fit the box wants its top above the
+  screen, the engine floors the offset at zero instead, and a 450 baseline lands in a 390 tall space
+  below the bottom edge
+* the backdrop left out, and the text scaled while the panel behind it stayed the old size, because
+  that quad is built in device pixels and handed straight to the drawing, never touching the
+  position scale
+
+The backdrop transform reduces to something simpler than the layout it matches: `x` scales about the
+horizontal centre and `y` about the bottom edge, which is exactly where the text is anchored, and it
+is the identity at `k = 1`. Only two calls reach that function and both are the subtitle's own bars.
+
+**Nothing else the font layer draws is affected.** The same layer draws every menu string and HUD
+readout; all ten writes are inside the dialogue's own drawing or reached only from it.
 
 ## Known limitations
 

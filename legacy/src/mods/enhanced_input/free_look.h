@@ -1,6 +1,7 @@
 #ifndef FREE_LOOK_H
 #define FREE_LOOK_H
 
+#include "camera_sites.h"
 #include "free_look_math.h"
 #include "player_sites.h"
 
@@ -49,6 +50,25 @@ bool free_look_is_installed(void);
  * the mouse. */
 bool free_look_is_enabled(void);
 
+/* The passive camera's switch, which this file keeps a COPY of because it is read on the render
+ * clock and must not touch the ini there. Anything that changes the setting has to push it in
+ * here as well, or the copy stands for the rest of the session and the feature looks dead. */
+void free_look_set_passive_follow(bool enabled);
+
+/* True while the LEVEL AUTHOR's own camera is on the player, by the same test free look uses to
+ * let go of it. Answered whether or not free look is switched on, because it is a fact about the
+ * room rather than about this feature.
+ *
+ * The sideways walk and the pad stick stand down while it holds. Free look already did, and the
+ * three of them not agreeing is what trapped a player on a balcony in the palace: the camera was
+ * the author's, free look had let go, and the pad went on spending the stick on a direction
+ * instead of a turn, so there was no way to turn round and jump back up. */
+bool free_look_level_owns_camera(void);
+
+/* Steering a jump, kept here for the same reason: it is read on the substep clock and must not
+ * reach for the ini there. */
+void free_look_set_air_control(bool enabled);
+
 /* Switches the live control mode. Returns false, changing nothing, when the machinery is not
  * installed: there would be no camera to turn and no honest half of the feature to offer.
  *
@@ -64,11 +84,17 @@ bool free_look_set_enabled(bool enabled);
  *
  * `strafe` is +1 for right and -1 for left, already inverted per configuration.
  * `stand_mode` gates the forced walk exactly as the sideways walk gates it. */
-bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, bool stand_mode);
+/* `forward` is SIGNED and may be analog. The caller derives it, because only the caller knows
+ * whether this substep's input came from a stick with a real magnitude or from keys that can
+ * only ever say +1, -1 or 0. Mixing an analog sideways value with a quantised forward one is
+ * what pulled every diagonal on a pad toward straight ahead. */
+bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, float forward,
+                     bool stand_mode, bool air_mode);
 
 /* Phase 7, BEFORE the original: turn the body toward the direction phase 2 asked for. The write
  * is not undone afterwards, unlike the sideways walk's travel offset this heading change is
- * real and every downstream consumer must see it. Does nothing unless free look took the substep. */
+ * real and every downstream consumer must see it. Does nothing unless free look took the
+ * substep. */
 void free_look_integrate(uint8_t *record, float substep_seconds);
 
 /* True while the trigger is held: the body is pointed at the camera and the feet strafe relative

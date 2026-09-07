@@ -38,6 +38,20 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `MenuWidgets` | `0` | | put this project's three widgets on the game's own controls screen: the two check boxes and the mouse sensitivity slider. Ships off so that screen looks as it did in 1999. Nothing is lost by it: all three are keys here and the developer menu has a row for each, sensitivity included. Read once at startup, so it takes effect on the next launch |
 | `StrafeInvert` | `0` | | |
 | `StrafeTurnsBody` | `1` | | turn the model to face the way it travels |
+| `AirControl` | `0` | | turn the body toward the stick while off the ground, so a jump can be aimed after it has left. Needs `FreeLook=1`; see **Steering a jump** |
+| `AirControlSettleMs` | `400` | 0-3000 | how long 90 % of the gap takes to close in the air |
+| `AirControlRate` | `180` | 15-1000 | degrees per second, the ceiling on turning in the air |
+| `PadStick` | `1` | | read the left stick from XInput as a direction and a magnitude instead of through the engine's own joystick path. See **The left stick** below for what that path does to a pad |
+| `PadControllerIndex` | `0` | 0-3 | which XInput slot |
+| `PadDeadzone` | `0.24` | 0-0.9 | radial, so the boundary is a circle and feels the same in every direction |
+| `PadRunThreshold` | `0.70` | 0-1 | how far the stick goes before a walk becomes a run |
+| `PadRunHysteresis` | `0.05` | 0-0.25 | half the width of the band around it, so the gait cannot chatter |
+| `CameraFollow` | `0` | | the passive camera. With `FreeLook=1` it drifts the camera back behind the body; with `FreeLook=0` it leans the camera a share of the sideways walk's travel angle instead |
+| `CameraFollowSettleMs` | `600` | 0-3000 | how long 90 % of the gap takes to close |
+| `CameraFollowRate` | `120` | 15-1000 | degrees per second, the hard ceiling on the swing |
+| `CameraFollowHoldMs` | `250` | 0-5000 | the pause after the player stops turning the camera before the drift starts |
+| `CameraFollowStrength` | `0.35` | 0-1 | `FreeLook=0` only: the share of the travel angle the camera leans |
+| `CameraFollowMaxDeg` | `25` | 0-90 | `FreeLook=0` only: the ceiling on that lean |
 | `StrafeSettleMs` | `250` | 0-1000 | how long the travel angle takes to close 90 % of a change. `0` = no damping, the old instant step |
 | `StrafeTurnRate` | `240` | 30-2000 | degrees per second, the damper's hard rate cap |
 | `SteerLean` | `1` | | the upper body leans into a turn again: chest and head are re-twisted after the original from the **engine's own** turn value. Mouse look only for now, under free look that value is the mouse, and there the mouse is the camera |
@@ -494,6 +508,156 @@ buffer, that address is no longer inside the host image and a second DLL is refu
 second box is a second entry in the *same* patch, appended to the one copy taken at loader time.
 `enhanced_input` owns **controls**; `variable_fov` owns **video**.
 
+## The left stick
+
+The engine reads a pad through WinMM into two independent scalars, control function 0 for the turn
+and function 1 for forward and back. There is no sideways axis and no vector anywhere. Three things
+then happen to those two numbers, and each loses information the one before it kept.
+
+A **thirty per cent deadzone, cut per axis, with no rescale**. `stdControl_readAxis` drops any
+sample inside the deadzone in the axis record, and `joystick_init_query_caps` sets that from a
+fraction of 0.3. Being per axis it is square, so a diagonal push stays dead well past the point a
+straight push is live. Being uncut it is a step, so the first live sample arrives at 0.30 rather
+than near zero.
+
+**Each stick axis is bound to its function twice.** `control_defaultJoyEntry` writes the descriptor
+pairs `{2,1}` and `{1,2}` for X, which are the two half axes; both resolve to function 0 with the
+invert flag, and `control_bindAxisShared` appends without deduplicating. `control_readAxis` then
+sums the bindings, so the axis doubles.
+
+**Every binding is clamped before the sum, and the sum is clamped again**, so the doubled value
+saturates at half the stick's travel.
+
+Composed, against the fraction of real stick travel:
+
+| deflection | what the game reads |
+|---|---|
+| below 0.30 | 0 |
+| 0.30 to 0.50 | jumps to 0.60, then climbs to 1.0 |
+| above 0.50 | pinned at 1.0 |
+
+The usable analog range is a fifth of the stick, entered by a jump to sixty per cent, and past
+halfway a diagonal reads as a corner whichever way it is really pointing, so the direction is gone
+rather than coarse. Read out of the retail image and then confirmed against a real install's
+`obi.ini`, whose `X0JOY` and `Y0JOY` rows are the shipped defaults. A player who has rebound the pad
+in the controls screen may not have the doubling, so nothing may assume it.
+
+There was a fourth loss, and that one was ours: the sideways walk took the analog value for the
+sideways component but only the move **bit** for the forward one, so every diagonal was pulled
+toward forward. A true forty five degree push came out at thirty five degrees, and at half
+deflection at nineteen.
+
+`pad_stick.c` reads the left stick from XInput instead, which is where the right stick already comes
+from, and applies one radial deadzone. It disables nothing and unbinds nothing: phase 2 runs after
+the engine's own steer, so it simply writes the movement fields again from its own vector, and a
+substep it has nothing to say about leaves the engine's numbers alone. That is what keeps the
+keyboard, and a hand-bound pad, working unchanged.
+
+### Walk and run
+
+Running is a **button** in this engine, not a speed. `Plr_StandClipSelect` asks whether the Run
+action is held and picks the `runFwd` clip, footstep state 2 and a speed cap of 3.5; otherwise
+`walkFwd`, state 1 and a cap of 2.0. So `pad_run.c` chains `control_isHeld` and answers true for
+that one action while the stick is past `PadRunThreshold`. It can only turn a no into a yes, so a
+bound Run key still works and still wins.
+
+The gait is two steps rather than a slide because the clips play at a fixed rate and nothing scales
+them by how fast the body is really moving. A continuously variable pace would slide the feet along
+the ground, and the harder the player pushed the worse it would look.
+
+### Standing down when the bindings are not ours
+
+Going around the engine's joystick path means going around everything that path was doing for us,
+and one of those things matters. A conversation with a choice menu stops the player moving so the
+stick can pick an answer, and the pause menu does the same. The engine does that by swapping the
+whole binding set through `input_setMode`, not by testing a flag anywhere the movement code can
+see: the mode cell it keeps is read nowhere else in the image. A stick read straight from XInput
+is bound by nothing and sailed past it, so the menu scrolled and the player walked at once.
+
+So `pad_stick.c` asks which binding set is live and reports nothing at all when it is not the
+gameplay one. That is done in the poll rather than at the one place that writes movement, because
+the run button and the air steer read this stick without going through that place, and a gate each
+of them has to remember is a gate one of them will not.
+
+Only eight places in the game set the mode. Three set 4 and three set 0, all of them the dialogue;
+the other two are `swmenu_open` and `swmenu_close`, which set 2 and then restore whatever was live
+before. No gameplay state uses anything but 0, which is what makes "only 0 drives" safe rather
+than merely tidy.
+
+A site that does not resolve answers YES. The cost of being wrong that way is one awkward
+conversation; the cost of being wrong the other way is a player who cannot move at all.
+
+## The passive camera
+
+**`CameraFollow` switches `FreeLook` on with it**, and the dependency is one way: free look on its
+own is exactly what it always was. The drift aims the camera at the body's heading, and that only
+follows the player because free look has already turned the body to face where it travels, so
+without free look there would be nothing to follow. Switching free look off switches the passive
+camera off with it, and if free look declines, so does this.
+
+`CameraFollow=1` drifts the camera back behind the body while the player is not
+turning it. Free look already turns the body to face its travel, so behind the body and behind the
+direction of travel are the same place, and one damped step toward the heading reads as the camera
+following the movement.
+
+**The target is the heading and may never be the travel angle.** Under free look the stick is
+measured against the camera, so a camera that chased the travel direction would be a loop with a
+gain of one: hold the stick sideways, the camera turns toward where you are going, the direction the
+stick means turns with it, and the player rotates for as long as they hold it. The heading closes no
+loop, because nothing measures the stick against the heading.
+
+**It steps on the render clock, not the substep clock.** The first version stepped it in phase 7 at
+the simulation's fixed 32 Hz and it was visibly jittery: the camera is published every drawn frame,
+so a yaw changing 32 times a second is held for two, three or four frames and then jumps. The camera
+is not simulation state and is free to move per frame, and the interpolated heading it aims at is
+already smoothed across the substep by the engine's own alpha.
+
+**It waits, in real time.** A pad's look stick arrives as synthesized mouse motion with a fractional
+remainder carried between polls, so it lands on some frames and not others. Asking whether this
+frame carried input started and stopped the drift several times a second, which was the other half
+of the jitter. `CameraFollowHoldMs` is the pause instead, and it also gives the beat a console
+camera usually waits before recentring.
+
+**Authored angles survive.** A soft recentre was considered once before and rejected, because
+seventeen shipped follow regions author a real over-the-shoulder yaw and three of them a full ninety
+degrees. The target is the heading plus the region's own authored yaw, which `camera_sites` already
+resolves, so those are left alone.
+
+With `FreeLook=0` the same switch runs a different mechanism in `camera_follow.c`: there the stick
+is heading-relative, the body does not turn, and a camera that followed the travel angle outright
+would rotate the stick out from under the player's thumb. It takes `CameraFollowStrength` of the
+angle, capped at `CameraFollowMaxDeg`, so the view never turns far enough to invert the mapping. The
+two can never both run.
+
+## Steering a jump
+
+`AirControl=1` turns the body toward the stick while the player is off the ground. Off by
+default, because it changes how the game plays rather than repairing a fault and the jump
+puzzles were authored against a body that flies wherever it launched.
+
+The engine was always willing. `Plr_UpdateJump` moves only the vertical, the horizontal is the
+ordinary facing times `curSpeed`, and both the steer and the integrate phases run in Jump,
+JediJump and Fall. Under plain mouse look the view turn already steers a jump. What stops it is
+this feature's own Stand gate, so air control is reachable only with `FreeLook=1`.
+
+The Stand gate is not loosened. Its two reasons are a forced move bit locking the crate shove
+for good, and a backward key outside Stand being a negative speed along an unchanged facing
+rather than a half turn. Neither reaches a body in flight, and **nothing is forced here**: no
+move bit is written and no drive renewed, so this redirects the speed the player launched with
+rather than adding to it, and a jump cannot be flown further than it would have gone.
+
+Only the three modes that are a body in flight with the ordinary integrate under them. A
+scripted jump follows an authored arc and its descriptor skips the steer phase, so it never
+reaches this at all.
+
+There is a row for it in the developer menu's **Utilities**, beside the passive camera's, which
+is the only way to reach it on a handheld: it was a key alone at first, and the one control that
+most needed reaching easily was the one that could not be reached at all.
+
+`AirControlSettleMs` ships at 400 against the body's own 150 on the ground, and
+`AirControlRate` at 180 against 540. The difference is the point: a jump that can be pivoted in
+place is a different game, and this is meant to be a lean.
+
 ## Known limitations
 
 **Under `FreeLook=1` the walk-backward clip never plays.** Holding back is a half turn and a forward
@@ -547,13 +711,14 @@ substitutes. With `FreeLook=0` the backward clip plays exactly as it shipped.
   values, not a compromise, so the release hands the cut to the engine whole. No shipped region
   carries bit 2 on its own, the three that carry it are `flags 12`, world-fixed as well, so this
   is a rule about what the mask means rather than an observable difference.
-* **The body does not turn outside Stand, unless an attack is live.** In the air, in a launched
-  sidestep and while swimming the mouse moves the camera and the body holds its heading. That is not
-  conservatism about animation: outside Stand the forced forward drive is not in force, so a
-  backward key is still a *negative speed along an unchanged facing* rather than a half turn, and
-  building the camera-relative angle there would double-count the reversal and send the player the
-  wrong way. The body comes round of its own accord on the next Stand substep in which a movement
-  key is held.
+* **The body does not turn outside Stand, unless an attack is live or `AirControl=1`.** In a
+  launched sidestep and while swimming the mouse moves the camera and the body holds its heading.
+  That is not conservatism about animation: outside Stand the forced forward drive is not in
+  force, so a backward key is still a *negative speed along an unchanged facing* rather than a
+  half turn, and building the camera-relative angle there would double-count the reversal and
+  send the player the wrong way. The body comes round of its own accord on the next Stand substep
+  in which a movement key is held. **Steering a jump** is the one case carved out of this, and
+  only because neither reason reaches it: see below.
 * **The turn penalty is off and stays off.** `Plr_Integrate` scales the displacement from
   `|turnWheel|`, and mouse look clears `turnWheel`. Under free look the body turns fast and often and
   the penalty, which exists to stop exactly that, never bites. It cannot be restored by writing

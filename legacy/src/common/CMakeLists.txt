@@ -16,6 +16,7 @@ add_library(engine_fixes_common STATIC
     frame_hook.c
     menu_patcher.c
     cinematic_gate.c
+    stick.c
 )
 
 target_include_directories(engine_fixes_common PUBLIC

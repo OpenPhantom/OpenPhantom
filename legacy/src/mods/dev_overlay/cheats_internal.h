@@ -1,4 +1,4 @@
-/* cheats_internal.h: what the five OpenPhantom cheat files share, and nothing else.
+/* cheats_internal.h: what the OpenPhantom cheat files share, and nothing else.
  *
  * The cheats were one file of over two thousand lines until they were split by responsibility.
  * They still share one state record, because they share one install pass and one panel: the panel
@@ -58,6 +58,25 @@ typedef void (__cdecl *mode_enter_fn_t)(void);
 typedef void (__cdecl *death_trigger_fn_t)(int32_t cause);
 typedef void (__cdecl *camera_type_fn_t)(int32_t type);
 typedef void (__cdecl *camera_freeze_fn_t)(const float *position);
+/* bapmap_probeWall, the universal wall raycast no clip answers for the
+ * player. Returns the blocking bapPoly*, or NULL for nothing in the way. */
+typedef void *(__cdecl *probe_wall_fn_t)(const void *from, const void *to,
+                                         float z_lift, float radius, uint32_t mask);
+/* Its stationary sibling at 0x0040C870, which tests a sphere sitting at one point rather than
+ * sweeping one along a segment. The AIRBORNE tick uses this one and not the swept probe, which
+ * is why walking through walls needs it as well the moment the glide lifts the player off the
+ * ground. NULL when its own site did not resolve, which is survivable: see install_noclip. */
+typedef void *(__cdecl *probe_wall_at_fn_t)(const void *pos, float z_lift, float radius,
+                                            uint32_t mask);
+/* Plr_AirMoveGate, the veto the engine applies to a horizontal move made in the AIR. Takes
+ * nothing and returns nothing; it reads the player from a global and clears the moved flag. */
+typedef void (__cdecl *air_move_gate_fn_t)(void);
+/* Plr_TryGrabLedgeWhileFalling, phase 8 of mode Fall: catches a ledge the player is falling
+ * past and puts them on it. Same shape, takes nothing and returns nothing. */
+typedef void (__cdecl *ledge_grab_fn_t)(void);
+/* bapobj_cylinderPush, the layer that makes bodies solid to each other. Answers whether the
+ * object may stand at newPos, and shoves whoever it displaces on the way. */
+typedef int32_t (__cdecl *actor_push_fn_t)(void *obj, const void *new_pos);
 
 typedef struct own_cheat {
     const char *name;
@@ -73,6 +92,11 @@ typedef struct cheats_own_state {
     detour_t                npc_damage_detour;
     detour_t                thing_draw_detour;
     detour_t                camera_update_detour;
+    detour_t                probe_wall_detour;
+    detour_t                probe_wall_at_detour;
+    detour_t                air_move_gate_detour;
+    detour_t                ledge_grab_detour;
+    detour_t                actor_push_detour;
     detour_t                jump_entry_detour;
     detour_t                jedi_jump_entry_detour;
     detour_t                fall_damage_detour;
@@ -88,6 +112,11 @@ typedef struct cheats_own_state {
     damage_fn_t             damage_original;
     thing_draw_fn_t         thing_draw_original;
     camera_update_fn_t      camera_update_original;
+    probe_wall_fn_t         probe_wall_original;
+    probe_wall_at_fn_t      probe_wall_at_original;
+    air_move_gate_fn_t      air_move_gate_original;
+    ledge_grab_fn_t         ledge_grab_original;
+    actor_push_fn_t         actor_push_original;
     mode_enter_fn_t         jump_entry_original;
     mode_enter_fn_t         jedi_jump_entry_original;
     scale_matrix_fn_t       scale_matrix_compose;      /* the retail matrix-scale composer, called
@@ -114,6 +143,12 @@ bool cheats_install_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
 void install_npc_damage(void);
 void install_jump_boost(void);
 void install_fall_punishment_immunity(void);
+void install_noclip(void);
+
+/* Suspends gravity for exactly as long as there is nothing under the player, so clipping
+ * through a wall into unmodelled space glides instead of dropping out of the world. Called
+ * every frame from the chained camera update, the one site in this group that always runs. */
+void cheats_noclip_tick(void);
 bool install_freecam(void);
 
 /* The player damage hook, which unlimited health owns. Jump boost calls it rather than the engine

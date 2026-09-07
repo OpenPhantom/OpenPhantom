@@ -304,11 +304,20 @@ static void fill_black_once(HWND window)
 
 /* The whole monitor the game is on, which is what a movie has to cover.
  *
- * The client rect was the obvious answer and it was the wrong one. The engine's own movie path
- * FORCES the display to its minimum mode before it plays anything and puts the previous mode back
- * afterwards, so "the size of the game's window while a movie is starting" is not the size of the
- * game, it is 640x480. Sizing to it produced a small picture in a corner of a black screen. The
- * monitor does not move, and it is also the honest reading of "full screen".
+ * The client rect was the obvious answer and it was the wrong one, though not for the reason this
+ * comment used to give. It said the engine's own movie path forces the display to its minimum mode
+ * before playing, so the client area at that instant is 640x480. That IS what the retail path does,
+ * at 0x0046C35A, and it is not what happens here: fmv_player detours that whole function, so on our
+ * path the original never runs and the mode is never forced. The claim has been untrue for as long
+ * as this design has existed.
+ *
+ * The real reason is simpler. In the shape the engine ships, its window is frameless at roughly
+ * 2054 by 2077 anchored at the top left, so it OVERHANGS the screen and its client area is not the
+ * visible picture either. The monitor is the honest reading of "full screen" there, and it does not
+ * move.
+ *
+ * That reasoning stops holding the moment something gives the game a window that really is a
+ * window, which is what WindowMode in enhanced_resolution does. See the child mode below.
  *
  * The window is not the game's, so this asks which monitor the game is on rather than assuming the
  * primary one: a player with two screens should get the movie on the one the game is on. */
@@ -342,10 +351,16 @@ static HWND create_surface(HWND game_window)
 
     if (surface_mode == SURFACE_CHILD) {
         /* The game's client area, not the monitor. A child is positioned inside its parent, so its
-         * origin is 0,0 by definition. The engine forces the display to its minimum mode while a
-         * movie plays, as monitor_rect_of's own note explains, so this can be 640x480: that is the
-         * whole of the game's window at that moment, which is the whole of the screen, so the
-         * picture still covers everything the player can see. */
+         * origin is 0,0 by definition and the size is exact by construction.
+         *
+         * This is the right mode whenever the game is in a real window, and the wrong one when the
+         * game's window overhangs the screen, which is the shape the engine ships in. It inherited
+         * a justification from monitor_rect_of about the engine forcing its minimum mode during a
+         * movie; that is refuted above and is not why this works.
+         *
+         * The client rectangle is read once and never re-read. The size is taken here, at
+         * creation, and nothing follows the parent afterwards, so anything that reshapes the game's
+         * window during playback leaves this child at a stale size. */
         if (!GetClientRect(game_window, &rect)) {
             log_error("the game window's client area could not be read (error %u)",
                       (unsigned)GetLastError());

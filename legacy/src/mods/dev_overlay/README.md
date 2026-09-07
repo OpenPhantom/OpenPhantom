@@ -680,6 +680,15 @@ second. **A key is only re-read if it is named in that poll**, which is worth kn
 a row: one added without it writes the file, nothing reads it back, and the row looks dead until the
 next launch. `CameraFollow` and `AirControl` are both in it.
 
+**Naming a key in that poll is not quite enough, and the second half cost a released build.**
+The poll reads each key and compares it against the value it last saw, and it reads all of
+them before it acts on any of them. So when one setting switches another off as a dependency,
+which is what free look does to these two, the value it last saw for the other key is one that
+no longer exists in the file or in the running game. Every later edit to that key then compares
+equal to it and is decided not to be a change, and the row goes dead until the game is
+restarted. It now re-reads what is live on any pass where it acted. A row whose key another
+row can write needs that, or it works once and never again.
+
 `Mouse speed` is `[enhanced_input] MouseDegreesPerCount`, named after that screen's caption as
 well, and it has a track too. Unlike the
 field of view it needs nothing published, because both of its ends are fixed and are the same band

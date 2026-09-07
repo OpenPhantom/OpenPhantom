@@ -41,6 +41,9 @@ order of thing from a per-object syscall.
 | `LevelOpenSeconds` | `0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0`, the default, leaves the engine's own behaviour alone |
 | `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it |
 | `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |
+| `LevelOpenFogStart` | `0.0` | 0-4000 | the fog band to hold during that window, in world units. Both `0` leave the window using its own numbers. Read only while `LevelOpenSeconds` is non zero |
+| `LevelOpenFogEnd` | `0.0` | 0-4000 | the other end of it. Must be past the start, or the engine paints the whole world in the fog colour rather than showing less of it |
+| `CutsceneViewRange` | `0.0` | 0 or 1.0-2.5 | hold this draw distance while a scripted camera runs, because a camera placed for the shot looks at ground that stops in front of it. `0` ships and turns it off. It only ever raises, the cell watchdog can still refuse it, and `StrictViewRange` declines it |
 | `FogImplementation` | `2` | 0-2 | which half of the engine draws the fog: `2` the device per pixel, `1` the engine's own per-vertex ramp, `0` neither. Read once at startup; see below |
 | `AuthoredFogBand` | `0` | | use each level's band untouched, ignoring every scaling term above |
 | `FogMinEndFraction` | `1.0` | 0-1 | least the fog end may be as a share of the draw distance; `0` disables the floor. Applies under `FogInsideCut` `0` and `1` only, and is skipped entirely under the shipped `2` |

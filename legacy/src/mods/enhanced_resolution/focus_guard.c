@@ -559,9 +559,13 @@ bool focus_guard_install(const focus_guard_config_t *config)
      * load-bearing in every session, because the engine has no resume path at all. */
     if (focus_state.config.confine_pointer) {
         if (config->window_is_moved) {
-            log_info("the pointer confinement is LOAD-BEARING in this session: FitWindowToMode is "
-                     "on, so the window is moved and sized away from the desktop edge and the "
-                     "pointer really can walk off it onto another monitor.");
+            /* Deliberately not naming one key. Two can set this now, FitWindowToMode and any
+             * WindowMode other than 0, and the caller hands over the OR of them. Naming one was
+             * wrong in a real log, which credited FitWindowToMode in a session where it was 0. */
+            log_info("the pointer confinement is LOAD-BEARING in this session: something in this "
+                     "DLL moves or reshapes the window (FitWindowToMode, or a WindowMode other "
+                     "than 0), so its edge is no longer the desktop edge and the pointer really "
+                     "can walk off it onto another monitor.");
         } else {
             log_info("nothing in this session moves the window, so it stays at screen 0,0 and "
                      "the pointer confinement is whatever the running window size makes it. The "

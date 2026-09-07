@@ -33,6 +33,10 @@ the mode table that the aspect gate anchors.
 | `MenuKeepsResolution` | `1` | stop menus switching to 640x480 |
 | `SubtitleScale` | `1.0` | how big the subtitles are, as a multiple of the size they have at 640x480. `1.0` is exactly the authored size and proportions at any resolution, `0.5` to `3.0` either side of it, and `0` leaves the engine's own shrinking behaviour alone. Settable from the developer menu and applied within a second; only `0` needs a relaunch. See **Subtitles that scale** below |
 | `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which is what its own pointer handling assumes. |
+| `WindowMode` | **`0`** | the shape of the window: `0` authentic, `1` borderless at the size of the monitor, `2` a caption and a border centred on it. `0` changes nothing. On its own this changes the window and not the device, so Alt Tab still costs a reset; `WindowedPresent` below is what changes that. **`2` is refused while `WindowedPresent=1`**, see the limitation below |
+| `WindowedPresent` | **`0`** | build the device windowed instead of letting it own the display. One byte: the cooperative flags the engine hands DirectDraw, `DDSCL_FULLSCREEN\|DDSCL_EXCLUSIVE` to `DDSCL_NORMAL`, keeping `DDSCL_FPUSETUP`. This is what makes Alt Tab free |
+| `WindowedWidth` | `0` | the client width for `WindowMode=2`; `0` means the resolution being rendered, so nothing is scaled. Clamped to the monitor |
+| `WindowedHeight` | `0` | the same for the height. Each axis falls back on its own |
 | `KeepCursorInWindow` | `1` | re-centre the mouse pointer in the window's client area instead of at screen (320,240) |
 | `ClipPointerToWindow` | `1` | hold the pointer inside the client area while the game window is in front, and let go the instant it is not |
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
@@ -48,6 +52,9 @@ the mode table that the aspect gate anchors.
 | `graphics_enumModes` | `0x46C932` | detoured, 9-byte prologue |
 | `graphics_setResolution` | `0x46BE3D` | detoured, 6-byte prologue, **only** when `ForceWidth`/`ForceHeight` are set |
 | `graphics_setMode` | `0x46BC85` | detoured, 6-byte prologue, **only** when `FitWindowToMode=1`. The choke point every valid mode change passes through |
+| `stdWin95_setDisplayMode` | `0x498C86` | detoured, 6-byte prologue, **only** when `WindowMode` is not `0`. The engine's own style-and-size switch; the correction runs before **and** after the original. Masked signature, anchored on the `push 0x10CF0000`, unique in all three shipped builds |
+| `graphics_setMode` (second hook) | `0x46BC85` | detoured a second time, **only** when `WindowMode` is not `0`, so the shape is reasserted before and after every device rebuild. `stdWin95_setDisplayMode` fires once a session and by then the first device already exists |
+| `stdDisplay_ddSetMode` cooperative flags | `0x492C43 + 0x12` | one byte, `0x11` to `0x08`, **only** when `WindowedPresent=1`. Read back before writing, so a second install declines |
 | `stdDisplay_getModeSize` | `0x49385A` | **called, never patched**, reads back the size that is really set |
 | `swmenu_enterMenuMode` | `0x45F7AC` | operand repointed at a cell holding `0x7FFFFFFF` |
 | `swmenu_modeIsUsable` | `0x45F686` | the same, and both must read the SAME cell |
@@ -71,6 +78,71 @@ the mode table that the aspect gate anchors.
 holds exactly 64 entries with **no bounds check**; the next live datum behind it is the menu
 descriptor. A modern driver can enumerate more 16-bit modes than that, so the enumerator is wrapped
 and capped, and the dropped labels are handed back to the engine's own allocator.
+
+## `WindowMode`, and what the window actually is today
+
+The engine already switches window styles and it already picks a size. `stdWin95_setDisplayMode`
+at `0x498C86` holds both style words, `0x10CF0000` with a caption and `0x10000000` frameless, and
+in both arms calls `SetWindowPos(hwnd, NULL, 0, 0, w + borderW, h + borderH, SWP_NOZORDER |
+SWP_NOMOVE)`.
+
+The retail path calls it once, from `main_openGraphics 0x43F4D4` at `0x43F542`, as
+`setDisplayMode(1, 0x800, 0x800)`. The bytes at `0x43F536` are `68 00 08 00 00 / 68 00 08 00 00 /
+6A 01 / E8 3F 97 05 00`. Two thousand and forty eight is not a resolution; it is a number that in
+1999 no display could exceed. The border deltas are added in that arm too, although the style it
+selects has no border, and they are `2 * SM_CXFRAME` and `SM_CYMENU + 2 * SM_CXFRAME`, computed
+once in WinMain.
+
+So the window the game runs in is frameless, about 2054 by 2077, anchored at the top left. It
+covers the screen by being larger than it, and on a display wider than about 2048 it stops covering
+it at all. Every description of this engine, including this file until recently, quotes the
+CREATION shape instead: `WS_POPUP` at `SM_CXSCREEN` by `SM_CYSCREEN`. That is true for the first
+moments of the process and not afterwards.
+
+`WindowMode=1` is therefore a correction rather than an addition: the same frameless style, at the
+size of the monitor the window is on. `WindowMode=2` is the new one, and it uses a style word of
+ours rather than the engine's `0x10CF0000`, because that word sets `WS_THICKFRAME` and
+`WS_MAXIMIZEBOX`. The window procedure at `0x49905E` handles neither `WM_SIZE` nor `WM_PAINT`, and
+the class style word at `0x498F74` is a literal zero so there is no `CS_HREDRAW`, so a window the
+player could drag-resize would change nothing about what is rendered and repaint nothing while it
+happened.
+
+The detour calls the original first and corrects on top of it. That way nothing the original does
+is skipped, including its write to `stdWin95_bWindowed`, which is the same shape `window_fit.c`
+uses on the mode change beside it.
+
+**`WindowMode` changes the window. `WindowedPresent` changes the device.** They are separate keys
+and either works without the other. With `WindowedPresent=0` the cooperative level stays `0x811`,
+the primary keeps `DDSCAPS_COMPLEX | DDSCAPS_FLIP`, the frame still reaches the screen through
+`Flip`, and Alt Tab still costs a reset and a re-upload of every texture, so a borderless window is
+a borderless window over a device that owns the screen.
+
+## `WindowedPresent`, and the one thing it cannot do
+
+One byte, at `0x492C43 + 0x12`. The engine assembles its cooperative flags as `mov [ebp-0x414],0x11`
+followed by `or ah,8`; writing `0x08` over the `0x11` makes the same two instructions produce
+`DDSCL_NORMAL | DDSCL_FPUSETUP`. Everything else is the engine's own: it still sets its display
+mode, still creates the same flipping surfaces, still presents with `Flip`.
+
+**It needs `EnableWindowMode = 0` in `dxwrapper.ini`, which is how that file ships.** That key does
+not mean what its name suggests: it arms the wrapper's own window management, which strips the
+caption and border off the game's window and recentres it to a size of its own.
+
+**The limitation, and it is structural rather than a bug.** A device asked for `DDSCL_NORMAL` takes
+the DESKTOP as its primary surface, and the engine's back buffer comes off that primary's flip
+chain, so both surfaces are the desktop's size whatever resolution the game renders at. The engine
+draws using a size it copied out of the mode table once and never refreshes, and the presentation is
+clipped to the window's client area. So all three have to agree: the render size, the client size
+and the desktop size. Measured on a 3840x2160 desktop: rendering at 1600x900 gave desktop sized
+surfaces and a black window, and a 1600x900 window over a 3840x2160 render put the picture in one
+corner at 1600/3840 of the window. That is why `WindowMode=2` is refused while this is on, with a
+logged reason.
+
+An earlier version replaced the whole device build instead, with no display mode, no flip chain, a
+clipper and a scaled blit, which is the arrangement the DirectX 6 and 7 samples use. It is written
+up as refuted in `windowed_device.h`: this engine reads its own front buffer back when a pause page
+opens and when the loading screen is built, so a primary that is not the game's own mode corrupts
+both.
 
 ## Why `FitWindowToMode` is off by default
 
@@ -342,9 +414,30 @@ That last part is the one worth watching, because the 640x480 island it leaves i
 of it: about 15 per cent of the picture at 1080p and under 4 per cent at 2160p, so the higher the
 resolution the more obvious it is.
 
-Two things here are newer than that session. The running window is about 2054 by 2077 rather than
-the desktop-sized popup this module's headers used to describe, and that size is read from the
-retail image; it has not been measured in a running game. The pointer confinement log line was
+The window work is newer than that session and has been played, with a result for each mode.
+
+**`WindowMode=1` with `WindowedPresent=1` works and is the configuration to use.** Played on a
+3840x2160 desktop at that render resolution: correct picture, Alt Tab genuinely free, the graphics
+wrapper reporting zero device recreates and staying windowed throughout, and roughly 100 fps against
+45 for the exclusive device. Movies play inside the window with `MovieSurface=child`.
+
+**`WindowMode=2` does not work with `WindowedPresent=1` and is refused**, for the structural reason
+given in the section above. That refusal is new and has not itself been observed in a log.
+
+**`WindowMode=1` with `WindowedPresent=0` has not been played.** It applies the engine's own style
+word and changes only the geometry, so the risk is low, but it is the combination a player gets by
+turning on one key and not the other and nobody has run it.
+
+**`WindowedPresent` on a machine with `EnableWindowMode=1` in `dxwrapper.ini` has not been played**
+either, and it is known to be wrong: that setting arms the wrapper's own window management, which
+strips the frame and recentres the window. The shipped `dxwrapper.ini` has it at 0.
+
+Untested and worth naming: two monitors, Wine and the Steam Deck, a resolution change during play,
+and a display with scaling set to anything other than 100 per cent. The per-apply log line prints
+the monitor rectangle, `GetSystemMetrics` and the window rectangle read back precisely so that the
+last of those can be told apart from a fault when somebody does run it. The running window is about 2054 by 2077 rather than the
+desktop-sized popup this module's headers used to describe, and that size is read from the retail
+image; it has not been measured in a running game. The pointer confinement log line was
 rewritten because of it, and that half has been seen: a launch since carries the new wording, which
 describes the running window size rather than claiming the client edge is the desktop edge.
 

@@ -73,6 +73,13 @@ add_unit_test(delivery_rates enhanced_input
 
 add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_anchor.c)
 add_unit_test(window_fit    enhanced_resolution enhanced_resolution/window_fit.c)
+
+# The whole of the window mode's policy: what shape is asked for, given a monitor and the size
+# the engine is rendering. window_fit.c comes along because window_mode.c asks it for that
+# size, and the rule here is to link the real module rather than a stub.
+add_unit_test(window_mode   enhanced_resolution enhanced_resolution/window_mode.c
+    enhanced_resolution/window_fit.c
+)
 add_unit_test(focus_guard   enhanced_resolution
     enhanced_resolution/focus_guard.c
     enhanced_resolution/window_fit.c

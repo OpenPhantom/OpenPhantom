@@ -53,6 +53,8 @@ add_engine_fix(enhanced_resolution
     dll_main.c
     enhanced_resolution.c
     window_fit.c
+    window_mode.c
+    windowed_device.c
     cursor_anchor.c
     pointer_cage.c
     focus_guard.c

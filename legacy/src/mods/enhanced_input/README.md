@@ -57,13 +57,14 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `SteerLean` | `1` | | the upper body leans into a turn again: chest and head are re-twisted after the original from the **engine's own** turn value. Mouse look only for now, under free look that value is the mouse, and there the mouse is the camera |
 | `SteerLeanFromHand` | `1` | | that lean follows **your hand** rather than the engine's turn cell. Under a mouse that cell is not a rate: its only way down is a store of zero, taken on any step whose frame carried no report from the device, so the twist collapses to centre and climbs back many times a second. A held turn key is untouched and keeps the engine's own climb. Needs `SteerLean=1` and `MouseLook=1` |
 | `RestoreTurnRate` | `1` | | stop zeroing the engine's turn cell, so the speed penalty on turning is the engine's again. Nothing is written into it, the double integration is subtracted in phase 7. It does not reach the follow camera, which overwrites that cell with its own number before it looks at it |
-| `FreeLookAimKeepsMovement` | `1` | | while the fire button is held, your keys keep steering the walk. The shot is aimed by the engine's own offset cell instead of by turning the body, so it still goes where you look, and the upper body turns into the shot, because the engine drives the chest from that same cell |
+| `FreeLookAimKeepsMovement` | `!Strafe` | | **defaults from `Strafe`**: off when the sideways walk is on, on when it is off. With the sideways walk on the body already faces where it travels and the movement keys point it, so squaring it up to the camera while you shoot takes the aiming away from the control you are already using, and the camera follow stands off at the same time. Set it explicitly to override the pairing. Read once at startup |
+| `FreeLookAimStrafeSwing` | `45` | 0-180 | degrees of aim a full sideways key adds while firing. The mouse stays the aiming device and this rides on top of the body already being squared up to it, so a target can be led sideways without moving the camera. Spent inside `FreeLookAimTwistMax` rather than on top of it, so raising this alone cannot point the weapon further off the body than that allows. `0` switches it off |
 | `SteerLog` | `0` | 0-4000 | measurement: that many substep lines in which the player is steering, then it stops |
 | `SteerLeanTestDegrees` | `0` | +/-90 | measurement: force a fixed twist on chest and head, ignoring the turn. Answers whether a node rotation reaches the screen at all |
 | `FreeLook` | `0` | | **the second control mode.** The mouse turns the camera and no longer turns the body. Requires `MouseLook=1`; mutually exclusive with the mouse-to-body path; also settable from the developer menu, and from the controls screen when `MenuWidgets=1` |
 | `FreeLookBodyTurnMs` | `150` | 0-1000 | how long the body takes to close 90 % of a turn toward its travel. `0` = snap |
 | `FreeLookBodyTurnMaxDegPerSec` | `540` | 60-2000 | the body turn's hard rate cap, deliberately above the engine's own 120 degrees per second clamp |
-| `FreeLookAimSnap` | `1` | | while an attack is live, drive the body to the camera yaw |
+| `FreeLookAimSnap` | `!Strafe` | | **defaults from `Strafe`**: off when the sideways walk is on, on when it is off. With the sideways walk on the body already faces where it travels and the movement keys point it, so squaring it up to the camera while you shoot takes the aiming away from the control you are already using, and the camera follow stands off at the same time. Set it explicitly to override the pairing. Read once at startup |
 | `FreeLookRegionRecoverDeg` | `25` | 0-180 | how much of the engine's own recentre is undone when an **authored camera region** hands the camera back. `0` switches the recovery off. A **scripted** camera never recovers |
 | `FreeLookLog` | `0` | | one line in the log per **change** of free look's arming gate, never one per frame. Off unless you are chasing a camera that turns on its own |
 
@@ -401,9 +402,25 @@ them.
 **Aiming.** The auto-aim searches a 16 degrees cone about the player's heading, which under free look is
 where the feet point. The cone is carried across `Plr_AutoAim` by a chained detour that swaps the
 heading for the camera yaw and restores it afterwards, the heading is read twice inside and both
-reads are covered. That same detour is the only byte-proven signal this DLL has that an attack has
-begun, so it also starts the **aim snap**: for 0.35 s the body is driven to the camera yaw, which is
-what makes the shot yaw and the force-push direction follow the camera as well.
+reads are covered.
+
+The **aim snap** is the other half: for 0.35 s the body is driven to the camera yaw, which is what
+makes the shot yaw and the force-push direction follow the camera as well. It is armed from
+`Plr_StartFire` rather than from the auto-aim, and that distinction is the whole of a reported bug.
+The engine calls the auto-aim only when `g_weaponCfg[slot].autoAimMode` is non-zero, which is true
+of seven of the thirteen shipped slots, so arming there left the other six turning the body toward
+their travel while the shot was still built against the camera. `Plr_StartFire` is the moment every
+weapon has in common, because the clip and the action handler below that call are unconditional.
+
+**The snap is not always on.** It and `FreeLookAimKeepsMovement` default from `Strafe`: off when the
+sideways walk is on, because the body then already faces where it travels and the movement keys
+point it, so squaring it up to the camera takes the aiming away from the control the player is
+already using. On when the sideways walk is off, where the body would otherwise face wherever it
+walks and there is no other way to aim. An explicit key overrides the pairing either way.
+
+While the snap is running, a sideways key swings the aim by up to `FreeLookAimStrafeSwing` degrees,
+spent inside `FreeLookAimTwistMax` rather than on top of it, so a target can be led sideways without
+moving the camera.
 
 ## The three settings on the controls screen
 

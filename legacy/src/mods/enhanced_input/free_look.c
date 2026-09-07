@@ -104,6 +104,18 @@
  * LIMITED rather than made inconsistent: running back-right while looking forward is 135 degrees,
  * and the shot then leaves at 90 with the weapon on that same line, instead of at 135 out of a
  * body facing elsewhere. */
+/* How far a full sideways deflection swings the aim while the trigger is held, before the twist
+ * limit below has its say. The mouse stays the aiming device: this rides ON TOP of the body already
+ * being squared up to the camera, so it leads a target sideways without the camera having to move.
+ *
+ * Forty five rather than the ninety the limit allows, because these are two different quantities.
+ * The limit is how far the weapon may ever point away from the body, a safety rail on the whole
+ * sum; this is how much authority one input has inside it. At ninety a full sideways key would
+ * spend the entire allowance on its own and nothing else could contribute, which is not an
+ * adjustment, it is a second aiming device. Zero switches it off and leaves the mouse alone with
+ * the job. */
+#define DEFAULT_AIM_STRAFE_SWING 45.0f
+
 #define DEFAULT_AIM_TWIST_MAX  90.0f
 #define MAX_AIM_TWIST_MAX     180.0f
 
@@ -122,6 +134,9 @@ typedef int32_t (__cdecl *auto_aim_fn_t)(int32_t kind);
  * it through a stored pointer with no push. A thunk declared with a parameter would leave the
  * stack believing one was there. */
 typedef void (__cdecl *fire_shot_fn_t)(void);
+
+/* Plr_StartFire: takes nothing, returns nothing, and runs for every weapon. */
+typedef void (__cdecl *start_fire_fn_t)(void);
 
 /* The one instance. free_look_camera.c is handed a pointer to it at install time; nothing else
  * ever sees it. */
@@ -160,9 +175,30 @@ void free_look_load_config(void)
 
     /* OFF BY DEFAULT. This changes how the game plays, not how it looks. */
     free_state.config.enabled  = ini_read_bool(INPUT_SECTION, "FreeLook", false);
-    free_state.config.aim_snap = ini_read_bool(INPUT_SECTION, "FreeLookAimSnap", true);
+    /* These two default off when the sideways walk is on, and the coupling is the point rather
+     * than a convenience.
+     *
+     * The aim snap exists to make aiming under free look feel like aiming without it: it points the
+     * body at the camera while the trigger is held, so the camera is the aiming device in both
+     * schemes. That is a good answer when the body would otherwise be facing wherever it walks and
+     * the player has no other way to aim.
+     *
+     * With the sideways walk on, the player has already chosen the other scheme. The body faces
+     * where it travels and the movement keys point it, so squaring it up to the camera the moment
+     * the trigger goes down takes the aiming away from the control they are already using and hands
+     * it to the mouse. The camera follow is caught by the same thing, because it stands off while
+     * the body is held at the camera, so it appears to stop working exactly while you shoot.
+     *
+     * So the default follows the scheme rather than being one answer for both. An explicit key in
+     * the file still wins either way, which is what keeps this a default and not a rule.
+     *
+     * Read once, so switching the sideways walk on during a session does not move these underneath
+     * the player: the fire detour is placed at install from the answer below and there is no way to
+     * take a detour back out again. */
+    free_state.config.aim_snap =
+        ini_read_bool(INPUT_SECTION, "FreeLookAimSnap", !input_config()->strafe);
     free_state.config.aim_keeps_movement =
-        ini_read_bool(INPUT_SECTION, "FreeLookAimKeepsMovement", true);
+        ini_read_bool(INPUT_SECTION, "FreeLookAimKeepsMovement", !input_config()->strafe);
     free_state.config.aim_twist_max =
         ini_read_float(INPUT_SECTION, "FreeLookAimTwistMax", DEFAULT_AIM_TWIST_MAX);
     if (!(free_state.config.aim_twist_max >= 0.0f)) {
@@ -171,6 +207,11 @@ void free_look_load_config(void)
     if (free_state.config.aim_twist_max > MAX_AIM_TWIST_MAX) {
         free_state.config.aim_twist_max = MAX_AIM_TWIST_MAX;
     }
+    free_state.config.aim_strafe_swing =
+        ini_read_float(INPUT_SECTION, "FreeLookAimStrafeSwing", DEFAULT_AIM_STRAFE_SWING);
+    free_state.config.aim_strafe_swing =
+        clamp_float(free_state.config.aim_strafe_swing, 0.0f, MAX_AIM_TWIST_MAX);
+
     free_state.config.rigid_mouse_look_camera =
         ini_read_bool(INPUT_SECTION, "MouseLookRigidCamera", true);
 
@@ -293,11 +334,25 @@ static float aim_offset_for(const uint8_t *record, float lock)
 {
     float heading = read_field(record, PLAYER_HEADING);
     float total;
+    float swing;
 
     if (!isfinite(heading) || !isfinite(lock)) {
         return lock;
     }
-    total = free_look_wrap180(lock + free_look_wrap180(free_state.camera_yaw - heading));
+
+    /* SUBTRACTED, because the two halves count opposite ways round. The sideways input counts RIGHT
+     * as positive, and this offset counts LEFT as positive, since left is the direction increasing
+     * heading turns. Added rather than subtracted, a right-hand key would swing the weapon left,
+     * which is the sort of thing that reads as the aim being broken rather than inverted.
+     *
+     * The latched value is the one free look was handed this substep, so it is already zero when
+     * the sideways walk is switched off. That is deliberate: with no sideways walk there is no
+     * sideways input to spend, and the mouse is alone with the aiming exactly as before. */
+    swing = free_state.aim_strafe * free_state.config.aim_strafe_swing;
+    if (!isfinite(swing)) {
+        swing = 0.0f;
+    }
+    total = free_look_wrap180(lock + free_look_wrap180(free_state.camera_yaw - heading) - swing);
 
     if (total >  free_state.config.aim_twist_max) { total =  free_state.config.aim_twist_max; }
     if (total < -free_state.config.aim_twist_max) { total = -free_state.config.aim_twist_max; }
@@ -346,6 +401,23 @@ static void __cdecl hook_fire_shot(void)
             }
         }
     }
+    original();
+}
+
+/* An attack has begun, for every weapon.
+ *
+ * The auto-aim below arms the same thing and used to be the only one that did, which was wrong for
+ * the six weapon slots whose autoAimMode is zero: the engine never calls it for those, so the body
+ * went on facing its travel while the shot was built against the camera. This runs first and runs
+ * always, so the aim snap now arms on the attack itself rather than on an assist the weapon may not
+ * have asked for.
+ *
+ * The original is called unconditionally and nothing else is touched. Arming is one float. */
+static void __cdecl hook_start_fire(void)
+{
+    start_fire_fn_t original = (start_fire_fn_t)free_state.start_fire_detour.original;
+
+    free_state.aim_hold_seconds = free_state.config.aim_snap ? AIM_SNAP_TAIL_SECONDS : 0.0f;
     original();
 }
 
@@ -406,6 +478,11 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
         record == NULL) {
         return false;
     }
+
+    /* Latched for the aim swing, which runs on the fire path and has no other way to see it. The
+     * value is whatever this substep was handed, so the sideways-walk gate above this call has
+     * already zeroed it when that feature is off. */
+    free_state.aim_strafe = strafe;
 
     /* The mouse turns the camera here and nowhere else. */
     free_state.camera_yaw = free_look_wrap360(free_state.camera_yaw + mouse_step_degrees);
@@ -560,6 +637,19 @@ void free_look_integrate(uint8_t *record, float substep_seconds)
  * ============================================================================================ */
 static void install_attack_detours(void)
 {
+    /* First, because it is the only one of the three that fires for every weapon. Optional like
+     * the other two: without it the aim snap falls back to being armed by the auto-aim alone, which
+     * is the behaviour that was reported as the weapon aiming forwards while the character pointed
+     * somewhere else. */
+    if (free_state.camera.start_fire != 0 &&
+        !detour_install(&free_state.start_fire_detour, free_state.camera.start_fire,
+                        (const void *)hook_start_fire, PLAYER_START_FIRE_PROLOGUE_SIZE)) {
+        log_warning("Plr_StartFire at %08X could not be detoured, so the aim snap is armed by the "
+                    "auto-aim alone and the weapons that do not use one keep aiming along the "
+                    "camera while the body faces its travel",
+                    (unsigned)free_state.camera.start_fire);
+    }
+
     /* This is what lets the aim snap stop stealing the walk. Without it the shot still leaves
      * along the BODY, so the snap has to keep turning the body to aim, and holding the trigger
      * keeps walking the player forward whatever key is pressed. */

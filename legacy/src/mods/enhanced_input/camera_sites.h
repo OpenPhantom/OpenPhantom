@@ -35,6 +35,11 @@
  * without splitting an instruction. */
 #define PLAYER_FIRE_SHOT_PROLOGUE_SIZE 6u
 
+/* Eight, because the third instruction is the player-pointer load and it is five bytes wide. The
+ * frame set-up alone is three, which is under the five a jump needs. Nothing in the eight is
+ * relative, so all of it relocates. */
+#define PLAYER_START_FIRE_PROLOGUE_SIZE 8u
+
 /* --- the camera object's own fields, none of them written by this feature -------------------- *
  *
  * Read out of the two functions that build the view, and listed here because the transition log
@@ -61,6 +66,7 @@ typedef struct camera_sites {
     uintptr_t update_cam;
     uintptr_t auto_aim;
     uintptr_t fire_shot;        /* the action handler that spawns the bolt; 0 = not resolved */
+    uintptr_t start_fire;       /* the moment an attack begins, for EVERY weapon; 0 = not resolved */
 
     /* The three cells the feature writes. All live in the zero-filled tail of .data, which the
      * engine itself rewrites every frame, so they are ordinary writable data and need no page

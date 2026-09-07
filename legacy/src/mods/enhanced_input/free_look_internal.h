@@ -54,6 +54,7 @@ typedef struct free_look_config {
     bool  aim_snap;
     bool  aim_keeps_movement;
     float aim_twist_max;
+    float aim_strafe_swing;  /* degrees of aim a full sideways deflection adds while firing */
     bool  log_transitions;
     float body_settle_seconds;
     float body_turn_rate;
@@ -95,6 +96,7 @@ typedef struct free_look_state {
     detour_t              update_detour;
     detour_t              auto_aim_detour;
     detour_t              fire_shot_detour;
+    detour_t              start_fire_detour;
 
     /* True while the two cells are ours. Set and cleared once per rendered frame by the camera
      * update; read by the phase thunks, which run BEFORE it in the same frame and therefore act
@@ -127,6 +129,7 @@ typedef struct free_look_state {
     /* One substep of lifetime: written by phase 2, consumed by phase 7. */
     bool  fire_shot_armed;   /* the shot aims itself, so the snap may release the walk */
     bool  aim_stance;        /* trigger held: face the camera, let the feet strafe */
+    float aim_strafe;        /* the sideways input this substep, for the aim swing */
     bool  aim_lock_valid;    /* an attack is live and aim_lock holds the engine's own target lock */
     float aim_lock;          /* Plr_AutoAim's bearing, relative to the CAMERA, captured once */
     bool  body_target_valid;

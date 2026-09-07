@@ -17,7 +17,7 @@
 
 #include <stdbool.h>
 
-/* Reads the key back from the ini. Absent reads as OFF, matching the shipped default, so a fresh
+/* Reads the key back from the ini. Absent reads as ON, matching the shipped default, so a fresh
  * installation shows the row in the state the game is actually in rather than the opposite. */
 bool auto_range_row_get(void);
 

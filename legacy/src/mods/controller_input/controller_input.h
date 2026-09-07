@@ -22,9 +22,14 @@
  * Windows hands it. SendInput-synthesized movement reaches it exactly like a real mouse would, with
  * no dependency between this DLL and enhanced_input.dll at all, which is what this project's own
  * "feature DLLs never depend on each other at run time" rule asks for. The pause key is confirmed
- * directly from this session's own decompile of gameplay_wndproc_hotkey_handler (0x0043F681): Escape
+ * directly from this session's own decompile of gameplay_wndproc_hotkey_handler (0x0043F603): Escape
  * is the sole route into gameplay_open_pause_menu (0x0043FAB5), and the engine's own state gating
  * already prevents a double-toggle, so nothing here needs to track menu state itself.
+ * The handler address here read 0x0043F681, which is not an entry point: it is the CALL SITE of
+ * the pause menu open INSIDE that handler, `E8 2F 04 00 00`, whose displacement resolves to
+ * 0x0043FAB5. The entry is 0x0043F603, `55 8B EC 83 EC 08`, and it is what the engine registers:
+ * the push at 0x0043EB5B is `68 03 F6 43 00`. focus_guard.c and overlay_input.c both had it
+ * right, so this was the only copy that disagreed.
  *
  * WHY A DEDICATED THREAD RATHER THAN common/frame_hook.h. Every other per-frame need in this tree
  * uses frame_hook, and the first build of this feature did too. Look worked immediately; skipping a

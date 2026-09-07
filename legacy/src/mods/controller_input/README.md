@@ -85,7 +85,7 @@ not have ruled out.
 
 ### Why Escape is the right key for Start
 
-Confirmed directly, this session, by decompiling `gameplay_wndproc_hotkey_handler` (`0x0043F681`):
+Confirmed directly, this session, by decompiling `gameplay_wndproc_hotkey_handler` (`0x0043F603`):
 Escape (`0x1b`) is the sole route into `gameplay_open_pause_menu` (`0x0043FAB5`) during normal
 gameplay, and the engine's own state gating (a separate handler owns Escape once a menu is
 already open) prevents a synthetic Escape from double-toggling anything. Two edge cases exist and

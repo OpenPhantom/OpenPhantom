@@ -36,7 +36,7 @@ the mode table that the aspect gate anchors.
 | `KeepCursorInWindow` | `1` | re-centre the mouse pointer in the window's client area instead of at screen (320,240) |
 | `ClipPointerToWindow` | `1` | hold the pointer inside the client area while the game window is in front, and let go the instant it is not |
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
-| `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole display mode instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. **Reported cost, not reproduced here yet:** the pause screens repair themselves through damage rectangles clipped to the same hard-coded 640x480 canvas, so a cursor moved past the island's edge cannot be erased and may stamp its blue glow onto the border until the screen closes. Every clickable widget is inside the island either way, so set this to `0` if you see that |
+| `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole 640x480 menu canvas instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. It is widened to the **canvas** and deliberately not to the display mode: the pause screens repair themselves through damage rectangles clipped to that same hard-coded 640x480, so a cursor outside it is drawn and never erased, which was reported from a 3840x2160 session as the cursor's blue glow smearing across the border. Widening to the canvas is exactly the region that repaints, so it keeps the engine's guarantee rather than breaking it |
 | `ClampMenuSpritesToIsland` | `1` | the erase-side companion of `MenuKeepsResolution`: clamp the menu toolkit's sprite draws to the 640x480 island, gated on the engine's own widget-pass flag so the HUD and the frozen pause backdrop pass through untouched. Closes the reported blue stamp the hovered button's halo left on the island's border (drawn against the screen, repaired against the canvas). Bit-identical for every sprite that fits the island, and a sprite drawn with a partial fill is passed through untouched |
 | `MenuScale` | `0` | how many times its authored size to draw the 640x480 menu canvas at. `0` ships and is the point of it: the ratio is READ FROM the converted artwork rather than set here, so the layout and the pictures cannot disagree about the number, and with no converted artwork there is no scale and the menus are the ones that shipped. A number instead sets it by hand, up to the 4095/640 ceiling the engine's own canvas imposes. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. Only half a feature without upscaled artwork: the blitter copies one source pixel to one destination pixel, so the layout spreads but the bitmaps do not grow |
 
@@ -56,7 +56,7 @@ the mode table that the aspect gate anchors.
 | `control_captureMouse` | `0x46A155` | detoured, 8-byte prologue, the re-anchor on activation, and the operand its `call` carries yields the engine's window handle |
 | `stdControl_setFocus` | `0x48D719` | **called, never patched**. Acquire/Unacquire on the DirectInput keyboard and mouse |
 | `stdControl_resync` | `0x48D1CF` | **called, never patched**, drains both device buffers, releasing everything held |
-| `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten to `W-33`/`H-33` and two origin operands repointed at zero cells, **only** when `WidenMenuCursorArea=1`. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
+| `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten from `0x25F`/`0x1BF` to canvas width minus 33 and canvas height minus 33, **only** when `WidenMenuCursorArea=1`. The block's two origin operands are read back as proof the block is the right one and are **never written**; an earlier version repointed them at zero cells to make the clamp screen relative, which is the fault above. One write step, so there is no partial state. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
 | the DirectDraw enumeration callback | `0x4928FC` | detoured, 6-byte prologue, **only** when `FilterModeEnumeration=1`. Address free: the mode counter, the 64 cap, the 0x54 stride and the table base are all read out of the matched operands and checked before use |
 | `swmenu_render`, the widget-pass bracket | `0x45DC6F`..`0x45DCB9` | **read, never patched**: address-free masked pattern over `inc g_tickCounter / mov [flag],1 / cmp [parent],1`; the flag cell is read out of the `C7 05` operand and cross-checked against the closing `mov [flag],0` at +0x41. The gate for the island clamp. In `obi.exe` it resolves at `0x45DC0F`, with the flag cell at `0x008BFB40` instead of `0x008BFBA0` |
 | `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
@@ -373,16 +373,17 @@ screen the pointer cannot be moved out of. The cursor coordinates are absolute s
 while the hit test adds the origin to the **widget**, so widening the clamp needs no coordinate
 work at all: a cursor outside the island simply hits nothing, exactly as it does today.
 
-**The install is two writes and their order is forced.** The four clamp immediates go first and
-the two origin operands second, because only one of the two partial states is survivable:
+**The install is one write and there is no partial state.** Only the four clamp immediates are
+written, to canvas width minus 33 and canvas height minus 33. The block's two origin operands are
+read back
+first, as proof that the block is the one the listing describes, and are never written.
 
-| after | cage | usable? |
-|---|---|---|
-| immediates only | `[origin, origin + W-33]` | yes, larger than shipped, everything reachable |
-| operands only | `[0, 607]` with the widgets centred at (640,300) on 1080p | **no, not one widget reachable** |
-
-A failure to repoint the operands therefore **rolls the immediates back** to the shipped 640x480
-rather than leaving the two halves disagreeing.
+An earlier version wrote them too, repointing them at zero cells so the clamp became screen
+relative rather than canvas relative. That is the fault described above: it let the cursor leave
+the region the pause screens can repaint, and it was reported from a 3840x2160 session as the
+cursor's blue glow smearing across the border. Removing it removed the smear, the two-step ordering
+and the rollback path that ordering needed, all at once. The cage is now computed absolutely from
+the canvas size, so writing it twice writes the same four numbers.
 
 **The signature contains the immediates it patches**, which is what identifies the block as the
 640x480 cage in the first place. It therefore cannot resolve a second time: the addresses are cached

@@ -116,6 +116,7 @@ add_engine_fix(enhanced_input
     dll_main.c
     enhanced_input.c
     input_config.c
+    input_foreground.c
     input_gate.c
     input_menu.c
     input_slider.c

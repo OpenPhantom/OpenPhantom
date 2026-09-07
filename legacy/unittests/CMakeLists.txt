@@ -46,6 +46,7 @@ add_unit_test(mouse_look enhanced_input
     enhanced_input/input_slider.c
     enhanced_input/mouse_rate.c
     enhanced_input/raw_mouse.c
+    enhanced_input/input_foreground.c
     enhanced_input/menu_cursor.c
 )
 
@@ -61,6 +62,7 @@ add_unit_test(view_lead enhanced_input
     enhanced_input/view_lead.c
     enhanced_input/free_look_math.c
     enhanced_input/raw_mouse.c
+    enhanced_input/input_foreground.c
 )
 
 # Whether the delivery survives a SLOW MOUSE, which is the question a field test on one desk

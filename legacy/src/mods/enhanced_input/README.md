@@ -201,6 +201,30 @@ direction, so turning `heading` has already turned the camera, with the authored
 
 ## The mouse: read from the device, banked per frame, drawn per frame
 
+### Raw packets are dropped while the game is not in front
+
+`MouseRawInput` registers `RIDEV_INPUTSINK`, and it has to: the reader owns a message-only window
+that can never be activated, so a foreground-only registration on that window would deliver
+nothing. That flag is also what kept the packets arriving after the player alt-tabbed away, so the
+view went on turning inside a game nobody was looking at. The retail engine does not do that. It
+opens its DirectInput devices `FOREGROUND`, Windows unacquires them when the window goes to the
+background, and it reads nothing until focus returns.
+
+So a packet is now dropped, at the point it arrives, unless a window of this process owns the
+foreground. Dropping at the source rather than at either reader means nothing accumulates, so
+there is no saved-up movement waiting to be applied in one jump when focus comes back, and both
+the view turn and the menu cursor are covered by one test. The absolute-position origin is
+forgotten on the way out, because an absolute packet is a position and the difference between the
+last background one and the first foreground one would be exactly the jump this avoids.
+
+There is no setting for it. Turning the view while the application is in the background is not a
+behaviour the engine ever had, so restoring it is a fix rather than a preference.
+
+The answer is cached for a few milliseconds, so a 1000 Hz mouse costs a handful of window calls a
+second rather than two thousand. The cost of that cache is that the change of foreground is acted
+on up to one poll interval late, which is under half a frame at 60 fps.
+
+
 `game_frame` runs the substeps **first** and polls the devices afterwards, and the substep driver is
 a fixed-step accumulator. So a substep only ever reads the previous frame's sample, and every frame
 that runs no substep is a sample nobody reads, at 144 fps about four fifths of the hand's movement

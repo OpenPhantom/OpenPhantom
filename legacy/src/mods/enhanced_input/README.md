@@ -748,11 +748,18 @@ substitutes. With `FreeLook=0` the backward clip plays exactly as it shipped.
   the penalty, which exists to stop exactly that, never bites. It cannot be restored by writing
   `turnWheel`, because `Plr_Steer` clamps it and computes the chest and head lean from it before our
   thunk regains control. If it reads as skating, the remedy is a penalty on `moveDrive`, not there.
-* **The shot yaw and the force-push direction follow the body, not the camera, on the first frame of
-  an attack.** Neither `Plr_FireWeaponAux` nor `Plr_ForcePushAux` has a single `call rel32` site in
-  the image; both are reached through a dispatch table, so neither can be diverted the way
-  `Plr_AutoAim` can. The aim snap closes the gap within about a sixth of a second and an *aimed* shot
-  is correct immediately, because the auto-aim cone it was picked from is the camera's.
+* **The force-push direction follows the body, not the camera, on the first frame of an attack.**
+  `Plr_ForcePushAux` has no `call rel32` site in the image; it is reached through a dispatch table,
+  so it cannot be diverted the way `Plr_AutoAim` can, and nothing here detours it. The aim snap
+  closes the gap within about a sixth of a second, when it is running at all.
+
+  The shot no longer shares that limitation, and this bullet claimed it did until 2026-09-08.
+  `Plr_FireWeaponAux` has no call site either, but it does not need one: it is detoured at its own
+  entry, and the offset is written into the cell the bolt is built from before the original runs, so
+  an *aimed* shot is correct on the first frame. That is only true while `FreeLookAimKeepsMovement`
+  is on, since the detour is placed from that setting at install. With it off, which is the default
+  when the sideways walk is on, the shot leaves along the body, which is the point of that scheme
+  rather than a shortfall of it.
 * **A shot fired from the air.** The un-reconstructed air-attack block was swept for both the heading
   and the actor-yaw field and reads neither, so it is not a further consumer, but the body does not
   turn in the air either, so an air attack goes where the body was left.

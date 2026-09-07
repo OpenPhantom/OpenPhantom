@@ -669,8 +669,17 @@ while this panel is open, so a row that asked it directly would be refused every
 clicked. Written to the file instead, the once-a-second re-read applies them in its own order
 once play resumes, with the refusal handling it already has.
 
-Both are **unavailable rather than hidden while `Strafe` is off**, because both are steered by
-the sideways input and there would be nothing to aim with.
+`Camera follows you` is **unavailable rather than hidden while `Strafe` is off**, because the walk
+never leaves the heading then and there is nothing to follow.
+
+`Steer a jump in the air` is available while **either** of them is on, and that difference is worth
+the sentence. **The shipped game steers a jump on its own**: the Jump and Fall descriptors both
+carry the ordinary steer phase, so the turn input has always turned the body in the air. What takes
+it away is free look, which handles the substep outside Stand so that the mouse stays on the camera.
+So this row is not an addition to the game, it is what gives back what our own scheme removed, and
+it is offered wherever that scheme is on. With free look on and the sideways walk off it still
+steers, with fewer directions, because a lone forward key is a turn toward the camera. With both
+off it is greyed out, because the engine is already doing the job.
 
 **All three needed the owning DLL to start reading its own settings back.** Both of those screens
 pushed outward only: they applied a change and then wrote the file, and nothing ever read it. A row

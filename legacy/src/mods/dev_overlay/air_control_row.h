@@ -16,8 +16,9 @@ bool air_control_row_get(void);
  * nothing for this to release. Switching it off leaves free look alone. */
 bool air_control_row_set(bool enabled);
 
-/* Unavailable rather than hidden while sideways walking is off, because the angle this steers by is
- * built from the sideways input and there would be nothing to aim with. */
+/* Available while EITHER the sideways walk or free look is on, because either one is enough to
+ * take the engine's own jump steering away, and unavailable while both are off because the shipped
+ * game already steers a jump perfectly well on its own. See the site comment for the evidence. */
 bool air_control_row_available(void);
 
 #endif /* DEV_OVERLAY_AIR_CONTROL_ROW_H */

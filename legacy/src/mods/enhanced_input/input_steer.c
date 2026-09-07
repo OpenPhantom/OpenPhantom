@@ -243,7 +243,20 @@ void __cdecl enhanced_input_steer_thunk(void)
         steer_forward = (bits & 1u) ? 1.0f : ((bits & 2u) ? -1.0f : 0.0f);
     }
 
-    if (free_look_steer(record, mouse_step, strafe, steer_forward, stand_mode, air_mode)) {
+    /* The sideways component is withheld when the sideways walk is off, and that gate was missing.
+     * Two install lines have always claimed it: this DLL says the keyboard turn axis still turns
+     * the player, and free look says only forward and back are camera-relative. The first was true
+     * and the second was not. The same axis was turned into a sideways value a few lines above,
+     * unconditionally, and handed to free look, which builds a travel angle out of it and turns the
+     * body to face it. So with the sideways walk off the turn keys did both at once: they turned
+     * the player, correctly, and they also walked them sideways relative to the camera, which is
+     * the whole of the feature that was supposed to be switched off.
+     *
+     * Withheld here rather than at the assignment because this is the one consumer that was wrong:
+     * the walk driver below is already gated on the same setting, and the turn fold further down
+     * reads the raw axis rather than this value, so both keep working untouched. */
+    if (free_look_steer(record, mouse_step, input_config()->strafe ? strafe : 0.0f,
+                        steer_forward, stand_mode, air_mode)) {
         /* The cell is zeroed AFTER the lean has read it, not before: free look turns the CAMERA
          * with the mouse, and a turn rate left standing would make the engine turn the BODY's
          * heading on top of it in phase 7, the very coupling free look exists to break. */

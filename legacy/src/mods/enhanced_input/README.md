@@ -322,6 +322,13 @@ genuinely faces the way it travels, the model-root rotation the sideways walk la
 and left there, and the vault probe, which under strafing tests a restored facing against a wall
 the rotated displacement ran into, now tests the direction that actually hit the wall.
 
+**With `Strafe=0` only forward and back are camera-relative.** The sideways component is withheld
+from that angle, so the turn keys turn the player the way the shipped game turns them and do not
+also walk them sideways. Both install lines have always said so and the second was not true until
+2026-09-08: the turn axis was made into a sideways value unconditionally and handed on, so with the
+sideways walk switched off the same key both turned the player and strafed them, which is the whole
+of the feature that was meant to be off.
+
 **The back-pedal clip is retired while this is on.** The drive is always forward, so holding back is
 a half turn and a forward walk toward the camera. That is a real loss of authored content, taken
 deliberately: the alternative, driving backward whenever the wanted travel is more than a right

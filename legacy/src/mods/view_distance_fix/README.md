@@ -566,12 +566,25 @@ edge 2-64, the authored profile survives every ratio, the easing agrees between 
 repeated evaluation is bit-identical. Offline verification passes on both retail builds,
 including the table/bucket cross-check and the three-hit count on the ecx append blocks.
 
-**Accepted in game**, in the 1.5.0 build, which was played through by hand. The fog regime in
-particular was settled by running it rather than by reading it: the vertex format, the capability
-bit, the two `FOGTABLEMODE` writers and the constant-zero specular fallback are all read out of
+**Accepted in game**, in the 1.5.0 build, which was played through by hand.
+
+The fog regime in particular was settled by running it rather than by reading it: the vertex
+format, the capability bit, the two `FOGTABLEMODE` writers and the constant-zero specular
+fallback are all read out of
 the image, but whether the fog is then visible on screen is only answerable in play, and it is.
 The band reported in a real log matches the arithmetic exactly, which is also what proved the
-field-of-view cosine had stopped being applied. The lines to look for are:
+field-of-view cosine had stopped being applied.
+
+`FogBandScale` is newer than that session and has been played since. It ships at 0.60 rather than
+1.0, a value chosen by looking at it in the running game by two people, and the shipped default was
+then launched with no `FogBandScale` line present: the log reported `fog band: scaled to 0.60 of
+where the terms above it put it`, and a level authoring 8.0 to 32.0 came out as 3.4 to 13.6 at a
+draw distance of 22 and 75.2 degrees. Dragging the developer menu's fog row through 0.55, 0.32 and
+0.61 and back was picked up within the second each time and left the key at 0.60 in the file, so
+the row round-trips. That session also had the device answering `table fog YES, w fog YES`, so it
+ran on the per-pixel path rather than the per-vertex ramp.
+
+The lines to look for are:
 
 ```
 [view_distance_fix] distance fog runs on the engine's own per-vertex ramp: ...

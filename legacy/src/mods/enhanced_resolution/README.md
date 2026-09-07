@@ -342,6 +342,12 @@ That last part is the one worth watching, because the 640x480 island it leaves i
 of it: about 15 per cent of the picture at 1080p and under 4 per cent at 2160p, so the higher the
 resolution the more obvious it is.
 
+Two things here are newer than that session. The running window is about 2054 by 2077 rather than
+the desktop-sized popup this module's headers used to describe, and that size is read from the
+retail image; it has not been measured in a running game. The pointer confinement log line was
+rewritten because of it, and that half has been seen: a launch since carries the new wording, which
+describes the running window size rather than claiming the client edge is the desktop edge.
+
 The offline verification below still stands and is what the individual patches rest on.
 
 `/W4 /WX` clean with zero compiler warnings; the DLL links and all six wired unit tests pass,

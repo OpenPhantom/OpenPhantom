@@ -908,6 +908,17 @@ The mouse path has been played. The raw device reader, the per-frame bank and th
 angle were accepted in the game on a 240 Hz display, and the drawn turn was measured over more than
 two thousand rendered frames while that was done.
 
+**The foreground gate was played separately**, after that session, since it was added later. With
+`MouseRawInput` on, alt-tabbing away, moving the mouse a long way and returning leaves the view
+where it was and the first movement after the return does not jump, and the ordinary turn is
+unaffected. That last part matters as much as the first: a gate answering false too often would
+simply stop the mouse working, and it does not.
+
+It carries no unit test, for the reasons given in the section on it: the only logic is an unsigned
+subtraction across the `GetTickCount` wrap, which is a language guarantee rather than an assumption
+of ours, and the rest is two window calls a console test cannot stage. Nothing about the gate
+reaches the log either, by design, so the log cannot confirm it and play is the only evidence.
+
 Four test files cover this feature. `unittests/mouse_rate.c` drives the rate estimator and the
 bank; `unittests/view_lead.c` proves a property of a sequence rather than of one call, that the
 drawn angle advances by one frame of hand movement on every frame while the body turns once per

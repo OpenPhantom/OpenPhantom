@@ -79,8 +79,9 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
 
     log_warning("the menu artwork is %dx%d but the game is running at %dx%d, so the menus are NOT "
                 "scaled. Drawing a canvas larger than the screen writes past the end of the frame "
-                "buffer and crashes. Convert the artwork for %dx%d with tools\\Convert Menu Art.bat, "
-                "or set the game back to the size it was converted for",
+                "buffer and crashes. Delete the converted artwork and the patch will size the "
+                "menus from the display itself, or set the game back to the size that artwork was "
+                "made for",
                 (int)scale_state.canvas_width, (int)scale_state.canvas_height,
                 (int)screen_width, (int)screen_height, (int)screen_width, (int)screen_height);
 

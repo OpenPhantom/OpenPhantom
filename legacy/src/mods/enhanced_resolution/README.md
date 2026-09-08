@@ -8,8 +8,8 @@ the mouse pointer and the input devices kept in step with them.
 > The game runs **16-bit**: the mode list accepts nothing else, and the 2-D layer writes two-byte
 > pixels straight into the back buffer. Which resolutions actually exist is therefore up to your
 > DirectDraw layer (dgVoodoo2, DDrawCompat). `LogModeTable=1` prints the complete table the layer
-> reported, so you can see rather than guess. `ModeBitDepth` is documented in `engine_fixes.ini`
-> and should be left at 16; see `mode_depth.h` for how far 32 was taken and where it stops.
+> reported, so you can see it. `ModeBitDepth` is documented in `engine_fixes.ini` and should be
+> left at 16; see `mode_depth.h` for how far 32 was taken and where it stops.
 
 ## Supported executables
 
@@ -33,9 +33,9 @@ the mode table that the aspect gate anchors.
 | `LogMenuArt` | `0` | report every distinct menu picture once, with the blit path it takes, and count the textured quads. A measurement rather than a feature, and off in a release. See **What a menu is actually made of** below |
 | `MenuKeepsResolution` | `1` | stop menus switching to 640x480 |
 | `SubtitleScale` | `1.0` | how big the subtitles are, as a multiple of the size they have at 640x480. `1.0` is exactly the authored size and proportions at any resolution, `0.5` to `3.0` either side of it, and `0` leaves the engine's own shrinking behaviour alone. Settable from the developer menu and applied within a second; only `0` needs a relaunch. See **Subtitles that scale** below |
-| `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which is what its own pointer handling assumes. |
+| `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which its own pointer handling assumes. |
 | `WindowMode` | **`0`** | the shape of the window: `0` authentic, `1` borderless at the size of the monitor, `2` a caption and a border at a chosen size, `3` the same with a resize grip and a maximise button, `4` no frame at a chosen size. `0` changes nothing. Modes `2` to `4` take their size from the two keys below; `1` takes the monitor. On its own this changes the window and not the device, so Alt Tab still costs a reset; `WindowedPresent` below is what changes that |
-| `WindowedPresent` | **`0`** | build the device windowed instead of letting it own the display. One byte: the cooperative flags the engine hands DirectDraw, `DDSCL_FULLSCREEN\|DDSCL_EXCLUSIVE` to `DDSCL_NORMAL`, keeping `DDSCL_FPUSETUP`. This is what makes Alt Tab free, and it is also what the sized window modes need. Writes `DdrawWriteToGDI` in `dxwrapper.ini` to match, which is the only key this patch ever writes in that file |
+| `WindowedPresent` | **`0`** | build the device windowed instead of letting it own the display. One byte: the cooperative flags the engine hands DirectDraw, `DDSCL_FULLSCREEN\|DDSCL_EXCLUSIVE` to `DDSCL_NORMAL`, keeping `DDSCL_FPUSETUP`. This makes Alt Tab free, and the sized window modes need it too. Writes `DdrawWriteToGDI` in `dxwrapper.ini` to match, which is the only key this patch ever writes in that file |
 | `WindowedWidth` | `0` | the client width for modes `2` to `4`; `0` means the resolution being rendered. Clamped to the monitor. The developer menu offers this as a list of the sizes the display reports, and the chosen one also becomes the resolution the game renders at from the next start |
 | `WindowedHeight` | `0` | the same for the height. Each axis falls back on its own |
 | `WindowedFill` | `1` | make the whole picture fill the window when the window is not at the screen's origin. Only does anything with `WindowedPresent=1`. See **Why a moved window showed part of the picture** below |
@@ -44,7 +44,7 @@ the mode table that the aspect gate anchors.
 | `KeepCursorInWindow` | `1` | re-centre the mouse pointer in the window's client area instead of at screen (320,240) |
 | `ClipPointerToWindow` | `1` | hold the pointer inside the client area while the game window is in front, and let go the instant it is not |
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
-| `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole 640x480 menu canvas instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. It is widened to the **canvas** and deliberately not to the display mode: the pause screens repair themselves through damage rectangles clipped to that same hard-coded 640x480, so a cursor outside it is drawn and never erased, which was reported from a 3840x2160 session as the cursor's blue glow smearing across the border. Widening to the canvas is exactly the region that repaints, so it keeps the engine's guarantee rather than breaking it |
+| `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole 640x480 menu canvas instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. It is widened to the **canvas** and deliberately not to the display mode: the pause screens repair themselves through damage rectangles clipped to that same hard-coded 640x480, so a cursor outside it is drawn and never erased, which was reported from a 3840x2160 session as the cursor's blue glow smearing across the border. Widening to the canvas is exactly the region that repaints, so it keeps the engine's guarantee |
 | `ClampMenuSpritesToIsland` | `1` | the erase-side companion of `MenuKeepsResolution`: clamp the menu toolkit's sprite draws to the 640x480 island, gated on the engine's own widget-pass flag so the HUD and the frozen pause backdrop pass through untouched. Closes the reported blue stamp the hovered button's halo left on the island's border (drawn against the screen, repaired against the canvas). Bit-identical for every sprite that fits the island, and a sprite drawn with a partial fill is passed through untouched |
 | `MenuScale` | `0` | how many times its authored size to draw the 640x480 menu canvas at. `0` is automatic: the ratio comes from a converted artwork set when one is mounted, and from the display's own resolution when one is not. A number sets it by hand, up to the 4095/640 ceiling the run length format imposes. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. It is no longer half a feature without converted artwork: menu bitmaps are replicated to the canvas as they load. See **Menus at any resolution** below |
 | `MenuArtDirectory` | `menu_hd` | a folder of converted artwork to mount ahead of the game's own archives, or empty for none. Optional now rather than required: a picture that is already the size the canvas wants passes straight through the replication, so a converted set is a one time cost paid instead of a per load one. It was undocumented here until the replication made it optional |
@@ -88,6 +88,59 @@ the mode table that the aspect gate anchors.
 holds exactly 64 entries with **no bounds check**; the next live datum behind it is the menu
 descriptor. A modern driver can enumerate more 16-bit modes than that, so the enumerator is wrapped
 and capped, and the dropped labels are handed back to the engine's own allocator.
+
+## The menu canvas follows the display
+
+Changing resolution in the game's own options screen lays the menus out again at the new size,
+artwork included, instead of abandoning the canvas when it no longer fits. That check still exists
+and is still a memory safety measure; it is the fallback rather than the answer.
+
+It applies only when the ratio came from the display, which is when there is no converted artwork on
+disk. A converted set is a fixed size and the canvas stays welded to it.
+
+Written again from the new ratio: the two canvas immediates in `swrle_blit`, the three cells the
+origin operands read, the menu origin, `g_menuScale` and `g_menuTextScale`, the list box row floor
+and text insets, the drawn cursor's size, every tracked screen's widget rectangles, and the cursor
+cage, sprite island and loading bar. Following on their own: the animated previews, the 3-D widgets,
+and every picture widget's rectangle, which `swpic_draw` fills in from the bitmap on every draw.
+
+**Four cells the engine derives, not one.** The menu origin on both axes, `g_menuScale` and
+`g_menuTextScale` all come out of one block that runs at startup and on the mode-change message and
+nowhere else. On a live change it runs before the canvas has moved, so all four belong to the
+resolution just left. Writing only the origin was not enough, and the symptom was unmistakable:
+`g_menuScale` is glyph size, base font size and where the 3-D widgets sit, so 4K down to a small
+mode left the text scaled for 4K and every screen off its background.
+
+**Rectangles are scaled from the size the screen was authored at**, which the shadow keeps.
+Dividing back does not recover it: the engine rewrites a list box's own height to a whole number of
+rows plus six, so the number that comes back was never the authored one. Measured in
+`unittests/menu_refit.c`, a box authored 100 tall walks to 83 over five changes and loses a row off
+the resolution list itself.
+
+List boxes on the open screen are sent `SWMSG_RESET` again, which is the engine's own message and
+the only place row height, row count and box height are derived. Artwork is dropped through the
+engine's own `swmenu_freeBitmaps`, which it calls itself on the outgoing screen when one screen is
+pushed over another; the resource layer counts references, so dropping every tracked screen at once
+is safe.
+
+Field confirmed at 2560x1600 refitted to 2048x1536: a widget authored 500x480 came back 1600x1536
+and the animated preview authored 232x100 came back 742x320, each the authored size through the new
+ratio.
+
+## A windowed game fits the monitor once its frame is counted
+
+The window is placed by growing the wanted client rectangle by the frame, but the client was only
+ever clamped against the raw monitor size. On a 3840x2160 screen a 3840x2160 client came back as a
+3862x2216 window at -11,0, with most of its caption above the top of the screen, and the same clamp
+decided the resolution written into `obi.ini`. The file said 3840x2160 while the window could only
+show 3818x2104, so the picture and the window disagreed by the width of the frame.
+
+`window_mode_fit_frame` shrinks the client until the whole window fits and centres on the outer
+rectangle rather than the client. Both the placement and the render size go through it. It is a
+separate step from `window_mode_client_rect` because that one answers what was asked for, which is
+the same answer whatever frame the mode has, and this one needs a measurement only a live window can
+give. Borderless modes measure a frame of nothing and are unchanged. They can still show the
+screen's own resolution when a framed one cannot.
 
 ## `WindowMode`, and what the window actually is today
 
@@ -149,8 +202,7 @@ the right one for none, so it is not really a second choice to make. It is writt
 That was measured before it was understood. On a 3840x2160 desktop, rendering at 1600x900 gave
 desktop sized surfaces and a black window, and a 1600x900 window over a 3840x2160 render put the
 picture in one corner at 1600/3840 of the window. Both were the surface sizing rather than the
-device, which is why an earlier build refused `WindowMode=2` whenever this was on. That refusal is
-gone.
+device, so an earlier build refused `WindowMode=2` whenever this was on. That refusal is gone.
 
 An earlier version replaced the whole device build instead, with no display mode, no flip chain, a
 clipper and a scaled blit, which is the arrangement the DirectX 6 and 7 samples use. It is written
@@ -161,15 +213,14 @@ both.
 ## Menus at any resolution
 
 The engine's menu blitter copies one source pixel to one destination pixel. It has no scale term,
-so a picture only fills a bigger canvas if the file is bigger, and that is the whole reason artwork
-was converted on disk and the whole reason the menus were welded to the resolution it was converted
-for. Below that resolution the entire scale stood down, because a canvas larger than the back buffer
-writes past the end of it.
+so a picture only fills a bigger canvas if the file is bigger. Artwork was converted on disk for
+that, and the menus were welded to the resolution it was converted for. Below that resolution the
+entire scale stood down, because a canvas larger than the back buffer writes past the end of it.
 
 Menu bitmaps are now replicated to the canvas as they load, which removes the weld. Measured on
 2026-09-08 at 1920x1080 with no converted artwork present: `640x480` arrived as `1920x1080`,
 `500x480` as `1500x1080`, `620x207` as `1860x621`, each exactly half the size the same file has in a
-set converted for 3840x2160, which is what a ratio of 3.0 by 2.25 against 6.0 by 4.5 should give.
+set converted for 3840x2160. A ratio of 3.0 by 2.25 against 6.0 by 4.5 should give half.
 
 **Where.** The BBMP resource handler loads a bitmap in three steps: read the file, convert it to 16
 bits, compress it into a run length stream. Between the second and third the pixels are raw and
@@ -178,8 +229,8 @@ rather than the compressor detoured, because that function has exactly two calle
 is the save game thumbnail, which is reallocated at a fixed 160x120 on every row change and copied
 into at that size. Redirecting one call site cannot reach it.
 
-**Whole pixels only, and that is not a quality preference.** A 16 bit pixel of exactly zero is
-transparent to this engine, and the zeros are not only the black an artist drew: the conversion to
+**Whole pixels only, not a quality preference.** A 16 bit pixel of exactly zero is transparent
+to this engine, and the zeros are not only the black an artist drew: the conversion to
 16 bits truncates, so in 565 anything under 8 red, 4 green and 8 blue collapses onto zero. A
 smoothing filter fails in both directions, and the arithmetic was traced rather than assumed.
 Blending a channel value of 1 against an adjacent transparent 0 at half weight gives 128, and the
@@ -249,9 +300,9 @@ that did escape would still send its clicks to the game rather than to the butto
 `PointerReleaseKey` suppresses the warp, drops the capture, and substitutes an arrow for the `NULL`
 the engine passes to `SetCursor`. That last part is needed because the engine answers `WM_SETCURSOR`
 for the whole window and not only for the picture, so a released pointer is invisible over the title
-bar too, which is exactly where it has to be seen. The capture is dropped every frame rather than
-once, because the engine takes it back whenever it handles an activation and coming back from
-minimised is an activation.
+bar too, where it has to be seen. The capture is dropped every frame rather than once, because the
+engine takes it back whenever it handles an activation and coming back from minimised is an
+activation.
 
 While released, the engine is sent the same "nothing moved" its own early-out returns, so no delta
 accumulates and the view does not lurch when the pointer is handed back.
@@ -259,7 +310,7 @@ accumulates and the view does not lurch when the pointer is handed back.
 ## Why the close box did nothing
 
 The engine answers `WM_CLOSE` with zero and does nothing else. It never reaches `DefWindowProc` and
-never reaches the shutdown, and that is deliberate: the window the engine gives itself is `WS_POPUP`
+never reaches the shutdown. That is deliberate: the window the engine gives itself is `WS_POPUP`
 with no close box at all, so the only thing that could ever send it a close was Alt+F4, and
 swallowing it stopped a stray keypress ending a level.
 
@@ -274,8 +325,8 @@ because freeing the world from inside a message dispatched from a frame that is 
 crash on exit waiting to happen. And the process ends inside the teardown rather than returning from
 it, because the engine only calls that function from `sys_main` with nothing above it but `WinMain`,
 whereas this reaches it from inside a frame; returning would carry on running a level that no longer
-exists. What is given up by leaving there is the C runtime's exit handlers, after the whole of the
-game's own shutdown has already run.
+exists. What is given up by leaving there is the C runtime's exit handlers, after the game's own
+shutdown has already run in full.
 
 There is a cleaner path in principle, which is to make the front end return its own quit answer so
 the game unwinds to `sys_main` by itself. It was looked at and is not available: that answer is a
@@ -299,14 +350,14 @@ was drawn on any path watched.
 
 **So the artwork conversion is not buying geometry.** The menus already scale. What the conversion
 buys is what happens to a small texture when a quad stretches it, and the answer today is the
-rasterizer's own bilinear filter, which is exactly the smoothing filter `convert_menu.py` refuses to
-use, and for a stated reason: after the engine converts a bitmap to 16 bit, a pixel that is exactly
-zero is a SKIP, so a smoothing filter invents near black where black was transparent and new
-exact zeros where there were none, haloing every button and punching holes in dark artwork. The
-converter replicates whole pixels instead, which cannot invent a colour that was not already there.
+rasterizer's own bilinear filter, the smoothing filter `convert_menu.py` refuses to use, and for a
+stated reason: after the engine converts a bitmap to 16 bit, a pixel that is exactly zero is a
+SKIP, so a smoothing filter invents near black where black was transparent and new exact zeros
+where there were none, haloing every button and punching holes in dark artwork. The converter
+replicates whole pixels instead, which cannot invent a colour that was not already there.
 
 That reframes the standing problem. It is not that the menus cannot follow a resolution; it is that
-stretching their textures through the wrong filter looks bad, which is why `MenuScale` ships at 0.
+stretching their textures through the wrong filter looks bad, so `MenuScale` ships at 0.
 A runtime upscaler using the converter's own rule would have the same output with no conversion step
 and no resolution lock, and `menu_preview.c` already does exactly that for the four previews.
 
@@ -322,8 +373,8 @@ Everything else in this DLL patches the game and leaves the presentation alone, 
 same whichever wrapper renders afterwards. Moving the game's window is the one thing here that
 argues with that wrapper over the same object, and it has cost twice:
 
-1. it broke the engine's own pointer confinement (the section below), which is why `cursor_anchor.c`
-   and `focus_guard.c` exist at all;
+1. it broke the engine's own pointer confinement (the section below), so `cursor_anchor.c` and
+   `focus_guard.c` exist;
 2. it produced a **2 fps** field report. The mode went down to 640x480 with the window, came back up
    to 2560x1440 without it, and the wrapper then downscaled a 1440p image into a 640x480 window on
    every frame. Invisible under the previous wrapper, which ran exclusive fullscreen.
@@ -349,7 +400,7 @@ and it is asymmetric:
 
 plus the options screen's own apply, which calls `graphics_setMode` directly twice (`0x44162C`,
 `0x44163C`). A fit driven from `graphics_setResolution` therefore **heard the mode go down and never
-heard it come back up**, which is exactly what the field log shows.
+heard it come back up**. The field log shows exactly that.
 
 Three details the new site needs, and all three are handled:
 
@@ -373,15 +424,15 @@ entire mouse confinement: warp back to the middle on every movement. It also nev
 the two spaces, and it cannot: the import table has no `ClientToScreen`, no `GetClientRect`, no
 `ClipCursor` and no `ShowCursor`.
 
-The two spaces agree for exactly one window position, the screen origin, and that is where the
-engine puts its own window (`CreateWindowExA` at `0x499019` passes X = 0, Y = 0 and style
-`0x80000000`, `WS_POPUP`) and where it leaves it, because both of its own `SetWindowPos` calls carry
+The two spaces agree for exactly one window position, the screen origin. That is where the engine
+puts its own window (`CreateWindowExA` at `0x499019` passes X = 0, Y = 0 and style `0x80000000`,
+`WS_POPUP`) and where it leaves it, because both of its own `SetWindowPos` calls carry
 `SWP_NOMOVE`. **`window_fit.c` is the only code that moves that window, and only when
-`FitWindowToMode=1`**, so this DLL is what makes the assumption false, and with the key at its new
-default of `0` it does not make it false at all. On a second monitor whose origin is at -1920,0 the
-warp target lands on the
-*other* display, the "already centred" test can never be true, and the pointer comes to rest outside
-the game window. Two field logs of the same build, one with `monitor at 0,0` and one with
+`FitWindowToMode=1`**, so
+this DLL makes the assumption false, and with the key at its new default of `0` it does not make
+it false at all. On a second monitor whose origin is at -1920,0 the warp target lands on the
+*other* display, the "already centred" test can never be true, and the pointer comes to rest
+outside the game window. Two field logs of the same build, one with `monitor at 0,0` and one with
 `monitor at -1920,0`, differ in exactly that and in nothing else.
 
 `cursor_anchor.c` converts the engine's own (320, 240) into screen coordinates with
@@ -455,7 +506,7 @@ wrapper setting, not a patch here.
 ## Timing
 
 `graphics_buildModeList` runs during **graphics** startup. Everything here that has to influence
-the list, the 4:3 gate above all, must therefore be patched before that, which is why the loader
+the list, the 4:3 gate above all, must therefore be patched before that, so the loader
 triggers at the host's entry point and not at `DirectInputCreateA`. When the gate is lifted after
 the list has been built, the patch reports success and has no effect: the options screen then
 offers only the 4:3 modes the DirectDraw layer happens to report. On one machine that was exactly
@@ -501,8 +552,8 @@ without it:
   position scale
 
 The backdrop transform reduces to something simpler than the layout it matches: `x` scales about the
-horizontal centre and `y` about the bottom edge, which is exactly where the text is anchored, and it
-is the identity at `k = 1`. Only two calls reach that function and both are the subtitle's own bars.
+horizontal centre and `y` about the bottom edge, where the text is anchored, and it is the identity
+at `k = 1`. Only two calls reach that function and both are the subtitle's own bars.
 
 **Nothing else the font layer draws is affected.** The same layer draws every menu string and HUD
 readout; all ten writes are inside the dialogue's own drawing or reached only from it.
@@ -520,7 +571,7 @@ readout; all ten writes are inside the dialogue's own drawing or reached only fr
   pointer can sit outside the window from launch until the hand touches the mouse, the first
   movement then anchors it. A transient, not a standing defect.
 * The anchor cannot help while the game is not the foreground application: that is deliberate, and
-  it is what makes Alt-Tab work.
+  it makes Alt-Tab work.
 * The confinement is released by a **per-frame** poll, so there is a window of up to one frame
   between the foreground going away and the rectangle being dropped. Windows also drops a clip of
   its own accord when the foreground window changes, but that is not relied on here.
@@ -536,8 +587,8 @@ readout; all ten writes are inside the dialogue's own drawing or reached only fr
 * The two menu-bolt patterns contain an absolute `.data` address. Under forced ASLR they stop
   resolving and the patch disables itself with a log line. Address-free variants were measured and
   rejected, 6 and 10 hits respectively.
-* If a chosen mode fits no connected monitor, the wrapper has to scale, and that is where it once
-  hung. The log warns; it does not stop you.
+* If a chosen mode fits no connected monitor, the wrapper has to scale. It once hung there. The log
+  warns; it does not stop you.
 
 ## Fallback behaviour
 
@@ -558,7 +609,7 @@ The pointer anchor and the focus guard now also log **whether they are load-bear
 `FitWindowToMode=0` nothing moves the window, so both are insurance and the log says so in those
 words. Their behaviour is unchanged either way, and their defaults stay `1`, at window origin
 (0,0) the anchor computes the identical warp and the clip rectangle is the whole desktop, so they
-cost nothing there and they are what makes an unusual setup survivable.
+cost nothing there and they make an unusual setup survivable.
 
 The pointer anchor has four named branches and the log says which one was taken:
 
@@ -648,9 +699,8 @@ wildcarded for exactly that reason. `obi.exe` still reports its expected 35 prob
 
 The engine already centres its menus. `g_menuOriginX [0x6CFD58] = (W-640)/2` and
 `g_menuOriginY [0x6CFD5C] = (H-480)/2` are written at startup and on every mode change, and both
-are **added** by `swwidget_draw` and by `swwidget_hitTest`, 18 references and 16 references, which
-is what guarantees that what you see and what you can click cannot drift apart. **None of that is
-touched.**
+are **added** by `swwidget_draw` and by `swwidget_hitTest`, 18 references and 16 references, so
+what you see and what you can click cannot drift apart. **None of that is touched.**
 
 What is wrong is a different number: inside the window procedure the engine clamps the cursor it
 *draws for its own menus* to `[originX, originX+0x25F] by [originY, originY+0x1BF]`, 607x447, i.e.
@@ -671,8 +721,8 @@ cursor's blue glow smearing across the border. Removing it removed the smear, th
 and the rollback path that ordering needed, all at once. The cage is now computed absolutely from
 the canvas size, so writing it twice writes the same four numbers.
 
-**The signature contains the immediates it patches**, which is what identifies the block as the
-640x480 cage in the first place. It therefore cannot resolve a second time: the addresses are cached
+**The signature contains the immediates it patches**, which identifies the block as the 640x480
+cage in the first place. It therefore cannot resolve a second time: the addresses are cached
 at install and the site is never re-resolved. If an earlier generation of this DLL is already in the
 process and has already widened the cage, the resolve fails, and the log says *that*, rather than
 claiming the engine was not recognised.

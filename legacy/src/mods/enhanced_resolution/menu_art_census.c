@@ -10,15 +10,6 @@
 
 #include <stddef.h>
 
-/* The surface header fields this reads. The same five menu_preview.c saves and restores around its
- * own swap, named again here rather than shared, because a census that reached into another file's
- * private offsets would make that file harder to change than it is. */
-#define VBUFFER_WIDTH          0x0Cu
-#define VBUFFER_HEIGHT         0x10u
-#define VBUFFER_BYTES_PER_LINE 0x18u
-#define VBUFFER_BITS_PER_PIXEL 0x24u
-#define VBUFFER_PIXELS         0x5Cu
-
 /* Sixty four distinct shapes. A menu screen has a few dozen widgets and most screens share most of
  * their furniture, so a walk through the whole front end has never needed more; the count of shapes
  * that did not fit is reported rather than silently dropped, so a full table cannot look like a
@@ -29,7 +20,6 @@ typedef struct census_entry {
     int32_t  mode;
     int32_t  width;
     int32_t  height;
-    int32_t  bits_per_pixel;
     uint32_t seen;
 } census_entry_t;
 
@@ -53,16 +43,22 @@ typedef int32_t(__cdecl *menu_open_fn_t)(void *menu);
 static detour_t pic_draw_detour;
 static detour_t menu_open_detour;
 
+/* AFTER the original, and that is the whole correction. The first version read the widget's own
+ * picture field before the draw, found it null on 4805 widgets across eight screens, and reported
+ * that almost nothing in a menu is a picture. The engine's own code says otherwise: when that field
+ * is null swpic_draw LOOKS THE PICTURE UP, and then writes its size into the widget's rectangle
+ * before blitting it. So the field is empty for most widgets and the picture is real, and reading
+ * before the draw measured the one moment at which that is not visible.
+ *
+ * Reading the rectangle afterwards costs nothing and sees every picture, looked up or not. */
 static void __cdecl census_pic_draw(void *widget, void *menu)
 {
     pic_draw_fn_t original = (pic_draw_fn_t)pic_draw_detour.original;
 
-    if (widget != NULL) {
-        menu_art_census_note(widget, *(void *const *)((char *)widget + WIDGET_DATA));
-    }
     if (original != NULL) {
         original(widget, menu);
     }
+    menu_art_census_note(widget);
 }
 
 static int32_t __cdecl census_menu_open(void *menu)
@@ -161,37 +157,28 @@ static const char *path_of(int32_t mode)
     return (mode >= 2) ? "raw, plain surface copy" : "compressed, swrle_blit";
 }
 
-void menu_art_census_note(const void *widget, const void *frame)
+void menu_art_census_note(const void *widget)
 {
     int32_t  mode;
     int32_t  width;
     int32_t  height;
-    int32_t  bits;
     uint32_t at;
 
     if (!census.armed || widget == NULL) {
         return;
     }
-    if (frame == NULL) {
+
+    /* The size of the picture that was just drawn, taken from the rectangle swpic_draw fills in
+     * from the surface's own header a line before it blits. */
+    mode   = *(const int32_t *)((const char *)widget + WIDGET_FONT_INDEX);
+    width  = *(const int32_t *)((const char *)widget + WIDGET_RECT_WIDTH);
+    height = *(const int32_t *)((const char *)widget + WIDGET_RECT_HEIGHT);
+    if (width <= 0 || height <= 0) {
         census.widgets_without_a_picture++;
         return;
     }
-    if (!memory_is_readable_range((uintptr_t)frame, VBUFFER_PIXELS + sizeof(void *))) {
-        return;
-    }
 
-    mode   = *(const int32_t *)((const char *)widget + WIDGET_FONT_INDEX);
-    width  = *(const int32_t *)((const char *)frame + VBUFFER_WIDTH);
-    height = *(const int32_t *)((const char *)frame + VBUFFER_HEIGHT);
-    bits   = *(const int32_t *)((const char *)frame + VBUFFER_BITS_PER_PIXEL);
-
-    /* A pointer being READABLE is not a pointer being a surface, and taking the first for the
-     * second put "1065353216x1065353216 at 414518224 bits" in a log. That width is 0x3F800000,
-     * which is 1.0f: the field a widget keeps a picture in holds other things on other widget
-     * kinds, and this had read a structure of floats. So the numbers are checked for being
-     * plausible ones before they are believed. */
-    if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
-        (bits != 8 && bits != 16 && bits != 24 && bits != 32)) {
+    if (width > 16384 || height > 16384) {
         census.not_a_surface++;
         return;
     }
@@ -211,12 +198,11 @@ void menu_art_census_note(const void *widget, const void *frame)
     census.entries[census.count].mode           = mode;
     census.entries[census.count].width          = width;
     census.entries[census.count].height         = height;
-    census.entries[census.count].bits_per_pixel = bits;
     census.entries[census.count].seen           = 1u;
     census.count++;
 
-    log_info("menu picture %dx%d at %d bits, blit mode %d: %s",
-             (int)width, (int)height, (int)bits, (int)mode, path_of(mode));
+    log_info("menu picture %dx%d, blit mode %d: %s",
+             (int)width, (int)height, (int)mode, path_of(mode));
 }
 
 static void report(void)
@@ -246,8 +232,8 @@ static void report(void)
         } else {
             compressed++;
         }
-        log_info("  %5dx%-5d %2d bits  mode %d  drawn %u times  %s",
-                 (int)e->width, (int)e->height, (int)e->bits_per_pixel, (int)e->mode,
+        log_info("  %5dx%-5d  mode %d  drawn %u times  %s",
+                 (int)e->width, (int)e->height, (int)e->mode,
                  (unsigned)e->seen, path_of(e->mode));
     }
     log_info("  %u shapes take the raw path, which is the one a draw time upscaler can already "

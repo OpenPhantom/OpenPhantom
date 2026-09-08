@@ -52,7 +52,7 @@ bool menu_art_census_install(void);
 
 /* Called from the swpic_draw detour, with the widget and its surface. Cheap and silent once a shape
  * has been seen before. */
-void menu_art_census_note(const void *widget, const void *frame);
+void menu_art_census_note(const void *widget);
 
 /* Called when a menu screen opens, so the summary can say how many screens produced these shapes.
  * A screen that draws nothing this census sees is the interesting case. */

@@ -16,6 +16,7 @@
 #include "menu_preview.h"
 #include "menu_scale_3d.h"
 #include "menu_art_census.h"
+#include "menu_art_load.h"
 #include "menu_scale_internal.h"
 #include "menu_scale_sites.h"
 
@@ -296,10 +297,17 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
         ratio_x = ratio_y = configured_ratio;  /* an explicit setting, which exists for testing */
     } else {
         if (!ratio_from_artwork(&ratio_x, &ratio_y)) {
-            log_info("MenuScale is automatic and no converted menu artwork was found beside the "
-                     "game, so the menus stay at their authored 640x480 canvas. Convert the "
-                     "artwork for your display and this follows it.");
-            return true;
+            /* No converted set, so the display decides instead and the artwork is replicated to
+             * meet it as it loads. That inverts this file's older doctrine, which was that the
+             * artwork is the one source of truth because a number read from the pictures cannot
+             * disagree with the pictures. It could not survive contact with a resolution that
+             * changes: the artwork cannot follow one and the display always can. */
+            if (!menu_art_load_display_ratio(&ratio_x, &ratio_y)) {
+                log_info("MenuScale is automatic, there is no converted menu artwork, and the "
+                         "game's own resolution could not be read, so the menus stay at their "
+                         "authored 640x480 canvas.");
+                return true;
+            }
         }
     }
 
@@ -317,6 +325,12 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
         log_info("the menu scale is 1, so the menus stay at their authored 640x480 canvas");
         return true;
     }
+
+    /* Armed whatever the ratio came from, because a picture that is already the right size declines
+     * itself. That is what lets a converted set, a half converted one and none at all all work: the
+     * converted pictures pass straight through and only the ones that are still authored size are
+     * replicated. */
+    (void)menu_art_load_install(ratio_x, ratio_y);
 
     /* Declined rather than installed, and this is a correctness gate and not a preference: with the
      * cage shut, every widget the scale moves outside the old 607x447 box becomes unreachable and

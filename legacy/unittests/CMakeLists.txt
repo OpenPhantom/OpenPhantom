@@ -106,6 +106,8 @@ add_unit_test(pointer_cage enhanced_resolution
 # at 3840x2160 the hovered button's halo is cut exactly at island x=1600 instead of stamping the
 # border. window_fit.c comes along for the same reason it does above: the hook asks it for the
 # display mode.
+add_unit_test(menu_art_resample enhanced_resolution enhanced_resolution/menu_art_resample.c)
+
 add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/menu_island_clip.c
     # the census the sprite hook reports to, the real file rather than a stub, and the site

@@ -46,7 +46,8 @@ the mode table that the aspect gate anchors.
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
 | `WidenMenuCursorArea` | `1` | let the **drawn menu cursor** move over the whole 640x480 menu canvas instead of the 607x447 island the engine clamps it to. Does **not** move or rescale any menu, the engine already centres those itself. It is widened to the **canvas** and deliberately not to the display mode: the pause screens repair themselves through damage rectangles clipped to that same hard-coded 640x480, so a cursor outside it is drawn and never erased, which was reported from a 3840x2160 session as the cursor's blue glow smearing across the border. Widening to the canvas is exactly the region that repaints, so it keeps the engine's guarantee rather than breaking it |
 | `ClampMenuSpritesToIsland` | `1` | the erase-side companion of `MenuKeepsResolution`: clamp the menu toolkit's sprite draws to the 640x480 island, gated on the engine's own widget-pass flag so the HUD and the frozen pause backdrop pass through untouched. Closes the reported blue stamp the hovered button's halo left on the island's border (drawn against the screen, repaired against the canvas). Bit-identical for every sprite that fits the island, and a sprite drawn with a partial fill is passed through untouched |
-| `MenuScale` | `0` | how many times its authored size to draw the 640x480 menu canvas at. `0` ships and is the point of it: the ratio is READ FROM the converted artwork rather than set here, so the layout and the pictures cannot disagree about the number, and with no converted artwork there is no scale and the menus are the ones that shipped. A number instead sets it by hand, up to the 4095/640 ceiling the engine's own canvas imposes. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. Only half a feature without upscaled artwork: the blitter copies one source pixel to one destination pixel, so the layout spreads but the bitmaps do not grow |
+| `MenuScale` | `0` | how many times its authored size to draw the 640x480 menu canvas at. `0` is automatic: the ratio comes from a converted artwork set when one is mounted, and from the display's own resolution when one is not. A number sets it by hand, up to the 4095/640 ceiling the run length format imposes. Declines when `WidenMenuCursorArea` is `0`, since a scaled menu inside the shipped cursor cage has buttons the pointer cannot reach. It is no longer half a feature without converted artwork: menu bitmaps are replicated to the canvas as they load. See **Menus at any resolution** below |
+| `MenuArtDirectory` | `menu_hd` | a folder of converted artwork to mount ahead of the game's own archives, or empty for none. Optional now rather than required: a picture that is already the size the canvas wants passes straight through the replication, so a converted set is a one time cost paid instead of a per load one. It was undocumented here until the replication made it optional |
 
 ## Engine locations
 
@@ -156,6 +157,50 @@ clipper and a scaled blit, which is the arrangement the DirectX 6 and 7 samples 
 up as refuted in `windowed_device.h`: this engine reads its own front buffer back when a pause page
 opens and when the loading screen is built, so a primary that is not the game's own mode corrupts
 both.
+
+## Menus at any resolution
+
+The engine's menu blitter copies one source pixel to one destination pixel. It has no scale term,
+so a picture only fills a bigger canvas if the file is bigger, and that is the whole reason artwork
+was converted on disk and the whole reason the menus were welded to the resolution it was converted
+for. Below that resolution the entire scale stood down, because a canvas larger than the back buffer
+writes past the end of it.
+
+Menu bitmaps are now replicated to the canvas as they load, which removes the weld. Measured on
+2026-09-08 at 1920x1080 with no converted artwork present: `640x480` arrived as `1920x1080`,
+`500x480` as `1500x1080`, `620x207` as `1860x621`, each exactly half the size the same file has in a
+set converted for 3840x2160, which is what a ratio of 3.0 by 2.25 against 6.0 by 4.5 should give.
+
+**Where.** The BBMP resource handler loads a bitmap in three steps: read the file, convert it to 16
+bits, compress it into a run length stream. Between the second and third the pixels are raw and
+about to be discarded, which is the one moment a larger copy costs nothing. The CALL is redirected
+rather than the compressor detoured, because that function has exactly two callers and the other one
+is the save game thumbnail, which is reallocated at a fixed 160x120 on every row change and copied
+into at that size. Redirecting one call site cannot reach it.
+
+**Whole pixels only, and that is not a quality preference.** A 16 bit pixel of exactly zero is
+transparent to this engine, and the zeros are not only the black an artist drew: the conversion to
+16 bits truncates, so in 565 anything under 8 red, 4 green and 8 blue collapses onto zero. A
+smoothing filter fails in both directions, and the arithmetic was traced rather than assumed.
+Blending a channel value of 1 against an adjacent transparent 0 at half weight gives 128, and the
+vertical pass then gives 0: a dark but opaque pixel becomes transparent, punching holes in dark
+artwork. Interpolating the other way haloes every transparent edge. Replication cannot do either,
+because every pixel drawn is one that was already in the picture.
+
+**Upward only.** Below a ratio of 1 the interval for a destination pixel is shorter than one source
+pixel and may contain none, so pixels are dropped: a one pixel border comes out dashed rather than
+thinner. At 3840 to 1920, half the source columns are never sampled. The replication refuses to
+shrink.
+
+**The ratio now comes from the display when there is no artwork**, which inverts what this file used
+to argue. The old doctrine was that reading the ratio from the pictures is what stops the layout and
+the pictures disagreeing. That was true and it could not survive a resolution that changes: artwork
+cannot follow one and a display always can.
+
+**What it does not do yet.** The menus are correct at the resolution the game started at. A picture
+is loaded once and held for as long as its screen is open, so it does not follow a resolution
+changed while the game runs. The cache that would have to be dropped is the engine's own, and the
+engine drops it itself on every screen change through `swmenu_freeBitmaps`.
 
 ## Why a moved window showed part of the picture
 

@@ -137,8 +137,8 @@ integrator or the collision code. The menu half adds two detours and one repoint
 | the absolute axis reader | `0x44A089 + 0x08` | resolved, not patched |
 | `pPlayer` | `0x449F94 - 4` | read from the operand, opcode checked first |
 | the mode descriptor table | `0x4479D2 + 48` | read from `player_save`'s own operand |
-| the fire action handler | `0x44BA3A` | detoured. It spawns the bolt as `heading + [pPlr+0x178]` from a heading read LIVE at that instant, substeps after `Plr_AutoAim` ran, which is why a heading swapped across `Plr_AutoAim` aims the search cone and nothing else |
-| `bapobj_setNodeYaw` | `0x41481B` | resolved and **called**, not patched. An ABSOLUTE store, which is what lets the steering lean re-issue the two writes the original already made |
+| the fire action handler | `0x44BA3A` | detoured. It spawns the bolt as `heading + [pPlr+0x178]` from a heading read LIVE at that instant, substeps after `Plr_AutoAim` ran. A heading swapped across `Plr_AutoAim` therefore aims the search cone only |
+| `bapobj_setNodeYaw` | `0x41481B` | resolved and **called**, not patched. An ABSOLUTE store, so the steering lean can re-issue the two writes the original already made |
 | `render_frameEnd` | `0x46C139` | **detoured** (chained), for the mouse bank and the live check box |
 | `g_frameDelta` | `0x46C139 + 0x0A` | read from the operand |
 | `options_controls` | `0x442A98` | **detoured**; its `push imm32` at `+23` is repointed at our widget copy |
@@ -147,8 +147,8 @@ integrator or the collision code. The menu half adds two detours and one repoint
 Free look adds seven sites of its own, six of them inside the camera update and all resolved by
 address-free masked patterns. Five cells appear in two patterns each and are cross-checked against
 each other before they are believed; the yaw offset appears in **three** independent ones. **They
-are resolved and detoured whenever `MouseLook=1`, whether `FreeLook` reads `0` or `1`**; that is
-what makes the control mode a live setting, and while it is off the hooks write nothing at all.
+are resolved and detoured whenever `MouseLook=1`, whether `FreeLook` reads `0` or `1`**, so the
+control mode is a live setting. While it is off the hooks write nothing at all.
 
 | Site | Retail VA | What |
 |---|---|---|
@@ -164,8 +164,8 @@ what makes the control mode a live setting, and while it is off the hooks write 
 The camera update's pattern is anchored on the engine's own debug statement, which prints the
 function's name and four of its globals in one line, a cheaper instrument than any call graph, in a
 module the code map admits it has barely read. The `frames` cell appears twice inside that one
-pattern (pushed, then zeroed) and the two operands must agree, which is what turns "seventy-one
-bytes lined up" into "this is the function we want" without embedding a single address.
+pattern (pushed, then zeroed) and the two operands must agree. That turns "seventy-one bytes
+lined up" into "this is the function we want" without embedding a single address.
 
 `Plr_AutoAim`'s pattern carries its own two constants, `FLT_MAX` and the **16.0-degree** cone half
 angle, and both of its `pPlayer` operands must equal the cell the steering already resolved out of
@@ -233,7 +233,7 @@ boundaries fell.
 
 The axis is therefore banked in a `render_frameEnd` callback and consumed **whole and zeroed** in
 phase 2. With `MouseRawInput` the sample comes from the device rather than from the engine's axis,
-which is what makes the count of reports in a frame knowable at all; and with `NewMouseInput` the
+so the count of reports in a frame becomes knowable; and with `NewMouseInput` the
 drawn angle is advanced once per rendered frame and the simulation is handed the total one step
 later, so the camera turns by what the hand did on that frame instead of by a fifth of what it did
 over the last step. The body still owns the heading and receives every degree. The total turn over
@@ -268,7 +268,7 @@ That replaced a `carryDelta` sidestep, and the reason is one line in the clip se
 a sideways key left `moveInput` and `curSpeed` at zero, so `Plr_StandClipSelect` picked an **idle**
 clip. The player slid sideways while standing still.
 
-The direction is turned by offsetting `heading` across the phase-7 call and nothing else. The
+The direction is turned by offsetting `heading` across the phase-7 call. The
 integrator takes `sincos_deg(heading)` inside its own body, so the displacement comes out rotated
 while every other reader sees the value it always had; afterwards `heading` is put back with the
 engine's own formula and the facing vector rebuilt. Knockback and the conveyor surcharge are added
@@ -280,7 +280,7 @@ frame and the node's translation is carried through unchanged; node 0 is a mesh-
 about a millimetre of the vertical centre line in all four hero rigs, so **the character spins in
 place**.
 
-### The angle is damped, and that is what the feature feels like
+### The angle is damped
 
 The raw angle only ever takes five values: 0, +/-45 and +/-90. Stepping straight between them moves the
 model 90 degrees in one substep, 2880 degrees per second, and no amount of animation cross-fading can hide it, because
@@ -351,8 +351,8 @@ the rotated displacement ran into, now tests the direction that actually hit the
 from that angle, so the turn keys turn the player the way the shipped game turns them and do not
 also walk them sideways. Both install lines have always said so and the second was not true until
 2026-09-08: the turn axis was made into a sideways value unconditionally and handed on, so with the
-sideways walk switched off the same key both turned the player and strafed them, which is the whole
-of the feature that was meant to be off.
+sideways walk switched off the same key both turned the player and strafed them, exactly the
+behaviour that was meant to be off.
 
 **The back-pedal clip is retired while this is on.** The drive is always forward, so holding back is
 a half turn and a forward walk toward the camera. That is a real loss of authored content, taken
@@ -368,13 +368,12 @@ player carries none of the fixed-look-at / fixed-heading / cut / world-fixed fla
 returns, so the engine's damper is back on the next frame with no restore path of ours to get wrong.
 
 **A scripted release and an authored-region release are not the same release.** They used to be
-treated as one, and that is the defect behind "in certain situations while walking the camera just
-rotates".
+treated as one, the defect behind "in certain situations while walking the camera just rotates".
 
 When a **script** takes the camera, a cutscene, the director, a warp, a load, the death arm, the
-wanted yaw is **dropped** and the next armed frame seeds it from the live cell. That is what makes
-coming back from a cutscene put the camera where the engine has just recentred it, behind the
-player, instead of where the mouse left it a minute ago.
+wanted yaw is **dropped** and the next armed frame seeds it from the live cell. Coming back from a
+cutscene therefore puts the camera where the engine has just recentred it, behind the player,
+instead of where the mouse left it a minute ago.
 
 When an **authored camera region** on the floor takes it, the player walks in and out again within a
 second or two, and all the while the engine's recentre is eating his aim at four per cent of the
@@ -419,18 +418,17 @@ Both were re-verified against the retail image for this change rather than inher
   when the detail switch `[0x4AC538] < 2`). It is asset data.
 
 So the only way free look can change what is under the camera is by changing **where the player
-walks**, which is what a control scheme is for. Every transition line in the log therefore carries
-the live pitch and eye height: when those two move, the region named on the same line is what moved
-them.
+walks**. Every transition line in the log therefore carries the live pitch and eye height: when
+those two move, the region named on the same line is what moved them.
 
 **Aiming.** The auto-aim searches a 16 degrees cone about the player's heading, which under free look is
 where the feet point. The cone is carried across `Plr_AutoAim` by a chained detour that swaps the
 heading for the camera yaw and restores it afterwards, the heading is read twice inside and both
 reads are covered.
 
-The **aim snap** is the other half: for 0.35 s the body is driven to the camera yaw, which is what
-makes the shot yaw and the force-push direction follow the camera as well. It is armed from
-`Plr_StartFire` rather than from the auto-aim, and that distinction is the whole of a reported bug.
+The **aim snap** is the other half: for 0.35 s the body is driven to the camera yaw, so the shot
+yaw and the force-push direction follow the camera as well. It is armed from `Plr_StartFire` rather
+than from the auto-aim, and that distinction was the reported bug.
 The engine calls the auto-aim only when `g_weaponCfg[slot].autoAimMode` is non-zero, which is true
 of seven of the thirteen shipped slots, so arming there left the other six turning the body toward
 their travel while the shot was still built against the camera. `Plr_StartFire` is the moment every
@@ -601,6 +599,35 @@ the engine's own steer, so it simply writes the movement fields again from its o
 substep it has nothing to say about leaves the engine's numbers alone. That is what keeps the
 keyboard, and a hand-bound pad, working unchanged.
 
+### It needs an XInput pad, and it now says so when it has not got one
+
+This reads the stick with `XInputGetState` alone, so it sees an Xbox pad, anything
+presenting itself as one, and a Steam Deck or Steam controller through Steam Input. Under Wine,
+XInput is supplied for any pad Wine recognises, with or without Steam. A DirectInput-only device is
+never visible here; the game's own Controls screen still reads those.
+
+Three states wear one symptom, and until a Steam Deck session forced the issue this file could not
+tell them apart in a log:
+
+* **No pad.** `XInputGetState` fails. Said once, and again if a pad appears and later goes.
+* **A pad this cannot see.** Also a failure, and indistinguishable from the above by design: there
+  is no device to fail on, so there is nothing to name. The message says both.
+* **A pad that is connected and sends nothing.** The call SUCCEEDS and every field is zero.
+  Measured on a Steam Deck in desktop mode: `left stick 0,0 right stick 0,0 triggers 0,0 buttons
+  0000`, which is Steam holding the controls in its desktop layout where they drive mouse and
+  keyboard. Launching through Steam applies a gamepad layout, so Gaming Mode works.
+
+The third is reported on TIME rather than on a reading, because a pad at rest and a pad sending
+nothing produce the same first report. Nothing is claimed until the pad has been connected fifteen
+seconds and every field of every report in that time has been zero. The first raw report is logged
+too, stated and not interpreted, so the call itself is evidenced separately from what arrives
+through it.
+
+**The fix for all three is the same one.** Add the game to Steam as a non-Steam game and launch it
+from there: Steam Input presents almost any controller as an XInput device, and on a Steam Deck in
+desktop mode that is the configuration confirmed working, window modes and input together. Failing
+that, use an Xbox pad, or something that emulates one such as DS4Windows.
+
 ### Walk and run
 
 Running is a **button** in this engine, not a speed. `Plr_StandClipSelect` asks whether the Run
@@ -629,8 +656,7 @@ of them has to remember is a gate one of them will not.
 
 Only eight places in the game set the mode. Three set 4 and three set 0, all of them the dialogue;
 the other two are `swmenu_open` and `swmenu_close`, which set 2 and then restore whatever was live
-before. No gameplay state uses anything but 0, which is what makes "only 0 drives" safe rather
-than merely tidy.
+before. No gameplay state uses anything but 0, so "only 0 drives" is safe.
 
 A site that does not resolve answers YES. The cost of being wrong that way is one awkward
 conversation; the cost of being wrong the other way is a player who cannot move at all.
@@ -709,9 +735,9 @@ place is a different game, and this is meant to be a lean.
 ## Known limitations
 
 **Under `FreeLook=1` the walk-backward clip never plays.** Holding back is a half turn and a forward
-walk toward the camera, so the forward move bit is set and the backward one cleared; that is what
-makes the body face its travel. It is deliberate, and it is the one animation the free-look scheme
-substitutes. With `FreeLook=0` the backward clip plays exactly as it shipped.
+walk toward the camera, so the forward move bit is set and the backward one cleared, and the body
+faces its travel. It is deliberate, and it is the one animation the free-look scheme substitutes.
+With `FreeLook=0` the backward clip plays exactly as it shipped.
 
 * **`Strafe` requires `MouseLook`.** `turnWheel` is the only turn channel in the engine. Mouse and
   keyboard exclude each other in the original, but both land there, so turning the keyboard axis
@@ -964,8 +990,8 @@ a census of every widget in every screen puts the highest authored string id at 
 
 **Accepted in game**, in the 1.5.0 build, which was played through by hand. Both check boxes have
 been seen and clicked, and both switches take effect live: the arming gate reads them on every
-camera update and the phase thunks read the same gate on every substep, which is what the code
-path predicted and what play confirms.
+camera update and the phase thunks read the same gate on every substep. The code path predicted
+that and play confirms it.
 
 The check boxes are behind `MenuExtras` and ship off, so the vanilla menu is the one the game
 shipped with. The same two switches are always reachable from the dev menu's Utilities page,

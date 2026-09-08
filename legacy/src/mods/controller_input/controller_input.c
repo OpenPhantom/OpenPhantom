@@ -102,6 +102,13 @@ typedef struct controller_input_state {
     HANDLE thread;
     bool   pad_connected;
 
+    /* Said once, the first time a poll finds nothing. Without it a pad this cannot see is
+       indistinguishable from no pad at all AND from a working one, because every line this DLL
+       writes describes what it would do rather than what it found. That silence cost a Steam Deck
+       session: in Gaming Mode Steam Input presents the pad as XInput and everything worked, and
+       the same build launched from the desktop had no XInput device and said nothing about it. */
+    bool   reported_absent;
+
     LARGE_INTEGER qpc_frequency;
     LARGE_INTEGER last_tick;
     bool          have_last_tick;
@@ -364,6 +371,22 @@ static void poll_once(void)
         if (ci_state.pad_connected) {
             log_info("controller %d disconnected, checking every %u ms until it returns",
                      ci_state.config.controller_index, (unsigned)DISCONNECTED_POLL_INTERVAL_MS);
+        } else if (!ci_state.reported_absent) {
+            ci_state.reported_absent = true;
+            log_info("no XInput controller was found in slot %d, so the right stick, Start "
+                     "and the triggers do nothing. That is not a fault in this patch and "
+                     "nothing further will be "
+                     "reported about it; a pad plugged in later is picked up on its own. "
+                     "Rechecked every two seconds. "
+                     "If one is plugged in NOW then it is a pad this cannot see, because only "
+                     "XInput devices are visible here. An XBOX pad works as it is; anything else "
+                     "has to be presented as one. Add the game to Steam as a non-Steam game and "
+                     "launch it from there, which is what Steam Input does for almost any "
+                     "controller, or run something that emulates XInput such as DS4Windows for a "
+                     "PlayStation pad. Without one of those, an older or off-brand pad, a "
+                     "PlayStation controller plugged straight in or a flight stick is invisible "
+                     "here; the game's own Controls screen still reads those.",
+                     ci_state.config.controller_index);
         }
         ci_state.pad_connected = false;
         return;
@@ -371,7 +394,8 @@ static void poll_once(void)
     if (!ci_state.pad_connected) {
         log_info("controller %d connected", ci_state.config.controller_index);
     }
-    ci_state.pad_connected = true;
+    ci_state.pad_connected  = true;
+    ci_state.reported_absent = false;      /* so a later disappearance is reported again */
 
     dt = seconds_since_last_poll();
 

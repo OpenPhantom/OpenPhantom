@@ -5,11 +5,11 @@
 [![GitHub Stars](https://img.shields.io/github/stars/OpenPhantom/OpenPhantom?style=for-the-badge&label=Stars)](https://github.com/OpenPhantom/OpenPhantom/stargazers)
 [![License](https://img.shields.io/github/license/OpenPhantom/OpenPhantom?style=for-the-badge)](https://github.com/OpenPhantom/OpenPhantom/blob/main/LICENSE)
 
-OpenPhantom is a modern PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It fixes the original PC version for modern Windows PCs, adding widescreen and ultrawide resolutions, uncapped FPS, corrected field of view, mouse look, working music and video, and 64-bit Windows compatibility. OpenPhantom also reverse engineers and reconstructs the game's engine as documented, maintainable source code, with tools for modding, editing, and extending the game.
+OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a 64-bit installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom reverse engineers and reconstructs the game's engine as documented, maintainable source code, with tools for modding, editing and extending the game.
 
 **[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
 
-OpenPhantom has two parts that will run side by side for a long time. The legacy patches are useful today: they modify the original retail executable in memory so you can play the game you already own with modern fixes. The reconstructed engine is the long-term project: rebuilding the game's systems from the ground up as clean, maintainable source code that can eventually support deeper modding and new features.
+The project has two parts. The legacy patches are useful today: they modify the retail executable in memory so the game you already own runs with modern fixes. The reconstructed engine is the long-term work: rebuilding the game's systems from the ground up as clean source code that can support deeper modding and new features.
 
 <img width="1920" height="400" alt="Star Wars Episode I: The Phantom Menace running at ultrawide resolution with OpenPhantom." src="https://github.com/user-attachments/assets/ad9cd6fb-8bcd-4b25-8d0a-65e221888bfc" />
 

@@ -59,8 +59,8 @@
 ; Nothing here compares versions. An existing installation is found by AppId and the player is asked
 ; what to do with it, so no number decides whether an install is allowed.
 ;
-; Tagged i1.4.2, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
-; tagged v0.4.2 on its own line.
+; Tagged i1.4.3, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
+; tagged v0.4.3 on its own line.
 #define AppVer "1.4.3"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.

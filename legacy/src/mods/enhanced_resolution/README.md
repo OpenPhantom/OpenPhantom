@@ -33,10 +33,13 @@ the mode table that the aspect gate anchors.
 | `MenuKeepsResolution` | `1` | stop menus switching to 640x480 |
 | `SubtitleScale` | `1.0` | how big the subtitles are, as a multiple of the size they have at 640x480. `1.0` is exactly the authored size and proportions at any resolution, `0.5` to `3.0` either side of it, and `0` leaves the engine's own shrinking behaviour alone. Settable from the developer menu and applied within a second; only `0` needs a relaunch. See **Subtitles that scale** below |
 | `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which is what its own pointer handling assumes. |
-| `WindowMode` | **`0`** | the shape of the window: `0` authentic, `1` borderless at the size of the monitor, `2` a caption and a border centred on it. `0` changes nothing. On its own this changes the window and not the device, so Alt Tab still costs a reset; `WindowedPresent` below is what changes that. **`2` is refused while `WindowedPresent=1`**, see the limitation below |
-| `WindowedPresent` | **`0`** | build the device windowed instead of letting it own the display. One byte: the cooperative flags the engine hands DirectDraw, `DDSCL_FULLSCREEN\|DDSCL_EXCLUSIVE` to `DDSCL_NORMAL`, keeping `DDSCL_FPUSETUP`. This is what makes Alt Tab free |
-| `WindowedWidth` | `0` | the client width for `WindowMode=2`; `0` means the resolution being rendered, so nothing is scaled. Clamped to the monitor |
+| `WindowMode` | **`0`** | the shape of the window: `0` authentic, `1` borderless at the size of the monitor, `2` a caption and a border at a chosen size, `3` the same with a resize grip and a maximise button, `4` no frame at a chosen size. `0` changes nothing. Modes `2` to `4` take their size from the two keys below; `1` takes the monitor. On its own this changes the window and not the device, so Alt Tab still costs a reset; `WindowedPresent` below is what changes that |
+| `WindowedPresent` | **`0`** | build the device windowed instead of letting it own the display. One byte: the cooperative flags the engine hands DirectDraw, `DDSCL_FULLSCREEN\|DDSCL_EXCLUSIVE` to `DDSCL_NORMAL`, keeping `DDSCL_FPUSETUP`. This is what makes Alt Tab free, and it is also what the sized window modes need. Writes `DdrawWriteToGDI` in `dxwrapper.ini` to match, which is the only key this patch ever writes in that file |
+| `WindowedWidth` | `0` | the client width for modes `2` to `4`; `0` means the resolution being rendered. Clamped to the monitor. The developer menu offers this as a list of the sizes the display reports, and the chosen one also becomes the resolution the game renders at from the next start |
 | `WindowedHeight` | `0` | the same for the height. Each axis falls back on its own |
+| `WindowedFill` | `1` | make the whole picture fill the window when the window is not at the screen's origin. Only does anything with `WindowedPresent=1`. See **Why a moved window showed part of the picture** below |
+| `PointerReleaseKey` | `0x91` | a virtual key that hands the mouse pointer back to Windows, so a framed window's title bar and buttons can be reached. Scroll Lock by default. `0` switches it off |
+| `FullscreenToggleKey` | `0x0D` | the key that, held with Alt, swaps between a window and the whole monitor. Enter by default, so Alt+Enter. Alt is required and is not configurable. `0` switches it off |
 | `KeepCursorInWindow` | `1` | re-centre the mouse pointer in the window's client area instead of at screen (320,240) |
 | `ClipPointerToWindow` | `1` | hold the pointer inside the client area while the game window is in front, and let go the instant it is not |
 | `ReacquireInputOnFocus` | `1` | send the engine the input resume it authored and never sends, so the keyboard and mouse still work after an Alt-Tab |
@@ -55,6 +58,11 @@ the mode table that the aspect gate anchors.
 | `stdWin95_setDisplayMode` | `0x498C86` | detoured, 6-byte prologue, **only** when `WindowMode` is not `0`. The engine's own style-and-size switch; the correction runs before **and** after the original. Masked signature, anchored on the `push 0x10CF0000`, unique in all three shipped builds |
 | `graphics_setMode` (second hook) | `0x46BC85` | detoured a second time, **only** when `WindowMode` is not `0`, so the shape is reasserted before and after every device rebuild. `stdWin95_setDisplayMode` fires once a session and by then the first device already exists |
 | `stdDisplay_ddSetMode` cooperative flags | `0x492C43 + 0x12` | one byte, `0x11` to `0x08`, **only** when `WindowedPresent=1`. Read back before writing, so a second install declines |
+| `sys_main` | `0x43E5E0` | **read, never patched**, and only for the address inside it. The call at `+12` is `sys_shutdown`; its own prologue is one hundreds of functions share, so the address is read out of the call rather than matched for. Resolves in both `WMAIN.EXE` builds, absent from `TPM.EXE` |
+| `sys_shutdown` | read from the call above | **called**, when the window's close box is used. The engine's own teardown, the same one `sys_main` runs on a normal exit |
+| the game's window procedure | subclassed | `SetWindowLongA(GWL_WNDPROC)`, chained with `CallWindowProcA`. Answers `WM_CLOSE`, which the engine swallows by design, and only when the window has a close box to click |
+| `dxwrapper.dll` import of `user32!GetClientRect` | import table | replaced, **only** when `WindowedFill=1` and `WindowedPresent=1`. Scoped to that one module, so this patch's own calls still get the truth |
+| the game's own import of `user32!SetCursor` | import table | replaced, **only** when `PointerReleaseKey` is set. Substitutes an arrow for the `NULL` the engine passes, while the pointer is released |
 | `stdDisplay_getModeSize` | `0x49385A` | **called, never patched**, reads back the size that is really set |
 | `swmenu_enterMenuMode` | `0x45F7AC` | operand repointed at a cell holding `0x7FFFFFFF` |
 | `swmenu_modeIsUsable` | `0x45F686` | the same, and both must read the SAME cell |
@@ -117,7 +125,7 @@ the primary keeps `DDSCAPS_COMPLEX | DDSCAPS_FLIP`, the frame still reaches the 
 `Flip`, and Alt Tab still costs a reset and a re-upload of every texture, so a borderless window is
 a borderless window over a device that owns the screen.
 
-## `WindowedPresent`, and the one thing it cannot do
+## `WindowedPresent`, and what it needs from the wrapper
 
 One byte, at `0x492C43 + 0x12`. The engine assembles its cooperative flags as `mov [ebp-0x414],0x11`
 followed by `or ah,8`; writing `0x08` over the `0x11` makes the same two instructions produce
@@ -128,21 +136,104 @@ mode, still creates the same flipping surfaces, still presents with `Flip`.
 not mean what its name suggests: it arms the wrapper's own window management, which strips the
 caption and border off the game's window and recentres it to a size of its own.
 
-**The limitation, and it is structural rather than a bug.** A device asked for `DDSCL_NORMAL` takes
-the DESKTOP as its primary surface, and the engine's back buffer comes off that primary's flip
-chain, so both surfaces are the desktop's size whatever resolution the game renders at. The engine
-draws using a size it copied out of the mode table once and never refreshes, and the presentation is
-clipped to the window's client area. So all three have to agree: the render size, the client size
-and the desktop size. Measured on a 3840x2160 desktop: rendering at 1600x900 gave desktop sized
-surfaces and a black window, and a 1600x900 window over a 3840x2160 render put the picture in one
-corner at 1600/3840 of the window. That is why `WindowMode=2` is refused while this is on, with a
-logged reason.
+**It also needs `DdrawWriteToGDI = 1`, and this patch writes that itself.** The name describes
+something it does not do here: the blit it is named for needs an emulated surface and a game not
+using Direct3D, and this game fails the second test from its first scene. What it decides for us is
+how big the surfaces the wrapper hands the engine are. With it off they take the desktop's size
+whatever resolution the game renders at, which is the wrong size for every windowed arrangement and
+the right one for none, so it is not really a second choice to make. It is written whenever
+`WindowedPresent` changes, only when the two disagree, and never when that file is absent.
+
+That was measured before it was understood. On a 3840x2160 desktop, rendering at 1600x900 gave
+desktop sized surfaces and a black window, and a 1600x900 window over a 3840x2160 render put the
+picture in one corner at 1600/3840 of the window. Both were the surface sizing rather than the
+device, which is why an earlier build refused `WindowMode=2` whenever this was on. That refusal is
+gone.
 
 An earlier version replaced the whole device build instead, with no display mode, no flip chain, a
 clipper and a scaled blit, which is the arrangement the DirectX 6 and 7 samples use. It is written
 up as refuted in `windowed_device.h`: this engine reads its own front buffer back when a pause page
 opens and when the loading screen is built, so a primary that is not the game's own mode corrupts
 both.
+
+## Why a moved window showed part of the picture
+
+`WindowedFill`. With `WindowedPresent` on, the graphics wrapper copies the engine's surface into its
+own back buffer before presenting, and before it copies, it clips. It takes the surface rectangle,
+which begins at the origin and is the size the engine renders, and intersects it with the window's
+client rectangle expressed in **desktop** coordinates. Two rectangles in two different coordinate
+spaces, intersected as though they were in one, so the result is only right when the client area
+happens to sit at the desktop origin.
+
+Three cases come out of that, and only the middle one is wrong:
+
+| the client area | what arrives |
+|---|---|
+| contains the surface rectangle | nothing is clipped, the whole picture |
+| overlaps it in part | a fragment, stretched over the whole window |
+| misses it entirely | the whole surface, scaled to the window |
+
+The third case is the interesting one. When the intersection comes out empty the wrapper leaves both
+rectangles null and asks for a whole surface to whole back buffer copy, and the present then scales
+that to the client area. That is the behaviour we want, and it is already written: it is what the
+code does when its own clip fails.
+
+So the correction makes the clip fail. `user32!GetClientRect` is replaced in the wrapper's own import
+table, and only there, and it answers with an empty rectangle in exactly the case above that is
+broken. Our own code keeps the truth from the same function, which matters: `focus_guard` confines
+the pointer with it and `window_fit` measures with it. It lies in one case out of three because the
+other two already put the whole picture on the screen, so correcting them would be a change with no
+purpose and some risk.
+
+## Why the pointer could not leave a window with a frame
+
+Two things hold it, and only one of them is ours.
+
+`focus_guard`'s `ClipCursor` is ours, and it stands down while the pointer is released. Tying it to
+the window mode instead was tried and was wrong: it left the pointer loose for the whole session, and
+the clip is what stops it escaping during fast mouse movement.
+
+The engine's is not a clip at all. `control_recentreMouse` warps the pointer back to the middle of
+the client area on every mouse message, which is how a 1999 engine reads a relative mouse: it moves
+the pointer to a known place, and the distance the next message arrives from is the delta. So the
+pointer can never be walked out, because every movement towards the edge is answered by a warp back
+to the middle. The engine also holds `SetCapture` while it is the active application, so a pointer
+that did escape would still send its clicks to the game rather than to the button under it.
+
+`PointerReleaseKey` suppresses the warp, drops the capture, and substitutes an arrow for the `NULL`
+the engine passes to `SetCursor`. That last part is needed because the engine answers `WM_SETCURSOR`
+for the whole window and not only for the picture, so a released pointer is invisible over the title
+bar too, which is exactly where it has to be seen. The capture is dropped every frame rather than
+once, because the engine takes it back whenever it handles an activation and coming back from
+minimised is an activation.
+
+While released, the engine is sent the same "nothing moved" its own early-out returns, so no delta
+accumulates and the view does not lurch when the pointer is handed back.
+
+## Why the close box did nothing
+
+The engine answers `WM_CLOSE` with zero and does nothing else. It never reaches `DefWindowProc` and
+never reaches the shutdown, and that is deliberate: the window the engine gives itself is `WS_POPUP`
+with no close box at all, so the only thing that could ever send it a close was Alt+F4, and
+swallowing it stopped a stray keypress ending a level.
+
+Giving the window a frame gave it a button the engine has never had a handler for. So the window
+procedure is wrapped, the message is answered, and the engine's own `sys_shutdown` runs a frame
+later. Not a synthesised quit: it is the same function `sys_main` calls when the game exits normally,
+and the settings file is unaffected either way because this game writes its settings when they change
+rather than on the way out.
+
+Two details that are not incidental. It runs a frame later rather than inside the window procedure,
+because freeing the world from inside a message dispatched from a frame that is still running is a
+crash on exit waiting to happen. And the process ends inside the teardown rather than returning from
+it, because the engine only calls that function from `sys_main` with nothing above it but `WinMain`,
+whereas this reaches it from inside a frame; returning would carry on running a level that no longer
+exists. What is given up by leaving there is the C runtime's exit handlers, after the whole of the
+game's own shutdown has already run.
+
+There is a cleaner path in principle, which is to make the front end return its own quit answer so
+the game unwinds to `sys_main` by itself. It was looked at and is not available: that answer is a
+local in the front end's stack frame, not a global anything can set.
 
 ## Why `FitWindowToMode` is off by default
 
@@ -415,6 +506,21 @@ of it: about 15 per cent of the picture at 1080p and under 4 per cent at 2160p, 
 resolution the more obvious it is.
 
 The window work is newer than that session and has been played, with a result for each mode.
+
+**Played on 2026-09-08**, on a 3840x2160 desktop with `WindowedPresent=1`: all four window shapes,
+dragging the window across the middle of the screen, dragging the edges of the resizable one,
+maximise and restore, minimise and restore, the pointer release, Alt+Enter, and the close box
+ending the game. Around 100 frames a second at 10.8 ms in a 1280x960 window over a 1024x768 render.
+
+What that session also found, and what the code now says instead of what it said then: the surfaces
+were never the device's fault, the pointer could not leave the window because the ENGINE re-centres
+it on every mouse message rather than because of any clip of ours, and the close box did nothing
+because the engine answers `WM_CLOSE` with zero on purpose.
+
+**Not tested:** a second monitor, a display whose scaling is not 100 per cent, and any machine
+without the graphics wrapper installed. The last one is the interesting gap: `WindowedFill` has
+nothing to correct there and switches itself off with a line saying so, but the shapes themselves
+have never been run against real DirectDraw.
 
 **`WindowMode=1` with `WindowedPresent=1` works and is the configuration to use.** Played on a
 3840x2160 desktop at that render resolution: correct picture, Alt Tab genuinely free, the graphics

@@ -134,6 +134,8 @@
  * ============================================================================================ */
 #include "focus_guard.h"
 
+#include "pointer_release.h"
+
 #include "window_fit.h"
 
 #include "common/frame_hook.h"
@@ -454,7 +456,14 @@ static void focus_guard_on_frame(void)
     inputs.had_focus        = focus_state.had_focus;
     inputs.has_focus        = has_focus;
     inputs.confining        = focus_state.confining;
-    inputs.confine_wanted   = focus_state.config.confine_pointer;
+    /* The confinement follows the release rather than the window mode. A framed window needs the
+     * pointer to be able to leave it, but only while the player has actually asked for it: the
+     * rest of the time the clip is what stops the pointer escaping during fast mouse movement,
+     * because the engine's own warp fires on mouse messages and a fast enough movement crosses
+     * the edge between two of them. Without this the pointer is loose for the whole session and
+     * turns up outside the window in the middle of turning the camera. */
+    inputs.confine_wanted   = focus_state.config.confine_pointer &&
+                              !pointer_release_is_active();
     inputs.reacquire_wanted = focus_state.config.reacquire_input;
 
     actions = focus_guard_actions(&inputs);

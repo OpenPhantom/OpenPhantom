@@ -55,6 +55,9 @@
 #include "pointer_cage.h"
 #include "window_fit.h"
 #include "window_mode.h"
+#include "present_clip.h"
+#include "pointer_release.h"
+#include "window_poll.h"
 #include "windowed_device.h"
 
 #include "common/detour.h"
@@ -192,6 +195,8 @@ typedef struct resolution_config {
     int32_t windowed_width;           /* 0 = the display mode */
     int32_t windowed_height;
     bool windowed_present;
+    bool windowed_fill;
+    int32_t pointer_release_key;
     bool keep_cursor_in_window;
     bool clip_pointer_to_window;
     bool reacquire_input_on_focus;
@@ -258,6 +263,8 @@ static void load_config(void)
     config->windowed_width        = ini_read_int (RESOLUTION_SECTION, "WindowedWidth", 0);
     config->windowed_height       = ini_read_int (RESOLUTION_SECTION, "WindowedHeight", 0);
     config->windowed_present      = ini_read_bool(RESOLUTION_SECTION, "WindowedPresent", false);
+    config->windowed_fill         = ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true);
+    config->pointer_release_key   = ini_read_int (RESOLUTION_SECTION, "PointerReleaseKey", 0x91);
 
     /* Default ON, and the reason it is safe to default a behaviour change on: on a window that
      * sits at screen 0,0, which is where the engine puts it and where it stays without the line
@@ -799,7 +806,10 @@ void enhanced_resolution_install(void)
             fit_moved = install_window_fit();
         }
         mode_moved = install_window_mode();
-        focus_guard_config_t focus_config;
+        focus_guard_config_t     focus_config;
+        present_clip_config_t    clip_config;
+        pointer_release_config_t release_config;
+        window_poll_config_t     poll_config;
 
         window_is_moved = fit_moved || mode_moved;
 
@@ -813,6 +823,24 @@ void enhanced_resolution_install(void)
         focus_config.reacquire_input = resolution_state.config.reacquire_input_on_focus;
         focus_config.window_is_moved = window_is_moved;
         (void)focus_guard_install(&focus_config);
+
+        /* Last of the window group: both read what the calls above settled. */
+        clip_config.windowed_present = resolution_state.config.windowed_present;
+        clip_config.enabled = resolution_state.config.windowed_fill &&
+                              clip_config.windowed_present;
+        (void)present_clip_install(&clip_config);
+
+        release_config.key = resolution_state.config.pointer_release_key;
+        (void)pointer_release_install(&release_config);
+
+        /* Seeded with what was just installed, so the first poll compares against what is in force
+         * rather than re-applying everything a second in. */
+        poll_config.mode                = resolution_state.config.window_mode;
+        poll_config.windowed_width      = resolution_state.config.windowed_width;
+        poll_config.windowed_height     = resolution_state.config.windowed_height;
+        poll_config.pointer_release_key = resolution_state.config.pointer_release_key;
+        poll_config.windowed_fill       = resolution_state.config.windowed_fill;
+        (void)window_poll_install(&poll_config);
 
         /* The artwork mount comes first of all, because menu_scale reads the converted
          * artwork's own size to decide the canvas, and that file lives in this folder. The mount

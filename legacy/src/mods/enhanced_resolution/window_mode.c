@@ -60,6 +60,10 @@ _Static_assert(sizeof SIG_SET_DISPLAY_MODE == sizeof MSK_SET_DISPLAY_MODE,
 #define STYLE_WINDOWED   (WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | \
                           WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
 
+/* The sizable variant adds exactly the two bits the fixed one leaves out. Written as an addition
+ * to STYLE_WINDOWED rather than spelled out again, so the two cannot drift apart. */
+#define STYLE_RESIZABLE  (STYLE_WINDOWED | WS_THICKFRAME | WS_MAXIMIZEBOX)
+
 /* The same bounds window_fit.c applies to a mode size, for the same reason: a value outside them
  * is not a resolution and acting on it would move the window somewhere absurd. */
 #define MODE_SIZE_MIN 64
@@ -71,7 +75,7 @@ _Static_assert(sizeof SIG_SET_DISPLAY_MODE == sizeof MSK_SET_DISPLAY_MODE,
  * valid mode change passes through here: eight callers reach it and only one of them is
  * graphics_setResolution.
  *
- * WHY THIS SITE AND NOT ONLY THE STYLE SWITCH BESIDE IT. stdWin95_setDisplayMode fires exactly
+ * Why this site and not only the style switch beside it. stdWin95_setDisplayMode fires exactly
  * once in a session, from main_openGraphics at 0x0043F542, and by then the device already exists:
  * the same function calls graphics_setResolution fifty one bytes earlier at 0x0043F50F, and that
  * is where DirectDraw is first asked for anything. A window shaped only from the later site is
@@ -127,9 +131,11 @@ static window_mode_state_t mode_state;
 uint32_t window_mode_style(window_mode_kind_t mode)
 {
     switch (mode) {
-    case WINDOW_MODE_BORDERLESS: return STYLE_BORDERLESS;
-    case WINDOW_MODE_WINDOWED:   return STYLE_WINDOWED;
-    default:                     return 0u;      /* leave GWL_STYLE alone */
+    case WINDOW_MODE_BORDERLESS:        return STYLE_BORDERLESS;
+    case WINDOW_MODE_WINDOWED:          return STYLE_WINDOWED;
+    case WINDOW_MODE_RESIZABLE:         return STYLE_RESIZABLE;
+    case WINDOW_MODE_BORDERLESS_SIZED:  return STYLE_BORDERLESS;
+    default:                            return 0u;   /* leave GWL_STYLE alone */
     }
 }
 
@@ -347,9 +353,9 @@ static uint32_t __cdecl hook_set_display_mode(int32_t mode, int32_t width, int32
         return 0u;
     }
 
-    /* BEFORE AND AFTER, and the before is the half that matters. window_fit.c reached the same
+    /* Before and after, and the before is the half that matters. window_fit.c reached the same
      * conclusion at the mode change beside this one, and its reason applies here word for word:
-     * whatever is rebuilt inside takes the window size AS IT IS AT THAT MOMENT.
+     * whatever is rebuilt inside takes the window size as it is at that moment.
      *
      * Correcting only afterwards is what the first build did, and it left everything that reads
      * the window during start-up holding the shape the engine gave it rather than ours. Two things
@@ -369,6 +375,57 @@ static uint32_t __cdecl hook_set_display_mode(int32_t mode, int32_t width, int32
 /* ==============================================================================================
  * Install
  * ============================================================================================ */
+bool window_mode_wanted_client_size(int32_t mode, int32_t windowed_width,
+                                    int32_t windowed_height,
+                                    int32_t *out_width, int32_t *out_height)
+{
+    window_mode_rect_t monitor;
+    window_mode_rect_t client;
+    int                mode_width  = 0;
+    int                mode_height = 0;
+    HWND               window      = window_fit_game_window();
+
+    if (out_width == NULL || out_height == NULL || window == NULL ||
+        mode == (int32_t)WINDOW_MODE_AUTHENTIC) {
+        return false;
+    }
+    if (!monitor_of(window, &monitor)) {
+        return false;
+    }
+    if (!window_fit_current_mode_size(&mode_width, &mode_height)) {
+        mode_width  = 0;
+        mode_height = 0;
+    }
+    if (!window_mode_client_rect((window_mode_kind_t)mode, &monitor,
+                                 (int32_t)mode_width, (int32_t)mode_height,
+                                 windowed_width, windowed_height, &client)) {
+        return false;
+    }
+    *out_width  = client.width;
+    *out_height = client.height;
+    return true;
+}
+
+bool window_mode_reapply(int32_t mode, int32_t windowed_width, int32_t windowed_height)
+{
+    if (!mode_state.armed) {
+        return false;
+    }
+    mode_state.config.mode           = (window_mode_kind_t)mode;
+    mode_state.config.windowed_width  = windowed_width;
+    mode_state.config.windowed_height = windowed_height;
+
+    /* Forgotten so that the next apply logs the shape even when the numbers happen to repeat an
+     * earlier one. Going 2 to 3 and back is a style change with no size change, and without this
+     * the log would fall silent on exactly the transitions a player is most likely to be trying
+     * to make sense of. */
+    mode_state.last_width  = 0;
+    mode_state.last_height = 0;
+
+    apply_window_mode();
+    return true;
+}
+
 bool window_mode_install(const window_mode_config_t *config)
 {
     uintptr_t site;
@@ -391,19 +448,37 @@ bool window_mode_install(const window_mode_config_t *config)
         return false;
     }
 
-    /* REFUSED RATHER THAN ATTEMPTED, because the result is a black window and nothing says why.
-     * A device built for DDSCL_NORMAL takes the desktop as its primary and the engine's back buffer
-     * comes off that primary's flip chain, so both surfaces are the desktop's size however small
-     * the game's own resolution is. What reaches the window is then clipped to its client area.
-     * Measured on a 3840x2160 desktop: asking for a 1600x900 window put the picture in the corner
-     * at 1600/3840 of the window, with the rest black. */
-    if (config->mode == WINDOW_MODE_WINDOWED && config->windowed_present) {
-        log_warning("WindowMode=2 asks for a window smaller than the screen and WindowedPresent=1 "
-                    "makes the device's surfaces the size of the desktop, so the picture would "
-                    "arrive in one corner of it. The window is left alone. Use WindowMode=1 for a "
-                    "borderless window at the screen size, which is what a windowed device can "
-                    "fill, or switch WindowedPresent off to get a real window back.");
-        return false;
+    /* Warned about rather than refused. An earlier build refused this pairing outright, on the
+     * grounds that a windowed device's surfaces are always the desktop's size. That was measured,
+     * and it was true of the configuration it was measured in, but it was not a property of the
+     * device: it belongs to the graphics wrapper, and one of its settings decides it. With that
+     * setting on, the surfaces take the size the engine is rendering and a window smaller than the
+     * screen is fillable. The refusal is gone because the reason for it was not general.
+     *
+     * What remains is narrower and lives in how the wrapper copies the picture out. It intersects
+     * the surface rectangle, which starts at the origin and is the render size, with the window's
+     * client rectangle expressed in DESKTOP coordinates, and copies only the overlap. Three cases
+     * follow, and only the middle one is wrong:
+     *
+     *   the client CONTAINS the surface rectangle   nothing is clipped, the whole picture is sent
+     *   the client OVERLAPS it in part              a fragment is sent, stretched over the window
+     *   the client MISSES it entirely               the wrapper sends the whole surface instead
+     *
+     * The first is a window at the monitor's origin at least as large as the render size, which is
+     * what WINDOW_MODE_BORDERLESS gives. The third is any window whose client starts past the render
+     * size on either axis, reachable by rendering small and placing the window right of or below
+     * that rectangle. The second is everything between, and it is the case this warns about: a
+     * fragment stretched over the window reads as a rendering fault rather than a geometry one, and
+     * there is nothing on screen to say otherwise. */
+    if (config->mode != WINDOW_MODE_BORDERLESS && config->windowed_present) {
+        log_info("WindowMode=%d with WindowedPresent=1: whether the picture fills this window "
+                 "depends on where its client area lands relative to the rectangle the engine "
+                 "renders. A client that covers that rectangle, and a client that misses it "
+                 "completely, both receive the whole picture. A client that overlaps it in part "
+                 "receives only the overlap, stretched to fill the window, which looks broken and "
+                 "is not. If that is what you see, move the window clear of the render rectangle "
+                 "or make it cover that rectangle. WindowedFill=1 does exactly that for you, "
+                 "and is on by default.", (int)config->mode);
     }
 
     signature_resolve_table(sites, SITE_COUNT);

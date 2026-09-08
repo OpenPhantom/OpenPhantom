@@ -77,17 +77,39 @@ typedef enum window_mode_kind {
     /* A caption and a border, centred on the monitor the window is on. The size is the display
      * mode by default, so nothing is scaled, and WindowedWidth/WindowedHeight override it.
      *
-     * IT IS REFUSED WHEN WindowedPresent IS ON, and the reason is in the config field below: a
-     * windowed device's surfaces are the desktop's size, and the presentation is clipped to the
-     * client area, so a window smaller than the desktop shows only part of the picture. The two
-     * settings are each correct alone and cannot both be had at once.
+     * An earlier build refused this whenever WindowedPresent was on, because the surfaces were
+     * measured at the desktop's size whatever the game rendered. That turned out to belong to the
+     * graphics wrapper rather than to the device, and one of its settings decides it; the pairing
+     * works and the refusal is gone. See window_poll.h for what is left of the constraint.
      *
-     * WS_THICKFRAME is deliberately NOT set, although the engine's own mode 0 word sets it. The
-     * window procedure at 0x0049905E handles neither WM_SIZE nor WM_PAINT, the class style word at
-     * 0x00498F74 is a literal zero so there is no CS_HREDRAW or CS_VREDRAW, and the engine
-     * publishes its render size once per mode set. A window the player can drag-resize would
-     * therefore change nothing about what is rendered and repaint nothing while it happened. */
+     * No resize grip here, which is the only difference between this mode and the next one. The
+     * window procedure at 0x0049905E handles neither WM_SIZE nor WM_PAINT and the class style word
+     * at 0x00498F74 is a literal zero, so a dragged edge tells the engine nothing. That is a reason
+     * to leave the grip off a window whose picture is drawn at a fixed size, and it stopped being a
+     * reason once the picture began being scaled to the client area at present time. */
     WINDOW_MODE_WINDOWED = 2,
+
+    /* The same window, with a frame the player can drag to any size, and a maximise button.
+     *
+     * The note above says WS_THICKFRAME is deliberately left out, and until the present started
+     * scaling that was right: the window procedure handles no WM_SIZE, the class word at 0x00498F74
+     * is a literal zero so there is no CS_HREDRAW, and the engine publishes its render size once per
+     * mode set, so a dragged edge changed nothing about what was drawn. What changed is underneath.
+     * With WindowedPresent the picture is scaled to the client area at present time, so the client
+     * can be any size and the engine neither knows nor needs to: it keeps rendering its own mode and
+     * the result is stretched to fit. The engine is still not told, and still does not need to be.
+     *
+     * The picture will hold still while a drag is in progress, because Windows runs a modal loop
+     * inside the drag and the game's own loop is not being serviced. It catches up when the mouse
+     * is let go. */
+    WINDOW_MODE_RESIZABLE = 3,
+
+    /* No frame at all, at a chosen size rather than the whole monitor. What a borderless window
+     * usually means outside this project, and the mode to use for a borderless picture that is not
+     * meant to cover the screen. There is no frame to grab, so moving it needs the pointer release
+     * key and a drag on the picture is not one: use the keyboard, or one of the modes with a
+     * caption, if the window has to be moved often. */
+    WINDOW_MODE_BORDERLESS_SIZED = 4,
 
     WINDOW_MODE_COUNT
 } window_mode_kind_t;
@@ -101,13 +123,10 @@ typedef struct window_mode_config {
     int32_t windowed_height;
 
     /* Whether the device is being built windowed, which is WindowedPresent in the same section.
-     * It is here only so that WINDOW_MODE_WINDOWED can refuse itself, and the reason is measured
-     * rather than defensive. A device asked for DDSCL_NORMAL takes the DESKTOP as its primary
-     * surface, and the engine's back buffer comes off that primary's flip chain, so both surfaces
-     * are the desktop's size whatever resolution the game renders at. The presentation is then
-     * clipped to the window's client area, so a window smaller than the desktop receives only that
-     * much of the picture and the rest of the window is left black. Measured at 1600x900 on a
-     * 3840x2160 desktop: the picture arrived at 1600/3840 of the window, in the corner. */
+     * Read here only so that a sized mode can say in the log what its picture depends on: the
+     * graphics wrapper clips what it presents against the window's client rectangle, and only a
+     * window that covers the rendered rectangle, or misses it entirely, receives the whole picture
+     * without help. present_clip.c is the help, and it is on by default. */
     bool windowed_present;
 } window_mode_config_t;
 
@@ -115,6 +134,27 @@ typedef struct window_mode_config {
  * the feature is switched off, because a silently absent feature reads exactly like a silently
  * broken one. Returns true only when the window really follows the setting from now on. */
 bool window_mode_install(const window_mode_config_t *config);
+
+/* Changes the shape while the game is running, which is what the dev panel's Window group does.
+ * Only the three things a player can choose are settable: whether the device is windowed is not,
+ * because that is decided once when the device is built.
+ *
+ * Returns false when nothing was installed to begin with, so a caller can tell a refused change
+ * from one that had no effect. Applying the same values again is allowed and does nothing
+ * visible, which is what lets a poll call it without comparing first. */
+bool window_mode_reapply(int32_t mode, int32_t windowed_width, int32_t windowed_height);
+
+/* The client size a mode would ask for, answered against the monitor the window is really on and
+ * the display mode really in force. This is the same arithmetic the window itself is shaped by,
+ * exposed so the RENDER size can be made to agree with it: a window at 1280x720 showing a 4K
+ * picture wastes most of a GPU to draw an interface too small to read, and a borderless window
+ * filling a 4K monitor with a 640x480 picture is a blur.
+ *
+ * False for the engine's own shape, which has no size of ours to agree with, and whenever the
+ * window or the mode cannot be measured. */
+bool window_mode_wanted_client_size(int32_t mode, int32_t windowed_width,
+                                    int32_t windowed_height,
+                                    int32_t *out_width, int32_t *out_height);
 
 /* ---- the geometry, exposed because it is the part that can be tested without a desktop --------
  * Everything this feature decides is in one function: given a mode, a monitor rectangle and the

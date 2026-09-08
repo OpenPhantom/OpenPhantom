@@ -1,12 +1,16 @@
 #include "windowed_device.h"
 
 #include "common/frame_hook.h"
+#include "common/host_image.h"
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
 
 #include <stdint.h>
+#include <stdio.h>
+
+#include <windows.h>
 
 /* --- 0x00492C43  stdDisplay_ddSetMode(param, pMode, palette) --------------------------------
  *
@@ -135,6 +139,57 @@ static void resolve_surface_records(uintptr_t function)
         log_warning("the two surface records could not be located, so the sizes the device really "
                     "produced will not be reported");
     }
+}
+
+/* The wrapper's own file, and the section and key inside it. Not reached through common/ini.h on
+ * purpose: that module documents itself as being about one file, engine_fixes.ini, and gives every
+ * feature a section so that none of them can write over another's keys. Teaching it a second file
+ * would give away the property that makes it safe, for one setting in one place. */
+#define WRAPPER_INI_NAME "dxwrapper.ini"
+#define WRAPPER_SECTION  "Dd7to9"
+#define WRAPPER_KEY      "DdrawWriteToGDI"
+
+void windowed_device_align_wrapper(bool windowed_present)
+{
+    char        path[MAX_PATH];
+    const char *directory = host_directory();
+    const int   wanted    = windowed_present ? 1 : 0;
+    int         present;
+
+    if (directory == NULL) {
+        return;
+    }
+    if (_snprintf(path, sizeof path, "%s\\%s", directory, WRAPPER_INI_NAME) < 0) {
+        return;
+    }
+    path[sizeof path - 1] = 0;
+
+    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+        return;              /* no wrapper installed, so there is nothing of its to keep in step */
+    }
+
+    /* Read before writing, so a file that already says the right thing is left exactly as it is,
+     * formatting included. The profile API rewrites the whole line it touches and this file lines
+     * its values up in a column, so an unnecessary write would be visible for no reason. */
+    present = (int)GetPrivateProfileIntA(WRAPPER_SECTION, WRAPPER_KEY, -1, path);
+    if (present == wanted) {
+        return;
+    }
+
+    if (!WritePrivateProfileStringA(WRAPPER_SECTION, WRAPPER_KEY, wanted ? "1" : "0", path)) {
+        log_warning("%s could not be written, so %s stays at %d. With WindowedPresent on and that "
+                    "setting off, the wrapper hands the engine surfaces the size of the DESKTOP "
+                    "rather than the size the game renders, and the picture does not fill the "
+                    "window. Set it by hand, or make the file writable.",
+                    WRAPPER_INI_NAME, WRAPPER_KEY, present);
+        return;
+    }
+    log_info("%s in %s changed from %d to %d, to match WindowedPresent=%d. That file belongs to "
+             "the graphics wrapper and this is the one key in it this patch ever writes: with it "
+             "off the wrapper sizes the engine's surfaces from the desktop instead of from the "
+             "game's own resolution, which no windowed arrangement can use. The wrapper reads its "
+             "file once at startup, so this takes effect on the next run.",
+             WRAPPER_KEY, WRAPPER_INI_NAME, present, wanted, windowed_present ? 1 : 0);
 }
 
 bool windowed_device_install(const windowed_device_config_t *config)

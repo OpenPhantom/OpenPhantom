@@ -227,6 +227,14 @@ static bool already_recorded(uint32_t width, uint32_t height)
     return false;
 }
 
+bool mode_filter_has_mode(int32_t width, int32_t height)
+{
+    if (width <= 0 || height <= 0 || filter_state.table == 0 || filter_state.count == NULL) {
+        return false;
+    }
+    return already_recorded((uint32_t)width, (uint32_t)height);
+}
+
 static int32_t __stdcall hook_enum_callback(void *desc, void *context)
 {
     enum_callback_fn_t original = (enum_callback_fn_t)filter_state.detour.original;

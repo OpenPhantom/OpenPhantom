@@ -20,6 +20,7 @@
 #define MODE_FILTER_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Resolves the enumeration callback and detours it. Returns true only when the filter is really
  * in force. Call BEFORE the graphics device starts, because the enumeration runs once, during
@@ -29,5 +30,14 @@ bool mode_filter_install(bool enabled);
 /* One line saying what the filter did, for the log to carry next to the mode list itself. Safe to
  * call when nothing was installed; it then says nothing. */
 void mode_filter_log_summary(void);
+
+/* Whether the engine holds a record for exactly this size that its own lookup would accept.
+ *
+ * Asked before a size is written into the game's settings file. That file is read at startup and
+ * the engine opens whatever it finds, so a size no display offers stops the game before it draws
+ * anything: 2146x1159 got in there once and the result was "could not initialize graphics
+ * hardware" until the file was edited by hand. Anything about to be written there has to be
+ * something this machine really reports. */
+bool mode_filter_has_mode(int32_t width, int32_t height);
 
 #endif /* MODE_FILTER_H */

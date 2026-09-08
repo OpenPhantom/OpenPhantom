@@ -71,7 +71,11 @@ add_unit_test(delivery_rates enhanced_input
     enhanced_input/mouse_rate.c
 )
 
-add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_anchor.c)
+# pointer_release.c comes along because cursor_anchor asks it whether the player has taken the
+# pointer before it re-centres. It is the real file rather than a stub: a stub would only prove
+# that the stub returns false.
+add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_anchor.c
+                                                enhanced_resolution/pointer_release.c)
 add_unit_test(window_fit    enhanced_resolution enhanced_resolution/window_fit.c)
 
 # The whole of the window mode's policy: what shape is asked for, given a monitor and the size
@@ -82,6 +86,9 @@ add_unit_test(window_mode   enhanced_resolution enhanced_resolution/window_mode.
 )
 add_unit_test(focus_guard   enhanced_resolution
     enhanced_resolution/focus_guard.c
+    # asked every frame whether the player has taken the pointer, so the confinement can stand
+    # down while they use the window frame
+    enhanced_resolution/pointer_release.c
     enhanced_resolution/window_fit.c
 )
 

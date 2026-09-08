@@ -149,6 +149,35 @@ static void test_the_style_words(void)
           "and WS_VISIBLE, because nothing calls ShowWindow again after the window is created");
 }
 
+static void test_the_sized_modes(void)
+{
+    window_mode_rect_t out;
+
+    ut_check(window_mode_style(WINDOW_MODE_RESIZABLE) == (window_mode_style(WINDOW_MODE_WINDOWED) |
+                                                          0x00040000u | 0x00010000u),
+          "the resizable style is the fixed one plus exactly WS_THICKFRAME and WS_MAXIMIZEBOX, so "
+          "the two cannot drift apart");
+
+    ut_check(window_mode_style(WINDOW_MODE_BORDERLESS_SIZED) ==
+             window_mode_style(WINDOW_MODE_BORDERLESS),
+          "a borderless window at a chosen size wears the same style as one at the monitor's size: "
+          "the two modes differ in their rectangle, not in their frame");
+
+    ut_check(window_mode_client_rect(WINDOW_MODE_RESIZABLE, &primary, 1920, 1080, 800, 600, &out),
+          "the resizable mode has a rectangle");
+    ut_check(out.width == 800 && out.height == 600 &&
+             out.left == (2560 - 800) / 2 && out.top == (1440 - 600) / 2,
+          "and it is sized and centred exactly like the fixed window, because only the frame "
+          "differs between them");
+
+    ut_check(window_mode_client_rect(WINDOW_MODE_BORDERLESS_SIZED, &primary, 1920, 1080, 0, 0,
+                                     &out),
+          "so does the sized borderless mode");
+    ut_check(out.width == 1920 && out.height == 1080,
+          "and with no explicit size it takes the display mode, NOT the monitor: that is the whole "
+          "difference between it and WINDOW_MODE_BORDERLESS");
+}
+
 int main(void)
 {
     ut_section("the authentic mode");
@@ -168,6 +197,9 @@ int main(void)
 
     ut_section("the style words");
     test_the_style_words();
+
+    ut_section("the sized modes");
+    test_the_sized_modes();
 
     return ut_summary("window_mode");
 }

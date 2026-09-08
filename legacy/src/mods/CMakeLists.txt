@@ -55,6 +55,11 @@ add_engine_fix(enhanced_resolution
     window_fit.c
     window_mode.c
     windowed_device.c
+    present_clip.c
+    pointer_release.c
+    window_poll.c
+    fullscreen_toggle.c
+    window_close.c
     cursor_anchor.c
     pointer_cage.c
     focus_guard.c

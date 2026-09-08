@@ -43,7 +43,7 @@
  * frame rate. Keeping the flip chain lets the render target and the primary both be
  * D3DPOOL_DEFAULT, and the present stays a copy that never leaves the card.
  *
- * AND THE FORMAT FIGHT WAS UNWINNABLE. Left unstated, the back buffer inherited the desktop's 32
+ * And the format fight was unwinnable. Left unstated, the back buffer inherited the desktop's 32
  * bits and the software 2-D layer, which writes two-byte pixels by hand, turned the menus magenta.
  * Stated as 565 the menus came right and the scene did not. Stated as 555 nothing drew at all,
  * because that converter supports exactly one format pair, R5G6B5 to X8R8G8B8. No value satisfied
@@ -76,5 +76,26 @@ typedef struct windowed_device_config {
 /* Resolves the site, writes the one immediate and logs which branch it took, including the branch
  * where it is switched off. Returns true only when the device will really be built windowed. */
 bool windowed_device_install(const windowed_device_config_t *config);
+
+/* Keeps the graphics wrapper's own setting in step with WindowedPresent, so that turning this on
+ * is one decision rather than two.
+ *
+ * The wrapper decides how big the surfaces it hands the engine are, and with its DdrawWriteToGDI
+ * off it hands out the DESKTOP's size whatever resolution the game is rendering. That is the wrong
+ * size for every windowed arrangement and the right one for none of them, so the setting is not
+ * really a choice: it is a thing that has to be true for WindowedPresent to work at all. Asking a
+ * player to hand-edit a third-party file to make one of our own switches function is a poor deal
+ * and it was how this shipped for exactly one session.
+ *
+ * Its name describes something it does not do here. The blit it is named for needs the surface to
+ * be emulated and the game to not be using Direct3D, and this game fails the second test from its
+ * first scene, so that path never runs. What it does for us is decide which arm of the wrapper's
+ * surface sizing is taken, and nothing else.
+ *
+ * Writes only when the value differs, logs whenever it writes, and does nothing at all when the
+ * file is not there, which is the case on a machine with no wrapper installed. The wrapper reads
+ * its file once at startup, so a change lands on the next run: the same restart WindowedPresent
+ * already needs. */
+void windowed_device_align_wrapper(bool windowed_present);
 
 #endif /* WINDOWED_DEVICE_H */

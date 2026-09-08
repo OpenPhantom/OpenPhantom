@@ -13,6 +13,7 @@ add_library(engine_fixes_common STATIC
     patch.c
     detour.c
     signature.c
+    import_patch.c
     frame_hook.c
     menu_patcher.c
     cinematic_gate.c

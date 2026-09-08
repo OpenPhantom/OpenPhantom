@@ -77,10 +77,23 @@ static void align_render_size(int32_t mode, int32_t wanted_width, int32_t wanted
         return;                  /* the engine's own shape, or nothing measurable to agree with */
     }
     if (!mode_filter_has_mode(width, height)) {
-        log_info("%dx%d is the size this window mode asks for, but it is not a mode this machine "
-                 "reports, so the game's own resolution is left where it is and the picture is "
-                 "scaled into the window instead. Choose a size from the panel's own list and "
-                 "the two will match.", (int)width, (int)height);
+        /* Told apart because the two want different things done about them. A size the machine
+         * simply does not offer is the reader's to change; a size that shrank on the way here did
+         * so because the window's own frame does not fit beside it, and no entry in the panel's
+         * list can help with that. */
+        if (width < wanted_width || height < wanted_height) {
+            log_info("%dx%d does not fit on this monitor once the window's border and caption are "
+                     "added, so the window is %dx%d instead, and that is not a mode this machine "
+                     "reports. The game's own resolution is left where it is and the picture is "
+                     "scaled into the window. A borderless window mode has no frame and can show "
+                     "the whole screen at its own size.",
+                     (int)wanted_width, (int)wanted_height, (int)width, (int)height);
+        } else {
+            log_info("%dx%d is the size this window mode asks for, but it is not a mode this "
+                     "machine reports, so the game's own resolution is left where it is and the "
+                     "picture is scaled into the window instead. Choose a size from the panel's "
+                     "own list and the two will match.", (int)width, (int)height);
+        }
         return;
     }
     if (_snprintf(path, sizeof path, "%s\\%s", directory, ENGINE_INI_NAME) < 0) {

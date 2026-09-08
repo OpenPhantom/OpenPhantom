@@ -178,6 +178,85 @@ static void test_the_sized_modes(void)
           "difference between it and WINDOW_MODE_BORDERLESS");
 }
 
+/* The frame a resizable window wears at the usual Windows metrics, measured off the game running
+ * on a 3840x2160 monitor: AdjustWindowRectEx turned a 3840x2160 client into a 3862x2216 window. */
+#define FRAME_WIDTH  22
+#define FRAME_HEIGHT 56
+
+static void test_a_framed_window_is_made_to_fit(void)
+{
+    window_mode_rect_t out;
+    window_mode_rect_t monitor = { 0, 0, 3840, 2160 };
+
+    ut_check(window_mode_client_rect(WINDOW_MODE_RESIZABLE, &monitor, 1920, 1080, 3840, 2160, &out),
+          "a resizable window is asked for a client the size of the monitor, which is what "
+          "choosing the top entry of the panel's resolution list does");
+    ut_check(out.width == 3840 && out.height == 2160,
+          "and on its own that is what it gets, because the size a reader asked for is the same "
+          "answer whatever frame the mode turns out to have");
+
+    ut_check(window_mode_fit_frame(&monitor, FRAME_WIDTH, FRAME_HEIGHT, &out),
+          "then the frame is taken into account");
+    ut_check(out.width == 3840 - FRAME_WIDTH && out.height == 2160 - FRAME_HEIGHT,
+          "and the client shrinks by exactly the frame, because a 3840x2160 client needs a "
+          "3862x2216 window and this monitor is 3840x2160. THIS is the number written into the "
+          "game's settings file as the resolution to render at: without the step, the file said "
+          "3840x2160 while the window could only ever show 3818x2104, and the picture and the "
+          "window disagreed by the width of the frame from then on");
+    ut_check(out.left == 0 && out.top == 0,
+          "and the window lands exactly on the monitor, caption included. Centring the CLIENT "
+          "instead would put it at -11,-28, which is most of the caption above the top of the "
+          "screen and a window that cannot be dragged back");
+}
+
+static void test_a_window_that_already_fits_is_left_alone(void)
+{
+    window_mode_rect_t out;
+
+    ut_check(window_mode_client_rect(WINDOW_MODE_RESIZABLE, &primary, 1920, 1080, 800, 600, &out) &&
+             window_mode_fit_frame(&primary, FRAME_WIDTH, FRAME_HEIGHT, &out),
+          "a window well inside the monitor goes through the same step");
+    ut_check(out.width == 800 && out.height == 600,
+          "and keeps the size it asked for, so the common case is untouched");
+    ut_check(out.left == (2560 - (800 + FRAME_WIDTH)) / 2 &&
+             out.top  == (1440 - (600 + FRAME_HEIGHT)) / 2,
+          "though it is centred on the whole window rather than on the client, which moves it up "
+          "and left by half a frame and is what puts equal desktop on either side of it");
+}
+
+static void test_a_borderless_window_is_unaffected(void)
+{
+    window_mode_rect_t out;
+
+    ut_check(window_mode_client_rect(WINDOW_MODE_BORDERLESS, &secondary, 1920, 1080, 0, 0, &out) &&
+             window_mode_fit_frame(&secondary, 0, 0, &out),
+          "a borderless window has no frame, so it is fitted against a frame of nothing");
+    ut_check(out.width == 1920 && out.height == 1080 &&
+             out.left == -1920 && out.top == 0,
+          "and comes out exactly as it went in, covering the whole monitor at its own origin. "
+          "That is why the borderless modes can still show the screen's own resolution when a "
+          "framed one cannot");
+}
+
+static void test_the_frame_fit_refusals(void)
+{
+    window_mode_rect_t out = { 7, 8, 800, 600 };
+    window_mode_rect_t tiny = { 0, 0, 40, 20 };
+
+    ut_check(!window_mode_fit_frame(NULL, 0, 0, &out) &&
+             !window_mode_fit_frame(&primary, 0, 0, NULL),
+          "a missing monitor or rectangle is refused rather than written through");
+    ut_check(!window_mode_fit_frame(&primary, -1, 0, &out) &&
+             !window_mode_fit_frame(&primary, 0, -1, &out),
+          "and so is a negative frame, which is not something AdjustWindowRectEx can produce and "
+          "so is evidence the measurement went wrong rather than a shape to honour");
+    ut_check(!window_mode_fit_frame(&tiny, FRAME_WIDTH, FRAME_HEIGHT, &out),
+          "a monitor the frame alone would fill leaves nothing to show, so it is refused too");
+    ut_check(out.left == 7 && out.top == 8 && out.width == 800 && out.height == 600,
+          "every one of those left the rectangle exactly as it arrived, so a caller that ignores "
+          "the return value still places a window it can see");
+}
+
 int main(void)
 {
     ut_section("the authentic mode");
@@ -197,6 +276,12 @@ int main(void)
 
     ut_section("the style words");
     test_the_style_words();
+
+    ut_section("making the window fit the monitor once its frame is added");
+    test_a_framed_window_is_made_to_fit();
+    test_a_window_that_already_fits_is_left_alone();
+    test_a_borderless_window_is_unaffected();
+    test_the_frame_fit_refusals();
 
     ut_section("the sized modes");
     test_the_sized_modes();

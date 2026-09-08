@@ -202,6 +202,34 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
     return true;
 }
 
+bool window_mode_fit_frame(const window_mode_rect_t *monitor,
+                           int32_t frame_width, int32_t frame_height,
+                           window_mode_rect_t *client)
+{
+    int32_t room_width;
+    int32_t room_height;
+
+    if (monitor == NULL || client == NULL || frame_width < 0 || frame_height < 0 ||
+        monitor->width <= 0 || monitor->height <= 0) {
+        return false;
+    }
+
+    room_width  = monitor->width  - frame_width;
+    room_height = monitor->height - frame_height;
+    if (room_width < 1 || room_height < 1) {
+        return false;                 /* the frame alone fills the screen: not a usable window */
+    }
+
+    if (client->width  > room_width)  { client->width  = room_width;  }
+    if (client->height > room_height) { client->height = room_height; }
+
+    /* Centred on the OUTER window rather than on the client. Centring the client puts half the
+     * frame off the top of the monitor, which for a framed mode is most of the caption. */
+    client->left = monitor->left + (monitor->width  - (client->width  + frame_width))  / 2;
+    client->top  = monitor->top  + (monitor->height - (client->height + frame_height)) / 2;
+    return true;
+}
+
 /* ==============================================================================================
  * The window
  * ============================================================================================ */
@@ -225,6 +253,29 @@ static bool monitor_of(HWND window, window_mode_rect_t *out)
     out->width  = info.rcMonitor.right - info.rcMonitor.left;
     out->height = info.rcMonitor.bottom - info.rcMonitor.top;
     return out->width > 0 && out->height > 0;
+}
+
+/* What the border and caption add to a client, for the style this mode WILL have rather than the
+ * one the window has now. Measured rather than assumed: the engine's own border deltas are short by
+ * SM_CYMENU, and a window with no menu is exactly the case that catches. */
+static bool frame_extra(window_mode_kind_t mode, HWND window,
+                        int32_t *out_width, int32_t *out_height)
+{
+    RECT     probe = { 0, 0, 1000, 1000 };
+    uint32_t style = window_mode_style(mode);
+
+    *out_width  = 0;
+    *out_height = 0;
+    if (style == 0u) {
+        return true;               /* the engine's own shape, which nothing here reshapes */
+    }
+    if (!AdjustWindowRectEx(&probe, (DWORD)style, GetMenu(window) != NULL,
+                            (DWORD)GetWindowLongA(window, GWL_EXSTYLE))) {
+        return false;
+    }
+    *out_width  = (int32_t)(probe.right - probe.left) - 1000;
+    *out_height = (int32_t)(probe.bottom - probe.top) - 1000;
+    return true;
 }
 
 static void apply_window_mode(void)
@@ -268,6 +319,17 @@ static void apply_window_mode(void)
                                  mode_state.config.windowed_width,
                                  mode_state.config.windowed_height, &client)) {
         return;
+    }
+
+    /* Before the window is placed, because the rectangle below is grown by the frame and a client
+     * the size of the monitor becomes an outer window larger than it. */
+    {
+        int32_t frame_width  = 0;
+        int32_t frame_height = 0;
+
+        if (frame_extra(mode_state.config.mode, window, &frame_width, &frame_height)) {
+            (void)window_mode_fit_frame(&monitor, frame_width, frame_height, &client);
+        }
     }
 
     style = window_mode_style(mode_state.config.mode);
@@ -401,6 +463,20 @@ bool window_mode_wanted_client_size(int32_t mode, int32_t windowed_width,
                                  windowed_width, windowed_height, &client)) {
         return false;
     }
+
+    /* The same fit the window itself goes through, so what is reported here is the size the client
+     * will really have and not the size that was asked for. The caller writes this into the game's
+     * settings file as the resolution to render at, and the two disagreeing by the width of a
+     * frame is the whole reason this step exists. */
+    {
+        int32_t frame_width  = 0;
+        int32_t frame_height = 0;
+
+        if (frame_extra((window_mode_kind_t)mode, window, &frame_width, &frame_height)) {
+            (void)window_mode_fit_frame(&monitor, frame_width, frame_height, &client);
+        }
+    }
+
     *out_width  = client.width;
     *out_height = client.height;
     return true;

@@ -117,6 +117,17 @@ enum {
     SITE_COUNT
 };
 
+/* One engine constant this feature moves, with both values it is ever written: four for the
+ * tumble, one for the yaw kick in flight, one for the gravity of the piece. */
+#define FLIGHT_CONSTANT_MAX 6u
+
+typedef struct flight_constant {
+    uintptr_t   address;
+    float       shipped;
+    float       tuned;
+    const char *what;
+} flight_constant_t;
+
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("stunt_tick",    SIG_STUNT_TICK),
     SIGNATURE_ENTRY("stunt_contact", SIG_STUNT_CONTACT),
@@ -161,16 +172,38 @@ typedef struct limb_flight_state {
     uint8_t   *settled_reported[MAX_SETTLE_MESSAGES];
     int        settle_messages;
     int        kick_messages;
+
+    /* Whether the tuned values are the ones currently in the image. The panel can change this
+       while the game runs, so it is state rather than a copy of the setting. */
+    bool       active;
+
+    flight_constant_t constants[FLIGHT_CONSTANT_MAX];
+    uint32_t          constant_count;
 } limb_flight_state_t;
 
 static limb_flight_state_t flight_state;
 
 /* ============================================================================================ */
-static bool scale_constant_at(uintptr_t operand_address, float scale, const char *what)
+/* Recorded rather than written, and that division is the whole reason this feature can be switched
+ * off at run time.
+ *
+ * These are pooled float constants the engine reads while a severed piece is in the air. Scaling
+ * one in place is a one way trip: the next call would read the value already scaled and square it,
+ * which is the mistake this project's own rules name. Worse for a switch, the engine severs seven
+ * authored pieces of its own, so a scaled constant left in place keeps changing THEIR flight while
+ * the feature reads off, and off would not mean off.
+ *
+ * So the shipped value and the tuned value are both worked out once, here, and every later write
+ * is one of those two absolutes. Applying twice writes the same bytes. */
+static bool remember_constant_at(uintptr_t operand_address, float scale, const char *what)
 {
     uint32_t constant_address;
     float    value;
 
+    if (flight_state.constant_count >= FLIGHT_CONSTANT_MAX) {
+        log_warning("%s -> no room to remember another flight constant, refused", what);
+        return false;
+    }
     if (!memory_read_u32(operand_address, &constant_address) ||
         !memory_is_inside_image(constant_address, sizeof(float))) {
         log_warning("%s -> constant %08X is outside the image, refused",
@@ -185,11 +218,16 @@ static bool scale_constant_at(uintptr_t operand_address, float scale, const char
                     what, (unsigned)constant_address, (double)value);
         return false;
     }
-    if (patch_write_f32(constant_address, value * scale) != PATCH_RESULT_OK) {
-        return false;
-    }
 
-    log_info("%s [%08X] %.4f -> %.4f", what, (unsigned)constant_address,
+    {
+        flight_constant_t *slot = &flight_state.constants[flight_state.constant_count++];
+
+        slot->address = constant_address;
+        slot->shipped = value;
+        slot->tuned   = value * scale;
+        slot->what    = what;
+    }
+    log_info("%s [%08X] %.4f, tuned value %.4f", what, (unsigned)constant_address,
              (double)value, (double)(value * scale));
     return true;
 }
@@ -206,16 +244,16 @@ static int tune_spin(float scale)
         return 0;
     }
 
-    tuned += scale_constant_at(site + OFFSET_SPIN_X_RANGE, scale, "tumble X range") ? 1 : 0;
-    tuned += scale_constant_at(site + OFFSET_SPIN_X_BASE,  scale, "tumble X base")  ? 1 : 0;
+    tuned += remember_constant_at(site + OFFSET_SPIN_X_RANGE, scale, "tumble X range") ? 1 : 0;
+    tuned += remember_constant_at(site + OFFSET_SPIN_X_BASE,  scale, "tumble X base")  ? 1 : 0;
 
     /* The two trailing operands sit behind a rel32 and are therefore not in the pattern. Check
      * the opcode first, never read blind. */
     if (memory_read_u8(site + OFFSET_SPIN_Z_RANGE - 2, &opcode_z_range) &&
         memory_read_u8(site + OFFSET_SPIN_Z_BASE  - 2, &opcode_z_base) &&
         opcode_z_range == 0xD8 && opcode_z_base == 0xD8) {
-        tuned += scale_constant_at(site + OFFSET_SPIN_Z_RANGE, scale, "tumble Z range") ? 1 : 0;
-        tuned += scale_constant_at(site + OFFSET_SPIN_Z_BASE,  scale, "tumble Z base")  ? 1 : 0;
+        tuned += remember_constant_at(site + OFFSET_SPIN_Z_RANGE, scale, "tumble Z range") ? 1 : 0;
+        tuned += remember_constant_at(site + OFFSET_SPIN_Z_BASE,  scale, "tumble Z base")  ? 1 : 0;
     } else {
         log_warning("the Z tumble operands do not have the expected shape, skipped");
     }
@@ -249,10 +287,10 @@ static int tune_yaw_kick(float scale)
         return 0;
     }
 
-    return scale_constant_at(operand, scale, "yaw kick in flight") ? 1 : 0;
+    return remember_constant_at(operand, scale, "yaw kick in flight") ? 1 : 0;
 }
 
-static void tune_flight_constants(void)
+static void record_flight_constants(void)
 {
     const limb_config_t *config = limb_config();
     int                  tuned = 0;
@@ -269,16 +307,51 @@ static void tune_flight_constants(void)
         if (site == 0) {
             log_warning("stunt_gravity did not resolve, gravity stays at five times world");
         } else {
-            tuned += scale_constant_at(site + OFFSET_STUNT_GRAVITY, config->gravity_scale,
+            tuned += remember_constant_at(site + OFFSET_STUNT_GRAVITY, config->gravity_scale,
                                        "gravity of the piece") ? 1 : 0;
         }
     }
 
     if (tuned != 0) {
-        log_info("flight tuned - %d constants. Tumble x%.2f, gravity x%.2f (0.2 per substep is "
-                 "204.8 u/s^2 = 5x world gravity)",
+        log_info("flight constants remembered - %d of them. Tumble x%.2f, gravity x%.2f (0.2 per "
+                 "substep is 204.8 u/s^2 = 5x world gravity). None is written until the feature "
+                 "is switched on, and switching it off writes the shipped values back.",
                  tuned, (double)config->spin_scale, (double)config->gravity_scale);
     }
+}
+
+void limb_flight_set_active(bool active)
+{
+    uint32_t index;
+    int      written = 0;
+
+    if (flight_state.active == active) {
+        return;
+    }
+    flight_state.active = active;
+
+    for (index = 0; index < flight_state.constant_count; ++index) {
+        const flight_constant_t *slot = &flight_state.constants[index];
+
+        if (patch_write_f32(slot->address, active ? slot->tuned : slot->shipped)
+                == PATCH_RESULT_OK) {
+            written++;
+        } else {
+            log_warning("%s [%08X] could not be written, so the flight of a severed piece is "
+                        "whatever was last put there", slot->what, (unsigned)slot->address);
+        }
+    }
+
+    if (flight_state.constant_count != 0) {
+        log_info("severed piece flight %s, %d of %u constants written",
+                 active ? "tuned" : "back to the engine's own values",
+                 written, (unsigned)flight_state.constant_count);
+    }
+}
+
+bool limb_flight_is_active(void)
+{
+    return flight_state.active;
 }
 
 /* ============================================================================================
@@ -465,7 +538,9 @@ static int32_t __cdecl hook_stunt_tick(void)
     float               *velocity;
     float                life;
 
-    if (flight_state.stunt_block_pointer == NULL) {
+    /* Off means the engine's own tick and nothing after it. Its result is returned untouched, so
+     * a piece the engine severed by itself behaves exactly as it always did. */
+    if (!flight_state.active || flight_state.stunt_block_pointer == NULL) {
         return result;
     }
     block = *flight_state.stunt_block_pointer;
@@ -555,7 +630,7 @@ static int32_t __cdecl hook_stunt_contact(void)
     float                delta[3];
     int32_t              result;
 
-    if (flight_state.stunt_block_pointer == NULL ||
+    if (!flight_state.active || flight_state.stunt_block_pointer == NULL ||
         (block = *flight_state.stunt_block_pointer) == NULL) {
         return original();
     }
@@ -618,7 +693,7 @@ void limb_flight_install(void)
     uintptr_t            contact_site;
 
     signature_resolve_table(sites, SITE_COUNT);
-    tune_flight_constants();
+    record_flight_constants();
 
     if (config->settle_seconds <= 0.0f) {
         log_info("SettleSeconds=0, no rest state; the piece tumbles until it is freed after 5 s");

@@ -23,6 +23,19 @@
 #ifndef LIMB_FLIGHT_H
 #define LIMB_FLIGHT_H
 
+#include <stdbool.h>
+
 void limb_flight_install(void);
+
+/* Puts the tuned flight values into the image, or the engine's own back.
+ *
+ * Both are absolute writes worked out once at install, so calling this twice with the same answer
+ * writes the same bytes and a scale can never compound. Off restores the shipped constants, which
+ * matters because the engine severs seven authored pieces of its own and those fly through the
+ * same numbers. */
+void limb_flight_set_active(bool active);
+
+/* Whether the tuned values are the ones in the image now. */
+bool limb_flight_is_active(void);
 
 #endif /* LIMB_FLIGHT_H */

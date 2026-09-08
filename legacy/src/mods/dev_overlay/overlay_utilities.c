@@ -3,6 +3,7 @@
 
 #include "auto_range_row.h"
 #include "dev_menu_size_row.h"
+#include "dismemberment_row.h"
 #include "air_control_row.h"
 #include "camera_follow_row.h"
 #include "cheats_no_fog.h"
@@ -32,6 +33,7 @@ typedef enum utilities_slot {
     UTILITIES_AUTO_RANGE,
     UTILITIES_STRICT_RANGE,
     UTILITIES_NO_FOG,
+    UTILITIES_DISMEMBERMENT,
     UTILITIES_FOG_BAND,
     UTILITIES_FOG_BAND_TRACK,
     UTILITIES_FOG_FOLLOW,
@@ -188,6 +190,16 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "No fog");
         out->on = cheats_no_fog_is_on();
         out->available = cheats_no_fog_is_available();
+        return;
+
+    /* Beside the fog rather than among the cheats, and for the same reason the fog row is here:
+     * this one is remembered in the settings file and the cheats are not. A row whose effect
+     * outlives the session sits with the settings, whatever it does to the game. */
+    case UTILITIES_DISMEMBERMENT:
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, "Lightsaber dismemberment");
+        out->on = dismemberment_row_get();
+        out->available = true;
         return;
 
     case UTILITIES_FOG_BAND:
@@ -398,6 +410,8 @@ bool overlay_utilities_toggle(uint32_t slot)
         return strict_range_row_set(!strict_range_row_get());
     case UTILITIES_NO_FOG:
         return cheats_no_fog_toggle();
+    case UTILITIES_DISMEMBERMENT:
+        return dismemberment_row_set(!dismemberment_row_get());
     case UTILITIES_FOG_FOLLOW:
         return fog_follow_row_set(!fog_follow_row_get());
     case UTILITIES_FREE_LOOK:

@@ -976,6 +976,21 @@ cap. The log lines to look for:
 ```
 
 
+## Lightsaber dismemberment sits in Utilities, not in Cheats
+
+It is a cheat by any ordinary reading, and it is here for the same reason the no-fog row is: this
+row writes a settings key and the choice survives the session, while the cheats above it do not.
+A row whose effect outlives the run belongs with the settings.
+
+The row writes one key, `[dismemberment] Mode`, as 2 or 0. It does not reach into
+`dismemberment.dll` and could not: feature DLLs here never call each other, and the panel does not
+know whether that one is even loaded. That DLL re-reads the key about once a second and applies it,
+so a press changes the game within that second.
+
+The key also takes 1, which corrects which limb the engine's own seven authored severings take
+without adding any. Nobody wants that on purpose, so the row writes 2 or 0 and a reader who has set
+1 by hand sees the row lit and keeps their setting until they press it.
+
 ## The Window mode group
 
 Eleven rows, and the group is a good deal more stateful than Utilities, so the rules it follows are

@@ -218,6 +218,7 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/open_key_row.c
     dev_overlay/fog_follow_row.c
     dev_overlay/auto_range_row.c
+    dev_overlay/dismemberment_row.c
     dev_overlay/fov_row.c
     dev_overlay/menu_extras_row.c
     dev_overlay/sensitivity_row.c

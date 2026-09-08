@@ -67,6 +67,7 @@ add_engine_fix(enhanced_resolution
     menu_scale.c
     menu_scale_sites.c
     menu_scale_install.c
+    menu_scale_refit.c
     menu_scale_3d.c
     menu_preview.c
     menu_art_census.c

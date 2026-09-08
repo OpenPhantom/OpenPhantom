@@ -28,12 +28,13 @@
  * allocator, and the pixels being replaced are released with the engine's free.
  *
  * ==============================================================================================
- * What it does not do
+ * Following a resolution change
  *
- * It does not make the menus follow a resolution change. A picture is loaded once and held by name
- * for as long as the screen is open, so a picture already resampled at one ratio stays at it until
- * the screen is left. The cache that would have to be dropped is the engine's own and it is
- * dropped by the engine's own swmenu_freeBitmaps, which is a separate piece of work.
+ * A picture is loaded once and held by name, so a picture resampled at one ratio stays at it until
+ * something drops it. Nothing here does that. What this offers instead is menu_art_load_set_ratio,
+ * and the caller that drops the cache is menu_scale_refit.c: it calls the engine's own
+ * swmenu_freeBitmaps, which zeroes a screen's bitmap slots, and every slot is then reloaded by
+ * name on the next draw and arrives back through here at whatever ratio it has last been told.
  */
 #ifndef MENU_ART_LOAD_H
 #define MENU_ART_LOAD_H
@@ -41,11 +42,20 @@
 #include <stdbool.h>
 
 /* Arms the redirect. `ratio_x` and `ratio_y` are the canvas the menus are being drawn at, so a
- * picture authored for 640x480 is replicated by those. Both must be greater than 1 for anything to
- * happen; at 1 there is nothing to do and this declines with a line saying so.
+ * picture authored for 640x480 is replicated by those.
  *
- * Returns true only when the redirect stands and menu bitmaps really will arrive resampled. */
+ * A ratio of 1 arms it just the same and every picture then declines itself, because a picture
+ * already the size it should be is left alone. That is deliberate: the canvas can be made larger
+ * later, and a redirect that was never armed could not be told about it.
+ *
+ * Returns true only when the redirect stands and menu bitmaps really can arrive resampled. */
 bool menu_art_load_install(float ratio_x, float ratio_y);
+
+/* The canvas has changed size, so the next picture to load is replicated by these instead.
+ *
+ * Only the ratio moves. Pictures already loaded are not touched and cannot be from here: they
+ * belong to the engine's cache, and dropping that is the caller's half of the change. */
+void menu_art_load_set_ratio(float ratio_x, float ratio_y);
 
 /* The canvas the DISPLAY can hold, as a multiple of the authored 640x480.
  *

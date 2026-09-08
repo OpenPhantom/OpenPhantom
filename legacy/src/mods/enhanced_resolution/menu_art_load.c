@@ -242,11 +242,6 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
     uintptr_t call_at;
     uintptr_t original = 0;
 
-    if (!(ratio_x > 1.0f) && !(ratio_y > 1.0f)) {
-        log_info("the menu canvas is the artwork's own size, so nothing is replicated as it loads");
-        return false;
-    }
-
     signature_resolve_table(sites, SITE_COUNT);
     if (sites[SITE_LOAD_COMPRESS].address == 0 || sites[SITE_MEM_ALLOC].address == 0 ||
         sites[SITE_MEM_FREE].address == 0) {
@@ -276,6 +271,13 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
         return false;
     }
 
+    if (!(ratio_x > 1.0f) && !(ratio_y > 1.0f)) {
+        log_info("the menu canvas is the artwork's own size, so nothing is replicated as it loads "
+                 "yet. The redirect at %08X is armed all the same, so that a canvas which grows "
+                 "later has somewhere to say so", (unsigned)call_at);
+        return true;
+    }
+
     log_info("menu artwork will be replicated to %.3f by %.3f as it loads, at the call at %08X. "
              "That is one of two callers of the compressor and the other one is the save game "
              "thumbnail, which must keep its own size, so the call is redirected rather than the "
@@ -285,4 +287,17 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
              (double)ratio_x, (double)ratio_y, (unsigned)call_at,
              (unsigned)sites[SITE_MEM_ALLOC].address);
     return true;
+}
+
+void menu_art_load_set_ratio(float ratio_x, float ratio_y)
+{
+    if (!load_state.armed) {
+        return;
+    }
+    load_state.ratio_x = ratio_x;
+    load_state.ratio_y = ratio_y;
+
+    /* Said again for the new size, because the first one is the line a reader looks for when the
+     * artwork comes out the wrong size and it would otherwise name a ratio no longer in use. */
+    load_state.reported = false;
 }

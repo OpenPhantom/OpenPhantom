@@ -442,6 +442,30 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
     }
 }
 
+void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height)
+{
+    if (!cage_state.active) {
+        return;                    /* never installed, or declined: there is nothing to move */
+    }
+    if (canvas_width  < MENU_SCALE_CANVAS_WIDTH)  { canvas_width  = MENU_SCALE_CANVAS_WIDTH;  }
+    if (canvas_height < MENU_SCALE_CANVAS_HEIGHT) { canvas_height = MENU_SCALE_CANVAS_HEIGHT; }
+
+    if (canvas_width == cage_state.applied_width && canvas_height == cage_state.applied_height) {
+        return;
+    }
+    if (!write_clamps(canvas_width, canvas_height)) {
+        log_warning("the menu cursor clamp could not be refitted to the %dx%d canvas, so it keeps "
+                    "the %dx%d one. Widgets outside the smaller of the two cannot be reached with "
+                    "the pointer",
+                    (int)canvas_width, (int)canvas_height,
+                    (int)cage_state.applied_width, (int)cage_state.applied_height);
+        return;
+    }
+    log_info("the drawn menu cursor may now travel %dx%d from the menu origin, following the "
+             "canvas to %dx%d", (int)(canvas_width - CURSOR_MARGIN),
+             (int)(canvas_height - CURSOR_MARGIN), (int)canvas_width, (int)canvas_height);
+}
+
 bool pointer_cage_is_active(void)
 {
     return cage_state.active;

@@ -410,6 +410,23 @@ static bool resolve_flag_cell(uintptr_t site)
     return true;
 }
 
+void menu_island_clip_resize(int canvas_width, int canvas_height)
+{
+    if (!clip_state.active || canvas_width <= 0 || canvas_height <= 0) {
+        return;
+    }
+    if (canvas_width == clip_state.island_width && canvas_height == clip_state.island_height) {
+        return;
+    }
+    clip_state.island_width  = canvas_width;
+    clip_state.island_height = canvas_height;
+
+    /* The origin is not kept, it is derived per sprite from the display mode and these two, so
+     * there is nothing else to move. */
+    log_info("menu sprites are now clamped to a %dx%d island, following the canvas",
+             canvas_width, canvas_height);
+}
+
 bool menu_island_clip_install(bool enabled, int canvas_width, int canvas_height)
 {
     if (clip_state.installed) {

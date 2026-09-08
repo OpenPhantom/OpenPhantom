@@ -108,6 +108,27 @@ add_unit_test(pointer_cage enhanced_resolution
 # display mode.
 add_unit_test(menu_art_resample enhanced_resolution enhanced_resolution/menu_art_resample.c)
 
+# Whether the canvas a screen was authored for can be recovered by dividing, which is what decides
+# whether the rectangle shadow has to keep it. The rest of the refit is engine writes and is not
+# testable here; the rounding is, and the rounding is where the answer turned out to be no.
+add_unit_test(menu_refit enhanced_resolution
+    enhanced_resolution/menu_scale.c
+    # the two halves of the same feature: menu_scale.c's hooks call into both
+    enhanced_resolution/menu_scale_install.c
+    enhanced_resolution/menu_scale_refit.c
+    enhanced_resolution/menu_scale_3d.c
+    enhanced_resolution/menu_scale_sites.c
+    enhanced_resolution/menu_preview.c
+    enhanced_resolution/menu_art_census.c
+    enhanced_resolution/menu_art_load.c
+    enhanced_resolution/menu_art_resample.c
+    enhanced_resolution/menu_art_source.c
+    enhanced_resolution/menu_loading_bar.c
+    enhanced_resolution/menu_island_clip.c
+    enhanced_resolution/pointer_cage.c
+    enhanced_resolution/window_fit.c
+)
+
 add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/menu_island_clip.c
     # the census the sprite hook reports to, the real file rather than a stub, and the site

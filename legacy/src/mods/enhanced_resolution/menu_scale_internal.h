@@ -25,13 +25,28 @@
  * arriving when it is full is declined rather than scaled twice. */
 #define SCALED_MENU_CAPACITY 64u
 
-/* One scaled menu, and the x and y this last wrote into each of its widgets.
+/* The shadow holds six ints per widget, and it does two jobs at once.
  *
- * The shadow is what lets a rectangle the GAME has written be told apart from one this left there,
- * which is the whole of the pause screen fix. See the note by hook_draw_menu. */
+ * The first four are the rectangle as the screen was AUTHORED, kept because every size the canvas
+ * is ever drawn at is that rectangle times a ratio. Scaling from the authored numbers means a
+ * canvas can be changed as often as the reader likes without the rounding of one change feeding
+ * into the next, and it is what lets the stand down put a screen back exactly rather than by
+ * dividing.
+ *
+ * The last two are the x and y this last WROTE, which is what lets a rectangle the GAME has
+ * written be told apart from one this left there. That is the whole of the pause screen fix; see
+ * the note by hook_draw_menu. */
+#define SHADOW_STRIDE     6u
+#define SHADOW_AUTHORED_X 0u
+#define SHADOW_AUTHORED_Y 1u
+#define SHADOW_AUTHORED_W 2u
+#define SHADOW_AUTHORED_H 3u
+#define SHADOW_WRITTEN_X  4u
+#define SHADOW_WRITTEN_Y  5u
+
 typedef struct scaled_menu {
     const void *menu;
-    int32_t    *shadow;          /* two ints per widget, x then y */
+    int32_t    *shadow;          /* SHADOW_STRIDE ints per widget, or NULL */
     size_t      widgets;
 } scaled_menu_t;
 
@@ -41,6 +56,15 @@ typedef struct menu_scale_state {
     float     ratio_y;
     int32_t   canvas_width;
     int32_t   canvas_height;
+
+    /* True when the ratio was taken from the display rather than from a converted set of artwork
+     * or from MenuScale, and so may follow the display when it changes. See menu_scale_refit.c. */
+    bool      follows_display;
+
+    /* The display the canvas above was fitted to, so a refit is considered once per change rather
+     * than once per frame. Zero until the engine has opened a mode. */
+    int32_t   fitted_screen_width;
+    int32_t   fitted_screen_height;
 
     detour_t  menu_open_detour;
     detour_t  pic_draw_detour;
@@ -62,13 +86,51 @@ typedef struct menu_scale_state {
 
 extern menu_scale_state_t scale_state;
 
-/* Canvas units to scaled ones. Defined in menu_scale.c and used by the preview upscaler as well,
- * because a preview grows by exactly the ratio its widget did. */
+/* Canvas units to scaled ones, and back. Both are defined in menu_scale.c; the first is used by the
+ * preview upscaler as well, because a preview grows by exactly the ratio its widget did.
+ *
+ * Rounding means the two are not an exact round trip on every value, which is why the shadow keeps
+ * the authored rectangle and unscaled_coordinate is only the fallback for a menu that has no
+ * shadow to keep it in. */
 int32_t scaled_coordinate(int32_t value, float ratio);
+int32_t unscaled_coordinate(int32_t value, float ratio);
 
 /* False once the canvas has been given up on, which it does on the spot. Defined in
  * menu_scale_install.c, beside the stand down it triggers. */
 bool canvas_still_fits(void);
+
+/* ---------------------------------------------------------------------------------------------
+ * menu_scale_refit.c: the ratio in force, and what happens when the display stops matching it.
+ */
+
+/* The canvas a ratio gives, and the two writes that make the engine draw on it: the run length
+ * blitter's clip and the three cells the origin operands read. Every one is absolute, so applying
+ * the same ratio twice writes the same numbers.
+ *
+ * False when a clip immediate could not be written, and then the clip has been put back and
+ * nothing else was touched. */
+bool menu_scale_apply_canvas(float ratio_x, float ratio_y);
+
+/* The rest of what the ratio in force decides: the list box row height floor and text insets, and
+ * the drawn cursor's size. None of them can fail the scale, so each is attempted on its own and
+ * a failure costs only itself. `verbose` is the install; a refit writes the same numbers quietly. */
+void menu_scale_apply_trimmings(bool verbose);
+
+/* Points the three origin operands at this file's cells. Done once, at install: after it, changing
+ * the canvas is a matter of writing the cells rather than patching anything. */
+bool menu_scale_repoint_origin(const uintptr_t *sites, size_t count);
+
+/* Derives the four cells the engine derives from the canvas: the menu origin on both axes,
+ * g_menuScale and g_menuTextScale. The engine's own block does this at startup and on the
+ * mode-change message only, and on a live change it runs too early to see the new canvas, so
+ * whatever changes the canvas afterwards has to do it instead. Either pointer may be NULL.
+ *
+ * Reads scale_state's canvas and the display, so call it after the canvas is in force. */
+void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y);
+
+/* Refits the canvas to the display if it has changed size, then checks the canvas still fits.
+ * Called from both menu hooks in place of canvas_still_fits, which it ends with. */
+void menu_scale_follow_display(void);
 
 /* The three hooks menu_scale.c owns. */
 int32_t __cdecl hook_menu_open(void *menu);

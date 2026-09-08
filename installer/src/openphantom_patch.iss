@@ -167,38 +167,28 @@ Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
 ; DLL mounts and reads the scale out of. Without it MenuScale finds no converted artwork and leaves
 ; the menus exactly as they shipped, so the two halves install together or the feature is absent.
 ;
-; Four files because of Linux. "Convert Menu Art.bat" drives convert_menu.ps1, which resamples with
-; GDI+; neither half works under Proton, where Wine ships no PowerShell and System.Drawing.Common is
-; Windows-only on .NET Core. convert_menu.sh drives convert_menu.py, which needs nothing but Python
-; 3 and is already on the Steam Deck. The two produce byte-identical output from the same input.
-;
-; Setup no longer runs either of them: openphantom_convert.exe below does that job on both
-; platforms. These are here for a player who wants to convert again at a different size without
-; re-running the installer, and they are the readable record of how the conversion works.
-Source: "{#PatchSrc}\tools\convert_menu.ps1";      DestDir: "{app}\tools"; \
-    Components: patch\enhanced_resolution; Flags: ignoreversion
-Source: "{#PatchSrc}\tools\Convert Menu Art.bat";  DestDir: "{app}\tools"; \
-    Components: patch\enhanced_resolution; Flags: ignoreversion
-Source: "{#PatchSrc}\tools\convert_menu.py";       DestDir: "{app}\tools"; \
-    Components: patch\enhanced_resolution; Flags: ignoreversion
-Source: "{#PatchSrc}\tools\convert_menu.sh";       DestDir: "{app}\tools"; \
-    Components: patch\enhanced_resolution; Flags: ignoreversion
+; The menu artwork converter is not installed any more, and neither is Setup's use of it. The patch
+; enlarges each menu picture as the game loads it, at whatever resolution is in force, so converting
+; a set beforehand buys nothing: it produces the same nearest neighbour pixels, costs between 210 MB
+; and 840 MB, and holds the menus at the one size it was made for instead of letting them follow a
+; resolution change. MenuArtDirectory still mounts a folder of that name, which is how anybody who
+; has drawn better artwork than the originals supplies it; that is a different thing from enlarging
+; the originals and is the half worth keeping.
 
-; The converter Setup itself runs, for both the menu artwork and the cutscenes, which is why it
-; carries both components and installs once rather than twice. It is a plain Win32 console program
-; and therefore the only one of the five converters that works everywhere: Wine runs it exactly as
+; The converter Setup itself runs, now for the cutscenes alone. It is a plain Win32 console program
+; and therefore the only one of the three converters that works everywhere: Wine runs it exactly as
 ; Windows does, so an installation under Proton or Lutris converts during Setup instead of leaving
 ; the player a pair of shell commands. It produces output byte-identical to the scripts beside it,
 ; which is checked rather than assumed.
 Source: "{#PatchSrc}\tools\openphantom_convert.exe"; DestDir: "{app}\tools"; \
-    Components: patch\enhanced_resolution patch\fmv_player; Flags: ignoreversion
+    Components: patch\fmv_player; Flags: ignoreversion
 
-; A second copy of the converter, in the temporary folder, and it is the one ConvertMenuArt and
-; ConvertMovies actually run. The copy above is for the player to run later; this one runs during
-; installation with Setup's rights, and {tmp} is the only one of the two that an ordinary user
-; cannot write to first. Removed when Setup finishes.
+; A second copy of the converter, in the temporary folder, and it is the one ConvertMovies actually
+; runs. The copy above is for the player to run later; this one runs during installation with
+; Setup's rights, and {tmp} is the only one of the two that an ordinary user cannot write to first.
+; Removed when Setup finishes.
 Source: "{#PatchSrc}\tools\openphantom_convert.exe"; DestDir: "{#PatchTmp}\tools"; \
-    Components: patch\enhanced_resolution patch\fmv_player; \
+    Components: patch\fmv_player; \
     Flags: ignoreversion deleteafterinstall
 Source: "{#PatchSrc}\mods\framerate_fix.dll";       DestDir: "{app}\mods"; \
     Components: patch\framerate_fix;       Flags: ignoreversion

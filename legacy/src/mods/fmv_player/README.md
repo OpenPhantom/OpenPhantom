@@ -97,8 +97,8 @@ reacting to however Bink touches the display, while `fmv_player` *enabled* shows
 which is this DLL doing exactly what it was built to do. Something early in start-up leaves the OS
 cursor undone, and the retail path's own incidental flashing was quietly re-triggering a full
 activation handshake and curing it before the player ever saw it. A smooth, flicker-free window
-removes that accidental cure along with the flicker, which is why the symptom only ever appeared
-with this DLL installed even though its root cause is not in this DLL. This does not repair that
+removes that accidental cure along with the flicker, so the symptom only ever appeared with this
+DLL installed even though its root cause is not in this DLL. This does not repair that
 cause; it replaces the accidental cure with a deliberate one. Where the actual defect lives, most
 likely the loader or the window's very first activation, is not identified.
 
@@ -115,10 +115,9 @@ window procedure does `g_menuCursorX += (client_x - 320)` and then clamps to the
 synthetic move only ever adds a delta to whatever the cells already held, a value this DLL has no
 way to know. The repair writes the two cells directly, to the middle of the island, with no message
 and no prior state involved, after draining the mouse backlog that would otherwise be applied on
-top of it. The four cells are found by pattern rather than hardcoded, and that is not ceremony:
-they sit at different addresses in the Edit Tool's own recompile of this engine, so four constants
-would have written into the wrong variables there. `menu_cursor_cells.c` carries the bytes and the
-measurements.
+top of it. The four cells are found by pattern rather than hardcoded. They sit at different
+addresses in the Edit Tool's own recompile of this engine, so four constants would have written
+into the wrong variables there. `menu_cursor_cells.c` carries the bytes and the measurements.
 
 A movie with no converted file falls straight through to the original Bink playback, unchanged, and
 so does one that arrives before libVLC has finished loading.
@@ -134,6 +133,8 @@ so does one that arrives before libVLC has finished loading.
 | `PostMovieHoldMs` | `2500` | How long the overlay stays up, still solid black, after a movie that was played once a level and its player already exist. `0` disables it. See "The post-movie curtain" below. |
 | `PostMovieFadeMs` | `300` | How long the curtain then takes to fade from opaque to transparent before it is destroyed, instead of cutting straight to the game. `0` skips the fade. |
 | `MutePostMovieAudio` | `1` | Suppress the one scripted sound call behind the curtain's own thud. Not a volume mute; dialogue and every other sound path are untouched. See "The post-movie curtain" below. |
+| `MovieSurface` | *empty, meaning* `auto` | Which window a movie is drawn into. `auto` measures the game's own window per movie, see below. `popup` is always a window of our own covering the monitor, `child` always one inside the game's window, `game` hands libVLC the game's own window and creates nothing. Anything else is refused and `auto` kept. |
+| `VideoOutput` | *empty on Windows,* `gdi` *under Wine* | libVLC's video output module. Its Direct3D output builds a second device and the game loses the one it is drawing with, so Wine gets `gdi`. |
 
 `Scaling` is applied when the movie plays, not when it is converted, so it works on files you
 already have and changing your mind costs nothing but a restart. Stretch is expressed as the
@@ -176,10 +177,10 @@ mode this whole feature is most likely to present as.
    looked for `...\vlc.exe\libvlc.dll`, which meant it could never find anything.
 
 It must be **32-bit**. This is a 32-bit process and a 32-bit process cannot load a 64-bit DLL under
-any circumstances, an architecture wall rather than a version mismatch. Most current VLC downloads default
-to 64-bit, which is exactly why the installer ships a 32-bit runtime rather than leaving it to the
-machine. A player who installs the patch without that component, and has only a 64-bit VLC, gets
-Bink for every movie and a log line saying why.
+any circumstances, an architecture wall rather than a version mismatch. Most current VLC downloads
+default to 64-bit, so the installer ships a 32-bit runtime rather than leaving it to the machine.
+A player who installs the patch without that component, and has only a 64-bit VLC, gets Bink for
+every movie and a log line saying why.
 
 Nothing is linked against libVLC at build time. `LoadLibraryW` and `GetProcAddress` at run time
 mean nobody building this project needs libVLC headers or an import library, and all ten exports
@@ -200,8 +201,7 @@ it works too; it asks for the folder instead.
 It needs FFmpeg, and finds one in this order: a copy a previous run cached in
 `%LOCALAPPDATA%\OpenPhantom\ffmpeg`, `ffmpeg` on `PATH`, and failing both it downloads one. That
 download is **pinned to a specific version and checked against a SHA256** before it is extracted,
-which is what makes a bug report reproducible: two players who hit the same problem are running the
-same encoder.
+so a bug report is reproducible: two players who hit the same problem are running the same encoder.
 
 A folder beside the script is deliberately **not** searched, and the reason is worth stating because
 it looks like an omission. The game folder is made writable by ordinary users on purpose, because
@@ -246,18 +246,17 @@ position every substep from `pPlayer+0x124`. Watched frame by frame around the o
 that source genuinely rises from the correct height to +1.48 units, overshoots back down to -0.04
 below it, and settles exactly on the correct value again, a real, self-resolving engine transient
 (a follow/settle filter driving the player toward its cutscene position, not a rendering artefact,
-which is what a genuine landing sound during the same window requires), taking roughly 650 ms to
+since a genuine landing sound in the same window requires a real move), taking roughly 650 ms to
 read flat once the cutscene lock fires, sometimes longer in practice. What retail's own resolution
 switch buys, incidentally, is enough black-screen time that this always finishes before its picture
 is ever shown again; this DLL's own faster transition does not spend that time, so the first real
 frame can land mid-transient.
 
 The curtain draws solid black for `PostMovieHoldMs` after the movie itself has already finished. It
-does not block; the engine keeps ticking normally underneath, which is what actually gives the
-transient somewhere to run to completion. It then fades out over `PostMovieFadeMs` instead of
-cutting straight to the game. It is scoped to movies played once a level and a player already
-exist: the two startup splash movies (`logo`, `bigape`) never get it, matched by the movie's own
-retail name in `fmv_player.c`.
+does not block; the engine keeps ticking normally underneath, so the transient has somewhere to run
+to completion. It then fades out over `PostMovieFadeMs` instead of cutting straight to the game. It
+is scoped to movies played once a level and a player already exist: the two startup splash movies
+(`logo`, `bigape`) never get it, matched by the movie's own retail name in `fmv_player.c`.
 
 **It is drawn by the game's own renderer, not a separate window.** A first version held a borderless
 overlay window open over the game instead of destroying it right away, which worked for a player
@@ -311,6 +310,46 @@ suppression is armed, tracking `pPlayer+0xA0` directly so suppression ends the m
 it exists for actually finishes, or the curtain's own timer as a fallback cap. Every other sound,
 both spoken lines included, passes through untouched.
 
+## Which surface a movie gets, and why it is measured rather than configured
+
+A movie has to cover what the player is looking at, and what that is depends on the shape the game's
+window is in.
+
+The window the engine gives itself is frameless, roughly 2054 by 2077, anchored at the top left. It
+covers the screen by being bigger than it, and its client area is not the visible picture. The
+monitor is the honest reading of "full screen" there, and a window of our own covering the monitor
+is right.
+
+That stopped being the only case when `enhanced_resolution`'s `WindowMode` began giving the game a
+window that really is a window. Then the monitor is not what the player is looking at: a movie
+covering it blacks out their desktop and plays at several times the size of the game.
+
+**This shipped as a defect and was caught from a fresh install.** `MovieSurface` shipped empty,
+empty took the platform's answer, and the platform's answer on Windows was the monitor. A tester
+running `WindowMode=2` at 1280x800 got a 3840x2160 movie over a 1280x800 game. The fix is that the
+question is now asked of the WINDOW instead of the operating system, once per movie:
+
+* A game window that covers its monitor, edges included, gets a movie covering the monitor. That is
+  every fullscreen install and the shape the engine ships in.
+* One that does not gets a child window exactly the size of the game's client area.
+
+Nothing here reads `WindowMode` or anything else belonging to another module; the window's own
+rectangle answers it. That also means moving or resizing the window between two movies is followed
+with nobody having to tell this file.
+
+**Wine is the exception, and it is not about size.** Under Wine `auto` is always a child. A top
+level window is mapped as an X11 window, the window manager focuses it, and Wine then holds the
+focus for a window that refuses activation, so no key reaches the game until the movie ends. That
+is the same reason `child` existed before `auto` did.
+
+The surface is created for each movie and destroyed after it, so its size is read fresh every time.
+It does not follow a reshape that happens DURING playback, and window settings are applied about
+once a second, so resizing the window while a cutscene runs leaves that one movie at the size it
+started at.
+
+Field confirmed on a Steam Deck in desktop mode: `the movie surface is 1280x800, taken from the
+game window's client area now`, matching the window rather than the panel.
+
 ## Why a separate window instead of drawing into the game's own surface
 
 Everything that made the first design slow was on the far side of a DirectDraw surface neither
@@ -358,9 +397,9 @@ confirmed against a legitimate install: `GAMEDATA\MOVIE\ARENA.BIK`.
 ```
 
 The bare `push ebp / mov ebp,esp / sub esp,0x90` prologue shape recurs elsewhere in an 830 KB
-image, which is exactly why the two-stage detour rule exists, and why this signature reaches two
-branches into the function rather than stopping at the prologue. Measured against the real retail
-`WMAIN.EXE` (829,952 bytes): exactly one match, all 72 bytes, at `0x0046C35A`.
+image, so the two-stage detour rule exists and this signature reaches two branches into the
+function rather than stopping at the prologue. Measured against the real retail `WMAIN.EXE`
+(829,952 bytes): exactly one match, all 72 bytes, at `0x0046C35A`.
 
 **The first gate is honoured.** The retail function refuses and returns 0 whenever `[006d6360]` is
 clear, so the hook hands those calls to the original rather than answering for them. What that cell
@@ -402,7 +441,7 @@ the host image.
 
 ## Closing the game during a movie
 
-**This game cannot be closed with Alt+F4 at any time, and that is the engine's own decision.** Its
+**This game cannot be closed with Alt+F4 at any time, by the engine's own decision.** Its
 window procedure at `0x0049905E` takes `WM_CLOSE` in the switch and returns zero without reaching
 `DefWindowProcA`, so the default destroy never happens, and because the switch takes it the message
 never reaches the chained handlers either. Only `WM_DESTROY` calls `PostQuitMessage`, and the game's

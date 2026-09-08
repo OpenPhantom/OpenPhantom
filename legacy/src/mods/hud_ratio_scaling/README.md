@@ -51,8 +51,8 @@ follows the aspect ratio, 4:1 at 4:3, 5.33:1 at 16:9. The weapon icon takes its 
 height and therefore keeps its shape. `SquareHud` derives the bar widths from the height as well.
 
 **The weapon icon is not exempt.** Its width comes from the height but its **left edge** comes from
-the width, so the two terms need different multipliers. Exempting the block entirely, which is
-what this DLL used to do, leaves a hole between the bar and the icon exactly as wide as the bar
+the width, so the two terms need different multipliers. Exempting the block entirely, as this DLL
+used to, leaves a hole between the bar and the icon exactly as wide as the bar
 lost: 97 px at 1920x1080.
 
 **Nothing grows relative to the screen.** Every extent is a fixed fraction, so the HUD occupies the
@@ -75,8 +75,8 @@ narrower. Nothing leaves the screen at either of those two modes.
 ### The digits
 
 Inside the HUD the glyph pair becomes `(sx*mW, sy*mH)`. The renderer draws at `(sx*W/640,
-sy*H/480)`, so that is what makes the digits grow by `H/480`, the factor the squared bars grow by,
-instead of by `W/640`. At 1920x1080 the HUD's authored `(0.8, 0.8)` becomes `(0.6, 0.8)` and the
+sy*H/480)`, so the digits grow by `H/480`, the factor the squared bars grow by, instead
+of by `W/640`. At 1920x1080 the HUD's authored `(0.8, 0.8)` becomes `(0.6, 0.8)` and the
 drawn glyph is `1.80 x 1.80` px: square, and 2.25 times its 480p size, like the bars.
 
 Outside the HUD the older rule is unchanged: `sy = sx * 3W/4H`. It raises the vertical rather than

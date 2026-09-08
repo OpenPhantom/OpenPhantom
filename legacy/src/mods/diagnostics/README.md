@@ -190,5 +190,5 @@ retail builds.
 
 **The audio observers are accepted in game.** They were used to find a live defect: the channel
 release observer reported three voices holding an owner handle that pointed into the calling
-thread's stack, named the sound in each and where the write would land, and that is what the fix
-for it was built from. The other areas are still offline only.
+thread's stack, named the sound in each and where the write would land. The fix was built
+from that. The other areas are still offline only.

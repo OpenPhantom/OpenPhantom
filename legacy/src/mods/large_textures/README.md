@@ -7,7 +7,7 @@ hardware allowed is loaded and drawn instead of being silently cropped.
 
 **This is a capability, not a fix.** It repairs no defect, and on the artwork the game ships it is
 the identity. If you are running the original data, installing this DLL changes nothing you can
-see, and that is the intended outcome.
+see. That is the intended outcome.
 
 ## Supported executables
 
@@ -97,7 +97,7 @@ and it is the source pointer handed to the page builder.
 
 Raising `MaxTextureSize` on its own does nothing at all for the level geometry. Census over the 11
 shipped levels: 116 world pages, of which **98 are 256 by 256**, 14 are 64 by 64 and 4 are 128 by
-128. Since 256 times 256 is 65536, which is exactly the fixed block, the stock loader can grow only
+128. Since 256 times 256 is 65536, exactly the fixed block, the stock loader can grow only
 the 18 small pages and only as far as 256:
 
 ```
@@ -115,8 +115,8 @@ installed when in fact the second limit was doing its job silently.
 4000 of the 6482 exported textures were read out of their own headers. The most common sizes are
 32 by 32 (1063), 16 by 32 (471), 64 by 32 (329), 64 by 64 (320) and 16 by 16 (317), and **none of
 the 4000 exceeds 256 on either axis**. So on the original artwork the clamp never fires and any
-ceiling at or above 256 is the identity. The remaining 2482 were not measured, which is why this
-says 4000 rather than all of them.
+ceiling at or above 256 is the identity. The remaining 2482 were not measured, so this says 4000
+rather than all of them.
 
 ## Known limitations
 
@@ -175,9 +175,9 @@ patch. The pattern work below is what establishes where it acts.
   larger than 256.
 
 To check in game: raise `MaxTextureSize`, start the game, and read `engine_fixes.log` for the
-`texture page ceiling 256 -> N` line. With the stock artwork that is the whole of what can be
-confirmed, because no shipped texture reaches the old ceiling. Confirming that the patch does
-something visible needs a replacement texture larger than 256 on an axis.
+`texture page ceiling 256 -> N` line. With the stock artwork that is all that can be confirmed,
+because no shipped texture reaches the old ceiling. Confirming that the patch does something
+visible needs a replacement texture larger than 256 on an axis.
 
 One hazard for whoever touches this next: the loader pattern begins three bytes into the function,
 so it overlaps the five bytes a trampoline detour writes over a prologue. Nothing in this project

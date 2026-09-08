@@ -5,7 +5,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/OpenPhantom/OpenPhantom?style=for-the-badge&label=Stars)](https://github.com/OpenPhantom/OpenPhantom/stargazers)
 [![License](https://img.shields.io/github/license/OpenPhantom/OpenPhantom?style=for-the-badge)](https://github.com/OpenPhantom/OpenPhantom/blob/main/LICENSE)
 
-OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a 64-bit installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom reverse engineers and reconstructs the game's engine as documented, maintainable source code, with tools for modding, editing and extending the game.
+OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a modern installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom reverse engineers and reconstructs the game's engine as documented, maintainable source code, with tools for modding, editing and extending the game.
 
 **[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x)
 
@@ -42,7 +42,7 @@ The patch and the installer carry **two numbers**, and they always did apart fro
 
 Both last digits move together on a release. The DLLs carry the **patch's** number, so a file's
 properties and the first line of `engine_fixes.log` read `0.4.2` while the installer that delivered
-them reads `1.4.2`. That is two numbers on one machine, which is what having two lines costs.
+them reads `1.4.2`. Two numbers on one machine is the cost of having two lines.
 
 **One release was made with the two merged into a single number**, published as `v1.5.0` and
 `i1.5.0`. That has been undone and the two lines are separate again, so on GitHub that release is

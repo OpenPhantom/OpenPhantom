@@ -23,8 +23,8 @@ Two hands, because one is not enough:
 1. **A vectored handler** sees the exception first, before any SEH frame, including a graphics
    wrapper's. It therefore fires even when something further out swallows the exception.
 2. **`SetUnhandledExceptionFilter`** catches the case where the vectored handler did not run. The
-   last installer wins here, so a wrapper loading after us replaces our filter, which is why the
-   vectored handler is the important one of the two, not the other way round.
+   last installer wins here, so a wrapper loading after us replaces our filter. The vectored
+   handler is the important one of the two, not the other way round.
 
 **It changes nothing.** Both paths return `CONTINUE_SEARCH` or hand on to the previous filter, so
 the crash unfolds exactly as it would without us. A reporter that bends the control flow reports on

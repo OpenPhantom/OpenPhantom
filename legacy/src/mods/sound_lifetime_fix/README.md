@@ -14,7 +14,7 @@ display driver's shader compiler.
 Turning sound effects off stops it. Turning the SFX volume slider to zero does not.
 
 That pair is the whole diagnosis in one line. The volume gates no branch anywhere in the engine, it
-is handed to Miles and nothing else reads it, so a silent game still allocates every channel and
+is handed to Miles and read nowhere else, so a silent game still allocates every channel and
 still runs every code path. The checkbox is different: it makes `bapsound_play` return before it
 allocates anything.
 
@@ -80,12 +80,12 @@ above the stack pointer, so every one of them wrote into a frame still in use.
 
 The flags settle which bug it is. Every channel that carried a stack owner handle was flagged
 `SNDF_STATIC_POS`, and no channel without that flag did: three for three, no false positives.
-`SNDF_STATIC_POS` is the bit `bapsound_pinChannel` sets and nothing else sets, so the dangling
-handles are exactly the pinned ones.
+`SNDF_STATIC_POS` is the bit `bapsound_pinChannel` sets, and no other code sets it, so the
+dangling handles are exactly the pinned ones.
 
 ## The fix
 
-Clear `pOwnerHandle` where the pin happens, which is what the pin was already trying to do.
+Clear `pOwnerHandle` where the pin happens. The pin was already trying to do that.
 
 Only a handle that points into the calling thread's own stack is cleared. A channel whose owner
 lives anywhere else keeps the lifetime protocol it was written for, so this does not have to be

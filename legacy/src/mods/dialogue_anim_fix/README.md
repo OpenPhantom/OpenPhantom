@@ -84,8 +84,8 @@ A per-frame correction while it is armed, and it is only ever armed for this one
    lines, so no extra bookkeeping is needed), this disarms itself completely: not just released
    until the next line, but off for the rest of this level, until the next `campaign_loadLevel`
    re-arms it. Those two globals blink to "nobody" for a moment between every line of the same
-   exchange too, not only at its end, which is why this needs an actual hold timer rather than
-   reacting to the first gap it sees.
+   exchange too, not only at its end, so this needs an actual hold timer rather than reacting to
+   the first gap it sees.
 
 ## Two mistakes already made here, so nobody repeats them
 

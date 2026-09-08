@@ -80,7 +80,7 @@ cursor by the vertex count:
 00487EF3  mov [0x00867380],ebx      stored back, with no test at all
 ```
 
-That is the whole of the pool's bookkeeping. The queue's *entry* count is tested against a ceiling
+That is the pool's entire bookkeeping. The queue's *entry* count is tested against a ceiling
 on the function's first instruction, so a scene cannot submit unlimited faces; the *vertex* cursor
 is tested against nothing, so a scene that stays under the entry ceiling can still run it past the
 end of the pool.
@@ -103,14 +103,14 @@ capability cell at `0x00866FC8` when the device fails its comparison probe.
 ## What a refusal costs
 
 One polygon, in a frame that was about to corrupt memory. The refusal is the same null the function
-already returns when its queue is full, and that is an ordinary condition in a busy scene, so every
+already returns when its queue is full. That is an ordinary condition in a busy scene, so every
 caller of the function already handles it. No new path is introduced.
 
 ## The pool ceiling is derived, not measured, and it is labelled as one
 
 The engine never names the pool's capacity. The only number in the image it can be derived from is
-the queue's entry ceiling, `0x2004`, which is the count the same function tests on its first
-instruction, and that is a derivation rather than a measurement.
+the queue's entry ceiling, `0x2004`, the count the same function tests on its first instruction.
+That is a derivation, not a measurement.
 
 A census was attempted and did not settle it. Scanning `.text` for dword literals landing between
 the pool's base at `0x00734C10` and a generous end at `0x00790000` returns 74 hits at byte
@@ -129,8 +129,8 @@ happens, and `PoolCapacityVertices` is how to answer it.
 
 * **The depth comparison repair is not expected to fire on modern hardware.** Any Direct3D 9 device
   advertises GREATER, so the mapper reaches the `0x10` arm and the hook passes the answer through
-  untouched. Whether any real device takes the probe failure path has not been established, which
-  is why this substitutes rather than assuming either way.
+  untouched. Whether any real device takes the probe failure path has not been established, so
+  this substitutes rather than assuming either way.
 * **Only the first refusal of each kind is logged.** The counters keep running after that but no
   later line prints them, so a session's total is not visible in `engine_fixes.log`.
 * **The immediate path is not guarded.** Its limit is 64 and it is a different array in a different
@@ -150,8 +150,8 @@ ini carries and stays off when the ini carries nothing.
 
 The depth comparison repair can fail to resolve or fail to detour without affecting the bounds. The
 reverse does not hold: it is attempted only once the face hook is in place, so a build on which the
-submit pattern does not resolve loses this repair too. That is worth knowing before anyone reads a
-silent log as "the mapper was fine here".
+submit pattern does not resolve loses this repair too. Do not read a silent log as "the mapper
+was fine here".
 
 Nothing is written to the image on any of these paths, so a partial install leaves the game exactly
 as it found it.
@@ -175,7 +175,7 @@ or measuring the assets, not after building.
 * **Reviving the dead eviction sweep at `0x00489170`.** It is real dead code with zero callers, but
   the same texture census says there is nothing to evict, a level's worth of 32x32 pages being a
   few megabytes. It would also need to be known what re-uploads a record whose surfaces it has just
-  released, and that is not established. Not worth building blind.
+  released. That is not established. Not worth building blind.
 
 ## Testing status
 

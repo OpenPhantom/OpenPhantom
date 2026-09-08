@@ -140,8 +140,8 @@ min(1, edge_limit(hFOV, R_live) / edge_limit(60 degrees, R_engine))
 where `R_engine` is where the cut edge would have been and `R_live` is where we actually put it,
 both read out of the draw-distance detour, which is the only place the two exist at once. At 60
 degrees with an unmoved cut edge that factor is **exactly `1.0f`**, so every level keeps its shipped
-numbers bit-for-bit. It is what makes the fog follow the FOV slider, the radius cap *and* the cell
-watchdog lowering the range mid-level.
+numbers bit-for-bit. The fog follows the FOV slider, the radius cap *and* the cell watchdog
+lowering the range mid-level.
 
 `FogInsideCut` is **absolute**, and it takes three values rather than two.
 
@@ -163,7 +163,7 @@ rule, so the field of view does not move the fog, and the assignment overwrites 
 `FogFollowFov` instead of combining with them. The corner may still pop, which costs a few pixels
 at the edge of the picture rather than half of everything in front of you.
 
-### The whole band moves, and that is a correctness rule
+### The whole band moves: a correctness rule
 
 `bapdraw_setFrameState` forms `end - start` at `0x00401E8B` and, when the result is **negative**,
 clears the "compute the fog yourself" flag at `0x00401EAA`. With that flag clear the emitter writes
@@ -253,8 +253,8 @@ distinction matters because it is the difference between a workaround and a fix.
 
 Direct3D chooses between **w-based** and **z-based** fog by inspecting the fourth column of the
 **projection matrix**: an affine one selects device depth, a non-affine one selects the reciprocal
-of `rhw`. In this engine `rhw` is `1 / cam.y`, so `w` is a distance in world units, which is
-exactly what the authored band is written in. The engine's table-fog branch is a **correct w-fog
+of `rhw`. In this engine `rhw` is `1 / cam.y`, so `w` is a distance in world units, the same
+units the authored band is written in. The engine's table-fog branch is a **correct w-fog
 configuration**.
 
 What is missing is the matrix. Cross-referencing every use of the device pointer shows vtable slot
@@ -279,9 +279,9 @@ world units keeps doing so.
 
 **It is chosen once, at startup, and this was learned the hard way.** `1` and `2` differ in device
 state, and the only place this engine programs the device's fog is inside `baplight_applyLevelFog`,
-which runs at a level load. Reverting the three writes changes the byte that function will push
-*next time* and nothing else, so a switch made while a level is up leaves the engine computing a
-per-vertex factor the device has been told to ignore, and nothing is fogged at all. Three fixes
+which runs at a level load. Reverting the three writes changes only the byte that function will
+push *next time*, so a switch made while a level is up leaves the engine computing a per-vertex
+factor the device has been told to ignore, and nothing is fogged at all. Three fixes
 were tried in the game and none worked: reverting the writes alone, additionally handing back an
 identity projection, and additionally calling `applyLevelFog`'s original by hand to reprogram the
 device. Tested by a person each time, no fog each time. What remains unexplained is why the third
@@ -289,17 +289,17 @@ did not work, since it is what a level load does; the honest reading is that som
 device or wrapper state is also one-way, and it was not worth more attempts to find out. So the
 setting waits for a restart, and the dev menu carries only the band terms, which are arithmetic.
 
-One thing it costs, and it is worth knowing before touching this file: with the ramp the engine
-re-read `world+0x218/+0x21C` every frame, so writing those two floats was enough for anyone. On the
-device path they only reach `FOGSTART`/`FOGEND` through `applyLevelFog`, so every writer has to be
-pushed. There are two: this file, and the developer overlay's no-fog cheat, which holds the band
-out past everything drawn. The frame tick pushes **their** value when it sees one that is not ours,
-and treats "settled" as meaning both that our band has not moved and that the device is showing it.
-Without that second half the fog could be switched off and never back on.
+One thing it costs: with the ramp the engine re-read `world+0x218/+0x21C` every frame, so writing
+those two floats was enough for anyone. On the device path they only reach `FOGSTART`/`FOGEND`
+through `applyLevelFog`, so every writer has to be pushed. There are two: this file, and the
+developer overlay's no-fog cheat, which holds the band out past everything drawn. The frame tick
+pushes **their** value when it sees one that is not ours, and treats "settled" as meaning both
+that our band has not moved and that the device is showing it. Without that second half the fog
+could be switched off and never back on.
 
 ### What a level opens with, and what the band follows
 
-Two behaviours worth knowing, both from chasing a reported flicker in the first seconds of a level.
+Two behaviours, both from chasing a reported flicker in the first seconds of a level.
 
 **A level opens on its own authored band.** At a load nothing has walked the new world yet, so
 there is no cut edge to reason from. The fallback used to substitute the level's authored view
@@ -329,7 +329,7 @@ slope, and the fog ends where the draw distance ended without visiting every val
 is deliberately slower than the band's own settle, because smoothing an input faster than its
 consumer only moves the problem.
 
-**The three writes are all-or-nothing, and that is not tidiness.** With the ramp disarmed, the
+**The three writes are all-or-nothing, not out of tidiness.** With the ramp disarmed, the
 world pass writes a **constant zero** into the specular of every world vertex (`0x00402459`), and
 zero means *fully fogged*. Clearing `FOGTABLEMODE` without arming the ramp would not lose the fog,
 it would paint the entire world in the fog colour. The install validates all three sites before it
@@ -363,14 +363,13 @@ cutscene the tank drives out of, with a 100 fps cap:
 | CPU per frame | 21-26 ms | 12-13 ms |
 | GPU | 15-27 % | unchanged |
 
-**The graphics card did not move, and that is the whole mechanism.** This engine transforms world
-geometry on the CPU, so a longer view is more work per frame for the processor and none at all for
-the card. Frame time is the only instrument that can see this: a card sitting at 20 % busy at both
-settings says nothing.
+**The graphics card did not move.** This engine transforms world geometry on the CPU, so a longer
+view is more work per frame for the processor and none at all for the card. Frame time is the only
+instrument that can see this: a card sitting at 20 % busy at both settings says nothing.
 
 Neither watchdog below fired during that run. Peak cell usage never came near the alarm, nothing
 overflowed, nothing was in danger. Those two guard against corruption, and a scale that is merely
-expensive walks straight past them, which is what `FrameBackoff` is for.
+expensive walks straight past them. `FrameBackoff` is for that.
 
 It measures the median frame of each window, a median so that one 250 ms level load cannot move
 it, and sizes each step by how far off target that window was: a 3 % miss only nudges, a 40 %
@@ -384,12 +383,11 @@ second against a ring it never emptied, so its median covered the last 256 frame
 seconds at 100 fps, and lagged the scene by over a second. Between that and steps sized for a
 gentler cost curve than this setting actually has, it took **fourteen seconds** to walk 2.50 down
 to 1.00 in a cutscene that is about thirteen seconds long: it arrived after the thing it was
-reacting to had finished, which is what a field run reported as "better but still drops". The
+reacting to had finished. A field run reported that as "better but still drops". The
 window is now emptied after each decision and a decision is every half second.
 
-**An attribution test was tried here and removed; it is worth knowing why.** The first run walked
-2.50 down to 1.15 in nine consecutive seconds, and its log shows the first three steps made the
-frame time *worse*:
+**An attribution test was tried here and removed.** The first run walked 2.50 down to 1.15 in nine
+consecutive seconds, and its log shows the first three steps made the frame time *worse*:
 
 ```
 2.50 -> 2.35   16.1 ms       2.05 -> 1.90   16.8 ms
@@ -540,7 +538,7 @@ scene, not about seeing further than that ceiling.**
 
 Each patch installs independently and says so. If `gather_append` does not match, the watchdog is
 off and the scale is pinned to 1.0. If the camera cannot be observed, the radius cap assumes the
-authored 63 degrees, the fog assumes 60 degrees, which is exactly the authored band, and both say so.
+authored 63 degrees and the fog assumes 60 degrees, giving exactly the authored band. Both say so.
 
 If `level_pointer` does not resolve, or there is no per-frame hook, there is **no fog tick**: the
 band is still computed and written once per level, so a field-of-view change taken mid-session
@@ -551,7 +549,7 @@ it last put there; anything that deliberately changes `world+0x218`/`+0x21C` kee
 `baplight_applyLevelFog` runs again. A whole-image sweep for those two displacements finds four
 writers and no more, `0x0041CC47`/`0x0041CC54` (the world defaults 10.0/22.0) and
 `0x0041D0A3`/`0x0041D0B5` (the B3D header copy), so today that clause only ever fires on a level
-load, but it is what makes the coupling safe next to a future one.
+load. It keeps the coupling safe next to a future one.
 
 The fog regime is the one all-or-nothing part: a single transaction over three sites. If any of the
 three does not resolve or does not carry the expected bytes, **none** of them is written and the log

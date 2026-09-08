@@ -9,14 +9,14 @@ the identity**, so the original behaviour is a fixed point.
 
 Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. On `obi.exe` most patterns do not resolve and
 each affected patch disables itself with a log line. The anchor blend is the exception: its site
-survives that recompile, which is why it does not share a gate with the rest of the camera work.
+survives that recompile, so it does not share a gate with the rest of the camera work.
 
 ## Configuration: `[framerate_fix]`
 
 | Key | Default | Meaning |
 |---|---|---|
 | `Enabled` | `1` | |
-| `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and nothing else: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
+| `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
 | `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. The only patch here that rewrites *instructions* rather than an operand, so it has its own switch |
@@ -83,7 +83,7 @@ survives that recompile, which is why it does not share a gate with the rest of 
   weights are `k` and `1-k` by construction. All 63 bytes are written in one call, only on an exact
   match of all 63, and a partial match declines, a short write would land mid-x87-sequence and
   corrupt the camera *silently*.
-  Two consequences worth knowing: this DLL must never be unloaded (the `fmul` operand names a cell
+  Two consequences: this DLL must never be unloaded (the `fmul` operand names a cell
   inside it), and the 63-byte write is safe because the mods load from the host entry point with
   one thread in the process.
 * The emitter dormancy compare is a sign-extended `imm8`, so the largest writable value is 127:
@@ -125,7 +125,7 @@ engine is better off with that value or with its own has not been measured, so t
 what shipped.
 
 `InterpolateMovers`, `InterpolateParticles`, `PreciseFrameTime` and `RebaseSimClock` were played
-and accepted by the maintainer, which is why they now default to on. That is a judgement about how
+and accepted by the maintainer, so they now default to on. That is a judgement about how
 they feel; the numbers in their own files are still a byte census and arithmetic rather than a
 measurement of a session, and `sim_clock` and `mover_blend` have unit tests covering the
 arithmetic alone.

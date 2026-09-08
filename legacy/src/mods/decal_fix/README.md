@@ -52,7 +52,7 @@ turns its bit `0x00100000` into a device call at `0x0048825B`:
 ```
 
 That state word carries `ZTEST` (`0x0800`) and **not** `ZWRITE` (`0x1000`): the decal tests depth
-and never writes it, so the bias is the whole of its claim to the pixel.
+and never writes it, so the bias is its only claim to the pixel.
 
 **`D3DRENDERSTATE_ZBIAS` does not exist in Direct3D 9.** It was replaced by `D3DRS_DEPTHBIAS`, a
 float in normalised depth instead of an integer 0..16, and every DirectDraw7-to-Direct3D9 layer has
@@ -62,15 +62,15 @@ to invent the conversion itself. The engine cannot influence the result and is n
 
 It stops asking the device for a favour and moves the geometry. Every polygon in this game is
 submitted **pre-transformed**, the vertex format literal is `0x1C4` =
-`XYZRHW|DIFFUSE|SPECULAR|TEX1`, so `z` is already the device-space depth in `[0,1]`, which is
-exactly the quantity `ZBIAS` was meant to shift. Subtracting a small constant from it is what
+`XYZRHW|DIFFUSE|SPECULAR|TEX1`, so `z` is already the device-space depth in `[0,1]`, the
+exact quantity `ZBIAS` was meant to shift. Subtracting a small constant from it is what
 `ZBIAS` did, done one layer earlier and on our side of the wrapper. Negative results are clamped to
 `0`.
 
-**The site is exclusive, and that is the whole reason this is safe.** An `E8 rel32` sweep of the
-entire `.text` finds `0x00487F40` has exactly **one** caller, `0x0041C87D`, inside
-`bapvrt_drawPolyDecals`. Nothing else in the game reaches it, so the hook needs no render-state test
-and can never touch world geometry, sprites, the HUD or the front end.
+**This is safe because the site is exclusive.** An `E8 rel32` sweep of the entire `.text` finds
+`0x00487F40` has exactly **one** caller, `0x0041C87D`, inside `bapvrt_drawPolyDecals`. Nothing else
+in the game reaches it, so the hook needs no render-state test and can never touch world geometry,
+sprites, the HUD or the front end.
 
 ## Which way is "forward" is not a constant
 
@@ -94,8 +94,8 @@ from a device capability at run time, at `0x00487672`:
 
 Any Direct3D 9 device advertises `GREATER`, so on a translation layer that is the branch that runs.
 This DLL's first release subtracted unconditionally and therefore pushed every decal *away* from
-the camera, which is why it changed nothing at any value of `DepthBias`, including values a
-thousand times larger than the depth buffer's quantisation.
+the camera. It changed nothing at any value of `DepthBias`, including values a thousand times
+larger than the depth buffer's quantisation.
 
 The direction is read **per call**, not latched at install: at the host entry point the graphics are
 not up yet and the cell still reads zero. The log names the answer once, on the first decal:
@@ -105,8 +105,8 @@ not up yet and the cell still reads zero. The log names the answer once, on the 
             pulled forward by +0.00015 in device depth
 ```
 
-The engine reads the direction late for the same reason, which is why the third sort key of its
-deferred draw list is direction-dependent rather than fixed.
+The engine reads the direction late for the same reason. The third sort key of its deferred draw
+list is direction-dependent rather than fixed.
 
 ## Choosing the number
 

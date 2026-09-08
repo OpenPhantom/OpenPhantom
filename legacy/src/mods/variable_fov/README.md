@@ -26,7 +26,7 @@ patterns do not resolve and the feature disables itself with a log line.
 | `SliderMaxFovDegrees` | `120` | min+2-170 | the rightmost notch, likewise absolute |
 | `Language` | *(empty)* | en\|de\|fr\|it\|es | caption language; empty follows Windows |
 
-### The slider is an absolute angle, and that is a change
+### The slider is now an absolute angle
 
 It used to select an **offset** on top of whatever the aspect mode computed, so notch 0 was "the
 unmodified view". That reads well at 4:3, where the authored horizontal really is 60 degrees, and badly
@@ -35,8 +35,8 @@ offset that can only add cannot come back down. There was no way to ask for 60.
 
 Now notch *n* means an absolute `SliderMinFovDegrees + n times 2` degrees, the number on the slider is
 the number in the caption. The offset is still what is stored and applied; it is simply computed
-from the angle picked, which is why the same notch is the same **angle** at every resolution and
-the offset behind it differs.
+from the angle picked, so the same notch is the same **angle** at every resolution and the offset
+behind it differs.
 
 Two consequences worth naming. `ExtraDegrees` **can now be negative**, and it has to be for this to
 work at all. And choosing less than the aspect mode's own answer costs vertical view: at 16:9 an

@@ -12,10 +12,13 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds two groups as well, split the same way and for the same reason the
-  Original tab is: **Cheats** are the things that change the game, **Utilities** are the settings
-  that configure this patch. It began as one group with a settings row appended, and the settings
-  outgrew the cheats, so a reader had to scroll past invincibility to reach the draw distance.
+* **OpenPhantom** holds three groups, split the same way and for the same reason the Original tab
+  is: **Cheats** are the things that change the game, **Utilities** are the settings that configure
+  this patch, and **Window mode** is the shape of the window. It began as one group with a settings
+  row appended, and the settings outgrew the cheats, so a reader had to scroll past invincibility to
+  reach the draw distance. Window mode came out of Utilities for the same reason plus one of its
+  own: its rows answer a single question a player arrives with, and half of them are unusable until
+  the game is restarted, which is worth saying in one place rather than eleven times.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
@@ -971,3 +974,55 @@ cap. The log lines to look for:
 [dev_overlay] the free camera teleport key dropped the player at 38.2 127.1 101.0
 [dev_overlay] the teleport was refused and the camera returned instead: it is 104 units of drop, past the 80 this engine can finish a fall from
 ```
+
+
+## The Window mode group
+
+Eleven rows, and the group is a good deal more stateful than Utilities, so the rules it follows are
+worth writing down.
+
+**The five shape rows are one choice, not five switches.** Pressing the lit one does nothing. An
+earlier build treated a second press as "turn this off" and dropped the player to the engine's own
+shape, which looks exactly like the window feature having stopped working.
+
+**Fullscreen is the exception, and is a switch.** The engine's own shape covers most of a screen, so
+turning it on reads as going fullscreen and the next thing anyone does is press it again to come
+back. It remembers the mode it replaced and gives it back. That memory is kept in this DLL rather
+than written to the settings file: it is a memory of a gesture, not a setting, and a key in the file
+that nothing else reads would only leave a reader wondering what it was for.
+
+**Choosing a shape also writes the device.** `WindowedPresent` had a row of its own and should not
+have: it has exactly one correct value for each shape above it, and one broken one. A window without
+it means an exclusive device owning the screen, so asking the engine for a smaller picture sets the
+real display resolution smaller, which was measured leaving a 4K desktop at 800x600. Fullscreen
+without it is not fullscreen. A row whose only two settings are the right answer and a trap is not a
+choice, so it is written wherever the shape is written and there is no row for it.
+
+**Everything greys until the device is windowed.** The gate is what the device actually IS, which is
+not the same question as what the settings file says: that file is read once, when the engine builds
+its device, so after a press the two disagree until the game is restarted. Reading it once, before
+anything in the group can be pressed, is what makes the rows follow the device rather than the file.
+Without that, switching fullscreen off un-greyed rows the device still could not carry.
+
+The two key bindings grey with everything else. Greying a binding row does not disable the key it
+names: Alt and Enter is the way out of fullscreen without opening this panel at all, and having the
+panel's own appearance take that away would be a trap rather than a tidy-up. What is given up while
+they are grey is the ability to rebind them.
+
+**The size is a list, not two typed numbers.** It unfolds into the sizes the display reports, one
+row each, and closes when one is chosen: the same shape the free camera's "how to fly" row uses, so
+the group's row count grows only while it is open. It was two text boxes first, and a typed number
+can be one no display offers. That matters more than it sounds, because the size chosen here is also
+written as the resolution to render at, the engine opens whatever it finds at startup, and a size it
+cannot open stops the game before it draws anything. Catching that afterwards and explaining it is
+worse than not being able to say it.
+
+The list comes from Windows rather than from the engine. The engine has one and `enhanced_resolution`
+owns it, but that is a different DLL and feature DLLs here do not depend on each other. Windows
+answers the same question from the same driver, and the DLL that actually writes the resolution
+checks its own list before it does, so a size offered here that the engine somehow does not know is
+refused there with a line saying so rather than reaching the settings file.
+
+Sizes under 640x480 are dropped. That is not tidiness: below roughly that much client area the
+engine's warp to client (320,240) lands outside the window, the pointer is clamped short of it, the
+echo test never matches, and a constant delta accumulates for as long as the window stays small.

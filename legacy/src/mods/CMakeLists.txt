@@ -308,6 +308,7 @@ add_engine_fix(dev_overlay
     view_range_live_row.c
     overlay_key_name.c
     overlay_utilities.c
+    overlay_window.c
     open_key_row.c
     fog_follow_row.c
     auto_range_row.c

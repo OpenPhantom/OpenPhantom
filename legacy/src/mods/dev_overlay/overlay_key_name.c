@@ -38,6 +38,13 @@ void overlay_key_name(int32_t vk, char *out, size_t out_size)
         case VK_HOME:     _snprintf(out, out_size, "Home");   break;
         case VK_END:      _snprintf(out, out_size, "End");    break;
         case VK_OEM_3:    _snprintf(out, out_size, "Backtick"); break;
+        /* Added when this patch started shipping keys it had no name for: the pointer release
+           defaults to Scroll Lock and reached a screenshot as a bare "145". */
+        case VK_SCROLL:   _snprintf(out, out_size, "ScrLk");  break;
+        case VK_PAUSE:    _snprintf(out, out_size, "Pause");  break;
+        case VK_BACK:     _snprintf(out, out_size, "Backsp"); break;
+        case VK_PRIOR:    _snprintf(out, out_size, "PgUp");   break;
+        case VK_NEXT:     _snprintf(out, out_size, "PgDn");   break;
         /* Decimal, not hex, because this is the form the reading direction accepts. A code
            with no name here is shown so it can be typed straight back into OpenKey, and a hex
            string would be refused by the parser and fall back to the default key. */

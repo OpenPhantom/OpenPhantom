@@ -120,9 +120,25 @@ void overlay_window_reset(void)
     size_list_open = false;
 }
 
+/* Auto is the FIRST entry, ahead of every size the display reports, and it is a row rather than
+ * only a label.
+ *
+ * The size row shows "auto" whenever no size has been chosen, which is what a fresh install reads,
+ * and auto means the window takes the size the game is rendering so the picture is one pixel for
+ * one pixel. Without a row that writes it back there was no way to return: the list held nothing
+ * but real modes, so picking one was a one way door out of the state the panel started in.
+ *
+ * So the list is one longer than the display's own. Entry 0 is auto and entry N is the display's
+ * N-1, which is the only place that shift exists; everything below counts in list entries and
+ * converts at the point of use. */
+static uint32_t size_entry_count(void)
+{
+    return size_list_count + 1u;
+}
+
 uint32_t overlay_window_row_count(void)
 {
-    return OVERLAY_WINDOW_BASE_ROWS + (size_list_open ? size_list_count : 0u);
+    return OVERLAY_WINDOW_BASE_ROWS + (size_list_open ? size_entry_count() : 0u);
 }
 
 /* Where a slot lands once the list is open: the rows after the size row are pushed down by the
@@ -130,7 +146,7 @@ uint32_t overlay_window_row_count(void)
 static bool slot_is_size_entry(uint32_t slot, uint32_t *out_index)
 {
     if (!size_list_open || slot <= (uint32_t)WINDOW_ROW_SIZE ||
-        slot > (uint32_t)WINDOW_ROW_SIZE + size_list_count) {
+        slot > (uint32_t)WINDOW_ROW_SIZE + size_entry_count()) {
         return false;
     }
     *out_index = slot - (uint32_t)WINDOW_ROW_SIZE - 1u;
@@ -139,8 +155,8 @@ static bool slot_is_size_entry(uint32_t slot, uint32_t *out_index)
 
 static uint32_t slot_without_list(uint32_t slot)
 {
-    if (size_list_open && slot > (uint32_t)WINDOW_ROW_SIZE + size_list_count) {
-        return slot - size_list_count;
+    if (size_list_open && slot > (uint32_t)WINDOW_ROW_SIZE + size_entry_count()) {
+        return slot - size_entry_count();
     }
     return slot;
 }
@@ -224,11 +240,20 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
 
             out->kind      = OVERLAY_ROW_CHEAT;
             out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
-            out->on        = size_list[entry].width == chosen_width &&
-                             size_list[entry].height == chosen_height;
             out->value[0]  = 0;
+
+            if (entry == 0u) {
+                /* Lit by the absence of a size rather than by a number, which is exactly what the
+                 * row above reads to decide it says auto. One test, one meaning. */
+                out->on = !(chosen_width > 0 && chosen_height > 0);
+                copy_label(out->label, "    auto (match the game's own size)");
+                return;
+            }
+
+            out->on = size_list[entry - 1u].width == chosen_width &&
+                      size_list[entry - 1u].height == chosen_height;
             _snprintf(out->label, sizeof out->label, "    %dx%d",
-                      (int)size_list[entry].width, (int)size_list[entry].height);
+                      (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
             out->label[sizeof out->label - 1] = 0;
             return;
         }
@@ -421,8 +446,15 @@ bool overlay_window_toggle(uint32_t slot)
      * above now and there is nothing left to pick. */
     if (slot_is_size_entry(slot, &entry)) {
         size_list_open = false;
-        return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", size_list[entry].width) &&
-               ini_write_int(RESOLUTION_SECTION, "WindowedHeight", size_list[entry].height);
+
+        /* Zero on both axes is what the rest of this feature already reads as auto, so returning to
+         * it is writing the numbers a fresh install has rather than a state of its own. */
+        if (entry == 0u) {
+            return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", 0) &&
+                   ini_write_int(RESOLUTION_SECTION, "WindowedHeight", 0);
+        }
+        return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", size_list[entry - 1u].width) &&
+               ini_write_int(RESOLUTION_SECTION, "WindowedHeight", size_list[entry - 1u].height);
     }
     slot = slot_without_list(slot);
 
@@ -467,9 +499,6 @@ bool overlay_window_toggle(uint32_t slot)
      * and is horrible: fifteen presses to cross the list, with the one you wanted going past. */
     case WINDOW_ROW_SIZE:
         build_size_list();
-        if (size_list_count == 0u) {
-            return false;               /* nothing to show, so opening an empty list helps nobody */
-        }
         size_list_open = !size_list_open;
         return true;
 

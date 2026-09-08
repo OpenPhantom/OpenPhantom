@@ -103,6 +103,7 @@
  * The cursor quad is drawn AFTER the bracket closes and is not covered here; it does not need to
  * be, because the engine's own cage keeps it inside the island, where its erase works.
  */
+#include "menu_art_census.h"
 #include "menu_island_clip.h"
 
 #include "window_fit.h"
@@ -296,6 +297,10 @@ static void __cdecl hook_draw_sprite(void *texture, float left, float right, flo
     draw_sprite_fn_t original = (draw_sprite_fn_t)clip_state.draw_sprite_detour.original;
     float            island_left;
     float            island_top;
+
+    /* Counted before anything is decided, so a sprite this function later declines to touch is
+     * still counted as one the menu drew. Silent unless LogMenuArt is on. */
+    menu_art_census_note_sprite(left, right, top, bottom);
 
     if (original == NULL) {
         return;                         /* the un-armed instant between write and state */

@@ -108,6 +108,10 @@ add_unit_test(pointer_cage enhanced_resolution
 # display mode.
 add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/menu_island_clip.c
+    # the census the sprite hook reports to, the real file rather than a stub, and the site
+    # table it resolves its own detours from
+    enhanced_resolution/menu_art_census.c
+    enhanced_resolution/menu_scale_sites.c
     enhanced_resolution/window_fit.c
 )
 

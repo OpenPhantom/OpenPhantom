@@ -15,6 +15,7 @@
 #include "menu_art_source.h"
 #include "menu_preview.h"
 #include "menu_scale_3d.h"
+#include "menu_art_census.h"
 #include "menu_scale_internal.h"
 #include "menu_scale_sites.h"
 
@@ -286,6 +287,10 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     if (scale_state.installed) {
         return true;
     }
+
+    /* Before the artwork test below, and deliberately: the census exists to measure whether that
+     * artwork could stop being needed, so it has to run on an installation that has none. */
+    (void)menu_art_census_install();
 
     if (configured_ratio > 0.0f) {
         ratio_x = ratio_y = configured_ratio;  /* an explicit setting, which exists for testing */

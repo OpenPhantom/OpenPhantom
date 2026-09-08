@@ -30,6 +30,7 @@ the mode table that the aspect gate anchors.
 | `MaxMenuModes` | `63` | cap for the engine's 64-slot label array; 4-63 |
 | `ForceWidth` / `ForceHeight` | `0` | 0 = leave `obi.ini` alone |
 | `LogModeTable` | `0` | dump the raw DirectDraw table on the first enumeration. A diagnostic, so it is off in a release |
+| `LogMenuArt` | `0` | report every distinct menu picture once, with the blit path it takes, and count the textured quads. A measurement rather than a feature, and off in a release. See **What a menu is actually made of** below |
 | `MenuKeepsResolution` | `1` | stop menus switching to 640x480 |
 | `SubtitleScale` | `1.0` | how big the subtitles are, as a multiple of the size they have at 640x480. `1.0` is exactly the authored size and proportions at any resolution, `0.5` to `3.0` either side of it, and `0` leaves the engine's own shrinking behaviour alone. Settable from the developer menu and applied within a second; only `0` needs a relaunch. See **Subtitles that scale** below |
 | `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which is what its own pointer handling assumes. |
@@ -234,6 +235,41 @@ game's own shutdown has already run.
 There is a cleaner path in principle, which is to make the front end return its own quit answer so
 the game unwinds to `sys_main` by itself. It was looked at and is not available: that answer is a
 local in the front end's stack frame, not a global anything can set.
+
+## What a menu is actually made of
+
+Measured with `LogMenuArt=1` on 2026-09-08, walking eight screens: the front end, the options pages,
+a level, a pause page and Load Game. The result contradicted what this file assumed, twice.
+
+**Almost nothing is a picture widget.** Two distinct shapes appeared in eight screens, and both were
+already known about: the 232x100 animated previews and the 160x120 save thumbnails. Against those,
+4805 widgets drew no picture at all. So the menu's backgrounds, plates and buttons do not reach the
+screen through `swpic_draw`, and the draw time upscaler in `menu_preview.c` cannot see them.
+
+**The furniture is textured quads.** 1208 sprite draws across the same eight screens, about 150 a
+screen, through `texture_drawSprite`. That function takes float destination edges, so its quad
+stretches whatever texture it is handed and needs no larger source to fill a larger canvas. The
+largest quad measured was 216x107, which is button sized: nothing approaching a full screen bitmap
+was drawn on any path watched.
+
+**So the artwork conversion is not buying geometry.** The menus already scale. What the conversion
+buys is what happens to a small texture when a quad stretches it, and the answer today is the
+rasterizer's own bilinear filter, which is exactly the smoothing filter `convert_menu.py` refuses to
+use, and for a stated reason: after the engine converts a bitmap to 16 bit, a pixel that is exactly
+zero is a SKIP, so a smoothing filter invents near black where black was transparent and new
+exact zeros where there were none, haloing every button and punching holes in dark artwork. The
+converter replicates whole pixels instead, which cannot invent a colour that was not already there.
+
+That reframes the standing problem. It is not that the menus cannot follow a resolution; it is that
+stretching their textures through the wrong filter looks bad, which is why `MenuScale` ships at 0.
+A runtime upscaler using the converter's own rule would have the same output with no conversion step
+and no resolution lock, and `menu_preview.c` already does exactly that for the four previews.
+
+Two things this has NOT established, and they are the next measurements rather than conclusions.
+What draws the front end's backdrop, which is thought to be a 3-D room rather than a bitmap and was
+not seen on either path. And whether converting the artwork changes the sprite sizes, which would
+confirm the quads are drawing the converted textures; that needs the same census run against an
+installation that has some.
 
 ## Why `FitWindowToMode` is off by default
 

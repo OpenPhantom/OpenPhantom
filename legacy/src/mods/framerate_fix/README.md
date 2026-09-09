@@ -157,3 +157,40 @@ only the cost per call.
 
 The rest of this DLL is accepted in game too, in the v0.4.1 build, which was played through by
 hand.
+
+## The offset has to be dropped where the level opens
+
+The rebase banks time: it takes a power of two off both simulation clocks, so their difference
+survives bit for bit, and adds the same amount back to the world clock so absolute time is
+preserved. That addition happens in the `bapmap_setWorldClock` hook, which the engine calls twice
+per substep.
+
+The engine zeroes both clocks itself when a level opens. The banked offset has to go with them, or
+the new level's world clock starts at the previous level's duration. That was already handled, but
+in the wrong place: the check ran once a frame at frame end, and by then the opening frame's
+substeps had already been handed `time + offset`.
+
+**What that cost.** The world clock began the new level two seconds in, while every mover had just
+been primed with a `timeBase` near zero. A mover's step is `now` minus the time it last ticked, so
+each one swallowed the whole banked offset on its first tick. Movers at rest absorbed it invisibly.
+A platform in mid journey crossed its entire gap in a single frame and left the characters standing
+where the save had put them.
+
+Measured on a Coruscant quicksave that reproduced it reliably: 59 movers each about to step
+2.031 s in one tick, and none at all once the offset was dropped in time.
+
+The detection now runs inside the world clock hook, before the addition, which is where a level
+actually opens. The frame end check is kept as well, for a level that opens without the substep
+loop running at all. Nothing about the rebase itself changed, so during a level not one float
+differs; only the first instant of a new one does, and there it starts from zero as this feature
+always intended.
+
+The boundary line in the log is the evidence either way. It used to report `0 s` of accumulated
+offset, not because there was none but because the substeps had already spent it. It now reports
+what was really banked, 4, 6, 18 and 28 seconds across a session.
+
+### Testing status
+
+Played, with the fix on and the feature on. The quicksave that failed every few loads now holds,
+the diagnostic mover observer reports no oversized steps, and the stutter this feature exists to
+prevent stayed away over several minutes of ordinary play, which is the part only an eye can judge.

@@ -168,6 +168,36 @@ typedef struct sim_clock_state {
 
 static sim_clock_state_t sim_state;
 
+/* The engine zeroes both clocks itself when a level opens, at 0x00475621 and 0x0047562B, and an
+ * offset carried across that boundary would make the new level's world clock start at the previous
+ * level's duration. A clock that went backwards is that event, and nothing else here can make it go
+ * backwards.
+ *
+ * WHERE this runs is a defect that shipped. It used to run only at frame end, and the
+ * substeps of the opening frame had already been handed time + offset by the hook below. The world
+ * clock therefore started the new level two seconds in, while every mover had just been primed with
+ * a timeBase near zero. A mover's step is now minus the time it last ticked, so each one swallowed
+ * the entire banked offset on its first tick. Movers at rest absorbed it invisibly; a platform in
+ * mid journey crossed its whole gap in a single frame and left the characters standing in the air.
+ * Measured on a Coruscant quicksave: 59 movers each stepping 2.031 s at once, and none at all once
+ * the offset was dropped in time. So both callers use this, and the hook calls it first. */
+static void drop_offset_if_level_opened(void)
+{
+    float live = *sim_state.time;
+
+    if (!(live < sim_state.last_seen)) {
+        return;
+    }
+    ++sim_state.resets;
+    log_info("the simulation clock went backwards, %.3f s to %.3f s, so a level has opened "
+             "(level boundary %u, %u rebases so far). The %.0f s of accumulated offset is dropped "
+             "and the world clock restarts with the level.",
+             (double)sim_state.last_seen, (double)live, (unsigned)sim_state.resets,
+             (unsigned)sim_state.rebases, sim_state.offset);
+    sim_state.offset    = 0.0;
+    sim_state.last_seen = live;
+}
+
 /* The world must never see the rebase, so the offset goes back on before the engine writes its
  * clock and its millisecond tick. */
 static void __cdecl hook_set_world_clock(void *world, float time)
@@ -178,6 +208,12 @@ static void __cdecl hook_set_world_clock(void *world, float time)
         original(world, time);
         return;
     }
+
+    /* Before the addition, and inside the substep loop, because this is where a level actually
+     * opens. Everything the opening frame ticks then reads a world clock that restarts with the
+     * level rather than one carrying the last level's duration. */
+    drop_offset_if_level_opened();
+
     original(world, (float)((double)time + sim_state.offset));
 }
 
@@ -210,22 +246,11 @@ void sim_clock_sample(void)
     if (!sim_state.active) {
         return;
     }
-    live = *sim_state.time;
+    /* Still checked here as well as in the hook. A level that opens without the substep loop
+     * running would otherwise leave the offset banked until the loop resumed. */
+    drop_offset_if_level_opened();
 
-    /* The engine zeroes both clocks itself when a level opens, at 0x00475621 and 0x0047562B, and an
-     * offset carried across that boundary would make the new level's world clock start at the
-     * previous level's duration. The reconstructed time would then grow with the session rather
-     * than with the level, which is the opposite of what this feature is for. A clock that went
-     * backwards is that event, and nothing else here can make it go backwards. */
-    if (live < sim_state.last_seen) {
-        ++sim_state.resets;
-        log_info("the simulation clock went backwards, %.3f s to %.3f s, so a level has opened "
-                 "(level boundary %u, %u rebases so far). The %.0f s of accumulated offset is "
-                 "dropped and the world clock restarts with the level.",
-                 (double)sim_state.last_seen, (double)live, (unsigned)sim_state.resets,
-                 (unsigned)sim_state.rebases, sim_state.offset);
-        sim_state.offset = 0.0;
-    }
+    live = *sim_state.time;
     sim_state.last_seen = live;
 
     step = sim_clock_rebase_step(live);

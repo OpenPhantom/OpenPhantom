@@ -5,9 +5,10 @@
  * harder to answer, not easier. They also behave unlike anything in Utilities. Four of them are one
  * choice rather than four switches, and two of them cannot take effect until the game is restarted.
  *
- * Like every other row that reaches out of this DLL, these write the settings file and nothing
- * else. enhanced_resolution owns the window and re-reads those keys about once a second, which is
- * what makes a choice here take effect while the game runs. See window_poll.h for the other half.
+ * Like every other row that reaches out of this DLL, these write the settings file. The keys are
+ * in the [enhanced_resolution] section: WindowMode, WindowedPresent, WindowedWidth,
+ * WindowedHeight, WindowedFill, PointerReleaseKey and FullscreenToggleKey. That DLL owns the
+ * window and re-reads them about once a second, so a choice here takes effect within that second.
  * Nothing here calls into that DLL, because feature DLLs in this tree do not depend on each other.
  */
 #ifndef DEV_OVERLAY_OVERLAY_WINDOW_H
@@ -36,7 +37,11 @@ void overlay_window_reset(void);
 void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
                         overlay_row_t *out);
 
+/* Always false: nothing in this group is typed into. Nothing calls it either, the same as the
+ * matching test in the Utilities group. */
 bool overlay_window_row_is_value(uint32_t slot);
+
+/* True for the two binding rows. Takes a slot as this group numbers it. */
 bool overlay_window_row_is_key(uint32_t slot);
 
 /* Flips a switch, or picks a mode. The four mode rows are a CHOICE and not four switches: turning

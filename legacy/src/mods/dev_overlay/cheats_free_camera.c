@@ -205,7 +205,7 @@ static bool    freecam_hotkey_was_down;
 
 /* How far above the player the camera may be and still bring them to it, in world units.
  *
- * MEASURED AGAINST THE PLAYER, NOT PROBED UNDER THE CAMERA, and that is the correction. The
+ * Measured against the PLAYER, never probed under the camera. This was a correction. The
  * first version of this asked the engine's floor probe what was under the camera. That probe is
  * scoped to the cell its point sits in, and a camera flown above the level is in no cell, so it
  * answered "no floor" for solid ground and the teleport was refused almost every time it was
@@ -278,7 +278,7 @@ static void __cdecl hook_camera_update(void)
              * left, which is the point of the key. The follow camera needs nothing either way:
              * the very next updateCam recomputes it from the player, wherever the player now is.
              *
-             * NOTHING IS REFUSED HERE, AND THAT IS A CORRECTION. A floor test was added and then
+             * Nothing is refused here, and that was a correction. A floor test was added and then
              * taken back out. It asked the engine's own probe whether there was ground under the
              * camera and declined the teleport when there was not, or when the drop was over
              * eighty units. Both refusals fired constantly in ordinary use, because that probe is
@@ -324,8 +324,8 @@ static void __cdecl hook_camera_update(void)
                 }
 
                 if (player != NULL) {
-                    /* BOTH copies of the position, and this is the whole of why dropping from
-                     * height did not work. Plr_CommitPose (0x0044C06B) opens with
+                    /* BOTH copies of the position. Dropping from height did not work because
+                     * only one was written. Plr_CommitPose (0x0044C06B) opens with
                      *
                      *     if (pPlayer+0xA0 != 0) { +0x118 = +0x124; ... }
                      *
@@ -402,9 +402,9 @@ static void __cdecl hook_camera_update(void)
 
     if (!freecam_valid) {
         /* Rising edge: seed POSITION from wherever the camera already is, so switching on never
-         * snaps the view, and pause the simulation; see sim_pause.h for why
-         * this one flag is enough to stop the player and the whole world simulating out from
-         * under a camera that is no longer looking through the player's own eyes. */
+         * snaps the view, and pause the simulation. One flag is enough to stop the player and
+         * the whole world simulating out from under a camera that is no longer looking through
+         * the player's own eyes. */
         freecam_teleport_pending = false;
         freecam_return_was_down  = (GetAsyncKeyState(FREECAM_RETURN_KEY) & 0x8000) != 0;
         freecam_x = *(float *)((uint8_t *)view + CAMERA_ANCHOR_X_OFFSET);
@@ -538,9 +538,8 @@ static void __cdecl hook_camera_update(void)
         /* Mouse look: cursor-delta polling rather than enhanced_input's own raw-input thread.
          * Reusing that thread would mean either reaching into another mod's DLL (this project's
          * mods do not depend on each other) or duplicating its hard-won shim workaround for
-         * WMAIN.EXE's own application-compatibility fix (see raw_mouse.c's own header comment) -
-         * both worse than the jitter this simpler path accepts for what is a debug camera, not
-         * competitive aim. */
+         * WMAIN.EXE's own application-compatibility fix. Both are worse than the jitter this
+         * simpler path accepts for what is a debug camera, not competitive aim. */
         if (GetCursorPos(&cursor_now)) {
             long dx = cursor_now.x - freecam_cursor_anchor.x;
             long dy = cursor_now.y - freecam_cursor_anchor.y;
@@ -615,11 +614,10 @@ static void __cdecl hook_camera_update(void)
         }
 
         /* Scroll wheel adjusts fly speed, the same feel Blender's own fly/walk navigation uses.
-         * overlay_input.c observes WM_MOUSEWHEEL unconditionally (panel open or closed) precisely
-         * because this needs it while FLYING, which is exactly when the panel is closed; see that
-         * file's own comment for how it confirmed the message actually reaches its hook (the
+         * WM_MOUSEWHEEL is observed unconditionally, panel open or closed, because this needs it
+         * while FLYING and the panel is closed then. The message does reach the hook: the
          * engine's top-level window procedure special-cases only four message types and falls
-         * through to the same registered-handler chain for everything else, wheel included).
+         * through to the same registered-handler chain for everything else, wheel included.
          * Multiplicative per notch rather than additive, so the same scroll feels proportionate
          * whether the current speed is barely-crawling or already fast. wheel_source is NULL if
          * dev_overlay.c never wired it in (its own site did not resolve), and then this simply never
@@ -664,7 +662,7 @@ static void __cdecl hook_camera_update(void)
          * FUN_004190c1 -> FUN_00418349): its translation is worldX += dx*cos(yaw)-dy*sin(yaw),
          * worldY += dx*sin(yaw)+dy*cos(yaw), which for pure forward (dx=0,dy=1) gives exactly
          * (-sin(yaw), cos(yaw)), matching the formula above at pitch=0. Two independent sites
-         * agree, which is what "confirmed" means in this file rather than "guessed once more". */
+         * agree. That is what "confirmed" means in this file. */
         {
             float forward = 0.0f;
             float strafe  = 0.0f;

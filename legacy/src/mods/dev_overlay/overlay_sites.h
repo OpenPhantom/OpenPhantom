@@ -1,4 +1,4 @@
-/* overlay_sites.h: every engine entry point the panel draws through, and nothing else.
+/* overlay_sites.h: every engine entry point the panel draws through.
  *
  * Split from the painting because they are two jobs and the file had grown past what this project
  * allows: one half is byte evidence and pattern matching, the other is layout and colour. Neither

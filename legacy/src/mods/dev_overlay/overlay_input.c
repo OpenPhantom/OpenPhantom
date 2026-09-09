@@ -226,7 +226,7 @@ static overlay_input_state_t input_state;
 
 /* ============================================================================================ */
 
-/* THE MODAL CELL IS NOT TOUCHED, AND THAT IS A CORRECTION.
+/* The modal cell is NOT touched, and that is a correction.
  *
  * It was raised here on the belief that it is what makes the engine stop listening. A byte census
  * says otherwise on both counts. The cell at the operand this file resolves has exactly three
@@ -337,7 +337,7 @@ void overlay_input_update_scroll(void)
 
 /* How often a drag is allowed to write, in milliseconds.
  *
- * THE THROTTLE IS THE WHOLE REASON A DRAG IS USABLE. The only channel between this DLL and the one
+ * Without the throttle a drag is unusable. The only channel between this DLL and the one
  * that owns the setting is the settings file, and writing a key rewrites the file, which here is
  * around ninety kilobytes. At sixty frames a second that is five megabytes a second of file
  * traffic for one dragged handle, and the stutter it causes would be blamed on the setting being

@@ -1,4 +1,4 @@
-/* overlay_sites.c: every engine entry point the panel draws through, and nothing else.
+/* overlay_sites.c: every engine entry point the panel draws through.
  *
  * ==============================================================================================
  * THE SITES, AND HOW EACH ONE WAS ESTABLISHED
@@ -21,8 +21,7 @@
  *   0043946A  83 C4 18                 add esp,0x18        ; 24 bytes, so cdecl with six arguments
  *
  * That the engine passes it `(u32)alpha << 24` for the letterbox fade is where the alpha comes
- * from: this is a blended shape, not a solid one, which is the whole reason the panel can be read
- * through.
+ * from: this is a blended shape rather than a solid one, so the panel can be read through.
  *
  * THE TEXT. The font layer sits at 0x0046AFA0 to 0x0046B7B0 and keeps sixteen font slots. Three
  * calls are made into it, select, colour and draw, and one cell is read rather than called. The

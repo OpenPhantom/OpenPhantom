@@ -27,7 +27,7 @@
  * the first face that blocks, or NULL for nothing in the way. So the whole cheat is one answer:
  * for the player's own blocking probes, nothing is in the way.
  *
- * That is the whole of the collision answer. There is a second, separate piece below, the glide,
+ * That is the collision answer. There is a second, separate piece below, the glide,
  * which exists because being able to walk through a wall is not much use if the far side drops
  * the player out of the world.
  *
@@ -639,7 +639,7 @@ void cheats_noclip_tick(void)
 
 /* Veto nothing while the cheat is on.
  *
- * The whole function is a veto and nothing else: it decides whether the horizontal move the
+ * The whole function is a veto: it decides whether the horizontal move the
  * previous phase built is allowed to stand, and if it is, it does nothing at all. So declining to
  * run it is exactly "allow the move", with no state left half-written and nothing to undo, rather
  * than the suppression of a phase that also had other work to do. That distinction is the entire

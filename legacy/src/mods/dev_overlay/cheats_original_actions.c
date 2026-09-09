@@ -171,9 +171,9 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
 #define MSG_DURATION_BITS    0x40800000   /* 4.0f's bit pattern, the seconds every message shows for */
 
 /* String operands, for the three codes too short for the image's own string analysis to have
- * named on its own (see cheats_original.c's MAX_NAME_LENGTH note: nothing stops a SHORT string
- * being missed the other way, by never being catalogued as one at all). Read live rather than
- * guessed, the same reason nothing here is a hardcoded address. */
+ * named on its own. Nothing stops a SHORT string being missed the other way, by never being
+ * catalogued as one at all. Read live rather than guessed, the same reason nothing here is a
+ * hardcoded address. */
 #define OP_DEBUG_CODE_TEXT           0x2E3u
 #define OP_GRAPHICS_DETAIL_CODE_TEXT 0x38Eu
 #define OP_RED_HIGHLIGHT_CODE_TEXT   0x43Bu

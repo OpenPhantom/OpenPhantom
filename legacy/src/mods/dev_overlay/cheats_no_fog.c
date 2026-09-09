@@ -108,8 +108,8 @@ _Static_assert(sizeof(SIG_LEVEL_POINTER) == sizeof(MSK_LEVEL_POINTER),
 #define WORLD_FOG_END            0x21Cu  /* float, world units; own authored band without asking */
 #define WORLD_PROBE_SIZE         (WORLD_FOG_END + sizeof(float))
 
-/* Comfortably past the world walk's own draw-distance clamp of [2,64] world units (0x00404F33,
- * documented in fog_regime.c's clamp_cut); nothing the renderer still has in view at these depths,
+/* Comfortably past the world walk's own draw-distance clamp of [2,64] world units, at
+ * 0x00404F33. Nothing the renderer still has in view at these depths,
  * so the per-vertex ramp never finds anything left to fog. Not an astronomical number: the ramp's
  * own math divides by the band width, and keeping this within a few thousand units leaves that
  * comfortably inside float32's precision. */

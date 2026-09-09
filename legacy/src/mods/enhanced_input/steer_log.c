@@ -1,5 +1,6 @@
 #include "steer_log.h"
 
+#include "pad_stick.h"
 #include "player_record.h"
 #include "steer_lean.h"
 
@@ -57,7 +58,7 @@ static float read_float(const uint8_t *record, int offset)
 }
 
 void steer_log_substep(const uint8_t *record, steer_branch_t branch, float substep_seconds,
-                       float yaw_degrees, float travel_degrees, int mode_index)
+                       float yaw_degrees, float travel_degrees, int mode_index, unsigned flags)
 {
     steer_lean_report_t lean;
     uint32_t            move_input;
@@ -100,10 +101,20 @@ void steer_log_substep(const uint8_t *record, steer_branch_t branch, float subst
         return;
     }
 
-    log_info("steer #%d %s mode=%d sub=%.5f yaw=%+.3f travel=%+.1f | lean %s chest=%u head=%u "
+    /* The stick itself, because every question this instrument gets asked about a pad starts with
+       what the player was actually pushing. Read here rather than passed in: these are the same
+       accessors the steer path reads, they answer for the substep just taken, and threading two
+       more arguments through three call sites to say the same thing would be worse. */
+    log_info("steer #%d %s mode=%d sub=%.5f pad=%d x=%+.3f y=%+.3f hb=%d drv=%d stand=%d "
+             "strafe=%d drive=%+.3f yaw=%+.3f travel=%+.1f | "
+             "lean %s chest=%u head=%u "
              "rate=%+.1f used=%+.2f wroteHead=%d wroteChest=%d claim=%.3f | move=0x%02X "
              "speed=%+.2f wheel=%+.2f | fire A=%.2f B=%.2f",
              log_state.substep, branch_name(branch), mode_index, (double)substep_seconds,
+             pad_stick_is_active() ? 1 : 0, (double)pad_stick_x(), (double)pad_stick_y(),
+             (flags & STEER_FLAG_HAND_BACK) ? 1 : 0, (flags & STEER_FLAG_PAD_DRIVING) ? 1 : 0,
+             (flags & STEER_FLAG_STAND_MODE) ? 1 : 0, (flags & STEER_FLAG_STRAFE) ? 1 : 0,
+             (double)read_float(record, PLAYER_MOVE_DRIVE),
              (double)yaw_degrees, (double)travel_degrees,
              lean.status, (unsigned)lean.chest_node, (unsigned)lean.head_node,
              (double)lean.raw_rate, (double)lean.applied_rate,

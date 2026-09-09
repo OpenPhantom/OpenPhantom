@@ -380,6 +380,18 @@ void strafe_walk_apply_stick_move(uint8_t *record, float forward, float strafe)
 
     *(uint32_t *)(record + PLAYER_MOVE_INPUT) = move_input;
 
+    /* NO BIT MEANS NO DRIVE, and this has to be written rather than left alone. The engine's own
+     * read of the pad has already put a drive there from its own axis, so leaving it standing is
+     * not neutral. Without this the player accelerates with the standing animation playing and
+     * slides across the floor: no clip is chosen, because no move bit is set, but the speed delta
+     * is applied anyway. Reachable whenever the stick is live and neither component asks to move,
+     * which is a sideways push with the sideways walk off, and the same push on a level that owns
+     * its own camera. */
+    if ((move_input & 3u) == 0u) {
+        write_field(record, PLAYER_MOVE_DRIVE, 0.0f);
+        return;
+    }
+
     /* THE DRIVE CARRIES THE SIGN, and leaving it positive for a backward push is a whole broken
      * half of the stick. The engine writes dtScale30 * 0.6 * axis with a SIGNED axis, and that sign
      * is what takes curSpeed negative; the backward move bit only chooses the clip and the speed

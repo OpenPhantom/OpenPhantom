@@ -39,6 +39,16 @@
  * rendered frame and hands a share of the bank over here, and taking it is what marks a substep as
  * having consumed, so it is done unconditionally, at the very top, before any gate can return.
  * ============================================================================================ */
+/* Measurement only. Which gates the substep passed, for the steer log; these decide between the
+   walk being ours and the walk being the engine's, and no number in the line shows them. */
+static unsigned steer_log_flags(bool hand_back, bool pad_driving, bool stand_mode)
+{
+    return (hand_back ? STEER_FLAG_HAND_BACK : 0u) |
+           (pad_driving ? STEER_FLAG_PAD_DRIVING : 0u) |
+           (stand_mode ? STEER_FLAG_STAND_MODE : 0u) |
+           (input_config()->strafe ? STEER_FLAG_STRAFE : 0u);
+}
+
 void __cdecl enhanced_input_steer_thunk(void)
 {
     uint8_t *record = player_sites_record(&input_state.sites);
@@ -180,7 +190,8 @@ void __cdecl enhanced_input_steer_thunk(void)
          * signal of its own to the camera: the bank is empty either way, and the last step's mouse
          * turn is paid back out by the engine's interpolation over the following step, so the
          * camera glides onto the body rather than snapping onto it. */
-        steer_log_substep(record, STEER_BRANCH_DECLINED, substep_seconds, 0.0f, 0.0f, mode_for_log);
+        steer_log_substep(record, STEER_BRANCH_DECLINED, substep_seconds, 0.0f, 0.0f, mode_for_log,
+                          steer_log_flags(false, false, stand_mode));
         return;
     }
 
@@ -215,7 +226,7 @@ void __cdecl enhanced_input_steer_thunk(void)
          * nothing to say about leaves the engine's own numbers exactly as they were, which is what
          * keeps the keyboard, and a pad the player has bound by hand, working unchanged. */
         pad_driving = pad_stick_take_substep(record, stand_mode, input_config()->strafe_invert,
-                                             &pad_strafe, &pad_forward);
+                                             input_config()->strafe, &pad_strafe, &pad_forward);
         if (pad_driving) {
             strafe = pad_strafe;
         }
@@ -318,7 +329,8 @@ void __cdecl enhanced_input_steer_thunk(void)
         input_state.steer_ran_this_substep = true;
         input_state.pending_valid          = true;
         steer_log_substep(record, STEER_BRANCH_FREE_LOOK, substep_seconds, mouse_step,
-                          input_state.pending_travel_degrees, mode_for_log);
+                          input_state.pending_travel_degrees, mode_for_log,
+                          steer_log_flags(hand_back, pad_driving, stand_mode));
         return;
     }
 
@@ -437,6 +449,7 @@ void __cdecl enhanced_input_steer_thunk(void)
     steer_log_substep(record, input_config()->mouse_look ? STEER_BRANCH_MOUSE_LOOK
                                                          : STEER_BRANCH_PASSIVE,
                       substep_seconds, input_state.pending_yaw_degrees,
-                      input_state.pending_travel_degrees, mode_for_log);
+                      input_state.pending_travel_degrees, mode_for_log,
+                      steer_log_flags(hand_back, pad_driving, stand_mode));
 }
 

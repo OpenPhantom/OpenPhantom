@@ -1023,6 +1023,49 @@ The claim now expires if the damper has not run for eight substeps, a quarter of
 longer than the whole settle and far longer than any gap it leaves while it is genuinely running.
 Nothing is lost by dropping it, because the next substep that drives a strafe opens a new one.
 
+## The left stick ran you forward when you only asked it to turn
+
+With the sideways walk off, pushing the stick left or right steered correctly and ran the player
+straight ahead at the same time. The steering was never the problem; the forward motion was not
+asked for.
+
+Two separate causes, and fixing only the first made it worse.
+
+**The move bit.** `strafe_walk_apply_stick_move` sets the walk-forward bit for a sideways push that
+carries no forward component, deliberately, so that the drive does not decay while the travel angle
+points sideways. That is right with the sideways walk on, where there is a travel angle to redirect
+the drive. With it off there is none, so the bit and the drive went straight ahead. The sideways
+deflection is now withheld from that writer when the sideways walk is off. The handback path for a
+level owning its own camera has always done the same.
+
+**The drive.** Clearing the bit alone left the player sliding across the floor in the standing pose.
+The engine's own read of the pad had already written a speed delta, and the drive write at the end
+of that function was unconditional, so removing the bit removed the animation and left the
+acceleration. The drive is now written as zero whenever neither move bit is set. That also settles
+the same slide on a level that owns its camera, where a pure sideways push has always taken this
+route.
+
+### What the log showed
+
+`SteerLog` was the instrument, and it now names the stick and the three gates as well as the angles,
+because none of that could be worked out from the numbers afterwards. A full left push with the
+sideways walk off, before the fix:
+
+    pad=1 x=-0.942 y=-0.336 hb=0 drv=1 stand=1 strafe=0
+    drive=+0.563 travel=+0.0 move=0x09 speed=+3.50
+
+`drive=+0.563` is the same number a full forward push writes, `move=0x09` carries the walk-forward
+bit, and `speed` had climbed to the 3.50 run cap while the stick asked for nothing forward. `drv=1`
+is what said the bit was ours rather than the engine's, and `travel=+0.0` is correct with the
+sideways walk off, so there was nothing to turn the drive sideways.
+
+### Testing status
+
+Played, and confirmed against the PlayStation release directly: with the sideways walk off the left
+stick now behaves exactly as it does there. Sideways turns on the spot, forward walks, a diagonal
+walks while turning. With the sideways walk on nothing changed, because the sideways value is passed
+exactly as before.
+
 ## Testing status
 
 Built and linked with the configured 32-bit MSVC toolchain, `/W4 /WX` clean. Three builds of this

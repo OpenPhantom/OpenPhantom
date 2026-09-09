@@ -101,7 +101,7 @@ float pad_stick_magnitude(void);
  * where the RAW component is wanted instead, as free look's own travel angle does, since a body
  * that faces its travel has no backward case to protect. */
 bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert,
-                            float *out_strafe, float *out_forward);
+                            bool sideways_walk, float *out_strafe, float *out_forward);
 
 /* The same stick, spent the way the SHIPPED GAME spends it: sideways turns, forward walks.
  *

@@ -225,7 +225,7 @@ void pad_stick_poll(void)
 #define PAD_BACKWARD_THRESHOLD 0.35f
 
 bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert,
-                            float *out_strafe, float *out_forward)
+                            bool sideways_walk, float *out_strafe, float *out_forward)
 {
     float forward;
     float strafe;
@@ -242,7 +242,16 @@ bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert
     }
     strafe = pad_stick_x();
 
-    strafe_walk_apply_stick_move(record, forward, strafe);
+    /* The move bits hear about the sideways deflection only when something is going to turn the
+     * travel angle to match it. With the sideways walk off nothing does, and a sideways push then
+     * set the walk-forward bit and full forward drive with nothing to redirect them: the stick
+     * steered correctly, through the engine's own turn, and ran the player straight ahead at the
+     * same time. Measured at a full left push with the sideways walk off: move bit 0 set, drive
+     * 0.563, the same number a full forward push writes, and speed climbing to the 3.50 run cap
+     * while the stick asked for no forward at all.
+     *
+     * The handback path below has always passed a zero here, for this reason. */
+    strafe_walk_apply_stick_move(record, forward, sideways_walk ? strafe : 0.0f);
 
     *out_forward = forward;
     *out_strafe  = strafe_invert ? -strafe : strafe;

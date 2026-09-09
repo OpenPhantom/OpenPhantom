@@ -28,7 +28,14 @@ void steer_log_configure(int max_lines);
 
 /* Called once per substep from the phase-2 thunk, after everything else has run, so the values are
  * the ones that were really written. `record` may be NULL. */
+/* Which of the three gates the substep passed, as a bitmask. These decide between the walk being
+ * ours and the walk being the engine's, and no number in the line shows them. */
+#define STEER_FLAG_HAND_BACK   0x1u
+#define STEER_FLAG_PAD_DRIVING 0x2u
+#define STEER_FLAG_STAND_MODE  0x4u
+#define STEER_FLAG_STRAFE      0x8u
+
 void steer_log_substep(const uint8_t *record, steer_branch_t branch, float substep_seconds,
-                       float yaw_degrees, float travel_degrees, int mode_index);
+                       float yaw_degrees, float travel_degrees, int mode_index, unsigned flags);
 
 #endif /* STEER_LOG_H */

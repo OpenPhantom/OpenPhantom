@@ -193,6 +193,10 @@ add_unit_test(menu_patcher "")
 # The chained detours actually get installed and called through here, on a page of machine code the
 # test writes itself. The property that matters cannot be seen in the struct fields: a second
 # detour that copied the first one's branch would report success and then loop forever.
+# The write guards: the range check and the read back. It writes into the test process rather
+# than the game, which is enough to prove a refusal refuses and a write lands.
+add_unit_test(patch "")
+
 add_unit_test(detour "")
 
 # The pattern matcher every patch in the project stands on.

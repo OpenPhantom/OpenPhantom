@@ -13,6 +13,11 @@
  *
  *   3. read the target of a CALL, do not assume it. patch_read_call_target() checks the E8 opcode
  *      before it believes the displacement.
+ *
+ *   4. READ BACK what was written. patch_write_bytes() compares the range against the bytes it
+ *      was given and refuses when they differ, putting the original back. A feature that
+ *      reports itself installed and then does nothing is the failure that looks most like
+ *      success.
  */
 #ifndef COMMON_PATCH_H
 #define COMMON_PATCH_H
@@ -36,6 +41,16 @@ const char *patch_result_text(patch_result_t result);
  * readable rather than faulting. */
 bool patch_validate_bytes(uintptr_t address, const uint8_t *expected_bytes, size_t size);
 
+/* Writes `size` bytes at `address` and confirms they are there afterwards.
+ *
+ * Refuses without touching anything when the range is not one this process owns, and says so as a
+ * bad range rather than as a protection failure. That is what the caller used to be told, and it
+ * reads as a permissions problem. No VirtualQuery is spent asking: the protection change refuses
+ * such a range itself, and this path is one the engine can drive.
+ *
+ * Answers PATCH_RESULT_WRITE_FAILED when the bytes do not read
+ * back, restoring what was there first; a write longer than this keeps a copy of is still checked
+ * but cannot be undone, and the log says which happened. */
 patch_result_t patch_write_bytes(uintptr_t address, const void *data, size_t size);
 patch_result_t patch_write_u8 (uintptr_t address, uint8_t  value);
 patch_result_t patch_write_u32(uintptr_t address, uint32_t value);

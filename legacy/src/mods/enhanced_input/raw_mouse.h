@@ -57,7 +57,7 @@
  *     contained rather than by its duration. It cannot be done from a sum.
  *   - the simulation consumes at a fixed 32 Hz, so a device reporting at 125 Hz delivers three or
  *     four whole reports per consumed interval no matter what the render rate does. That is a
- *     frame-rate-invariant wobble, which is exactly the shape the field reported, and it is the one
+ *     frame-rate-invariant wobble, exactly the shape the field reported, and it is the one
  *     surviving candidate that a frame rate cap could not have removed.
  *   - and the report rate itself is not knowable any other way. Counting packets here measures it
  *     directly, which turns the remaining question from an argument into a number.

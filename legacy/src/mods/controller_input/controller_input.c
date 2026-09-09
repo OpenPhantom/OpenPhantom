@@ -6,7 +6,7 @@
  * Win32, on this DLL's own dedicated background thread rather than common/frame_hook.h's usual
  * once-per-rendered-frame site.
  *
- * THAT IS A DELIBERATE DEPARTURE FROM THIS PROJECT'S USUAL PATTERN, AND HERE IS WHY. The first
+ * That is a deliberate departure from this project's usual pattern, and here is why. The first
  * build of this feature used frame_hook, like every other per-frame need in this tree. Look worked
  * immediately. Skipping a playing movie with Start never did, on any test. The reason: fmv_player's
  * own movie playback (vlc_playback.c) runs a dedicated `for (;;)` pump loop on the game's own
@@ -56,7 +56,7 @@
  * real milliseconds instead, since this thread has nothing to do with frames any more. */
 #define ESCAPE_HOLD_MS 60u
 
-/* Radial deadzone, applied to the magnitude of the stick vector rather than per axis, which is what
+/* Radial deadzone, applied to the magnitude of the stick vector rather than per axis, as
  * Microsoft's own XInput documentation recommends: a per-axis deadzone leaves a square dead region
  * that still lets a small diagonal push through on both axes at once. 0.24 is close to
  * XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE (8689 of 32767, about 0.265) rounded to a plainer default. */
@@ -219,7 +219,7 @@ static void synthesize_pause_press(void)
 /* Whether this game's movement/roll keys are read through WM_KEYDOWN, GetAsyncKeyState or
  * DirectInput's own polled keyboard state has not been confirmed the way Escape's path was; this
  * game's use of a dinput.dll loader in the first place is evidence DirectInput reads at least some
- * of its input, which is a real, different question from the two paths Escape was proven to
+ * of its input; that is a real and different question from the two paths Escape was proven to
  * reach. Field-test before trusting this. */
 static void set_alt_held(bool want_held)
 {
@@ -241,8 +241,8 @@ static void set_alt_held(bool want_held)
 /* One tap: down, held for ROLL_TAP_DOWN_MS, then up, blocking this thread only, the same shape
  * synthesize_pause_press already uses for Escape. The arrow keys are extended keys on a real
  * keyboard (the block they share a physical position with is the numeric keypad), and
- * KEYEVENTF_EXTENDEDKEY is what tells the receiving code which one a synthesised press means, the
- * same way a real keyboard's own scan code would. */
+ * KEYEVENTF_EXTENDEDKEY tells the receiving code which one a synthesised press means, the same
+ * way a real keyboard's own scan code would. */
 static void synthesize_roll_tap(WORD vk)
 {
     INPUT input;
@@ -304,10 +304,11 @@ static void handle_roll_triggers(const XINPUT_GAMEPAD *pad, int threshold)
 
 /* Whether this game owns the foreground.
  *
- * WHY EVERY INJECTION IS GATED ON THIS. SendInput does not aim at a window, it goes to whatever has
- * focus. Without this check, a stick pushed while the game is alt tabbed moves the mouse in the
- * player's browser, a trigger fires Alt chords into it, and Start sends it an Escape. That is not a
- * quirk, it is this DLL typing into somebody else's application, and it shipped enabled by default.
+ * Why every injection is gated on this. SendInput does not aim at a window; it goes to whatever
+ * has focus. Without this check, a stick pushed while the game is alt tabbed moves the mouse in
+ * the player's browser, a trigger fires Alt chords into it, and Start sends it an Escape. That is
+ * not a quirk; it is this DLL typing into somebody else's application, and it shipped enabled by
+ * default.
  *
  * The foreground window's owning process is compared to this one rather than a HWND of our own
  * being tracked, which needs nothing set up anywhere else here. Byte for byte the same check
@@ -327,9 +328,9 @@ static bool is_game_foreground(void)
 
 /* Everything this thread might be holding down, released, and every edge it tracks reset.
  *
- * Called when the game does not own the foreground. RELEASING HAS TO HAPPEN ANYWAY, which is why
- * this is not simply an early return: a synthetic Alt left down belongs to whichever window has
- * focus now, and leaving it there is worse than anything the gate prevents. The audit that found
+ * Called when the game does not own the foreground. Releasing has to happen anyway, so this is not
+ * simply an early return: a synthetic Alt left down belongs to whichever window has focus now, and
+ * leaving it there is worse than anything the gate prevents. The audit that found
  * the missing gate found this alongside it, and it is the half that outlives the alt tab.
  *
  * The edges are recorded rather than cleared so that returning to the game with Start or a trigger
@@ -360,15 +361,14 @@ static void poll_once(void)
             ci_state.reported_absent = true;
             log_info("no XInput controller was found in slot %d, so the right stick, Start "
                      "and the triggers do nothing. That is not a fault in this patch and "
-                     "nothing further will be "
-                     "reported about it; a pad plugged in later is picked up on its own. "
-                     "Rechecked twice a second. "
+                     "nothing further will be reported about it; a pad plugged in later is "
+                     "picked up on its own. Rechecked twice a second. "
                      "If one is plugged in NOW then it is a pad this cannot see, because only "
                      "XInput devices are visible here. An XBOX pad works as it is; anything else "
                      "has to be presented as one. Add the game to Steam as a non-Steam game and "
-                     "launch it from there, which is what Steam Input does for almost any "
-                     "controller, or run something that emulates XInput such as DS4Windows for a "
-                     "PlayStation pad. Without one of those, an older or off-brand pad, a "
+                     "launch it from there, where Steam Input presents almost any controller as "
+                     "an XInput pad, or run something that emulates XInput such as DS4Windows "
+                     "for a PlayStation pad. Without one of those, an older or off-brand pad, a "
                      "PlayStation controller plugged straight in or a flight stick is invisible "
                      "here; the game's own Controls screen still reads those.",
                      ci_state.config.controller_index);

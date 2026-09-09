@@ -17,7 +17,7 @@
  *
  * Call it AFTER the controls screen has been patched: that screen is the other writer of these two
  * keys, and this only makes an edit from somewhere else arrive sooner. Losing the hook costs a
- * restart, which is what these settings did before, so it warns rather than refusing anything. */
+ * restart, as these settings did before, so it warns rather than refusing anything. */
 void input_switches_install(void);
 
 #endif /* INPUT_SWITCHES_H */

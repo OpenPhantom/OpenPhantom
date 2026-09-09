@@ -1,8 +1,8 @@
 /* input_config.c: the ini half of the input feature.
  *
  * No engine and no state that outlives a setting. Every number here is clamped on the way in, so a
- * finite pair of limits is what guarantees a finite setting, and a value that is not a number
- * becomes the minimum rather than poisoning whatever reads it.
+ * finite pair of limits guarantees a finite setting, and a value that is not a number becomes the
+ * minimum rather than poisoning whatever reads it.
  */
 #include "input_config.h"
 
@@ -25,8 +25,8 @@
 #define MAX_STRAFE_SETTLE_MS      1000.0f
 
 /* The engine's own steady-state turn rate for a held key, in degrees per second. Matching it rather
- * than picking a taste value is what makes "both features off" the original control scheme rather
- * than an approximation of it. The one difference is that ours is instant where the original ramps
+ * than picking a taste value keeps "both features off" the original control scheme rather than an
+ * approximation of it. The one difference is that ours is instant where the original ramps
  * over about a fifth of a second.
  *
  * The number is the engine's clamp on the turn cell, written as two immediates rather than loaded
@@ -134,7 +134,7 @@ void input_config_load(void)
     config.strafe_turns_body = ini_read_bool (INPUT_SECTION, "StrafeTurnsBody", true);
 
     /* Zero is a legitimate setting and means "no damping": the angle steps between 0, +-45 and
-     * +-90 the way it used to, which is what makes the two comparable in one build. */
+     * +-90 the way it used to, so the two are comparable in one build. */
     settle_ms = ini_read_float(INPUT_SECTION, "StrafeSettleMs", DEFAULT_STRAFE_SETTLE_MS);
     settle_ms = clamp_float(settle_ms, 0.0f, MAX_STRAFE_SETTLE_MS);
     config.strafe_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;

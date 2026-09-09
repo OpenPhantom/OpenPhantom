@@ -8,7 +8,7 @@
  * every one of these can be checked without the game running. Getting any of them wrong is
  * invisible until a camera is on screen:
  *
- *   * the OFFSET is the whole feature, the engine adds it to an interpolated heading, so it has
+ *   * the OFFSET is the whole feature: the engine adds it to an interpolated heading, so it has
  *     to be built against exactly the heading the engine is about to use;
  *   * the INPUT ANGLE is where the signed-speed trap lives. The sideways walk builds its angle in
  *     the frame of the drive because backward is a negative speed along an unchanged facing. Free
@@ -26,13 +26,14 @@
  * Bit 4 (fast lag) is deliberately NOT in the mask; it only shortens the damper and appears on
  * follow-shaped regions, so releasing on it would cost a camera that is perfectly steerable.
  *
- * BIT 2 is in the mask even though it leaves the camera in its follow state, and that is not
- * belt and braces. Bits 0, 1 and 3 each pick a camera family and set the camera object's state; bit
+ * BIT 2 is in the mask even though it leaves the camera in its follow state, and not as belt and
+ * braces. Bits 0, 1 and 3 each pick a camera family and set the camera object's state; bit
  * 2 only asks for a snap instead of a blend, and the arm it selects assigns the yaw offset the
  * region's authored yaw outright, LATER in the same call than the recentre and later than anything
  * we could write in front of it. Staying armed through a cut region would therefore have the engine
  * overwrite our value every frame and us overwrite the engine's every frame, which is a flicker
- * rather than a compromise. Releasing hands the cut to the engine whole, which is what a cut is. */
+ * rather than a compromise. Releasing hands the cut to the engine whole, and a cut is the
+ * engine's to make. */
 #define CAMERA_REGION_FIXED_MASK 0x0Fu
 
 /* The player module's own state word. Only 1 runs the phases, and the death arm is not 1, so this
@@ -79,7 +80,8 @@ typedef enum free_look_release {
     FREE_LOOK_RELEASE_PHASES_NOT_RUNNING,   /* no level, a parked player, or the death arm   */
     FREE_LOOK_RELEASE_MODE_UNKNOWN,
     FREE_LOOK_RELEASE_SCRIPT_FORCED_REGION, /* dialogue, the director, a set piece, a turret */
-    FREE_LOOK_RELEASE_SNAP_RUNNING,         /* level start, warp, new view, the frame after a load */
+    /* level start, warp, new view, the frame after a load */
+    FREE_LOOK_RELEASE_SNAP_RUNNING,
     FREE_LOOK_RELEASE_NO_CAMERA_OBJECT,
     FREE_LOOK_RELEASE_CAMERA_NOT_FOLLOW,    /* the author's camera family, seen on the object */
     FREE_LOOK_RELEASE_CAMERA_REGION,        /* the author's camera family, seen on the region */
@@ -106,13 +108,13 @@ bool free_look_release_is_authored_region(free_look_release_t reason);
  *
  * The engine's recentre has been running throughout the release, so the camera it hands back sits
  * somewhere between where the player left it and the region's authored home, and exactly where
- * depends on how many frames the release lasted, which is what makes an untreated release read as
- * "the camera rotated at random". Taking the wanted yaw back undoes that, but only while the engine
+ * depends on how many frames the release lasted, so an untreated release reads as "the camera
+ * rotated at random". Taking the wanted yaw back undoes that, but only while the engine
  * has not turned the camera further than `limit_degrees`: past that the swing is no longer a stolen
  * few degrees but a genuine re-aim, and snapping over it would be a jump of its own.
  *
  * `limit_degrees <= 0` (and NaN) switches the recovery off and the engine's angle is always taken,
- * which is what the feature did before this existed. */
+ * as the feature did before this existed. */
 bool free_look_recovers_wanted_yaw(float wanted, float engine_yaw, float limit_degrees);
 
 /* Into [0, 360) and into (-180, 180]. A value that is not a number passes through unchanged, so
@@ -126,7 +128,7 @@ float free_look_wrap180(float degrees);
 float free_look_interpolated_heading(float previous, float current, float alpha);
 
 /* The direction the player is asking to travel, relative to the camera, in degrees and POSITIVE
- * TO THE LEFT, the direction increasing heading turns.
+ * to the left, the direction increasing heading turns.
  *
  *   `strafe`   +1 right, -1 left, 0 none
  *   `forward`  +1 forward, -1 backward, 0 none

@@ -11,7 +11,7 @@
  * ACCUMULATES, so a held key climbs 12, 26, 42, 60, 80, 102, 120 and saturates the +-120 clamp in
  * seven substeps, about a fifth of a second. Chest 1.0 -> 10.0 deg, head 1.2 -> 12.0 deg.
  *
- * That climb is the engine's own ease-in, which is why nothing here damps the value a second time.
+ * That climb is the engine's own ease-in, so nothing here damps the value a second time.
  *
  * That is the body leading into a corner before the feet follow. Mouse look has to clear the turn
  * cell; it carries the mouse as well as the keys, so leaving it standing integrates the mouse a

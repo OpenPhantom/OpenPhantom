@@ -9,9 +9,10 @@
  * and this DLL adds a third term after that store, mouse look's per-frame view lead, which is
  * reported here as itself.
  *
- * Three terms, so a jump has three possible authors and printing all of them settles it. The line also carries
- * the raw inputs of the first term, because "the interpolated heading moved" has three quite
- * different causes and they are distinguishable only from headPrevious, headCurrent and the alpha:
+ * Three terms, so a jump has three possible authors and printing all of them settles it. The line
+ * also carries the raw inputs of the first term, because "the interpolated heading moved" has
+ * three quite different causes, distinguishable only from headPrevious, headCurrent and the
+ * alpha:
  *
  *   * both headings moved together        -> the body really turned that far
  *   * the headings barely moved           -> the alpha did it, and it left (0,1]
@@ -176,7 +177,7 @@ void camera_watch_sample(void)
 
     /* The two terms are printed beside the result they compose, so the line can be checked against
      * itself: wrap360(interp + offset) must be the yaw. Where it is not, the reader is looking at a
-     * third writer, and that is the finding. */
+     * third writer. That is the finding. */
     log_warning("CAMERA JUMP %+.1f deg in one frame -> yaw %.1f. interp %.1f = prev %.1f + "
                 "wrap180(cur %.1f, prev) * alpha %.3f, offset %.1f, view lead %+.2f. Region "
                 "%08X flags %02X, authored yaw %.1f. gOver %d, snap %d, camera state %d. Composed "

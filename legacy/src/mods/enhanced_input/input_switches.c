@@ -3,8 +3,8 @@
  * The seam taken here is the one enhanced_input.c had already measured and named: the block of
  * setters and availability queries the controls screen calls, plus the once-a-second re-read that
  * drives the same two setters from the file. Not one line of it patches a byte, reads a player
- * record or runs on a substep, which is what makes it a different responsibility from the phase
- * thunks it used to sit beside. The thunks were rejected as the seam for the opposite reason: they
+ * record or runs on a substep, so it is a different responsibility from the phase thunks it used
+ * to sit beside. The thunks were rejected as the seam for the opposite reason: they
  * read eleven fields of the install state between them.
  *
  * What this file needs from enhanced_input.c is three answers, and it asks for them rather than
@@ -118,12 +118,12 @@ void enhanced_input_set_camera_follow(bool enabled)
         return;
     }
 
-    /* THE DEPENDENCY IS NOT ENFORCED HERE, and the reason is worth keeping.
+    /* The dependency is not enforced here, and the reason is worth keeping.
      *
      * The passive camera is built on free look, so the two have to move together, and the obvious
      * place to do it is right here: ask free look to switch on before arming this. That was tried
-     * and it desynced. Free look REFUSES while the player phases are not running, which is exactly
-     * the state the game is in while the developer menu is open, so the one moment a player is ever
+     * and it desynced. Free look REFUSES while the player phases are not running, exactly the
+     * state the game is in while the developer menu is open, so the one moment a player is ever
      * going to tick this box is the one moment free look will not take it. The row then read ON
      * with the feature off, and the poll below had already recorded the new value so it never
      * retried.
@@ -132,10 +132,10 @@ void enhanced_input_set_camera_follow(bool enabled)
      * them in order once the phases are running again, using the refusal handling it already has.
      * What is left here is only the half that can never refuse. */
 
-    /* TWO HOLDERS OF ONE SETTING, and both have to be told. camera_follow.c owns the answer for
+    /* Two holders of one setting, and both have to be told. camera_follow.c owns the answer for
      * the sideways walk's own lean, and free_look.c keeps a copy of the same switch because it
      * reads it on the render clock, where reaching for the ini would be wrong. Telling only one
-     * of them is what made the developer menu's row look dead: it wrote the file, the file was
+     * of them made the developer menu's row look dead: it wrote the file, the file was
      * not read back, and the feature kept whatever it had been given at launch. */
     input_config_set_camera_follow(enabled);
     camera_follow_configure(enabled, input_config()->strafe,
@@ -243,7 +243,7 @@ void enhanced_input_set_free_look(bool enabled)
  * rest of the session.
  *
  * So a key this pass did NOT act on is re-read from the live setting afterwards, and a key it DID
- * act on is left alone. That is what keeps both halves true at once: the key that was just refused
+ * act on is left alone. That keeps both halves true at once: the key that was just refused
  * keeps its file-derived shadow and is not retried, and the key that was changed underneath us is
  * corrected. Only on a pass that acted, so an idle second still costs four reads and four compares.
  *
@@ -307,7 +307,8 @@ static void poll_switches(void)
 
     if (strafe != seen_strafe) {
         seen_strafe = strafe;
-        enhanced_input_set_strafe(strafe);     /* logs whichever branch it took, refusals included */
+        /* logs whichever branch it took, refusals included */
+        enhanced_input_set_strafe(strafe);
         did_strafe = true;
     }
     if (free_look != seen_free_look) {

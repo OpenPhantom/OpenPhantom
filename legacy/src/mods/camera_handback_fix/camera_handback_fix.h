@@ -31,8 +31,8 @@
  * asked for it, and three field runs said the same thing: every take in the level came from a
  * spoken line, the healthy ones were released by the dialogue closing or by the cutscene opcode a
  * moment later, and the one that broke the camera had no release after it at all until the level
- * tore down. A fourth run watched `Dialog_Close` itself and reported the count as zero, which is
- * what separates the two halves of that condition and says the count is what refused.
+ * tore down. A fourth run watched `Dialog_Close` itself and reported the count as zero. That
+ * separates the two halves of the condition and names the count as the half that refused.
  *
  * The three other candidates all died on the evidence rather than on argument: the cutscene opcode
  * takes the camera and raises the lock to 5, the tripod gun and the fall-death camera take it too,

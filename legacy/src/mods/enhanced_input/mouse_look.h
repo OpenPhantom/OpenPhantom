@@ -15,7 +15,7 @@
  * So the samples are collected once per rendered frame and banked, and the bank is drained by
  * whoever consumes, at that consumer's own cadence. The arithmetic of the drain is in mouse_rate.c
  * and it has one property this file depends on completely: a drain removes what it delivers, and
- * it can neither deliver what has not arrived nor deliver against what has. That is what lets two
+ * it can neither deliver what has not arrived nor deliver against what has. That is how two
  * consumers at different cadences share one bank.
  */
 
@@ -48,7 +48,7 @@ typedef float (__cdecl *input_axis_fn_t)(int axis);
  * `hard_cap_degrees` alone, because a limit measured against no time at all would silently swallow
  * every input.
  *
- * It THROWS AWAY what it clips, which is why the primary path does not use it. A drain there
+ * It THROWS AWAY what it clips, so the primary path does not use it. A drain there
  * happens once per rendered frame, and the mouse counts arriving in a frame are not proportional
  * to that frame's duration: frame times on real hardware swing by a factor of four or more, so
  * identical hand movement would be clipped on a short frame and passed on a long one, and the

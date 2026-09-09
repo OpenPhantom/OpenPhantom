@@ -2,7 +2,7 @@
  * destroys both.
  *
  * ==============================================================================================
- * WHY THIS EXISTS AT ALL, and it is not a preference
+ * Why this exists at all, and it is not a preference
  *
  * The engine reads a pad through WinMM into two INDEPENDENT scalars: control function 0 (turn) and
  * control function 1 (forward and back). There is no sideways axis and no vector anywhere. Three
@@ -41,17 +41,17 @@
  * at half deflection at nineteen.
  *
  * ==============================================================================================
- * WHAT THIS DOES INSTEAD
+ * What this does instead
  *
  * Reads the left stick from XInput, which is where it already comes from for the right stick in
  * controller_input.dll, and applies one radial deadzone. That gives an honest direction over the
- * whole stick and an honest magnitude, which is what a camera-relative walk needs and what a
- * walk/run threshold needs.
+ * whole stick and an honest magnitude, both of which a camera-relative walk and a walk/run
+ * threshold need.
  *
  * It does NOT touch the engine's own reading. Nothing here disables an axis, clears a binding or
  * writes an engine input cell. The phase 2 thunk runs AFTER the engine's own steer, so it simply
  * overwrites the movement fields with values built from this vector, and a frame where this reader
- * has nothing to say leaves the engine's own numbers exactly as they were. That is what keeps the
+ * has nothing to say leaves the engine's own numbers exactly as they were. That keeps the
  * keyboard, and a pad the player has bound by hand, working unchanged.
  */
 #ifndef ENHANCED_INPUT_PAD_STICK_H
@@ -84,7 +84,7 @@ float pad_stick_y(void);
  * rather than at the deadzone's own value. */
 float pad_stick_magnitude(void);
 
-/* THE PAD'S WHOLE CONTRIBUTION TO ONE STEER SUBSTEP, answered in one call so the phase 2 thunk
+/* The pad's whole contribution to one steer substep, answered in one call so the phase 2 thunk
  * does not have to know how a stick becomes a sideways value and a forward one.
  *
  * Polls, and answers false when the stick is centred or the player is not in Stand, in which
@@ -113,7 +113,7 @@ bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert
  *
  * `out_turn` is the raw sideways deflection, for the caller to spend on the view the way it
  * spends the keyboard's turn. Only the forward and back move bits are written here, with no
- * sideways component at all, which is exactly what the engine's own scheme puts in them.
+ * sideways component at all, exactly what the engine's own scheme puts in them.
  *
  * The stick is still read from XInput rather than handed back to the engine's own joystick
  * path, and that is deliberate: on a pad that reaches XInput but never WinMM, handing it back

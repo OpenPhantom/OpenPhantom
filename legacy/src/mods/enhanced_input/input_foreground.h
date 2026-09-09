@@ -4,15 +4,15 @@
  *
  * The raw mouse reader registers RIDEV_INPUTSINK, and it has to: it owns a message-only window
  * that can never be activated, so a foreground-only registration on that window would deliver
- * nothing. INPUTSINK is what makes the reader work, and it is also what makes it keep working
- * after the player has alt-tabbed away. Windows goes on delivering the device's movement, the
+ * nothing. INPUTSINK makes the reader work, and it also keeps it working after the player has
+ * alt-tabbed away. Windows goes on delivering the device's movement, the
  * reader goes on accumulating it, and the view goes on turning inside a game the player is no
  * longer looking at.
  *
  * The retail engine does not behave that way. It opens its DirectInput devices FOREGROUND, so
  * Windows unacquires them the moment the window goes to the background and the engine reads
  * nothing. Gating on the foreground therefore restores what the engine did rather than changing
- * it, which is why there is no setting for it: the alternative is a bug, not a preference.
+ * it, so there is no setting for it: the alternative is a bug, not a preference.
  *
  * Why the process and not a window
  *

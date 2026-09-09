@@ -18,14 +18,14 @@
  * Why the write site is a detour on updateCam and not a per-FRAME CALLBACK. The camera consumes
  * the yaw offset one frame after a frame-end callback could write it, and by then the substeps
  * have already advanced the three globals the offset was computed against, so the camera would
- * still inherit the frame's heading change, which is exactly the wobble the offset exists to
- * remove. The only instant at which the interpolated heading updateCam is about to use already
- * exists is between the substeps and updateCam itself, so the feature writes from a chained
- * detour on updateCam's own prologue, immediately before the original runs.
+ * still inherit the frame's heading change, exactly the wobble the offset exists to remove. The
+ * only instant at which the interpolated heading updateCam is about to use already exists is
+ * between the substeps and updateCam itself, so the feature writes from a chained detour on
+ * updateCam's own prologue, immediately before the original runs.
  */
 
 /* push ebp / mov ebp,esp / sub esp,0x88; nine bytes, one instruction boundary, no relative
- * operand, which is what the trampoline needs to be able to copy it. */
+ * operand, all of which the trampoline needs in order to copy it. */
 #define CAMERA_UPDATE_PROLOGUE_SIZE 9u
 
 /* push ebp / mov ebp,esp / sub esp,0x44; six bytes, same reasoning. */
@@ -44,8 +44,8 @@
  *
  * Read out of the two functions that build the view, and listed here because the transition log
  * quotes the last two: the pitch and the eye height are the two numbers a horizontal free look must
- * never move, and printing them either side of every transition is what turns that from a promise
- * into something a player can check.
+ * never move, and printing them either side of every transition turns that from a promise into
+ * something a player can check.
  *
  *   +0x00  state    0 follow, 1 fixed look-at or fixed heading, 2 world-fixed
  *   +0x2C  eye Z    composed as  eyeZ = anchorZ (+0x1C) + offsetZ (+0x0C)
@@ -67,7 +67,8 @@ typedef struct camera_sites {
     uintptr_t update_cam;
     uintptr_t auto_aim;
     uintptr_t fire_shot;        /* the action handler that spawns the bolt; 0 = not resolved */
-    uintptr_t start_fire;       /* the moment an attack begins, for EVERY weapon; 0 = not resolved */
+    /* the moment an attack begins, for EVERY weapon; 0 = not resolved */
+    uintptr_t start_fire;
 
     /* The three cells the feature writes. All live in the zero-filled tail of .data, which the
      * engine itself rewrites every frame, so they are ordinary writable data and need no page
@@ -76,8 +77,8 @@ typedef struct camera_sites {
     volatile float *yaw_lag;
 
     /* The heading the camera update compared against LAST frame. Writing this frame's heading into
-     * it makes the engine measure a zero change, which is what selects the simple yaw arm, the
-     * only one whose result is what this feature computed. NULL when the site did not resolve, in
+     * it makes the engine measure a zero change and select the simple yaw arm, the only one
+     * whose result is what this feature computed. NULL when the site did not resolve, in
      * which case free look still runs and the engine still picks the arm itself. */
     volatile float *last_interp;
 
@@ -105,8 +106,8 @@ typedef struct camera_sites {
  * naming exactly what is lost, and the feature still installs.
  *
  * `expected_player_pointer` is the cell the steering already resolved out of Plr_Steer. The
- * auto-aim site is only believed when it reads the player out of that same cell, which is what
- * separates "the auto-aim of the player we steer" from "a function shaped like it". */
+ * auto-aim site is only believed when it reads the player out of that same cell. That separates
+ * "the auto-aim of the player we steer" from "a function shaped like it". */
 bool camera_sites_resolve(camera_sites_t *out, const void *expected_player_pointer);
 
 #endif /* CAMERA_SITES_H */

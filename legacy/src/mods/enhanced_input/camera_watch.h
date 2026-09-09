@@ -25,8 +25,8 @@
  *     substep samples, or the alpha left (0,1] and the term extrapolated;
  *   * the OFFSET moved, something wrote the cell: free look, the engine's own recentre, or
  *     another mod;
- *   * the VIEW LEAD moved, which is the hand, and which is the only one of the three that is
- *     supposed to move on an ordinary frame.
+ *   * the VIEW LEAD moved, the hand, and the only one of the three that is supposed to move on
+ *     an ordinary frame.
  *
  * It is quiet by construction. It prints only when a single frame moves the camera further than a
  * threshold no ordinary frame reaches, and it stops after a fixed number of lines, so a healthy
@@ -39,10 +39,10 @@
 void camera_watch_install(const camera_sites_t *sites);
 
 /* Call once per rendered frame IMMEDIATELY BEFORE the camera update runs, and once IMMEDIATELY
- * AFTER it. The split is not tidiness, it is the difference between a line that composes and a line
- * that does not: the camera update REWRITES the yaw offset at its own tail, so an offset read after
- * it is not the offset the yaw was built from. The first call records the inputs the update is
- * about to use; the second reads the yaw it produced and prints them together, so
+ * AFTER it. The split is not tidiness; it is the difference between a line that composes and a
+ * line that does not: the camera update REWRITES the yaw offset at its own tail, so an offset read
+ * after it is not the offset the yaw was built from. The first call records the inputs the update
+ * is about to use; the second reads the yaw it produced and prints them together, so
  * `wrap360(interp + offset) == yaw` is a check the reader can actually perform. */
 void camera_watch_before_update(void);
 void camera_watch_sample(void);

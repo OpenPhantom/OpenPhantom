@@ -3,7 +3,7 @@
  * The original locks nothing in a menu, a dialogue or a cutscene. It does not have to: it reads
  * the mouse inside Plr_Steer, and Plr_Steer is one of the player phases, dispatched from the
  * phase table through `call dword ptr [ecx*4 + g_plrPhases]`. Its entry at 0x00449EE8 has no E8
- * caller anywhere in the image, which is what a table dispatch looks like. In those three states
+ * caller anywhere in the image, the shape a table dispatch leaves. In those three states
  * the engine simply does not run the phases, so the steer never runs and nothing turns.
  *
  * Anything in this DLL that turns the view on the RENDER clock is outside that pipeline and would
@@ -27,7 +27,7 @@ void input_gate_note_phase_ran(void);
  * swing the view by everything the hand did during a cutscene the moment the cutscene ended. */
 bool input_gate_is_open(void);
 
-/* Says once, the first time the gate is found shut, that this is what is happening. Kept apart
+/* Says once, the first time the gate is found shut, that input is being held back. Kept apart
  * from the test so a caller can ask as often as it likes without deciding when to log. */
 void input_gate_note_closed(void);
 

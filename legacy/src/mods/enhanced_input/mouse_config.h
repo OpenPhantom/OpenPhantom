@@ -34,8 +34,8 @@ typedef struct mouse_config {
     bool  smoothing_is_automatic;
 
     /* Collect once per rendered frame rather than once per substep. Switching it off is not a
-     * degraded version of this feature, it is the engine's own behaviour restored: one live read
-     * per substep with nothing banked, which is what makes the two comparable in one build. */
+     * degraded version of this feature; it is the engine's own behaviour restored: one live read
+     * per substep with nothing banked, so the two are comparable in one build. */
     bool  accumulate_requested;
 
     bool  raw_requested;          /* read the device directly rather than through the engine */

@@ -13,9 +13,8 @@
  * neither: the pitch is built by a different lerp with a rate pushed as an immediate, and the eye
  * height is composed by adding an UNROTATED Z, so a horizontal free look provably cannot tilt the
  * view or raise the eye. When those two numbers move across a transition, what moved them is the
- * authored pitch and camera offset of the region named on the same line, and having them printed
- * either side of every transition is what turns that argument from a promise into something a
- * player can check.
+ * authored pitch and camera offset of the region named on the same line, and printing them either
+ * side of every transition turns that argument from a promise into something a player can check.
  *
  * It is off unless the ini asks for it, because a normal session should be silent.
  */

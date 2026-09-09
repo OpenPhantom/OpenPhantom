@@ -5,7 +5,7 @@
  * engine ship in one installation and the recompile moves code by more than 0x1E000, so an address
  * table would have written silently into a different function.
  *
- * About half of this file is disassembly rather than code, and that is deliberate: a pattern
+ * About half of this file is disassembly rather than code, deliberately: a pattern
  * without its listing is a magic number, and splitting the two apart would put every proof one
  * file away from the code that depends on it.
  */
@@ -140,7 +140,7 @@ static const uint8_t SIG_PLAYER_KEYBOARD_AXIS[] = {
  *   8B 55 10
  *   89 54 08 04                pNodeRot[idx].y = degrees  <- +4 is the YAW component
  *
- * The pattern has to run this far, and that is not thoroughness. bapobj_setNodePitch at 0x00414789
+ * The pattern has to run this far, and not out of thoroughness. bapobj_setNodePitch at 0x00414789
  * is byte-identical to this function except for two places: its `jae` displacement is 0x19 rather
  * than 0x1A, and its store is `89 14 08`, component [0], the PITCH, rather than `89 54 08 04`.
  * A pattern that stopped before the store would match both and could resolve to the wrong one.

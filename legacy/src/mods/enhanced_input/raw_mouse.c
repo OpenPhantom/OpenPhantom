@@ -26,9 +26,9 @@
  * input rather than costing us our feature.
  *
  * A message-only window on a thread of our own has none of that. It cannot be seen, cannot be
- * activated, cannot take focus and shares nothing with the engine. RIDEV_INPUTSINK is what makes it
- * work: the registration asks for the device's data even while our window is not in the foreground,
- * which it never is.
+ * activated, cannot take focus and shares nothing with the engine. RIDEV_INPUTSINK is the piece
+ * that makes it work: the registration asks for the device's data even while our window is not in
+ * the foreground, which it never is.
  *
  * RIDEV_NOLEGACY is the flag deliberately not used, at any rung of the ladder below. It suppresses
  * ordinary mouse messages for the whole process, and the engine's menus, its pointer warp and its
@@ -164,9 +164,9 @@ static void accumulate_packet(const RAWMOUSE *mouse)
     InterlockedIncrement(&raw_state.packets_since_take);
     InterlockedExchange(&raw_state.newest_ms, (LONG)GetTickCount());
 
-    /* The arrival time is the whole point of reading the device directly: it is what lets the
-     * counts be divided by the time the reports span rather than by the interval they happened
-     * to be collected in. */
+    /* The arrival time is the whole point of reading the device directly: it lets the counts be
+     * divided by the time the reports span rather than by the interval they happened to be
+     * collected in. */
     {
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);
@@ -347,9 +347,9 @@ static bool register_one(DWORD flags, HWND target, const char *what)
             if (direct(&device, 1, (UINT)sizeof(device))) {
                 log_info("raw input registered: %s, through the unshimmed function. Windows ships "
                          "an application compatibility fix for this executable which intercepts "
-                         "RegisterRawInputDevices and fails it, and that is what the refusal above "
-                         "was. The real function was resolved out of user32's export table and "
-                         "accepted the same parameters.", what);
+                         "RegisterRawInputDevices and fails it, and that is where the refusal "
+                         "above came from. The real function was resolved out of user32's export "
+                         "table and accepted the same parameters.", what);
                 return true;
             }
             log_warning("raw input refused %s with error %lu, and the unshimmed function refused "
@@ -553,9 +553,9 @@ void raw_mouse_take(raw_mouse_sample_t *out)
 
     if (raw_state.absolute_seen && !raw_state.warned_absolute) {
         raw_state.warned_absolute = true;
-        log_warning("the mouse is reporting ABSOLUTE positions rather than relative counts, which "
-                    "is what a remote desktop and the virtual mice that streaming and VR software "
-                    "install do. They are differenced here so the view still turns, but the "
+        log_warning("the mouse is reporting ABSOLUTE positions rather than relative counts, as a "
+                    "remote desktop and the virtual mice that streaming and VR software install "
+                    "do. They are differenced here so the view still turns, but the "
                     "resolution is the resolution of that virtual pointer and not of your mouse. "
                     "If the aim feels coarse, the cause is that device rather than this game.");
     }
@@ -587,7 +587,7 @@ void raw_mouse_take(raw_mouse_sample_t *out)
  * every packet exactly once.
  *
  * Counts, not pixels, and both axes. The caller decides what a count is worth on screen and keeps
- * the remainder; nothing is rounded here, because rounding is what the engine already gets
+ * the remainder; nothing is rounded here, because rounding is the thing the engine already gets
  * wrong. */
 void raw_mouse_take_cursor(long *out_dx, long *out_dy)
 {

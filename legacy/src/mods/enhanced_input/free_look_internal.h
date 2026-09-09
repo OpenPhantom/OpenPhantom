@@ -24,7 +24,7 @@
  * The four fields both halves touch, written down at both ends because no compiler checks them
  *
  * Splitting a file cannot split a shared invariant; it can only hide half of it. These four are
- * the whole of what crosses, and each has an order that is decided by the engine's frame layout
+ * everything that crosses, and each has an order that is decided by the engine's frame layout
  * rather than by anything in this code:
  *
  *   camera_yaw          the camera half seeds it from the camera object and advances it by the
@@ -62,9 +62,8 @@ typedef struct free_look_config {
     float body_turn_rate;
     float region_recover_degrees;
 
-    /* THE PASSIVE CAMERA. Drift the camera back behind the body while the player is not
-     * looking, which is the whole of what a console third-person camera does that this game
-     * never did.
+    /* The passive camera. Drift the camera back behind the body while the player is not
+     * looking, the one thing a console third-person camera does that this game never did.
      *
      * The target is the BODY'S HEADING, and it may never be the travel angle. Under free look
      * the stick is measured against the camera, so a camera that chased the travel direction
@@ -72,7 +71,7 @@ typedef struct free_look_config {
      * the stick means rotates with it, and the player spins for as long as they hold it. The
      * heading closes no loop, because nothing measures the stick against the heading. And once
      * the body has been turned to face its travel, behind the body and behind the direction of
-     * travel are the same place, which is why this reads as following the movement. */
+     * travel are the same place, so this reads as following the movement. */
     bool  passive_follow;
     float passive_settle_seconds;
     float passive_rate;

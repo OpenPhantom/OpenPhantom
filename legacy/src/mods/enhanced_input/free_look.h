@@ -26,8 +26,8 @@ void free_look_load_config(void);
 /* Resolves the camera cells and installs the four chained detours: the camera update, which the
  * feature cannot run without, and the three optional ones on the attack path.
  *
- * The machinery is installed whether or not the feature is switched on, and that is what makes the
- * control mode a live setting rather than a launch-time choice. While it is off the hooks write
+ * The machinery is installed whether or not the feature is switched on, so the control mode is a
+ * live setting rather than a launch-time choice. While it is off the hooks write
  * nothing at all: the arming gate refuses on the switch itself, so the two camera cells stay the
  * engine's own and the mouse keeps turning the body. The alternative, resolving and detouring at
  * the moment a menu switch is ticked, would patch code from inside a screen loop, and a check box
@@ -66,7 +66,7 @@ void free_look_refresh_aim_pairing(void);
  * room rather than about this feature.
  *
  * The sideways walk and the pad stick stand down while it holds. Free look already did, and the
- * three of them not agreeing is what trapped a player on a balcony in the palace: the camera was
+ * three of them not agreeing trapped a player on a balcony in the palace: the camera was
  * the author's, free look had let go, and the pad went on spending the stick on a direction
  * instead of a turn, so there was no way to turn round and jump back up. */
 bool free_look_level_owns_camera(void);
@@ -105,7 +105,7 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
 void free_look_integrate(uint8_t *record, float substep_seconds);
 
 /* True while the trigger is held: the body is pointed at the camera and the feet strafe relative
- * to it, which is exactly what free look OFF does. Nothing is twisted in that state, because the
+ * to it, exactly as free look OFF does. Nothing is twisted in that state, because the
  * weapon already points where the player is looking. */
 bool free_look_aim_stance(void);
 

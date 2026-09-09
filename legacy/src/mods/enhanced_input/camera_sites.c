@@ -1,8 +1,8 @@
 /* camera_sites.c: finding the follow camera's own cells in this build, or refusing.
  *
  * Nine patterns and what each of them is worth. About two thirds of this file is disassembly
- * rather than code, and that is deliberate: a pattern without its listing is a magic number, and
- * splitting the two apart would put every proof one file away from the code that depends on it.
+ * rather than code, deliberately: a pattern without its listing is a magic number, and splitting
+ * the two apart would put every proof one file away from the code that depends on it.
  *
  * SIZE NOTE. Well over the 600 line mark, under the 900 hard limit. Only a small part of it is
  * code: read this operand, range-check it, cross-check it against its twin. The rest is the nine
@@ -54,7 +54,7 @@
  *   C7 05 <frames> 00000000   frames := 0             <- the SAME operand again: a free proof
  *   8B 0D <alpha> / 89 4D C4  mov ecx,[substepAlpha]  stashed for the heading interpolation
  *
- * The two `frames` operands must be equal. That is what turns "twenty-one bytes happened to line
+ * The two `frames` operands must be equal. Equal operands turn "twenty-one bytes happened to line
  * up" into "this is the debug statement of the function we want", without embedding one address.
  *
  * The pattern is registered as a DETOUR target: the first nine bytes are the ones our own branch
@@ -164,12 +164,12 @@ static const uint8_t MSK_CAMERA_INTERP[] = {
  *
  * lerpAngle(k,a,b) returns k*a + (1-k)*b, so at k = 0.96 a held offset is eaten with a half life
  * of about seventeen rendered frames. Writing 1.0 into the rate cell makes it return a unchanged.
- * The rate cell is rewritten from an immediate at the tail of every call, which is why the release
- * is "stop writing" and not "write the old value back".
+ * The rate cell is rewritten from an immediate at the tail of every call, so the release is
+ * "stop writing" and not "write the old value back".
  *
  * (There is a near-twin of this call two dozen instructions further on that handles the case where
  * the offset and the target are more than half a turn apart. It allocates its registers in a
- * different order and does not match this pattern, which is why this one is unique.)
+ * different order and does not match this pattern, so this one is unique.)
  *
  * Nothing else patches this window. The frame-rate fix owns four sites in the same function, the
  * pitch lag immediate, the two follow-blend operands, the yaw deadband operand and the four lag
@@ -327,12 +327,12 @@ static const uint8_t MSK_CAMERA_REGION[] = {
  *   * and nothing between the deadband and the arm select can undo it, which is the part that
  *     actually decides whether this works. Four further writers of camTurn sit in that stretch,
  *     0x0041896D, 0x00418AA5, 0x00418B1A and 0x00418B3F, the entries to fixed-lookat, world-fixed
- *     and fixed-heading and the return to follow. Every one of them is a literal `mov [camTurn], 0`.
+ *     and fixed-heading and the return to follow. Every one is a literal `mov [camTurn], 0`.
  *     They can only reinforce arm B; there is no path on which one of them restores a non-zero
  *     value and quietly hands the frame back to the easing arm.
  *
- * The two operands must name the same cell, which is what separates this block from forty-nine
- * bytes that happened to line up. */
+ * The two operands must name the same cell. That separates this block from forty-nine bytes
+ * that happened to line up. */
 static const uint8_t SIG_CAMERA_LAST_INTERP[] = {
     0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x75, 0x18,
@@ -380,8 +380,8 @@ static const uint8_t MSK_CAMERA_LAST_INTERP[] = {
  *   E8 <Thing_FindNearestInCone>
  *
  * Both pPlayer operands must be equal AND must be the same cell the player sites already resolved
- * out of Plr_Steer. That is what makes this the auto-aim of the player we are steering rather than
- * a similarly shaped function.
+ * out of Plr_Steer. That makes this the auto-aim of the player we are steering rather than a
+ * similarly shaped function.
  *
  * The function takes exactly one argument and it is used: it is compared against 2 inside the
  * body, and its single caller pushes one dword and cleans four bytes afterwards. A thunk declared
@@ -434,7 +434,7 @@ static const uint8_t MSK_PLAYER_AUTO_AIM[] = {
  * never armed. The body went on facing its TRAVEL direction while the shot was still built as
  * "camera minus heading", so walking sideways turned the character one way and left the weapon
  * pointing another. Reported as the weapon always aiming forwards rather than where the character
- * is pointed, which is exactly what those two disagreeing produces.
+ * is pointed, the symptom those two disagreeing produces.
  *
  * The clip and the action handler below the auto-aim call are unconditional, so this function is
  * the moment every weapon has in common. Both player reads are masked and cross-checked against
@@ -489,7 +489,7 @@ _Static_assert(sizeof SIG_PLAYER_START_FIRE == sizeof MSK_PLAYER_START_FIRE,
  * instant, plus this offset cell. Correct the cell here and the shot can be aimed anywhere the
  * player is looking while the body walks wherever the keys say.
  *
- * The player pointer is read out and cross-checked, exactly as the auto-aim site is: it is what
+ * The player pointer is read out and cross-checked, exactly as the auto-aim site is; that
  * separates this from a similarly shaped handler belonging to something else. */
 static const uint8_t SIG_PLAYER_FIRE_SHOT[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14,

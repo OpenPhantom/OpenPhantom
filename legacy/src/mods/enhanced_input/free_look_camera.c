@@ -98,21 +98,22 @@
  * The camera has two yaw arms, and this feature only ever worked on one of them
  *
  * The addition above is the SIMPLE arm. There is a second one that EASES the yaw toward the wanted
- * angle over a frame, and which of the two runs is decided by a global holding the signed per-frame
- * change of the BODY's target heading: zero picks the simple arm, anything else picks the eased one.
+ * angle over a frame, and which of the two runs is decided by a global holding the signed
+ * per-frame change of the BODY's target heading: zero picks the simple arm, anything else picks
+ * the eased one.
  *
  * The eased arm's 0/360 seam handling is derived from the sign of that change. While the camera is
  * bolted to the body that is a fair proxy for "which way round should I go"; free look is what
  * makes it wrong. Measured: a camera 2.7 degrees from its target was read as 357.3
  * degrees away and moved 78 degrees in one frame.
  *
- * So the ARM IS FORCED. On armed frames this feature writes the interpolated heading the camera is
+ * So the arm is forced. On armed frames this feature writes the interpolated heading the camera is
  * about to use into the cell the engine compares against, the engine measures a change of exactly
  * zero, and the simple arm runs. The full listing, the reason the eased arm must NOT instead be
  * inverted, and the proof that the cell has exactly two references image-wide are all at the
  * pattern in camera_sites.c, which is where the bytes are.
  *
- * WHAT THAT COSTS, stated here because it is a real change and not a pure repair: on armed frames
+ * What that costs, stated here because it is a real change and not a pure repair: on armed frames
  * the engine's one-frame easing of the camera YAW is gone and the yaw becomes exactly what free
  * look asked for. The eye position keeps its own lag, the pitch is untouched; it is built further
  * upstream from a different lerp, and on released frames the engine chooses its arm as it always
@@ -199,9 +200,9 @@ static void refuse_this_frame(const char *what, const free_look_gate_t *gate,
  * It is wrong when the level author merely placed a camera on the floor the player is standing on.
  * The player walks in and out of those in a second or two, and while he is inside the engine's own
  * recentre is eating his aim at four per cent a frame. Dropping the yaw means the camera he gets
- * back is wherever that eating happened to stop, which depends on how many frames he spent on
- * those polygons and on nothing else. That is what "the camera rotates at random while walking"
- * looks like from the inside.
+ * back is wherever that eating happened to stop, which depends on nothing but how many frames he
+ * spent on those polygons. That is what "the camera rotates at random while walking" looks like
+ * from the inside.
  *
  * So an authored region REMEMBERS the yaw, once, at the moment it takes the camera. It is not
  * refreshed while the region holds: refreshing it would track the engine's recentre and there would
@@ -322,13 +323,13 @@ static float update_camera_yaw(void)
     float                interpolated;
     float                offset;
 
-    /* WHOSE CAMERA IS IT, asked every frame and independently of our own switch.
+    /* Whose camera is it, asked every frame and independently of our own switch.
      *
      * This is not free look's question and it is not answered for free look's benefit. The
      * sideways walk and the pad stick need to know whether the level author has placed a camera
      * here, so they can hand the player back to the engine's own movement where one is; and they
-     * need it whether or not free look is switched on, which is why the gate is asked with
-     * `enabled` forced true rather than being read off the switch.
+     * need it whether or not free look is switched on, so the gate is asked with `enabled` forced
+     * true rather than being read off the switch.
      *
      * It costs eight cell reads a frame. Avoiding them was right when free look was the only
      * consumer and the switch already answered for it; it is not right now that something else
@@ -464,13 +465,13 @@ static float update_camera_yaw(void)
      * the substeps (where phase 2 drains the bank), then this camera update, and only afterwards
      * the frame end, where the bank is FILLED. So the fill can never fall between the two drains,
      * and a drain that finds the bank already emptied by phase 2 returns zero rather than the same
-     * sample twice. That is the engine's own frame layout doing the work, which is why free look
-     * needs no per-frame callback of its own and must not grow one: a callback would sit next to
+     * sample twice. That is the engine's own frame layout doing the work, so free look needs no
+     * per-frame callback of its own and must not grow one: a callback would sit next to
      * the bank's filler at the frame end and its result would depend on registration order.
      *
      * It is safe only because the bank consumes and ZEROES. On the degraded path the axis is read
      * live and unzeroed, both readers would receive the same sample, and this is switched off. */
-    /* NOT WHILE THE CAMERA FOLLOW IS DRIVING, and this is the difference between the two drivers
+    /* Not while the camera follow is driving, and this is the difference between the two drivers
      * rather than a special case. Under free look the mouse IS the camera, so the banked motion
      * belongs here and accumulates into the wanted yaw. Under the follow the mouse turns the BODY,
      * so `interpolated` already carries it; adding it a second time turns the camera twice and the
@@ -515,7 +516,7 @@ static float update_camera_yaw(void)
      * difference from what free look wants is the size of this frame's step. */
     log_gate(true, FREE_LOOK_ARMED, note, &gate, region);
 
-    /* THE ARM SELECT, and it has to be this value rather than any other.
+    /* The arm select, and it has to be this value rather than any other.
      *
      * A few instructions into the original the engine takes the wrapped difference between this
      * cell and the very heading computed above, negates it, and stores it as "how far the target
@@ -603,8 +604,8 @@ static int32_t __cdecl hook_update_cam(void)
     camera_watch_before_update();
     result = original();
 
-    /* The lead goes on BEFORE the watch samples, because what the watch is for is what ends up on
-     * screen. It is handed to the watch as well, so that the watch's own check of the engine's
+    /* The lead goes on BEFORE the watch samples, because the watch is there to check what ends up
+     * on screen. It is handed to the watch as well, so that the watch's own check of the engine's
      * arithmetic, interpolated heading plus offset equals the yaw, still composes. */
     finish_view_lead(lead);
     camera_watch_note_lead(lead);

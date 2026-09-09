@@ -19,7 +19,7 @@
  *          -> cursor += (messagePosition - centre)
  *          -> the clamp
  *
- * The callback is reached through a table, which is why it has no relative caller: 0x0045DA2E
+ * The callback is reached through a table, so it has no relative caller: 0x0045DA2E
  * pushes 0x00460A54 into 0x00498DBE, the window module's callback registration. Its arguments are
  * (hwnd, msg, wParam, lParam, int *out); the message is [ebp+0x0C], which the head of the function
  * compares against 0x100, WM_KEYDOWN, and the packed position is [ebp+0x14].
@@ -41,7 +41,7 @@
  *     00460BFE  mov   [0x004B6C9C], edx
  *     00460C25  add   eax, 0x25F                  the 607 wide clamp
  *
- * A census of both cells is what made this safe to touch: ten references each, and every single
+ * A census of both cells made this safe to touch: ten references each, and every single
  * write is inside 0x00460A54. The only other function that mentions them is 0x00460A30, which
  * reads both. There is no second writer anywhere in the image.
  *
@@ -125,13 +125,13 @@
 #define ENGINE_CENTRE_Y      240
 #define WM_MOUSEMOVE_MSG     0x0200u
 
-/* One device count moves the pointer one pixel. That is what the system does with acceleration
+/* One device count moves the pointer one pixel, as the system itself does with acceleration
  * switched off, so the feel is the one the player already has. No key reads it; a high
  * resolution mouse that wants less needs one adding. */
 #define DEFAULT_PIXELS_PER_COUNT 1.0f
 
-/* A message packs two SIGNED 16-bit coordinates, which is what the two `movsx` above read them
- * back as. Anything beyond this in one message would wrap into a large movement in the opposite
+/* A message packs two SIGNED 16-bit coordinates, and the two `movsx` above read them back as
+ * such. Anything beyond this in one message would wrap into a large movement in the opposite
  * direction, so it is clamped and the remainder is kept for the next one rather than dropped. */
 #define MAX_DELTA_PER_MESSAGE 30000
 
@@ -146,8 +146,8 @@
  *   83 3D ?? ?? ?? ?? 00 cmp  [the menu pointer], 0
  *   75 07                jne  carry on
  *
- * The two absolute operands are wildcarded, and that is what makes the pattern resolve on the
- * recompile as well as on the retail builds:
+ * The two absolute operands are wildcarded, so the pattern resolves on the recompile as well as
+ * on the retail builds:
  *
  *     retail WMAIN.EXE                     0x00460A54
  *     wmain.exe                            0x00460A54
@@ -170,6 +170,8 @@ static const uint8_t MSK_MENU_PUMP[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_MENU_PUMP == sizeof MSK_MENU_PUMP,
+               "the menu pump pattern and its mask are different lengths");
 #define MENU_PUMP_PROLOGUE  6u
 
 /* Five arguments, and only the fourth is touched. The others are passed through untouched because
@@ -202,7 +204,7 @@ static menu_cursor_state_t cursor_state;
  * The counts come from a second pair of accumulators inside raw_mouse. Its primary take is
  * destructive by design and has exactly one consumer, the view turn, so the cursor gets the same
  * packets added to accumulators of its own and clears only those. The view path is left exactly as
- * it was, which is what keeps a working path out of this change's blast radius. The vertical axis
+ * it was, which keeps a working path out of this change's blast radius. The vertical axis
  * exists only on the cursor's side; the view turn never had a use for it. */
 static bool take_whole_pixels(int *out_dx, int *out_dy)
 {
@@ -253,7 +255,7 @@ static int32_t __cdecl hook_menu_pump(void *hwnd, uint32_t message, uint32_t wpa
         /* Nothing whole to hand over yet, and the message still has to be passed on because it also
          * drives the recentring. Passing the engine's own coordinates through would add its
          * quantised movement on top of ours and count the same motion twice, so the message is
-         * given the centre, which is exactly the value its early-out ignores. */
+         * given the centre, exactly the value its early-out ignores. */
         lparam = ((uint32_t)(ENGINE_CENTRE_Y & 0xFFFF) << 16) |
                  ((uint32_t)(ENGINE_CENTRE_X & 0xFFFF));
         return cursor_state.original(hwnd, message, wparam, lparam, out);
@@ -297,9 +299,10 @@ bool menu_cursor_install(bool enabled)
     cursor_state.installed = true;
 
     log_info("menu pointer driven from the device at %08X. The engine moves it by the difference "
-             "between the system pointer and a hard-coded (320,240), in whole screen pixels, which "
-             "loses everything under one pixel, loses travel at the screen edge because that centre "
-             "is not the middle of a modern screen, and carries the machine's pointer acceleration. "
+             "between the system pointer and a hard-coded (320,240), in whole screen pixels, "
+             "which loses everything under one pixel, loses travel at the screen edge because "
+             "that centre is not the middle of a modern screen, and carries the machine's "
+             "pointer acceleration. "
              "This hands its own accumulation a delta measured from the DEVICE instead, kept in "
              "floating point so the remainder survives. Its clamp, its hit testing and the "
              "resolution fix's cage all run exactly as before, because only the number changes. If "

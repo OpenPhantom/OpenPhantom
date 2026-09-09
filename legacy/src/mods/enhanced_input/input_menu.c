@@ -57,8 +57,7 @@
  *
  * The same shared table once looked like a way to borrow the AUDIO screen's background (index 9)
  * as a plate for this group. It is not, and the layout comment below records why in full: a widget
- * rectangle cannot crop or scale a bitmap, so borrowing a full-screen background draws the WHOLE of
- * it.
+ * rectangle cannot crop or scale a bitmap, so borrowing a full-screen background draws ALL of it.
  *
  * ==============================================================================================
  * Why a check box and not a selectable label
@@ -175,15 +174,15 @@ static const uint8_t MSK_OPTIONS_CONTROLS[] = {
 #define OPTIONS_CONTROLS_PROLOGUE      6u
 #define OPTIONS_CONTROLS_PUSH_OFFSET  22u   /* the 0x68 opcode, verified before the operand */
 #define OPTIONS_CONTROLS_TABLE_OFFSET 23u
-/* The third `push imm32` of the same prologue: the screen's bitmap-name table, which is what
- * bounds every bitmap index this file appends. */
+/* The third `push imm32` of the same prologue: the screen's bitmap-name table, which bounds
+ * every bitmap index this file appends. */
 #define OPTIONS_CONTROLS_BMP_PUSH_OFFSET  34u
 #define OPTIONS_CONTROLS_BMP_TABLE_OFFSET 35u
 #define OPCODE_PUSH_IMM32           0x68u
 
 /* 0x0045EB7B, swmenu_getString(stringId, destination). It clears the destination first and then
- * indexes its table with NO BOUNDS CHECK, which is why every id handed to it has to be one this
- * module owns. */
+ * indexes its table with NO BOUNDS CHECK, so every id handed to it has to be one this module
+ * owns. */
 static const uint8_t SIG_GET_STRING[] = {
     0x55, 0x8B, 0xEC, 0x56, 0x57,
     0x8B, 0x45, 0x0C,
@@ -258,15 +257,15 @@ static signature_t sites[SITE_COUNT] = {
  * which mattered only because it was offered as evidence that 4 is universal; it is the convention,
  * not a rule, and the pair is verified against this screen's own table at run time regardless. */
 #define BITMAP_CHECKBOX_UNCHECKED 4
-/* The same table carries the slider's two frames, which is what makes a slider on THIS screen
- * possible at all: 2 = slgauge.bmp (the track), 3 = slslide.bmp (the knob). The controls screen and
+/* The same table carries the slider's two frames, making a slider on THIS screen possible at
+ * all: 2 = slgauge.bmp (the track), 3 = slslide.bmp (the knob). The controls screen and
  * the video screen share one bitmap-name table; both are built with [0x4AEE10], so the gamma
  * slider's own artwork is already loaded here and costs no new resource. */
 #define BITMAP_GAUGE 2
 #define BITMAP_KNOB  3
 /* There is deliberately no BITMAP_PLATE. Two of them were tried, 9 (volume.bmp) and 17
  * (popup.bmp), and the layout comment below records why neither can work. A plate index is not
- * merely unused here; adding one back without reading that comment first would repeat the defect. */
+ * merely unused here; adding one back without reading that comment first repeats the defect. */
 /* Font table: 0 indust, 1 sysfont, 2 courier. All eighteen authored check boxes use 2; the
  * authored body text on this screen uses 1, and the slider's caption is body text. */
 #define FONT_CHECKBOX 2
@@ -274,8 +273,8 @@ static signature_t sites[SITE_COUNT] = {
 
 /* ---- The layout, and the fact that ended three attempts at it -------------------------------- *
  *
- * There is no plate, and that is the correction. Three versions of this group were built on the
- * belief that a widget's rectangle crops or scales its bitmap. it does not and cannot: the blit
+ * There is no plate. That is the correction. Three versions of this group were built on the
+ * belief that a widget's rectangle crops or scales its bitmap. It does not and cannot: the blit
  * every widget in this toolkit ends in takes canvas, bitmap, x and y, no width, no height, and
  * clips only against a hard-coded 640x480.
  *
@@ -293,8 +292,8 @@ static signature_t sites[SITE_COUNT] = {
  * becomes unreadable. That was settled by rendering it over the real extracted background and
  * looking at it, not by arithmetic on rectangles.
  *
- * So the group is drawn with no plate at all, and that is acceptable here for a reason specific to
- * this screen: what lies behind the empty region is NOT the live 3-D scene. `controls.bmp` is
+ * So the group is drawn with no plate at all, acceptable here for a reason specific to this
+ * screen: what lies behind the empty region is NOT the live 3-D scene. `controls.bmp` is
  * 73.3 % transparent, opaque only over columns 1..280 and 382..616, and what shows through is
  * `splashol.bmp`, the brown machinery backdrop. It is static, dark and low-contrast, and white
  * captions read cleanly on it.
@@ -344,7 +343,7 @@ static signature_t sites[SITE_COUNT] = {
 #define SLIDER_WIDTH        255
 #define SLIDER_HEIGHT        50
 
-/* THE DRAWN FOOTPRINTS, which is what the assertions below are allowed to reason about. */
+/* The drawn footprints, the only thing the assertions below are allowed to reason about. */
 #define GAUGE_WIDTH         250   /* slgauge.bmp  */
 #define GAUGE_HEIGHT         50
 #define CHECKBOX_BOX_SIZE    34   /* chkbxoff.bmp */
@@ -701,10 +700,10 @@ static bool build_widgets(uintptr_t site)
      * screen's own furniture. What backs these widgets is splashol.bmp, showing through the 73 %
      * of controls.bmp that is transparent. */
     /* Sideways walking gets a box only when there is a key it could be driven from. The keyboard
-     * axis reader is what supplies that key, and on a build where its signature missed, the switch
-     * would refuse every time it was clicked. */
+     * axis reader supplies that key, and on a build where its signature missed, the switch would
+     * refuse every time it was clicked. */
     if (!menu_state.show_widgets) {
-        /* OFF BY DEFAULT. All three of the widgets this file adds are settings the game shipped
+        /* Off by default. All three of the widgets this file adds are settings the game shipped
          * without, so a player who wants the game as it was should not have to look at them.
          *
          * Nothing is lost by hiding them: all three are ini keys and the developer menu carries a
@@ -770,7 +769,7 @@ void input_menu_install(void)
      * this is the only place that acts on it and the screen is built exactly once. */
     menu_state.show_widgets = ini_read_bool(INPUT_SECTION, "MenuWidgets", false);
     if (!menu_state.show_widgets) {
-        /* SAID RATHER THAN LEFT SILENT. Without this the screen is untouched and the log
+        /* Said rather than left silent. Without this the screen is untouched and the log
          * carries no line about it, which reads exactly like a signature that missed. The
          * reader has to be able to tell a deliberate default from a broken resolve. */
         log_info("MenuWidgets=0, which is the default: the controls screen is left as the "

@@ -111,9 +111,9 @@
  * Forty five rather than the ninety the limit allows, because these are two different quantities.
  * The limit is how far the weapon may ever point away from the body, a safety rail on the whole
  * sum; this is how much authority one input has inside it. At ninety a full sideways key would
- * spend the entire allowance on its own and nothing else could contribute, which is not an
- * adjustment, it is a second aiming device. Zero switches it off and leaves the mouse alone with
- * the job. */
+ * spend the entire allowance on its own, leaving nothing for anything else to contribute; that is
+ * not an adjustment but a second aiming device. Zero switches it off and leaves the mouse alone
+ * with the job. */
 #define DEFAULT_AIM_STRAFE_SWING 45.0f
 
 #define DEFAULT_AIM_TWIST_MAX  90.0f
@@ -167,7 +167,7 @@ static float clamp_float(float value, float minimum, float maximum)
 
 /* ==============================================================================================
  * Configuration. Every float is passed through clamp_float, which turns NaN into the minimum and
- * either infinity into a bound, so a finite pair of limits is what guarantees a finite setting.
+ * either infinity into a bound, so a finite pair of limits guarantees a finite setting.
  * ============================================================================================ */
 /* Who is already aiming, if anyone. Either scheme points the body with the movement control, so
  * either one makes the aim snap take that control away at the moment the trigger goes down. */
@@ -180,7 +180,7 @@ void free_look_load_config(void)
 {
     float settle_ms;
 
-    /* OFF BY DEFAULT. This changes how the game plays, not how it looks. */
+    /* Off by default. This changes how the game plays, not how it looks. */
     free_state.config.enabled  = ini_read_bool(INPUT_SECTION, "FreeLook", false);
     /* These two default off when something else already aims, and the coupling is the point
      * rather than a convenience.
@@ -195,14 +195,14 @@ void free_look_load_config(void)
      * the trigger goes down takes the aiming away from the control they are already using and hands
      * it to the mouse.
      *
-     * THE FOLLOW CAMERA COUNTS FOR THE SAME REASON, and leaving it out was a defect rather than a
+     * The follow camera counts for the same reason, and leaving it out was a defect rather than a
      * decision. It stands off while the body is held at the camera, so it appears to stop working
      * exactly while you shoot, and a player who switches it on has chosen to aim by pointing the
      * body. Keying only off the sideways walk meant they had to find these two keys and write them
      * by hand to get the scheme the switch had promised them.
      *
      * So the default follows the scheme rather than being one answer for both. An explicit key in
-     * the file still wins either way, which is what keeps this a default and not a rule.
+     * the file still wins either way, so this stays a default and not a rule.
      *
      * Read once, so switching the sideways walk on during a session does not move these underneath
      * the player: the fire detour is placed at install from the answer below and there is no way to
@@ -258,8 +258,8 @@ void free_look_load_config(void)
         clamp_float(free_state.config.body_turn_rate, MIN_BODY_TURN_RATE, MAX_BODY_TURN_RATE);
 
     /* Zero is a legitimate setting and means "never take the wanted yaw back": the camera is then
-     * always picked up wherever the engine's recentre had got to, which is what this feature did
-     * before the recovery existed. */
+     * always picked up wherever the engine's recentre had got to, as this feature did before the
+     * recovery existed. */
     free_state.config.region_recover_degrees =
         ini_read_float(INPUT_SECTION, "FreeLookRegionRecoverDeg", DEFAULT_REGION_RECOVER_DEG);
     free_state.config.region_recover_degrees =
@@ -346,8 +346,8 @@ bool free_look_set_enabled(bool enabled)
     return true;
 }
 
-/* THE ONE NUMBER. Both the shot and the chest are driven from this and from nothing else, which is
- * what guarantees the weapon is always on the line the bolt leaves along.
+/* The one number. Both the shot and the chest are driven from this and from no other source, so
+ * the weapon is always on the line the bolt leaves along.
  *
  * The bolt's direction is built inside the fire handler as `heading + [pPlayer+0x178]`, from a
  * heading read LIVE at that instant, several substeps after Plr_AutoAim ran. So the heading
@@ -356,10 +356,10 @@ bool free_look_set_enabled(bool enabled)
  *
  * `lock` is what Plr_AutoAim put in the cell ONCE, captured when it ran, a target bearing relative
  * to the CAMERA, because the camera yaw is the heading it was shown. Adding the camera-to-body
- * angle resolves both terms into the body's frame, which is what the bolt is built in.
+ * angle resolves both terms into the body's frame, the frame the bolt is built in.
  *
- * It is assigned, never accumulated, and that is not style. The handler this feeds is polled from
- * the tail of phase 1 on EVERY substep while an attack is armed; it returns early until the
+ * It is assigned, never accumulated. That is not a style choice. The handler this feeds is polled
+ * from the tail of phase 1 on EVERY substep while an attack is armed; it returns early until the
  * animation marker fires, so a version that read the cell and added to it compounded once per
  * substep and saturated the clamp at every angle within a few frames. A player walking
  * forward-right fired at ninety degrees. Reading only the captured lock makes the result depend on
@@ -396,7 +396,7 @@ static float aim_offset_for(const uint8_t *record, float lock)
     return total;
 }
 
-/* WHAT `armed` MEANS, and it is not what these four callers want.
+/* What `armed` means, and it is not what these four callers want.
  *
  * `armed` says the CAMERA HOLD is taken: the recentre is frozen, the yaw arm is forced and the
  * authored regions are being watched. The camera follow takes that same hold, because building a
@@ -463,8 +463,8 @@ static void __cdecl hook_start_fire(void)
  * would lock onto whatever is in front of the feet. The swap is exact: the heading is read twice
  * inside the original and both reads are covered by an offset across the one call.
  *
- * It is also the only byte-proven signal this DLL has that an attack has begun, so it is what
- * starts the aim snap. */
+ * It is also the only byte-proven signal this DLL has that an attack has begun, so it starts the
+ * aim snap. */
 static int32_t __cdecl hook_auto_aim(int32_t kind)
 {
     auto_aim_fn_t original = (auto_aim_fn_t)free_state.auto_aim_detour.original;
@@ -486,7 +486,7 @@ static int32_t __cdecl hook_auto_aim(int32_t kind)
 
     /* The lock is captured here and nowhere else. This is the one moment the engine's own target
      * bearing exists in the cell; from here on the cell is ours and is assigned, never read back.
-     * Capturing rather than re-reading is what stops the per-substep poll from compounding.
+     * Capturing rather than re-reading stops the per-substep poll from compounding.
      *
      * No chest write here either: phase 6 is followed by phase 2 of the next substep, whose
      * Plr_Steer writes that node unconditionally, so a twist written here lasts at most one
@@ -562,7 +562,7 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
      *
      * The travel direction is Stand-gated with it, and deliberately so. Outside Stand the forced
      * forward drive is not in force, so a backward key is still a NEGATIVE SPEED along an
-     * unchanged facing rather than a half turn, building the camera-relative angle there would
+     * unchanged facing rather than a half turn; building the camera-relative angle there would
      * double-count the reversal and send the player the wrong way. Outside Stand the mouse
      * therefore moves the camera while the body holds its heading, unless an attack is live, a
      * swing is running, or air control is on and the body is genuinely in flight. */
@@ -604,7 +604,7 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
             return true;
         }
 
-        /* AIR CONTROL, and it is the only OTHER thing that may happen outside Stand.
+        /* Air control, and it is the only OTHER thing that may happen outside Stand.
          *
          * The gate above it stays exactly as strict as it was, for the reasons alongside it: a
          * forced move bit outside Stand would lock the crate shove for good, and a backward key
@@ -632,7 +632,7 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
      * in the new direction because the body is about to be turned to face it. Plain forward is
      * left completely alone, so walking forward is byte-for-byte what it always was.
      *
-     * NOT WHILE AIMING. Forcing a forward walk is how free look makes a body that faces its travel
+     * Not while aiming. Forcing a forward walk is how free look makes a body that faces its travel
      * play a walk clip; with the body facing the camera instead, a backward key really is a
      * back-pedal and a sideways key really is a sidestep, and the sideways walk drives both. */
     if (!free_state.aim_stance &&
@@ -640,7 +640,7 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
         strafe_walk_force_forward(record, forward < 0.0f);
     }
 
-    /* THE TRAVEL DIRECTION, for every substep the trigger is NOT held. While it is, the body is
+    /* The travel direction, for every substep the trigger is NOT held. While it is, the body is
      * already pointed at the camera above and the feet are handled by the sideways walk instead,
      * so this must not turn the body a second time. */
     if (!free_state.body_target_valid &&
@@ -671,7 +671,7 @@ void free_look_integrate(uint8_t *record, float substep_seconds)
 
     /* The attack is over when the engine clears the cell. It does that at the tail of the fire
      * handler, on the substep the bolt actually leaves, so a zero here is the release signal,
-     * and dropping the lock with it is what stops the next attack from starting on this one's
+     * and dropping the lock with it stops the next attack from starting on this one's
      * residue. */
     if (free_state.aim_lock_valid && read_field(record, PLAYER_CHEST_CLAIM) == 0.0f) {
         free_state.aim_lock_valid = false;
@@ -725,11 +725,11 @@ static void install_attack_detours(void)
                     (unsigned)free_state.camera.start_fire);
     }
 
-    /* This is what lets the aim snap stop stealing the walk. Without it the shot still leaves
+    /* This lets the aim snap stop stealing the walk. Without it the shot still leaves
      * along the BODY, so the snap has to keep turning the body to aim, and holding the trigger
      * keeps walking the player forward whatever key is pressed.
      *
-     * INSTALLED WHATEVER THE SETTING SAYS, and that is what makes the setting live. The hook reads
+     * Installed whatever the setting says, so the setting stays live. The hook reads
      * config.aim_keeps_movement on every call and returns the original untouched when it is off,
      * so a detour that is present costs nothing while the feature is not wanted. Installing it
      * conditionally was the reason the setting could only ever be switched off during a session:
@@ -822,8 +822,8 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
                    "pulled back toward the body."
                  : "Free look is installed but switched off, so mouse look is the live control "
                    "mode. Both hooks are in place and both write nothing while it is off, the "
-                   "two camera cells stay the engine's own, which is what lets it be switched "
-                   "on in this same session rather than at the next launch.",
+                   "two camera cells stay the engine's own, so it can be switched on in this "
+                   "same session rather than at the next launch.",
              (double)(free_state.config.body_settle_seconds * MILLISECONDS_PER_SECOND),
              (double)free_state.config.body_turn_rate,
              free_state.config.aim_snap
@@ -833,11 +833,11 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
                  : "off",
              strafe_enabled ? "on" : "off (only forward and back are camera-relative)");
 
-    /* THE BRANCH, NAMED. A silent exit is a blind spot: without this line the two cases below look
+    /* The branch, named. A silent exit is a blind spot: without this line the two cases below look
      * identical in a log, and they are the difference between a camera that goes exactly where the
      * mouse asked and one that jumps up to a fifth of a turn whenever the body is also turning. */
     if (free_state.camera.last_interp != NULL) {
-        log_info("the camera's yaw ARM IS FORCED at %08X: on armed frames the engine is told the "
+        log_info("the camera's yaw arm is FORCED at %08X: on armed frames the engine is told the "
                  "target heading did not move this frame, which makes it take the plain "
                  "heading-plus-offset arm instead of the eased one. The eased arm decides which "
                  "way to cross 0/360 from the sign of the body's own turn, which is meaningless "

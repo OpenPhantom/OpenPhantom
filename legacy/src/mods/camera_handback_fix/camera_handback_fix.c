@@ -41,7 +41,7 @@ static const uint8_t SIG_OVERRIDE_ON[] = {
  *   55 8B EC / C7 05 E8 B4 5B 00 00000000 / 5D C3    the same shape, storing zero.
  *
  * Fifteen bytes, all taken, unique at thirteen. It takes no argument and leaves the forced region
- * cell alone, which is why the flag rather than that cell is what everything here reads. */
+ * cell alone, so everything here reads the flag and not that cell. */
 static const uint8_t SIG_OVERRIDE_OFF[] = {
     0x55, 0x8B, 0xEC, 0xC7, 0x05, 0xE8, 0xB4, 0x5B, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x5D, 0xC3
@@ -55,8 +55,8 @@ static const uint8_t SIG_OVERRIDE_OFF[] = {
  *   8B 45 10              mov eax,[ebp+0x10]
  *
  * Sixteen bytes are unique, twenty are taken. NOT detoured: it is resolved only so the address
- * control returns to after its call to the setter can be derived from it, which is what attributes
- * a take to the dialogue without writing that address down. */
+ * control returns to after its call to the setter can be derived from it. That return address is
+ * how a take is attributed to the dialogue without writing the address down. */
 static const uint8_t SIG_DIALOG_SPEAK_SINGLE[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,
     0x00, 0x8B, 0x45, 0x10, 0x50, 0xE8, 0x27, 0x04
@@ -132,9 +132,9 @@ static struct {
     const int32_t *flag;        /* the scripted-camera flag                       */
     const int32_t *lock;        /* the cinematic input lock                       */
     uintptr_t      dialogue_take_return;
-    bool           took_it;     /* the dialogue is what set the flag, not somebody else */
-    bool           reported;    /* the repair says what it did once, not per line  */
-    bool           declined;    /* and says once why it did nothing, which is rarer */
+    bool           took_it;     /* the dialogue set the flag, not somebody else   */
+    bool           reported;    /* the repair says what it did once, not per line */
+    bool           declined;    /* and the rarer case, why it did nothing, once   */
 } fix;
 
 /* Reads a 32-bit absolute operand out of a resolved site, refusing anything outside the image. */
@@ -175,8 +175,8 @@ static void __cdecl hook_dialog_close(int32_t from_op)
     if (!handback_rule_owes_camera(fix.took_it, *fix.flag, *fix.lock)) {
         /* Said once, and only for the case that is not obviously fine: the dialogue closed still
          * holding a camera it took and this declined anyway, which can only be the lock. That is
-         * a cutscene above the dialogue, and its own opcode is what owes the camera back. Without
-         * this line the two reasons for doing nothing are indistinguishable in the log. */
+         * a cutscene above the dialogue, and its own opcode owes the camera back. Without this
+         * line the two reasons for doing nothing are indistinguishable in the log. */
         if (fix.took_it && *fix.flag != 0 && !fix.declined) {
             fix.declined = true;
             log_info("a dialogue closed still holding the camera and it was LEFT alone, because "
@@ -184,8 +184,8 @@ static void __cdecl hook_dialog_close(int32_t from_op)
                      "still running and the camera is its business, not this module's. Reported "
                      "once", (int)*fix.lock);
         }
-        /* A dialogue whose camera the engine released on its own owes nothing, and this is the
-         * common case: it is what happens every time a choice menu was open. */
+        /* A dialogue whose camera the engine released on its own owes nothing. That is the common
+         * case; it happens every time a choice menu was open. */
         fix.took_it = (*fix.flag != 0) && fix.took_it;
         return;
     }
@@ -247,10 +247,10 @@ void camera_handback_fix_install(void)
     }
     fix.dialogue_take_return = sites[SITE_DIALOG_SPEAK_SINGLE].address + DIALOG_SPEAK_TAKE_RETURN;
 
-    /* ALL THREE OR NONE. Without the setter nothing knows whose camera it is and the repair would
+    /* All three or none. Without the setter nothing knows whose camera it is and the repair would
      * reach for anybody's; without the clearer it would go on thinking the dialogue holds a camera
      * the engine has already given back; and the close is the only moment the repair acts at. Any
-     * two of them is not a smaller version of this fix, it is a wrong one. */
+     * two of them is not a smaller version of this fix; it is a wrong one. */
     if (!detour_install(&fix.on, sites[SITE_OVERRIDE_ON].address,
                         (const void *)hook_override_on, OVERRIDE_ON_PROLOGUE) ||
         !detour_install(&fix.off, sites[SITE_OVERRIDE_OFF].address,

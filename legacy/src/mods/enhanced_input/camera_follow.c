@@ -76,8 +76,8 @@ void camera_follow_step(float travel_degrees, float frame_seconds)
      * sidestep, the view swung round behind it, and the player was left pushing a stick whose
      * sideways direction no longer pointed sideways on screen. See camera_follow.h.
      *
-     * Zero when the stick is centred, which is what makes letting go a drift home rather than a
-     * case of its own. The damper is strafe's, so the camera and the body settle with the same
+     * Zero when the stick is centred, so letting go is a drift home rather than a case of its
+     * own. The damper is strafe's, so the camera and the body settle with the same
      * shape of curve and only their constants differ. */
     target = travel_degrees * follow_state.strength;
     if (target >  follow_state.max_degrees) { target =  follow_state.max_degrees; }

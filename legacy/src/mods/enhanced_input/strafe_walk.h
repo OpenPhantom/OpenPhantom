@@ -13,7 +13,7 @@
  *
  *   `strafe`     +1 right, -1 left, 0 none
  *   `forward`    the player's OWN forward axis: +1, -1 or 0, 0 even when a walk is about to be
- *                forced on their behalf, which is what makes a lone sideways key a right angle
+ *                forced on their behalf, so a lone sideways key comes out as a right angle
  *   `drive_sign` +1 when the drive is forward, -1 when it is backward
  *
  * Pure, and one of the two pieces of this DLL that can be checked without the game running. */
@@ -22,8 +22,8 @@ float strafe_walk_travel_offset(float strafe, float forward, float drive_sign);
 /* One damper step, and the second piece that is checkable offline.
  *
  * `current` moves toward `target` so that 90 % of any gap is closed in `settle_seconds` of REAL
- * time, whatever the substep is worth, which is why the substep is an argument and not a
- * compile-time constant. The step is additionally limited to `max_rate_deg_per_second` of travel,
+ * time, whatever the substep is worth, so the substep is an argument and not a compile-time
+ * constant. The step is additionally limited to `max_rate_deg_per_second` of travel,
  * so a large gap cannot produce a first-substep spike.
  *
  * Returns `target` exactly once the remaining gap falls inside the dead band, so the value lands
@@ -57,9 +57,9 @@ void strafe_walk_force_forward(uint8_t *record, bool clear_backward);
 float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds);
 
 /* The same, with a REAL forward component rather than one rebuilt from the move bits. Only the
- * pad has one to give; a keyboard's is always exactly +1, -1 or 0, which is what the call above
- * is for. Mixing an analogue sideways value with a quantised forward one is what made every
- * diagonal on a stick come out compressed toward straight ahead. */
+ * pad has one to give; a keyboard's is always exactly +1, -1 or 0, which the call above covers.
+ * Mixing an analogue sideways value with a quantised forward one made every diagonal on a stick
+ * come out compressed toward straight ahead. */
 float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
                                float substep_seconds);
 
@@ -73,7 +73,7 @@ void strafe_walk_apply_stick_move(uint8_t *record, float forward, float strafe);
 /* Either thunk, on a substep that does not drive the walk: bring the latched body angle home.
  *
  * The root node is a latch, and the walk is driven in Stand only, so without this the last angle
- * written in Stand stays on the model for the whole of a jump, a sabre swing or a swim. Call it on
+ * written in Stand stays on the model for the length of a jump, a sabre swing or a swim. Call it on
  * every substep that does not call strafe_walk_drive; it does nothing at all once the angle has
  * reached zero, so it never writes to a node it does not already own.
  *

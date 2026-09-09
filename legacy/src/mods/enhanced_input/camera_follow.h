@@ -1,7 +1,7 @@
 /* camera_follow.h: a passive camera follow for strafing, the thing a pad expects and this engine
  * does not do.
  *
- * WHY IT IS NEEDED, which is a fact about strafe rather than about the camera. strafe_walk.c does
+ * Why it is needed is a fact about strafe rather than about the camera. strafe_walk.c does
  * not turn the player's heading; that is its whole design. It sets the forward bit and the drive
  * the engine itself would write and then turns the direction the walk comes out in, so the clips,
  * the footsteps and the collision all stay the engine's own. The heading therefore never moves
@@ -51,9 +51,9 @@
  * heading-relative, so the direction that moves the player sideways ON SCREEN rotates as the
  * view swings, the player corrects, the correction moves the travel angle, and the view swings
  * further. Nothing in the engine is in conflict there and no cell is contended; the loop
- * closes through the player's hands, which is why it reads as fighting. Taking a third of the
- * angle and stopping well short of the point where the mapping inverts is what leaves the
- * drift readable as drift. */
+ * closes through the player's hands and reads as fighting. Taking a third of the angle and
+ * stopping well short of the point where the mapping inverts leaves the drift readable as
+ * drift. */
 void camera_follow_configure(bool enabled, bool strafe_enabled, float settle_seconds,
                              float max_rate_deg_per_second, float strength,
                              float max_degrees);
@@ -62,7 +62,7 @@ void camera_follow_configure(bool enabled, bool strafe_enabled, float settle_sec
  * is the same either way, but the clock matters to anyone reading the rate against it.
  *
  * `travel_degrees` is how far the walk is turned off the heading, zero when the stick is centred,
- * which is what makes releasing it a drift home rather than a separate case. */
+ * so releasing it is a drift home rather than a separate case. */
 void camera_follow_step(float travel_degrees, float frame_seconds);
 
 /* How far off the interpolated heading the camera should sit right now. Zero when this is off, so

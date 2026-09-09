@@ -53,8 +53,8 @@ the caller that asked for it. Across three field runs:
 * the take that broke the camera had no release after it at all, until the level tore down
 
 A fourth run watched `Dialog_Close` itself, reading the flag on the way in and again on the way out,
-and reported the choice count as zero. That is what separates the two halves of the condition and
-names the count as what refused.
+and reported the choice count as zero. That separates the two halves of the condition and names
+the count as the half that refused.
 
 The free look gate in `enhanced_input` reads the same flag and had been reporting it all along:
 `gOver 1` with `camera state 0`, meaning the camera object was in ordinary follow while the flag
@@ -65,7 +65,7 @@ still claimed a script had it.
 When a dialogue closes still holding a camera it took itself, the camera is handed back.
 
 **Only the count test is dropped.** The lock half is kept, in the form "nobody above this dialogue
-is still holding the input lock". That is what stops this from stealing a camera a cutscene is
+is still holding the input lock". That stops this from stealing a camera a cutscene is
 holding: a cutscene takes the lock to level 5, and it is still standing when a dialogue nested
 inside it closes. Asking whether the lock is clear *now* also covers the second failure above,
 which deleting the count test on its own would have left in place.
@@ -76,7 +76,7 @@ cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered a
 
 Installed all three detours or none. Without the setter nothing knows whose camera it is; without
 the clearer it would think the dialogue still holds one the engine already gave back; and the close
-is the only moment it acts at. Any two of them is not a smaller version of this fix, it is a wrong
+is the only moment it acts at. Any two of them is not a smaller version of this fix; it is a wrong
 one.
 
 ## Configuration: `[camera_handback_fix]`

@@ -1,4 +1,4 @@
-/* enhanced_input_internal.h: the two phase thunks' shared state, and nothing else.
+/* enhanced_input_internal.h: nothing but the two phase thunks' shared state.
  *
  * The engine calls this DLL at exactly two points in the player pipeline, phase 2 to steer and
  * phase 7 to integrate, and they are one mechanism split across two moments: phase 2 decides what

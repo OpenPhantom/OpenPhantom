@@ -12,7 +12,7 @@
 /* ==============================================================================================
  * The captions, in five languages
  *
- * ASCII only, and that is not laziness: the menu fonts are bitmap fonts and their coverage above
+ * ASCII only, and not out of laziness: the menu fonts are bitmap fonts and their coverage above
  * 0x7F has never been read out of the assets. SEITWAERTS rather than the umlaut, PAS CHASSE and
  * CAMERA LIBRE rather than the accents.
  *

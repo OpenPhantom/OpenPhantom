@@ -25,7 +25,7 @@
  *   * The camera may lead the body and it may not be leashed to it. The gap is bounded by one step
  *     of hand movement and closes by itself, because the body is handed exactly the same degrees
  *     one step later. Clamping the camera against the body would make the camera a function of the
- *     body again, which is the whole of what this removes.
+ *     body again, the very thing this removes.
  *
  * ==============================================================================================
  * The frame, in program order
@@ -132,11 +132,11 @@
  * not smoother, while the thing a player sees gets better.
  *
  * So the verdict is the split. Every frame is tagged with whether a simulation step ran on it, and
- * the roughness is averaged over the two groups separately. The defect is that the whole of the
- * change lands on the one frame in five that ran a step, so today the ratio between the two groups
+ * the roughness is averaged over the two groups separately. The defect is that the entire change
+ * lands on the one frame in five that ran a step, so today the ratio between the two groups
  * should be large, and if the feature does what it claims it should fall toward one. That ratio is
- * free of hand speed, free of frame rate and free of the sensitivity setting, which is what makes
- * two runs in one sitting comparable at all. The median and the mean are printed beside it because
+ * free of hand speed, free of frame rate and free of the sensitivity setting, so two runs in one
+ * sitting are comparable at all. The median and the mean are printed beside it because
  * the plan asked for them.
  * ============================================================================================ */
 #define CENSUS_MIN_FRAMES     600u      /* about four seconds at a high frame rate */
@@ -144,7 +144,7 @@
 #define CENSUS_MAX_FRAMES   20000u      /* give up and report what there is */
 #define CENSUS_MAX_SAMPLES    256u      /* kept sorted, so the median is free at the end */
 
-/* THE SPEED BANDS, and they exist because the first version of this instrument measured the one
+/* The speed bands, and they exist because the first version of this instrument measured the one
  * regime nobody is complaining about.
  *
  * The report it produced covered 0.9 degrees per frame, about 80 degrees a second, which is a
@@ -158,12 +158,13 @@
  * frame, which at 90 frames a second is 90 and 360 degrees a second.
  *
  * A SKIP is counted separately, because the roughness average cannot express it: it is a frame
- * whose drawn step changed by more than the whole of the previous step, which is what "it stopped
- * and then jumped" is. A perfectly even sweep produces none at any speed. */
+ * whose drawn step changed by more than the whole previous step, the shape of "it stopped and
+ * then jumped". A perfectly even sweep produces none at any speed. */
 #define CENSUS_BANDS            3u
 #define CENSUS_BAND_SLOW_MAX    1.0f
 #define CENSUS_BAND_MEDIUM_MAX  4.0f
-#define CENSUS_MIN_MOVING_FRAMES 200u   /* medium and fast together, before the report is worth it */
+/* medium and fast together, before the report is worth it */
+#define CENSUS_MIN_MOVING_FRAMES 200u
 
 /* Enough to carry a whole fast sweep and its run-out, few enough that it cannot fill a disk. */
 #define MAX_DUMP_FRAMES 400
@@ -186,7 +187,7 @@ typedef struct yaw_census {
     uint32_t kept;
 
     /* Indexed by speed band: slow, medium, fast. `skips` counts the frames whose drawn step
-     * changed by more than the whole of the previous step. */
+     * changed by more than the whole previous step. */
     uint32_t band_frames[CENSUS_BANDS];
     double   band_first[CENSUS_BANDS];
     double   band_second[CENSUS_BANDS];
@@ -207,7 +208,7 @@ typedef struct view_lead_state {
 
     /* Degrees banked by the rendered frames since the last simulation step took them. */
     float pending;
-    /* What the last step was handed, which is what the engine's interpolation is paying out. */
+    /* What the last step was handed, and what the engine's interpolation is paying out. */
     float substep_mouse;
 
     /* The ledger. Doubles because they run for a whole session and a float would stop counting. */
@@ -220,7 +221,7 @@ typedef struct view_lead_state {
     /* Set by the step handover, consumed by the census sample: which frames ran a step. */
     bool  substep_since_sample;
 
-    /* THE BURST, and it exists because an average cannot answer "did that frame draw nothing".
+    /* The burst, and it exists because an average cannot answer "did that frame draw nothing".
      *
      * Every aggregate above says how rough a band was; none of them can tell hand acceleration
      * from lumpy delivery, and those two want opposite repairs. A run of consecutive frames
@@ -282,7 +283,7 @@ float view_lead_degrees(float pending_degrees, float substep_mouse_degrees, floa
  * ============================================================================================ */
 void view_lead_load_config(void)
 {
-    /* OFF BY DEFAULT. It changes where the camera points within a simulation step, which is a
+    /* Off by default. It changes where the camera points within a simulation step, which is a
      * change in feel rather than the repair of a fault, and the whole point of the measurement
      * below is that the two settings can be compared in one sitting. */
     lead_state.enabled = ini_read_bool(INPUT_SECTION, "NewMouseInput", false);
@@ -343,8 +344,8 @@ bool view_lead_is_active(void)
  * 0x00418EE2 is the reason this feature refuses to arm unless the plain arm is forced. Arm A reads
  * back the yaw that was drawn on the previous frame, so a lead added to that yaw would be fed into
  * the next frame's own answer and would compound rather than being recomputed from nothing. Arm B
- * is heading plus offset and carries no history at all, which is what makes a per-frame lead a
- * quantity that can simply be added and then forgotten. */
+ * is heading plus offset and carries no history at all, so a per-frame lead is a quantity that
+ * can simply be added and then forgotten. */
 void view_lead_install(bool bank_is_live, bool yaw_arm_is_forced)
 {
     if (lead_state.installed) {
@@ -353,34 +354,35 @@ void view_lead_install(bool bank_is_live, bool yaw_arm_is_forced)
     lead_state.installed = true;
 
     if (!lead_state.enabled) {
-        log_info("NewMouseInput=0, the view angle stays a simulation quantity: it advances once per "
-                 "simulation step and the camera interpolates between the last two of them, which "
-                 "is the engine's own behaviour. A held direction key asks for the same number of "
-                 "degrees every step, so that interpolation draws a straight line and the key is "
-                 "smooth; the mouse asks for a different number every step, so above about 32 "
-                 "frames per second several frames in a row are drawn at one turn rate and then it "
-                 "changes. NewMouseInput=1 puts the mouse on the render clock instead.");
+        log_info("NewMouseInput=0, the view angle stays a simulation quantity: it advances once "
+                 "per simulation step and the camera interpolates between the last two of them, "
+                 "which is the engine's own behaviour. A held direction key asks for the same "
+                 "number of degrees every step, so that interpolation draws a straight line and "
+                 "the key is smooth; the mouse asks for a different number every step, so above "
+                 "about 32 frames per second several frames in a row are drawn at one turn rate "
+                 "and then it changes. NewMouseInput=1 puts the mouse on the render clock "
+                 "instead.");
         return;
     }
 
     /* Each refusal is named rather than counted, because the two have completely different repairs
      * and a player who is told only that the feature is off cannot tell which he is looking at. */
     if (!bank_is_live) {
-        log_warning("NewMouseInput=1 needs the mouse to be collected once per rendered frame and it "
-                    "is not, so it stays OFF. Without the bank the axis is read live and is not "
+        log_warning("NewMouseInput=1 needs the mouse to be collected once per rendered frame and "
+                    "it is not, so it stays OFF. Without the bank the axis is read live and is not "
                     "cleared by reading it, so a second reader would be handed the same movement "
-                    "and the view would turn twice as far. MouseAccumulate=1 is what turns the "
-                    "collector on; the log above says why it is not running.");
+                    "and the view would turn twice as far. MouseAccumulate=1 turns the collector "
+                    "on; the log above says why it is not running.");
         return;
     }
     if (!yaw_arm_is_forced) {
         log_warning("NewMouseInput=1 needs the camera's plain yaw arm and it is not being forced, "
-                    "so it stays OFF. The engine's other arm eases the camera toward its target and "
-                    "reads back the yaw that was drawn on the previous frame, so the extra turn "
-                    "shown on one frame would be fed into the next one and would compound instead "
-                    "of being recomputed. MouseLookRigidCamera=1 forces the plain arm; if that is "
-                    "already 1, the cell that selects the arm did not resolve in this build and the "
-                    "line above says so.");
+                    "so it stays OFF. The engine's other arm eases the camera toward its target "
+                    "and reads back the yaw that was drawn on the previous frame, so the extra "
+                    "turn shown on one frame would be fed into the next one and would compound "
+                    "instead of being recomputed. MouseLookRigidCamera=1 forces the plain arm; if "
+                    "that is already 1, the cell that selects the arm did not resolve in this "
+                    "build and the line above says so.");
         return;
     }
 
@@ -439,9 +441,9 @@ float view_lead_take_substep(float degrees_taken_from_the_bank)
     lead_state.pending       = 0.0f;
     lead_state.handed_total += (double)banked;
 
-    /* What the interpolation is about to pay out is the WHOLE mouse turn this step applies, which
-     * is what the engine's own per-step drain handed over as well as what was banked here. Leaving
-     * the first term out would leave that part of the turn to be drawn twice. */
+    /* What the interpolation is about to pay out is the WHOLE mouse turn this step applies: what
+     * the engine's own per-step drain handed over as well as what was banked here. Leaving the
+     * first term out would leave that part of the turn to be drawn twice. */
     lead_state.substep_mouse = isfinite(degrees_taken_from_the_bank)
                                    ? (banked + degrees_taken_from_the_bank)
                                    : banked;
@@ -592,8 +594,8 @@ static void census_report_bands(void)
                  census->band_skips[band],
                  100.0 * (double)census->band_skips[band] / (double)census->band_frames[band]);
     }
-    log_info("  a SKIP is a frame whose drawn step changed by more than the whole of the previous "
-             "step, which is what \"it stopped and then jumped\" is. An even sweep produces none at "
+    log_info("  a SKIP is a frame whose drawn step changed by more than the whole previous step, "
+             "the shape of \"it stopped and then jumped\". An even sweep produces none at "
              "any speed. Roughness is the mean change of the drawn step against the mean step, so "
              "it is comparable between bands and between runs; the absolute jump a band implies is "
              "its roughness times its mean turn, and at a 90 degree field of view one degree is "
@@ -657,7 +659,7 @@ static void census_report(void)
                      (double)packets / (double)census->frames_seen,
                      100.0 * (double)census->frames_seen / (double)packets);
         } else {
-            log_info("  no raw device reports arrived in this window, so the mouse was read through "
+            log_info("no raw device reports arrived in this window, so the mouse was read through "
                      "the engine's own device and the report timing is not recoverable");
         }
     }
@@ -671,11 +673,11 @@ static void census_report(void)
         return;
     }
     log_info("the mouse ledger over the same window: %.1f degrees banked by the rendered frames, "
-             "%.1f handed to the simulation, %.1f dropped where the camera was not ours, %.2f still "
-             "banked. The residual is %.4f degrees and it must be rounding: anything else means "
-             "movement was invented or lost between the two clocks, which is the one fault here "
-             "that nothing on screen would show until the camera and the body had quietly parted "
-             "company.",
+             "%.1f handed to the simulation, %.1f dropped where the camera was not ours, %.2f "
+             "still banked. The residual is %.4f degrees and it must be rounding: anything else "
+             "means movement was invented or lost between the two clocks, which is the one fault "
+             "here that nothing on screen would show until the camera and the body had quietly "
+             "parted company.",
              lead_state.banked_total, lead_state.handed_total, lead_state.dropped_total,
              (double)lead_state.pending, residual);
 
@@ -732,10 +734,10 @@ void view_lead_census_sample(float drawn_yaw)
          * first frame of real movement belongs to a menu or a cutscene and would only make the
          * residual look like a leak.
          *
-         * The opening balance is not zero, and getting that wrong is what the ledger caught itself
-         * doing in the field: whatever is in the bank at this instant has not been handed over yet
-         * and will be, so a window that starts counting from zero reports exactly that much as
-         * invented movement. It is booked as already banked. */
+         * The opening balance is not zero, and getting that wrong is the fault the ledger caught
+         * itself in during the field run: whatever is in the bank at this instant has not been
+         * handed over yet and will be, so a window that starts counting from zero reports exactly
+         * that much as invented movement. It is booked as already banked. */
         lead_state.banked_total  = (double)lead_state.pending;
         lead_state.handed_total  = 0.0;
         lead_state.dropped_total = 0.0;

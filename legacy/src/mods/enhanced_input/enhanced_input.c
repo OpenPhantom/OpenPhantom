@@ -74,8 +74,8 @@
  * restored values. What deliberately stays rotated is the displacement, desiredPos and moveDir.
  *
  * Knockback and the conveyor surcharge are added AFTER the heading term, in world axes, so they
- * are untouched by the offset, which is exactly right and is the reason this is done with a
- * heading offset rather than by rotating the finished displacement.
+ * are untouched by the offset. That is the reason this is done with a heading offset rather than
+ * by rotating the finished displacement.
  *
  * ---- and the body is turned to match ---------------------------------------------------------
  * bapobj_setNodeYaw(hActor, 0, theta) rotates the model root. It is additive on the animation
@@ -88,8 +88,8 @@
  * The engine polls the device once per rendered frame and does it after that frame's substeps
  * have already run, so most of the hand's movement was being overwritten unread. mouse_look.c
  * collects every frame's sample and hands out a share per consumed interval. This thunk asks for
- * the step and applies it; the drain is unconditional, because taking it is what tells the
- * collector somebody is consuming.
+ * the step and applies it; the drain is unconditional, because taking it is how the collector is
+ * told somebody is consuming.
  *
  * ---- and the upper body leans into the turn again --------------------------------------------
  * Plr_Steer ends by twisting chest and head about the model's up axis, turnWheel/12 and /10, from
@@ -104,7 +104,7 @@
  * touched. The chest is skipped while the auto-aim claims it, because the weapon and the blade hang
  * off that node; the head has no other writer in the image.
  *
- * WHERE THE SEAMS WENT. This file installs the whole DLL: two phase thunks, the menu, the sites
+ * Where the seams went. This file installs the whole DLL: two phase thunks, the menu, the sites
  * they all depend on, and the order in which they have to come up. The thunks themselves are
  * short, and their correctness rests entirely on facts about the engine that no reader can see
  * from them, which fields the clip selector branches on, where sincos_deg is taken, which modes
@@ -181,18 +181,18 @@ void enhanced_input_write_field(uint8_t *record, int offset, float value)
  * The view turn happens BEFORE the original, because the original consumes it: it wraps heading to
  * 0..360 right afterwards itself (0x44A6C5, call wrap360). So we do not wrap and do not clean up.
  *
- * The travel turn WRAPS the original, and that is the whole trick of this feature. The integrator
+ * The travel turn WRAPS the original. That is the whole trick of this feature. The integrator
  * takes sincos_deg(heading) inside its own body, so a heading that is offset across exactly that
  * one call sends the displacement somewhere else while leaving every other consumer of heading,
  * the camera above all, looking at the value it always had.
  *
- * This phase also brings the body angle home, and that is a second reason it is thunked. Phase 2
+ * This phase also brings the body angle home, a second reason it is thunked. Phase 2
  * does not run in every mode phase 7 runs in: swimming (whose descriptor replaces phase 2 with a
  * steer of its own), a launched sidestep and a fixed jump are the three. The model root is a
- * latch, so an angle written in Stand would otherwise stay on the model for the whole of whatever
- * came next. The release only ever touches the node while a non-zero angle of OURS is still on it,
- * so it unwinds our own latch and nothing else, in swimming, where this DLL never writes an
- * angle in the first place, it does nothing at all. That is the deliberate answer to a genuinely
+ * latch, so an angle written in Stand would otherwise stay on the model for as long as whatever
+ * came next lasted. The release only ever touches the node while a non-zero angle of OURS is still
+ * on it, so it unwinds our own latch only; in swimming, where this DLL never writes an angle in
+ * the first place, it does nothing at all. That is the deliberate answer to a genuinely
  * new reach: the phase-7 thunk can see modes the phase-2 thunk never did.
  * ============================================================================================ */
 
@@ -218,7 +218,7 @@ static void __cdecl integrate_thunk(void)
         frame_delta = enhanced_input_read_field(record, PLAYER_FRAME_DELTA);
     }
 
-    /* Free look's body turn goes FIRST, and the position of this line is the whole of a defect that
+    /* Free look's body turn goes FIRST, and the position of this line was the entire defect that
      * shipped. Unlike the sideways walk's travel offset a few lines below, this write is NOT undone
      * afterwards: the body has really turned, and the camera anchor, the vault probe and the
      * model's own world yaw all have to see it. The travel offset, on the other hand, remembers the
@@ -347,7 +347,7 @@ void enhanced_input_install(void)
 
     input_config_load();
 
-    /* Strafe WITHOUT mouse look is impossible, and that is a byte finding rather than a taste:
+    /* Strafe WITHOUT mouse look is impossible, a byte finding rather than a matter of taste:
      * turnWheel (+0x2A4) is the ONLY turn channel. Mouse and keyboard exclude each other in the
      * original, but both land there. Turning the keyboard axis into strafing means clearing
      * turnWheel, which clears the mouse with it. Without mouse look a character would be left
@@ -422,8 +422,8 @@ void enhanced_input_install(void)
      * than doubling the turn. */
     (void)free_look_install(&input_state.sites, input_config()->strafe);
 
-    /* After free_look_install, because that is what resolves the camera sites this borrows, and
-     * it installs whatever the free look setting says. */
+    /* After free_look_install, because that call resolves the camera sites this borrows, and it
+     * installs whatever the free look setting says. */
     pad_stick_configure(input_config()->pad_stick, input_config()->pad_controller_index,
                         input_config()->pad_deadzone, input_config()->pad_run_threshold,
                         input_config()->pad_run_hysteresis);
@@ -445,8 +445,8 @@ void enhanced_input_install(void)
         mouse_look_use_frame_clock_smoothing();
     }
 
-    /* The controls screen is patched whatever the keyboard axis did, and that is a repair rather
-     * than a reordering. The screen carries three widgets: the mouse sensitivity slider, the free
+    /* The controls screen is patched whatever the keyboard axis did, a repair rather than a
+     * reordering. The screen carries three widgets: the mouse sensitivity slider, the free
      * look check box and the sideways walking check box. Only the last of them has anything to do
      * with the keyboard axis, and gating all three on it meant that a build where one signature
      * missed lost the sensitivity slider and the free look switch as well, while the log blamed a
@@ -500,7 +500,7 @@ void enhanced_input_install(void)
                  "instead of a zero, so the speed penalty on turning is the engine's again. It "
                  "does NOT reach the follow camera: bapview_updateCam overwrites that cell with "
                  "its own wrap difference before either of its tests, so the penalty ladder is "
-                 "what this buys and nothing else. The view still turns as fast as the hand does; "
+                 "all this buys. The view still turns as fast as the hand does; "
                  "the double integration is taken out in phase 7. RestoreTurnRate=0 reverts it.");
     } else {
         log_info("RestoreTurnRate=0, the turn cell is zeroed as before, so turning costs no speed "

@@ -36,8 +36,8 @@
  * the value is still ours to interpret.
  *
  * The view step does not come from a read at all any more. mouse_look.c banks the axis once per
- * rendered frame and hands a share of the bank over here, and taking it is what marks a substep as
- * having consumed, so it is done unconditionally, at the very top, before any gate can return.
+ * rendered frame and hands a share of the bank over here, and taking it marks a substep as having
+ * consumed, so it is done unconditionally, at the very top, before any gate can return.
  * ============================================================================================ */
 /* Measurement only. Which gates the substep passed, for the steer log; these decide between the
    walk being ours and the walk being the engine's, and no number in the line shows them. */
@@ -73,13 +73,13 @@ void __cdecl enhanced_input_steer_thunk(void)
 
     /* First, and before any gate of ours. The engine only reaches this phase when it is running
      * the player pipeline, which is the only state in which it reads input itself. A menu, a
-     * dialogue and a cutscene stop the pipeline, and that is the whole of the original's input
+     * dialogue and a cutscene stop the pipeline, and that is the original's entire input
      * lock. Everything this DLL turns on the render clock is gated on this stamp. */
     input_gate_note_phase_ran();
 
     /* The substep is read BEFORE the drain and outside every gate. The reconstruction underneath
      * answers a RATE, so it has to be told the interval this consumer covers, and the drain itself
-     * has to stay unconditional, because taking it is what marks a substep as having consumed. A
+     * has to stay unconditional, because taking it marks a substep as having consumed. A
      * record that is not there yet answers zero, which the drain understands.
      *
      * The bank is consumed on EVERY run of this thunk, before any gate: a step left in it would be
@@ -88,7 +88,7 @@ void __cdecl enhanced_input_steer_thunk(void)
     if (record != NULL) {
         substep_seconds = enhanced_input_read_field(record, PLAYER_FRAME_DELTA);
     }
-    /* ONE CONSUMER, ONE CADENCE, and which one it is depends on the control mode.
+    /* One consumer, one cadence, and which one it is depends on the control mode.
      *
      * With the per-frame path live the bank belongs to the camera update, and this phase takes only
      * what the rendered frames have already banked. Asking the bank for a substep's worth here as
@@ -99,9 +99,9 @@ void __cdecl enhanced_input_steer_thunk(void)
      * rough again as the others, which is the very asymmetry the per-frame path exists to remove.
      *
      * Without the per-frame path this is unchanged: the substep is the only consumer, and taking
-     * is also what tells the collector somebody is consuming.
+     * is also how the collector is told somebody is consuming.
      *
-     * The handover is called either way, because it is what marks a substep for the measurement,
+     * The handover is called either way, because it marks a substep for the measurement,
      * and it answers zero while the feature is off. The view lead is PASSED the step that has just
      * been taken, and for two reasons of which only the first is obvious. The body owes the sum,
      * because the bank can be drained on both clocks and each drain removes what it hands over. And
@@ -153,7 +153,7 @@ void __cdecl enhanced_input_steer_thunk(void)
             air_mode   = (mode == PLAYER_MODE_JUMP || mode == PLAYER_MODE_JEDI_JUMP ||
                           mode == PLAYER_MODE_FALL);
             /* A swing, either hero's. Both descriptors run the steer and the integrate, so the
-             * engine turns the body through one and this file's Stand gate is what stopped it. */
+             * engine turns the body through one and this file's Stand gate stopped it. */
             melee_mode = (mode == PLAYER_MODE_SABRE_ATTACK || mode == PLAYER_MODE_PANAKA);
             /* And whether the swing needs anything folding back. Only with the sideways walk on:
              * with it off the turn axis was never taken away in the first place, and the arm
@@ -169,9 +169,9 @@ void __cdecl enhanced_input_steer_thunk(void)
     }
 
     if (phase_active) {
-        /* Read whether or not sideways walking is on: with it OFF the same axis is what turns the
-         * player, and this used to be the read that was skipped, which is why A and D went dead
-         * rather than merely stopping strafing. Reading consumes nothing; the query API never
+        /* Read whether or not sideways walking is on: with it OFF the same axis turns the player,
+         * and this used to be the read that was skipped, so A and D went dead rather than merely
+         * stopping strafing. Reading consumes nothing; the query API never
          * touches a device. */
         if (input_state.sites.read_absolute_axis != NULL) {
             keyboard_axis = input_state.sites.read_absolute_axis(0);
@@ -195,18 +195,18 @@ void __cdecl enhanced_input_steer_thunk(void)
         return;
     }
 
-    /* NEGATED, and this is the whole of the "A and D are the wrong way round" bug. The digital
-     * turn axis is POSITIVE FOR LEFT, the shipped defaults bind the left arrow and NUMPAD4
+    /* NEGATED, and this is the entire "A and D are the wrong way round" bug. The digital
+     * turn axis is POSITIVE for left, the shipped defaults bind the left arrow and NUMPAD4
      * without the invert flag and the right arrow and NUMPAD6 with it, while this file counts
      * right as positive. Treating the axis as if positive meant right sidestepped the wrong way
      * for every key bound to it. */
     axis   = -enhanced_input_clamp(keyboard_axis, -1.0f, 1.0f);
     strafe = input_config()->strafe_invert ? -axis : axis;
 
-    /* ---- WHERE THE AUTHOR PLACED A CAMERA, THE GAME'S OWN SCHEME GETS ITS STICK BACK -------
+    /* ---- Where the author placed a camera, the game's own scheme gets its stick back -------
      *
      * Free look already lets go of an authored camera, and for a long time it was the only one of
-     * the three that did. That disagreement is what trapped a player on a balcony in the palace.
+     * the three that did. That disagreement trapped a player on a balcony in the palace.
      * Our scheme spends the stick on a DIRECTION and leaves free look to turn the body to face it;
      * with free look gone what remained was a body lean clamped at ninety degrees and nothing that
      * rotates the player at all, so there was no way to turn round and jump back up.
@@ -223,8 +223,8 @@ void __cdecl enhanced_input_steer_thunk(void)
     } else {
         /* The pad replaces both components of the input, or neither. pad_stick.h sets out why the
          * engine's own read of the same stick cannot be used for a direction. A substep it has
-         * nothing to say about leaves the engine's own numbers exactly as they were, which is what
-         * keeps the keyboard, and a pad the player has bound by hand, working unchanged. */
+         * nothing to say about leaves the engine's own numbers exactly as they were, which keeps
+         * the keyboard, and a pad the player has bound by hand, working unchanged. */
         pad_driving = pad_stick_take_substep(record, stand_mode, input_config()->strafe_invert,
                                              input_config()->strafe, &pad_strafe, &pad_forward);
         if (pad_driving) {
@@ -242,16 +242,16 @@ void __cdecl enhanced_input_steer_thunk(void)
      * knows where the substep's input came from. From a stick it is a real magnitude and its sign
      * carries the whole lower half of the circle; from keys it can only ever be +1, -1 or 0. Free
      * look's own angle is a signed atan2 that reaches a full half turn either way, so given an
-     * honest pair it turns the body anywhere the stick points, which is what makes a smooth 360
-     * possible at all. */
+     * honest pair it turns the body anywhere the stick points, and a smooth 360 becomes
+     * possible. */
     if (pad_driving) {
         steer_forward = pad_stick_y();      /* the RAW component, not the back-pedal deadbanded one:
                                              * facing your travel has no backward case to protect */
     } else if ((air_mode || melee_mode) && pad_stick_is_active()) {
-        /* THE VECTOR IS WANTED IN THE AIR TOO, and only the move bits are not.
+        /* The vector is wanted in the air too, and only the move bits are not.
          *
          * pad_stick_take_substep is gated on Stand because that is where it WRITES, and a
-         * forced bit outside Stand is what would lock the crate shove. Reading is a different
+         * forced bit outside Stand would lock the crate shove. Reading is a different
          * question and this used to conflate them, so a jump fell back to the engine's own
          * degraded read of the same stick. That is coarse everywhere, and on a machine where
          * the pad reaches XInput but never the engine's WinMM joystick path it is nothing at
@@ -280,8 +280,8 @@ void __cdecl enhanced_input_steer_thunk(void)
      * and the second was not. The same axis was turned into a sideways value a few lines above,
      * unconditionally, and handed to free look, which builds a travel angle out of it and turns the
      * body to face it. So with the sideways walk off the turn keys did both at once: they turned
-     * the player, correctly, and they also walked them sideways relative to the camera, which is
-     * the whole of the feature that was supposed to be switched off.
+     * the player, correctly, and they also walked them sideways relative to the camera, the
+     * entire feature that was supposed to be switched off.
      *
      * Withheld here rather than at the assignment because this is the one consumer that was wrong:
      * the walk driver below is already gated on the same setting, and the turn fold further down
@@ -292,9 +292,9 @@ void __cdecl enhanced_input_steer_thunk(void)
          * with the mouse, and a turn rate left standing would make the engine turn the BODY's
          * heading on top of it in phase 7, the very coupling free look exists to break. */
         input_state.turn_wheel_is_ours = false;
-        /* NOTHING IS WRITTEN INTO THE UPPER BODY HERE, and the empty line is the design rather than
-         * an omission. It has carried three different corrections, each removed for a different
-         * reason, and they are kept together because an empty line invites a fourth.
+        /* Nothing is written into the upper body here, and the empty line is the design rather
+         * than an omission. It has carried three different corrections, each removed for a
+         * different reason, and they are kept together because an empty line invites a fourth.
          *
          * The first re-issued the engine's own upper body twist from the turn cell. On this branch
          * that cell carries OUR MOUSE, because the engine's analogue turn arm reads the same device
@@ -317,7 +317,7 @@ void __cdecl enhanced_input_steer_thunk(void)
         /* While the trigger is held the feet belong to the sideways walk, not to free look's own
          * travel turn. The body is already facing the camera, so a sideways key is a real sidestep
          * and a backward key a real back-pedal, the same thing this DLL does with free look
-         * switched off, which is what makes firing feel identical in both schemes. */
+         * switched off, so firing feels identical in both schemes. */
         if (free_look_aim_stance() && stand_mode && input_config()->strafe) {
             input_state.pending_travel_degrees =
                 strafe_walk_drive(record, strafe, substep_seconds);
@@ -354,7 +354,7 @@ void __cdecl enhanced_input_steer_thunk(void)
          * the one being zeroed.
          *
          * The rate is the engine's own ceiling for the player, and the sign is the axis's: the
-         * digital turn axis is POSITIVE FOR LEFT, which is also the direction increasing heading
+         * digital turn axis is POSITIVE for left, which is also the direction increasing heading
          * turns, so it is added unnegated. (The sideways walk negates it because THAT file counts
          * right as positive; this does not.) */
         /* A swing joins the two cases that already fold, and for the same reason both of them
@@ -377,7 +377,7 @@ void __cdecl enhanced_input_steer_thunk(void)
 
         /* And the pad's sideways deflection, on the same path and at the same rate. It is negated
          * because this file counts right as positive while the axis above is positive for LEFT,
-         * so passing -x is what puts the pad on the keyboard's own footing rather than adding a
+         * so passing -x puts the pad on the keyboard's own footing rather than adding a
          * second sign convention. Analog, so a small push is a slow turn. */
         if ((hand_back || melee_turn) && pad_turn != 0.0f) {
             input_state.pending_yaw_degrees +=
@@ -392,15 +392,15 @@ void __cdecl enhanced_input_steer_thunk(void)
          * it did: Plr_PublishGround hands the cell over, and updateCam overwrites it with its own
          * measurement of the interpolated heading before anything looks at it. Writing 0 still
          * switched off every one of the nine. */
-        /* READ BEFORE OVERWRITING. This is the value the original just computed, the ramped
+        /* Read before overwriting. This is the value the original just computed, the ramped
          * keyboard turn or the clamped mouse accumulation, and it is the authentic input for the
          * upper-body twist. Two lines further down the cell stops holding it. */
         engine_rate = enhanced_input_read_field(record, PLAYER_TURN_WHEEL);
 
         if (input_config()->restore_turn_rate) {
-            /* NOTHING IS WRITTEN, and that is less than this used to do and more correct.
+            /* Nothing is written, and that is less than this used to do and more correct.
              *
-             * Writing our own rate was the second mistake here. the cell is an accumulator: the
+             * Writing our own rate was the second mistake here. The cell is an accumulator: the
              * original does turnWheel += ramp * axis, so a held key climbs 12, 26, 42, 60, 80,
              * 102, 120 across seven substeps, and that climb IS the engine's ease-in, the thing
              * the upper-body twist is supposed to show. Writing a finished 120 into it poisons the

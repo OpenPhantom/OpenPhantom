@@ -21,7 +21,7 @@
  * costs no latency at all, because it changes what is divided rather than delaying anything.
  *
  * ==============================================================================================
- * Why the per-substep increment is the whole of it, out of the engine's own bytes
+ * Why the per-substep increment is all of it, out of the engine's own bytes
  *
  * The substep is exactly 1/32 s, and `sys_runSubsteps` writes the constant itself:
  *
@@ -115,8 +115,8 @@
  * look plausible.
  *
  * What survives the packet clock is the report clock's own unevenness, and the only way to remove
- * that is to average, which is delay. That is what the time constant buys and it is the only thing
- * in here that costs anything.
+ * that is to average, which is delay. The time constant buys that, and it is the only thing in
+ * here that costs anything.
  *
  * ==============================================================================================
  * Why the time constant is measured rather than configured
@@ -131,7 +131,7 @@
  * The rule that makes two consumers safe, and it is the one this file exists to enforce
  *
  * Everything that arrives is banked, and a take removes what it delivers. Nothing is ever delivered
- * that has not arrived, and the bank can never change sign. That is what lets two consumers at
+ * that has not arrived, and the bank can never change sign. That is how two consumers at
  * different cadences share one reconstruction: whatever the first takes, the second finds gone, and
  * the total delivered over any interval is exactly the total the hand produced.
  *
@@ -181,8 +181,8 @@ void mouse_rate_reset(mouse_rate_t *rate);
  * that cannot say passes one packet and the frame's own duration, which loses the boundary
  * correction and keeps everything else. A reader that can say and had nothing to report this frame
  * passes zero packets, and that is not the same thing: an interval with no report in it says
- * nothing about the hand, and feeding it in as a zero is what makes a slow device look like a
- * stopping one.
+ * nothing about the hand, and feeding it in as a zero makes a slow device look like a stopping
+ * one.
  *
  * `frame_seconds` is used only to age the estimate on a frame that carried no report at all, which
  * is the normal case whenever the device reports more slowly than the game draws.

@@ -20,10 +20,10 @@
  *   0044A2BA  D835 D0864A00            fdiv [0x4A86D0] = 10.0
  *             ...                      setNodeYaw(hActor, [pPlr+0x54], that)
  *
- * The clamp is the engine's KEYBOARD turn ceiling, and it is kept because it is what sizes the
- * pose: a wrist flick is 1200-1800 deg/s, and without the clamp the chest would twist by hundreds
- * of degrees. With it the twist saturates at the authored maximum, which is what the shipped game
- * shows when a player holds a turn key.                                                        */
+ * The clamp is the engine's KEYBOARD turn ceiling, and it is kept because it sizes the pose: a
+ * wrist flick is 1200-1800 deg/s, and without the clamp the chest would twist by hundreds of
+ * degrees. With it the twist saturates at the authored maximum, as the shipped game does when a
+ * player holds a turn key.                                                                     */
 #define LEAN_CLAMP_DEGREES_PER_SECOND 120.0f
 #define LEAN_CHEST_DIVISOR             12.0f
 #define LEAN_HEAD_DIVISOR              10.0f
@@ -76,7 +76,7 @@ static bool report(const char *status)
     return false;
 }
 
-/* THE BISECTION KNOB, and it exists because a subtle effect cannot be told apart from no effect.
+/* The bisection knob, and it exists because a subtle effect cannot be told apart from no effect.
  *
  * The measurement so far says the ENGINE ITSELF writes this twist every substep the mouse moves,
  * and that it is still not visible. Either something overwrites the two nodes after Plr_Steer, or a
@@ -212,7 +212,7 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
     }
 
     /* The forced angle short-circuits the whole computation, including the damper, so what lands in
-     * the node is exactly the number in the ini and nothing else can be blamed for it. */
+     * the node is exactly the number in the ini and nothing else can account for it. */
     if (lean_state.test_degrees != 0.0f) {
         last_report.status      = "FORCED";
         last_report.raw_rate    = lean_state.test_degrees;
@@ -224,7 +224,7 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
         return true;
     }
 
-    /* THE ENGINE'S NUMBER, OR THE HAND'S. It used to be the engine's always, because that value is
+    /* The engine's number, or the hand's. It used to be the engine's always, because that value is
      * authentic by construction. True of a key, false of a mouse, and the difference is one branch:
      *
      *   00449F9C  E8 ..                    call the relative axis reader   ; the mouse turn

@@ -12,8 +12,8 @@
  * disassembly of the accumulation and the census that shows nothing else writes those two cells.
  *
  * Nothing here replaces the engine's cursor, its clamp or its hit testing. It replaces only the
- * number the engine adds, and lets the engine do everything else exactly as before, which is what
- * keeps it out of the way of the pointer cage in enhanced_resolution.
+ * number the engine adds, and lets the engine do everything else exactly as before, which keeps
+ * it out of the way of the pointer cage in enhanced_resolution.
  */
 
 /* Installs the detour. `enabled` is the feature's ini gate, MenuCursorRawInput. Returns true only

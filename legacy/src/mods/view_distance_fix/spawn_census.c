@@ -1,5 +1,14 @@
 /* spawn_census.c: count the spawns the engine refuses, because nothing else does.
  *
+*
+ * SIZE NOTE: just past the six hundred line mark. It crossed when the world pointer stopped being
+ * a literal and became a pattern with its disassembly beside it, about fifty lines of evidence for
+ * one address. That evidence is what lets the address be trusted on a build where the globals
+ * moved, so it stays.
+ *
+ * THE SEAM, if this grows again, is the player position log. dump_nearby_placements,
+ * player_position_log_tick and the switch that arms them share only their throttle with the spawn
+ * refusal census and the destroy observer, and none of the three reads the state of another.
  * ==============================================================================================
  * THE SILENT FAILURE, walked from the report to the bytes
  *
@@ -207,7 +216,34 @@ static uint32_t *resolve_camera_view_pointer_slot(void)
  * resolved by signature: it is a fixed global read as a literal absolute operand at several
  * already-confirmed sites this session (FUN_0040be00, FUN_0040c2be among them), not a relocatable
  * target, and this is a one-off diagnostic rather than something meant to ship. */
-#define WORLD_POINTER_ADDRESS          0x008A0060u
+/* --- 0x00406BE3, a function that opens by loading the world pointer ---------------------------
+ *   55 8B EC              push ebp / mov ebp,esp
+ *   83 EC 24              sub  esp, 0x24
+ *   A1 <world>            mov  eax, [g_world]
+ *   89 45 F8              mov  [ebp-8], eax
+ *   8B 4D F8 / 8B 51 50   mov  ecx,[ebp-8] / mov edx,[ecx+0x50]
+ *
+ * This was a literal, argued for on the grounds that the cell is a fixed global and this is a
+ * one-off diagnostic. The objection that stands is the recompile: three builds ship at the same
+ * file size and the globals move, so a literal there reads a different cell and the census reports
+ * placements that were never placed. Twenty bytes, the operand masked, and with it wildcarded the
+ * pattern matches exactly once in the retail image and yields 0x008A0060, the value that used to
+ * be written here. */
+static const uint8_t SIG_WORLD_POINTER[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x24, 0xA1, 0x00, 0x00, 0x00,
+    0x00, 0x89, 0x45, 0xF8, 0x8B, 0x4D, 0xF8, 0x8B, 0x51, 0x50
+};
+static const uint8_t MSK_WORLD_POINTER[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_WORLD_POINTER == sizeof MSK_WORLD_POINTER,
+               "the world pointer pattern and its mask are different lengths");
+#define OFFSET_WORLD_POINTER_OPERAND 7u
+
+/* Filled in at install from the operand above; 0 means the site did not resolve and the placement
+ * dump declines rather than reading a cell it guessed at. */
+static uintptr_t world_pointer_cell;
 #define WORLD_PLACEMENT_COUNT_OFFSET   0x204u
 #define WORLD_PLACEMENT_ARRAY_OFFSET   0x20Cu
 #define PLACEMENT_ACTIVE_FLAG_BIT      0x1u
@@ -223,7 +259,8 @@ static void dump_nearby_placements(const float *player_position)
     uint32_t array;
     int32_t  index;
 
-    if (!memory_read(WORLD_POINTER_ADDRESS, &world, sizeof(world)) || world == 0) {
+    if (world_pointer_cell == 0 ||
+        !memory_read(world_pointer_cell, &world, sizeof(world)) || world == 0) {
         return;
     }
     if (!memory_read((uintptr_t)world + WORLD_PLACEMENT_COUNT_OFFSET, &count, sizeof(count)) ||
@@ -434,6 +471,25 @@ bool spawn_census_install(uintptr_t activation_scan, bool enabled)
         return census.original != NULL;
     }
     census.installed = true;
+
+    /* The world pointer, read out of an instruction rather than written down. Without it the
+     * nearby placement dump declines; the count of refused spawns above it does not need it. */
+    {
+        uintptr_t site = signature_find_unique(SIG_WORLD_POINTER, MSK_WORLD_POINTER,
+                                               sizeof SIG_WORLD_POINTER);
+        uint32_t  address = 0;
+
+        if (site != 0 && memory_read_u32(site + OFFSET_WORLD_POINTER_OPERAND, &address) &&
+            memory_is_inside_image(address, sizeof(uint32_t))) {
+            world_pointer_cell = (uintptr_t)address;
+            log_info("[diagnostics] the world pointer is at %08X, read from the operand at "
+                     "%08X", (unsigned)world_pointer_cell, (unsigned)site);
+        } else {
+            log_warning("[diagnostics] the world pointer did not resolve, so the nearby "
+                        "placement dump is off. It would otherwise read a guessed address "
+                        "and list placements that were never placed.");
+        }
+    }
 
     if (!enabled) {
         log_info("[diagnostics] Spawns=0, refused NPC spawns are not counted. The engine's own "

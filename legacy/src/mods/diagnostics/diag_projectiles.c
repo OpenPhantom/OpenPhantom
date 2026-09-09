@@ -64,12 +64,49 @@
 #include "common/frame_hook.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/signature.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define PROJECTILE_LIST_HEAD_ADDRESS 0x00872FB8u
+/* --- 0x0045243E, the only function that both tests the projectile list head and then loads it ---
+ *   55 8B EC              push ebp / mov ebp,esp
+ *   83 3D <head> 00       cmp  dword ptr [g_projectileListHead], 0
+ *   74 10                 je   +0x10
+ *   A1 <head>             mov  eax, [g_projectileListHead]
+ *   50                    push eax
+ *   E8 <rel32>            call the walker
+ *
+ * The address was written here as a literal. Three builds of this engine ship at the same file
+ * size and the globals move between them, so a literal reads a different cell on two of the three
+ * and reports numbers that look real. Both operands are masked and the address is read back out of
+ * the first, which is the rule this directory is held to.
+ *
+ * Nineteen bytes, and with both operands wildcarded the pattern still matches exactly once in the
+ * retail image; the operand it then reads is 0x00872FB8, the value that used to be written here. */
+static const uint8_t SIG_PROJECTILE_HEAD[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x74, 0x10, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x50, 0xE8
+};
+static const uint8_t MSK_PROJECTILE_HEAD[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_PROJECTILE_HEAD == sizeof MSK_PROJECTILE_HEAD,
+               "the projectile list head pattern and its mask are different lengths");
+#define OFFSET_PROJECTILE_HEAD_OPERAND       5u
+/* The same cell again, in the mov that follows the compare. Both are read and required to agree,
+ * the way cheats_no_fog.c checks its own pair: one operand proves the pattern matched something
+ * shaped right, two agreeing prove it matched the function meant. */
+#define OFFSET_PROJECTILE_HEAD_OPERAND_TWO 13u
+
+/* Filled in at install from the operand above; 0 means the site did not resolve and the census
+ * declines rather than reading a cell it guessed at. */
+static uintptr_t projectile_list_head;
+
+/* Where that address was read from, so the log can say so rather than assert it. */
+static uintptr_t projectile_head_site;
 #define PROJECTILE_NEXT_OFFSET       0x00u
 #define PROJECTILE_POSITION_OFFSET   0x04u   /* float[3], world x/y/z */
 
@@ -115,7 +152,7 @@ static void projectile_census_tick(void)
     }
     projectile_census.frame_count = 0;
 
-    if (!memory_read(PROJECTILE_LIST_HEAD_ADDRESS, &entry, sizeof(entry))) {
+    if (!memory_try_read(projectile_list_head, &entry, sizeof(entry))) {
         return;
     }
 
@@ -128,7 +165,7 @@ static void projectile_census_tick(void)
     sampled = 0;
     while (entry != 0 && count < PROJECTILE_WALK_MAX) {
         if (sampled < PROJECTILE_SAMPLE_COUNT) {
-            if (memory_read((uintptr_t)entry + PROJECTILE_POSITION_OFFSET, sample[sampled],
+            if (memory_try_read((uintptr_t)entry + PROJECTILE_POSITION_OFFSET, sample[sampled],
                             sizeof(sample[sampled]))) {
                 sample_index[sampled] = count;
                 ++sampled;
@@ -138,7 +175,7 @@ static void projectile_census_tick(void)
         {
             uint32_t next;
 
-            if (!memory_read((uintptr_t)entry + PROJECTILE_NEXT_OFFSET, &next, sizeof(next))) {
+            if (!memory_try_read((uintptr_t)entry + PROJECTILE_NEXT_OFFSET, &next, sizeof(next))) {
                 break;
             }
             entry = next;
@@ -165,11 +202,34 @@ int diag_projectiles_install(int projectiles_level)
         return 0;
     }
 
+    {
+        uintptr_t site = signature_find_unique(SIG_PROJECTILE_HEAD, MSK_PROJECTILE_HEAD,
+                                               sizeof SIG_PROJECTILE_HEAD);
+        uint32_t  address = 0;
+
+        uint32_t second = 0;
+
+        if (site == 0 ||
+            !memory_read_u32(site + OFFSET_PROJECTILE_HEAD_OPERAND, &address) ||
+            !memory_read_u32(site + OFFSET_PROJECTILE_HEAD_OPERAND_TWO, &second) ||
+            address != second ||
+            !memory_is_inside_image(address, sizeof(uint32_t))) {
+            log_warning("the projectile list head did not resolve, so this census is off. It "
+                        "would otherwise read whatever sits at a guessed address and report "
+                        "counts that look real.");
+            return 0;
+        }
+        projectile_list_head = (uintptr_t)address;
+        projectile_head_site = site;
+    }
+
     projectile_census.armed     = true;
     projectile_census.per_frame = frame_hook_add(projectile_census_tick);
 
-    log_info("projectile list census armed at fixed global %08X, reporting every %u frames%s",
-             (unsigned)PROJECTILE_LIST_HEAD_ADDRESS, (unsigned)PROJECTILE_REPORT_EVERY_FRAMES,
+    log_info("projectile list census armed, head at %08X read from the operand at %08X, "
+             "reporting every %u frames%s",
+             (unsigned)projectile_list_head, (unsigned)projectile_head_site,
+             (unsigned)PROJECTILE_REPORT_EVERY_FRAMES,
              projectile_census.per_frame
                  ? ""
                  : ". The per-frame hook is NOT available, so nothing will ever be reported");

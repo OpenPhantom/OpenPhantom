@@ -197,6 +197,10 @@ add_unit_test(menu_patcher "")
 # than the game, which is enough to prove a refusal refuses and a write lands.
 # The guarded reads. The case that matters is the refusal: the trying form has to answer no for
 # an address this process does not own rather than take the program down.
+# The settings file, driven against a real one written beside the test binary. Every module
+# reads through this, and the parsing underneath is the platform is own.
+add_unit_test(ini "")
+
 add_unit_test(memory "")
 
 add_unit_test(patch "")

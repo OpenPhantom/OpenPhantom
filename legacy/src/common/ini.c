@@ -59,6 +59,32 @@ bool ini_read_string(const char *section, const char *key, const char *default_v
         return false;
     }
 
+    /* ABSENT AND EMPTY are different, and the platform call cannot tell them apart on its
+       own. It answers with the number of characters it copied, and it copies the default when
+       the key is missing, so a non-empty default always came back looking present. Every
+       caller in this project happens to pass an empty default, where a count of zero means
+       absent by luck; one passes a real one, and its absent branch could never run.
+
+       So the question is asked with a default no settings file can hold, a value carrying
+       control characters. Its arrival means the key was not there, and the caller's own
+       default is copied in afterwards. */
+    static const char ABSENT[] = "\001\002absent\002\001";
+
+    if (buffer_size > sizeof ABSENT) {
+        (void)GetPrivateProfileStringA(section, key, ABSENT, buffer, (DWORD)buffer_size,
+                                       ini_path());
+        buffer[buffer_size - 1] = '\0';
+
+        if (strcmp(buffer, ABSENT) == 0) {
+            strncpy(buffer, (default_value != NULL) ? default_value : "", buffer_size - 1);
+            buffer[buffer_size - 1] = '\0';
+            return false;
+        }
+        return true;
+    }
+
+    /* Too small to hold the sentinel, so the question cannot be put that way. The count is the
+       only signal left, and it is right whenever the default is empty. */
     copied = GetPrivateProfileStringA(section, key, (default_value != NULL) ? default_value : "",
                                       buffer, (DWORD)buffer_size, ini_path());
     buffer[buffer_size - 1] = '\0';

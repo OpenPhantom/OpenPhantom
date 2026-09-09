@@ -110,6 +110,17 @@ that *could* produce the symptom is not a cause; only a measurement that sees it
 * At most 12 pieces are tracked for `prevRot` maintenance and 3 for the diagnostics; beyond that the
   surplus is equalised (a hard frame, never the sawtooth) or stays silent.
 
+## Switching it off left the rotation slots holding dead pieces
+
+Each piece in flight holds a slot recording the attitude it had last frame, and a slot is released
+as soon as the piece disappears. Without that the table keeps a pointer to a freed block and the
+next piece allocated at the same address inherits a foreign attitude, which is a limb that starts
+its flight already turned.
+
+The tick returned early when the feature was switched off, before it reached the release, so the
+slots kept whatever the last severing had put in them. The table is now cleared once on the way out,
+and the release on the way in is unchanged.
+
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes on both retail builds.

@@ -164,6 +164,7 @@ typedef struct limb_flight_state {
 
     /* prevRot maintenance. */
     uint8_t   *previous_rot_owner[PREVIOUS_ROT_SLOTS];
+    bool       slots_held;      /* whether the table above may still hold live block pointers */
     float      previous_rot[PREVIOUS_ROT_SLOTS][3];
 
     /* Which blocks have already been reported at rest. Remembering only the LAST one is not
@@ -540,8 +541,22 @@ static int32_t __cdecl hook_stunt_tick(void)
     /* Off means the engine's own tick and nothing after it. Its result is returned untouched, so
      * a piece the engine severed by itself behaves exactly as it always did. */
     if (!flight_state.active || flight_state.stunt_block_pointer == NULL) {
+        /* Released on the way out, once, for the same reason they are released when a piece
+         * disappears: a slot left holding a dead block pointer hands the next stunt at that
+         * address a foreign attitude. Switching the feature off mid-session used to return here
+         * without doing it, so the slots kept whatever the last severing had put in them until
+         * something happened to match. */
+        if (flight_state.slots_held) {
+            int index;
+
+            for (index = 0; index < PREVIOUS_ROT_SLOTS; ++index) {
+                flight_state.previous_rot_owner[index] = NULL;
+            }
+            flight_state.slots_held = false;
+        }
         return result;
     }
+    flight_state.slots_held = true;
     block = *flight_state.stunt_block_pointer;
 
     /* The slot is released as soon as the piece disappears, otherwise the table holds a dead

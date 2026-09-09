@@ -58,7 +58,7 @@ float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds);
 
 /* The same, with a REAL forward component rather than one rebuilt from the move bits. Only the
  * pad has one to give; a keyboard's is always exactly +1, -1 or 0, which is what the call above
- * is for. Mixing an analog sideways value with a quantised forward one is what made every
+ * is for. Mixing an analogue sideways value with a quantised forward one is what made every
  * diagonal on a stick come out compressed toward straight ahead. */
 float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
                                float substep_seconds);

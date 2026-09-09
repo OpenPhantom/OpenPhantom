@@ -147,7 +147,7 @@ path, where a range check would cost a system call per frame.
 
 ## Testing status
 
-**Accepted in game**, in the 1.5.0 build from this tree, which was played through by hand. It
+**Accepted in game**, in the v0.4.1 build from this tree, which was played through by hand. It
 also builds `/W4 /WX` clean here with the unit test suite green, though neither of those says
 anything about the patch on its own: they say the code compiles and that the tests which exist
 still pass.

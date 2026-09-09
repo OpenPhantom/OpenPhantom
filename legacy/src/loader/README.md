@@ -20,8 +20,8 @@ save the first 5 bytes of the host's entry point, write `jmp our_stub` over them
 the stub:  restore those 5 bytes, load the mods, jump back to the entry point
 ```
 
-Restoring before jumping back is what makes this safe without decoding an instruction, the entry
-point is re-executed from its first byte, so it does not matter that the five bytes may end
+Restoring before jumping back makes this safe without decoding an instruction: the entry point is
+re-executed from its first byte, so it does not matter that the five bytes may end
 mid-instruction. Only one thread exists at that point. The address comes from the PE header
 (`AddressOfEntryPoint`), not from a byte pattern, so it cannot be wrong on another build.
 
@@ -29,8 +29,8 @@ mid-instruction. Only one thread exists at that point. The address comes from th
 `WMAIN.EXE` imports exactly one function from `DINPUT.dll`, verified in all three engine builds:
 the import descriptor names only `DirectInputCreateA`, the IAT slot is `0x008C148C`, and it is
 reached through a single thunk at `0x00499220` with exactly one caller at `0x0048D0CF`, whose
-result is stored to a local and never tested. It runs outside the loader lock, which is what made
-it attractive. But **graphics startup runs before input startup**: by the time it is called,
+result is stored to a local and never tested. Running outside the loader lock was the attraction.
+But **graphics startup runs before input startup**: by the time it is called,
 `graphics_buildModeList` has already filtered the display-mode list, so lifting the 4:3 gate had
 no effect and the options screen still offered a single resolution. The proof is in the log, the
 old build reported "display mode not set yet" at install time, the new one reported "mode size

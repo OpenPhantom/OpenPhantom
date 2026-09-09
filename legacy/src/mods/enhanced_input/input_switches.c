@@ -77,6 +77,7 @@ void enhanced_input_set_strafe(bool enabled)
      * nothing would come back to walk it down, so it is dropped here and the next driven substep
      * starts from zero. The pending pair is one substep of lifetime and is cleared with it. */
     strafe_walk_reset();
+    free_look_refresh_aim_pairing();
     enhanced_input_forget_pending_travel();
 
     /* The camera follow is armed from the strafe setting as it stood at LAUNCH, and without
@@ -141,6 +142,9 @@ void enhanced_input_set_camera_follow(bool enabled)
                             input_config()->camera_follow_strength,
                             input_config()->camera_follow_max_degrees);
     free_look_set_passive_follow(enabled);
+    /* The pairing follows the switch the player just moved, so the scheme this row promises is
+     * the scheme they get without restarting or finding two keys by hand. */
+    free_look_refresh_aim_pairing();
 
     if (!ini_write_int(INPUT_SECTION, "CameraFollow", enabled ? 1 : 0)) {
         log_warning("the passive camera is now %s, but the setting could not be written to the ini "
@@ -315,7 +319,8 @@ static void poll_switches(void)
 void input_switches_install(void)
 {
     if (!frame_hook_add(poll_switches)) {
-        log_warning("no per-frame hook, so Strafe, FreeLook and CameraFollow are read once at "
-                    "startup and an edit made while the game runs waits for the next launch");
+        log_warning("no per-frame hook, so Strafe, FreeLook, CameraFollow and AirControl are "
+                    "read once at startup and an edit made while the game runs waits for the "
+                    "next launch");
     }
 }

@@ -505,8 +505,8 @@ bool overlay_draw_paint(void)
     /* --- the search field. Opaque with a light border rather than a translucent black rectangle:
      * the same shape, and the difference between a well and a hole.
      *
-     * Typing only reaches this box once it has been clicked into; see overlay_input.c's click()
-     * and the focus gate in handle(). The border and the caret are what say so: the accent border
+     * Typing only reaches this box once it has been clicked into, and the input layer's focus
+     * gate is what holds that. The border and the caret say so: the accent border
      * and the caret both only appear once a click actually landed here, so the box never LOOKS
      * ready to type into before it is. --- */
     {

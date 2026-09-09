@@ -20,6 +20,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
 | `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. The only patch here that rewrites *instructions* rather than an operand, so it has its own switch |
+| `CompensateCameraInCutscenes` | `0` | at `0` a scripted camera gets an anchor weight of zero, so a placed shot holds its gather origin instead of easing toward it. The five lag cells stay compensated either way, because they damp the rig and the euler rather than the origin. `1` compensates the anchor during a scripted camera as well |
 | `CompensateAnimation` | `1` | the animation clock and the emitter dormancy counter |
 | `AnimationClockMode` | `1` | 1 = the authored 30 Hz rate |
 | `SpinSleep` | `0` | `Sleep(0)` -> `Sleep(1)` in the frame wait |
@@ -106,10 +107,10 @@ dormancy and both draw patches are already in place by then and stay in place.
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes on both retail builds
-executables (EN, DE, the Fix Pack, and both install copies). One unit test, `camera_anchor`, the
-anchor encoder is the only isolated pure logic in this DLL, and the only place where a wrong byte
-produces no crash and no log line.
+Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes on the executables
+checked: EN, DE, the Fix Pack, and both install copies. One unit test, `camera_anchor`, on the
+anchor encoder: it is the only isolated pure logic in this DLL, and the only place where a wrong
+byte produces no crash and no log line.
 
 `FaceLatchYield` was tested in the game. At an uncapped rate of about 90 fps the swamp opening
 released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the scene plays at
@@ -154,5 +155,5 @@ through the detour with 6,960 poses blended and none refused, so the interpolati
 job rather than having quietly stopped. That last check is the point: the call count did not fall,
 only the cost per call.
 
-The rest of this DLL is accepted in game too, in the 1.5.0 build, which was played through by
+The rest of this DLL is accepted in game too, in the v0.4.1 build, which was played through by
 hand.

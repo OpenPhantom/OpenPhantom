@@ -510,10 +510,11 @@ static void __declspec(naked) hook_camera_lock(void)
  * it independently of whatever camera TYPE is currently selected, so suppressing only the type
  * latch above would still leave the camera's TARGET pinned to this frozen point even though its
  * TYPE stayed normal. While jump boost is on, this call is skipped entirely, the same shape as
- * every other hook in this section: +0x1c4 simply stays whatever it already was - 0, since this
- * is its only writer, so the per-frame camera code keeps reading the player's own live position
- * exactly as it would on an ordinary fall that never reached this branch at all. While jump boost
- * is off, the call still happens exactly as retail wrote it, argument included. */
+ * every other hook in this section: +0x1c4 simply stays whatever it already was, which is 0,
+ * since this is its only writer, so the per-frame camera code keeps reading the player's own
+ * live position exactly as it would on an ordinary fall that never reached this branch at all.
+ * While jump boost is off, the call still happens exactly as retail wrote it, argument
+ * included. */
 static void __cdecl on_camera_freeze(void)
 {
     if (!fall_consequences_suppressed() && own_state.camera_freeze_target != NULL) {

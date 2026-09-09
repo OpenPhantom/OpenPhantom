@@ -15,7 +15,7 @@
  *      The last installer wins: a wrapper that loads after us replaces our filter. That is why
  *      the vectored handler is the important one of the two, not the other way round.
  *
- * WE CHANGE NOTHING. Both paths return CONTINUE_SEARCH / hand on to the previous filter, so the
+ * We change NOTHING. Both paths return CONTINUE_SEARCH / hand on to the previous filter, so the
  * crash unfolds exactly as it would without us. A reporter that bends the control flow reports on
  * a different program than the one that crashed.
  *
@@ -437,7 +437,7 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
     static char where[MAX_PATH + 32];
     bool        overflow;
 
-    /* A CRASH HANDLER THAT FAULTS CALLS ITSELF. The vectored handler sees the second exception
+    /* A crash handler that faults CALLS ITSELF. The vectored handler sees the second exception
      * exactly as it saw the first, so without this the reporter recurses, each time on a shorter
      * stack, until something else kills the process and the log ends mid line. The report counter
      * below does not prevent that on its own, it only bounds how often it happens.
@@ -456,14 +456,14 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
 
     overflow = (record->ExceptionCode == EXCEPTION_STACK_OVERFLOW);
 
-    /* THE CODE, THE ADDRESS AND THE REGISTERS GO OUT BEFORE THE MODULE IS NAMED, and that order
-     * is the whole point of this paragraph. GetModuleHandleEx and GetModuleFileName both take the
-     * loader lock, and one of the three crashes this reporter was written for hung inside a
+    /* The code, the address and the registers go out BEFORE the module is named.
+     * GetModuleHandleEx and GetModuleFileName both take the loader lock, and one of the three
+     * crashes this reporter was written for hung inside a
      * graphics wrapper cleanup, which is to say inside the loader, holding it. Naming the module
      * first, as this used to, means that deadlock costs the entire report rather than one line of
      * it. Everything that can be had from the record and the context alone is therefore already
      * in the file by the time anything reaches for the lock. */
-    log_info("################ CRASH (%s) ################", how);
+    log_info("crash (%s)", how);
     log_error("%s (%08lX) at %08X", fatal_exception_name(record->ExceptionCode),
               (unsigned long)record->ExceptionCode,
               (unsigned)(uintptr_t)record->ExceptionAddress);
@@ -477,7 +477,7 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
     log_info("eip=%08X esp=%08X ebp=%08X",
              (unsigned)context->Eip, (unsigned)context->Esp, (unsigned)context->Ebp);
 
-    /* HOW MUCH STACK WAS LEFT, because "we ran out of stack" is a common explanation for a
+    /* How much stack was left, because "we ran out of stack" is a common explanation for a
      * wild instruction pointer and it should be answerable from the report rather than argued
      * about. The two words come from this thread's own TEB, which is what fs addresses on x86:
      * NtTib.StackBase at +4 is the high end, NtTib.StackLimit at +8 is the lowest page that is
@@ -522,7 +522,7 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
 
     log_info("WMAIN .text %08X + %08X",
              (unsigned)host_image_text(), (unsigned)host_image_text_size());
-    log_info("################ END ################");
+    log_info("end of crash report");
 
     InterlockedExchange(&crash_state.busy, 0);
 }

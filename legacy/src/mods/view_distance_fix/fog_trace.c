@@ -27,7 +27,7 @@
  * rest of the frame BEFORE incrementing their counter, and the sort heap accepts a face into the
  * deferred array and its vertices into the pool and then never inserts it into the queue.
  *
- * EVERY ONE OF THESE IS RESOLVED OUT OF AN OPERAND, not written down as an address. Each pattern
+ * Every one of these is resolved out of an OPERAND, not written down as an address. Each pattern
  * is a run of instructions that touches the counter, with the counter's own address wildcarded and
  * read back at install, and with every other image address inside the window wildcarded as well so
  * the pattern survives forced ASLR rather than matching only at the preferred base. All thirteen

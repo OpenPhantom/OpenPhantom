@@ -34,7 +34,7 @@
  *   the 3-D widgets      menu_scale_3d.c reads the live projection every frame
  *   picture rectangles   swpic_draw writes the reloaded bitmap's size in on every draw
  *
- * THE FOUR CELLS THE ENGINE DERIVES ARE WRITTEN HERE, and that is the part it is easiest to leave
+ * The FOUR cells the engine derives are written here, and they are the part easiest to leave
  * out. The engine works out the menu origin on both axes, g_menuScale and g_menuTextScale in one
  * block, and that block runs at startup and on the mode-change message and nowhere else. On a live
  * change it runs BEFORE this has had a frame to move the canvas, so all four belong to the canvas
@@ -212,9 +212,9 @@ void menu_scale_apply_trimmings(bool verbose)
         if (patch_write_u8(site + LISTBOX_FLOOR_COMPARE, (uint8_t)floor) == PATCH_RESULT_OK &&
             patch_write_u32(site + LISTBOX_FLOOR_VALUE, (uint32_t)floor) == PATCH_RESULT_OK) {
             if (verbose) {
-                log_info("list box rows: the %d pixel minimum row height becomes %d, which is what "
-                         "the engine then derives the row count, the box height and the row hit "
-                         "test from", LISTBOX_SHIPPED_FLOOR, (int)floor);
+                log_info("list box rows: the %d pixel minimum row height becomes %d. The engine "
+                         "derives the row count, the box height and the row hit test from it",
+                         LISTBOX_SHIPPED_FLOOR, (int)floor);
             }
         } else if (verbose) {
             log_warning("the list box row height floor could not be scaled, so list box rows will "

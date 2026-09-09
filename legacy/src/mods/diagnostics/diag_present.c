@@ -661,8 +661,8 @@ int diag_present_install(int level)
              "frame at which the display has been opened, and again only if it changes.%s",
              present_state.timing
                  ? " The present is also timed, and the thread cycles spent inside it are counted "
-                   "beside the wall clock, which is what separates a flip that blocks in the "
-                   "driver from one whose retry loop spins."
+                   "beside the wall clock, so a flip that blocks in the driver and one whose "
+                   "retry loop spins read differently."
                  : "");
     if (present_state.flip_flags_cell == 0) {
         log_warning("the flip flags cell did not resolve, so whether the flip is asked to wait for "

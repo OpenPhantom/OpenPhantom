@@ -41,7 +41,7 @@
  * out on the next one, so the total is conserved exactly. A guard that deletes evidence hides the
  * fault it guards against, and this file has paid for that twice.
  *
- * AND THE BOLT SITS AT THE DOOR RATHER THAN AT THE TILL. Holding motion back rather than deleting
+ * AND THE CUT RUNS BEFORE THE BANK, not after it. Holding motion back rather than deleting
  * it is right for input and wrong for a FAULT: once clipped motion started being paid out instead
  * of dropped, a single impossible sample became a guaranteed full turn. bolt_implausible_sample()
  * cuts one frame's sample to the fastest a hand could have been BEFORE it is banked, so the bank
@@ -372,7 +372,7 @@ static float bolt_implausible_sample(float sample, float seconds)
         return sample;
     }
     /* A sample that is not a number would poison the bank for good, and no clamp downstream can
-     * undo it. Both comparisons fail for NaN, which is exactly the wanted behaviour. */
+     * undo it. Both comparisons fail for NaN. */
     if (!(sample >= -MAX_PLAUSIBLE_AXIS_SAMPLE && sample <= MAX_PLAUSIBLE_AXIS_SAMPLE)) {
         return 0.0f;
     }
@@ -511,8 +511,8 @@ static void census_report(void)
              "percent, mean %.1f, over %u slope changes. Mean speed %.0f deg/s, %.0f to %.0f. "
              "The camera draws each step as a straight ramp, so what the eye reads as a kink is the "
              "change of slope between two of them, and the median divided by four is the wobble "
-             "that implies. Read the MEDIAN: a mean far above it means a few large events dominate, "
-             "which is what a hard reversal of the hand looks like.",
+             "that implies. Read the MEDIAN: a mean far above it means a few large events "
+             "dominate, such as a hard reversal of the hand.",
              census->steps, (double)census->seconds, median, roughness, census->rough_steps,
              speed, (double)census->rate_min, (double)census->rate_max);
 
@@ -657,9 +657,6 @@ static void collect_frame_sample(void)
     }
 }
 
-/* g_frameDelta, out of the operand of render_frameEnd's own first instruction. Read rather than
- * hard-coded, and it is the frame time here: the substep driver overwrites that cell with the
- * substep and restores the frame's own value before the frame ends. */
 void mouse_look_install(input_axis_fn_t reader)
 {
     if (reader == NULL) {
@@ -790,7 +787,9 @@ static float deliver(float dt_seconds)
 
 /* Everything this file drains is gated on the engine running its own player phases, which is the
  * only state in which it reads input. input_gate.c has the mechanism; here it is one question and
- * one consequence: deliver nothing, and drop what was banked. */
+ * one consequence: deliver nothing, and drop what was banked. mouse_rate_reset also clears the
+ * measured report interval and the window behind it, so the filter re-primes when the gate
+ * reopens. */
 static bool drop_while_locked(void)
 {
     if (input_gate_is_open()) {

@@ -43,7 +43,7 @@ typedef int32_t(__cdecl *menu_open_fn_t)(void *menu);
 static detour_t pic_draw_detour;
 static detour_t menu_open_detour;
 
-/* AFTER the original, and that is the whole correction. The first version read the widget's own
+/* AFTER the original, and that one word is the correction. The first version read the widget's own
  * picture field before the draw, found it null on 4805 widgets across eight screens, and reported
  * that almost nothing in a menu is a picture. The engine's own code says otherwise: when that field
  * is null swpic_draw LOOKS THE PICTURE UP, and then writes its size into the widget's rectangle

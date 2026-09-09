@@ -97,9 +97,8 @@ void __cdecl enhanced_input_steer_thunk(void)
      * because the bank can be drained on both clocks and each drain removes what it hands over. And
      * the camera has to be TOLD the sum, because what it must stop drawing is the whole mouse turn
      * this substep applies, not only the part that came through the per-frame path; leaving the
-     * engine's own per-step drain out of that total leaves its share to be drawn twice, which
-     * is the
-     * same double count the lead exists to remove, in miniature. */
+     * engine's own per-step drain out of that total leaves its share to be drawn twice, which is
+     * the same double count the lead exists to remove, in miniature. */
     if (!view_lead_is_active()) {
         mouse_step = mouse_look_take_substep_degrees(substep_seconds);
     }
@@ -127,9 +126,9 @@ void __cdecl enhanced_input_steer_thunk(void)
             phase_active = (mode != PLAYER_MODE_SIDLE && mode != PLAYER_MODE_FIXED_JUMP);
             /* The walk is driven in stand and nowhere else, and this gate is load-bearing well
              * beyond the animation. Phase 2 also runs while shoving a crate, and
-             * Plr_UpdatePushBlock
-             * leaves that mode only when NEITHER move bit is set, a forced forward bit would push
-             * the crate on a sideways key and lock the player in the mode for good. It also keeps
+             * Plr_UpdatePushBlock leaves that mode only when NEITHER move bit is set, so a
+             * forced forward bit would push the crate on a sideways key and lock the player in
+             * the mode for good. It also keeps
              * the forced bit out of the air.
              *
              * What it does not do, because this used to claim the opposite: it does not keep the
@@ -287,7 +286,7 @@ void __cdecl enhanced_input_steer_thunk(void)
          * reason, and they are kept together because an empty line invites a fourth.
          *
          * The first re-issued the engine's own upper body twist from the turn cell. On this branch
-         * that cell carries OUR MOUSE, because the engine's analog turn arm reads the same device
+         * that cell carries OUR MOUSE, because the engine's analogue turn arm reads the same device
          * axis mouse_look.c does, and under free look the mouse is the camera. Twisting the chest
          * with it is body language for a turn the body never made.
          *

@@ -31,7 +31,11 @@ the mode table that the aspect gate anchors.
 | `ForceWidth` / `ForceHeight` | `0` | 0 = leave `obi.ini` alone |
 | `LogModeTable` | `0` | dump the raw DirectDraw table on the first enumeration. A diagnostic, so it is off in a release |
 | `LogMenuArt` | `0` | report every distinct menu picture once, with the blit path it takes, and count the textured quads. A measurement rather than a feature, and off in a release. See **What a menu is actually made of** below |
+| `LogResolutionCalls` | `0` | report every call to `graphics_setResolution` with the address that made it, and change nothing. Six of that function's seven callers push 640x480 and `MenuKeepsResolution` neutralises one of them, so this is what names the caller behind a screen that still drops. Capped at 32 lines a session, and off in a release |
+| `ModeBitDepth` | `16` | the bit depth the mode list asks for, 16 or 32. Leave it at 16: 32 opens all three depth gates and produces a real 32-bit device, and the software 2-D layer then writes two-byte pixels into it. See `mode_depth.h` for how far it was taken and where it stops |
 | `MenuKeepsResolution` | `1` | stop menus switching to 640x480 |
+| `EndingKeepsResolution` | `1` | the same for the ENDING, which is a separate mode change the setting above never covered. Finishing the game drops the display at `0x0043EF19`, just before the last cutscene, and the credits inherit it; through a Direct3D 9 translation layer that costs the device its exclusive full screen. The engine's own movie player still sets 640x480 for a film |
+| `SkipCredits` | `1` | Escape leaves the end credits. `credits_screen` reads no input at all, so the crawl otherwise ends when the text ends. This does not cut it off: the line reader is told the text has run out, and the game closes the screen its own way, with the rows blanking and the music fading over about four seconds |
 | `SubtitleScale` | `1.0` | how big the subtitles are, as a multiple of the size they have at 640x480. `1.0` is exactly the authored size and proportions at any resolution, `0.5` to `3.0` either side of it, and `0` leaves the engine's own shrinking behaviour alone. Settable from the developer menu and applied within a second; only `0` needs a relaunch. See **Subtitles that scale** below |
 | `FitWindowToMode` | **`0`** | **last resort.** Move and size the window to match the display mode. Only for a setup with **no graphics wrapper at all**, where the window really can end up smaller than the mode. It costs the engine's window its position at screen (0,0), which its own pointer handling assumes. |
 | `WindowMode` | **`0`** | the shape of the window: `0` authentic, `1` borderless at the size of the monitor, `2` a caption and a border at a chosen size, `3` the same with a resize grip and a maximise button, `4` no frame at a chosen size. `0` changes nothing. Modes `2` to `4` take their size from the two keys below; `1` takes the monitor. On its own this changes the window and not the device, so Alt Tab still costs a reset; `WindowedPresent` below is what changes that |
@@ -73,13 +77,16 @@ the mode table that the aspect gate anchors.
 | `control_captureMouse` | `0x46A155` | detoured, 8-byte prologue, the re-anchor on activation, and the operand its `call` carries yields the engine's window handle |
 | `stdControl_setFocus` | `0x48D719` | **called, never patched**. Acquire/Unacquire on the DirectInput keyboard and mouse |
 | `stdControl_resync` | `0x48D1CF` | **called, never patched**, drains both device buffers, releasing everything held |
-| `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten from `0x25F`/`0x1BF` to canvas width minus 33 and canvas height minus 33, **only** when `WidenMenuCursorArea=1`. The block's two origin operands are read back as proof the block is the right one and are **never written**; an earlier version repointed them at zero cells to make the clamp screen relative, which is the fault above. One write step, so there is no partial state. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
+| `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten from `0x25F`/`0x1BF` to canvas width minus 33 and canvas height minus 33, **only** when `WidenMenuCursorArea=1`. The block's two origin operands are read back as proof the block is the right one and are **never written**; an earlier version repointed them at zero cells to make the clamp screen relative, which is the fault above. Four separate writes with no rollback, and every value computed absolutely from the canvas, so a partial write is repaired by resizing again. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
 | the DirectDraw enumeration callback | `0x4928FC` | detoured, 6-byte prologue, **only** when `FilterModeEnumeration=1`. Address free: the mode counter, the 64 cap, the 0x54 stride and the table base are all read out of the matched operands and checked before use |
 | `swmenu_render`, the widget-pass bracket | `0x45DC6F`..`0x45DCB9` | **read, never patched**: address-free masked pattern over `inc g_tickCounter / mov [flag],1 / cmp [parent],1`; the flag cell is read out of the `C7 05` operand and cross-checked against the closing `mov [flag],0` at +0x41. The gate for the island clamp. In `obi.exe` it resolves at `0x45DC0F`, with the flag cell at `0x008BFB40` instead of `0x008BFBA0` |
 | `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
 | `swrle_blit`, the canvas clip | `0x004616CC` | two immediates at `+0x30` and `+0x37`, `640`/`480` -> `640N`/`480N`; the function reads the destination surface size and discards it |
 | the menu origin block | matched **twice** | `0x0045D69D` and `0x0045D7CB`; three operands each repointed at cells holding `640N` and `480N`, which also gives `g_menuScale` its multiplier without touching its non-popping `fst` |
 | `swmenu_open` | `0x0045D9F5` | detoured, 8 byte prologue; scales each menu's widget rectangles once, which the draw and the hit test both read |
+| the ending's mode drop | `0x0043EF19` | the five byte `call graphics_setResolution(640,480)` replaced with `NOP`, **only** when `EndingKeepsResolution=1`. The two pushes and the `add esp,8` after them stay, so the stack balances either way. Address free: the pattern's two call displacements and its `"movie\scene8"` operand are masked, and the tail carries the distinction from the five other sites that push 640x480 |
+| `credits_screen` | `0x004470F8` | detoured, 8-byte prologue, **only** when `SkipCredits=1`. Detoured to BOUND the skip: being inside the function that runs the credits is the honest way to know they are running |
+| `credits_readLine` | `0x004476EB` | detoured, 9-byte prologue, **only** when `SkipCredits=1`. Answers end of file once Escape has been seen. Installed AFTER the screen detour, because the reader alone can never answer end of file and there is no `detour_remove` |
 
 ## Why the gate alone is not enough
 
@@ -224,10 +231,10 @@ set converted for 3840x2160. A ratio of 3.0 by 2.25 against 6.0 by 4.5 should gi
 
 **Where.** The BBMP resource handler loads a bitmap in three steps: read the file, convert it to 16
 bits, compress it into a run length stream. Between the second and third the pixels are raw and
-about to be discarded, which is the one moment a larger copy costs nothing. The CALL is redirected
-rather than the compressor detoured, because that function has exactly two callers and the other one
-is the save game thumbnail, which is reallocated at a fixed 160x120 on every row change and copied
-into at that size. Redirecting one call site cannot reach it.
+about to be discarded, so a larger copy there costs nothing. The CALL is redirected rather than the
+compressor detoured, because that function has exactly two callers and the other one is the save
+game thumbnail, which is reallocated at a fixed 160x120 on every row change and copied into at that
+size. Redirecting one call site cannot reach it.
 
 **Whole pixels only, not a quality preference.** A 16 bit pixel of exactly zero is transparent
 to this engine, and the zeros are not only the black an artist drew: the conversion to
@@ -248,10 +255,11 @@ to argue. The old doctrine was that reading the ratio from the pictures is what 
 the pictures disagreeing. That was true and it could not survive a resolution that changes: artwork
 cannot follow one and a display always can.
 
-**What it does not do yet.** The menus are correct at the resolution the game started at. A picture
-is loaded once and held for as long as its screen is open, so it does not follow a resolution
-changed while the game runs. The cache that would have to be dropped is the engine's own, and the
-engine drops it itself on every screen change through `swmenu_freeBitmaps`.
+**A picture is loaded once and held for as long as its screen is open**, so a resolution changed
+while the game runs needs the cache dropped. The cache is the engine's own and it drops it itself on
+every screen change through `swmenu_freeBitmaps`, so the refit calls that same function and the
+slots reload by name at the ratio `menu_art_load_set_ratio` was last told. See **The menu canvas
+follows the display** above.
 
 ## Why a moved window showed part of the picture
 
@@ -348,18 +356,19 @@ stretches whatever texture it is handed and needs no larger source to fill a lar
 largest quad measured was 216x107, which is button sized: nothing approaching a full screen bitmap
 was drawn on any path watched.
 
-**So the artwork conversion is not buying geometry.** The menus already scale. What the conversion
-buys is what happens to a small texture when a quad stretches it, and the answer today is the
-rasterizer's own bilinear filter, the smoothing filter `convert_menu.py` refuses to use, and for a
+**So the artwork conversion was not buying geometry.** The menus already scale. What the conversion
+bought was what happens to a small texture when a quad stretches it, against the rasterizer's own
+bilinear filter, which is the smoothing the retired `convert_menu.py` refused to use, and for a
 stated reason: after the engine converts a bitmap to 16 bit, a pixel that is exactly zero is a
 SKIP, so a smoothing filter invents near black where black was transparent and new exact zeros
 where there were none, haloing every button and punching holes in dark artwork. The converter
-replicates whole pixels instead, which cannot invent a colour that was not already there.
+replicated whole pixels instead, which cannot invent a colour that was not already there.
 
-That reframes the standing problem. It is not that the menus cannot follow a resolution; it is that
-stretching their textures through the wrong filter looks bad, so `MenuScale` ships at 0.
-A runtime upscaler using the converter's own rule would have the same output with no conversion step
-and no resolution lock, and `menu_preview.c` already does exactly that for the four previews.
+That reframed the standing problem. The menus can follow a resolution; what looked bad was
+stretching their textures through the wrong filter. The runtime upscaler that answered it is
+`menu_art_resample.c`, on the converter's own whole pixel rule, with no conversion step and no
+resolution lock, and `menu_preview.c` had already done the same for the four previews. `MenuScale`
+ships at 0, which is now automatic rather than off.
 
 Two things this has NOT established, and they are the next measurements rather than conclusions.
 What draws the front end's backdrop, which is thought to be a 3-D room rather than a bitmap and was
@@ -560,11 +569,13 @@ readout; all ten writes are inside the dialogue's own drawing or reached only fr
 
 ## Known limitations
 
-* `MenuKeepsResolution=1` has a visible price: the front end, the pause screens and the loading
-  screen become a 640x480 island in the middle of the picture (14.8 % of the area at 1080p), and the
-  drawn menu cursor stays inside that box. What it buys is no full D3D9 device rebuild on every menu
-  open and close; six of those in 22 seconds appeared in one user log, and the graphics wrapper
-  hung inside exactly that rebuild.
+* `MenuKeepsResolution=1` had a visible price while the canvas was fixed at 640x480: the front end,
+  the pause screens and the loading screen sat as a 640x480 island in the middle of the picture,
+  14.8 % of the area at 1080p, with the drawn menu cursor inside that box. `MenuScale` closes it by
+  growing the canvas to the display, so the island is now only what a stood-down or declined scale
+  leaves. What `MenuKeepsResolution` buys is no full D3D9 device rebuild on every menu open and
+  close; six of those in 22 seconds appeared in one user log, and the graphics wrapper hung inside
+  exactly that rebuild.
 * There is a **third** `SetCursorPos(320, 240)` at the end of the engine's input startup, inside a
   large function that is not detoured for one warp that happens once. Input startup runs after
   graphics startup, i.e. after the window has already been moved, so on a secondary monitor the
@@ -633,9 +644,9 @@ The focus guard has three named branches and the log says which one was taken:
 
 **Played, including at 3840x2160.** The mode reaches the game's own options screen, the game runs
 in it, and the menus hold the resolution rather than dropping to 640x480 and rebuilding the device.
-That last part is the one worth watching, because the 640x480 island it leaves is the visible cost
-of it: about 15 per cent of the picture at 1080p and under 4 per cent at 2160p, so the higher the
-resolution the more obvious it is.
+That session predates `MenuScale`, so it saw the 640x480 island that holding the mode used to leave:
+about 15 per cent of the picture at 1080p and under 4 per cent at 2160p. The canvas now grows with
+the display, so the island is only what a stood-down or declined scale leaves.
 
 The window work is newer than that session and has been played, with a result for each mode.
 
@@ -681,7 +692,7 @@ describes the running window size rather than claiming the client edge is the de
 
 The offline verification below still stands and is what the individual patches rest on.
 
-`/W4 /WX` clean with zero compiler warnings; the DLL links and all six wired unit tests pass,
+`/W4 /WX` clean with zero compiler warnings; the DLL links and every wired unit test passes,
 including the `focus_guard` test that enumerates all 64 input combinations of the release rule and
 walks a whole session of Alt-Tabs, a Win key and a minimise asserting that no frame ever ends with
 the pointer confined and the foreground gone.
@@ -709,10 +720,12 @@ screen the pointer cannot be moved out of. The cursor coordinates are absolute s
 while the hit test adds the origin to the **widget**, so widening the clamp needs no coordinate
 work at all: a cursor outside the island simply hits nothing, exactly as it does today.
 
-**The install is one write and there is no partial state.** Only the four clamp immediates are
-written, to canvas width minus 33 and canvas height minus 33. The block's two origin operands are
-read back
-first, as proof that the block is the one the listing describes, and are never written.
+**The install is one step.** Only the four clamp immediates are written, to canvas width minus 33
+and canvas height minus 33. The block's two origin operands are read back first, as proof that the
+block is the one the listing describes, and are never written. The four are four separate
+`patch_write_u32` calls with no rollback between them, so a failure part way through leaves the two
+width immediates written and the two height ones not. Every value is computed absolutely from the
+canvas, so the repair is to call the resize again rather than to undo anything.
 
 An earlier version wrote them too, repointing them at zero cells so the clamp became screen
 relative rather than canvas relative. That is the fault described above: it let the cursor leave

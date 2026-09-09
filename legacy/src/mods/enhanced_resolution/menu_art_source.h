@@ -5,8 +5,9 @@
  *
  * menu_scale.c makes the menu canvas bigger. That is only half of a widescreen menu: the engine's
  * blitter copies one source pixel to one destination pixel, so the artwork has to be bigger too,
- * and the artwork is the player's own, converted by tools\convert_menu.ps1 against their own
- * installation. This is what makes the engine read the converted files instead of the originals.
+ * and the artwork is the player's own, converted against their own installation by the artwork
+ * converter this project has since retired. This file makes the engine read those files instead of
+ * the originals.
  *
  * The engine mounts a chain of resource sources and asks each in turn, and it already promotes the
  * install root to the head of that chain, which is why a loose file beside WMAIN.EXE beats big.lab.
@@ -33,8 +34,8 @@
 
 #include <stdbool.h>
 
-/* The folder the converter writes and this mounts, relative to the game directory. Matches
- * convert_menu.ps1's own default, and movies_hd's naming. */
+/* The folder the converter wrote and this mounts, relative to the game directory. Matches the
+ * converter's own default, and movies_hd's naming. */
 #define MENU_ART_DEFAULT_DIRECTORY "menu_hd"
 
 /* Arms the mount. `directory` is the MenuArtDirectory ini value; an empty string or NULL means the

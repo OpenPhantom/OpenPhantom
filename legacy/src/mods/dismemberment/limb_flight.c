@@ -1,5 +1,5 @@
 /* limb_flight.c: the flight, the rest state, and the prevRot maintenance the engine forgot.
- * The reverse-engineering account of WHY each of these exists is in limb_flight.h.
+ * The reverse-engineering account of why each of these exists sits with the declarations.
  *
  * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. The excess is the measurements
  * and byte evidence that justify each constant. Deleting those to get under the mark is not a
@@ -184,8 +184,7 @@ typedef struct limb_flight_state {
 static limb_flight_state_t flight_state;
 
 /* ============================================================================================ */
-/* Recorded rather than written, and that division is the whole reason this feature can be switched
- * off at run time.
+/* Recorded rather than written, so the feature can be switched off while the game runs.
  *
  * These are pooled float constants the engine reads while a severed piece is in the air. Scaling
  * one in place is a one way trip: the next call would read the value already scaled and square it,
@@ -313,7 +312,7 @@ static void record_flight_constants(void)
     }
 
     if (tuned != 0) {
-        log_info("flight constants remembered - %d of them. Tumble x%.2f, gravity x%.2f (0.2 per "
+        log_info("%d flight constants remembered. Tumble x%.2f, gravity x%.2f (0.2 per "
                  "substep is 204.8 u/s^2 = 5x world gravity). None is written until the feature "
                  "is switched on, and switching it off writes the shipped values back.",
                  tuned, (double)config->spin_scale, (double)config->gravity_scale);
@@ -678,7 +677,7 @@ static bool resolve_stunt_block(uintptr_t tick_site)
     }
     if (!memory_read_u32(tick_site + OFFSET_STUNT_BLOCK_POINTER, &pointer_address) ||
         !memory_is_inside_image(pointer_address, sizeof(uint32_t))) {
-        log_warning("g_stuntBlock would be at %08X - refused", (unsigned)pointer_address);
+        log_warning("g_stuntBlock would be at %08X, refused", (unsigned)pointer_address);
         return false;
     }
 

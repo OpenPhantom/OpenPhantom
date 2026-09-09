@@ -20,7 +20,7 @@ disables that one part and says so in the log.
 
 | Key | Default | Range | Meaning |
 |---|---|---|---|
-| `Enabled` | `1` | | |
+| `Enabled` | `1` | | `0` installs nothing and the log says so. |
 | `MaxDeferredVertices` | `30` | 1-31 | the most vertices one deferred face may carry |
 | `PoolCapacityVertices` | `8196` | 0 or more | the ceiling on the shared vertex pool; `0` switches that second bound off |
 | `GuardDepthCompare` | `1` | | substitute LESS when the comparison mapper answers 0 |
@@ -194,7 +194,8 @@ accept, a ceiling of zero, and the counts that would wrap if the pool question w
 `used + count > capacity` rather than as a subtraction. The vertex limit and the pool ceiling are
 passed in, so the test drives the same code the game runs without an engine cell anywhere near it.
 
-**Not compiled and not run in the game.** The test was written but has not been built here.
+**The unit test builds and passes.** `face_bounds` is a registered ctest target, so CI runs it.
+**Not run in the game.**
 
 An untriggered session is the expected result rather than evidence that the guard works: on a
 correct scene and a working device none of the three paths is taken. What can be confirmed in game

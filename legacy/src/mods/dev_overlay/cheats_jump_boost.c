@@ -149,8 +149,8 @@ static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
  * THE PATTERN FOR THIS GATE IS NOT REPEATED HERE. sim_pause.c, in this same DLL, resolves this
  * exact site, reads the same operand and owns the cell. This feature asks it to hold the pause
  * rather than resolving the address a second time and writing the cell itself. Two resolvers of
- * one address is how the two of them came to fight; see sim_pause.h for the sequence that left
- * the game frozen with nothing holding it. */
+ * one address is how the two of them came to fight, and the sequence it produced left the game
+ * frozen with nothing holding it. */
 
 /* Free camera, site two of two: the camera object pointer, and its per-frame update.
  *

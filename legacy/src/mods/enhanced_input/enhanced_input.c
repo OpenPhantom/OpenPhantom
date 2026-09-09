@@ -104,11 +104,11 @@
  * touched. The chest is skipped while the auto-aim claims it, because the weapon and the blade hang
  * off that node; the head has no other writer in the image.
  *
- * SIZE NOTE: this file is well over six hundred lines. It installs the whole DLL: two phase
- * thunks, the menu, the sites they all depend on, and the order in which they have to come up. The
- * thunks themselves are short, and their correctness rests entirely on facts about the engine that
- * no reader can see from them, which fields the clip selector branches on, where sincos_deg is
- * taken, which modes run which phase. That evidence is the length.
+ * WHERE THE SEAMS WENT. This file installs the whole DLL: two phase thunks, the menu, the sites
+ * they all depend on, and the order in which they have to come up. The thunks themselves are
+ * short, and their correctness rests entirely on facts about the engine that no reader can see
+ * from them, which fields the clip selector branches on, where sincos_deg is taken, which modes
+ * run which phase. That evidence is most of the length.
  * Two seams have been taken. The CONFIGURATION half, its defaults, its clamps and the retired
  * keys, went into input_config.c, which touches the engine at no point. The LIVE SWITCH half went
  * into input_switches.c: the setters and availability queries the controls screen calls, and the
@@ -240,9 +240,8 @@ static void __cdecl integrate_thunk(void)
          * Phase 2 now leaves a real turn rate in the cell instead of a zero, so the original's own
          * `heading += turnWheel * frameDt` is no longer a no-op and would turn the view a second
          * time. Both fields are read LIVE, here, rather than remembered from phase 2:
-         * Plr_UpdateFall
-         * and Plr_EnterSidle can zero the cell in between, and a remembered value would then steer
-         * the view BACKWARDS by a term the engine never applied.
+         * Plr_UpdateFall and Plr_EnterSidle can zero the cell in between, and a remembered value
+         * would then steer the view BACKWARDS by a term the engine never applied.
          *
          * Gated on having written the cell ourselves. The free-look branch and MouseLook=0 both
          * leave a zero there deliberately, and correcting for a term that is not coming would be

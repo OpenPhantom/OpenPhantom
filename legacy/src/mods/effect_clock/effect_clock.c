@@ -1,11 +1,12 @@
 /* effect_clock.c: three effects that re-roll themselves once per rendered frame, put back on the
  * engine's own substep clock.
  *
- * SIZE NOTE. This file runs well over six hundred lines and the great majority of it is comment.
- * The executable part is one bracket around a call, two one line replacements for a random draw,
- * and the installation. What is long is the evidence: a census of every draw from the engine's
- * random generator, the eighteen of those that a drawn frame reaches, the message each of them
- * hangs off, and the disassembly of the three that turned out to be genuinely per frame.
+ * SIZE NOTE. This file runs a little over six hundred lines and the great majority of it is
+ * comment. The executable part is one bracket around a call, two one line replacements for a
+ * random draw, and the installation. What is long is the evidence: a census of every draw from
+ * the engine's random generator, the eighteen of those that a drawn frame reaches, the message
+ * each of them hangs off, and the disassembly of the three that turned out to be genuinely per
+ * frame.
  *
  * The seam that was taken is substep_noise.c, which holds the arithmetic the two replacements
  * answer with and the seed the arc bracket pins. That part is a pure function of a substep number
@@ -625,7 +626,7 @@ void effect_clock_install(void)
     }
 
     if (clock_state.flicker_paced || clock_state.halo_paced) {
-        log_info("side effect worth knowing: the drawing path no longer advances the engine's "
+        log_info("side effect: the drawing path no longer advances the engine's "
                  "global random generator, so the simulation's own sequence stops depending on how "
                  "many frames were drawn. The original was already frame-rate dependent there.");
     }

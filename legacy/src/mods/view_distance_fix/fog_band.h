@@ -34,7 +34,7 @@
 #define FOG_DEAD_BAND_UNITS      0.01f
 #define FOG_MAX_TRUSTED_SECONDS  0.125f
 
-/* THE BAND FOLLOWS A SETTLED DRAW DISTANCE, NOT THE INSTANTANEOUS ONE.
+/* The band follows a SETTLED draw distance, not the instantaneous one.
  *
  * The cut edge is not a steady number. The frame governor moves the view scale whenever a scene
  * costs too much, in steps of its own every half second, and every step changes the distance the
@@ -48,9 +48,9 @@
  *
  * The field of view never moved and neither did the reference. The live cut fell 39, 34, 33, 32,
  * and the band spent the whole cutscene chasing a target that had already moved again. That is the
- * fog visibly swinging at level entry, which is what issue #30 reports.
+ * fog visibly swinging at level entry, the behaviour issue #30 reports.
  *
- * Easing the CUT rather than only the band is what fixes it. A step becomes a slope, several steps
+ * Easing the CUT rather than only the band fixes it. A step becomes a slope, several steps
  * inside one settle become one slope, and the fog ends up where the draw distance ended up without
  * having visited every value on the way. Slower than the band's own settle, deliberately: this is
  * the input, and smoothing an input faster than its consumer only moves the problem. */

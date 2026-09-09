@@ -87,7 +87,7 @@
  * sprite) the compression is invisible, and a sprite that fits the island, which is every
  * authored widget, is passed through bit-identical.
  *
- * A sprite drawn with fill < 1 is LEFT ALONE entirely, and that is not caution but arithmetic.
+ * A sprite drawn with fill < 1 is LEFT ALONE entirely, on arithmetic rather than on caution.
  * The blitter's first act is a left-anchored wipe,
  *
  *     0042967C  ...                    xRight = (xRight - xLeft) * fill + xLeft

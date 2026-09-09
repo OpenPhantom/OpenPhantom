@@ -40,7 +40,7 @@
  *
  * At the 60 degrees the game ships with (`push 0x42700000` at 0x00417F79, the first argument of
  * the one and only rdCamera_new call) that factor is 0.866. At 87 degrees it is 0.724. That is
- * the whole of the "wider field of view, nearer fog" rule, and it is geometry rather than taste.
+ * the whole "wider field of view, nearer fog" rule, and it is geometry, not taste.
  *
  * And capping the fog that way costs nothing visible. graphics_clearFrame 0x0046C0F5 clears the
  * picture to the colour std3D_setFogColor last wrote ([0x6FC988]/[0x854E50]/[0x6FC980], packed by
@@ -49,7 +49,7 @@
  * gradient into a colour that is on the screen either way.
  *
  * ==============================================================================================
- * The band is scaled, never just its far end, and that is a correctness rule, not a taste one
+ * The band is scaled, never just its far end. This is a correctness rule, not a taste one
  *
  * bapdraw_setFrameState 0x00401E8B forms `end - start` and, when the result is NEGATIVE
  * (`fcomp [0x4A801C]` with [0x4A801C] = 0.0f, `test ah,1`), writes 0 into the "compute the fog
@@ -94,7 +94,7 @@ typedef struct fog_regime_config {
     float open_fog_end;
     bool  vertex_fog;       /* run the fog on the engine's own per-vertex ramp */
     bool  follow_fov;       /* scale the authored band as the picture widens or the cut moves in */
-    /* WHERE THE BAND ENDS RELATIVE TO THE CUT. Three answers to one question, so it is a choice
+    /* Where the band ends relative to the cut. Three answers to one question, so it is a choice
      * and not a stack: see fog_regime_depth_limit for why two of them can never both hold.
      *   0  neither. The authored band, followed by the field of view if FogFollowFov is on.
      *   1  the no-pop-in cap: end at (cut - margin) * cos(hFOV/2), so a cell arriving at the
@@ -149,8 +149,8 @@ float fog_regime_depth_limit(float cut_units);
 float fog_regime_follow_factor(float horizontal_fov_degrees, float reference_cut, float live_cut);
 
 /* The band the level should be showing right now. `authored` is the level's own band as loaded;
- * this function never reads what is currently in the level record, which is what keeps a repeated
- * call from squaring its own effect. */
+ * this function never reads what is currently in the level record, so a repeated call cannot
+ * square its own effect. */
 void fog_regime_target_band(const fog_regime_config_t *config,
                             const fog_regime_band_t *authored,
                             float horizontal_fov_degrees,

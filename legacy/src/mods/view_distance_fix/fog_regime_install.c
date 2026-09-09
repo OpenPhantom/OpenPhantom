@@ -273,7 +273,7 @@ void report_device_fog_caps(void)
              (caps & RASTER_CAPS_FOGTABLE) ? "YES" : "no",
              (caps & RASTER_CAPS_WFOG) ? "YES" : "no",
              (caps & RASTER_CAPS_WFOG)
-                 ? "The device measures fog against eye-space w, which is what this engine's band "
+                 ? "The device measures fog against eye-space w, the unit this engine's band "
                    "is already expressed in, so per-pixel fog is reachable here."
                  : "The device measures fog against device depth, so the engine's world-unit band "
                    "cannot be handed to it unconverted and the per-vertex ramp is the only path.");

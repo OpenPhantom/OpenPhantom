@@ -5,7 +5,8 @@
  *
  * graphics_buildModeList 0x46C592 filters the platform's raw DirectDraw table [0x862740]
  * (count [0x862014], stride 0x54) into this device's list. The acceptance rule, in code order:
- *     1. kind == 1 && bpp == 0x10           <- 16-bit only, and see mode_depth.h for why
+ *     1. kind == 1 && bpp == 0x10           <- 16-bit only; ModeBitDepth can open all three
+ *                                              depth gates, and the software 2-D layer then fails
  *     2. 640x480 is accepted unconditionally
  *     3. else: w*h*6 <= VRAM limit, w >= 640, h >= 480,
  *              AND (w == 1280 && h == 1024) OR (w/4 == h/3)      <- THE 4:3 LOCK
@@ -303,7 +304,7 @@ static void load_config(void)
      * leaving a permanent stamp of the cursor's blue glow on the border until the screen closes.
      * The front end never shows it because its 3-D room repaints every pixel every frame. Every
      * clickable widget lives inside the island either way, so if that report reproduces here this
-     * default becomes OFF; see pointer_cage.c's header for the full mechanism. */
+     * default becomes OFF. */
     config->widen_menu_cursor_area =
         ini_read_bool(RESOLUTION_SECTION, "WidenMenuCursorArea", true);
 
@@ -329,17 +330,17 @@ static void load_config(void)
     config->filter_mode_enumeration =
         ini_read_bool(RESOLUTION_SECTION, "FilterModeEnumeration", true);
 
-    /* Default 1, which is off and is exactly the behaviour that shipped. Whole multiples only:
-     * the menu bitmaps are blitted one source pixel to one destination pixel, so a fractional
-     * canvas would leave the artwork sitting at a size the layout does not agree with. See
-     * menu_scale.h for why this is only half a feature without upscaled artwork, and for why it
+    /* Default 0, which is automatic rather than off: a mounted artwork set decides the ratio, and
+     * the display's own resolution decides it when there is none. Fractional ratios are ordinary,
+     * 1600 wide gives 2.5. Any other number is an explicit multiple of the authored 640x480 and
+     * exists for testing. The ceiling is 4095/640, which the run length row format imposes. It
      * declines to install when the menu cursor cage is not widened. */
     config->menu_scale =
         ini_read_float(RESOLUTION_SECTION, "MenuScale", 0.0f);
 
-    /* Where tools\convert_menu.ps1 wrote the upscaled artwork. One folder rather than seventy
-     * loose files beside WMAIN.EXE, mounted through the engine's own resource chain, and named
-     * here so it can be moved or emptied without touching the DLL. Empty declines the mount. */
+    /* A folder of the reader's own menu artwork. One folder rather than seventy loose files beside
+     * WMAIN.EXE, mounted through the engine's own resource chain, and named here so it can be
+     * moved or emptied without touching the DLL. Empty declines the mount. */
     ini_read_string(RESOLUTION_SECTION, "MenuArtDirectory", MENU_ART_DEFAULT_DIRECTORY,
                     config->menu_art_directory, sizeof config->menu_art_directory);
 
@@ -881,7 +882,8 @@ void enhanced_resolution_install(void)
              * window_fit_current_mode_size(), and its SIZE is the canvas menu_scale settled on.
              * Clamping to the authored 640x480 while the menus draw on a scaled canvas cuts real
              * widgets off at a border that is no longer there. This is the erase-side companion
-             * of MenuKeepsResolution, see menu_island_clip.c for the defect it closes. */
+             * of MenuKeepsResolution: it closes the blue stamp the hovered button's halo leaves
+             * on the island's border, drawn against the screen and repaired against the canvas. */
             (void)menu_island_clip_install(resolution_state.config.clamp_menu_sprites_to_island,
                                            canvas_width, canvas_height);
         }

@@ -33,7 +33,7 @@
  * So the scale moves the four buttons to their new places and leaves them at their authored size,
  * which reads as a bug even though nothing has failed.
  *
- * WHY THE SURFACE IS NOT SIMPLY CREATED BIGGER. Patching those two immediates is easy, and wrong.
+ * Why the surface is not simply created BIGGER. Patching those two immediates is easy, and wrong.
  * Bink decodes at the video's own 232x100 whatever it is given, so a larger surface would hold a
  * small picture in the corner of a large black rectangle, and the only way to fill it would be to
  * upscale the surface in place. Three of the four clips are paused at any moment, so an in place
@@ -48,7 +48,7 @@
  * size into it before blitting. That is the wanted outcome rather than a leak: the hit box then
  * matches what the reader can see, so the whole face of each button is clickable.
  *
- * WHY THE MODE IS TESTED AND NOT JUST pData. The save game screens plant thumbnails through the
+ * Why the mode is tested and not just pData. The save game screens plant thumbnails through the
  * same pData with bCompress set, and swrle_compressVBuffer FREES the pixel buffer, puts a much
  * shorter run length stream in its place, and leaves rasterInfo completely alone. So a compressed
  * surface still claims to be 232x100 raw pixels and nothing on it says otherwise: reading it as raw
@@ -300,7 +300,7 @@ static void preview_expand_row(const preview_slot_t *slot, const uint8_t *source
  * standing still. On the save screen that means once per row selected; on the main menu, once per
  * frame of the one clip that is playing.
  *
- * PALETTE SURFACES ARE NOT SMOOTHED. Interpolating two palette INDICES produces a third index whose
+ * Palette surfaces are NOT smoothed. Interpolating two palette INDICES produces a third index whose
  * colour has nothing to do with either, so those fall back to whole pixel replication. No surface
  * this actually meets is palettised; the test is there so that one never comes out as confetti. */
 static void preview_fill(preview_slot_t *slot, const uint8_t *source, int32_t source_bytes_per_line)

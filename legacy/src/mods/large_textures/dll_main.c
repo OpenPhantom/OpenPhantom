@@ -1,4 +1,4 @@
-/* dll_main.c: entry point of large_textures.dll. See ../common/mod_entry.h for the contract. */
+/* dll_main.c: entry point of large_textures.dll. */
 #include "large_textures.h"
 
 #include "common/mod_entry.h"

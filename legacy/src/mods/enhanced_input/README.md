@@ -27,13 +27,14 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `MouseAccumulate` | `1` | | bank the axis once per rendered frame instead of reading it once per substep. `0` restores the old behaviour for an A/B comparison |
 | `MouseRawInput` | `1` | | read the device directly instead of through the engine's DirectInput axis. The engine's reader answers a sum, so nothing downstream can tell three device reports in a step from four; this one counts them. Falls back to the engine's reader, and says so in the log, if the registration fails |
 | `MenuCursorRawInput` | `1` | | move the menu pointer from the device as well. The engine moves it in whole screen pixels against a hard-coded centre, which loses everything under one pixel and loses travel at a screen edge |
-| `NewMouseInput` | `1` | | advance the **drawn** view angle once per rendered frame and hand the simulation the total afterwards. Needs `MouseAccumulate=1` and `MouseLookRigidCamera=1`; it refuses with a named reason in the log if either is off |
+| `NewMouseInput` | `0` | | advance the **drawn** view angle once per rendered frame and hand the simulation the total afterwards. Needs `MouseAccumulate=1` and `MouseLookRigidCamera=1`; it refuses with a named reason in the log if either is off |
 | `NewMouseInputDump` | `0` | 0-400 | measurement: that many rendered frames of the drawn turn, one line each, once per session |
 | `MouseLookRigidCamera` | `1` | | force the camera's plain yaw arm. The engine's other arm eases toward its target and reads back the yaw it drew last frame, which would compound a per-frame correction instead of recomputing it |
 | `CameraJumpWatchDeg` | `0` | 0-180 | measurement: log a line whenever the drawn camera yaw moves more than this in one frame. `0` is off |
 | `KeyTurnRate` | `120` | 15-720 | degrees per second for the turn keys. The engine's own value is 120 and it is clamped there internally, so raising this also lifts that clamp |
 | `MouseSpikeLimitDegPerSec` | `3000` | 360-20000 | degrees per second. At **delivery** a step past it is held back and paid out on the next frame rather than deleted; at the **door** a single frame's sample past it is cut to it before it is banked at all. A guard against a broken device, not against your hand |
 | `MouseLog` | `0` | | one line per sample the door bolt had to cut. A healthy session cuts nothing and logs nothing |
+| `MouseSmoothMaxMs` | `0` | 0-400 | the ceiling on how much delay the delivery filter may spend. The filter measures the device's own report interval and sizes itself from that, so this bounds it rather than setting it. `0` is a written decision and is obeyed: no smoothing. An absent key leaves the choice to the control mode |
 | `Strafe` | `0` | | requires `MouseLook=1`; also settable from the developer menu, and from the controls screen when `MenuWidgets=1` |
 | `MenuWidgets` | `0` | | put this project's three widgets on the game's own controls screen: the two check boxes and the mouse sensitivity slider. Ships off so that screen looks as it did in 1999. Nothing is lost by it: all three are keys here and the developer menu has a row for each, sensitivity included. Read once at startup, so it takes effect on the next launch |
 | `StrafeInvert` | `0` | | |
@@ -58,6 +59,7 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `SteerLeanFromHand` | `1` | | that lean follows **your hand** rather than the engine's turn cell. Under a mouse that cell is not a rate: its only way down is a store of zero, taken on any step whose frame carried no report from the device, so the twist collapses to centre and climbs back many times a second. A held turn key is untouched and keeps the engine's own climb. Needs `SteerLean=1` and `MouseLook=1` |
 | `RestoreTurnRate` | `1` | | stop zeroing the engine's turn cell, so the speed penalty on turning is the engine's again. Nothing is written into it, the double integration is subtracted in phase 7. It does not reach the follow camera, which overwrites that cell with its own number before it looks at it |
 | `FreeLookAimKeepsMovement` | `!Strafe` | | **defaults from `Strafe`**: off when the sideways walk is on, on when it is off. With the sideways walk on the body already faces where it travels and the movement keys point it, so squaring it up to the camera while you shoot takes the aiming away from the control you are already using, and the camera follow stands off at the same time. Set it explicitly to override the pairing. Read once at startup |
+| `FreeLookAimTwistMax` | `90` | 0-180 | degrees the weapon may be pointed off the body while firing. `FreeLookAimStrafeSwing` is spent inside this rather than on top of it |
 | `FreeLookAimStrafeSwing` | `45` | 0-180 | degrees of aim a full sideways key adds while firing. The mouse stays the aiming device and this rides on top of the body already being squared up to it, so a target can be led sideways without moving the camera. Spent inside `FreeLookAimTwistMax` rather than on top of it, so raising this alone cannot point the weapon further off the body than that allows. `0` switches it off |
 | `SteerLog` | `0` | 0-4000 | measurement: that many substep lines in which the player is steering, then it stops |
 | `SteerLeanTestDegrees` | `0` | +/-90 | measurement: force a fixed twist on chest and head, ignoring the turn. Answers whether a node rotation reaches the screen at all |
@@ -102,7 +104,7 @@ frame while the mouse-to-body path drains once per substep.
 A single frame's sample past the limit is now **cut to it before it is banked**, so the reservoir
 only ever holds motion a person really made. It is cut rather than dropped because at the top of the
 sensitivity band a genuine flick can reach that rate, and losing one whole is worse than shortening
-it. Every cut is named in the log, once as a warning and, with `MouseLog=1`; one line each.
+it. Every cut is named in the log: once as a warning, and with `MouseLog=1` one line each.
 
 ### `MouseSensitivity` was renamed, and the old value must not be reused
 
@@ -582,13 +584,13 @@ Composed, against the fraction of real stick travel:
 | 0.30 to 0.50 | jumps to 0.60, then climbs to 1.0 |
 | above 0.50 | pinned at 1.0 |
 
-The usable analog range is a fifth of the stick, entered by a jump to sixty per cent, and past
+The usable analogue range is a fifth of the stick, entered by a jump to sixty per cent, and past
 halfway a diagonal reads as a corner whichever way it is really pointing, so the direction is gone
 rather than coarse. Read out of the retail image and then confirmed against a real install's
 `obi.ini`, whose `X0JOY` and `Y0JOY` rows are the shipped defaults. A player who has rebound the pad
 in the controls screen may not have the doubling, so nothing may assume it.
 
-There was a fourth loss, and that one was ours: the sideways walk took the analog value for the
+There was a fourth loss, and that one was ours: the sideways walk took the analogue value for the
 sideways component but only the move **bit** for the forward one, so every diagonal was pulled
 toward forward. A true forty five degree push came out at thirty five degrees, and at half
 deflection at nineteen.
@@ -686,7 +688,7 @@ so a yaw changing 32 times a second is held for two, three or four frames and th
 is not simulation state and is free to move per frame, and the interpolated heading it aims at is
 already smoothed across the substep by the engine's own alpha.
 
-**It waits, in real time.** A pad's look stick arrives as synthesized mouse motion with a fractional
+**It waits, in real time.** A pad's look stick arrives as synthesised mouse motion with a fractional
 remainder carried between polls, so it lands on some frames and not others. Asking whether this
 frame carried input started and stopped the drift several times a second, which was the other half
 of the jitter. `CameraFollowHoldMs` is the pause instead, and it also gives the beat a console
@@ -753,8 +755,10 @@ What stopped it was this file's Stand gate, reached in three places at once, non
 decision about melee. The pad stands down outside Stand because that is where it writes; free look
 returns before its travel turn; and the fold that pays the keyboard's turn back into the view runs
 only when nothing else is spending the axis. With `Strafe=1` the turn keys therefore had no
-consumer at all during a swing while the engine's own turn went on being subtracted in phase 7,
-and with `Strafe=0` the stick had none.
+consumer at all during a swing while the engine's own turn went on being subtracted in phase 7.
+With `Strafe=0` the keys still reached that fold; what has no consumer there is this DLL's own
+XInput reading of the stick, and it is left out on purpose, for the reason given at the end of
+this section.
 
 So the direction the player asks for turns the body through a swing now, in both control modes and
 in Panaka's melee with it. The blade goes along: `Plr_TestSwingWorld` [0x0044E6E2] sweeps a capsule
@@ -1039,12 +1043,12 @@ ids were also confirmed against the retail image directly: the controls table us
 a census of every widget in every screen puts the highest authored string id at 414, with neither
 `0x7655` nor `0x7656` in use.
 
-**Accepted in game**, in the 1.5.0 build, which was played through by hand. Both check boxes have
+**Accepted in game**, in the v0.4.1 build, which was played through by hand. Both check boxes have
 been seen and clicked, and both switches take effect live: the arming gate reads them on every
 camera update and the phase thunks read the same gate on every substep. The code path predicted
 that and play confirms it.
 
-The check boxes are behind `MenuExtras` and ship off, so the vanilla menu is the one the game
+The check boxes are behind `MenuWidgets` and ship off, so the vanilla menu is the one the game
 shipped with. The same two switches are always reachable from the dev menu's Utilities page,
 which is where they were exercised.
 

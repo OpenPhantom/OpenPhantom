@@ -33,9 +33,9 @@
  * into the next, and it is what lets the stand down put a screen back exactly rather than by
  * dividing.
  *
- * The last two are the x and y this last WROTE, which is what lets a rectangle the GAME has
- * written be told apart from one this left there. That is the whole of the pause screen fix; see
- * the note by hook_draw_menu. */
+ * The last two are the x and y this last WROTE, so a rectangle the GAME has written can be told
+ * apart from one this left there. That comparison is the pause screen fix; the note by
+ * hook_draw_menu carries the rest of it. */
 #define SHADOW_STRIDE     6u
 #define SHADOW_AUTHORED_X 0u
 #define SHADOW_AUTHORED_Y 1u

@@ -1,10 +1,10 @@
 /* controller_input.h: the right stick looks around, Start pauses, and nothing else about a
  * controller is touched.
  *
- * A field investigation this session (three separate machines, three different ways of exposing an
- * Xbox-style pad to this game) found that Xidi, a third-party wrapper this project used to install
- * to make the pad answer the game's own WinMM joystick calls, produces rare but large single-frame
- * stalls (measured up to 419 ms) whenever it is actively being polled. Turning Xidi off removed the
+ * A field investigation (three separate machines, three different ways of exposing an Xbox-style
+ * pad to this game) found that Xidi, a third-party wrapper this project used to install to make
+ * the pad answer the game's own WinMM joystick calls, produces rare but large single-frame stalls
+ * (measured up to 419 ms) whenever it is actively being polled. Turning Xidi off removed the
  * stalls in every controlled comparison. The two things it was actually being used for on this
  * project were the right stick driving the camera and Start opening the pause menu; both are
  * reproduced here without Xidi, without WinMM, and without the game's own joystick reading at all.
@@ -13,18 +13,18 @@
  * exactly three WinMM calls (joyGetNumDevs, joyGetPosEx, joyGetDevCapsA), modelling one physical
  * stick with up to 32 buttons. There is no second-stick concept in it at all, which is why Xidi's
  * own working configuration for this game did not route the right stick or Start through that
- * surface either: it mapped StickRightX to a synthesized mouse axis and ButtonStart to a
- * synthesized Escape keypress. This DLL does the same two things, directly.
+ * surface either: it mapped StickRightX to a synthesised mouse axis and ButtonStart to a
+ * synthesised Escape keypress. This DLL does the same two things, directly.
  *
  * WHY SENDINPUT RATHER THAN A DIRECT HOOK. enhanced_input.dll's own raw mouse reader
  * (raw_mouse.c) accepts a WM_INPUT relative mouse report on nothing more than its type field; it
  * has no way to tell a real device from an injected one, and neither does the RAWMOUSE structure
- * Windows hands it. SendInput-synthesized movement reaches it exactly like a real mouse would, with
+ * Windows hands it. SendInput-synthesised movement reaches it exactly like a real mouse would, with
  * no dependency between this DLL and enhanced_input.dll at all, which is what this project's own
  * "feature DLLs never depend on each other at run time" rule asks for. The pause key is confirmed
- * directly from this session's own decompile of gameplay_wndproc_hotkey_handler (0x0043F603): Escape
- * is the sole route into gameplay_open_pause_menu (0x0043FAB5), and the engine's own state gating
- * already prevents a double-toggle, so nothing here needs to track menu state itself.
+ * directly from a decompile of gameplay_wndproc_hotkey_handler (0x0043F603): Escape is the sole
+ * route into gameplay_open_pause_menu (0x0043FAB5), and the engine's own state gating already
+ * prevents a double-toggle, so nothing here needs to track menu state itself.
  * The handler address here read 0x0043F681, which is not an entry point: it is the CALL SITE of
  * the pause menu open INSIDE that handler, `E8 2F 04 00 00`, whose displacement resolves to
  * 0x0043FAB5. The entry is 0x0043F603, `55 8B EC 83 EC 08`, and it is what the engine registers:

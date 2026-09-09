@@ -505,7 +505,7 @@ static bool write_all_words(void)
                   (unsigned)table_state.words[index].new_value);
 
         if (!roll_back("partial failure")) {
-            log_error("THE COLLECTION PATH IS HALF RELOCATED AND CANNOT BE ROLLED BACK. The "
+            log_error("The collection path is HALF RELOCATED and cannot be rolled back. The "
                       "append blocks now write into TWO different buffers, and the bucket list "
                       "heads point alternately into both. Continuing would mean driving into a "
                       "silent memory corruption. The game is terminated in a controlled way.");

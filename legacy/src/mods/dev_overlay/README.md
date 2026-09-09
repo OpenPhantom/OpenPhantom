@@ -120,9 +120,10 @@ several pairs are two answers to one question and share a single detour.
 
 **No fog was a ninth and now lives under Utilities**, at the head of the fog settings. It is still
 the same code in `cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A
-player looking for it is looking at the fog, and the two rows under it are the rest of that
-answer: this one removes the fog, the next says how thick it is, and the last says what it is
-measured against. Split across two groups they read as unrelated.
+player looking for it is looking at the fog, and the fog thickness and fog follow rows below it
+are the rest of that answer: this one removes the fog, the second says how thick it is, and the
+third says what it is measured against. The dismemberment row sits between them, for the reason
+given in its own section. Split across two groups they read as unrelated.
 
 A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
 That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
@@ -535,7 +536,7 @@ is learned from the row rather than by having a number refused.
 number it sets, which is the same shape the field of view and mouse speed rows use. The track spans
 `VIEW_RANGE_MIN` to `VIEW_RANGE_MAX`, both compile-time constants here rather than settings, so
 unlike the field of view there is no way for a reader to set the two ends equal and nothing to guard
-against dividing by zero. A drag rounds to a fiftieth, because the row's own formatter shows two
+against dividing by zero. A drag rounds to a hundredth, because the row's own formatter shows two
 decimals and a value with more than that would leave the number and the handle disagreeing about
 what had been set. A fiftieth was tried first and is wrong: the grid has to contain both ends of
 every row using it, and fog thickness starts at `0.25`, which a fiftieth rounds up to `0.26`, so
@@ -554,7 +555,7 @@ read `2.50x` while the game is really drawing at `1.00x`. The note directly unde
 
 ## The note under the draw distance
 
-The second row under **Utilities** is not a control. It reads `in force: 1.00x` and cannot be
+The row under that slider is not a control. It reads `in force: 1.00x` and cannot be
 clicked into, because nothing here can change it: it reports the draw distance the game is actually
 running, which is not always the one typed above it. The frame governor lowers that when a scene
 costs too much frame time and the cell watchdog lowers it when the draw table or the vertex cache is
@@ -771,7 +772,7 @@ are allowed, and both things then happen.
 
 ## The subtitle size row
 
-Directly above the dev menu size, and it edits `[enhanced_resolution] SubtitleScale`: how big the
+Two rows above the dev menu size, and it edits `[enhanced_resolution] SubtitleScale`: how big the
 subtitles are, as a multiple of the size they have at 640x480. Typed in like the rows above it, with
 the band in the label, and **dragged on the track beneath it**.
 
@@ -820,7 +821,7 @@ this row works whatever else is or is not in the `mods` folder.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | |
+| `Enabled` | `1` | `0` installs nothing and the log says so. |
 | `OpenKey` | `0` | The key that opens the panel. `0` accepts F6 and whichever key sits below Escape: the caret on a German layout, the backtick on a British one. Takes a name (`F8`, `numpad +`, `backtick`, `A`) or a virtual key code. Written by the panel's own key-binding row, and typed by hand when you cannot open it. |
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
 | `DevMenuSize` | `0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
@@ -993,7 +994,7 @@ without adding any. Nobody wants that on purpose, so the row writes 2 or 0 and a
 
 ## The Window mode group
 
-Eleven rows, and the group is a good deal more stateful than Utilities, so the rules it follows are
+Ten rows, and the group is a good deal more stateful than Utilities, so the rules it follows are
 worth writing down.
 
 **The five shape rows are one choice, not five switches.** Pressing the lit one does nothing. An

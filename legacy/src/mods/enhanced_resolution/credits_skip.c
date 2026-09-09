@@ -174,7 +174,7 @@ void credits_skip_install(bool enabled)
         return;
     }
 
-    /* THE SCREEN DETOUR BEFORE THE READER, and the order is what makes a partial failure safe.
+    /* The screen detour BEFORE the reader, and the order is what keeps a partial failure safe.
      * skip_requested is only ever set while inside_credits is up, and only the screen detour raises
      * that, so a reader detour standing on its own can never answer end of file: it passes every
      * call straight through. The reverse order would leave the reader armed with nothing to bound

@@ -471,8 +471,8 @@ void vertex_table_relocate(void)
              (unsigned)table_state.guard_address, (unsigned)OLD_LIMIT, (unsigned)NEW_LIMIT,
              (unsigned)WORD_COUNT, (unsigned)WORD_COUNT);
     log_info("vertex table: the trailer record at 0x006bf9f0 is UNCHANGED and untouched by this "
-             "relocation; it was never part of the cache, only adjacent to it, which is exactly "
-             "why the cache moves whole rather than growing in place.");
+             "relocation; it was never part of the cache, only adjacent to it, so the cache "
+             "moves whole rather than growing in place.");
 }
 
 void vertex_table_restore(void)

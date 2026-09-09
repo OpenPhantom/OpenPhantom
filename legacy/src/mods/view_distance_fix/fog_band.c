@@ -1,14 +1,13 @@
-/* fog_band.c: the fog band arithmetic, and nothing that touches the engine.
+/* fog_band.c: the fog band arithmetic. Nothing here touches the engine.
  *
  * Split out of fog_regime.c, which had grown past the hard limit while carrying four jobs its own
  * section banners already named: this arithmetic, the live cut edge and camera, the level record,
- * and the install pass. This is the first of those, and it is the cut worth taking first because
- * it is the only one that can be reasoned about on its own: no engine memory is touched anywhere
- * below, every function here is a value in and a value out, and the unit test covers exactly this
- * and nothing else.
+ * and the install pass. This is the first of those, and it was taken first because it is the only
+ * one that can be reasoned about on its own: no engine memory is touched anywhere below, every
+ * function here is a value in and a value out, and the unit test covers it.
  *
- * The seam is therefore not a line count. It is the boundary between what can be tested without a
- * game and what cannot.
+ * The seam is the boundary between what can be tested without a game and what cannot, rather than
+ * a line count.
  */
 #include "fog_regime.h"
 
@@ -173,7 +172,7 @@ void fog_regime_target_band(const fog_regime_config_t *config,
     if (config->follow_fov) {
         end *= fog_regime_follow_factor(horizontal_fov_degrees, reference_cut, live_cut);
     }
-    /* WHERE THE BAND ENDS. Rule 2 assigns rather than caps, and skips the floor entirely: the
+    /* Where the band ends. Rule 2 assigns rather than caps, and skips the floor entirely: the
      * floor is (cut - margin) * fraction, which is below (cut + margin) for every fraction at or
      * under one, so it could never bind here anyway.
      *
@@ -186,14 +185,14 @@ void fog_regime_target_band(const fog_regime_config_t *config,
     if (config->inside_cut == FOG_END_NO_SATURATION) {
         end = fog_regime_depth_limit(sat_cut);
     } else if (config->inside_cut == FOG_END_NO_POP_IN) {
-        /* The no-pop-in limit, computed here and APPLIED AFTER THE FLOOR. See the floor's own
+        /* The no-pop-in limit, computed here and applied AFTER the floor. See the floor's own
          * comment for why the order is the whole point. */
         edge = fog_regime_edge_limit(horizontal_fov_degrees, cap_cut);
         if (edge > 0.0f && end > edge) {
             end = edge;
         }
     }
-    /* HOW FAR IN THE COUPLING IS ALLOWED TO PULL THE END, and this is the one bound the original
+    /* How far in the coupling is allowed to pull the end, and this is the one bound the original
      * had none of.
      *
      * Both terms above are cos(half angle) in disguise, which converts a radial reach into a
@@ -215,7 +214,7 @@ void fog_regime_target_band(const fog_regime_config_t *config,
      * visible world on it. Past that the extreme corners may pop in, which costs a few pixels at
      * the edge of the picture rather than everything beyond halfway.
      *
-     * BUT THE FLOOR MAY NOT RAISE THE END PAST THE LIMIT, and until now it always did. The limit is
+     * But the floor may NOT raise the end past the limit, and until now it always did. The limit is
      * (cut - margin) * cos(hFOV/2) and the floor is (cut - margin) * min_end_fraction, so at the
      * shipped min_end_fraction of 1.0 the floor is at or above the limit for EVERY legal field of
      * view, and the limit above was overwritten on every level, always. FogInsideCut has been dead

@@ -2,7 +2,6 @@
  *
  * Everything here is a pure function of its arguments, which is the point: the parts that are
  * easy to get subtly wrong are the parts that can be tested without launching the game.
- * See unittests/fov_math.c.
  */
 #ifndef FOV_MATH_H
 #define FOV_MATH_H

@@ -467,9 +467,9 @@ bool cursor_anchor_install(bool enabled, bool window_is_moved)
     } else {
         log_info("this repair is BELT-AND-BRACES in this session: nothing moves the window, so it "
                  "stays at screen 0,0 where the engine's own arithmetic is already correct and "
-                 "this hook computes the identical warp. It is left on because it costs nothing "
-                 "there and it is what makes an unusual setup, a wrapper that repositions the "
-                 "window, a desktop with a negative monitor origin, survivable.");
+                 "this hook computes the identical warp. It costs nothing there, and it carries "
+                 "two setups nothing here can see: a wrapper that repositions the window, and a "
+                 "desktop with a negative monitor origin.");
     }
     return true;
 }

@@ -53,6 +53,8 @@ typedef struct free_look_config {
     bool  rigid_mouse_look_camera;
     bool  aim_snap;
     bool  aim_keeps_movement;
+    bool  aim_snap_written;        /* the ini states it, so no default may move it   */
+    bool  aim_keeps_written;       /* the same, for the movement half                */
     float aim_twist_max;
     float aim_strafe_swing;  /* degrees of aim a full sideways deflection adds while firing */
     bool  log_transitions;
@@ -126,8 +128,10 @@ typedef struct free_look_state {
     bool  region_memory_valid;
     float region_memory_yaw;
 
-    /* One substep of lifetime: written by phase 2, consumed by phase 7. */
+    /* Set once at install, from whether the fire detour was placed, and never cleared. */
     bool  fire_shot_armed;   /* the shot aims itself, so the snap may release the walk */
+
+    /* One substep of lifetime: written by phase 2, consumed by phase 7. */
     bool  aim_stance;        /* trigger held: face the camera, let the feet strafe */
     float aim_strafe;        /* the sideways input this substep, for the aim swing */
     bool  aim_lock_valid;    /* an attack is live and aim_lock holds the engine's own target lock */

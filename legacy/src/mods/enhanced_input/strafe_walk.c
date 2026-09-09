@@ -1,11 +1,9 @@
 /* strafe_walk.c: walking sideways by driving the engine's own walk somewhere else.
  *
- * SIZE NOTE: a little over six hundred lines, and the reason is that this file holds both halves
- * of one
- * quantity. The angle is damped on the simulation clock and drawn on the frame clock, and the
- * two
- * are not separable without putting the pair of floats they interpolate between on either side of a
- * translation unit boundary. That is the same seam a previous split was rejected on elsewhere in
+ * SIZE NOTE: past 750 lines, under the 900 hard limit, because this file holds both halves of one
+ * quantity. The angle is damped on the simulation clock and drawn on the frame clock, and the two
+ * are not separable without putting the pair of floats they interpolate between on either side of
+ * a translation unit boundary. That is the same seam a previous split was rejected on elsewhere in
  * this directory, for the same reason.
  *
  * The seam, if this ever needs one, is the DRAWN half at the bottom: its two signatures, its cell
@@ -428,7 +426,7 @@ float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
     /* THE ONLY DIFFERENCE FROM strafe_walk_drive IS THAT `forward` IS REAL, and it is the whole
      * point of the pad path. The other one rebuilds it as exactly +1, -1 or 0 from the move
      * bits, because a keyboard has nothing finer to give. Handing atan2 a quantised 1 against an
-     * analog sideways value pulls every diagonal toward forward: a true forty five degree push
+     * analogue sideways value pulls every diagonal toward forward: a true forty five degree push
      * came out at thirty five degrees, and at half deflection at nineteen. With both components
      * honest the angle is the direction the stick is actually pointing. */
     if (record == NULL) {

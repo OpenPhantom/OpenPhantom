@@ -2,9 +2,9 @@
 
 Everything under `dist/` except `saves/` is third-party, carried here so the
 installer needs no network, during installation or afterwards. `dist/ffmpeg/ffmpeg.exe` is the
-exact build `convert_movies.ps1` pins, so it is what the converter would have downloaded on first
-use; carrying it is what makes cutscene conversion work offline too. Each is redistributable; this file records what they are, what
-they are under, and what shipping them obliges us to do.
+exact build `convert_movies.ps1` pins, the one the converter would have downloaded on first use,
+so carrying it keeps cutscene conversion offline too. Each is redistributable; this file records
+what they are, what they are under, and what shipping them obliges us to do.
 
 The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover any of it.
 
@@ -107,7 +107,7 @@ say that the DLL beside it is the one the project meant to ship.
 Only third-party binaries are listed. The project builds its own DLLs from the source in this
 repository and they change with every build, so recording their hashes in a checked-in file would
 be stale before it was committed. The point of this manifest is the code that came from somewhere
-else, which is exactly the code the repository cannot otherwise account for.
+else, which the repository cannot otherwise account for.
 
 Regenerate it whenever a component is refreshed, in the same commit as the refresh. A manifest
 that lags the binaries it describes is worse than none, because it reads as verification.

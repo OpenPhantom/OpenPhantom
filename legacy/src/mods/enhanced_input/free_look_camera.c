@@ -12,6 +12,7 @@
  * pulls it home, with no byte written anywhere in the pitch path. The camera pitch is a
  * different field, built from a different lerp with a different rate that is pushed as an
  * immediate rather than read from the frozen cell, and the eye height is composed by adding an
+ * UNROTATED Z, so a horizontal free look provably cannot tilt the view or raise the eye.
  *
  * SIZE NOTE: this file is over six hundred lines and almost none of it is code. It writes
  * three engine cells and reads eight more, and every one of them needed a fact about the
@@ -22,7 +23,6 @@
  * simple and cannot be changed safely. One seam has been taken: the passive camera, which
  * decides what the wanted yaw drifts toward when nobody is driving it, went into
  * free_look_follow.c with its own clock, its own settings and its own reasons.
- * UNROTATED Z, so a horizontal free look provably cannot tilt the view or raise the eye.
  *
  * ==============================================================================================
  * Why the write happens in a detour on updateCam and not in a frame callback
@@ -45,8 +45,8 @@
  * is meant for. A frame that runs no camera update, a paused frame, where the engine skips the
  * whole broadcast, never sees our write at all.
  *
- * A consequence worth stating because somebody will otherwise reach for the obvious tool: THIS
- * Feature registers no per-FRAME CALLBACK, and it must not grow one. The mouse bank it drains is
+ * A consequence worth stating because somebody will otherwise reach for the obvious tool: this
+ * feature registers NO per-frame callback, and it must not grow one. The mouse bank it drains is
  * filled by a callback at the frame end, and two callbacks on the same frame hook run in
  * registration order, a coupling that is invisible in the type system and that a later edit
  * would silently invert. Writing from inside the camera update instead puts the engine's own frame
@@ -102,8 +102,8 @@
  * change of the BODY's target heading: zero picks the simple arm, anything else picks the eased one.
  *
  * The eased arm's 0/360 seam handling is derived from the sign of that change. While the camera is
- * bolted to the body that is a fair proxy for "which way round should I go"; free look is exactly
- * The thing that makes it wrong. Measured: a camera 2.7 degrees from its target was read as 357.3
+ * bolted to the body that is a fair proxy for "which way round should I go"; free look is what
+ * makes it wrong. Measured: a camera 2.7 degrees from its target was read as 357.3
  * degrees away and moved 78 degrees in one frame.
  *
  * So the ARM IS FORCED. On armed frames this feature writes the interpolated heading the camera is
@@ -330,17 +330,15 @@ static float update_camera_yaw(void)
      * need it whether or not free look is switched on, which is why the gate is asked with
      * `enabled` forced true rather than being read off the switch.
      *
-     * It costs the eight cell reads the note below was avoiding. That note was right when free
-     * look was the only consumer and the switch already answered for it; it is not right now that
-     * something else is asking a different question of the same cells. */
+     * It costs eight cell reads a frame. Avoiding them was right when free look was the only
+     * consumer and the switch already answered for it; it is not right now that something else
+     * is asking a different question of the same cells. The second call below, inside the log
+     * branch, is still made only on the frame the switch changes and only when the log is
+     * asked for. */
     build_gate(&gate, &record, &region);
     gate.enabled           = true;
     free_state->world_gate = free_look_gate_refusal(&gate);
 
-    /* The switch is tested before anything is gathered, because the machinery is installed even
-     * while the feature is off and this hook then runs on every rendered frame. build_gate reads
-     * eight cells to answer a question the switch has already answered, so it is called here only
-     * on the one frame the switch actually changes, and only when the log is asked for. */
     /* The camera follow drives the same hold, so the early-out has to let it through or the
      * hold is released on every frame free look is off, which is every frame the follow is
      * for. Below this point nothing else asks whether free look itself is on; the gate takes
@@ -548,7 +546,7 @@ static float update_camera_yaw(void)
  * stores back exactly what it read a few instructions earlier. What it writes is the interpolated
  * heading plus its own offset.
  *
- * IT IS NOT READ BACK IN THIS FRAME AT ALL. The camera transform is composed by a different
+ * It is NOT read back in this frame at all. The camera transform is composed by a different
  * function, early in the next frame, before the simulation steps and before this one runs, and that
  * function builds the rotation and the eye together from a single read of this field. So the value
  * written here is the camera the NEXT frame is drawn with, and a frame is always drawn through a

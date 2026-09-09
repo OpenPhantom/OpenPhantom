@@ -14,7 +14,7 @@ frames, which comes from the PE headers.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | |
+| `Enabled` | `1` | `0` installs neither handler and the log says so. |
 
 ## What it installs
 
@@ -46,7 +46,7 @@ arranged deliberately rather than left to chance.
   obtainable from the exception record and the context alone is therefore already in the file
   before anything reaches for it, so a deadlock there costs one line instead of the whole report.
 * **The buffers are static, not automatic.** The guard above makes the body single threaded, so
-  there is nothing to race, and roughly 550 bytes stay off a stack that may be nearly gone.
+  there is nothing to race, and roughly 850 bytes stay off a stack that may be nearly gone.
 
 ## Known limitations
 
@@ -68,10 +68,10 @@ arranged deliberately rather than left to chance.
   the one entry that matters.
 * **A first-chance access violation is not a report.** This project reads engine memory through
   the guarded readers in `common/memory.c`, which are SEH: they provoke access violations on
-  purpose across 47 call sites and answer `false`. A vectored handler installed first sees every
-  one of them, and the exception code is the same code a real crash carries, so filtering by code
-  cannot tell them apart. Four recovered probes used to spend the whole budget above, leaving the
-  reporter silent for the crash it exists to catch.
+  purpose across every guarded read in the tree and answer `false`. A vectored handler installed
+  first sees every one of them, and the exception code is the same code a real crash carries, so
+  filtering by code cannot tell them apart. Four recovered probes used to spend the whole budget
+  above, leaving the reporter silent for the crash it exists to catch.
 
   Access violations therefore get one compact line per distinct faulting site, then a count, from
   a budget of their own; the full report for one comes from the unhandled filter, which runs only

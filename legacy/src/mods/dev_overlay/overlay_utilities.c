@@ -87,7 +87,7 @@ static void fill_typed(overlay_row_t *out, const char *editing_text,
 /* A handle belongs on its track. A value outside the slider's own ends is left honest on the row
  * above, because a setting typed into the file should read as what it is, but a fraction outside
  * 0 to 1 would draw the handle past the end of the track and read as a broken slider rather than
- * a value off the scale. Three rows want this, so it is written once. */
+ * a value off the scale. Four rows want this, so it is written once. */
 static void clamp_fraction(overlay_row_t *out)
 {
     if (out->fraction < 0.0f) {
@@ -182,10 +182,11 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
 
     case UTILITIES_NO_FOG:
         /* The only row in this group that is a cheat by origin. It sits here rather than with
-         * the cheats because a player looking for it is looking at the fog, and the two rows
-         * under it are the rest of that answer: this one removes the fog, the next decides how
-         * thick it is, and the last decides what it is measured against. Split across two
-         * groups they read as unrelated. */
+         * the cheats because a player looking for it is looking at the fog, and the fog
+         * thickness and fog follow rows are the rest of that answer: this one removes the fog,
+         * the second decides how thick it is, and the third decides what it is measured
+         * against. The dismemberment row sits between them, for the reason recorded at its own
+         * case below. Split across two groups they read as unrelated. */
         out->kind = OVERLAY_ROW_CHEAT;
         copy_label(out->label, "No fog");
         out->on = cheats_no_fog_is_on();

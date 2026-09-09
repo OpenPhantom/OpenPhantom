@@ -50,11 +50,11 @@
  * after the already-confirmed +0xB0 ramped-speed field) with the same flat velocity value read
  * from a per-character table; the difference is only which characters route through which
  * function (Obi-Wan and Qui-Gon go through Jedi Jump for an ORDINARY jump, everyone else through
- * plain Jump; see cheats_openphantom.c's own site comments for the byte evidence). Both hooks call
- * the original unconditionally first, since the jump must still happen exactly as retail built it,
- * then, only while this cheat is on, read the velocity the original just wrote and scale it up in
- * place. Gravity integration afterward is untouched and needs no separate handling: a bigger launch
- * velocity fed into the same linear decay simply produces a higher arc. Either site resolving is
+ * plain Jump, with the byte evidence at each site). Both hooks call the original unconditionally
+ * first, since the jump must still happen exactly as retail built it, then, only while this cheat
+ * is on, read the velocity the original just wrote and scale it up in place. Gravity integration
+ * afterwards is untouched and needs no separate handling: a bigger launch velocity fed into the
+ * same linear decay simply produces a higher arc. Either site resolving is
  * enough to offer the cheat; if only one does, whichever characters route through the other
  * function jump at their normal height, and the log says which half is covered, the same
  * "half a feature is still worth having" reasoning this file already documents for install().

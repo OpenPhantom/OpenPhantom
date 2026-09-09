@@ -4,7 +4,7 @@
  * THE DEFECT
  *
  * MSVC inlined a hand-written, backwards-running copy loop 40 times into this image. It LOADS
- * Before it checks the bound:
+ * before it checks the bound:
  *
  *     0x492219  8B 0C 06   mov ecx,[esi+eax]
  *     0x49221C  89 0C 07   mov [edi+eax],ecx

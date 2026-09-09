@@ -1,4 +1,4 @@
-/* cheats_internal.h: what the OpenPhantom cheat files share, and nothing else.
+/* cheats_internal.h: what the OpenPhantom cheat files share.
  *
  * The cheats were one file of over two thousand lines until they were split by responsibility.
  * They still share one state record, because they share one install pass and one panel: the panel

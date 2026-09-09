@@ -14,7 +14,7 @@
 
 #include <stdio.h>
 
-/* THE CEILING IS THE SCREEN, NOT A CONSTANT, and that is a repair rather than a refinement.
+/* The ceiling is the SCREEN, not a constant. This was a repair, not a refinement.
  *
  * DevMenuSize ends up as a fixed number of PIXELS: overlay_draw.c passes
  * glyph_scale(scale * 640/screen_w, scale * 480/screen_h), and the engine's own renderer multiplies

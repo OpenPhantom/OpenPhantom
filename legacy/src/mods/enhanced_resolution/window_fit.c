@@ -607,9 +607,9 @@ bool window_fit_install(const window_fit_config_t *config)
 
     log_info("hooked graphics_setMode at %08X: the window follows the display mode in BOTH "
              "directions from there. It is the only site that sees every valid mode change: eight "
-             "callers reach it and just one of them is graphics_setResolution, which is why a fit "
-             "driven from graphics_setResolution heard a menu drop the mode to 640x480 and never "
-             "heard it come back up.", (unsigned)site);
+             "callers reach it and just one of them is graphics_setResolution. A fit driven from "
+             "graphics_setResolution heard a menu drop the mode to 640x480 and never heard it come "
+             "back up.", (unsigned)site);
 
     /* Two real losses, and each is stated rather than hidden. Neither disables the feature: the
      * fit still happens at the mode change itself, which is the case that matters most. */

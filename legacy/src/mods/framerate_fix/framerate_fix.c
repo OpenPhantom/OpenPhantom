@@ -1,6 +1,6 @@
 /* framerate_fix.c: lift the render cap, and pay for everything that lifting it costs.
  *
- * SIZE NOTE: a little over six hundred lines. This file is the DLL's entry point and it also owns
+ * SIZE NOTE: past seven hundred lines. This file is the DLL's entry point and it also owns
  * the two engine sites that are frame COUNTERS used as clocks, the animation tick and the emitter
  * dormancy limit, because both are corrected in the same way and from the same argument. The bulk
  * is not code: it is the byte census that decides which readers of the animation counter are

@@ -12,8 +12,8 @@ polled.
 The game's entire controller surface is three WinMM calls, `joyGetNumDevs`, `joyGetPosEx` and
 `joyGetDevCapsA`, modelling one physical joystick. There is no second-stick concept in it at all.
 Xidi's own working configuration for this game did not route the right stick or Start through that
-surface either: it mapped the right stick's X axis to a synthesized mouse axis and Start to a
-synthesized Escape keypress. This DLL does the same things, directly, without Xidi and without the
+surface either: it mapped the right stick's X axis to a synthesised mouse axis and Start to a
+synthesised Escape keypress. This DLL does the same things, directly, without Xidi and without the
 game's own joystick reading. Roll is different: the game's
 own controls screen already binds it to Left Alt or Right Alt held plus the Left or Right arrow key
 TAPPED (confirmed directly from that screen, not assumed, and confirmed again live: holding the
@@ -33,10 +33,10 @@ itself, not in how it gets loaded.
 | `Enabled` | `1` | Master switch. On by default: played and confirmed working across several sessions. |
 | `LookEnabled` | `1` | Right stick drives the camera. |
 | `PauseEnabled` | `1` | Start opens the pause menu. |
-| `RollEnabled` | `1` | Left/right trigger holds Alt+Left / Alt+Right. |
+| `RollEnabled` | `1` | Left/right trigger holds Alt and taps Left / Right while it is pulled. |
 | `ControllerIndex` | `0` | Which XInput slot (0-3) to read. |
 | `Deadzone` | `0.24` | Radial deadzone on the right stick, 0 to just under 1. |
-| `LookSensitivity` | `4000.0` | Synthesized mouse counts per second at full stick deflection. |
+| `LookSensitivity` | `4000.0` | Synthesised mouse counts per second at full stick deflection. |
 | `TriggerThreshold` | `30` | How far a trigger must travel (0-255) before roll engages. |
 
 `LookSensitivity` is in the same units `enhanced_input.dll`'s own `MouseDegreesPerCount` scales
@@ -77,7 +77,7 @@ matter what the game's own thread is doing.
 `enhanced_input.dll`'s own raw mouse reader (`raw_mouse.c`) accepts a `WM_INPUT` relative mouse
 report checking only its type field (`RIM_TYPEMOUSE`) and its relative/absolute flag; nothing in
 that code, or in the `RAWMOUSE` structure Windows hands it, can tell a real device from an
-injected one. `SendInput`-synthesized movement reaches it exactly like a real mouse would. This was
+injected one. `SendInput`-synthesised movement reaches it exactly like a real mouse would. This was
 confirmed by reading that code directly, and confirmed again live across several play sessions on
 this specific executable, which has its own history of raw-input quirks under Windows' application
 compatibility shims (see `raw_mouse.c`'s own header comment) that a reading of the code alone could
@@ -85,19 +85,19 @@ not have ruled out.
 
 ### Why Escape is the right key for Start
 
-Confirmed directly, this session, by decompiling `gameplay_wndproc_hotkey_handler` (`0x0043F603`):
+Confirmed directly, by decompiling `gameplay_wndproc_hotkey_handler` (`0x0043F603`):
 Escape (`0x1b`) is the sole route into `gameplay_open_pause_menu` (`0x0043FAB5`) during normal
 gameplay, and the engine's own state gating (a separate handler owns Escape once a menu is
 already open) prevents a synthetic Escape from double-toggling anything. Two edge cases exist and
 are left unguarded on purpose, because both already do something reasonable: if `dev_overlay`'s
-own panel is open, a synthesized Escape closes that panel instead of reaching the game; if
-`fmv_player` is mid-movie, a synthesized Escape skips the movie (via that feature's own
+own panel is open, a synthesised Escape closes that panel instead of reaching the game; if
+`fmv_player` is mid-movie, a synthesised Escape skips the movie (via that feature's own
 `GetAsyncKeyState(VK_ESCAPE)` poll) rather than opening a menu. Neither is treated as a bug here.
 
 Also confirmed live, played with `[fmv_player] Enabled=0` so every movie fell through to the
 untouched retail Bink player (`0x0046C35A`) rather than `fmv_player`'s own libVLC path: Start still
-skips the movie. That function's own internal skip-key check was never decompiled this session, so
-which mechanism it actually reads from is not confirmed the way the other two paths are, but
+skips the movie. That function's own internal skip-key check was never decompiled, so which
+mechanism it actually reads from is not confirmed the way the other two paths are, but
 `SendInput` updates the same OS-level keyboard state that `WM_KEYDOWN` dispatch, `GetAsyncKeyState`
 polling and DirectInput's device state all draw from, and it now demonstrably reaches all three
 different consumers this DLL has been tested against.
@@ -125,7 +125,7 @@ the third of those. This project's own loader exists specifically because this g
 DirectInput for at least some of its input (that is the whole reason a `dinput.dll` loader was
 needed here in the first place), which makes DirectInput a real candidate for how roll is read, not
 just a theoretical one, and DirectInput in exclusive acquisition mode has a documented history
-elsewhere of not always seeing `SendInput`-synthesized keys the way non-exclusive raw input and
+elsewhere of not always seeing `SendInput`-synthesised keys the way non-exclusive raw input and
 message-based reads do. Whichever mechanism it actually is, the tap-shaped fix has since been played
 and confirmed working (see Testing status below), so this is now a known-working path rather than
 an open question about whether it works at all, just an open question about which of the three it
@@ -248,7 +248,7 @@ worked. Closing the menu again with a second Start press did nothing. Root cause
 down and key up were sent in the same `SendInput` call. Opening the menu is a plain `WM_KEYDOWN`
 dispatch and does not care how fast the up follows; closing it goes through `TranslateMessage`
 producing `WM_CHAR`, which wants the key genuinely observed as held. Fixed by holding the
-synthesized Escape down for one game frame before releasing it, confirmed working on replay.
+synthesised Escape down for one game frame before releasing it, confirmed working on replay.
 
 **Round two:** with closing the menu fixed, Start still could not skip a playing movie; a real
 keyboard Escape press could. Root cause, found by reading `fmv_player/vlc_playback.c` directly:

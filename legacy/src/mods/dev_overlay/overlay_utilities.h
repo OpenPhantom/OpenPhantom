@@ -8,8 +8,9 @@
  *
  * It is a file of its own because overlay_model.c was over its size limit before this split and its
  * own SIZE NOTE names a seam. This is a better seam than the one it named: rows that read and write
- * one setting each, with no share of the panel's navigation, search, folding or typing state. What stays behind in overlay_model.c is the part that has to know which row is
- * being typed into, because that is the panel's state rather than any row's.
+ * one setting each, with no share of the panel's navigation, search, folding or typing state.
+ * What stays behind is the part that has to know which row is being typed into, because that is
+ * the panel's state rather than any row's.
  *
  * The rows here are DESCRIBED and ACTED ON here, and NUMBERED by the caller. That split is what
  * keeps this file free of the id arithmetic the cheats group needs, where rows are positioned
@@ -26,8 +27,9 @@
 /* In the order they are drawn. The draw distance first, because it is the setting a player came
  * looking for, with a note under it saying what the game is actually running; the key binding
  * last, because it is the one nobody needs twice. In between they sit next to what they affect:
- * the draw distance with its two gates, then the fog band and whether the fog follows the draw
- * distance, then the view and control settings, then the panel's own size.
+ * the draw distance with its two gates, then no fog, then lightsaber dismemberment, then the
+ * fog band and whether the fog follows the draw distance, then the view and control settings,
+ * then the panel's own size.
  *
  * Six of these carry no text of their own. The live draw distance under the typed one reports
  * and is never clicked; the other five are slider tracks, under the draw distance, the fog
@@ -43,8 +45,8 @@
 void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
                            overlay_row_t *out);
 
-/* True when this slot is a typed value, which is what tells the caller to start an edit rather
- * than act on a press. */
+/* True when this slot is a typed value, so a press starts an edit rather than acting on the row.
+ * Nothing calls this today: the model dispatches on the row kind it was handed instead. */
 bool overlay_utilities_row_is_value(uint32_t slot);
 
 /* True when this slot binds a key, the same question for the other kind of edit. */

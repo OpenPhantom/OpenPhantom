@@ -20,6 +20,8 @@
  */
 #include "controller_input.h"
 
+#include "look_counts.h"
+
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/stick.h"
@@ -55,6 +57,24 @@
  * instant. A run of one game frame's worth was the minimum that fixed the menu; this is measured in
  * real milliseconds instead, since this thread has nothing to do with frames any more. */
 #define ESCAPE_HOLD_MS 60u
+
+/* The right stick's vertical axis, off by default.
+ *
+ * This game's camera does not pitch. enhanced_input's view turn says so directly in
+ * raw_mouse.h, where the vertical axis is drained only for the menu pointer, and its free look
+ * is horizontal throughout. A synthesised vertical count is therefore not a look anywhere, and
+ * the poll spends work producing one that nothing is waiting for.
+ *
+ * It is NOT what made the right stick walk the player. That was found in the same session and
+ * measured to the game's own joystick bindings, which bind the pad's R axis to the same
+ * forward and back control as the left stick's. It is a separate defect and this setting does
+ * not touch it. What is established here is that the count buys nothing, not that it cost
+ * anything.
+ *
+ * The axis is kept behind a setting instead of being deleted because two things do read a
+ * vertical mouse movement: the menu pointer, and dev_overlay's free camera, which pitches from
+ * the screen pointer and is the one place in this project where a vertical look exists. */
+#define DEFAULT_LOOK_VERTICAL false
 
 /* Radial deadzone, applied to the magnitude of the stick vector rather than per axis, as
  * Microsoft's own XInput documentation recommends: a per-axis deadzone leaves a square dead region
@@ -94,6 +114,7 @@
 typedef struct controller_input_config {
     bool  enabled;
     bool  look_enabled;
+    bool  look_vertical;
     bool  pause_enabled;
     bool  roll_enabled;
     int   controller_index;
@@ -134,8 +155,9 @@ typedef struct controller_input_state {
     ULONGLONG roll_left_next_tap_tick;
     ULONGLONG roll_right_next_tap_tick;
 
-    double remainder_x;  /* fractional synthesised mouse counts carried across polls */
-    double remainder_y;
+    /* The fraction of a mouse count owed from earlier polls. See look_counts.h; it is a
+     * record rather than two doubles here because the arithmetic that owns it lives there. */
+    look_carry_t look_carry;
 } controller_input_state_t;
 
 static controller_input_state_t ci_state;
@@ -166,34 +188,23 @@ static double seconds_since_last_poll(void)
 
 static void synthesize_look(float x, float y, double dt)
 {
-    double desired_x;
-    double desired_y;
-    LONG   send_x;
-    LONG   send_y;
-    INPUT  input;
+    long  send_x;
+    long  send_y;
+    INPUT input;
 
-    if (dt <= 0.0) {
-        return;
-    }
-
-    /* Y is inverted here on purpose: XInput's right stick reports +1 as "up", and pushing the
-     * stick up is meant to look up, which is a negative (upward) mouse movement on screen. */
-    desired_x = (double)x * (double)ci_state.config.look_sensitivity * dt + ci_state.remainder_x;
-    desired_y = (double)(-y) * (double)ci_state.config.look_sensitivity * dt + ci_state.remainder_y;
-
-    send_x = (LONG)desired_x;
-    send_y = (LONG)desired_y;
-    ci_state.remainder_x = desired_x - (double)send_x;
-    ci_state.remainder_y = desired_y - (double)send_y;
-
-    if (send_x == 0 && send_y == 0) {
+    /* The vertical axis is dropped here rather than inside the arithmetic, which has no
+     * opinion about what the game does with a count. A zero deflection banks nothing, so the
+     * carry does not quietly fill up while the axis is switched off. */
+    if (!look_counts_step(&ci_state.look_carry, x,
+                          ci_state.config.look_vertical ? y : 0.0f,
+                          ci_state.config.look_sensitivity, dt, &send_x, &send_y)) {
         return;
     }
 
     ZeroMemory(&input, sizeof(input));
     input.type = INPUT_MOUSE;
-    input.mi.dx = send_x;
-    input.mi.dy = send_y;
+    input.mi.dx = (LONG)send_x;
+    input.mi.dy = (LONG)send_y;
     input.mi.dwFlags = MOUSEEVENTF_MOVE;
     (void)SendInput(1, &input, sizeof(INPUT));
 }
@@ -341,8 +352,7 @@ static void release_everything_held(const XINPUT_GAMEPAD *pad, int threshold)
     ci_state.start_was_down = (pad->wButtons & XINPUT_GAMEPAD_START) != 0;
     ci_state.roll_left_was_engaged  = (int)pad->bLeftTrigger  > threshold;
     ci_state.roll_right_was_engaged = (int)pad->bRightTrigger > threshold;
-    ci_state.remainder_x = 0.0;
-    ci_state.remainder_y = 0.0;
+    look_counts_reset(&ci_state.look_carry);
 }
 
 static void poll_once(void)
@@ -428,6 +438,8 @@ static void load_config(controller_input_config_t *config)
 {
     config->enabled          = ini_read_bool (CONTROLLER_SECTION, "Enabled", true);
     config->look_enabled     = ini_read_bool (CONTROLLER_SECTION, "LookEnabled", true);
+    config->look_vertical    = ini_read_bool (CONTROLLER_SECTION, "LookVertical",
+                                              DEFAULT_LOOK_VERTICAL);
     config->pause_enabled    = ini_read_bool (CONTROLLER_SECTION, "PauseEnabled", true);
     config->roll_enabled     = ini_read_bool (CONTROLLER_SECTION, "RollEnabled", true);
     config->controller_index = ini_read_int  (CONTROLLER_SECTION, "ControllerIndex", 0);
@@ -452,11 +464,12 @@ static void load_config(controller_input_config_t *config)
                     config->trigger_threshold, DEFAULT_TRIGGER_THRESHOLD);
         config->trigger_threshold = DEFAULT_TRIGGER_THRESHOLD;
     }
-    /* Written as a NOT so that a NaN fails it. atof answers nan for the word, and a NaN sensitivity
-     * survives every ordinary comparison, reaches the cast in the look synthesis as INT_MIN and
-     * sends the pointer to the far corner on every poll for the rest of the session. The ceiling is
-     * loose on purpose: it is there to catch a typed exponent, not to hold an opinion about how
-     * fast anyone likes their look. */
+    /* Written as a NOT so that a NaN fails it. atof answers nan for the word, and a NaN survives
+     * every ordinary comparison. look_counts_step refuses one now as well, so the pointer no
+     * longer ends up in the far corner either way, but the two are not the same answer: there the
+     * look simply stops, here the player is told what was typed and given a working stick back.
+     * The ceiling is loose on purpose: it is there to catch a typed exponent, not to hold an
+     * opinion about how fast anyone likes their look. */
     if (!(config->look_sensitivity >= MIN_LOOK_SENSITIVITY) ||
         !(config->look_sensitivity <= MAX_LOOK_SENSITIVITY)) {
         log_warning("LookSensitivity=%.1f is out of range (%.0f to %.0f), using %.0f",
@@ -504,10 +517,11 @@ void controller_input_install(void)
     }
 
     log_info("armed on its own thread (id %lu): controller %d, look %s (sensitivity %.0f, "
-             "deadzone %.2f), pause %s, roll %s (trigger threshold %d)",
+             "deadzone %.2f, vertical %s), pause %s, roll %s (trigger threshold %d)",
              (unsigned long)thread_id, ci_state.config.controller_index,
              ci_state.config.look_enabled ? "on" : "off",
              (double)ci_state.config.look_sensitivity, (double)ci_state.config.deadzone,
+             ci_state.config.look_vertical ? "on" : "off",
              ci_state.config.pause_enabled ? "on" : "off",
              ci_state.config.roll_enabled ? "on" : "off", ci_state.config.trigger_threshold);
 }

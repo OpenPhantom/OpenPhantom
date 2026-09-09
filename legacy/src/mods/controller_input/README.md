@@ -32,12 +32,34 @@ itself, not in how it gets loaded.
 |---|---|---|
 | `Enabled` | `1` | Master switch. On by default: played and confirmed working across several sessions. |
 | `LookEnabled` | `1` | Right stick drives the camera. |
+| `LookVertical` | `0` | Send the stick's vertical axis as well. Off because this game has no vertical camera; see below. |
 | `PauseEnabled` | `1` | Start opens the pause menu. |
 | `RollEnabled` | `1` | Left/right trigger holds Alt and taps Left / Right while it is pulled. |
 | `ControllerIndex` | `0` | Which XInput slot (0-3) to read. |
 | `Deadzone` | `0.24` | Radial deadzone on the right stick, 0 to just under 1. |
 | `LookSensitivity` | `4000.0` | Synthesised mouse counts per second at full stick deflection, 1 to 100000. |
 | `TriggerThreshold` | `30` | How far a trigger must travel (0-255) before roll engages. |
+
+### The vertical axis is off
+
+This game's camera does not pitch. `enhanced_input`'s own view turn says so in `raw_mouse.h`:
+it drains the vertical axis only for the menu pointer, and its free look is horizontal
+throughout. A synthesised vertical count is therefore not a look anywhere, and the poll spends
+work producing one that nothing is waiting for.
+
+**It is not why the right stick walked the player.** That was found in the same session, and
+the measurement put it somewhere else entirely: the game's own joystick bindings bind the pad's
+R axis, which is the right stick's vertical on an Xbox pad seen through WinMM, to the same
+forward and back control as the left stick's Y. Setting `JOYENABLE=0` in `obi.ini` stopped the
+walking with this setting already off, which puts it on the engine's own reading and not on
+anything synthesised here. That defect belongs to `enhanced_input`, where it is now fixed by
+answering the engine's own reading of that axis with a zero; this setting does not address it
+and was never going to. See **The right stick walked the player** in that module's README.
+
+What stands is the narrower claim: the count buys nothing. The axis is kept behind
+`LookVertical` rather than deleted, because two things do read a vertical mouse movement: the
+menu pointer, and `dev_overlay`'s free camera, which pitches from the screen pointer and is the
+only vertical look in this project. Left and right are unaffected either way.
 
 `LookSensitivity` is in the same units `enhanced_input.dll`'s own `MouseDegreesPerCount` scales
 from, but this DLL does not read that setting and has no dependency on `enhanced_input.dll` at
@@ -49,9 +71,10 @@ degrees per second at full deflection.
 No signature, no detour, no patch on the game. `XInputGetState` (Microsoft's own API, not Xidi,
 not WinMM) reads the pad on this DLL's own dedicated background thread (`CreateThread`), polling
 at a fixed real-time interval rather than once per rendered frame; see "Why a dedicated thread"
-below for why that matters. The right stick's deflection, after a radial deadzone, is scaled by
-`LookSensitivity` and by the real elapsed time since the last poll (`QueryPerformanceCounter`, not
-the engine's own clock), and sent as relative mouse movement via `SendInput`. A fractional
+below for why that matters. The right stick's horizontal deflection, after a radial deadzone, is
+scaled by `LookSensitivity` and by the real elapsed time since the last poll
+(`QueryPerformanceCounter`, not the engine's own clock), and sent as relative mouse movement via
+`SendInput`. The vertical is dropped unless `LookVertical=1`. A fractional
 remainder is carried across polls so a small, sustained deflection still adds up correctly rather
 than being truncated to nothing every time. Start is edge-detected (only the press, not the
 release) and sent as a synthetic Escape key down, held for `ESCAPE_HOLD_MS` (60ms), then up, also
@@ -60,6 +83,24 @@ and taps its own arrow key repeatedly while it does, one tap the instant the tri
 threshold and one more every 150ms after that for as long as it stays past it, each tap the same
 50ms-down shape as Escape's own press.
 
+### The fraction owed is its own file
+
+That fraction is the only part of this DLL with a right answer that can be checked without a
+pad, and it was the part nothing checked. It now lives in `look_counts.c`: no pad, no clock, no
+`SendInput`. `controller_input.c` asks it for whole counts and sends whatever comes back.
+
+Two properties are written down as checks now. The first
+is the fraction, which only shows over a run of polls: at the shipped sensitivity one
+poll at a hundredth of the stick range is worth a third of a count, and a hundred of them have
+to turn the view by 32 counts arriving one at a time. Nothing in a play session can report on
+that, because a dead band at a tenth of the stick reads as a deadzone rather than as a fault.
+
+The second is the cast. A sensitivity that is not a number reaches a cast to `long`, which is
+undefined and here lands on the most negative value a `long` holds, sending the pointer to the
+corner of the screen on every poll for the rest of the session. The settings loader already
+corrects `LookSensitivity` on the way in and still does, because a player who typed something
+odd deserves to be told; the arithmetic now refuses it as well, so a second caller arriving
+later cannot reintroduce it.
 ### Why a dedicated thread instead of common/frame_hook.h
 
 Every other per-frame need in this tree uses `frame_hook`, and the first build of this feature did
@@ -249,6 +290,9 @@ if the answer is yes, the honest fix is documentation rather than code.
 * `SendInput` is OS-level synthetic input. It will also reach any other foreground window, though
   in practice this game holds input focus while running and the pause key/mouse movement are
   harmless if they ever did not.
+* The right stick's vertical axis is not sent unless `LookVertical=1`, because there is no
+  vertical camera to drive with it. That does not stop the right stick walking the player: the
+  game's own joystick bindings do that, and the fix for it is not in this DLL. See above.
 * A large gap between polls (an Alt-Tab, a breakpoint, the disconnected-pad recheck interval) is
   treated as zero elapsed time for the look calculation rather than firing one enormous turn when
   polling resumes.
@@ -257,6 +301,18 @@ if the answer is yes, the honest fix is documentation rather than code.
   uninstall" convention). The OS reclaims the thread when the process exits.
 
 ## Testing status
+
+Lifting the look arithmetic into `look_counts.c` is built, unit tested at 24 checks and played.
+The look feels as it did, the player's own words, including the slow push where the carry is
+doing all the work. Nothing about the numbers changed: the same fraction is carried the same
+way, and an ordinary poll produces the count it always did. What is new is that a reading which
+is not a number now stops the look instead of reaching the cast.
+
+That session is what found the right stick walking the player. `LookVertical` defaulting to off
+is built and played, and it did **not** stop the walking, which is how the cause was traced to
+the game's own joystick bindings instead and fixed in `enhanced_input`. The setting is kept for
+the narrower reason described above, and the right stick was confirmed behaving correctly in
+the run that proved the other fix.
 
 The diagonal correction and the `LookSensitivity` range check are built and unit tested, and
 **not yet played**. The look will turn more slowly on a diagonal than it used to, by up to 41

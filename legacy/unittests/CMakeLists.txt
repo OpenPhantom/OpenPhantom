@@ -304,6 +304,11 @@ add_unit_test(input_mode enhanced_input enhanced_input/input_mode.c)
 # either says alone, so it is worth a test of its own.
 add_unit_test(frame_governor view_distance_fix view_distance_fix/frame_governor.c)
 
+# Whether a small push on the right stick moves the view at all. One poll of it is worth less
+# than a whole mouse count, and SendInput only takes whole ones, so the fraction owed has to
+# survive from one poll to the next or the stick is dead until it is pushed a long way.
+add_unit_test(look_counts controller_input controller_input/look_counts.c)
+
 # Naming a virtual key, which the open-key row shows and the ini round-trips.
 add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)
 

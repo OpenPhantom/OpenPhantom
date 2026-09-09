@@ -68,6 +68,12 @@ typedef struct input_config {
     float pad_run_threshold;      /* magnitude at which a push means run rather than walk   */
     float pad_run_hysteresis;     /* half the width of the band, so the gait cannot chatter */
 
+    /* Whether the GAME's own joystick reading may still have the right stick's vertical. The
+     * shipped bindings put that axis on the same forward and back control as the left
+     * stick's, so it walks the player; see pad_axis_mute.h for the bindings and for the
+     * measurement that found it. Off takes that one axis away from the engine's reading. */
+    bool  pad_engine_right_stick;
+
     /* Degrees per second A and D turn the player while sideways walking is off. It exists because
      * mouse look has to clear the engine's own turn cell; that cell carries the mouse too, so
      * the keyboard's share has to be re-applied from here or the keys go dead. */

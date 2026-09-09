@@ -204,6 +204,12 @@ void input_config_load(void)
         clamp_float(ini_read_float(INPUT_SECTION, "PadRunHysteresis",
                                    DEFAULT_PAD_RUN_HYSTERESIS), 0.0f, 0.25f);
 
+    /* Off by default, which is a repair: the shipped binding on that axis walks the player
+     * from the stick they are aiming with. 1 hands it back to somebody who bound it on
+     * purpose in the game's own Controls screen. */
+    config.pad_engine_right_stick = ini_read_bool(INPUT_SECTION, "PadEngineRightStick",
+                                                  false);
+
     config.key_turn_rate =
         ini_read_float(INPUT_SECTION, "KeyTurnRate", DEFAULT_KEY_TURN_RATE);
     config.key_turn_rate = clamp_float(config.key_turn_rate,

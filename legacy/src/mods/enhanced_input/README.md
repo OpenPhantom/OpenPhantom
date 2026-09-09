@@ -47,6 +47,7 @@ images, including `obiold` and `netobi`, whose VAs differ by more than `0x1E000`
 | `PadDeadzone` | `0.24` | 0-0.9 | radial, so the boundary is a circle and feels the same in every direction |
 | `PadRunThreshold` | `0.70` | 0-1 | how far the stick goes before a walk becomes a run |
 | `PadRunHysteresis` | `0.05` | 0-0.25 | half the width of the band around it, so the gait cannot chatter |
+| `PadEngineRightStick` | `0` | | let the GAME go on reading the right stick's vertical for itself. Off, because the shipped bindings put that axis on walking; see **The right stick walked the player** |
 | `CameraFollow` | `0` | | the passive camera. With `FreeLook=1` it drifts the camera back behind the body; with `FreeLook=0` it leans the camera a share of the sideways walk's travel angle instead |
 | `CameraFollowSettleMs` | `600` | 0-3000 | how long 90 % of the gap takes to close |
 | `CameraFollowRate` | `120` | 15-1000 | degrees per second, the hard ceiling on the swing |
@@ -1067,6 +1068,72 @@ Played, and confirmed against the PlayStation release directly: with the sideway
 stick now behaves exactly as it does there. Sideways turns on the spot, forward walks, a diagonal
 walks while turning. With the sideways walk on nothing changed, because the sideways value is passed
 exactly as before.
+
+## The right stick walked the player
+
+Pushing the right stick up or down walked the player forward and back. The right stick is the look
+in this game, driven from `controller_input.dll` through synthesised mouse movement, so a stick
+that both aimed and drove read as the pad being broken.
+
+**It was not the synthesised mouse.** That was the first answer and it was wrong. This game's
+camera does not pitch at all, so `controller_input` was changed to stop sending a vertical count,
+which is worth doing on its own grounds and did not stop the walking. That is what turned the
+search around: with nothing vertical being synthesised, something else was still driving.
+
+**The shipped bindings.** The game reads the pad itself through WinMM, and a retail `obi.ini`
+carries these rows, decoded against `control_readAxis` as `(control, half axis)`:
+
+    Y0JOY=0x0304   control 3, half axis 4      the left stick, forward
+    Y1JOY=0x0403   control 4, half axis 3      the left stick, back
+    R0JOY=0x0307   control 3, half axis 7      the RIGHT stick, forward
+    R2JOY=0x0408   control 4, half axis 8      the RIGHT stick, back
+
+`control_readAxis` at `0x0046507E` sums every binding on a control, so either stick alone is enough
+to walk.
+
+Which axis is which comes from the engine, stated twice in its own code.
+`joystick_init_query_caps` walks `JOYCAPS` in the order X, Y, Z, R, U, V and fills the axis table
+in that order. `options_controls_configure_joystick` then reads each axis back to find out what the
+player is moving, and asks for index 3 only when `wCaps` carries `JOYCAPS_HASR`, so index 3 is the
+R axis by the engine's own test. That same function
+records the axis under input ids 7 and 8, which are the two the `R` rows above name. R on an Xbox
+pad seen through WinMM is the right stick's vertical.
+
+**The measurement.** `JOYENABLE=0` in `obi.ini` switches off the engine's own joystick reading and
+nothing else. With it off the walking stopped, with the patch's own vertical already switched off
+beforehand, which puts the cause on the engine's reading rather than on anything this project
+sends. That was one run and it did not depend on the decode above being right.
+
+**Why the left stick's own path never covered it.** `pad_stick_take_substep` returns early while
+the stick sits inside its deadzone and writes no movement at all. That is deliberate and it is
+what keeps the keyboard, and a pad somebody has bound by hand, working. A centred left stick
+therefore leaves whatever the engine read standing, and what the engine read was the other stick.
+Asserting a zero there instead would have taken the keyboard's movement away with it.
+
+**What was done.** `pad_axis_mute.c` chains `stdControl_readAxis` at `0x48D38D`, a six byte
+prologue, and answers a flat zero for that one axis. Every other axis, the buttons, the hat and
+the keyboard reach the game exactly as before.
+Nothing is unbound and no engine input cell is written: the binding is still in `obi.ini` and the
+reading is answered rather than altered. So the promise in `pad_stick.h` still holds where it was
+made, and a build where the signature does not resolve loses this and nothing else.
+
+**What it costs.** Two things. Somebody who bound the right stick's vertical on purpose loses what
+they bound it to, and there is no way from here to tell a deliberate binding from the shipped one.
+And the joystick binding screen finds out what the player is moving by reading these same axes, so
+while this is on, pushing the right stick up or down on that screen registers as nothing and the
+axis cannot be given a new binding. An existing binding is untouched, since the screen lists those
+from the binding table rather than from the axis. `PadEngineRightStick=1` hands the axis back.
+
+The right stick's horizontal is left alone. The shipped bindings put it on a different control from
+either movement one and nothing has been seen doing harm with it.
+
+### Testing status
+
+Played and confirmed by the player: the right stick no longer walks, its horizontal still pans,
+and the left stick still walks, runs and steers. The log line naming the axis is the other half
+of the evidence, since a site that failed to resolve would leave the feature off and say so.
+The face buttons and the hat were checked in the same run, because this detour sits on the
+function every axis is read through.
 
 ## Testing status
 

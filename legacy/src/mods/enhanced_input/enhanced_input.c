@@ -122,6 +122,7 @@
 #include "enhanced_input_internal.h"
 
 #include "camera_follow.h"
+#include "pad_axis_mute.h"
 #include "pad_run.h"
 #include "pad_stick.h"
 
@@ -430,6 +431,14 @@ void enhanced_input_install(void)
     if (input_config()->pad_stick) {
         pad_run_install();
         input_mode_resolve();   /* only this stick goes around the engine's own bindings */
+    }
+
+    /* Not gated on the pad stick above. The axis walks the player through the engine's own
+     * reading, so it does it whether or not this DLL is driving the left stick, and a player
+     * running the engine's pad path with controller_input for the look meets it just the
+     * same. */
+    if (!input_config()->pad_engine_right_stick) {
+        (void)pad_axis_mute_install(PAD_AXIS_RIGHT_STICK_VERTICAL);
     }
 
     camera_follow_configure(input_config()->camera_follow, input_config()->strafe,

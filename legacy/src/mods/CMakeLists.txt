@@ -139,6 +139,7 @@ add_engine_fix(enhanced_input
     input_mode.c
     input_steer.c
     pad_stick.c
+    pad_axis_mute.c
     pad_run.c
     menu_captions.c
     mouse_look.c

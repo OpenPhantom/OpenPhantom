@@ -77,6 +77,7 @@ add_engine_fix(enhanced_resolution
     menu_art_source.c
     mode_depth.c
     mode_filter.c
+    mode_table.c
     sw_blit_guard.c
     ending_resolution.c
     credits_skip.c

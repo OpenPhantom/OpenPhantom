@@ -23,7 +23,7 @@
  *     00488279  call [ecx+0x58]           <- IDirect3DDevice3::SetRenderState
  *
  * The state word carries ZTEST (0x0800) and NOT ZWRITE (0x1000): the decal tests depth and never
- * writes it, so the ZBIAS is the whole of its claim to the pixel.
+ * writes it, so the ZBIAS is its only claim to the pixel.
  *
  * D3DRENDERSTATE_ZBIAS does not exist in DIRECT3D 9. It was replaced by D3DRS_DEPTHBIAS, a float in
  * normalised depth rather than an integer 0..16. Any DirectDraw7-to-Direct3D9 translation has to
@@ -98,11 +98,11 @@ static const uint8_t SIG_DECAL_SUBMIT[] = {
  * 0x01->1 NEVER, 0x04->3 EQUAL, 0x08->4 LESSEQUAL, 0x10->5 GREATER, 0x20->6, 0x40->7, 0x80->8. So
  * the mask 0x10 is D3DCMP_GREATER: a REVERSED depth test, in which nearer means a LARGER z.
  *
- * Any Direct3D 9 device advertises GREATER, so on a translation layer this is the branch that runs,
- * which is exactly why this DLL's first release changed nothing at any magnitude. The direction
- * is read per call rather than latched at install: at the host entry point the graphics are not up
- * yet and the cell is still zero. The engine reads it late for the same reason, which is why the
- * third sort key of its deferred draw list is direction-dependent rather than fixed. */
+ * Any Direct3D 9 device advertises GREATER, so on a translation layer this is the branch that runs.
+ * This DLL's first release subtracted unconditionally and changed nothing at any magnitude. The
+ * direction is read per call rather than latched at install: at the host entry point the graphics
+ * are not up yet and the cell is still zero. The engine reads it late for the same reason, and its
+ * deferred draw list's third sort key is direction-dependent rather than fixed. */
 static const uint8_t SIG_ZFUNC_SELECT[] = {
     0xA1, 0x6C, 0x59, 0x85, 0x00, 0x8B, 0x48, 0x24, 0x80, 0xE1, 0x10, 0xF6,
     0xD9, 0x1B, 0xC9, 0x83, 0xE1, 0x0E, 0x83, 0xC1, 0x02, 0x89, 0x0D, 0xC8,
@@ -138,7 +138,7 @@ static const uint8_t SIG_ZFUNC_SELECT[] = {
  * conventional conversion assumes a LESS-style buffer and SUBTRACTS. Under this engine's reversed
  * depth that turns "equal" into "strictly less" and kills every decal pixel everywhere, while
  * nothing else in the game changes, because nothing else ever sets ZBIAS. It also swamps a
- * per-vertex nudge of any sane size, which is why DepthBias alone did nothing.
+ * per-vertex nudge of any sane size, so DepthBias alone did nothing.
  *
  * Forcing the ZBIAS=0 arm restores exactly the configuration the equality contract needs. */
 static const uint8_t SIG_ZBIAS_BRANCH[] = {
@@ -250,12 +250,12 @@ static void neutralise_zbias(void)
 
     opcode = site + OFFSET_ZBIAS_BRANCH_OPCODE;
     if (!patch_validate_bytes(opcode, &was, sizeof was)) {
-        log_warning("the byte at %08X is not the expected `je` - refused, nothing written",
+        log_warning("the byte at %08X is not the expected `je`; refused, nothing written",
                     (unsigned)opcode);
         return;
     }
     if (patch_write_bytes(opcode, &now, sizeof now) != PATCH_RESULT_OK) {
-        log_error("could not write the ZBIAS branch at %08X - nothing is changed",
+        log_error("could not write the ZBIAS branch at %08X; nothing is changed",
                   (unsigned)opcode);
         return;
     }
@@ -450,8 +450,8 @@ void decal_fix_install(void)
     }
 
     log_info("decals are pulled %.5f towards the camera in device depth at %08X "
-             "(one caller: bapvrt_drawPolyDecals). D3DRENDERSTATE_ZBIAS, which is what the engine "
-             "asks for and what Direct3D 9 removed, is no longer what decides whether a scorch "
-             "mark or a ground shadow survives the depth test.",
+             "(one caller: bapvrt_drawPolyDecals). The engine asks for D3DRENDERSTATE_ZBIAS and "
+             "Direct3D 9 removed it, so it no longer decides whether a scorch mark or a ground "
+             "shadow survives the depth test.",
              (double)decal_state.depth_bias, (unsigned)sites[SITE_DECAL_SUBMIT].address);
 }

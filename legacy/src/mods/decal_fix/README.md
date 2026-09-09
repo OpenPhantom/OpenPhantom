@@ -15,15 +15,22 @@ match, the DLL changes nothing and says so.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `DepthBias` | `0.0` | 0-0.01 | how far a decal is pulled towards the camera, in device depth. Ships at 0, meaning off: pulling the vertex was measured and changed nothing, and the fix that does the work is `NeutraliseZBias` below |
+| `NeutraliseZBias` | `1` | | write `je` -> `jmp` at `0x00488270`, so the decal arm issues `SetRenderState(D3DRENDERSTATE_ZBIAS, 0)` instead of `1`. **This is the fix.** A translation layer that synthesises a subtracting depth bias for a state Direct3D 9 does not have turns the engine's exact-equality decal test into a strict less-than and loses every decal |
+| `DepthBias` | `0.0` | 0-0.01 | how far a decal is pulled towards the camera, in device depth. Ships at 0, meaning off: pulling the vertex was measured and changed nothing, and `NeutraliseZBias` above is what does the work |
+| `StateClear` | `0` | | bits to clear from the decal's render state word `0x0010AE40` before it reaches the engine. An instrument, not a feature |
+| `StateSet` | `0` | | bits to set in the same word. Both ship at 0, so the word reaches the engine exactly as it left `bapvrt_drawPolyDecals`. They exist to settle which removed state costs the decal in single runs instead of one rebuild per suspect: that word asks for at least two things Direct3D 9 removed, ZBIAS (bit `0x00100000`, state 47) and `TEXTUREMAPBLEND=DECALALPHA` (bit `0x00000400`, state 21), and a translation layer may honour, drop or mistranslate either |
 
-`DepthBias=0` is the same as `Enabled=0`: it is the amount, not a switch. It ships at 0, so this row documents a lever rather than something the patch is doing for you.
+`DepthBias=0` is not the same as `Enabled=0`. It is an amount rather than a switch, and it ships at
+0, so that row documents a lever rather than something the patch is doing for you. `Enabled=0` also
+turns off `NeutraliseZBias`, which is the byte that brings the decals back.
 
 ## Engine locations
 
 | Site | Retail VA | What |
 |---|---|---|
-| the decal fan submit | `0x00487F40` | detoured; only vertex `z` is changed, the return value is passed through |
+| the decal fan submit | `0x00487F40` | detoured, 8-byte prologue; only vertex `z` and the render state word are changed, the return value is passed through |
+| the ZBIAS branch | `0x00488270` | one byte, `je` (`74`) -> `jmp` (`EB`), **only** when `NeutraliseZBias=1`. Validated as the expected `je` before it is written, so a second install declines |
+| the depth compare selector | `0x00487672` | **read, never patched**, and only for the mask cell operand at `+23`. Read per call rather than latched at install: at the host entry point the graphics are not up and the cell is still zero |
 | `bapvrt_drawPolyDecals` | `0x0041C87D` | the one and only caller, read during the RE, not patched |
 
 ## Why a decal needs help at all

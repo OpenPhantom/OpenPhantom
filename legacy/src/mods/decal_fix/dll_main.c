@@ -1,4 +1,4 @@
-/* dll_main.c: entry point of decal_fix.dll. See ../common/mod_entry.h for the contract. */
+/* dll_main.c: entry point of decal_fix.dll. */
 #include "decal_fix.h"
 
 #include "common/mod_entry.h"

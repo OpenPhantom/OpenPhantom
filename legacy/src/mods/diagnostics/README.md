@@ -138,6 +138,20 @@ every frame, so an undrawn record can carry a current timestamp. Only the page p
 Level 3 is loud, the drawer runs once per decorated polygon per frame. Keep `MaxLinesPerSecond`
 on, stand still, and read the collapsed counts rather than the individual lines.
 
+## Where the projectile census finds the list
+
+The head of the engine's ballistic list is not written down here. It is read out of the only
+function that both tests the head and then loads it, at `0x45243E`, whose nineteen bytes carry
+the same global twice, once in the `cmp` and once in the `mov` that follows it. Both operands
+are masked and both are read back, and the census declines unless the two agree, which is the
+same pair test `dev_overlay/cheats_no_fog.c` already makes on its own. One operand proves the
+pattern matched something the right shape; two agreeing prove it matched the function meant.
+
+It matters because three builds of this engine ship at the same file size and the globals move
+between them. An address written down here would read a different cell on two of the three and
+report counts that look real, which is worse than reporting nothing. If the site does not
+resolve the census says so and counts nothing.
+
 ## Flood protection
 
 The simulation runs at 32 substeps/s and the renderer at up to 240 frames/s. Events that fire per

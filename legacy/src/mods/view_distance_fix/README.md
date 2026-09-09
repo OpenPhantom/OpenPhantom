@@ -82,6 +82,7 @@ every measurement in the shipped ini lives:
 | actor destroy (`FUN_00437850`) | `0x437850` | detoured over a 6-byte prologue, **only** when `[diagnostics] Spawns=1`; observation only, the original runs and nothing is refused |
 | `Plr_RunPhases` | `0x448297` | read only, **only** when `LogPlayerPosition=1`; `&pPlayer` taken from the operand at `+0x27` and never detoured |
 | the camera object pointer | address read from the operand | read only, **only** when `LogPlayerPosition=1`; euler pitch `+0x34` and yaw `+0x38`, nothing written. The pattern is the one `enhanced_input/camera_sites.c` resolves for its own free look |
+| the world pointer | `0x406BE3 + 0x07` | read only, **only** when `[diagnostics] Spawns=1`; the placement dump reads the cell to reach `world+0x50` and writes nothing. The pattern is twenty bytes with the operand masked and the opcodes in front of it checked, so a build that moved the global leaves the dump switched off instead of reading a cell it guessed at |
 | `rdMesh_draw` cull word | `0x40F3F7 - 4` | address read from the operand |
 | `rdThing_Draw` | `0x40FE70` | detoured; the cull word is always restored |
 | `rdCamera_BuildProjection` | `0x475FFA` | observed only, for the radius cap and the fog |

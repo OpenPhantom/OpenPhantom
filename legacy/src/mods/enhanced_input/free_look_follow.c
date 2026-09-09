@@ -100,9 +100,9 @@ static void note_stall(const free_look_state_t *state, follow_stall_t stall)
  * so the target is the heading PLUS that. When the site did not resolve this falls back to the bare
  * heading, the same degraded mode the rest of this file takes.
  *
- * IT WAITS, AND IT NEVER MOVES UNDER THE PLAYER'S HAND. A hold-off measured in real time, rather
+ * It WAITS, and it never moves under the player's hand. A hold-off measured in real time, rather
  * than a test of whether this particular frame carried input: the right stick arrives as
- * synthesized mouse motion with a fractional remainder carried between polls, so it lands on some
+ * synthesised mouse motion with a fractional remainder carried between polls, so it lands on some
  * frames and not others, and a frame-by-frame test started and stopped the drift several times a
  * second. That stutter was the other half of the jitter. */
 void free_look_follow_step(free_look_state_t *state, float interpolated)

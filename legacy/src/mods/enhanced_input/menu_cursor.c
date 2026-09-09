@@ -126,8 +126,8 @@
 #define WM_MOUSEMOVE_MSG     0x0200u
 
 /* One device count moves the pointer one pixel. That is what the system does with acceleration
- * switched off, so the feel is the one the player already has, and it is a setting rather than a
- * constant because a high resolution mouse may want less. */
+ * switched off, so the feel is the one the player already has. No key reads it; a high
+ * resolution mouse that wants less needs one adding. */
 #define DEFAULT_PIXELS_PER_COUNT 1.0f
 
 /* A message packs two SIGNED 16-bit coordinates, which is what the two `movsx` above read them

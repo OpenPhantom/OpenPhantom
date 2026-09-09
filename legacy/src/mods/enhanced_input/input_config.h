@@ -47,7 +47,7 @@ typedef struct input_config {
     float camera_follow_max_degrees;  /* and the ceiling on the result                    */
 
     /* How long after the player stops turning the camera before it starts drifting back. Real
-     * time, and it exists because the right stick arrives as synthesized mouse motion that
+     * time, and it exists because the right stick arrives as synthesised mouse motion that
      * lands on some frames and not others: without a hold-off the drift starts and stops
      * several times a second and reads as jitter. */
     float camera_follow_hold_seconds;

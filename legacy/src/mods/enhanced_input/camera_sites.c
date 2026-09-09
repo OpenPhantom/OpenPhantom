@@ -1,20 +1,19 @@
 /* camera_sites.c: finding the follow camera's own cells in this build, or refusing.
  *
- * Seven patterns and what each of them is worth. About two thirds of this file is disassembly
+ * Nine patterns and what each of them is worth. About two thirds of this file is disassembly
  * rather than code, and that is deliberate: a pattern without its listing is a magic number, and
  * splitting the two apart would put every proof one file away from the code that depends on it.
  *
  * SIZE NOTE. Well over the 600 line mark, under the 900 hard limit. Only a small part of it is
- * code, the whole of which is "read this operand, range-check it, and cross-check it against its
- * twin". The rest is the seven disassembly listings that say WHY each pattern is the site it
- * claims to be, which is what has to stand at the site, and which deleting to reach a line count
- * would be the wrong trade.
+ * code: read this operand, range-check it, cross-check it against its twin. The rest is the nine
+ * disassembly listings that say WHY each pattern is the site it claims to be. Deleting them to
+ * reach a line count would be the wrong trade.
  *
  * There is no seam worth cutting here: every listing belongs to the resolver directly beneath it,
  * and a split would sort patterns into two files by nothing more interesting than where the limit
  * happened to fall. If this file has to grow again, the unit to move out is one WHOLE site,
- * pattern, offsets, listing and resolver together, and the candidate is the auto-aim, which is
- * the only one of the seven that is not part of the camera at all.
+ * pattern, offsets, listing and resolver together, and the candidates are the three attack sites,
+ * Plr_AutoAim, Plr_FireWeaponAux and Plr_StartFire, none of which is part of the camera.
  *
  * The claim the whole feature rests on, and where it comes from:
  *

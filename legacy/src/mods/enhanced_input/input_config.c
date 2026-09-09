@@ -174,9 +174,6 @@ void input_config_load(void)
                                    DEFAULT_CAMERA_FOLLOW_MAX_DEG),
                     0.0f, MAX_CAMERA_FOLLOW_MAX_DEG);
 
-    /* On by default, unlike the two features above it, because this is a REPAIR rather than a
-     * change of scheme: it gives the pad the direction and the magnitude the engine's own path
-     * throws away, and a machine with no pad plugged in never reaches any of it. */
     settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowHoldMs",
                                DEFAULT_CAMERA_FOLLOW_HOLD_MS);
     config.camera_follow_hold_seconds =
@@ -190,6 +187,9 @@ void input_config_load(void)
         clamp_float(ini_read_float(INPUT_SECTION, "AirControlRate", DEFAULT_AIR_TURN_RATE),
                     MIN_AIR_TURN_RATE, MAX_AIR_TURN_RATE);
 
+    /* On by default, unlike the two features above it, because this is a REPAIR rather than a
+     * change of scheme: it gives the pad the direction and the magnitude the engine's own path
+     * throws away, and a machine with no pad plugged in never reaches any of it. */
     config.pad_stick = ini_read_bool(INPUT_SECTION, "PadStick", true);
     config.pad_controller_index =
         (int)clamp_float((float)ini_read_int(INPUT_SECTION, "PadControllerIndex", 0),

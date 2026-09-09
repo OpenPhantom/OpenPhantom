@@ -7,7 +7,7 @@
 /* Everything the horizontal free look has to FIND in the follow camera, and nothing it does with
  * what it finds. Split off from the feature for the same reason the player sites are: it is one
  * job with one answer, "is the camera in this build the one we know, and where are its cells",
- * and the byte evidence for seven patterns is long enough to bury the code that uses it.
+ * and the byte evidence for nine patterns is long enough to bury the code that uses it.
  *
  * Not one address is written down. Every cell below is read out of an operand at a site whose
  * surrounding instructions prove what the operand is for, and several of them are read twice at
@@ -62,7 +62,8 @@
 #define BAPVIEW_READ_SIZE          0x3Cu
 
 typedef struct camera_sites {
-    /* The two chained-detour targets. `auto_aim` is optional and is 0 when it did not resolve. */
+    /* The four chained-detour targets. Only `update_cam` is required; `auto_aim`, `fire_shot`
+     * and `start_fire` are optional and are 0 when they did not resolve. */
     uintptr_t update_cam;
     uintptr_t auto_aim;
     uintptr_t fire_shot;        /* the action handler that spawns the bolt; 0 = not resolved */

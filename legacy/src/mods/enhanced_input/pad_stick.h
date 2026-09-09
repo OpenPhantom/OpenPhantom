@@ -28,17 +28,17 @@
  *     0.30 to 0.50    jumps to 0.60, then climbs to 1.0
  *     above 0.50      pinned at 1.0
  *
- * The whole analog range is a fifth of the stick, entered by a jump to sixty per cent, and
+ * The whole analogue range is a fifth of the stick, entered by a jump to sixty per cent, and
  * everything past halfway is saturated. Past halfway a diagonal reads (1, 1) whatever direction it
  * is really pointing, so the DIRECTION is gone, not merely coarse. This was read out of the retail
  * image and then confirmed against a real install's obi.ini, whose X0JOY/Y0JOY rows are the shipped
  * defaults; a player who has rebound the pad in the controls screen may not have the doubling, so
  * nothing here may ASSUME it, which is the other reason to stop reading that path.
  *
- * FOURTH, and this part was ours rather than the engine's: the sideways walk took the analog value
- * for the sideways component but only the move BIT for the forward one, so every diagonal was
- * pulled toward forward. A true forty five degree push came out at thirty five degrees, and at half
- * deflection at nineteen.
+ * FOURTH, and this part was ours rather than the engine's: the sideways walk took the analogue
+ * value for the sideways component but only the move BIT for the forward one, so every diagonal
+ * was pulled toward forward. A true forty five degree push came out at thirty five degrees, and
+ * at half deflection at nineteen.
  *
  * ==============================================================================================
  * WHAT THIS DOES INSTEAD

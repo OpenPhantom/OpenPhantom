@@ -830,6 +830,14 @@ rather than restating it, so a group that grows past the array stops the build. 
 the display knows, the size list among them, cannot be asserted, so an overflow also writes one
 warning naming the first row it dropped.
 
+## A key row could not be rebound while the size list was open
+
+Slots in the Window group shift down by the length of the size list while that list is open, and
+`source_row` and the activation path both take the shift out before they look at a slot. The
+binding path did not. With the list open, the release-key row arrived as slot 22 rather than 6, so
+the check for "is this a key row" said no, the binding was refused, and nothing was written or
+logged. Closing the list first and then pressing the row always worked, so this survived testing.
+
 ## Configuration: `[dev_overlay]`
 
 | Key | Default | Meaning |

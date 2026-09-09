@@ -41,9 +41,7 @@ static const int32_t SLOT_MODE[] = {
     MODE_AUTHENTIC, MODE_BORDERLESS, MODE_WINDOWED, MODE_RESIZABLE, MODE_BORDERLESS_SIZED
 };
 
-/* Thirty two is well past what any display reports once duplicates at other depths and refresh
- * rates are folded together; the ones seen in testing offer around fifteen. */
-#define SIZE_LIST_MAX 32u
+#define SIZE_LIST_MAX OVERLAY_WINDOW_SIZE_LIST_MAX
 
 static struct {
     int32_t width;
@@ -415,6 +413,9 @@ bool overlay_window_row_is_value(uint32_t slot)
     return false;              /* the size is chosen from a list now, not typed */
 }
 
+/* Takes a slot with the size list already taken out of it, the convention every other slot-taking
+ * function in this file follows. Handing it a raw slot while the list is open asks about the wrong
+ * row. */
 bool overlay_window_row_is_key(uint32_t slot)
 {
     return slot == (uint32_t)WINDOW_ROW_RELEASE_KEY ||
@@ -520,7 +521,23 @@ bool overlay_window_commit(uint32_t slot, const char *text)
 
 bool overlay_window_bind(uint32_t slot, int32_t virtual_key)
 {
-    if (!overlay_window_row_is_key(slot) || virtual_key < 0 || virtual_key > 0xFF) {
+    uint32_t entry = 0;
+
+    if (virtual_key < 0 || virtual_key > 0xFF) {
+        return false;
+    }
+    /* The same two steps, in the same order, that source_row() and overlay_window_activate() both
+     * take: a slot inside the open size list belongs to the list, and every row below the list is
+     * pushed down by its length. This did neither, so it compared a pushed-down slot against the
+     * unshifted numbers: with the list open, pressing either key row and then a key wrote nothing
+     * and reported nothing, and the row went on showing the key it already had. */
+    if (slot_is_size_entry(slot, &entry)) {
+        return false;
+    }
+    (void)entry;
+    slot = slot_without_list(slot);
+
+    if (!overlay_window_row_is_key(slot)) {
         return false;
     }
     if (slot == (uint32_t)WINDOW_ROW_FULLSCREEN_KEY) {

@@ -5,9 +5,9 @@
  * only its far end, is written out in fog_regime.h. Everything below is the byte evidence for
  * each site and the arithmetic itself.
  *
- * SIZE NOTE. Back under the 600 line mark, and the note stays because how it got there is the
- * part worth knowing. Most of what is left is byte evidence at each site rather than code, which
- * is where that evidence belongs.
+ * SIZE NOTE. Back under the 600 line mark. The note stays because how it got there still matters.
+ * Most of what is left is byte evidence at each site rather than code, and that is where the
+ * evidence belongs.
  *
  * It was once past the hard limit, carrying four jobs its section banners named. Two have gone:
  * the arithmetic to fog_band.c, which needed no engine memory and is the half a unit test can
@@ -331,7 +331,7 @@ static bool remember_level(void *level)
     fog_state.cut_observed   = false;
     fog_state.cut_first_seen = false;
 
-    /* AND WHAT WE BELIEVE THE DEVICE IS SHOWING, which is nothing, because this is a new level.
+    /* And what we believe the device is showing, which on a new level is nothing.
      *
      * This is a record of what we last pushed, and it was carried across a level load. The tick's
      * settled test asks whether the device already shows the current band, so on a second load of

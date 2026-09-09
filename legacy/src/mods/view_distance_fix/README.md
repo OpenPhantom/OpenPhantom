@@ -54,13 +54,18 @@ order of thing from a per-object syscall.
 | `RelocateDrawTable` | `1` | | move the cell table, raise its limit to 32768 (raised again from 16384; see `draw_table.c` section 2) |
 | `LowerCellLimit` | `1` | | lower it to 7168 instead; skipped when the relocation is active |
 | `RelocateVertexCache` | `1` | | move the vertex cache, raise its limit to 32768 |
+| `Dither` | `0` | | set Direct3D render state 26 on the device. The frame buffer is 5/6/5, so a level fade slides a multiplier across it and a flat fogged region crosses a channel boundary everywhere at once, which reads as a band stepping in blocks. The engine never asks for dithering, so setting it once cannot be undone |
+| `PolyDepthBias` | `1` | | `1` is the engine's own behaviour and patches nothing. `0` zeroes the per-polygon depth bias scale at the operand behind `0x00419DBB`. A DIAGNOSTIC: the fog alpha is baked into a shared vertex from whichever polygon reached it first, so two polygons with different bias bytes give that vertex two different fogs depending on gather order. Zeroing the scale also removes the depth sorting the bias exists for, so coplanar surfaces may fight |
+| `TranslucentFog` | `0` | | `1` turns the fog-enable clear in the deferred face submit into a no-op, so an alpha-blended face keeps the fog every other face gets. A DIAGNOSTIC: the level-of-detail cross-fade makes geometry translucent while it crosses, so a surface loses its fog for the length of the transition |
+| `LogFogBand` | `0` | | capture what the band was computed from, one sample a frame after a level load, and write the whole run out once when the band settles or the array fills. It captures rather than logging as it goes, because a file write per frame would stall the easing under suspicion. Nothing is captured at `0` |
+| `LogPlayerPosition` | `0` | | log the player's position, and the camera yaw and pitch where that site resolves, every ten frames, with a dump of the level placements within 15 units every fifth sample. Written to identify a specific placement live rather than by name, because a placement name is a reused archetype label |
 
 One more switch lives in the `[diagnostics]` section rather than this one, because that is where
 every measurement in the shipped ini lives:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `[diagnostics] Spawns` | `0` | count the NPC spawns the engine refuses because its actor or thing pool is full |
+| `[diagnostics] Spawns` | `0` | count the NPC spawns the engine refuses because its actor or thing pool is full. It also logs every successful spawn by name and position, and detours the actor-destroy function to log every teardown with its reason |
 
 ## Engine locations
 
@@ -74,6 +79,9 @@ every measurement in the shipped ini lives:
 | `FOGTABLEMODE` (state commit) | `0x489B5B` | `push 3` -> `push 0` (`D3DFOG_NONE`) |
 | `enemy_activationScan` | `0x4371E4 + 0x18` | one call site redirected, and only when `NpcRangeScale` is above 1 |
 | `enemy_activationScan` spawn call | `0x4371E4 + 0x4A` | one call site redirected, **only** when `[diagnostics] Spawns=1`; the opcode and the three-argument cleanup behind it are checked first |
+| actor destroy (`FUN_00437850`) | `0x437850` | detoured over a 6-byte prologue, **only** when `[diagnostics] Spawns=1`; observation only, the original runs and nothing is refused |
+| `Plr_RunPhases` | `0x448297` | read only, **only** when `LogPlayerPosition=1`; `&pPlayer` taken from the operand at `+0x27` and never detoured |
+| the camera object pointer | address read from the operand | read only, **only** when `LogPlayerPosition=1`; euler pitch `+0x34` and yaw `+0x38`, nothing written. The pattern is the one `enhanced_input/camera_sites.c` resolves for its own free look |
 | `rdMesh_draw` cull word | `0x40F3F7 - 4` | address read from the operand |
 | `rdThing_Draw` | `0x40FE70` | detoured; the cull word is always restored |
 | `rdCamera_BuildProjection` | `0x475FFA` | observed only, for the radius cap and the fog |
@@ -564,7 +572,7 @@ edge 2-64, the authored profile survives every ratio, the easing agrees between 
 repeated evaluation is bit-identical. Offline verification passes on both retail builds,
 including the table/bucket cross-check and the three-hit count on the ecx append blocks.
 
-**Accepted in game**, in the 1.5.0 build, which was played through by hand.
+**Accepted in game**, in the v0.4.1 build, which was played through by hand.
 
 The fog regime in particular was settled by running it rather than by reading it: the vertex
 format, the capability bit, the two `FOGTABLEMODE` writers and the constant-zero specular

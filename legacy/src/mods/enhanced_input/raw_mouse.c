@@ -90,6 +90,10 @@ typedef struct raw_mouse_state {
      * sides, because these are the only two cells the two threads share. */
     volatile LONG accumulated_counts;
     volatile LONG packets;             /* lifetime, for the report rate */
+    /* The arrival tick of the newest packet, in milliseconds. A second, coarser copy of the
+       timestamp below, kept because the delivery test runs on the menu's message path and that
+       arrives at the device's own rate: it must not take the lock that guards the fine one. */
+    volatile LONG newest_ms;
     volatile LONG packets_since_take;  /* reset by every take */
     /* The timestamp of the newest packet, in performance counter ticks. Written on the raw thread
      * and read on the game thread; a 64-bit value cannot be read atomically on a 32-bit build, so
@@ -158,6 +162,7 @@ static void accumulate_packet(const RAWMOUSE *mouse)
     }
     InterlockedIncrement(&raw_state.packets);
     InterlockedIncrement(&raw_state.packets_since_take);
+    InterlockedExchange(&raw_state.newest_ms, (LONG)GetTickCount());
 
     /* The arrival time is the whole point of reading the device directly: it is what lets the
      * counts be divided by the time the reports span rather than by the interval they happened
@@ -597,12 +602,37 @@ void raw_mouse_take_cursor(long *out_dx, long *out_dy)
     }
 }
 
-/* True once the reader is registered and has actually delivered a packet. The cursor path uses it
- * to decide whether it may take the engine's own motion away: a registration that succeeded and
- * then stayed silent would otherwise leave the player with a frozen pointer, which is worse than
- * the stepping this replaces. */
+/* How stale the newest packet may be, in milliseconds, and still count as delivery. A hand moving
+ * a mouse produces packets hundreds of times a second, so an ordinary movement is never near this;
+ * a hand that is still produces no WM_MOUSEMOVE either, so the cursor path does not ask. The only
+ * state that fails it is a reader that has genuinely stopped. */
+#define RAW_DELIVERY_STALE_MS 1000
+
+/* True while the reader is registered and packets are still arriving. The cursor path uses it to
+ * decide whether it may take the engine's own motion away: a reader that is not delivering would
+ * otherwise leave the player with a frozen pointer, which is worse than the stepping this replaces.
+ *
+ * The lifetime count alone was not enough. It only ever increments, so it answered yes forever
+ * after the first packet, and a reader that delivered and then stopped, because the device was
+ * removed or the registration was lost, went on swallowing every mouse move and substituting the
+ * screen centre for it. That is the frozen pointer this exists to prevent, reached by the one route
+ * the test did not cover. The arrival time is already recorded for the report rate, so asking how
+ * old the newest packet is costs nothing new. */
 bool raw_mouse_is_delivering(void)
 {
-    return raw_state.active && raw_state.registered &&
-           InterlockedCompareExchange(&raw_state.packets, 0, 0) > 0;
+    LONG newest;
+
+    if (!raw_state.active || !raw_state.registered) {
+        return false;
+    }
+    if (InterlockedCompareExchange(&raw_state.packets, 0, 0) <= 0) {
+        return false;
+    }
+
+    /* No lock and no counter query. This is asked once per mouse-move message, which arrives at
+       whatever rate the device reports at, so it is one of the paths that must stay cheap. The
+       millisecond stamp is a single interlocked read, and the subtraction is done in a signed LONG
+       so that the tick counter's own wrap is a small difference rather than a huge one. */
+    newest = InterlockedCompareExchange(&raw_state.newest_ms, 0, 0);
+    return ((LONG)GetTickCount() - newest) < RAW_DELIVERY_STALE_MS;
 }

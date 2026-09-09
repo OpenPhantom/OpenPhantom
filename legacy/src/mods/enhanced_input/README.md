@@ -985,6 +985,33 @@ unaffected; each is read back through its own recorded index, and only a box tha
 actually happened, so a refusal shows as the tick springing back rather than as a switch that
 silently does nothing.
 
+## Four faults found by reading rather than by playing
+
+**A pause demoted raw input for the session.** The mouse watchdog switches back to the engine's own
+reader when raw input answers nothing while the engine keeps reporting movement. That is the shape
+of a registration that succeeded and then went silent. But the engine skips its poll while the
+game is paused and its reader then keeps answering the same non-zero number it last saw, which is
+that same shape exactly. Two seconds of pause, a cutscene, or an alt-tab begun mid-turn was enough,
+and the log blamed the device. The watchdog now only ages on a frame somebody is consuming.
+
+**A reader that stopped delivering froze the menu cursor.** `raw_mouse_is_delivering` tested a
+lifetime packet count, which only increments, so it answered yes forever after the first packet. The
+menu cursor path swallows every mouse move and substitutes its own while that is true, so a reader
+that delivered and then stopped left the pointer sitting still. It now asks whether a packet has
+arrived recently, using the arrival time already recorded for the report rate. A moving mouse is
+never near the limit and a still one sends no mouse moves for the path to consult.
+
+**The switch poll ran four times a second.** It counted 60 frames and called that a second, which it
+is only at 60 frames a second, and this game's frame rate is uncapped. It now measures a real second
+on the engine's frame delta. The frame count survives only as the fallback for a frame clock that
+did not resolve.
+
+**`MouseSmoothMaxMs=0` was not always obeyed.** The adaptive time constant is clamped between a 2 ms
+floor, which is a property of the arithmetic, and the player's ceiling. Where the two crossed the
+floor won, so a device reporting faster than about 3 kHz was given 2 ms of smoothing by somebody who
+had written that they wanted none. The ceiling wins now. Covered in `legacy/unittests/mouse_rate.c`,
+which reads 2 ms against the old code and none against this one.
+
 ## Testing status
 
 Built and linked with the configured 32-bit MSVC toolchain, `/W4 /WX` clean. Three builds of this

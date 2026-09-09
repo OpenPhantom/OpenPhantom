@@ -492,6 +492,39 @@ static void test_survives_nonsense(void)
             "and an unprimed filter reports no time constant");
 }
 
+/* MouseSmoothMaxMs=0 means no smoothing, and it has to mean that at every report rate. */
+static void test_a_zero_ceiling_is_obeyed(void)
+{
+    mouse_rate_t rate;
+    unsigned     i;
+
+    ut_section("a ceiling of zero");
+
+    /* An 8 kHz device at 250 frames a second: 32 reports in each 4 ms frame, so a report interval
+     * of 0.125 ms and six of them is 0.75 ms, which is below the arithmetic's own 2 ms floor. That
+     * is the only place the floor and the ceiling can cross, and the floor used to win, so a player
+     * who had written that they wanted no smoothing was given 2 ms of it. */
+    mouse_rate_reset(&rate);
+    for (i = 0; i < 40u; ++i) {
+        mouse_rate_observe(&rate, 4.0f, 32u, 0.004f, 0.004f, 0.0f);
+    }
+    ut_check(rate.report_seconds < 0.000334f,
+             "the estimate really is below a third of a millisecond, which is where six intervals "
+             "fall under the floor");
+    ut_near(mouse_rate_time_constant(&rate, 0.0f), 0.0f, 0.0f,
+            "and a zero ceiling then gives no smoothing at all");
+
+    /* The ordinary case is unchanged: a 1 kHz device asks for 6 ms, well above the floor. */
+    mouse_rate_reset(&rate);
+    for (i = 0; i < 40u; ++i) {
+        mouse_rate_observe(&rate, 4.0f, 4u, 0.004f, 0.004f, MAX_TAU);
+    }
+    ut_near(mouse_rate_time_constant(&rate, 0.0f), 0.0f, 0.0f,
+            "a zero ceiling gives none on a 1 kHz device either");
+    ut_check(mouse_rate_time_constant(&rate, MAX_TAU) > 0.002f,
+             "while the same device under an ordinary ceiling still gets its six intervals");
+}
+
 int main(void)
 {
     test_conserves();
@@ -500,6 +533,7 @@ int main(void)
     test_spread_beats_the_plain_path();
     test_a_slow_device_is_still_improved();
     test_survives_nonsense();
+    test_a_zero_ceiling_is_obeyed();
 
     return ut_summary("mouse_rate");
 }

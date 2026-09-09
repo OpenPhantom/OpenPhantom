@@ -55,15 +55,18 @@
  * would stretch the filter to a quarter of a second on one bad frame. */
 #define MAX_REPORT_SECONDS 0.100f
 
+/* The MAXIMUM wins where the two bounds cross, and they can cross here: the time constant's floor
+ * is a property of the arithmetic while its ceiling is a number out of the player's ini, so a
+ * ceiling below the floor is a configuration rather than a mistake. Returning the floor in that
+ * case handed 2 ms of smoothing to somebody who had written MouseSmoothMaxMs=0, which only shows
+ * on a device reporting faster than about 3 kHz, since that is where six report intervals first
+ * fall below the floor. */
 static float clamp_float(float value, float minimum, float maximum)
 {
     if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
+        value = minimum;
     }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
+    return (value > maximum) ? maximum : value;
 }
 
 static float magnitude_of(float value)

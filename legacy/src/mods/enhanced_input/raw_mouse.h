@@ -116,9 +116,10 @@ unsigned raw_mouse_packet_count(void);
  * The vertical axis exists only here: the view turn has no use for it. */
 void raw_mouse_take_cursor(long *out_dx, long *out_dy);
 
-/* True once the reader is registered and a packet has actually arrived. The cursor path must not
- * take the engine's own pointer motion away on the strength of a registration alone: a silent
- * reader would leave the player with a frozen cursor, which is worse than the stepping it
+/* True while the reader is registered and packets are still arriving, which is a question about
+ * now rather than about the past. The cursor path must not take the engine's own pointer motion
+ * away on the strength of a registration alone, nor on the strength of a packet that arrived once
+ * an hour ago: either leaves the player with a frozen cursor, which is worse than the stepping it
  * replaces. */
 bool raw_mouse_is_delivering(void);
 

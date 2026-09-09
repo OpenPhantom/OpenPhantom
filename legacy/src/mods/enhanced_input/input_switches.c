@@ -19,6 +19,8 @@
 #include "camera_follow.h"
 #include "strafe_walk.h"
 
+#include "frame_clock.h"
+
 #include "common/frame_hook.h"
 #include "common/ini.h"
 #include "common/logging.h"
@@ -246,12 +248,21 @@ void enhanced_input_set_free_look(bool enabled)
  * corrected. Only on a pass that acted, so an idle second still costs four reads and four compares.
  *
  * Once a second. The file is on disk and a whole second is invisible next to reaching for a key.
+ *
+ * A second measured on the engine's frame delta, not counted in frames. This counted 60 frames and
+ * called that a second, which it is only at 60 frames a second; this game's frame rate is uncapped,
+ * so on a fast machine the file was being re-read three or four times as often as intended. The
+ * frame count survives as the fallback for a frame clock that did not resolve, the one case where
+ * there is nothing better to count.
  */
-#define SWITCH_POLL_FRAMES 60u
+#define SWITCH_POLL_SECONDS 1.0f
+#define SWITCH_POLL_FRAMES_UNCLOCKED 60u
 
 static void poll_switches(void)
 {
     static uint32_t frames;
+    static float    elapsed;
+    static bool     clock_seen;
     static bool     seeded;
     static bool     seen_strafe;
     static bool     seen_free_look;
@@ -273,10 +284,21 @@ static void poll_switches(void)
         seen_air_control   = input_config()->air_control;
         seeded             = true;
     }
-    if (++frames < SWITCH_POLL_FRAMES) {
-        return;
+    {
+        const float step = frame_clock_seconds();
+
+        if (step > 0.0f) {
+            clock_seen = true;
+            elapsed += step;
+        }
+        ++frames;
+        if (clock_seen ? (elapsed < SWITCH_POLL_SECONDS)
+                       : (frames < SWITCH_POLL_FRAMES_UNCLOCKED)) {
+            return;
+        }
+        elapsed = 0.0f;
+        frames  = 0;
     }
-    frames = 0;
 
     strafe        = ini_read_bool(INPUT_SECTION, "Strafe", seen_strafe);
     free_look     = ini_read_bool(INPUT_SECTION, "FreeLook", seen_free_look);

@@ -427,7 +427,9 @@ static float bolt_implausible_sample(float sample, float seconds)
  * ============================================================================================ */
 #define RAW_SILENCE_LIMIT_SECONDS 2.0f
 
-static float read_frame_sample(float seconds)
+/* `collector_dormant` is the caller's own dormancy decision, taken before this runs so the
+ * watchdog below can be told about it. */
+static float read_frame_sample(float seconds, bool collector_dormant)
 {
     float engine_sample = 0.0f;
     float raw_sample;
@@ -451,6 +453,15 @@ static float read_frame_sample(float seconds)
     }
     if (engine_sample == 0.0f) {
         return 0.0f;                    /* nobody saw anything: the hand is still */
+    }
+
+    /* Only a frame somebody is consuming can say anything about whether raw input is delivering.
+     * While the collector is dormant the engine skips its poll, so its reader keeps answering the
+     * same non-zero number it last saw. That is the condition this watchdog tests for, so ageing it
+     * there meant two seconds of pause, a cutscene or an alt-tab begun mid-turn demoted raw input
+     * for the rest of the session and the log blamed the device. */
+    if (collector_dormant) {
+        return 0.0f;
     }
 
     mouse_state.raw_silent_seconds += (seconds > 0.0f) ? seconds : 0.0f;
@@ -614,19 +625,24 @@ static void collect_frame_sample(void)
 {
     float sample = 0.0f;
     float seconds = 0.0f;
+    bool  dormant_now;
 
     if (frame_clock_seconds() > 0.0f) {
         seconds = frame_clock_seconds();
     }
 
+    /* Aged before the read rather than after it, because the read has a watchdog in it that must
+     * not run while nobody is consuming. Nothing else looks at this between the two. */
+    mouse_state.idle_seconds += (seconds > 0.0f) ? seconds : 0.0f;
+    dormant_now = mouse_state.idle_seconds > COLLECTOR_DORMANT_AFTER_SECONDS;
+
     /* Read first and unconditionally, whatever happens next. The raw reader CONSUMES, so skipping
      * the read would let its accumulator grow across a whole pause and arrive as one lump. */
-    sample = read_frame_sample(seconds);
+    sample = read_frame_sample(seconds, dormant_now);
     sample = bolt_implausible_sample(sample, seconds);
     census_frame(seconds);
 
-    mouse_state.idle_seconds += (seconds > 0.0f) ? seconds : 0.0f;
-    if (mouse_state.idle_seconds > COLLECTOR_DORMANT_AFTER_SECONDS) {
+    if (dormant_now) {
         /* Nobody has consumed for an eighth of a second: a pause, a cutscene, a loading screen or a
          * menu. The sample is dropped rather than banked, and the reconstruction is parked ONCE
          * rather than on every frame, because a rate measured before an interruption says nothing

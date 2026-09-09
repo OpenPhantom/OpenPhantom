@@ -33,7 +33,7 @@
  *
  * Whole pixel replication cannot do either, by construction rather than by care: every destination
  * pixel is a bit exact copy of some source pixel, so zero maps to zero and non zero maps to non
- * zero at every ratio. tools/convert_menu.py uses the same rule and says the same thing.
+ * zero at every ratio. The retired artwork converter used the same rule for the same reason.
  *
  * ==============================================================================================
  * Upward only
@@ -61,7 +61,7 @@
  * step is 42.667 and the last ten source columns are never reached, and its two axes disagree about
  * where a pixel's centre is by half a source pixel.
  *
- * It agrees with tools/convert_menu.py on every whole ratio and DIFFERS where the target size is
+ * It agrees with the retired artwork converter on every whole ratio and DIFFERS where the size is
  * rounded, which was measured rather than assumed: 60 columns of 1067 at 640 by 1.667, and 239 rows
  * of 2156 for the one artwork file whose height is odd. The converter divides by the ratio it was
  * asked for, this divides by the size it actually produced, and the two are only the same map when
@@ -74,9 +74,9 @@
 int32_t menu_art_resample_source_index(int32_t dest_index, int32_t dest_extent,
                                        int32_t source_extent);
 
-/* The size a ratio gives a dimension, rounded the way tools/convert_menu.py rounds it. Keeping the
- * two identical is what stops a resampled picture and a converted one differing by a pixel and
- * putting the layout half a pixel out. */
+/* The size a ratio gives a dimension, rounded the way the retired artwork converter rounded it,
+ * int(v * ratio + 0.5). Keeping the two identical stops a resampled picture and a converted one
+ * differing by a pixel and putting the layout half a pixel out. */
 int32_t menu_art_resample_scaled(int32_t value, float ratio);
 
 /* Replicates a 16 bit picture into a caller provided buffer.

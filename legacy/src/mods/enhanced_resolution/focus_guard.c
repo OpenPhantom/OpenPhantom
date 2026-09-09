@@ -582,8 +582,8 @@ bool focus_guard_install(const focus_guard_config_t *config)
                      "2054 by 2077, so on a desktop narrower than that the client edge IS the "
                      "desktop edge and the confinement costs nothing, while on a wider one the "
                      "window does not reach the screen edge and the confinement is doing real "
-                     "work. Either way it is what makes a setup where something else repositions "
-                     "the window survivable.");
+                     "work. Either way it carries a setup where something else repositions the "
+                     "window.");
         }
     }
     return true;

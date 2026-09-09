@@ -29,7 +29,7 @@
  * does everything else, which is the smallest change that reaches the cause. It also leaves the
  * prologue untouched, so anything that does want to detour this function still can.
  *
- * The courtesy is one directional, and that is worth saying rather than leaving to be discovered.
+ * The courtesy is one directional, stated here rather than left to be discovered.
  * This pattern begins at the entry and is not declared as a detour target, so a DLL that detours
  * this function BEFORE this one installs replaces the first five bytes with a jump and the pattern
  * then matches zero times. The feature switches itself off with a message that reads like an

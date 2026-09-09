@@ -19,7 +19,7 @@
  * The bigger artwork can come from either of two places, and that is the difference between the
  * canvas being welded to one resolution and following the display:
  *
- *   from disk    tools/convert_menu.py writes a converted set, and the canvas is read from it. The
+ *   from disk    a converted set on disk, and the canvas is read from it. The
  *                files are a fixed size, so the canvas is the size they were made for and nothing
  *                else. This came first and is still what a converted install does.
  *
@@ -123,7 +123,7 @@
  *
  *   no converted set          the DISPLAY is the ratio, and the artwork is replicated to meet it
  *                             as the engine loads it. The canvas then follows the display for as
- *                             long as the game runs; see menu_scale_refit.c.
+ *                             long as the game runs, refitted on every mode change.
  *
  * `cursor_cage_widens` is whether WidenMenuCursorArea is on. The cage is sized from this canvas, so
  * with it off the drawn cursor keeps the engine's 607x447 clamp while the widgets move outside it

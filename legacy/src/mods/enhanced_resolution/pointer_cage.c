@@ -388,7 +388,7 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
         log_info("WidenMenuCursorArea=0, the engine's own menu cursor clamp is left exactly as it "
                  "shipped. That is the right setting at MenuScale=1, where the two are identical; "
                  "with the canvas scaled it leaves the cursor in a 607x447 box while the widgets "
-                 "sit outside it, which is why MenuScale declines to install alongside this.");
+                 "sit outside it. MenuScale therefore declines to install alongside this.");
         return;
     }
 
@@ -429,8 +429,8 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
     }
 
     if (canvas_width == MENU_SCALE_CANVAS_WIDTH) {
-        log_info("the menu cursor clamp is the canvas, 607x447 from the menu origin, which is what "
-                 "the engine shipped (patched at %08X, same values). It becomes larger only when "
+        log_info("the menu cursor clamp is the canvas, 607x447 from the menu origin, the values "
+                 "the engine shipped (patched at %08X, same numbers). It becomes larger only when "
                  "MenuScale does.", (unsigned)site);
     } else {
         log_info("the drawn menu cursor may now travel %dx%d from the menu origin, following the "

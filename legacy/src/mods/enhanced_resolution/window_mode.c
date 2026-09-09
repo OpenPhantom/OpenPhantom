@@ -589,10 +589,10 @@ bool window_mode_install(const window_mode_config_t *config)
 
     mode_state.armed = true;
     log_info("WindowMode=%d armed at %08X. The engine calls that function once during the renderer "
-             "bring-up, asking for 0x800 by 0x800, which is why the window it runs in is neither "
-             "the size of the screen nor a window. The correction is applied both before and "
-             "after the engine's own, because whatever is rebuilt inside takes the window size as "
-             "it is at that moment.",
+             "bring-up, asking for 0x800 by 0x800, so the window it runs in comes out about 2054 "
+             "by 2077: neither the size of the screen nor a window. The correction is applied both "
+             "before and after the engine's own, because whatever is rebuilt inside takes the "
+             "window size as it is at that moment.",
              (int)config->mode, (unsigned)site);
     return true;
 }

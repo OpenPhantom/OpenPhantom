@@ -93,9 +93,9 @@
 /* g_menuScale and g_menuTextScale, the two the repointed numerator feeds, and the base size the
  * second is the first multiplied by.
  *
- * WRITTEN as well as read, and that is the whole of why a live resolution change used to leave the
- * menus in pieces. The engine derives both in exactly one block, which runs at startup and on the
- * mode-change message and nowhere else:
+ * WRITTEN as well as read. Leaving them read-only is why a live resolution change used to leave
+ * the menus in pieces. The engine derives both in exactly one block, which runs at startup and on
+ * the mode-change message and nowhere else:
  *
  *     D9 05 90 88 4A 00   fld  [numerator]     <- repointed at a cell of ours
  *     D8 35 40 A4 86 00   fdiv [g_screenW]

@@ -1,7 +1,7 @@
 /* window_fit.h: keep the game window on whatever display mode the engine has actually set.
  *
  * ==============================================================================================
- * This is off by default, and that is the design, not a retreat
+ * This is off by default, on the reasoning below
  *
  * Everything else in this tree patches the game and leaves the presentation alone, so it behaves
  * the same whether a graphics wrapper renders afterwards or nothing does. Moving the game's window

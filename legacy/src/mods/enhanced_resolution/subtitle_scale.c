@@ -109,8 +109,8 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
  * Twelve bytes are unique, twenty are taken, and the nine byte prologue is an instruction
  * boundary holding nothing relative.
  *
- * THE BACKDROP IS NOT DRAWN THROUGH THE FONT LAYER, which is why nine writes made the text right
- * and left the panel behind it the old size. The quad is built in device pixels by the caller and
+ * The backdrop is NOT drawn through the font layer, so nine writes made the text right and left
+ * the panel behind it the old size. The quad is built in device pixels by the caller and
  * handed straight here, so posScale never touches it. Only two calls reach this function and both
  * are the subtitle's own bars, so a detour on it cannot affect anything else.
  *
@@ -130,7 +130,7 @@ static const uint8_t SIG_DRAW_BAR[] = {
 typedef void(__cdecl *draw_bar_fn_t)(float x0, float y0, float x1, float y1, uint32_t argb);
 
 /* ==============================================================================================
- * THE WHOLE CHANGE IS THE MAPPING, AND NOT ONE CONSTANT INSIDE THE BOX
+ * The change is the MAPPING, not one constant inside the box
  *
  * Everything the layout does is in box pixels, and the box reaches the screen through two things
  * only: the centring, which asks how big the screen is, and posScale, which divides by the same.
@@ -378,11 +378,12 @@ static bool install_patches(void)
 
     state.installed = true;
     log_info("the subtitle box now scales with the display. The engine drew a 640x480 box of fixed "
-             "pixels and centred it, holding the text at a constant PIXEL size, which is why it "
-             "shrank; the layout is now told the screen is %dx%d rather than %dx%d and its two "
-             "scales divide by that same pair, so the box, its row pitch, its baseline and its "
-             "wrap all grow together. Fitted by HEIGHT, so a 4:3 box pillarboxes on a wide screen "
-             "instead of running off the bottom. Nothing else the font layer draws is affected",
+             "pixels and centred it, holding the text at a constant PIXEL size, so it shrank as "
+             "the resolution rose. The layout is now told the screen is %dx%d rather than %dx%d "
+             "and its two scales divide by that same pair, so the box, its row pitch, its "
+             "baseline and its wrap all grow together. Fitted by HEIGHT, so a 4:3 box pillarboxes "
+             "on a wide screen instead of running off the bottom. Nothing else the font layer "
+             "draws is affected",
              (int)state.told_w, (int)state.told_h, (int)state.seen_w, (int)state.seen_h);
     return true;
 }
@@ -421,14 +422,14 @@ void subtitle_scale_install(void)
     state.bar_site   = bar_site;
     state.resolved   = true;
 
-    /* NOTHING IS WRITTEN UNTIL THE DISPLAY IS KNOWN, and that is not caution, it is the order the
-     * game starts in. This runs from the loader, before any mode has been set, so the two size
+    /* NOTHING IS WRITTEN until the display is known, on the order the game starts in rather than
+     * on caution. This runs from the loader, before any mode has been set, so the two size
      * cells are still zero and the numbers every one of the five writes depends on cannot be
      * computed yet. Patching anyway with the authored 640x480 in them would draw the box across
      * the whole screen for as long as it took the first poll to correct it.
      *
-     * The first attempt did the writes here and refused when the read failed, which is why it
-     * reported that the display could not be read and then did nothing at all for the session. */
+     * The first attempt did the writes here and refused when the read failed, so it reported that
+     * the display could not be read and then did nothing at all for the session. */
     if (recompute() && !install_patches()) {
         return;
     }

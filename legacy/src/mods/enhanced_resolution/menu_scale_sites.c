@@ -179,7 +179,7 @@ static const uint8_t MSK_DRAW_MENU[] = {
  * middle of the scaled canvas. The model KEEPS its new size, because that comes from g_menuScale
  * straight into rdMatrix_scale and never passes through this function.
  *
- * THE FOCAL IS NOT A CONSTANT AND MUST NOT BE GUESSED. focalPx is halfWidth / tan(hFOV / 2), so it
+ * The focal is NOT a constant and must not be guessed. focalPx is halfWidth / tan(hFOV / 2), so it
  * moves with the resolution AND with the field of view the reader has chosen; at 3840x2160 and 98
  * degrees it is 1669.69, where a fixed 60 degree lens would say 3325. Assuming a lens put every
  * model at half the distance from the centre it should have been. So the cell is refreshed from
@@ -351,7 +351,7 @@ _Static_assert(sizeof SIG_SET_WIDGET_IMAGE == sizeof MSK_SET_WIDGET_IMAGE,
  * A 32 pixel cursor on a 4K screen is about a third of the size it appeared at when the menus were
  * 640x480, and it is the last thing on these screens still drawn at its authored size.
  *
- * UNLIKE EVERY OTHER MENU PICTURE, THIS ONE CAN SIMPLY BE MADE BIGGER. It does not go through
+ * Unlike every other menu picture, this one can simply be made BIGGER. It does not go through
  * swrle_blit, the run length blitter with no scale term that made converting the artwork necessary
  * in the first place; it goes through texture_drawSprite, which takes the destination extents as
  * arguments. So the two `+ 0x20` immediates are the whole of it.
@@ -360,7 +360,7 @@ _Static_assert(sizeof SIG_SET_WIDGET_IMAGE == sizeof MSK_SET_WIDGET_IMAGE,
  * that is not 4:3, and a stretched arrow reads as a rendering fault rather than as a design. The
  * vertical ratio is used for both, which is the one the text already follows.
  *
- * THE CEILING IS 127 AND IT IS THE INSTRUCTION'S. Both are `add reg,imm8` with a signed byte, so
+ * The ceiling is 127 and it is the INSTRUCTION'S. Both are `add reg,imm8` with a signed byte, so
  * 127 is as large as this can go without moving code: at 3840x2160 the proportional answer would be
  * 144. The difference is not worth relocating a function over, and a clamped cursor is still three
  * times the size it would otherwise have been.

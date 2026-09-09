@@ -1012,6 +1012,17 @@ floor won, so a device reporting faster than about 3 kHz was given 2 ms of smoot
 had written that they wanted none. The ceiling wins now. Covered in `legacy/unittests/mouse_rate.c`,
 which reads 2 ms against the old code and none against this one.
 
+## The strafe damper could outlive the record it was drawing from
+
+The damper hands the drawn half a player record each substep it owns the model root for, and the
+claim is dropped once it has written an exact zero. A level opening mid-strafe means the damper never
+runs again and never reaches that zero, so the claim stood and every drawn frame went on reading a
+record the engine may have freed.
+
+The claim now expires if the damper has not run for eight substeps, a quarter of a second, which is
+longer than the whole settle and far longer than any gap it leaves while it is genuinely running.
+Nothing is lost by dropping it, because the next substep that drives a strafe opens a new one.
+
 ## Testing status
 
 Built and linked with the configured 32-bit MSVC toolchain, `/W4 /WX` clean. Three builds of this

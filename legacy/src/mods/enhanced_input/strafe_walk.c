@@ -160,6 +160,7 @@ typedef struct strafe_walk_state {
     bool              damped_this_substep; /* whether our damper actually ran in it            */
     bool              owns_node;           /* whether the model root is ours to write at all   */
     uint32_t          previous_tick;       /* the substep counter as of the last drawn frame   */
+    uint32_t          opened_tick;         /* the substep counter when the damper last ran     */
     uint8_t          *record;              /* the player record, captured where it is known    */
 
     /* Resolved once at install. Plain pointers rather than reads through the memory helper: this
@@ -211,6 +212,11 @@ static void open_substep(uint8_t *record)
     strafe_state.damped_this_substep = true;
     strafe_state.owns_node           = true;
     strafe_state.record              = record;
+    /* Guarded, unlike the read in the draw path: that one only runs from a detour the install
+     * placed, and the counter is resolved in the same function. This runs from the damper, which
+     * works whether or not the drawn half resolved anything. */
+    strafe_state.opened_tick         = (strafe_state.substep_counter != NULL)
+                                     ? *strafe_state.substep_counter : 0u;
 }
 
 void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, bool turns_body,
@@ -230,6 +236,7 @@ void strafe_walk_reset(void)
     strafe_state.theta_previous      = 0.0f;
     strafe_state.damped_this_substep = false;
     strafe_state.owns_node           = false;
+    strafe_state.record              = NULL;
 }
 
 float strafe_walk_travel_offset(float strafe, float forward, float drive_sign)
@@ -654,6 +661,10 @@ static float current_alpha(void)
     return (alpha > 1.0f) ? 1.0f : alpha;
 }
 
+/* At 32 substeps a second this is a quarter of a second, which is longer than the settle itself
+ * and far longer than any gap the damper leaves while it is genuinely running. */
+#define CLAIM_STALE_SUBSTEPS 8u
+
 static void draw_interpolated_angle(void)
 {
     uint8_t *record;
@@ -673,6 +684,21 @@ static void draw_interpolated_angle(void)
         }
         strafe_state.damped_this_substep = false;
         strafe_state.previous_tick       = tick;
+    }
+
+    /* The record belongs to the substep that handed it over, and the damper runs in every substep
+     * it owns the node for, including the whole settle back to zero. So more than a handful of
+     * substeps since the last one is not a slow settle, it is the damper having stopped: a level
+     * opened, or the player left the ground into something that owns the root itself. The record
+     * from before that is a pointer into memory the engine may have freed, and this runs on every
+     * drawn frame, so the claim is dropped rather than followed. The difference is unsigned, so a
+     * counter that restarted with the level reads as a very large gap.
+     *
+     * Nothing is lost by dropping it: the next substep that drives a strafe opens a new one. */
+    if ((uint32_t)(tick - strafe_state.opened_tick) > CLAIM_STALE_SUBSTEPS) {
+        strafe_state.owns_node = false;
+        strafe_state.record    = NULL;
+        return;
     }
 
     record = strafe_state.record;

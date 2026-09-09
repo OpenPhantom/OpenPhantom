@@ -89,9 +89,9 @@ A per-frame correction while it is armed, and it is only ever armed for this one
 
 ## Two mistakes already made here, so nobody repeats them
 
-**Correcting every frame by calling the real trigger every frame.** The obvious-looking fix, forcing the previous
-speaker's target to idle and calling the real trigger the instant a different actor's line starts,
-has no visible effect, because the superseded actor's own script node rewrites
+**Correcting every frame by calling the real trigger every frame.** The obvious-looking fix,
+forcing the previous speaker's target to idle and calling the real trigger the instant a different
+actor's line starts, has no visible effect, because the superseded actor's own script node rewrites
 `actor+0x1C0` right back on the very next frame and the correction was one-shot. Making the
 correction run every frame instead, but still calling the real trigger every time, produces a worse
 symptom: the superseded actor's own node and this fix's own correction each retrigger a fresh
@@ -103,9 +103,9 @@ bookkeeping quietly satisfied afterward, described in step 3 above.
 **No expiry on "not the current speaker".** A first working version of the correction above had no
 scope at all: it watched every actor who had ever spoken a line, anywhere in the game, and kept
 correcting them for the rest of the session whenever they were not the current speaker, which is
-true of them forever after their one line. Opcode `0x202` "Animation" is not dialogue-specific, since a
-level's own script reaches for it for ordinary gameplay animation too, and that unscoped rule was
-overwriting *that* the instant it landed on `actor+0x1C0`. The symptom was other, unrelated
+true of them forever after their one line. Opcode `0x202` "Animation" is not dialogue-specific,
+since a level's own script reaches for it for ordinary gameplay animation too, and that unscoped
+rule was overwriting *that* the instant it landed on `actor+0x1C0`. The symptom was other, unrelated
 characters going completely static well after this cutscene had ended. Arming only for `espa.b3d`
 and watching only two specific names, both described above, is the fix: this cannot act on
 anything this bug was never about.
@@ -118,7 +118,7 @@ animation lingers past their own line, in any other scene, is a different report
 own name (and, if it is in a different level, its own level file) added, or a deliberately more
 general version of this fix written and re-scoped with the same care given to this one.
 
-## Testing status: ACCEPTED IN GAME (2026-08-22)
+## Testing status: accepted in game (2026-08-22)
 
 Confirmed live against the Mos Espa opening cutscene: Obi-Wan's head stops the moment Qui-Gon's
 line starts and stays stopped, without freezing him solid, and every other actor in the level keeps

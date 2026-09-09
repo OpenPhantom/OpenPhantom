@@ -11,16 +11,16 @@
  *
  *     riderPos = R * (riderPos - pivot) + pivot + translationDelta
  *
- * and the numbers coming out of it are real work rather than noise: the mover's pose advances about
- * 0.45 of its 29 units of travel every tick, its rotation delta is exactly zero, and its
- * translation
- * delta is a steady -0.0008 in Z. Over the full run that is the five centimetres, and the carry is
- * faithfully applying it. Nothing afterwards puts the character back: the tick re-probes the floor
- * immediately after the carry, but only stores the result, so the descent stands.
+ * and the numbers coming out of it are real work rather than noise: the mover's pose advances
+ * about 0.45 of its 29 units of travel every tick, its rotation delta is exactly zero, and its
+ * translation delta is a steady -0.0008 in Z. Over the full run that is the five centimetres,
+ * and the carry is faithfully applying it. Nothing afterwards puts the character back: the tick
+ * re-probes the floor immediately after the carry, but only stores the result, so the descent
+ * stands.
  *
- * WHY THE CARRY IS NOT SUPPRESSED. Those same numbers are what a genuinely descending platform
- * looks like, and refusing the translation would freeze every rider on every lift in the game. The
- * two cases cannot be told apart from the delta.
+ * WHY THE CARRY IS NOT SUPPRESSED. A genuinely descending platform produces those same numbers,
+ * and refusing the translation would freeze every rider on every lift in the game. The two cases
+ * cannot be told apart from the delta.
  *
  * WHAT SEPARATES THEM IS THE FLOOR. The ground contact already carries the signed height of the
  * selected floor over the character's feet, positive when the floor is ABOVE them. A rider properly

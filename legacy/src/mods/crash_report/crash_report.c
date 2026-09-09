@@ -21,7 +21,7 @@
  *
  * First hand also means false alarms. Some libraries use SEH for control flow, and a C++ throw
  * (0xE06D7363) or a breakpoint is not a crash. So we filter by code and cap the number of
- * reports, a log that fills up with harmless exceptions hides the one entry that matters.
+ * reports: a log that fills up with harmless exceptions hides the one entry that matters.
  */
 #include "crash_report.h"
 
@@ -107,7 +107,7 @@ static void describe_module(uintptr_t address, char *out, size_t size)
     HMODULE  module = NULL;
     /* Static, not automatic. write_report holds a guard that makes this single threaded for
      * its whole body, so there is nothing here to race, and 260 bytes kept off the stack are
-     * 260 bytes that still exist on the one path where the stack is what ran out. */
+     * 260 bytes that still exist on the one path where the stack itself ran out. */
     static char path[MAX_PATH];
     char    *file_name;
 
@@ -154,9 +154,9 @@ static void report_faulting_bytes(uintptr_t instruction_pointer)
         /* _snprintf returns NEGATIVE on truncation rather than the length it wanted. Adding
          * that to `written` walks the next write off the FRONT of the buffer, and the loop
          * guard does not catch it, because a negative is still below the limit. It cannot
-         * happen at the constants above, where 32 bytes need 98 of 160, and that is exactly
-         * why it would go unnoticed by whoever widens BYTES_AROUND_EIP later, inside the one
-         * function here that only ever runs when something has already gone wrong. */
+         * happen at the constants above, where 32 bytes need 98 of 160, so it would go
+         * unnoticed by whoever widens BYTES_AROUND_EIP later, inside the one function here
+         * that only ever runs when something has already gone wrong. */
         int chunk = _snprintf(line + written, sizeof(line) - (size_t)written, "%02X%s",
                               bytes[index], (index == BYTES_BEFORE_EIP - 1) ? " | " : " ");
         if (chunk < 0) {
@@ -172,16 +172,16 @@ static void report_faulting_bytes(uintptr_t instruction_pointer)
 
 /* Deliberately NOT a real stack walk: that would need the unwind data of a 1999 MSVC build, which
  * does not exist. We sweep the raw stack for values that land in WMAIN's .text. That yields
- * candidates for the call chain, stale ones included, which is exactly why the stack offset is
- * printed with each: the LOWEST offsets are the youngest frames and the most believable. */
+ * candidates for the call chain, stale ones included, so the stack offset is printed with each:
+ * the LOWEST offsets are the youngest frames and the most believable. */
 /* The allocation base of whatever an address belongs to, or 0 when it is not in committed
  * executable memory.
  *
- * VirtualQuery AND NOTHING ELSE, which is the whole design of this. Naming the module would
- * mean GetModuleFileName, and that takes the loader lock: the one call in this file that is
- * deliberately held back until the registers are already written, because a crash inside the
- * loader would deadlock on it. A base needs no lock, and it costs nothing to resolve later,
- * because the loader writes the mapping into this same log at startup:
+ * VirtualQuery, and no other call. Naming the module would mean GetModuleFileName, and that
+ * takes the loader lock: the one call in this file that is deliberately held back until the
+ * registers are already written, because a crash inside the loader would deadlock on it. A base
+ * needs no lock, and it costs nothing to resolve later, because the loader writes the mapping into
+ * this same log at startup:
  *
  *     [loader] mod framerate_fix.dll     loaded at 6E1D0000, calling engine_fix_install
  *
@@ -228,7 +228,7 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
     uintptr_t       text_start = host_image_text();
     uintptr_t       text_end   = text_start + host_image_text_size();
     uintptr_t       own_base = executable_allocation_base((uintptr_t)&report_engine_frames);
-    /* THE SWEEP MUST STOP AT THE TOP OF THE STACK. Above NtTib.StackBase is not this thread's
+    /* The sweep must stop at the top of the stack. Above NtTib.StackBase is not this thread's
      * stack and never was, so anything found there is not a frame, however much it looks like one.
      * The first report that carried the stack extent showed six entries past the top being printed
      * as frames, and two of them had already been used to build a wrong theory about which feature
@@ -271,8 +271,8 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
             if (base != 0) {
                 unsigned seen;
 
-                /* The offset is what a map file or a disassembler wants, so it is printed
-                 * rather than left to be worked out from two numbers on one line. */
+                /* A map file or a disassembler wants the offset, so it is printed rather
+                 * than left to be worked out from two numbers on one line. */
                 log_info("  esp+%04X   %08X   module %08X + %X%s", index * 4, (unsigned)value,
                          (unsigned)base, (unsigned)((uintptr_t)value - base),
                          (base == own_base) ? "   <- this reporter" : "");
@@ -297,7 +297,7 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
                  "which is itself the finding)");
     }
 
-    /* THE LEGEND IS LAST, AND THAT IS THE POINT. Naming a module means GetModuleFileName and
+    /* The legend comes last, deliberately. Naming a module means GetModuleFileName and
      * the loader lock, so it goes after every address is already in the file: if this deadlocks
      * the report is still complete and only the names are missing. Resolving distinct bases
      * rather than every frame keeps it to a handful of calls whatever the sweep found.
@@ -347,11 +347,11 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
  *
  * WHAT THIS COSTS. An access violation that something further out swallows, while the process then
  * hangs rather than dying, is now one line instead of a report. That line still names the faulting
- * address, the address it touched and what it was doing, which is the part worth having; the
- * registers and the stack sweep are what is given up. That is the right way round: a report never
+ * address, the address it touched and what it was doing, the part worth having; the registers
+ * and the stack sweep are given up. That is the right way round: a report never
  * written because four probes spent the budget is worth less than a line that always is.
  * ============================================================================================ */
-/* THE TEST THAT SEPARATES A PROBE FROM A CRASH, and it was missing from the first version of
+/* The test that separates a probe from a crash, and it was missing from the first version of
  * this: a guarded reader faults INSIDE its own memcpy, so the instruction pointer is in code
  * that is mapped and executable and only the address it touched is bad. Execution that has left
  * the rails has an instruction pointer that is itself nowhere: 00000001, FFFFFFFF, a freed page.
@@ -433,7 +433,7 @@ static void report_first_chance_summary(void)
 static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *context)
 {
     /* Static, for the same reason describe_module's own buffer is: the guard below makes this
-     * function single threaded for the whole of its body. */
+     * function single threaded for its whole body. */
     static char where[MAX_PATH + 32];
     bool        overflow;
 
@@ -458,11 +458,11 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
 
     /* The code, the address and the registers go out BEFORE the module is named.
      * GetModuleHandleEx and GetModuleFileName both take the loader lock, and one of the three
-     * crashes this reporter was written for hung inside a
-     * graphics wrapper cleanup, which is to say inside the loader, holding it. Naming the module
-     * first, as this used to, means that deadlock costs the entire report rather than one line of
-     * it. Everything that can be had from the record and the context alone is therefore already
-     * in the file by the time anything reaches for the lock. */
+     * crashes this reporter was written for hung inside a graphics wrapper cleanup, which is to
+     * say inside the loader, holding it. Naming the module first, as this used to, means that
+     * deadlock costs the entire report rather than one line of it. Everything that can be had
+     * from the record and the context alone is therefore already in the file by the time
+     * anything reaches for the lock. */
     log_info("crash (%s)", how);
     log_error("%s (%08lX) at %08X", fatal_exception_name(record->ExceptionCode),
               (unsigned long)record->ExceptionCode,
@@ -479,7 +479,7 @@ static void write_report(const char *how, EXCEPTION_RECORD *record, CONTEXT *con
 
     /* How much stack was left, because "we ran out of stack" is a common explanation for a
      * wild instruction pointer and it should be answerable from the report rather than argued
-     * about. The two words come from this thread's own TEB, which is what fs addresses on x86:
+     * about. The two words come from this thread's own TEB, which fs addresses on x86:
      * NtTib.StackBase at +4 is the high end, NtTib.StackLimit at +8 is the lowest page that is
      * currently committed. The handler runs on the faulting thread, so these are its numbers.
      *
@@ -562,8 +562,15 @@ static LONG WINAPI unhandled_filter(EXCEPTION_POINTERS *pointers)
 
 void crash_report_install(void)
 {
-    host_image_resolve();
+    /* log_init comes first, or every line below it is dropped, including the warning that would
+     * name the problem. The image is resolved next and its answer is checked: the byte dump and
+     * the stack sweep both ask where WMAIN's .text is, and an unresolved image answers with an
+     * empty range, so every frame would read as belonging to something else. */
     log_init("crash_report", false);
+    if (!host_image_resolve()) {
+        log_error("no 32-bit host image");
+        return;
+    }
 
     if (crash_state.installed) {
         return;

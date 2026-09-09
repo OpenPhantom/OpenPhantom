@@ -79,7 +79,7 @@ arranged deliberately rather than left to chance.
   a `memcpy` cannot raise an illegal instruction or a divide by zero. The cost is that an access
   violation swallowed further out, while the process then hangs rather than dying, is one line
   instead of a report; that line still names the faulting address, what it touched and what it was
-  doing, and the registers and stack sweep are what is given up.
+  doing, and the registers and stack sweep are given up.
 * Only genuinely fatal codes are reported. Breakpoints, C++ throws (`0xE06D7363`) and the
   thread-naming exception are control flow, not crashes.
 * On `EXCEPTION_STACK_OVERFLOW` the report itself needs stack, and it has only the single page
@@ -96,6 +96,6 @@ function either talks to the OS or formats a report.
 
 **Accepted in game, on real crashes rather than induced ones.** It caught a repeatable fault on
 three machines and produced the report that was used to diagnose it: the exception, the registers,
-the stack extent, and the module each frame belonged to. The module naming is what turned a report
-that read as a dead end into the one that named the fault, so that part is confirmed by having
-done its job rather than by having been looked at.
+the stack extent, and the module each frame belonged to. The module naming turned a report that
+read as a dead end into the one that named the fault, so that part is confirmed by having done its
+job rather than by having been looked at.

@@ -13,7 +13,7 @@ display driver's shader compiler.
 
 Turning sound effects off stops it. Turning the SFX volume slider to zero does not.
 
-That pair is the whole diagnosis in one line. The volume gates no branch anywhere in the engine, it
+That pair is the diagnosis. The volume gates no branch anywhere in the engine, it
 is handed to Miles and read nowhere else, so a silent game still allocates every channel and
 still runs every code path. The checkbox is different: it makes `bapsound_play` return before it
 allocates anything.
@@ -75,7 +75,7 @@ STALE OWNER ch 1 "obifire1.wav" -> 001AFB9C, in the stack 00130000..001B0000, AB
 STALE OWNER ch 3 "bdlaser1.wav" -> 001AFC2C, in the stack 00130000..001B0000, ABOVE esp by 1644 bytes
 ```
 
-All three at the same instant, which is the message 6 burst. All three blaster sounds. All three
+All three at the same instant, the message 6 burst. All three blaster sounds. All three
 above the stack pointer, so every one of them wrote into a frame still in use.
 
 The flags settle which bug it is. Every channel that carried a stack owner handle was flagged
@@ -104,8 +104,8 @@ Section `[sound_lifetime_fix]`.
 
 **The causal chain was not traced instruction by instruction.** The dangling write is real, it is
 byte proven, and it lands in live frames at exactly the moment the crash happens. What was never
-demonstrated is that one of those particular writes is what produced the faulting instruction about
-half a second later. Removing a genuine memory corruption bug and observing that the crash stops is
+demonstrated is that one of those particular writes produced the faulting instruction about half a
+second later. Removing a genuine memory corruption bug and observing that the crash stops is
 strong evidence, not a proof.
 
 If the crash survives this, the corruption is somewhere else and the count of detached handles in

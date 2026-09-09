@@ -37,7 +37,7 @@ level with `[diagnostics] Characters`:
 | 3 | the seated background characters, including the one that sinks | no |
 | 5 | one character, bit 0 set alongside another bit | no |
 
-**Contact is what breaks the assumption.** The handler in `enemy.c` at `FUN_00436a68` adds an
+**Contact breaks the assumption.** The handler in `enemy.c` at `FUN_00436a68` adds an
 impulse to a character's velocity on contact without asking whether that character can be moved
 safely. Standing on her points it down. The movement function integrates it and commits the result
 at `0x0043655E` with nothing consulted, and the landing path then clears the velocity while leaving
@@ -151,23 +151,23 @@ person reading this will be tempted by at least one of them again.
 |---|---|
 | gravity settling her onto a wrongly chosen floor | the steps were exactly one sixteenth every time and never accelerated, and paused for seconds while the player stood beside her. Gravity does none of that |
 | a refused move never clearing her downward velocity, so it accumulated | her velocity reads zero while she stands still and spikes only on the steps she moves, so it is an impulse, not something retained |
-| the swept collision test raising its ray origin by a step-over allowance, hiding a small descent | **built, shipped to a test install, and changed nothing.** The instrument added to find out why is what found the real cause |
+| the swept collision test raising its ray origin by a step-over allowance, hiding a small descent | **built, shipped to a test install, and changed nothing.** The instrument added to find out why turned up the real cause |
 | clearing the velocity of every collision exempt character | **built, shipped, and it froze the ships, the birds and the droids on flying platforms.** Exempt means the engine will not test it, not that it never moves |
 
-The third is the one that taught the method. The census put in to explain the failure reported: in four
-thousand sweeps, six were descending, all six were the **player** landing, and not one carried the
-allowance the character move test passes. Her move never reaches that function at all.
+The third is the one that taught the method. The census put in to explain the failure reported: in
+four thousand sweeps, six were descending, all six were the **player** landing, and not one carried
+the allowance the character move test passes. Her move never reaches that function at all.
 
 The fourth is the one that taught the caution: a repair can pass every test, be accepted in play,
 and still be wrong about a population nobody thought to look at.
 
-The lesson worth keeping: counting what a hook actually sees is worth more than reasoning about
-what it should see.
+The lesson that ended it: counting what a hook actually sees beats reasoning about what it should
+see.
 
 ## A mover id only means something inside its own level
 
-The set of movers found to be creeping is what lets the ground snap recognise the one the rider
-carry refused, since the snap is handed no rate of its own to measure. It was keyed on the mover id
+The set of movers found to be creeping lets the ground snap recognise the one the rider carry
+refused, since the snap is handed no rate of its own to measure. It was keyed on the mover id
 alone, and nothing tells this DLL when a level opens, so an entry outlived the level that created
 it: a later level whose mover happened to carry the same number was taken for the one already being
 refused and had its ground snap declined for the rest of the session.

@@ -32,7 +32,7 @@
  *
  * The two cue getters sit next to each other and are near-identical, which makes one pattern
  * cover both. They are wanted for the log rather than for the repair: when the music hangs, the
- * cue that was in force at that moment is the first thing worth knowing.
+ * cue that was in force at that moment is the first thing to look at.
  *
  *   bapMusicGetState   ... 75 07 B8 E8 03 00 00 EB 05 A1 <state latch> 5D C3    (1000 = NULL cue)
  *   bapMusicGetSequence... 75 07 B8 D0 07 00 00 EB 05 A1 <seq latch>   5D C3    (2000 = NULL cue)
@@ -50,7 +50,7 @@
  *             6A 09 / 6A 00 / E8 <module_broadcastDt>     command 9, id 0
  *             C7 05 <sys_pause_on> 00000000
  *
- * That broadcast is what actually pauses the music in the shipped game, and it is BALANCED: the
+ * That broadcast actually pauses the music in the shipped game, and it is BALANCED: the
  * dispatcher it goes through walks the module list, calls each handler and keeps the return value
  * in a local nobody reads. There is a second dispatcher pair in the image that DOES gate on the
  * return value and on a flag bit, and whose music arm would indeed stick, but neither of those
@@ -137,10 +137,10 @@ static const uint8_t MSK_MUSIC_RESUME[] = {
     0xFF, 0xFF
 };
 
-_Static_assert(sizeof(SIG_MUSIC_PAUSE) == sizeof(MSK_MUSIC_PAUSE),
-               "the pause pattern and its mask are different lengths");
-_Static_assert(sizeof(SIG_MUSIC_RESUME) == sizeof(MSK_MUSIC_RESUME),
-               "the resume pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_PAUSE == sizeof MSK_MUSIC_PAUSE,
+               "the music pause pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_RESUME == sizeof MSK_MUSIC_RESUME,
+               "the music resume pattern and its mask are different lengths");
 _Static_assert(sizeof(SIG_MUSIC_PAUSE) == sizeof(SIG_MUSIC_RESUME),
                "the two halves of the latch pair must be the same shape");
 
@@ -170,15 +170,16 @@ static const uint8_t MSK_MUSIC_PERIODIC[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF
 };
-_Static_assert(sizeof(SIG_MUSIC_PERIODIC) == sizeof(MSK_MUSIC_PERIODIC),
-               "the periodic pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_PERIODIC == sizeof MSK_MUSIC_PERIODIC,
+               "the music periodic pattern and its mask are different lengths");
 
 #define OFFSET_PERIODIC_ATTACHED 0x05u
 #define OFFSET_PERIODIC_REENTRY  0x13u
 
 /* --- the two cue getters, one pattern ---------------------------------------------------------
- * The NULL cues 1000 and 2000 are literal on purpose: they are what tells the two apart, and a
- * build that spelled them differently is a build this feature should not read latches from. */
+ * The NULL cues 1000 and 2000 are literal on purpose: they are the only thing telling the two
+ * apart, and a build that spelled them differently is a build this feature should not read
+ * latches from. */
 static const uint8_t SIG_MUSIC_GETTERS[] = {
     0x55, 0x8B, 0xEC,
     0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -211,8 +212,8 @@ static const uint8_t MSK_MUSIC_GETTERS[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_MUSIC_GETTERS) == sizeof(MSK_MUSIC_GETTERS),
-               "the getter pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_GETTERS == sizeof MSK_MUSIC_GETTERS,
+               "the cue getter pattern and its mask are different lengths");
 
 #define OFFSET_GETTERS_ATTACHED_A 0x05u
 #define OFFSET_GETTERS_STATE      0x14u
@@ -248,7 +249,7 @@ static const uint8_t MSK_SYS_PAUSE[] = {
     0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_SYS_PAUSE) == sizeof(MSK_SYS_PAUSE),
+_Static_assert(sizeof SIG_SYS_PAUSE == sizeof MSK_SYS_PAUSE,
                "the sys_pause pattern and its mask are different lengths");
 
 /* The `cmp dword [..], 1` operand at the top; the claim below it must name the same cell. */

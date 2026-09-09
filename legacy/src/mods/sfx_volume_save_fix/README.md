@@ -16,11 +16,11 @@ Any build whose audio code matches the retail sites at `0x00417459` / `0x0041738
 nothing and says so in the log.
 
 Two of the three patterns carry absolute data addresses, because those addresses are the sites'
-own operands and are what makes the patterns unique. The consequence is worth stating: a build
-that relinked its data section fails those two and the DLL declines rather than guessing. Measured
-on every retail image to hand, including the German one, all three resolve exactly once; on the
-Edit Tool's own recompile of the engine only the address-free middle pattern resolves, and the DLL
-declines with a log line, which is the intended answer.
+own operands and the patterns are only unique with them in. The consequence: a build that relinked
+its data section fails those two and the DLL declines rather than guessing. Measured on every
+retail image to hand, including the German one, all three resolve exactly once; on the Edit Tool's
+own recompile of the engine only the address-free middle pattern resolves, and the DLL declines
+with a log line, the intended answer.
 
 ## Configuration: `[sfx_volume_save_fix]`
 
@@ -71,7 +71,7 @@ the engine itself derived the mirror from, clamped to `[0, scale]`. Both data ad
 out of `bapsound_setMasterVolume`'s own instruction stream rather than hardcoded, and range
 checked against the host image before they are followed.
 
-**The replacement keeps the original's own guard branch,** and that is not a detail. The function
+**The replacement keeps the original's own guard branch.** That is not a detail. The function
 answers `0`, not a volume, while `g_soundReady` is still `0`. A replacement that skipped that
 branch would answer with the mirror instead, and the mirror reads `1.0` at that point for exactly
 the reason bug 2 describes, so on a machine whose sound never initialises, the options screen

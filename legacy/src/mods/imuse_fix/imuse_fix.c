@@ -18,7 +18,7 @@
  *      DirectSound buffer the music streams through is a LOOPING buffer that is never stopped,
  *      the audible result is the last second of PCM circling forever rather than silence.
  *
- *   3. NAME EVERY CHANGE. One line per TRANSITION, never one per frame.
+ *   3. Name every change. One line per TRANSITION, never one per frame.
  *
  * ---- What it is not ---------------------------------------------------------------------------
  * There is a well-travelled claim that the music bug is a return value: the module handler's
@@ -31,7 +31,7 @@
  * The live pause path is the pause menu, and it uses the OTHER dispatcher: it walks the module
  * list, calls each handler and drops the result into a local nobody reads. `ImPause` and
  * `ImResume` are balanced across it. Patching those two return values changes nothing that
- * executes, which is why this file does not do it. The guard in point 2 is the honest version of
+ * executes, so this file does not do it. The guard in point 2 is the honest version of
  * the same worry: instead of predicting how the latch might get stuck, it watches whether it IS
  * stuck, repairs it, and says so, so a log without that line is evidence, not silence.
  *
@@ -159,8 +159,8 @@ static int32_t read_cell(const volatile int32_t *cell, int32_t absent)
     return *cell;
 }
 
-/* The two cue latches, for the log only. They are what says WHICH piece of music was in force at
- * the moment something went wrong, and the engine reports its NULL cues as 1000 and 2000. */
+/* The two cue latches, for the log only. They say WHICH piece of music was in force at the moment
+ * something went wrong, and the engine reports its NULL cues as 1000 and 2000. */
 static void describe_cues(char *buffer, size_t size)
 {
     if (state.sites.state_latch == NULL || state.sites.sequence_latch == NULL) {
@@ -204,8 +204,8 @@ static void note_state(int32_t attached, int32_t paused, int32_t sys_pause, bool
      * Both setters write their latch BEFORE they hand the cue to the music DLL and neither takes
      * it back if the DLL refuses it, and the setters' own `cue == latch` guard then swallows
      * every later attempt at that same cue. So a cue the DLL cannot honour parts the latch from
-     * what is audible permanently. Logging every cue change is what makes the LAST cue before the
-     * music stopped readable, and that is the one worth knowing. */
+     * what is audible permanently. Logging every cue change keeps the LAST cue before the music
+     * stopped readable, and an investigation needs exactly that cue. */
     int32_t state_cue = read_cell(state.sites.state_latch, 0);
     int32_t sequence_cue = read_cell(state.sites.sequence_latch, 0);
 
@@ -435,7 +435,7 @@ void imuse_fix_install(void)
     }
 
     /* One frame hook drives both halves. render_frameEnd also runs inside the blocking menu
-     * loops, which is what makes the orphan guard able to see a pause taken by a menu screen. */
+     * loops, so the orphan guard can see a pause taken by a menu screen. */
     if (!frame_hook_add(imuse_fix_frame)) {
         log_warning("the per-frame hook could not be installed, nothing in this DLL runs. There "
                     "is no degraded mode worth having: every part of this feature is a decision "

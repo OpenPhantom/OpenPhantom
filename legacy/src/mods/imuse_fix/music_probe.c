@@ -18,17 +18,17 @@
  *     heartbeat ticks stop advancing   AND   the gate is not zero
  *
  * and this file logs exactly that. It writes NOTHING into the music DLL. If the ticks keep
- * advancing while the music is stuck, the theory above is dead and the log says so plainly,
- * which is worth as much as a confirmation.
+ * advancing while the music is stuck, the theory above is dead and the log says so plainly; a
+ * refutation is worth as much as a confirmation.
  *
- * ---- THE STRESS MODE -------------------------------------------------------------------------
+ * ---- The stress mode -------------------------------------------------------------------------
  * A defect that appears once an hour cannot be worked on. `MusicStressHz` drives cue changes far
  * faster than any level does, which raises the collision rate on BOTH sides at once: the game
  * thread takes the gate on every cue, and the timer thread takes it while it ramps group volume,
- * which is exactly what a cue change makes it do.
+ * exactly what a cue change makes it do.
  *
- * It calls ImSetState DIRECTLY rather than through the engine's own setter, and that is
- * deliberate: the engine latches a cue before handing it over and refuses a repeat of the same
+ * It calls ImSetState DIRECTLY rather than through the engine's own setter, deliberately: the
+ * engine latches a cue before handing it over and refuses a repeat of the same
  * value, so driving it through the engine would both fight the latch and leave the game's music
  * state machine somewhere the game did not put it. Going straight to the DLL exercises precisely
  * the traffic the race needs and leaves the game's own latch untouched, so ordinary music resumes
@@ -100,7 +100,7 @@ typedef struct probe_state {
      * GAME THREAD almost always reads 0, because the game thread is not inside ImLock at the
      * moment we look, so `gate=0` on a routine line is not a health certificate, it is the
      * expected reading. What the sample can see reliably is the value that never comes back down,
-     * and the maximum is what shows a transient overlap on the way there. */
+     * and the maximum shows a transient overlap on the way there. */
     int32_t gate_max;
 
     bool    stall_reported;
@@ -407,7 +407,7 @@ void music_probe_frame(void)
     }
 
     /* The routine line is the probe's, not the watchdog's. A session that only asked for the
-     * repairs gets the stall and recovery lines, which report a fault, and nothing else. */
+     * repairs gets the stall and recovery lines, which report a fault, and no routine lines. */
     if (config.probe && config.report_seconds > 0 &&
         now - state.last_report_ms >= (DWORD)config.report_seconds * 1000u) {
         report_routine(ticks, gate, now - state.last_report_ms);

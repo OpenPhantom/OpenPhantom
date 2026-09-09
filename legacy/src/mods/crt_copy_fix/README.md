@@ -43,8 +43,8 @@ as well; this repairs a picture, not only a crash.
 
 Not an insertion: the whole loop is replaced. 25 bytes are available, 11 are needed. The result
 reads `[0 .. N-4]`, writes `[0 .. N-4]`, runs `N/4` iterations and descends in steps of four, **the
-same order as the original**, which matters because the backwards direction keeps overlapping
-ranges safe. The only difference is the removed load at -4.
+same order as the original**; the backwards direction keeps overlapping ranges safe. The only
+difference is the removed load at -4.
 
 ## Why the site is deliberately not unique
 

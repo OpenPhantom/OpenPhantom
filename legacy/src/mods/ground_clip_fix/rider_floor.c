@@ -135,8 +135,8 @@ static void __cdecl hook_snap_to_ground(uint8_t *actor, void *position)
 
     /* The same mover the carry refused, recognised by the set it recorded, and only while the
      * floor is BELOW the feet: a negative distance means the snap would pull the character down
-     * onto the creeping surface, while a positive one would lift them, which is the engine
-     * putting somebody back on top of something and is left alone. */
+     * onto the creeping surface, while a positive one would lift them; that is the engine putting
+     * somebody back on top of something, and it is left alone. */
     if (actor != NULL &&
         is_crusher(*(const uint8_t *const *)(actor + CHARACTER_GROUND_MOVER)) &&
         is_known_creeper(*(const uint8_t *const *)(actor + CHARACTER_GROUND_MOVER)) &&

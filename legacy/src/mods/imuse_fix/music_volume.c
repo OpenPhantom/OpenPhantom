@@ -40,7 +40,7 @@ static const uint8_t MSK_MUSIC_ATTACH[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 _Static_assert(sizeof SIG_MUSIC_ATTACH == sizeof MSK_MUSIC_ATTACH,
-               "the attach mask must be the same length as its pattern");
+               "the attach pattern and its mask are different lengths");
 #define MUSIC_ATTACH_PROLOGUE 6u        /* push ebp; mov ebp,esp; sub esp,18h */
 
 /* bapMusicDetach, 0x0041046C.
@@ -63,7 +63,7 @@ static const uint8_t MSK_MUSIC_DETACH[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF
 };
 _Static_assert(sizeof SIG_MUSIC_DETACH == sizeof MSK_MUSIC_DETACH,
-               "the detach mask must be the same length as its pattern");
+               "the detach pattern and its mask are different lengths");
 #define MUSIC_DETACH_PROLOGUE 10u       /* push ebp; mov ebp,esp; cmp [abs],0 */
 
 /* bapMusicSetVolume, 0x004106CC.
@@ -88,7 +88,7 @@ static const uint8_t MSK_MUSIC_SET_VOLUME[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 _Static_assert(sizeof SIG_MUSIC_SET_VOLUME == sizeof MSK_MUSIC_SET_VOLUME,
-               "the set-volume mask must be the same length as its pattern");
+               "the set-volume pattern and its mask are different lengths");
 /* push ebp; mov ebp,esp; push ecx; mov [ebp-4],0. An exact instruction boundary and no operand
  * that a trampoline would have to relocate. */
 #define MUSIC_SET_VOLUME_PROLOGUE 11u

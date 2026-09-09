@@ -4,7 +4,7 @@
  * crashes at the end of the load. The fault is an EXECUTE at FFFFFFFF reached through the window
  * message pump, with no engine frame under it. Turning sound effects off stops it. Turning the
  * volume to zero does not, because the volume gates no branch anywhere in the engine: it is handed
- * to Miles and nothing else reads it.
+ * to Miles and no other code reads it.
  *
  * THE CAUSE. bapsound_play records the address the caller passed for its channel handle,
  *
@@ -14,7 +14,7 @@
  *
  *     if (c->pOwnerHandle != 0) { *c->pOwnerHandle = -1; c->pOwnerHandle = 0; }
  *
- * which is a sound protocol as long as the handle outlives the voice. Three call sites in the
+ * That protocol holds as long as the handle outlives the voice. Three call sites in the
  * projectile code pass the address of a stack local instead. shot_spawn is the one that runs on
  * every bolt fired:
  *
@@ -31,17 +31,17 @@
  * message 6 and that reaches bapsound_removeLevelSounds, which stops all twelve channels. Measured
  * on the save that crashes: three channels carried stack owner handles at that moment, all three
  * flagged SNDF_STATIC_POS, all three blaster sounds, and every one of them wrote above the stack
- * pointer, which is to say into a frame still in use.
+ * pointer, into a frame still in use.
  *
- * THE FIX. Clear pOwnerHandle where the pin happens, which is what the pin was already trying to
- * do. Only a handle pointing into the calling thread's own stack is cleared. A channel whose owner
- * lives anywhere else keeps the protocol it was written for, so this does not have to be right
- * about call sites nobody has looked at yet.
+ * THE FIX. Clear pOwnerHandle where the pin happens; the pin was already trying to do exactly
+ * that. Only a handle pointing into the calling thread's own stack is cleared. A channel whose
+ * owner lives anywhere else keeps the protocol it was written for, so this does not have to be
+ * right about call sites nobody has looked at yet.
  *
  * WHAT THIS DOES NOT SETTLE. The write is a real defect and this removes it, but the chain from the
  * poisoned slot to the faulting instruction half a second later was never traced instruction by
  * instruction. If the crash survives this, the corruption was somewhere else, and the count below
- * still says how many dangling handles were detached, which is the useful half of the answer.
+ * still gives the useful half of the answer: how many dangling handles were detached.
  */
 #include "sound_lifetime_fix.h"
 
@@ -66,7 +66,7 @@
  *   55 8B EC 51      push ebp / mov ebp,esp / push ecx
  *   8B 45 08         mov eax,[ebp+8]          the channel index, the only argument read here
  *   C1 E0 07         shl eax,7                the bank stride, 0x80
- *   05 <imm32>       add eax,&g_channel[0]    THE CHANNEL BANK. The operand is at +0x0B and is
+ *   05 <imm32>       add eax,&g_channel[0]    the channel bank. The operand is at +0x0B and is
  *                                             read out rather than written down, so a build that
  *                                             places the bank elsewhere still resolves.
  *   89 45 FC         mov [ebp-4],eax
@@ -75,7 +75,7 @@
  *   74 27            jz past the whole body
  *
  * The four operand bytes are masked out of the pattern for the reason above. The detour takes the
- * first seven bytes, which is a whole number of instructions and more than jmp rel32 needs. */
+ * first seven bytes, a whole number of instructions and more than jmp rel32 needs. */
 static const uint8_t SIG_PIN_CHANNEL[] = {
     0x55, 0x8B, 0xEC, 0x51, 0x8B, 0x45, 0x08, 0xC1, 0xE0, 0x07, 0x05,
     0x00, 0x00, 0x00, 0x00,
@@ -86,6 +86,8 @@ static const uint8_t MASK_PIN_CHANNEL[] = {
     0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_PIN_CHANNEL == sizeof MASK_PIN_CHANNEL,
+               "the pin channel pattern and its mask are different lengths");
 #define PIN_CHANNEL_PROLOGUE  7u
 #define OFFSET_CHANNEL_BANK   0x0Bu
 

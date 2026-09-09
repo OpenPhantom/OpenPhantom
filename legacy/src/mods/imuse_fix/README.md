@@ -184,9 +184,9 @@ sees a zero standing in front of it and remembers the previous value as the play
 `bapMusicAttach` puts that value back after the original has run, because the original's last act
 is the reload being corrected.
 
-The two-deep history is what removes the guesswork. A player who drags to silence has already put
-their own zero into the previous slot before the screen's zero arrives, so zero is what comes back
-and the rule needs no opinion about what a zero means.
+The two-deep history removes the guesswork. A player who drags to silence has already put their
+own zero into the previous slot before the screen's zero arrives, so zero comes back and the rule
+needs no opinion about what a zero means.
 
 ### Engine locations
 

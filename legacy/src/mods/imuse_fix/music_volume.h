@@ -14,7 +14,7 @@
  *     bapMusicAttach();             re-reads MVOL from the file and applies it
  *
  * The slider's new position has not reached the file yet, so the attach puts the file's old value
- * back and that is what the exit write then saves. Drag the slider, change provider, leave: the
+ * back, and the exit write then saves that. Drag the slider, change provider, leave: the
  * drag is gone. Change provider, then drag: it sticks. That order dependence is why the report
  * reads as intermittent.
  *

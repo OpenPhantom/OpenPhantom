@@ -5,8 +5,8 @@
  *
  * Three repairs, and all three are the identity on a scene and a device that stay inside what the
  * engine was written for. Two are array bounds in the deferred face submit, and a face past either
- * of them is refused exactly the way the engine already refuses one when its queue is full, which
- * every caller of that function handles. The third is an answer of zero from the depth comparison
+ * of them is refused exactly the way the engine already refuses one when its queue is full; every
+ * caller of that function handles that. The third is an answer of zero from the depth comparison
  * mapper, substituted rather than handed on to the device.
  */
 #ifndef RENDER_GUARD_H

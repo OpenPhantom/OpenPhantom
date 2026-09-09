@@ -10,8 +10,8 @@
  * length. The array sits at [esp+0x18], so its last byte is [esp+0x37]. The frame is
  * `sub esp,0x28` plus four pushes, which puts the saved return address at [esp+0x38]. That is
  * outcode[32], and the thirty third vertex of a face writes it. The result is not a graphical
- * defect, it is a corrupted return whose target depends on where the vertex landed on screen,
- * which is also why it would never reproduce twice the same way.
+ * defect, it is a corrupted return whose target depends on where the vertex landed on screen, so
+ * it would never reproduce twice the same way.
  *
  * Thirty is the authored limit rather than an inference. The editor build of this engine still
  * carries the assert the shipping build compiles out, and its text names the number: "Can't have
@@ -46,15 +46,15 @@
  *
  * ============================== On the length of this file ====================================
  *
- * The two bounds themselves are in face_bounds.c, which is the one seam here that pays for itself:
- * they are pure arithmetic, they are the whole point of the DLL, and a test can only reach them
- * from outside this file, which exposes nothing but its install function. What stays behind is
- * everything that touches the engine, the ini or the log.
+ * The two bounds themselves are in face_bounds.c, the one seam here that pays for itself: they
+ * are pure arithmetic, and a test can only reach them from outside this file, which exposes
+ * nothing but its install function. What stays behind is everything that touches the engine, the
+ * ini or the log.
  *
  * The other seam available is the depth comparison repair, which is a pattern, a hook of eight
  * lines and one detour. Splitting that out buys a header, an include and a shared state pointer for
  * twenty lines of code that belong to the same Direct3D layer as everything else here, so it stays.
- * What makes the file long is the byte evidence, and that is not the part to move.
+ * The file is long because of the byte evidence; that is not the part to move.
  */
 #include "render_guard.h"
 
@@ -99,9 +99,8 @@
  * `push ebp / mov ebp,esp / sub esp,imm` opening. A detour that assumed five would cut the
  * `sub esp,0x28` in half.
  *
- * Both absolute operands are wildcarded, which is what lets one pattern serve every build: it
- * resolves at 0x00487D20 on each retail WMAIN checked and at 0x00487CC0 on the Edit Tool's
- * recompile.
+ * Both absolute operands are wildcarded so that one pattern serves every build: it resolves at
+ * 0x00487D20 on each retail WMAIN checked and at 0x00487CC0 on the Edit Tool's recompile.
  *
  * The `cmp eax,0x2004` at pattern offset 18 is the queue's own entry ceiling, and it is read out
  * of the match rather than written down here, because the pool capacity below is derived from
@@ -124,6 +123,8 @@ static const uint8_t MSK_DEFER_FACE[] = {
     0xFF,
     0xFF
 };
+_Static_assert(sizeof SIG_DEFER_FACE == sizeof MSK_DEFER_FACE,
+               "the deferred face submit pattern and its mask are different lengths");
 #define DEFER_FACE_PROLOGUE       8u
 #define OFFSET_ENTRY_CEILING      18u
 
@@ -137,8 +138,8 @@ static const uint8_t MSK_DEFER_FACE[] = {
  *   00487EF3  89 1D 80 73 86 00     mov [0x00867380],ebx      stored back, with no test at all
  *   004880C7  C7 05 80 73 86 00 ..  mov dword [0x00867380],0  the reset, in the queue drain
  *
- * The shift by five is what proves the pool's stride is 32 bytes. The add and the store are the
- * whole of the pool's bookkeeping: no comparison, no ceiling, no refusal anywhere on that path.
+ * The shift by five proves the pool's stride is 32 bytes. The add and the store are the pool's
+ * entire bookkeeping: no comparison, no ceiling, no refusal anywhere on that path.
  *
  * The site is inside the same function but far past the eight bytes a detour on its entry
  * rewrites, so the two anchors cannot interfere with each other. It resolves at 0x00487EEB on
@@ -156,21 +157,23 @@ static const uint8_t MSK_POOL_CURSOR[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_POOL_CURSOR == sizeof MSK_POOL_CURSOR,
+               "the pool cursor pattern and its mask are different lengths");
 #define OFFSET_POOL_CURSOR_OPERAND 2u
 
 /* --- why the pool's capacity is a setting and not a constant ---------------------------------- *
  * The engine never names that capacity. The only number in the image it can be derived from is the
  * queue's entry ceiling above, 0x2004, the count this same function tests on its first
- * instruction. That is a derivation, not a measurement, and it is worth saying so plainly.
+ * instruction. That is a derivation, not a measurement.
  *
  * A census was attempted and did not settle it. Scanning .text for dword literals landing between
  * the pool's base at 0x00734C10 and a generous end at 0x00790000 returns 74 hits at byte alignment,
  * 15 of them dword aligned and only 6 real instruction operands, so most are coincidences inside
  * instructions rather than addresses. From the other side, the nearest address above the pool's
  * base that anything else is known to use is 0x008439AC, which is 1.06 MB higher, so the pool is
- * not immediately followed by anything identified. The derived
- * capacity, 0x2004 vertices of 32 bytes each, which is 0x40080 bytes ending at 0x00774C90, is
- * consistent with that gap but not proven by it.
+ * not immediately followed by anything identified. The derived capacity, 0x2004 vertices of 32
+ * bytes each, which is 0x40080 bytes ending at 0x00774C90, is consistent with that gap but not
+ * proven by it.
  *
  * So the guard defaults to the derived number and says so in the log the first time it refuses,
  * instead of dropping geometry quietly. A refusal during ordinary play is evidence that the pool
@@ -196,7 +199,7 @@ static const uint8_t MSK_POOL_CURSOR[] = {
  *
  * That input is reachable: the device open path stores exactly 2 into the capability cell at
  * 0x00866FC8 when the device fails its comparison probe. Whether any real device takes that path
- * is not established, which is exactly why this substitutes instead of assuming either way. Any
+ * is not established, so this substitutes instead of assuming either way. Any
  * Direct3D 9 device advertises GREATER, so on a translation layer the mapper reaches the 0x10 arm
  * and this hook never changes an answer.
  *
@@ -210,8 +213,8 @@ static const uint8_t MSK_POOL_CURSOR[] = {
  * They diverge only at the mask and the contributed value of that second arm: `and edx,3` with
  * `or al,4` against `and edx,4` with `or al,3`. Extended through it the pattern is unique on every
  * retail build checked and on the recompile, where it lands at 0x0048AA99. The shorter anchor
- * looked completely reasonable while being wrong, which is the case the rule about expected match
- * counts exists for.
+ * looked completely reasonable while being wrong. The rule about expected match counts exists for
+ * exactly that case.
  *
  * No absolute operands, so the pattern is literal throughout. The prologue is eleven bytes, four
  * for the frame and seven for the zeroing of the accumulator. */

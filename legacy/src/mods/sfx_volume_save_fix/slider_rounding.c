@@ -50,7 +50,7 @@
  *   50              push eax
  *   6A 02 | 6A 04   push the widget id, 2 for music and 4 for sfx
  *
- * The widget id is what separates the two, so each pattern is unique on its own. The 19.0f operand
+ * The widget id separates the two, so each pattern is unique on its own. The 19.0f operand
  * and the call displacement are masked: both move on a rebuild, and neither identifies the site. */
 #define SEED_CALL_OFFSET 9u     /* where the E8 sits inside the pattern */
 
@@ -73,9 +73,9 @@ static const uint8_t MSK_SEED[] = {
     0xFF, 0xFF, 0xFF
 };
 _Static_assert(sizeof SIG_SEED_MUSIC == sizeof MSK_SEED,
-               "the music seed mask must be the same length as its pattern");
+               "the music seed pattern and its mask are different lengths");
 _Static_assert(sizeof SIG_SEED_SFX == sizeof MSK_SEED,
-               "the sfx seed mask must be the same length as its pattern");
+               "the sfx seed pattern and its mask are different lengths");
 
 enum {
     SITE_SEED_MUSIC,

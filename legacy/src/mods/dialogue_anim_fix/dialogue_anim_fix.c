@@ -8,11 +8,11 @@
  * if he were still talking. Confirmed live with a diagnostics build that watched both actors'
  * internal state frame by frame.
  *
- * The dialogue system itself is clean: the single global "who is speaking" cell (Dialog_SpeakSingle,
- * 0x00430D12) latches and clears correctly for every line, with no stale value and no skipped
- * switch. The head motion is not driven by dialogue state at all. It is a SEPARATE animation
- * channel, script opcode 0x202 "Animation" (the FSM interpreter's own case for it, inside
- * 0x00433D0B):
+ * The dialogue system itself is clean: the single global "who is speaking" cell
+ * (Dialog_SpeakSingle, 0x00430D12) latches and clears correctly for every line, with no stale
+ * value and no skipped switch. The head motion is not driven by dialogue state at all. It is a
+ * SEPARATE animation channel, script opcode 0x202 "Animation" (the FSM interpreter's own case for
+ * it, inside 0x00433D0B):
  *
  *   case 0x202:
  *     actor+0x1C0 = local_c[1];         <- ALWAYS rewritten, every time this node is visited
@@ -37,33 +37,34 @@
  *
  *   1. campaign_loadLevel (0x0043F70A, hooked below) names the level file being loaded. Arming
  *      requires "espa.b3d" (case-sensitive; every level path this engine loads is already lower
- *      case, so no fold is needed) - any other level disarms and forgets everything.
- *   2. Even while armed, an actor is only ever watched if their own body resolves (through the same
- *      body -> rdThing -> model3 name-string chain the earlier diagnostics build used) to a name
- *      starting "obinpc" or "pquigon". No other actor in Mos Espa, dialogue or not, is ever touched.
+ *      case, so no fold is needed); any other level disarms and forgets everything.
+ *   2. Even while armed, an actor is only ever watched if their own body resolves (through the
+ *      same body -> rdThing -> model3 name-string chain the earlier diagnostics build used) to a
+ *      name starting "obinpc" or "pquigon". No other actor in Mos Espa, dialogue or not, is ever
+ *      touched.
  *   3. Once armed and watching, an actor who is not the current global speaker and whose own talk-
  *      animation target is still non-idle is switched to idle through FUN_0042E3AD, the engine's
- *      own debounce and trigger - exactly what a correctly authored "Animation: idle" node would
- *      do - but only ONCE per stale streak, not every frame. actor+0x1BC (the id FUN_0042E3AD
+ *      own debounce and trigger, exactly what a correctly authored "Animation: idle" node would
+ *      do, but only ONCE per stale streak, not every frame. actor+0x1BC (the id FUN_0042E3AD
  *      believes is already playing) is then kept in sync with whatever actor+0x1C0 the superseded
  *      actor's own script node keeps rewriting every frame, WITHOUT calling the trigger again, so
  *      their own next visit to that node sees no change and does not retrigger anything itself
  *      either. The idle animation switched to on the first frame is left alone after that, free to
  *      keep playing and looping normally. Calling the real trigger every frame instead (an earlier
  *      version of this fix did) restarts both animations from their own first frame every single
- *      frame forever, in an endless tug of war with the actor's own script node, which is what "he
- *      just pauses in place entirely" was: neither pose ever gets past its opening frame. This runs
- *      late enough in the frame (the shared render_frameEnd hook every other fix in this project's
- *      DLL set already uses) to land after that frame's own FSM tick, so the idle pose it forces is
- *      the one that actually gets drawn, even though the superseded actor's own node re-asserts its
- *      stale target moments earlier in the very same frame.
+ *      frame forever, in an endless tug of war with the actor's own script node. That was the "he
+ *      just pauses in place entirely" report: neither pose ever gets past its opening frame. This
+ *      runs late enough in the frame (the shared render_frameEnd hook every other fix in this
+ *      project's DLL set already uses) to land after that frame's own FSM tick, so the idle pose it
+ *      forces is the one that actually gets drawn, even though the superseded actor's own node
+ *      re-asserts its stale target moments earlier in the very same frame.
  *   4. The moment nobody has actually been speaking for HoldSeconds (the same single speaker cell
  *      and the dialogue-active flag Dialog_SpeakSingle's own timeout handler already clears between
  *      lines, so no extra bookkeeping is needed), this DISARMS itself completely: not just released
  *      until the next line, but off for the rest of this level, until the next campaign_loadLevel
  *      re-arms it. Those two globals blink to "nobody" for a moment between every line of the SAME
- *      exchange too, not only at its end, which is why this needs an actual hold timer rather than
- *      reacting to the first gap it sees.
+ *      exchange too, not only at its end, so this needs an actual hold timer rather than reacting
+ *      to the first gap it sees.
  *
  * FUN_0042E3AD is never detoured, only called: this fix does not want to run every time the game's
  * own script evaluates that opcode, only once a frame, and only while armed. Nothing here touches
@@ -75,9 +76,9 @@
  * The first build of this fix was a GENERIC rule: any actor who had ever spoken, anywhere, held
  * their own talk-animation channel hostage for the rest of the session whenever they were not the
  * current speaker, which is true of them forever after their one line. Opcode 0x202 "Animation" is
- * not dialogue-specific - a level's own script reaches for it for ordinary gameplay animation too -
- * and that generic rule was overwriting THAT the instant it landed on actor+0x1C0, which is what
- * "some characters completely stop animating at all" was. Scoping arming to one level file and
+ * not dialogue-specific; a level's own script reaches for it for ordinary gameplay animation too,
+ * and that generic rule was overwriting THAT the instant it landed on actor+0x1C0. That was the
+ * "some characters completely stop animating at all" report. Scoping arming to one level file and
  * watching by name to two specific actors means this can only ever act on the one conversation it
  * was written for; it does nothing anywhere else in the game, on purpose.
  */
@@ -136,8 +137,8 @@ static const uint8_t MSK_DIALOG_BOX_START[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_DIALOG_BOX_START) == sizeof(MSK_DIALOG_BOX_START),
-               "the dialog-box-start pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_DIALOG_BOX_START == sizeof MSK_DIALOG_BOX_START,
+               "the dialog box start pattern and its mask are different lengths");
 #define DIALOG_BOX_START_PROLOGUE 13u
 
 /* --- opcode 0x504 "Statement" 0x00435A0A, no absolute address in this stretch, no masking
@@ -195,7 +196,8 @@ static signature_t sites[SITE_COUNT] = {
 #define ACTOR_ANIM_TARGET_OFFSET    0x1C0u   /* the id last requested for the primary anim */
 #define ACTOR_ANIM_CURRENT_OFFSET   0x1BCu   /* the id FUN_0042E3AD believes is already playing */
 #define ANIM_ID_IDLE                    0
-#define ANIM_ID_NONE                   -1    /* never a real id, forces a clean retrigger on sight */
+#define ANIM_ID_NONE                   -1    /* never a real id, forces a clean retrigger on
+                                              * sight */
 #define DIALOG_CURRENT_SPEAKER_ADDR 0x00882180u  /* Dialog_SpeakSingle's own single-slot cell */
 #define DIALOG_ACTIVE_FLAG_ADDR     0x00882184u  /* cleared between lines AND at the real end */
 #define BODY_THING_OFFSET           0x9Cu    /* body -> rdThing*, same offset dismemberment.c and
@@ -229,7 +231,8 @@ typedef struct dialogue_anim_fix_state {
     bool     forcing[MAX_TRACKED_ACTORS];   /* was this actor being corrected last frame */
 
     uint32_t hold_ms;
-    DWORD    last_dialogue_activity_tick;   /* 0 = no dialogue observed since the last arm/release */
+    DWORD    last_dialogue_activity_tick;   /* 0 = no dialogue observed since the last arm or
+                                             * release */
 
     uint32_t corrections_this_second;
     DWORD    corrections_log_tick;
@@ -260,7 +263,7 @@ static void release_all_tracked_actors(void)
     memset(fix_state.forcing, 0, sizeof(fix_state.forcing));
 }
 
-/* model3's own first bytes ARE a short name string - the same technique retail's own giant-model
+/* model3's own first bytes ARE a short name string, the same technique retail's own giant-model
  * special case in rdThing_Draw uses, and the same one the diagnostics build that first isolated
  * this bug already relied on. Returns false on any unreadable link in the chain, which reads as
  * "not a name we recognise" and leaves the actor untouched, the safe default. */
@@ -318,7 +321,7 @@ static void track_actor(int32_t actor_record)
 }
 
 /* Arm only for espa.b3d; anything else disarms and forgets whatever was being watched before,
- * which also covers leaving Mos Espa and coming back later - a fresh load re-arms from nothing. */
+ * which also covers leaving Mos Espa and coming back later; a fresh load re-arms from nothing. */
 static int32_t __cdecl hook_level_load(const char *path)
 {
     level_load_fn_t original = (level_load_fn_t)fix_state.level_load.original;
@@ -358,12 +361,12 @@ static void __cdecl hook_dialog_statement(int32_t actor_record, void *node, int3
 /* Once a rendered frame, after that frame's own FSM tick has already run: every tracked actor who
  * is not the current speaker and whose own talk-animation target is still non-idle gets forced
  * back to idle. Their own script node will rewrite it again on the NEXT frame if it is still
- * parked there, which is exactly why this has to run every frame rather than once.
+ * parked there, so this has to run every frame rather than once.
  *
- * Before any of that: if nobody has actually been speaking for HoldSeconds, this DISARMS - not
+ * Before any of that: if nobody has actually been speaking for HoldSeconds, this DISARMS: not
  * just a release until the next line, but off for the rest of this level, same as if a different
  * level had just loaded. The two globals blink to "nobody" for a moment between every line of the
- * same exchange too, not only at its end, which is why this needs an actual hold timer. */
+ * same exchange too, not only at its end, so this needs an actual hold timer. */
 static void on_frame_correct_stale_speakers(void)
 {
     uint32_t current_speaker = 0;
@@ -432,8 +435,8 @@ static void on_frame_correct_stale_speakers(void)
          * Keeping actor+0x1BC in sync with whatever their script just wrote satisfies that check
          * WITHOUT calling the trigger again, so the idle animation this fix switched to on the
          * first frame is left alone to keep playing and looping normally instead of being
-         * restarted from its own first frame every single frame, which is what "he just pauses in
-         * place entirely" was: two animations endlessly restarting each other, neither ever
+         * restarted from its own first frame every single frame. That was the "he just pauses in
+         * place entirely" report: two animations endlessly restarting each other, neither ever
          * getting past its opening pose. */
         *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_CURRENT_OFFSET) = target;
         ++corrected_now;
@@ -519,7 +522,8 @@ void dialogue_anim_fix_install(void)
         log_warning("opcode 0x504 Statement did not resolve");
     }
 
-    if (fix_state.dialog_box_start.original == NULL && fix_state.dialog_statement.original == NULL) {
+    if (fix_state.dialog_box_start.original == NULL &&
+        fix_state.dialog_statement.original == NULL) {
         log_warning("neither dialogue trigger hooked, this fix cannot do anything this session");
         return;
     }

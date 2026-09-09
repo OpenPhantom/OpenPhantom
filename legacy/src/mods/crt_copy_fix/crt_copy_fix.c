@@ -20,7 +20,7 @@
  *
  * On heap memory this never shows, because mem_alloc puts a 0x10-byte header in front. It becomes
  * fatal exactly when the source is a locked DirectDraw surface whose preceding page is not
- * mapped, which is what the user's crash report showed:
+ * mapped. The user's crash report showed exactly that:
  *
  *     ACCESS_VIOLATION at 0049222D, READ at 09BEEFFC
  *     esi=09BEEFFC  ->  row start 09BEF000, page aligned
@@ -41,9 +41,9 @@
  *     7F F5      jg  back              ; rel8 = 0x492219 - 0x492224 = -0x0B
  *     90 x14                           ; padding, exactly up to `popal` at 0x492232
  *
- * Reads [0 .. N-4], writes [0 .. N-4], N/4 iterations, descending in steps of four. THE SAME
- * ORDER as the original, which matters because the backwards direction is what makes overlapping
- * ranges safe. The only difference is the removed load at -4.
+ * Reads [0 .. N-4], writes [0 .. N-4], N/4 iterations, descending in steps of four, in the same
+ * order as the original; the backwards direction keeps overlapping ranges safe. The only
+ * difference is the removed load at -4.
  *
  * ==============================================================================================
  * Why this does not use a unique signature

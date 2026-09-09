@@ -22,10 +22,10 @@
  * at 0x0043655E with nothing consulted, and the landing path then clears the velocity while
  * leaving the position where it ended up, so the next push starts from there.
  *
- * ==================== WHAT THIS DOES, AND THE REGRESSION THAT SHAPED IT ======================
+ * ==================== What this does, and the regression that shaped it ======================
  *
  * The obvious repair is to clear the velocity of any character the engine does not collision test,
- * on the reasoning that such a character is static. THAT WAS BUILT, SHIPPED, AND WAS WRONG. Two
+ * on the reasoning that such a character is static. That was built, shipped, and was wrong. Two
  * populations are exempt from collision and only one of them is static:
  *
  *   The seated background characters. They never move, and clearing a velocity they never carry
@@ -57,16 +57,16 @@
  *   velocity reads zero while she stands still and spikes only on the steps she actually moves.
  *
  *   The swept collision test raising its ray origin by a step-over allowance, hiding a small
- *   descent. Built, shipped to a test install, and changed nothing. The instrument added to explain
- *   that failure is what found the real cause: in four thousand sweeps, six were descending, all
- *   six were the PLAYER landing, and not one carried the allowance the character move test passes.
- *   Her move never reaches that function at all.
+ *   descent. Built, shipped to a test install, and changed nothing. The instrument added to
+ *   explain that failure turned up the real cause: in four thousand sweeps, six were descending,
+ *   all six were the PLAYER landing, and not one carried the allowance the character move test
+ *   passes. Her move never reaches that function at all.
  *
  *   Clearing the velocity of every collision exempt character. Built, shipped, and it froze the
  *   ships and birds, as described above.
  *
- * The lesson worth keeping is the one that ended it: counting what a hook actually sees is worth
- * more than reasoning about what it should see.
+ * The lesson that ended it: counting what a hook actually sees beats reasoning about what it
+ * should see.
  */
 #include "ground_clip_fix.h"
 
@@ -95,8 +95,8 @@
  *   8B 0D <addr32>        mov  ecx,[g_contactOther]
  *   89 4D F4              mov  [ebp-0x0C],ecx
  *
- * A few instructions later it reads the character out of that body with `mov eax,[edx+0xA0]`,
- * which is the same owner field the diagnostics character census already reads back the other way.
+ * A few instructions later it reads the character out of that body with `mov eax,[edx+0xA0]`, the
+ * same owner field the diagnostics character census already reads back the other way.
  *
  * Both global addresses are wildcarded and the first is read out of its operand rather than
  * written down. Counted against the retail executable, 829,952 bytes, MD5
@@ -110,6 +110,8 @@ static const uint8_t MASK_CONTACT[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_CONTACT == sizeof MASK_CONTACT,
+               "the contact handler pattern and its mask are different lengths");
 #define CONTACT_PROLOGUE       6u
 #define OFFSET_CONTACT_BODY    0x07u
 
@@ -243,7 +245,7 @@ void ground_clip_fix_install(void)
 
     /* Read the global's address out of the matched operand rather than writing it down, and refuse
        it if it does not land inside the image. That is the "no patch without a check" rule applied
-       to a read, and it is what keeps this working if a build places the global elsewhere. */
+       to a read, and it keeps this working if a build places the global elsewhere. */
     {
         uint32_t address = 0;
 

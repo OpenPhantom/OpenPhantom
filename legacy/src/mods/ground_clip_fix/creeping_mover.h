@@ -6,7 +6,7 @@
  * records found sixty four of them, fifteen with walkable faces that descend, and several are
  * plainly transport, including an articulated ninety unit lift.
  *
- * ================================ The rate is what separates them ==============================
+ * =================================== The rate separates them ===================================
  *
  * Descent per tick, measured out of the level files across all eleven levels the executable names,
  * so this is the whole game rather than a sample:
@@ -39,8 +39,8 @@
 /* An entry is the id AND the mover it was seen on. A mover id is only unique inside its own level,
  * so the id alone made an entry outlive the level that created it: a later level whose mover
  * happened to carry the same number was recognised as the one already being refused, and had its
- * ground snap declined for the rest of the session. Nothing here is told when a level opens, and
- * the address is what distinguishes them without having to be. */
+ * ground snap declined for the rest of the session. Nothing here is told when a level opens; the
+ * address distinguishes them without it needing to be. */
 typedef struct creeping_mover_entry {
     uint32_t    id;
     const void *mover;
@@ -53,7 +53,7 @@ typedef struct creeping_mover_set {
 
 /* True when a fall of `fell` units in one tick is a creep rather than transport. A rise or a
  * standstill is not a creep: `fell` is positive downward, and a value of zero or less answers
- * false, which is what leaves a mover carrying somebody upward alone. */
+ * false, leaving a mover carrying somebody upward alone. */
 bool creeping_mover_is_creep(float fell);
 
 /* Remember this mover, and answer whether this is the first time it has been seen, so a caller can

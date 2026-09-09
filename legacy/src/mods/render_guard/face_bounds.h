@@ -21,8 +21,8 @@
  * the 33rd vertex of a face writes it, so this is the bound between a refused polygon and a
  * corrupted return.
  *
- * `max_vertices` is the limit in force and comes from the caller's configuration. A count equal to
- * it is accepted and one above it is refused, which is why the authored 30 refuses nothing a correct
+ * `max_vertices` is the limit in force and comes from the caller's configuration. A count equal
+ * to it is accepted and one above it is refused, so the authored 30 refuses nothing a correct
  * scene submits.
  *
  * A limit of 0 does not switch this bound off. It refuses every face that carries a vertex at all,

@@ -106,7 +106,7 @@ One polygon, in a frame that was about to corrupt memory. The refusal is the sam
 already returns when its queue is full. That is an ordinary condition in a busy scene, so every
 caller of the function already handles it. No new path is introduced.
 
-## The pool ceiling is derived, not measured, and it is labelled as one
+## The pool ceiling is derived, not measured
 
 The engine never names the pool's capacity. The only number in the image it can be derived from is
 the queue's entry ceiling, `0x2004`, the count the same function tests on its first instruction.
@@ -130,15 +130,14 @@ happens, and `PoolCapacityVertices` is how to answer it.
 * **The depth comparison repair is not expected to fire on modern hardware.** Any Direct3D 9 device
   advertises GREATER, so the mapper reaches the `0x10` arm and the hook passes the answer through
   untouched. Whether any real device takes the probe failure path has not been established, so
-  this substitutes rather than assuming either way.
+  this substitutes rather than assumes either way.
 * **Only the first refusal of each kind is logged.** The counters keep running after that but no
   later line prints them, so a session's total is not visible in `engine_fixes.log`.
 * **The immediate path is not guarded.** Its limit is 64 and it is a different array in a different
   function; nothing here touches it.
 * The pool cursor is read fresh on every call rather than tracked, because the engine zeroes it
   when it drains the queue and this hook has no reliable way to see that moment.
-* There is no uninstall, which is a property of the shared detour layer rather than of this
-  feature.
+* There is no uninstall, a property of the shared detour layer rather than of this feature.
 
 ## Fallback behaviour
 
@@ -180,7 +179,7 @@ or measuring the assets, not after building.
 ## Testing status
 
 **Offline pattern verification passes on all three builds**, with the addresses in the table above.
-That check is also what caught the first version of the comparison mapper pattern: the obvious
+That check also caught the first version of the comparison mapper pattern: the obvious
 30 byte anchor, from the prologue through the first capability test, matches a sibling function in
 the same module as well, and the two only diverge at the second arm, `and edx,3` with `or al,4`
 against `and edx,4` with `or al,3`. Extending the pattern through that arm makes it unique

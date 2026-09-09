@@ -13,8 +13,8 @@
  * decrements, so the counter can only ever get stuck too HIGH, never too low. Stuck high, the
  * heartbeat never runs again; nothing refills the music buffer; and because that buffer plays
  * LOOPING, the result is the last half second of music circling forever rather than silence.
- * Only ImInitialize writes the counter back to zero, which is why nothing short of tearing the
- * music system down and rebuilding it brings the music back.
+ * Only ImInitialize writes the counter back to zero, so nothing short of tearing the music
+ * system down and rebuilding it brings the music back.
  *
  * Two ways in, and they need different repairs.
  *
@@ -48,7 +48,7 @@
  * ImSetParam looks its handle up BEFORE it range-checks, so an out-of-range value on a handle
  * that does not exist returns -4 ("no such sound") in the original and -5 ("bad value") here.
  * Both are failures, both are ignored by every caller in this game, and no caller distinguishes
- * them. Refusing first is what makes the repair race-free.
+ * them. Refusing first makes the repair race-free.
  * ============================================================================================ */
 #include "imuse_guard.h"
 
@@ -69,7 +69,7 @@
 #define IMUSE_PARAM_BAD_VALUE ((int32_t)0xFFFFFFFB)
 
 /* The parameters that have a range check, and the bound each one applies. Taken from the body of
- * ImSetParam; the first four compare UNSIGNED and the fifth SIGNED, which is why they are not one
+ * ImSetParam; the first four compare UNSIGNED and the fifth SIGNED, so they are not one
  * expression. */
 #define IMUSE_PARAM_TRANSPOSE   0x400   /* value < 0x10   unsigned */
 #define IMUSE_PARAM_PAN         0x500   /* value < 0x80   unsigned */
@@ -369,9 +369,9 @@ bool imuse_guard_install(const imuse_sites_t *sites)
     /* ---- the race ---------------------------------------------------------------------- */
     guard.lock_made_atomic = make_lock_atomic(sites->im_lock);
     if (guard.lock_made_atomic) {
-        /* The prologue of ImUnlock is `mov eax,[abs32]`, five bytes, which is exactly what a
-         * jmp rel32 needs and a clean instruction boundary. The original is deliberately never
-         * called: this replaces it rather than wrapping it. */
+        /* The prologue of ImUnlock is `mov eax,[abs32]`, five bytes: exactly what a jmp rel32
+         * needs, and a clean instruction boundary. The original is deliberately never called:
+         * this replaces it rather than wrapping it. */
         if (detour_install(&unlock_detour, sites->im_unlock, (const void *)hook_im_unlock, 5u)) {
             log_info("the music heartbeat lock is now atomic: ImLock at %08X increments with a "
                      "lock prefix, and ImUnlock at %08X is replaced by a compare-and-exchange "

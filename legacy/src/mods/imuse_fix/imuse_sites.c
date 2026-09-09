@@ -61,9 +61,9 @@ _Static_assert(sizeof(void *) == 4, "imuse_fix reads 32-bit operands out of iMUS
 #define IMUSE_MODULE_NAME "iMUSE.DLL"
 
 /* --- ImLock and ImUnlock, as one pattern ------------------------------------------------------
- * The two sit in consecutive 16-byte slots with the compiler's 0x90 padding between them, which
- * is what makes a 32-byte pattern out of two functions that are 7 and 16 bytes long. Neither is
- * exported, so a pattern is the only way to them; both operands are wildcarded and read out. */
+ * The two sit in consecutive 16-byte slots with the compiler's 0x90 padding between them, so one
+ * 32-byte pattern covers two functions that are 7 and 16 bytes long. Neither is exported, so a
+ * pattern is the only way to them; both operands are wildcarded and read out. */
 static const uint8_t SIG_IMUSE_GATE[] = {
     0xFF, 0x05, 0x00, 0x00, 0x00, 0x00,     /* inc  [gate]            <- operand +0x02 */
     0xC3,
@@ -86,16 +86,16 @@ static const uint8_t MSK_IMUSE_GATE[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF
 };
-_Static_assert(sizeof(SIG_IMUSE_GATE) == sizeof(MSK_IMUSE_GATE),
-               "the gate pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_IMUSE_GATE == sizeof MSK_IMUSE_GATE,
+               "the heartbeat gate pattern and its mask are different lengths");
 
 #define OFFSET_GATE_INC   0x02u
 #define OFFSET_GATE_LOAD  0x11u
 #define OFFSET_GATE_STORE 0x1Bu
 
 /* --- the multimedia-timer callback, for the tick counter --------------------------------------
- * Anchored on its two guard tests and its tail. The `ret 0x14` is what proves it is the timer
- * callback rather than an ordinary routine: five stack arguments is LPTIMECALLBACK's shape. */
+ * Anchored on its two guard tests and its tail. The `ret 0x14` proves it is the timer callback
+ * rather than an ordinary routine: five stack arguments is LPTIMECALLBACK's shape. */
 static const uint8_t SIG_IMUSE_HEARTBEAT_TICK[] = {
     0x68, 0x00, 0x00, 0x00, 0x00,           /* push <critical section> */
     0xFF, 0x15, 0x00, 0x00, 0x00, 0x00,     /* call [EnterCriticalSection] */
@@ -120,8 +120,8 @@ static const uint8_t MSK_IMUSE_HEARTBEAT_TICK[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_IMUSE_HEARTBEAT_TICK) == sizeof(MSK_IMUSE_HEARTBEAT_TICK),
-               "the heartbeat pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_IMUSE_HEARTBEAT_TICK == sizeof MSK_IMUSE_HEARTBEAT_TICK,
+               "the heartbeat tick pattern and its mask are different lengths");
 
 #define OFFSET_TICK_INC 0x26u
 
@@ -185,7 +185,7 @@ static const uint8_t MSK_IMUSE_HEARTBEAT[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF
 };
-_Static_assert(sizeof(SIG_IMUSE_HEARTBEAT) == sizeof(MSK_IMUSE_HEARTBEAT),
+_Static_assert(sizeof SIG_IMUSE_HEARTBEAT == sizeof MSK_IMUSE_HEARTBEAT,
                "the heartbeat prologue pattern and its mask are different lengths");
 
 #define OFFSET_HB_REENTRY_READ  0x0Au
@@ -243,14 +243,14 @@ static const uint8_t MSK_IMUSE_SET_PARAM[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF
 };
-_Static_assert(sizeof(SIG_IMUSE_SET_PARAM) == sizeof(MSK_IMUSE_SET_PARAM),
+_Static_assert(sizeof SIG_IMUSE_SET_PARAM == sizeof MSK_IMUSE_SET_PARAM,
                "the ImSetParam pattern and its mask are different lengths");
 
 /* `push esi` + `mov esi,[abs32]` = 1 + 6, the first instruction boundary at or past the five
  * bytes a jmp rel32 needs. */
 #define SET_PARAM_PROLOGUE 7u
 
-/* ImUnlock sits in the paragraph after ImLock, which is what lets one pattern name both. */
+/* ImUnlock sits in the paragraph after ImLock, so one pattern names both. */
 #define OFFSET_IM_UNLOCK_FROM_LOCK 0x10u
 
 /* --- ImPrintf, and the one pointer it calls ---------------------------------------------------
@@ -298,8 +298,8 @@ static const uint8_t IMPRINTF_MASK[] = {
     0xFF, 0xFF,
     0xFF
 };
-_Static_assert(sizeof(IMPRINTF_BODY) == sizeof(IMPRINTF_MASK),
-               "the ImPrintf body check and its mask are different lengths");
+_Static_assert(sizeof IMPRINTF_BODY == sizeof IMPRINTF_MASK,
+               "the ImPrintf body pattern and its mask are different lengths");
 
 #define OFFSET_IMPRINTF_SLOT 0x1Eu
 

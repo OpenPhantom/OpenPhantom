@@ -69,6 +69,7 @@
 #include "limb_flight.h"
 
 #include "common/detour.h"
+#include "common/frame_hook.h"
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
@@ -258,9 +259,13 @@ static void load_config(void)
     limb_config_t *config = &limb_state.config;
     int            mode;
 
-    mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)LIMB_MODE_ON_DEATH);
+    /* OFF is the default here and in the shipped ini, and the two have to agree: a reader whose
+     * file predates this key would otherwise get the feature the file does not mention. Severing a
+     * limb on the killing blow changes how the game plays rather than repairing it, and this
+     * project's rule for that class is a switch with a default that leaves the game alone. */
+    mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)LIMB_MODE_OFF);
     if (mode < (int)LIMB_MODE_OFF || mode > (int)LIMB_MODE_ON_DEATH) {
-        mode = (int)LIMB_MODE_ON_DEATH;
+        mode = (int)LIMB_MODE_OFF;
     }
     config->mode = (limb_mode_t)mode;
 
@@ -551,7 +556,10 @@ static void __cdecl hook_hide_meshes(void *piece_thing, void *model3, uint8_t *n
     int     original_keep = keep;
     int32_t raw_mesh = -1;
 
-    if (model3 != NULL && nodes != NULL) {
+    /* Off means the engine's own index. This hook stays installed whatever the setting is, because
+     * a detour cannot be taken out again, and the engine severs seven authored pieces of its own
+     * that would otherwise keep arriving here translated while the feature reads off. */
+    if (limb_state.config.mode != LIMB_MODE_OFF && model3 != NULL && nodes != NULL) {
         uint32_t node_count = *(const uint32_t *)((const char *)model3 + MODEL3_NODE_COUNT);
 
         if (node_count <= MAX_PLAUSIBLE_NODES && keep >= 0 && (uint32_t)keep < node_count) {
@@ -643,12 +651,6 @@ static void install_death_gate(void)
     uintptr_t gate_site  = sites[SITE_DEATH_GATE].address;
     uintptr_t target;
 
-    if (limb_state.config.mode < LIMB_MODE_ON_DEATH) {
-        log_info("mode %d, only the node is corrected; the seven authored ENMY records now lose "
-                 "the RIGHT piece", (int)limb_state.config.mode);
-        return;
-    }
-
     if (probe_site == 0 ||
         !patch_read_call_target(probe_site + OFFSET_DETACH_PIECE_CALL, &target)) {
         log_warning("enemy_detachPiece did not resolve, death-gate mode OFF, node correction "
@@ -703,6 +705,36 @@ static void install_mesh_index_fix(void)
     }
 }
 
+/* The setting is re-read about once a second so the panel's row takes effect while the game runs.
+ * Reading a file every frame would be absurd for a value that changes when somebody presses a key,
+ * and the flight constants are only written when the answer actually changes. */
+#define POLL_INTERVAL_FRAMES 60u
+
+static void poll_mode(void)
+{
+    static uint32_t countdown;
+    int             mode;
+
+    if (countdown != 0u) {
+        countdown--;
+        return;
+    }
+    countdown = POLL_INTERVAL_FRAMES;
+
+    mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)limb_state.config.mode);
+    if (mode < (int)LIMB_MODE_OFF || mode > (int)LIMB_MODE_ON_DEATH ||
+        mode == (int)limb_state.config.mode) {
+        return;
+    }
+
+    limb_state.config.mode = (limb_mode_t)mode;
+
+    /* Said before the flight constants are moved, so the log reads in the order the reader thinks
+     * in: the setting changed, and here is what changed because of it. */
+    log_info("Mode is now %d, read from the settings file while the game runs", mode);
+    limb_flight_set_active(mode != (int)LIMB_MODE_OFF);
+}
+
 void dismemberment_install(void)
 {
     log_init("dismemberment", false);
@@ -716,10 +748,6 @@ void dismemberment_install(void)
     }
 
     load_config();
-    if (limb_state.config.mode == LIMB_MODE_OFF) {
-        log_info("Mode=0, dismemberment is left exactly as it shipped");
-        return;
-    }
     if (!resolve_message_mailbox()) {
         return;
     }
@@ -727,8 +755,29 @@ void dismemberment_install(void)
     signature_resolve_table(sites, SITE_COUNT);
     limb_state.installed = true;
 
+    /* Everything is installed whatever the setting says, and the setting is then obeyed at run
+     * time. That is not the shape this file had, and the reason for the change is that the
+     * developer panel can now turn this on and off while the game runs: a detour has no uninstall
+     * here, so a feature that only arms itself when its setting was on at startup can never be
+     * switched on later.
+     *
+     * Every hook and both flight constants therefore ask the mode rather than assuming it, and
+     * every one of them returns the engine's own answer when the mode is off. The engine severs
+     * seven authored pieces by itself, so off has to mean the shipped game rather than merely
+     * "we stop adding more". */
     install_probe();
     install_mesh_index_fix();
     install_death_gate();
     limb_flight_install();
+
+    limb_flight_set_active(limb_state.config.mode != LIMB_MODE_OFF);
+    log_info("Mode=%d at startup. The developer panel's Utilities page has a row that writes this "
+             "key, so a choice made in game is the one the next run starts with.",
+             (int)limb_state.config.mode);
+
+    if (!frame_hook_add(poll_mode)) {
+        log_warning("render_frameEnd could not be hooked, so a change made in the panel will not "
+                    "be picked up until the next start. Everything the setting selects still "
+                    "works; only the live switch is lost.");
+    }
 }

@@ -59,9 +59,9 @@
 ; Nothing here compares versions. An existing installation is found by AppId and the player is asked
 ; what to do with it, so no number decides whether an install is allowed.
 ;
-; Tagged i1.4.2, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
-; tagged v0.4.2 on its own line.
-#define AppVer "1.4.2"
+; Tagged i1.4.3, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
+; tagged v0.4.3 on its own line.
+#define AppVer "1.4.3"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
@@ -383,28 +383,19 @@ english.SettingsFailed=These settings could not be written into engine_fixes.ini
 english.ConvertPageCaption=Converting the cutscenes
 english.ConvertPageDescription=This happens once. After that the game plays the converted films.
 english.ConvertPreparing=Getting ready...
+english.StartSizePageCaption=Starting resolution
+english.StartSizePageDescription=What size the game should run at
+english.StartSizePageText=The game keeps one resolution in its own settings file and starts at it every time. This is where that is set.%n%nThe menus follow whatever you choose, at any size, and so does the rest of the picture. Nothing has to be prepared beforehand and nothing is downloaded.%n%nYou can change it again later from the game's own options screen, or from the OpenPhantom dev menu while you play.
+english.StartSizeOptScreen=Fit this screen, %1 (recommended)
+english.StartSizeOpt1080=1920 x 1080
+english.StartSizeOpt1440=2560 x 1440
+english.StartSizeOpt2160=3840 x 2160
+english.StartSizeOptOwn=Another size:
+english.StartSizeOptLeave=Leave the setting as it is
+english.StartSizeBadSize=Type the screen size as width x height, for example 2560x1440. It has to be between 640x480 and 3840x2160.
+english.OldMenuArtFound=This installation has a menu_hd folder, which an older version of OpenPhantom made to enlarge the menu artwork on disk.%n%nIt is no longer needed. The patch now enlarges the menus as the game loads them, at whatever size you play at, and keeping the folder holds the menus at the one resolution it was made for.%n%nDelete it and free the space?
+english.OldMenuArtFailed=The menu_hd folder could not be deleted. You can remove it by hand whenever you like; nothing depends on it.
 english.ConvertWorking=Converting the cutscenes...
-english.MenuArtWorking=Converting the menu artwork...
-english.MenuArtPageCaption=Menu artwork
-english.MenuArtPageDescription=How the menus should be made to fit your screen
-english.MenuArtPageText=The menus were drawn for a 640x480 screen in 1999 and the game cannot enlarge them by itself, so on a modern display they sit as a small island in the middle of the picture.%n%nThis makes larger copies of the pictures already inside your own game. Nothing is downloaded, your own game files are only read, and the game is then set to run at the size you choose here.%n%nChoose the size you actually play at. To play at a SMALLER size later, delete the menu_hd folder in the game folder first, then convert again at the new size with tools\Convert Menu Art.bat. Artwork made for a bigger screen than the game is running on cannot be drawn. Around 210 MB for 1080p, 840 MB for 4K.
-english.MenuArtOptScreen=Fit this screen, %1 (recommended)
-english.MenuArtOpt1080=1920 x 1080 (about 210 MB)
-english.MenuArtOpt1440=2560 x 1440 (about 375 MB)
-english.MenuArtOpt2160=3840 x 2160 (about 840 MB)
-english.MenuArtOptOwn=Another size:
-english.MenuArtOptLater=Not now. I will run tools\Convert Menu Art.bat myself later
-english.MenuArtBadSize=Type the screen size as width x height, for example 3440x1440.%n%nIt cannot be smaller than 640 x 480, which is the size the menus were drawn at, and there is nothing to gain above 3840 x 2160.
-english.MenuFitPageCaption=Menu shape
-english.MenuFitPageDescription=How the 4:3 menu artwork should fill a widescreen display
-english.MenuFitPageText=The menus were drawn in the same 4:3 shape as an old television. On a widescreen display they can either be stretched to fill it, or kept in their own shape with black down each side.%n%nStretching suits these menus, because they are mostly panels and lettering rather than photographs.
-english.MenuFitStretch=Stretch to fill the screen (recommended)
-english.MenuFitUniform=Keep the original shape, with black down the sides
-english.MenuArtDone=The menu artwork was converted.%n%n%1%n%nThe menus will fill your screen the next time you play, and the game has been set to that resolution.%n%nIf you change the game to a smaller resolution later, the menus go back to their original size until you convert again with tools\Convert Menu Art.bat in the game folder.%n%nTo undo it completely and get the disc space back, delete the menu_hd folder beside the game. Nothing else depends on it.
-english.MenuArtPartly=Not all of the menu artwork was converted.%n%n%1%n%nThe game is installed and runs, and the menus that were not converted look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
-english.MenuArtFailed=The menu artwork could not be converted. The converter stopped with code %1.%n%nThe game is installed and runs, and the menus look as they always did.%n%nYou can try again any time with tools\Convert Menu Art.bat in the game folder.
-english.MenuArtNoScript=The menu artwork converter was not found at %1, so the menus were left as they are.
-english.MenuArtNoReport=The menu artwork converter finished without saying what it did, so the artwork may or may not have been made.%n%nLook for a menu_hd folder beside the game. You can run tools\Convert Menu Art.bat there at any time.
 english.ConvertDone=The cutscenes were converted.%n%n%1%n%nNothing else is needed. The game uses them from now on.
 english.ConvertKept=The cutscenes were left as they were.%n%n%1%n%nConverted films were already in the game folder, so nothing was encoded and the size you chose was not applied to them.%n%nTo redo them at that size, delete the movies_hd folder beside the game and run tools\Convert Movies.bat.
 english.ConvertNoFilms=There were no cutscenes to convert.%n%n%1%n%nNo .BIK files were found beside the game, so nothing was encoded.%n%nThe game is installed and runs. If you expected films, check that GAMEDATA\MOVIE has them.
@@ -494,28 +485,19 @@ german.SettingsFailed=Diese Einstellungen konnten nicht in die engine_fixes.ini 
 german.ConvertPageCaption=Zwischensequenzen werden umgewandelt
 german.ConvertPageDescription=Das geschieht einmalig. Danach spielt das Spiel die umgewandelten Filme.
 german.ConvertPreparing=Vorbereitung...
+german.StartSizePageCaption=Startauflösung
+german.StartSizePageDescription=In welcher Größe das Spiel laufen soll
+german.StartSizePageText=Das Spiel merkt sich eine Auflösung in seiner eigenen Einstellungsdatei und startet jedes Mal damit. Hier wird sie festgelegt.%n%nDie Menüs richten sich nach Ihrer Wahl, in jeder Größe, und das übrige Bild ebenso. Es muss nichts vorbereitet und nichts heruntergeladen werden.%n%nSie können die Auflösung später jederzeit im Optionsbildschirm des Spiels oder im OpenPhantom-Entwicklermenü ändern.
+german.StartSizeOptScreen=An diesen Bildschirm anpassen, %1 (empfohlen)
+german.StartSizeOpt1080=1920 x 1080
+german.StartSizeOpt1440=2560 x 1440
+german.StartSizeOpt2160=3840 x 2160
+german.StartSizeOptOwn=Andere Größe:
+german.StartSizeOptLeave=Einstellung unverändert lassen
+german.StartSizeBadSize=Geben Sie die Bildschirmgröße als Breite x Höhe an, zum Beispiel 2560x1440. Sie muss zwischen 640x480 und 3840x2160 liegen.
+german.OldMenuArtFound=In dieser Installation liegt ein Ordner menu_hd, den eine ältere OpenPhantom-Version angelegt hat, um die Menügrafiken auf der Festplatte zu vergrößern.%n%nEr wird nicht mehr gebraucht. Der Patch vergrößert die Menüs jetzt beim Laden, in der Größe, in der Sie gerade spielen, und der Ordner hält die Menüs auf der einen Auflösung fest, für die er erstellt wurde.%n%nLöschen und den Speicherplatz freigeben?
+german.OldMenuArtFailed=Der Ordner menu_hd konnte nicht gelöscht werden. Sie können ihn jederzeit von Hand entfernen; nichts hängt davon ab.
 german.ConvertWorking=Zwischensequenzen werden umgewandelt...
-german.MenuArtWorking=Menügrafiken werden umgewandelt...
-german.MenuArtPageCaption=Menügrafiken
-german.MenuArtPageDescription=Wie die Menüs an Ihren Bildschirm angepasst werden
-german.MenuArtPageText=Die Menüs wurden 1999 für 640x480 gezeichnet, und das Spiel kann sie nicht selbst vergrößern. Auf einem heutigen Bildschirm sitzen sie deshalb als kleine Insel in der Mitte des Bildes.%n%nHier werden größere Kopien der Bilder erzeugt, die bereits in Ihrem eigenen Spiel liegen. Es wird nichts heruntergeladen, Ihre Spieldateien werden nur gelesen, und das Spiel wird anschließend auf die hier gewählte Größe eingestellt.%n%nWählen Sie die Größe, in der Sie tatsächlich spielen. Wenn Sie später in einer KLEINEREN Größe spielen möchten, löschen Sie zuerst den Ordner menu_hd im Spielverzeichnis und wandeln Sie dann mit tools\Convert Menu Art.bat in der neuen Größe erneut um. Grafiken für einen größeren Bildschirm als den, auf dem das Spiel läuft, können nicht dargestellt werden. Etwa 210 MB für 1080p, 840 MB für 4K.
-german.MenuArtOptScreen=An diesen Bildschirm anpassen, %1 (empfohlen)
-german.MenuArtOpt1080=1920 x 1080 (etwa 210 MB)
-german.MenuArtOpt1440=2560 x 1440 (etwa 375 MB)
-german.MenuArtOpt2160=3840 x 2160 (etwa 840 MB)
-german.MenuArtOptOwn=Andere Größe:
-german.MenuArtOptLater=Jetzt nicht. Ich starte tools\Convert Menu Art.bat später selbst
-german.MenuArtBadSize=Geben Sie die Bildschirmgröße als Breite x Höhe an, zum Beispiel 3440x1440.%n%nSie darf nicht kleiner als 640 x 480 sein, der Größe, in der die Menüs gezeichnet wurden, und über 3840 x 2160 ist nichts zu gewinnen.
-german.MenuFitPageCaption=Menüformat
-german.MenuFitPageDescription=Wie die 4:3-Menügrafiken einen Breitbildschirm ausfüllen sollen
-german.MenuFitPageText=Die Menüs wurden im 4:3-Format eines alten Fernsehers gezeichnet. Auf einem Breitbildschirm können sie entweder gestreckt werden, oder sie behalten ihr Format und bekommen schwarze Balken an den Seiten.%n%nStrecken passt zu diesen Menüs, denn sie bestehen überwiegend aus Flächen und Schrift und nicht aus Fotos.
-german.MenuFitStretch=Auf Bildschirmbreite strecken (empfohlen)
-german.MenuFitUniform=Originalformat behalten, mit schwarzen Balken an den Seiten
-german.MenuArtDone=Die Menügrafiken wurden umgewandelt.%n%n%1%n%nDie Menüs füllen beim nächsten Spielstart Ihren Bildschirm, und das Spiel wurde auf diese Auflösung eingestellt.%n%nWenn Sie das Spiel später auf eine kleinere Auflösung umstellen, kehren die Menüs zu ihrer ursprünglichen Größe zurück, bis Sie mit tools\Convert Menu Art.bat im Spielverzeichnis erneut umwandeln.%n%nUm alles rückgängig zu machen und den Speicherplatz zurückzubekommen, löschen Sie den Ordner menu_hd neben dem Spiel. Nichts anderes hängt davon ab.
-german.MenuArtPartly=Es wurden nicht alle Menügrafiken umgewandelt.%n%n%1%n%nDas Spiel ist installiert und läuft. Nicht umgewandelte Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
-german.MenuArtFailed=Die Menügrafiken konnten nicht umgewandelt werden. Der Umwandler endete mit Code %1.%n%nDas Spiel ist installiert und läuft, die Menüs sehen aus wie bisher.%n%nSie können es jederzeit erneut versuchen mit tools\Convert Menu Art.bat im Spielverzeichnis.
-german.MenuArtNoScript=Der Umwandler für die Menügrafiken wurde unter %1 nicht gefunden. Die Menüs wurden unverändert gelassen.
-german.MenuArtNoReport=Der Umwandler für die Menügrafiken wurde beendet, ohne mitzuteilen, was er getan hat. Die Grafiken wurden möglicherweise erzeugt, möglicherweise auch nicht.%n%nSehen Sie nach, ob neben dem Spiel ein Ordner menu_hd liegt. Sie können tools\Convert Menu Art.bat dort jederzeit ausführen.
 german.ConvertDone=Die Zwischensequenzen wurden umgewandelt.%n%n%1%n%nMehr ist nicht nötig. Das Spiel verwendet sie ab sofort.
 german.ConvertKept=Die Zwischensequenzen wurden unverändert gelassen.%n%n%1%n%nIm Spielverzeichnis lagen bereits umgewandelte Filme, es wurde also nichts kodiert und die gewählte Größe wurde nicht auf sie angewendet.%n%nUm sie in dieser Größe neu zu erzeugen, löschen Sie den Ordner movies_hd neben dem Spiel und führen Sie tools\Convert Movies.bat aus.
 german.ConvertNoFilms=Es gab keine Zwischensequenzen zum Umwandeln.%n%n%1%n%nNeben dem Spiel wurden keine .BIK-Dateien gefunden, es wurde also nichts kodiert.%n%nDas Spiel ist installiert und läuft. Falls Sie Filme erwartet haben, prüfen Sie, ob GAMEDATA\MOVIE sie enthält.
@@ -568,14 +550,10 @@ var
   MovieTotal, MovieDone: Integer;
   MovieResult: String;
 
-  { The same three, for the menu artwork. Its converter announces the count on a TOTAL line before
-    it starts, because unlike the movies there is nothing on disc to count beforehand: the pictures
-    are inside big.lab and LOCALIZE.LAB and only the converter reads those. }
-  MenuArtPage: TInputOptionWizardPage;
-  MenuArtEdit: TNewEdit;
-  MenuFitPage: TInputOptionWizardPage;
-  MenuArtTotal, MenuArtDone, MenuArtSkipped: Integer;
-  MenuArtResult: String;
+  { The resolution the game is set to start at. It writes one pair of numbers into the game's own
+    settings file and converts nothing: the patch sizes the menus from that resolution as it runs. }
+  StartSizePage: TInputOptionWizardPage;
+  StartSizeEdit: TNewEdit;
 
   { Both are written into engine_fixes.ini after it has been installed, because the row that installs
     it replaces the file. }
@@ -758,9 +736,9 @@ end;
 
 { Typing in the box picks the row it sits on, so nobody fills it in and then wonders why their size
   was ignored. Same reasoning as FpsEditChanged, and the row index is the one below the presets. }
-procedure MenuArtEditChanged(Sender: TObject);
+procedure StartSizeEditChanged(Sender: TObject);
 begin
-  MenuArtPage.SelectedValueIndex := 4;
+  StartSizePage.SelectedValueIndex := 4;
 end;
 
 
@@ -854,54 +832,39 @@ begin
   { Assigned after the text above, so filling in the default does not tick the option. }
   FpsEdit.OnChange := @FpsEditChanged;
 
-  { The player's own screen is preselected, because that is the size the artwork has to be for the
-    menus to fill it and there is no reason to make somebody read their own resolution off a label.
-    The fixed sizes below it are for converting on one machine and playing on another. }
-  MenuArtPage := CreateInputOptionPage(
+  { The player's own screen is preselected, because it is what almost everybody wants and there is
+    no reason to make somebody read their own resolution off a label. The fixed sizes below it are
+    for setting up on one machine and playing on another. }
+  StartSizePage := CreateInputOptionPage(
     FpsPage.ID,
-    ExpandConstant('{cm:MenuArtPageCaption}'),
-    ExpandConstant('{cm:MenuArtPageDescription}'),
-    ExpandConstant('{cm:MenuArtPageText}'),
+    ExpandConstant('{cm:StartSizePageCaption}'),
+    ExpandConstant('{cm:StartSizePageDescription}'),
+    ExpandConstant('{cm:StartSizePageText}'),
     True,
     False);
-  MenuArtPage.Add(FmtMessage(ExpandConstant('{cm:MenuArtOptScreen}'), [ScreenSizeText]));
-  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt1080}'));
-  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt1440}'));
-  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOpt2160}'));
-  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOptOwn}'));
-  MenuArtPage.Add(ExpandConstant('{cm:MenuArtOptLater}'));
-  MenuArtPage.SelectedValueIndex := 0;
+  StartSizePage.Add(FmtMessage(ExpandConstant('{cm:StartSizeOptScreen}'), [ScreenSizeText]));
+  StartSizePage.Add(ExpandConstant('{cm:StartSizeOpt1080}'));
+  StartSizePage.Add(ExpandConstant('{cm:StartSizeOpt1440}'));
+  StartSizePage.Add(ExpandConstant('{cm:StartSizeOpt2160}'));
+  StartSizePage.Add(ExpandConstant('{cm:StartSizeOptOwn}'));
+  StartSizePage.Add(ExpandConstant('{cm:StartSizeOptLeave}'));
+  StartSizePage.SelectedValueIndex := 0;
 
   { An ultrawide is not on the list above and never will be: there are too many shapes to enumerate,
-    and somebody converting for a screen they are not sitting at cannot use the first row either. The
-    row height is set rather than measured, because the box below sits ON one of these rows and a
-    guessed height would put it between two of them. }
-  MenuArtPage.CheckListBox.MinItemHeight := ScaleY(18);
-  MenuArtPage.CheckListBox.Height := ScaleY(6 * 18);
+    and the box below takes any of them. The row height is set rather than measured, because that
+    box sits ON one of these rows and a guessed height would put it between two of them. }
+  StartSizePage.CheckListBox.MinItemHeight := ScaleY(18);
+  StartSizePage.CheckListBox.Height := ScaleY(6 * 18);
 
-  MenuArtEdit := TNewEdit.Create(MenuArtPage);
-  MenuArtEdit.Parent := MenuArtPage.Surface;
-  MenuArtEdit.Left := MenuArtPage.CheckListBox.Left + ScaleX(110);
-  MenuArtEdit.Top := MenuArtPage.CheckListBox.Top + ScaleY(18) * 4 - ScaleY(2);
-  MenuArtEdit.Width := ScaleX(90);
-  MenuArtEdit.Text := IntToStr(ScreenWidth) + 'x' + IntToStr(ScreenHeight);
+  StartSizeEdit := TNewEdit.Create(StartSizePage);
+  StartSizeEdit.Parent := StartSizePage.Surface;
+  StartSizeEdit.Left := StartSizePage.CheckListBox.Left + ScaleX(110);
+  StartSizeEdit.Top := StartSizePage.CheckListBox.Top + ScaleY(18) * 4 - ScaleY(2);
+  StartSizeEdit.Width := ScaleX(90);
+  StartSizeEdit.Text := IntToStr(ScreenWidth) + 'x' + IntToStr(ScreenHeight);
 
   { Assigned after the text above, so filling in the default does not tick the option. }
-  MenuArtEdit.OnChange := @MenuArtEditChanged;
-
-  { Stretch first and preselected. These menus are panels and lettering, which take it without
-    looking wrong, and filling the screen is the entire point of converting anything. Keeping the
-    shape is offered rather than hidden, because it is a taste and not a mistake. }
-  MenuFitPage := CreateInputOptionPage(
-    MenuArtPage.ID,
-    ExpandConstant('{cm:MenuFitPageCaption}'),
-    ExpandConstant('{cm:MenuFitPageDescription}'),
-    ExpandConstant('{cm:MenuFitPageText}'),
-    True,
-    False);
-  MenuFitPage.Add(ExpandConstant('{cm:MenuFitStretch}'));
-  MenuFitPage.Add(ExpandConstant('{cm:MenuFitUniform}'));
-  MenuFitPage.SelectedValueIndex := 0;
+  StartSizeEdit.OnChange := @StartSizeEditChanged;
 
   ConvertPage := CreateOutputProgressPage(
     ExpandConstant('{cm:ConvertPageCaption}'),
@@ -940,13 +903,8 @@ begin
     Result := not WizardIsComponentSelected('patch\fmv_player')
   else if PageID = FpsPage.ID then
     Result := not WizardIsComponentSelected('patch\framerate_fix')
-  else if PageID = MenuArtPage.ID then
-    Result := not WizardIsComponentSelected('patch\enhanced_resolution')
-  else if PageID = MenuFitPage.ID then
-    { Not asked when nothing is being converted now: unlike the cutscene scaling, which is read at
-      playback, this one is baked into the pictures and means nothing without them. }
-    Result := (not WizardIsComponentSelected('patch\enhanced_resolution')) or
-              (MenuArtPage.SelectedValueIndex = 5);
+  else if PageID = StartSizePage.ID then
+    Result := not WizardIsComponentSelected('patch\enhanced_resolution');
 end;
 
 function WantsCleanReinstall: Boolean;
@@ -1211,18 +1169,18 @@ end;
   as (run and 0xfff) while advancing the output by the whole run, so a canvas wider than 4095 pixels
   corrupts the stream. 4095/640 is 6.398, which 3840 is comfortably inside and 4096 is not. }
 
-function MenuArtPageAccepted: Boolean;
+function StartSizePageAccepted: Boolean;
 var
   W, H: Integer;
 begin
   Result := True;
-  if MenuArtPage.SelectedValueIndex <> 4 then
+  if StartSizePage.SelectedValueIndex <> 4 then
     Exit;
 
-  ParseSize(MenuArtEdit.Text, W, H);
+  ParseSize(StartSizeEdit.Text, W, H);
   Result := (W >= 640) and (H >= 480) and (W <= 3840) and (H <= 2160);
   if not Result then
-    MsgBox(ExpandConstant('{cm:MenuArtBadSize}'), mbError, MB_OK);
+    MsgBox(ExpandConstant('{cm:StartSizeBadSize}'), mbError, MB_OK);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -1235,8 +1193,8 @@ begin
     Result := ReinstallPageAccepted
   else if CurPageID = FpsPage.ID then
     Result := FpsPageAccepted
-  else if CurPageID = MenuArtPage.ID then
-    Result := MenuArtPageAccepted
+  else if CurPageID = StartSizePage.ID then
+    Result := StartSizePageAccepted
   else if CurPageID = wpReady then
     Result := ReadyPageAccepted;
 end;
@@ -1519,139 +1477,32 @@ begin
     Result := StrToIntDef(Digits, -1);
 end;
 
-{ The size chosen on the menu artwork page, or 0x0 for "not now". Reported as a pair because the
-  converter takes both: a menu is not upscaled by a single factor, since a 4:3 canvas on a 16:9
-  screen is stretched by different amounts across and down. }
-procedure ChosenMenuSize(var W, H: Integer);
+{ The size chosen on the starting resolution page, or 0x0 for "leave the setting alone". Reported
+  as a pair because a screen is two numbers and this makes no assumption about their ratio: an
+  ultrawide and a 4:3 panel both arrive here as themselves. }
+procedure ChosenStartSize(var W, H: Integer);
 begin
   W := 0;
   H := 0;
   if not WizardIsComponentSelected('patch\enhanced_resolution') then
     Exit;
 
-  case MenuArtPage.SelectedValueIndex of
+  case StartSizePage.SelectedValueIndex of
     0: begin W := ScreenWidth; H := ScreenHeight; end;
     1: begin W := 1920; H := 1080; end;
     2: begin W := 2560; H := 1440; end;
     3: begin W := 3840; H := 2160; end;
-    4: ParseSize(MenuArtEdit.Text, W, H);
+    4: ParseSize(StartSizeEdit.Text, W, H);
   end;
 
-  { Below the canvas the menus are authored at there is nothing to upscale to, and the converter
-    refuses rather than shrinking anything. Asking it to fail is worse than not asking. }
+  { 640x480 is the smallest mode the engine builds a list for, so anything under it is not a
+    resolution the game can open and is left to the game's own default rather than written. }
   if (W < 640) or (H < 480) then begin
     W := 0;
     H := 0;
   end;
 end;
 
-{ Called once per line the menu converter writes. Its --quiet mode speaks the same protocol the
-  movie half does, with one addition: a TOTAL line first, because the pictures live inside the
-  archives and there is nothing on disc to count before it starts. }
-procedure MenuArtOnLog(const S: String; const Error, FirstLine: Boolean);
-var
-  Line: String;
-begin
-  if Error then
-    Exit;
-
-  Line := Trim(S);
-  if Line = '' then
-    Exit;
-
-  if Copy(Line, 1, 6) = 'TOTAL ' then begin
-    MenuArtTotal := StrToIntDef(Copy(Line, 7, Length(Line)), 0);
-    Exit;
-  end;
-
-  if Copy(Line, 1, 5) = 'DONE ' then begin
-    MenuArtResult := Copy(Line, 6, Length(Line));
-    Exit;
-  end;
-
-  if Copy(Line, 1, 3) = 'OK ' then begin
-    MenuArtDone := MenuArtDone + 1;
-  end else if Copy(Line, 1, 5) = 'SKIP ' then begin
-    MenuArtDone := MenuArtDone + 1;
-    MenuArtSkipped := MenuArtSkipped + 1;
-  end else
-    Exit;
-
-  if MenuArtTotal > 0 then
-    ConvertPage.SetProgress(MenuArtDone, MenuArtTotal);
-  ConvertPage.SetText(ExpandConstant('{cm:MenuArtWorking}'), Line);
-end;
-
-{ Makes the upscaled menu artwork, hidden, with a progress page in front of it.
-
-  The converter is the copy in the patch's unpacked folder rather than the one just installed, for
-  the same reason the movie half uses that copy: [Dirs] grants users-modify on the game folder,
-  because the game keeps its settings and saves inside it, and this runs with Setup's rights.
-
-  It is a native executable, and that is the whole point. This step used to be PowerShell driving
-  GDI+, which meant it did nothing at all under Proton or Lutris: Wine ships no PowerShell. The
-  executable is a plain Win32 console program, so Wine runs it exactly as Windows does and a Steam
-  Deck installation now converts its artwork during Setup like any other. The .ps1, .py and .sh
-  scripts still install beside it for anyone who wants to convert again at a different size. }
-procedure ConvertMenuArt;
-var
-  W, H, ResultCode: Integer;
-  Script, Params, Fit: String;
-begin
-  ChosenMenuSize(W, H);
-  if (W = 0) or (H = 0) then
-    Exit;
-
-  Script := ExpandConstant('{#PatchTmp}\tools\openphantom_convert.exe');
-  if not FileExists(Script) then begin
-    MsgBox(UserMessage('MenuArtNoScript', Script), mbError, MB_OK);
-    Exit;
-  end;
-
-  MenuArtTotal := 0;
-  MenuArtDone := 0;
-  MenuArtSkipped := 0;
-  MenuArtResult := '';
-
-  if MenuFitPage.SelectedValueIndex = 1 then
-    Fit := ' --uniform'
-  else
-    Fit := '';
-
-  { No --output: the converter's own default is menu_hd, which is also the DLL's own default
-    MenuArtDirectory, and naming it in two places is how those two drift apart. }
-  Params := 'menu --quiet --game "' + ExpandConstant('{app}') + '"' +
-            ' --width ' + IntToStr(W) + ' --height ' + IntToStr(H) + Fit;
-
-  ConvertPage.SetText(ExpandConstant('{cm:ConvertPreparing}'), '');
-  ConvertPage.SetProgress(0, 100);
-  ConvertPage.Show;
-  try
-    if not ExecAndLogOutput(Script, Params, ExpandConstant('{app}'), SW_HIDE,
-                            ewWaitUntilTerminated, ResultCode, @MenuArtOnLog) then
-      ResultCode := -1;
-  finally
-    ConvertPage.Hide;
-  end;
-
-  { The DONE line is what decides the message, for the same reason it does for the movies: "it
-    stopped" and "it converted seventy-two of them" are different things to be told. }
-  if (ResultCode = 0) and (MenuArtResult <> '') then begin
-    if MenuArtSkipped > 0 then
-      MsgBox(UserMessage('MenuArtPartly', MenuArtResult), mbInformation, MB_OK)
-    else
-      MsgBox(UserMessage('MenuArtDone', MenuArtResult), mbInformation, MB_OK)
-  end
-  else if MenuArtResult <> '' then
-    MsgBox(UserMessage('MenuArtPartly', MenuArtResult), mbError, MB_OK)
-  else if ResultCode = 0 then
-    { It succeeded and said nothing this understood, which is not a failure and must not be reported
-      as one. It happens when the installed converter is older than the installer driving it, which
-      is exactly what a hand-copied second copy of a script invites. }
-    MsgBox(UserMessage('MenuArtNoReport', ''), mbInformation, MB_OK)
-  else
-    MsgBox(UserMessage('MenuArtFailed', IntToStr(ResultCode)), mbError, MB_OK);
-end;
 
 procedure ConvertMovies;
 var
@@ -1974,9 +1825,14 @@ begin
     end;
   end;
 
-  if not SetIniString('options', 'screen_width', '1920', Ini) then
+  { The game's own default, and it is meant to be overwritten. ApplyStartSize runs after this and
+    writes whatever the player chose on the starting resolution page. This used to be 1920x1080,
+    which was a guess made when the menus could only be enlarged by converting artwork for one
+    fixed size beforehand; the patch now sizes them from whatever resolution it finds, so there is
+    nothing left for a guess here to serve. }
+  if not SetIniString('options', 'screen_width', '640', Ini) then
     Failed := Failed + '[options] screen_width' + #13#10;
-  if not SetIniString('options', 'screen_height', '1080', Ini) then
+  if not SetIniString('options', 'screen_height', '480', Ini) then
     Failed := Failed + '[options] screen_height' + #13#10;
 
   { A count rather than a decoration. Every write above reports its own failure, but a table that
@@ -2025,6 +1881,61 @@ begin
         + 'to none on the controls screen to fix it by hand.');
 end;
 
+{ The resolution the game starts at, which is one pair of numbers in its own settings file.
+  Nothing is converted and nothing is prepared: the patch reads that resolution and sizes the menus
+  from it as the game runs, and follows it again if the player changes it later.
+
+  Silent when the player asked for the setting to be left alone, and silent when the patch is not
+  being installed, because then there is nothing here that would read the answer. }
+procedure ApplyStartSize;
+var
+  W, H: Integer;
+  Ini, Failed: String;
+begin
+  ChosenStartSize(W, H);
+  if (W = 0) or (H = 0) then
+    Exit;
+
+  Ini := ExpandConstant('{app}\obi.ini');
+  Failed := '';
+  if not SetIniString('options', 'screen_width', IntToStr(W), Ini) then
+    Failed := Failed + '[options] screen_width' + #13#10;
+  if not SetIniString('options', 'screen_height', IntToStr(H), Ini) then
+    Failed := Failed + '[options] screen_height' + #13#10;
+
+  if Failed <> '' then
+    MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
+end;
+
+{ Offers to remove a menu_hd folder an older version of this installer made.
+
+  It is dead weight now and worse than dead. The patch enlarges menu artwork as the game loads it,
+  at whatever resolution is in force, so a folder of pictures made for one fixed size holds the
+  menus at that size and stops them following a resolution change at all. Between 210 MB and 840 MB
+  of it, depending on what it was made for.
+
+  The MANIFEST is the test, not the folder, and that is the whole safety of this step. Artwork
+  somebody drew themselves is still supported and still mounts from a folder of that name, and a
+  folder like that must never be offered up for deletion. Only this project's own converter writes
+  openphantom_menu_art.txt, and that file's own first lines already say to delete the folder to undo
+  it, so the offer is the one the converter itself made.
+
+  Asked rather than done. It is the player's disk and their copy of the game. }
+procedure RetireConvertedMenuArt;
+var
+  Folder: String;
+begin
+  Folder := ExpandConstant('{app}\menu_hd');
+  if not FileExists(Folder + '\openphantom_menu_art.txt') then
+    Exit;
+
+  if MsgBox(ExpandConstant('{cm:OldMenuArtFound}'), mbConfirmation, MB_YESNO) <> IDYES then
+    Exit;
+
+  if not DelTree(Folder, True, True, True) then
+    MsgBox(ExpandConstant('{cm:OldMenuArtFailed}'), mbError, MB_OK);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
@@ -2036,10 +1947,15 @@ begin
   ApplyChosenSettings;
   ApplySoundProvider;
   ApplyGameDefaults;
+
+  { After ApplyGameDefaults, which writes the game's own 640x480 into a settings file it may have
+    just created. This is the one that puts the player's answer there. }
+  ApplyStartSize;
+
   ApplyWinePovFix;
   InstallCompleteSaves;
   ConvertMovies;
-  ConvertMenuArt;
+  RetireConvertedMenuArt;
 end;
 
 { Clears one contested name by moving what is there rather than overwriting it.

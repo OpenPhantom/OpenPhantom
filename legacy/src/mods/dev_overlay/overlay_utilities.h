@@ -33,7 +33,7 @@
  * and is never clicked; the other five are slider tracks, under the draw distance, the fog
  * thickness, the field of view, the sensitivity and the subtitle size. Each track sits on its
  * own line so the handle never covers the number it sets. */
-#define OVERLAY_UTILITIES_ROW_COUNT 22u
+#define OVERLAY_UTILITIES_ROW_COUNT 23u
 
 /* Fills everything about one row except `group` and `id`, which belong to the caller's numbering.
  *
@@ -59,8 +59,10 @@ bool overlay_utilities_toggle(uint32_t slot);
 bool overlay_utilities_commit(uint32_t slot, const char *text);
 
 /* Drags the slot's slider to `fraction`, 0 to 1. False when the slot has no slider or the write
- * failed. Only the field of view has one: it is the only setting here whose whole range is worth
- * sweeping through to find a number, rather than typed once and left. */
+ * failed. Five slots have one: the draw distance, the fog thickness, the field of view, the mouse
+ * speed and the subtitle size. They are the settings whose whole range is worth sweeping through
+ * to find a number, rather than typed once and left. Every one of them writes on a hundredth
+ * grid, for the reason recorded at the first of them in overlay_utilities.c. */
 bool overlay_utilities_slider_set(uint32_t slot, float fraction);
 
 /* Binds a key. False when the slot is not the key row or the key was refused. */

@@ -68,6 +68,21 @@ int32_t scaled_coordinate(int32_t value, float ratio)
     return (scaled >= 0.0f) ? (int32_t)(scaled + 0.5f) : -(int32_t)(-scaled + 0.5f);
 }
 
+/* The inverse, for a menu whose shadow could not be allocated and so has no authored rectangle
+ * kept for it. Rounding makes it approximate, which is why it is the fallback rather than the
+ * method: a screen put back this way can sit a pixel off, and a screen refitted this way twice can
+ * sit two. Every menu that has a shadow is scaled from the authored numbers instead. */
+int32_t unscaled_coordinate(int32_t value, float ratio)
+{
+    float restored;
+
+    if (!(ratio > 0.0f)) {
+        return value;
+    }
+    restored = (float)value / ratio;
+    return (restored >= 0.0f) ? (int32_t)(restored + 0.5f) : -(int32_t)(-restored + 0.5f);
+}
+
 /* See the long note by SIG_QUERY_FONT in menu_scale_sites.c. The glyphs are drawn ratio_y taller
  * than this used to say they were, so this says so. */
 uint32_t __cdecl hook_query_font(void)
@@ -173,9 +188,11 @@ static void scale_widgets(void *menu)
         return;
     }
 
-    /* The shadow is optional. Without it the menu is still scaled, and only the screens that
-     * rewrite their own rectangles go uncorrected, which is where this file stood before. */
-    shadow = (int32_t *)malloc((size_t)count * 2u * sizeof(int32_t));
+    /* The shadow is optional. Without it the menu is still scaled, and what is lost is the two
+     * things it is kept for: the screens that rewrite their own rectangles go uncorrected, which is
+     * where this file stood before, and a refit has to divide its way back to the authored
+     * rectangle instead of reading it. */
+    shadow = (int32_t *)malloc((size_t)count * SHADOW_STRIDE * sizeof(int32_t));
     if (shadow == NULL && !scale_state.warned_shadow) {
         scale_state.warned_shadow = true;
         log_warning("a menu could not be given its %u entry rectangle shadow, so the pause and "
@@ -186,14 +203,26 @@ static void scale_widgets(void *menu)
     for (index = 0; index < count; ++index) {
         int32_t *rect = (int32_t *)(widgets + (size_t)index * WIDGET_STRIDE + WIDGET_RECT_X);
 
+        /* The authored rectangle is taken BEFORE anything is scaled, which is the only moment it
+         * is on offer: swmenu_open has not run yet, so nothing has re-derived a list box's height
+         * and no picture has written its own size in. */
+        if (shadow != NULL) {
+            int32_t *kept = &shadow[(size_t)index * SHADOW_STRIDE];
+
+            kept[SHADOW_AUTHORED_X] = rect[0];
+            kept[SHADOW_AUTHORED_Y] = rect[1];
+            kept[SHADOW_AUTHORED_W] = rect[2];
+            kept[SHADOW_AUTHORED_H] = rect[3];
+        }
+
         rect[0] = scaled_coordinate(rect[0], scale_state.ratio_x);   /* x      */
         rect[1] = scaled_coordinate(rect[1], scale_state.ratio_y);   /* y      */
         rect[2] = scaled_coordinate(rect[2], scale_state.ratio_x);   /* width  */
         rect[3] = scaled_coordinate(rect[3], scale_state.ratio_y);   /* height */
 
         if (shadow != NULL) {
-            shadow[index * 2u]      = rect[0];
-            shadow[index * 2u + 1u] = rect[1];
+            shadow[(size_t)index * SHADOW_STRIDE + SHADOW_WRITTEN_X] = rect[0];
+            shadow[(size_t)index * SHADOW_STRIDE + SHADOW_WRITTEN_Y] = rect[1];
         }
     }
 
@@ -246,9 +275,12 @@ void __cdecl hook_draw_menu(void *menu)
      * screen is open the whole time: the mode changes, the engine recomputes the origin from the
      * cells this file owns, and the very next frame blits a canvas wider than the new back buffer.
      * Nothing reopens, so a check on open never runs, and the first thing that happens is the write
-     * past the end of the buffer. Two float reads and two compares, before anything is drawn. */
+     * past the end of the buffer. Two float reads and two compares, before anything is drawn.
+     *
+     * The canvas is refitted to the new mode here rather than merely checked against it, which is
+     * the difference between the menus following a resolution change and giving up on one. */
     if (!scale_state.stood_down) {
-        (void)canvas_still_fits();
+        menu_scale_follow_display();
     }
     tracked = (menu != NULL) ? find_scaled_menu(menu) : NULL;
     widgets = (menu != NULL) ? *(char *const *)((char *)menu + MENU_WIDGET_ARRAY) : NULL;
@@ -258,14 +290,20 @@ void __cdecl hook_draw_menu(void *menu)
 
         for (index = 0; index < tracked->widgets; ++index) {
             int32_t *rect = (int32_t *)(widgets + index * WIDGET_STRIDE + WIDGET_RECT_X);
+            int32_t *kept = &tracked->shadow[index * SHADOW_STRIDE];
 
-            if (rect[0] != tracked->shadow[index * 2u]) {
+            /* A value that is not the one this wrote is one the game has just authored, so the
+             * authored copy moves on to it as well. Without that, a refit would put the sliding
+             * panel back to wherever it happened to be when the screen was opened. */
+            if (rect[0] != kept[SHADOW_WRITTEN_X]) {
+                kept[SHADOW_AUTHORED_X] = rect[0];
                 rect[0] = scaled_coordinate(rect[0], scale_state.ratio_x);
-                tracked->shadow[index * 2u] = rect[0];
+                kept[SHADOW_WRITTEN_X]  = rect[0];
             }
-            if (rect[1] != tracked->shadow[index * 2u + 1u]) {
+            if (rect[1] != kept[SHADOW_WRITTEN_Y]) {
+                kept[SHADOW_AUTHORED_Y] = rect[1];
                 rect[1] = scaled_coordinate(rect[1], scale_state.ratio_y);
-                tracked->shadow[index * 2u + 1u] = rect[1];
+                kept[SHADOW_WRITTEN_Y]  = rect[1];
             }
         }
     }
@@ -303,7 +341,7 @@ int32_t __cdecl hook_menu_open(void *menu)
      * starts drawing from it, and because its own reset pass reads the box heights this writes.
      * Scaling afterwards would leave one frame at the authored size. */
     if (!scale_state.stood_down) {
-        (void)canvas_still_fits();
+        menu_scale_follow_display();
     }
 
     if (menu != NULL && !scale_state.stood_down &&

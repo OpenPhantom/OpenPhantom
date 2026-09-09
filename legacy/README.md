@@ -160,7 +160,7 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 Its only job is to load the fixes at the right moment and get out of the way.
 
 **`src/mods` holds the fixes**, one directory per DLL. They never call each other. A fix can be
-deleted from `mods\` and nothing else notices, which is also how you bisect a problem.
+deleted from `mods\` and nothing else notices. That is also how you bisect a problem.
 
 ### Inside a fix
 
@@ -245,7 +245,7 @@ rendered frame. A conventional trampoline hook placed on an already hooked targe
 hook's jump into its own trampoline and builds an infinite loop that reports success.
 `src/common/detour.c` instead detects the existing branch, keeps its destination as the caller's
 `original`, and points the branch at itself. The chain unwinds correctly whatever order the DLLs
-loaded in, which is why load order encodes no dependencies. `unittests/detour.c` builds a chain of
+loaded in, so load order encodes no dependencies. `unittests/detour.c` builds a chain of
 three hooks and calls through it.
 
 **Validate, then write.** Every patch reads back what it is about to overwrite and refuses when it

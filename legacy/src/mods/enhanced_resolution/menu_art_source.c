@@ -139,7 +139,8 @@ static void mount_once(void)
          * wrong. Said at info, once, because it is the first thing to check when somebody reports
          * that they converted the art and nothing changed. */
         log_info("no menu artwork mounted from '%s'. That is the normal state without converted "
-                 "artwork; run tools\\Convert Menu Art.bat to make some", art_mount_path);
+                 "artwork, and is the normal state: the original pictures are enlarged to the "
+                 "canvas as they load instead", art_mount_path);
         return;
     }
 

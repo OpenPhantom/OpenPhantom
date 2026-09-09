@@ -54,6 +54,11 @@
 #include "subtitle_scale.h"
 #include "pointer_cage.h"
 #include "window_fit.h"
+#include "window_mode.h"
+#include "present_clip.h"
+#include "pointer_release.h"
+#include "window_poll.h"
+#include "windowed_device.h"
 
 #include "common/detour.h"
 #include "common/host_image.h"
@@ -186,6 +191,12 @@ typedef struct resolution_config {
     bool log_mode_table;
     bool menu_keeps_resolution;
     bool fit_window_to_mode;
+    int32_t window_mode;              /* 0 authentic, 1 borderless, 2 windowed */
+    int32_t windowed_width;           /* 0 = the display mode */
+    int32_t windowed_height;
+    bool windowed_present;
+    bool windowed_fill;
+    int32_t pointer_release_key;
     bool keep_cursor_in_window;
     bool clip_pointer_to_window;
     bool reacquire_input_on_focus;
@@ -248,6 +259,12 @@ static void load_config(void)
      * is that the engine's window stops sitting at screen 0,0, which is the assumption its own
      * pointer handling rests on, and repairing that is what the two features below are for. */
     config->fit_window_to_mode    = ini_read_bool(RESOLUTION_SECTION, "FitWindowToMode", false);
+    config->window_mode           = ini_read_int (RESOLUTION_SECTION, "WindowMode", 0);
+    config->windowed_width        = ini_read_int (RESOLUTION_SECTION, "WindowedWidth", 0);
+    config->windowed_height       = ini_read_int (RESOLUTION_SECTION, "WindowedHeight", 0);
+    config->windowed_present      = ini_read_bool(RESOLUTION_SECTION, "WindowedPresent", false);
+    config->windowed_fill         = ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true);
+    config->pointer_release_key   = ini_read_int (RESOLUTION_SECTION, "PointerReleaseKey", 0x91);
 
     /* Default ON, and the reason it is safe to default a behaviour change on: on a window that
      * sits at screen 0,0, which is where the engine puts it and where it stays without the line
@@ -674,6 +691,21 @@ static void install_forced_startup_resolution(void)
     }
 }
 
+/* The window mode is the player's choice of shape and lives in window_mode.c. It is installed
+ * AFTER the fit, because it asks window_fit_current_mode_size() for the size the engine is
+ * rendering and that accessor is resolved inside window_fit_install(). */
+static bool install_window_mode(void)
+{
+    window_mode_config_t mode_config;
+
+    mode_config.mode = (window_mode_kind_t)resolution_state.config.window_mode;
+    mode_config.windowed_width  = resolution_state.config.windowed_width;
+    mode_config.windowed_height = resolution_state.config.windowed_height;
+    mode_config.windowed_present = resolution_state.config.windowed_present;
+
+    return window_mode_install(&mode_config);
+}
+
 /* The window fit is a whole responsibility of its own and lives in window_fit.c; this hands it the
  * two table pointers that were resolved here and nothing else. */
 static bool install_window_fit(void)
@@ -735,8 +767,51 @@ void enhanced_resolution_install(void)
      * exactly when this DLL moves the window". That is not known until the window fit has either
      * gone in or failed, so neither may be installed before install_window_fit() has returned. */
     {
-        bool window_is_moved = install_window_fit();
-        focus_guard_config_t focus_config;
+        /* EITHER of them counts as moving the window, and the OR is the whole reason this is one
+         * variable rather than two. The two features below report whether they are load-bearing,
+         * and the answer is "load-bearing exactly when this DLL moves the window". A window mode
+         * that centres a window, or puts a borderless one on a monitor whose origin is not (0,0),
+         * breaks the engine's own pointer arithmetic exactly as the fit does, so counting only the
+         * fit would leave them calling themselves insurance while they were carrying the feature.
+         *
+         * The fit runs first because the mode asks it for the display mode size. */
+        windowed_device_config_t device_config;
+        bool fit_moved;
+        bool mode_moved;
+        bool window_is_moved;
+
+        /* The device change is a single byte written into code the engine runs later, so its
+         * position in this sequence decides nothing. It is here because this is where the window
+         * work lives, and for no other reason. */
+        device_config.enabled = resolution_state.config.windowed_present;
+        (void)windowed_device_install(&device_config);
+
+        /* Only one of them may move the window. Each is a complete opinion about where the
+         * window goes: the fit puts it at the monitor's corner at the size of the display mode and
+         * re-applies for frames afterwards, the mode centres it at a size of the player's choosing
+         * and applies from the same site. Run together the fit acts last and wins, so the player
+         * silently gets neither what they asked for nor a warning.
+         *
+         * The mode wins, because it is the more specific request and because the fit documents
+         * itself as a last resort for a setup with no graphics wrapper at all. */
+        if (resolution_state.config.fit_window_to_mode &&
+            resolution_state.config.window_mode != (int32_t)WINDOW_MODE_AUTHENTIC) {
+            log_warning("FitWindowToMode=1 and WindowMode=%d both decide where the window goes, "
+                        "and they disagree. WindowMode wins and the fit is not installed: it is "
+                        "the older setting and it documents itself as a last resort for a machine "
+                        "with no graphics wrapper. Set WindowMode=0 if you wanted the fit.",
+                        (int)resolution_state.config.window_mode);
+            fit_moved = false;
+        } else {
+            fit_moved = install_window_fit();
+        }
+        mode_moved = install_window_mode();
+        focus_guard_config_t     focus_config;
+        present_clip_config_t    clip_config;
+        pointer_release_config_t release_config;
+        window_poll_config_t     poll_config;
+
+        window_is_moved = fit_moved || mode_moved;
 
         /* This repairs the one piece of engine arithmetic that assumed the window would never be
          * moved at all. */
@@ -748,6 +823,24 @@ void enhanced_resolution_install(void)
         focus_config.reacquire_input = resolution_state.config.reacquire_input_on_focus;
         focus_config.window_is_moved = window_is_moved;
         (void)focus_guard_install(&focus_config);
+
+        /* Last of the window group: both read what the calls above settled. */
+        clip_config.windowed_present = resolution_state.config.windowed_present;
+        clip_config.enabled = resolution_state.config.windowed_fill &&
+                              clip_config.windowed_present;
+        (void)present_clip_install(&clip_config);
+
+        release_config.key = resolution_state.config.pointer_release_key;
+        (void)pointer_release_install(&release_config);
+
+        /* Seeded with what was just installed, so the first poll compares against what is in force
+         * rather than re-applying everything a second in. */
+        poll_config.mode                = resolution_state.config.window_mode;
+        poll_config.windowed_width      = resolution_state.config.windowed_width;
+        poll_config.windowed_height     = resolution_state.config.windowed_height;
+        poll_config.pointer_release_key = resolution_state.config.pointer_release_key;
+        poll_config.windowed_fill       = resolution_state.config.windowed_fill;
+        (void)window_poll_install(&poll_config);
 
         /* The artwork mount comes first of all, because menu_scale reads the converted
          * artwork's own size to decide the canvas, and that file lives in this folder. The mount

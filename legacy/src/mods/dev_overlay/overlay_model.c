@@ -30,6 +30,7 @@
 
 #include "overlay_key_name.h"
 #include "overlay_utilities.h"
+#include "overlay_window.h"
 
 #include "cheats_openphantom.h"
 #include "cheats_original.h"
@@ -55,7 +56,8 @@ static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_TOGGLES */
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
-    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
+    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_WINDOW    */
 };
 
 typedef struct overlay_model_state {
@@ -161,6 +163,13 @@ static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
  * commit land on a row in the other group. The assert is what keeps the two spaces apart as rows
  * are added to either. */
 #define UTILITIES_FIRST_ID 64u
+
+/* Above the Utilities block rather than immediately after it, so that adding a row there needs
+ * no arithmetic here. The assert below is what keeps the two from meeting. */
+#define WINDOW_FIRST_ID 128u
+_Static_assert(UTILITIES_FIRST_ID + OVERLAY_UTILITIES_ROW_COUNT <= WINDOW_FIRST_ID,
+               "the Utilities rows have grown into the Window group's ids: raise "
+               "WINDOW_FIRST_ID");
 _Static_assert(FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT <= UTILITIES_FIRST_ID,
                "the cheats group has grown into the utilities group's id space; raise "
                "UTILITIES_FIRST_ID");
@@ -224,6 +233,7 @@ void overlay_model_reset(void)
     model.row_count = 0;
     model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
     model.freecam_info_expanded = false;   /* folds closed on every open, same as the groups do */
+    overlay_window_reset();                /* and the window group's size list, for the same reason */
     model.freecam_was_on = false;   /* re-synced against the real state on the very next rebuild */
     model.editing_value = false;   /* same reasoning as capturing_hotkey just above */
     model.value_edit_buf[0] = '\0';
@@ -236,6 +246,7 @@ void overlay_model_reset(void)
      * scroll past invincibility to reach the draw distance. */
     model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Utilities";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_WINDOW].title = "Window mode";
     for (i = 0; i < (uint32_t)OVERLAY_GROUP_COUNT; ++i) {
         model.groups[i].expanded = false;      /* everything starts folded, as asked */
     }
@@ -359,6 +370,8 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
         return OVERLAY_UTILITIES_ROW_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
+        return overlay_window_row_count();
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
         /* +4, one for each row this group holds that is not one of its own cheats: the jump-boost
@@ -447,6 +460,22 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             capturing = true;
         }
         overlay_utilities_row(id, editing, capturing, out);
+        return;
+    }
+    case OVERLAY_GROUP_OPENPHANTOM_WINDOW: {
+        /* The same shape as the group above, and for the same reason: a slot here is its own
+         * position and the id carries a base so the two groups' ids cannot be confused. */
+        const char *editing = NULL;
+        bool        capturing = false;
+
+        out->id = WINDOW_FIRST_ID + id;
+        if (model.editing_value && model.editing_value_row == out->id) {
+            editing = model.value_edit_buf;
+        }
+        if (model.capturing_hotkey && model.capturing_hotkey_row == out->id) {
+            capturing = true;
+        }
+        overlay_window_row(id, editing, capturing, out);
         return;
     }
     case OVERLAY_GROUP_OPENPHANTOM:
@@ -704,6 +733,8 @@ bool overlay_model_activate(uint32_t index)
         /* Every switch in that group, answered by the group itself. The two edit kinds above have
          * already been taken, so what reaches here is a plain toggle. */
         return overlay_utilities_toggle(row.id - UTILITIES_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
+        return overlay_window_toggle(row.id - WINDOW_FIRST_ID);
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
         return true;
@@ -737,6 +768,12 @@ void overlay_model_capture_hotkey(int32_t virtual_key)
     }
     row = model.capturing_hotkey_row;
     model.capturing_hotkey = false;
+    /* Tested from the HIGHEST base downwards. These are open-ended ranges, so asking about
+     * Utilities first would answer yes for a Window row as well and bind the wrong setting. */
+    if (row >= WINDOW_FIRST_ID) {
+        (void)overlay_window_bind(row - WINDOW_FIRST_ID, virtual_key);
+        return;
+    }
     if (row >= UTILITIES_FIRST_ID) {
         /* A refusal leaves the binding alone and the row shows the key it still has, which is the
          * same shape the value rows use for text that is not a number. The refused keys are the
@@ -803,6 +840,11 @@ void overlay_model_value_commit(void)
         return;      /* nothing was typed, leave whatever value was already set alone */
     }
 
+    /* Highest base first, for the reason given at the matching test in the hotkey path. */
+    if (row >= WINDOW_FIRST_ID) {
+        (void)overlay_window_commit(row - WINDOW_FIRST_ID, model.value_edit_buf);
+        return;
+    }
     if (row >= UTILITIES_FIRST_ID) {
         /* Every typed row in that group, parsed and written by the group itself. A refusal leaves
          * the setting alone, which is what the row then shows. */

@@ -66,6 +66,7 @@
 #include "vlc_playback.h"
 
 #include "common/logging.h"
+#include "common/platform.h"
 
 #include <windows.h>
 
@@ -245,22 +246,30 @@ bool video_overlay_is_still_loading(void)
 }
 
 /* ============================================================================================ */
-/* See the header. SURFACE_POPUP is what shipped and stays the default. */
+/* See the header. SURFACE_AUTO is the default and decides per movie; the other three are the
+ * reader saying which one, and are then obeyed whatever the window looks like. */
 typedef enum {
-    SURFACE_POPUP = 0,
+    SURFACE_AUTO = 0,
+    SURFACE_POPUP,
     SURFACE_CHILD,
     SURFACE_GAME
 } surface_mode_t;
 
-static surface_mode_t surface_mode = SURFACE_POPUP;
+static surface_mode_t surface_mode = SURFACE_AUTO;
 
 void video_overlay_set_surface_mode(const char *mode)
 {
     if (mode == NULL) {
         return;
     }
-    if (_stricmp(mode, "popup") == 0) {
+    if (_stricmp(mode, "auto") == 0) {
+        surface_mode = SURFACE_AUTO;
+    } else if (_stricmp(mode, "popup") == 0) {
         surface_mode = SURFACE_POPUP;
+        log_info("every movie is drawn into a window of its own covering the whole monitor, "
+                 "whatever shape the game's own window is. That is right for the frameless "
+                 "overhanging window the engine ships in and wrong for a real window; auto picks "
+                 "between the two per movie");
     } else if (_stricmp(mode, "child") == 0) {
         surface_mode = SURFACE_CHILD;
         log_info("the movie surface is a child of the game's window rather than a window of its "
@@ -273,9 +282,91 @@ void video_overlay_set_surface_mode(const char *mode)
         log_info("libVLC is given the game's own window and no movie window is created. This is "
                  "the last resort Wine setting: see video_overlay.h");
     } else {
-        log_warning("MovieSurface=%s is not one of popup, child or game, so the shipped popup is "
-                    "kept", mode);
+        log_warning("MovieSurface=%s is not one of auto, popup, child or game, so auto is kept",
+                    mode);
     }
+}
+
+/* The whole monitor the game is on, which is what a movie has to cover.
+ *
+ * The client rect was the obvious answer and it was the wrong one, though not for the reason this
+ * comment used to give. It said the engine's own movie path forces the display to its minimum mode
+ * before playing, so the client area at that instant is 640x480. That IS what the retail path does,
+ * at 0x0046C35A, and it is not what happens here: fmv_player detours that whole function, so on our
+ * path the original never runs and the mode is never forced. The claim has been untrue for as long
+ * as this design has existed.
+ *
+ * The real reason is simpler. In the shape the engine ships, its window is frameless at roughly
+ * 2054 by 2077 anchored at the top left, so it OVERHANGS the screen and its client area is not the
+ * visible picture either. The monitor is the honest reading of "full screen" there, and it does not
+ * move.
+ *
+ * That reasoning stops holding the moment something gives the game a window that really is a
+ * window, which is what WindowMode in enhanced_resolution does. See the child mode below.
+ *
+ * The window is not the game's, so this asks which monitor the game is on rather than assuming the
+ * primary one: a player with two screens should get the movie on the one the game is on. */
+static bool monitor_rect_of(HWND window, RECT *out_rect)
+{
+    HMONITOR     monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO  info;
+
+    ZeroMemory(&info, sizeof info);
+    info.cbSize = sizeof info;
+    if (monitor == NULL || !GetMonitorInfo(monitor, &info)) {
+        log_error("the monitor the game is on could not be identified (error %u)",
+                  (unsigned)GetLastError());
+        return false;
+    }
+
+    *out_rect = info.rcMonitor;
+    return true;
+}
+
+/* Which surface this movie gets, asked PER MOVIE rather than settled once at startup.
+ *
+ * The whole monitor is the honest reading of "full screen" for the window the engine ships in: it
+ * is frameless, roughly 2054 by 2077, anchored at the top left, and so it OVERHANGS the screen and
+ * its client area is not the visible picture. A movie covering the monitor is right there.
+ *
+ * It stopped being right the moment WindowMode began giving the game a window that really is a
+ * window. Then the monitor is not what the player is looking at, and a movie covering it blacks out
+ * their desktop and plays at several times the size of the game. That is what a fresh install did:
+ * MovieSurface ships empty, empty took the platform's answer, and the platform's answer on Windows
+ * was the monitor.
+ *
+ * So the question is asked of the window instead of the operating system. A game window that covers
+ * its monitor gets the monitor, which is the shipped behaviour and every fullscreen install. One
+ * that does not gets a child exactly the size of its client area. Nothing here reads WindowMode or
+ * anything else belonging to another module: the window's own rectangle answers it, which also
+ * means dragging or resizing between two movies is followed with no one having to tell this file.
+ *
+ * Wine is the exception and it is not about size. A top level window is mapped as an X11 window,
+ * the window manager focuses it, and Wine then holds the focus for a window that refuses
+ * activation, so no key reaches the game until the movie ends. A child avoids that whatever the
+ * game's window looks like. */
+static surface_mode_t effective_mode(HWND game_window)
+{
+    RECT window_rect;
+    RECT monitor;
+
+    if (surface_mode != SURFACE_AUTO) {
+        return surface_mode;
+    }
+    if (platform_is_wine()) {
+        return SURFACE_CHILD;
+    }
+    if (!GetWindowRect(game_window, &window_rect) || !monitor_rect_of(game_window, &monitor)) {
+        return SURFACE_POPUP;      /* the shipped answer, for when the question cannot be asked */
+    }
+
+    /* Covers the monitor, edges included, so the overhanging shape the engine ships in lands here
+     * as well as a genuine fullscreen one. */
+    if (window_rect.left <= monitor.left && window_rect.top <= monitor.top &&
+        window_rect.right >= monitor.right && window_rect.bottom >= monitor.bottom) {
+        return SURFACE_POPUP;
+    }
+    return SURFACE_CHILD;
 }
 
 /* The one moment that needs a manual black fill: the gap between the window appearing and libVLC's
@@ -302,55 +393,42 @@ static void fill_black_once(HWND window)
     ReleaseDC(window, paint_dc);
 }
 
-/* The whole monitor the game is on, which is what a movie has to cover.
- *
- * The client rect was the obvious answer and it was the wrong one. The engine's own movie path
- * FORCES the display to its minimum mode before it plays anything and puts the previous mode back
- * afterwards, so "the size of the game's window while a movie is starting" is not the size of the
- * game, it is 640x480. Sizing to it produced a small picture in a corner of a black screen. The
- * monitor does not move, and it is also the honest reading of "full screen".
- *
- * The window is not the game's, so this asks which monitor the game is on rather than assuming the
- * primary one: a player with two screens should get the movie on the one the game is on. */
-static bool monitor_rect_of(HWND window, RECT *out_rect)
-{
-    HMONITOR     monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO  info;
-
-    ZeroMemory(&info, sizeof info);
-    info.cbSize = sizeof info;
-    if (monitor == NULL || !GetMonitorInfo(monitor, &info)) {
-        log_error("the monitor the game is on could not be identified (error %u)",
-                  (unsigned)GetLastError());
-        return false;
-    }
-
-    *out_rect = info.rcMonitor;
-    return true;
-}
-
 /* The surface libVLC is given. See the header for what each one is for and why the choice exists
  * at all. Returns NULL in SURFACE_GAME, where NULL is the answer rather than a failure, so the
  * caller tests the mode and not just the handle. */
 static HWND create_surface(HWND game_window)
 {
-    RECT rect;
+    surface_mode_t mode = effective_mode(game_window);
+    RECT           rect;
 
-    if (surface_mode == SURFACE_GAME) {
+    if (mode == SURFACE_GAME) {
         return NULL;
     }
 
-    if (surface_mode == SURFACE_CHILD) {
+    if (mode == SURFACE_CHILD) {
         /* The game's client area, not the monitor. A child is positioned inside its parent, so its
-         * origin is 0,0 by definition. The engine forces the display to its minimum mode while a
-         * movie plays, as monitor_rect_of's own note explains, so this can be 640x480: that is the
-         * whole of the game's window at that moment, which is the whole of the screen, so the
-         * picture still covers everything the player can see. */
+         * origin is 0,0 by definition and the size is exact by construction.
+         *
+         * This is the right mode whenever the game is in a real window, and the wrong one when the
+         * game's window overhangs the screen, which is the shape the engine ships in. It inherited
+         * a justification from monitor_rect_of about the engine forcing its minimum mode during a
+         * movie; that is refuted above and is not why this works.
+         *
+         * The client rectangle is read once and never re-read. The size is taken here, at
+         * creation, and nothing follows the parent afterwards, so anything that reshapes the game's
+         * window during playback leaves this child at a stale size. */
         if (!GetClientRect(game_window, &rect)) {
             log_error("the game window's client area could not be read (error %u)",
                       (unsigned)GetLastError());
             return NULL;
         }
+        /* Said once per movie, because the size a movie is drawn at is the one thing about this
+         * path nobody can read off the screen with any confidence: a window most of the width of
+         * the monitor and a window the whole of it look the same from a chair. It is also the
+         * number to compare against the shape enhanced_resolution last logged. */
+        log_info("the movie surface is %dx%d, taken from the game window's client area now",
+                 (int)(rect.right - rect.left), (int)(rect.bottom - rect.top));
+
         return CreateWindowExW(WS_EX_NOACTIVATE, OVERLAY_CLASS_NAME, L"", WS_CHILD,
                                0, 0, rect.right - rect.left, rect.bottom - rect.top,
                                game_window, NULL, own_module(), NULL);
@@ -365,6 +443,10 @@ static HWND create_surface(HWND game_window)
      * read as physical key state inside vlc_playback.c rather than as per-window input. Both were
      * already true of the separate-process design and neither was ever the problem; being
      * in-process is what is different here. */
+    log_info("the movie surface is %dx%d at %d,%d, which is the whole monitor the game is on",
+             (int)(rect.right - rect.left), (int)(rect.bottom - rect.top),
+             (int)rect.left, (int)rect.top);
+
     return CreateWindowExW(WS_EX_NOACTIVATE, OVERLAY_CLASS_NAME, L"", WS_POPUP,
                            rect.left, rect.top,
                            rect.right - rect.left, rect.bottom - rect.top,
@@ -388,7 +470,7 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
     }
 
     overlay_window = create_surface(game_window);
-    if (overlay_window == NULL && surface_mode != SURFACE_GAME) {
+    if (overlay_window == NULL && effective_mode(game_window) != SURFACE_GAME) {
         log_error("the overlay window could not be created (error %u)", (unsigned)GetLastError());
         return false;
     }

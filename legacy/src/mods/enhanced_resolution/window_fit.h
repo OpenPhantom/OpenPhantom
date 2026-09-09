@@ -12,6 +12,10 @@
  *      carry SWP_NOMOVE, and its re-centring warp compares CLIENT coordinates against the SCREEN
  *      point it warps to. Those two agree at exactly one window origin: (0,0). Moving the window
  *      made the pointer walk out of it. That is what cursor_anchor.c and focus_guard.c repair.
+ *      The size in that first sentence is the CREATION size only: the engine restyles and resizes
+ *      itself once during the renderer bring-up, to WS_VISIBLE alone at about 2054 by 2077, so the
+ *      running window is not the desktop-sized popup it was created as. The origin is what this
+ *      argument rests on, and SWP_NOMOVE preserves that either way.
  *
  *   2. It produced a two-frames-per-second field report. The window was shrunk to 640x480 with the
  *      mode, the mode went back up to 2560x1440, the window did not, and whatever rendered

@@ -37,4 +37,12 @@
  * nothing else, so it is never worth declining anything larger over. */
 bool menu_loading_bar_install(int32_t canvas_width, int32_t canvas_height);
 
+/* The canvas has changed size, so the ten numbers are written again for the new one.
+ *
+ * All ten are written absolutely from the canvas, so a refit back down to the authored 640x480
+ * puts the game's own numbers back rather than leaving the bar sized for a canvas that has gone.
+ * The two sites are resolved on the first call that needs them, which is why a canvas that starts
+ * at the authored size and grows later still works. */
+bool menu_loading_bar_resize(int32_t canvas_width, int32_t canvas_height);
+
 #endif /* MENU_LOADING_BAR_H */

@@ -97,6 +97,8 @@
  * ============================================================================================ */
 #include "cursor_anchor.h"
 
+#include "pointer_release.h"
+
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
@@ -301,6 +303,14 @@ static int32_t __cdecl hook_recentre_mouse(int32_t packed_client_point)
         return 0;
     }
 
+    /* The player has asked for the pointer, which is how a window with a frame gets used. Answering
+     * the way the early-out above does matters as much as skipping the warp: returning zero is the
+     * engine's own "nothing moved", so no delta is taken from a pointer that is off doing something
+     * else, and the view does not lurch when it is handed back. */
+    if (pointer_release_is_active()) {
+        return 0;
+    }
+
     /* The echo of our own last warp, read exactly the way the engine reads it. */
     if (cursor_anchor_point_is_centre((uint32_t)packed_client_point)) {
         return 0;
@@ -323,7 +333,7 @@ static void __cdecl hook_capture_mouse(void)
      * decides, and doing it this way keeps the original's other two effects untouched. */
     cursor_state.original_capture();
 
-    if (cursor_state.active && foreground_belongs_to_us()) {
+    if (cursor_state.active && foreground_belongs_to_us() && !pointer_release_is_active()) {
         (void)warp_to_client_centre();
     }
 }
@@ -444,10 +454,14 @@ bool cursor_anchor_install(bool enabled, bool window_is_moved)
              reanchored ? "installed too" : "NOT installed");
 
     /* The honest half of the line above. What this repair is WORTH depends entirely on whether
-     * anything moves the window, and nothing in this DLL does unless FitWindowToMode is on. */
+     * anything moves the window, and TWO settings in this DLL now can: FitWindowToMode, and any
+     * WindowMode other than 0. The caller ORs them, so this cannot name one of them without
+     * risking naming the wrong one, which it did until a log showed it crediting FitWindowToMode
+     * in a session where that key was 0. */
     if (window_is_moved) {
-        log_info("this repair is LOAD-BEARING in this session: FitWindowToMode is on, so the window "
-                 "is moved off screen 0,0 and the engine's own re-centring would put the pointer "
+        log_info("this repair is LOAD-BEARING in this session: something in this DLL moves or "
+                 "reshapes the window (FitWindowToMode, or a WindowMode other than 0), so it no "
+                 "longer sits at screen 0,0 and the engine's own re-centring would put the pointer "
                  "outside its own client area, on a monitor whose origin is negative, on another "
                  "display entirely.");
     } else {

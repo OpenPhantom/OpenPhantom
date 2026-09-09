@@ -67,15 +67,56 @@
 #define DRAW_CURSOR_HEIGHT  0x3Cu
 #define DRAW_CURSOR_SHIPPED 32
 
+/* swmenu_freeBitmaps and swmenu_sendWidget, the two the refit borrows.
+ *
+ * Neither is patched. The refit calls them exactly as the engine calls them itself, which is the
+ * whole reason it can drop a screen's artwork and put its list boxes back together while the screen
+ * stays open: both of those are things the engine already does to a live menu.
+ *
+ * The widget message dispatcher indexes a table of handlers by the widget's own type, so the type
+ * a list box has is the index whose handler is swlistbx_input. That was read out of the table
+ * rather than guessed: entry 5's first field is 0x0045C940, and entry 0's second field is
+ * swpic_draw, which is the picture widget and confirms the reading of the table. */
+#define WIDGET_LISTBOX_TYPE 5
+
+/* SWMSG_RESET. swmenu_reset sends it to every widget when a screen is opened, and a list box's arm
+ * is what derives its row height, its row count and its own height from the font. Sending it again
+ * is what makes those three follow a canvas that has changed under an open screen. It carries no
+ * allocation and leaves the selected row alone, so a second one is not a second open. */
+#define SWMSG_RESET 0
+
 /* The three `mov reg,[g_menuScale]` operands, one per axis of the scale. */
 #define SW3D_SCALE_OPERAND_X 0xAEu
 #define SW3D_SCALE_OPERAND_Y 0xB6u
 #define SW3D_SCALE_OPERAND_Z 0xBFu
 
-/* Read, never written. g_menuScale is the engine's own live float, the one the repointed numerator
- * feeds; the camera is whatever rdCamera_BuildProjection last produced, and +0x3C is the focal in
- * pixels it derived from the field of view. */
-#define ENGINE_MENU_SCALE_CELL 0x004B682CU
+/* g_menuScale and g_menuTextScale, the two the repointed numerator feeds, and the base size the
+ * second is the first multiplied by.
+ *
+ * WRITTEN as well as read, and that is the whole of why a live resolution change used to leave the
+ * menus in pieces. The engine derives both in exactly one block, which runs at startup and on the
+ * mode-change message and nowhere else:
+ *
+ *     D9 05 90 88 4A 00   fld  [numerator]     <- repointed at a cell of ours
+ *     D8 35 40 A4 86 00   fdiv [g_screenW]
+ *     D9 15 2C 68 4B 00   fst  [g_menuScale]   non-popping, the next instruction consumes it
+ *     D8 0D 3C 68 4B 00   fmul [base text size]
+ *     D9 1D 30 68 4B 00   fstp [g_menuTextScale]
+ *
+ * On a live change that block runs BEFORE the canvas has been refitted, so what it leaves behind
+ * belongs to the canvas that has just gone, and nothing derives it again until the next mode
+ * change. g_menuScale is glyph size, base font size and where the 3-D widgets sit, so the menus
+ * come back laid out for the old resolution. menu_scale_refit.c derives the two the same way the
+ * block does rather than waiting for it.
+ *
+ * The base size is read, never written: swmenu_startup passes its address to a settings read, so
+ * it is a live value rather than the 1.0 the image ships.
+ *
+ * The camera is whatever rdCamera_BuildProjection last produced, and +0x3C is the focal in pixels
+ * it derived from the field of view. */
+#define ENGINE_MENU_SCALE_CELL      0x004B682CU
+#define ENGINE_MENU_TEXT_SCALE_CELL 0x004B6830U
+#define ENGINE_MENU_BASE_TEXT_CELL  0x004B683CU
 
 /* The display the engine settled on, as floats, and the menu origin it derived from them. Read to
  * check the canvas still fits, and the origin is WRITTEN when it does not. See menu_scale_stand_down.
@@ -108,6 +149,7 @@
 #define WIDGET_RECT_HEIGHT   0x2Cu
 #define WIDGET_TERMINATOR    (-1)
 #define MENU_WIDGET_ARRAY    0x08u
+#define WIDGET_LINK          0x30u
 #define WIDGET_DATA          0x34u
 #define WIDGET_FONT_INDEX    0x18u
 
@@ -128,6 +170,8 @@ enum {
     SITE_SET_WIDGET_IMAGE,
     SITE_DRAW_CURSOR,
     SITE_SW3D_DRAW,
+    SITE_FREE_BITMAPS,
+    SITE_SEND_WIDGET,
     SITE_COUNT
 };
 

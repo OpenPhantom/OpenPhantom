@@ -62,4 +62,9 @@ bool menu_island_clip_fill_is_whole(float fill);
  * for the same reason the cursor cage is installed after it. */
 bool menu_island_clip_install(bool enabled, int canvas_width, int canvas_height);
 
+/* The canvas has changed size, so the island the sprites are clamped to changes with it. Does
+ * nothing unless the clamp is installed and active. An island left behind a canvas that has grown
+ * cuts real widgets off at a border that is no longer there. */
+void menu_island_clip_resize(int canvas_width, int canvas_height);
+
 #endif /* MENU_ISLAND_CLIP_H */

@@ -122,38 +122,54 @@ static signature_t sites[SITE_COUNT] = {
 static float loading_bar_width  = 128.0f;
 static float loading_bar_height = 32.0f;
 
-static bool installed;
+static bool resolved;
+static bool sites_missing;
+
+/* The canvas the ten numbers below were last written for. Kept so a refit that changes nothing is
+ * not a page of patch writes, and so the log can say what moved. */
+static int32_t applied_width;
+static int32_t applied_height;
 
 static int32_t scaled(int32_t value, float ratio)
 {
     return (int32_t)((float)value * ratio + 0.5f);
 }
 
-bool menu_loading_bar_install(int32_t canvas_width, int32_t canvas_height)
+/* Resolved on the first call that needs it rather than at the install, because the install may
+ * happen at a canvas of 640x480, where there is nothing to write, and the canvas may grow later. */
+static bool resolve_sites(void)
 {
-    float ratio_x;
-    float ratio_y;
-
-    if (installed) {
+    if (resolved) {
         return true;
     }
-    if (canvas_width <= 0 || canvas_height <= 0) {
+    if (sites_missing) {
         return false;
     }
-
-    ratio_x = (float)canvas_width  / (float)LOADING_CANVAS_WIDTH;
-    ratio_y = (float)canvas_height / (float)LOADING_CANVAS_HEIGHT;
-    if (ratio_x <= 1.0f && ratio_y <= 1.0f) {
-        return false;                 /* the canvas is authored size: the shipped numbers are right */
-    }
-
     signature_resolve_table(sites, SITE_COUNT);
     if (sites[SITE_PROGRESS_GEOMETRY].address == 0 || sites[SITE_TEXT_ORIGIN].address == 0) {
+        sites_missing = true;
         log_warning("the loading bar's geometry did not resolve, so the bar and its percentage "
                     "stay at their authored size in the top left of the loading screen. Nothing "
                     "else is affected");
         return false;
     }
+    resolved = true;
+    return true;
+}
+
+/* Every one of the ten is written absolutely from the ratio, so writing them again at ratio 1 puts
+ * the shipped numbers back rather than leaving the bar sized for a canvas that has gone. */
+static bool write_geometry(int32_t canvas_width, int32_t canvas_height)
+{
+    float ratio_x;
+    float ratio_y;
+
+    if (canvas_width <= 0 || canvas_height <= 0 || !resolve_sites()) {
+        return false;
+    }
+
+    ratio_x = (float)canvas_width  / (float)LOADING_CANVAS_WIDTH;
+    ratio_y = (float)canvas_height / (float)LOADING_CANVAS_HEIGHT;
 
     loading_bar_width  = 128.0f * ratio_x;
     loading_bar_height =  32.0f * ratio_y;
@@ -182,7 +198,8 @@ bool menu_loading_bar_install(int32_t canvas_width, int32_t canvas_height)
                 == PATCH_RESULT_OK &&
             patch_write_u32(text + TEXT_Y_OFFSET,    (uint32_t)scaled(0x17c, ratio_y))
                 == PATCH_RESULT_OK) {
-            installed = true;
+            applied_width  = canvas_width;
+            applied_height = canvas_height;
             log_info("loading bar scaled with the canvas: %dx%d at %d,%d on a %dx%d backdrop, "
                      "percentage at %d,%d",
                      (int)loading_bar_width, (int)loading_bar_height,
@@ -196,4 +213,24 @@ bool menu_loading_bar_install(int32_t canvas_width, int32_t canvas_height)
     log_warning("the loading bar's geometry could not be written, so it may be part scaled on the "
                 "loading screen. Nothing else is affected");
     return false;
+}
+
+bool menu_loading_bar_install(int32_t canvas_width, int32_t canvas_height)
+{
+    if (canvas_width <= LOADING_CANVAS_WIDTH && canvas_height <= LOADING_CANVAS_HEIGHT) {
+        /* The canvas is the authored size, so the shipped numbers are already the right ones and
+         * the two sites are left unresolved until something asks for a larger canvas. */
+        applied_width  = LOADING_CANVAS_WIDTH;
+        applied_height = LOADING_CANVAS_HEIGHT;
+        return false;
+    }
+    return write_geometry(canvas_width, canvas_height);
+}
+
+bool menu_loading_bar_resize(int32_t canvas_width, int32_t canvas_height)
+{
+    if (canvas_width == applied_width && canvas_height == applied_height) {
+        return true;
+    }
+    return write_geometry(canvas_width, canvas_height);
 }

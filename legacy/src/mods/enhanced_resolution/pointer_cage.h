@@ -26,6 +26,18 @@
 void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height);
 
 /* True when the clamp really was widened, for the caller's own log. */
+/* The canvas has changed size under an open menu, so the clamp follows it.
+ *
+ * Does nothing unless the cage is installed and active, and nothing when the canvas has not
+ * actually moved. The four immediates are written absolutely from the size, so this is the same
+ * write the install made rather than an adjustment to it.
+ *
+ * This one is not optional in the way the loading bar's is. The clamp is what the pointer can
+ * reach, so a cage left behind a canvas that has grown leaves every widget in the new area dead:
+ * nothing fails, nothing logs, the buttons simply cannot be pointed at. That is the same failure
+ * the scale refuses to install into. */
+void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height);
+
 bool pointer_cage_is_active(void);
 
 

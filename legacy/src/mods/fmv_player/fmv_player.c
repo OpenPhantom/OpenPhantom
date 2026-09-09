@@ -185,12 +185,13 @@ static void load_config(void)
      * than silently pick the more destructive of the two. */
     ini_read_string(FMV_PLAYER_SECTION, "Scaling", "letterbox", scaling, sizeof scaling);
 
-    /* Which window the movie is drawn into. The default depends on the platform: the popup that
-     * has always shipped on Windows, and a child of the game's own window under Wine, where a top
-     * level window takes the keyboard away for as long as a cutscene lasts. See video_overlay.h. */
+    /* Which window the movie is drawn into. The default is auto, which asks the game's own window
+     * per movie: one that covers its monitor gets a movie covering the monitor, and a real window
+     * gets a movie exactly its own size. Under Wine auto is always a child, for a reason that is
+     * about keyboard focus rather than size. See video_overlay.h. */
     {
         char        surface[16];
-        const char *default_surface = platform_is_wine() ? "child" : "popup";
+        const char *default_surface = "auto";
 
         ini_read_string(FMV_PLAYER_SECTION, "MovieSurface", default_surface,
                         surface, sizeof surface);

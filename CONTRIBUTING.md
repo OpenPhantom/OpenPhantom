@@ -43,8 +43,8 @@ architecture/    How the original engine is put together, written down.
 installer/       Packaging and setup.
 ```
 
-`legacy/` and `installer/` have something in them. The rest are placeholders, and that is worth
-knowing before you plan a large contribution: if you want to start one of them, open an issue first
+`legacy/` and `installer/` have something in them. The rest are placeholders. Know that before
+you plan a large contribution: if you want to start one of them, open an issue first
 so the shape can be agreed before anybody writes a thousand lines.
 
 Both components that exist are laid out the same way: an entry point and the documents at the top,
@@ -113,7 +113,7 @@ Write in English, everywhere: code, comments, log messages, commit messages and 
 
 ## Reviews
 
-Reviews here are technical and direct, and that is not unfriendliness. Expect to be asked where a
+Reviews here are technical and direct. That is not unfriendliness. Expect to be asked where a
 number came from, what happens on the path you did not mention, and how you know. Answering "I do
 not know, I assumed" is a completely acceptable answer and is more useful than a confident guess.
 

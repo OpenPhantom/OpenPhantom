@@ -53,6 +53,13 @@ add_engine_fix(enhanced_resolution
     dll_main.c
     enhanced_resolution.c
     window_fit.c
+    window_mode.c
+    windowed_device.c
+    present_clip.c
+    pointer_release.c
+    window_poll.c
+    fullscreen_toggle.c
+    window_close.c
     cursor_anchor.c
     pointer_cage.c
     focus_guard.c
@@ -60,8 +67,12 @@ add_engine_fix(enhanced_resolution
     menu_scale.c
     menu_scale_sites.c
     menu_scale_install.c
+    menu_scale_refit.c
     menu_scale_3d.c
     menu_preview.c
+    menu_art_census.c
+    menu_art_resample.c
+    menu_art_load.c
     menu_loading_bar.c
     menu_art_source.c
     mode_depth.c
@@ -116,6 +127,7 @@ add_engine_fix(enhanced_input
     dll_main.c
     enhanced_input.c
     input_config.c
+    input_foreground.c
     input_gate.c
     input_menu.c
     input_slider.c
@@ -300,6 +312,7 @@ add_engine_fix(dev_overlay
     view_range_live_row.c
     overlay_key_name.c
     overlay_utilities.c
+    overlay_window.c
     open_key_row.c
     fog_follow_row.c
     auto_range_row.c
@@ -313,6 +326,7 @@ add_engine_fix(dev_overlay
     strict_range_row.c
     view_range_row.c
     dev_menu_size_row.c
+    dismemberment_row.c
     subtitle_size_row.c
     overlay_model.c
     overlay_draw.c

@@ -12,13 +12,40 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. On `obi.exe` the patterns do 
 
 | Key | Default | Range | Meaning |
 |---|---|---|---|
-| `Mode` | `2` | 0-2 | 0 off, 1 correct the node only, 2 also sever on the killing blow |
+| `Mode` | `0` | 0-2 | 0 off, 1 correct the node only, 2 also sever on the killing blow. Ships off: severing on the killing blow changes how the game plays rather than repairing it, so it is a switch with a default that leaves the game alone. The developer panel's Utilities page has a row that writes this key, and this DLL re-reads it while the game runs |
 | `SpinScale` | `0.35` | 0-2 | the tumble of the flying piece |
 | `GravityScale` | `0.40` | 0.1-2 | its gravity |
 | `YawScale` | `0.12` | 0-2 | the 90 degree per substep yaw kick in the flight arm |
 | `SettleSeconds` | `1.20` | 0-5 | after this the piece lies still for good |
 | `SettleDamping` | `0.80` | 0.1-1 | tumble damping per substep before that |
 | `Diagnostics` | `0` | | record the full state of every flying piece |
+
+
+## Switching it off, and what off means
+
+Everything here is installed whatever `Mode` says, and the setting is then obeyed at run time. That
+is the opposite of how this file used to work, and the reason is the developer panel: a detour has
+no uninstall in this project, so a feature that only arms itself when its setting was on at startup
+can never be switched on later. The panel's Utilities page has a row that writes `Mode`, and this
+DLL re-reads the key about once a second through `render_frameEnd`, so a press takes effect within
+that second and the file carries the choice into the next run.
+
+Off has to mean the shipped game rather than "we stop adding more", because **the engine severs
+seven authored pieces of its own** (five on FEDSHIP, two on QUEEN). Four things therefore stand
+down rather than being skipped at install:
+
+* the node probe returns the engine's own answer
+* the mesh index translation leaves `keep` alone
+* the death gate hook returns without severing
+* the six flight constants are written back to the values the engine shipped
+
+That last one is why `scale_constant_at` became `remember_constant_at`. It used to read the live
+value and multiply it in place, which cannot be undone and would square the scale if it ever ran
+twice. Both the shipped value and the tuned value are now worked out once at install and every
+later write is one of those two absolutes, so applying the same answer twice writes the same bytes.
+
+If `render_frameEnd` does not resolve, the setting still selects everything it always did; only the
+live switch is lost, and the log says so.
 
 ## Engine locations
 
@@ -30,7 +57,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. On `obi.exe` the patterns do 
 | the `hideMeshesBelow` call | `0x41441D + 0x19` | redirected through a translating thunk |
 | `candy_stuntTick` | `0x42F64C` | detoured, 6-byte prologue |
 | `candy_stuntOnContact` | `0x42FB2D` | detoured, 6-byte prologue |
-| four tumble constants, gravity, the yaw kick | in `.data` | scaled directly; readers only in the flight code |
+| four tumble constants, gravity, the yaw kick | in `.data` | both the shipped and the tuned value are read once at install; every later write is one of those two absolutes. Readers only in the flight code |
 
 ## The two defects
 

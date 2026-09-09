@@ -49,7 +49,7 @@ responsibility, not because a state struct exists. Do not add `include/`, `publi
 another `src/` below that level; nothing here needs them.
 
 Each component owns its `CMakeLists.txt`. The root file holds the project settings and the compiler
-flags and nothing else, so adding a fix is a new directory plus one `add_engine_fix()` call next to
+flags, so adding a fix is a new directory plus one `add_engine_fix()` call next to
 the existing ones.
 
 **Reach the shared layer through the include root:**
@@ -128,7 +128,7 @@ return the original's result. Calculations and persistence belong in ordinary fu
 Calling conventions come from reverse engineering evidence, never from a guess. Get one wrong and
 the stack is corrupted at a point nowhere near the symptom.
 
-`common/detour.c` chains, and that is the whole reason it exists rather than a vendored library.
+`common/detour.c` chains. That is the reason it exists rather than a vendored library.
 When you place a detour on a function another DLL may also want, your `original` may be that DLL's
 hook rather than the engine. Call it exactly as if it were the real function and the chain unwinds
 correctly whatever order the DLLs loaded in. There is no uninstall, so a detour you place stands

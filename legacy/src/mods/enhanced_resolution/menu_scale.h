@@ -1,4 +1,4 @@
-/* menu_scale.h: draw the 640x480 menu canvas at the size the converted artwork was made for.
+/* menu_scale.h: draw the 640x480 menu canvas at the size of the display.
  *
  * ==============================================================================================
  * What this is for
@@ -14,7 +14,18 @@
  * anywhere in the image: all four arms of stdDisplay_blit were disassembled and none takes a
  * destination extent. So the canvas cannot be enlarged by asking the engine to stretch it. What CAN
  * be done is to make the canvas itself bigger and put bigger artwork into it, which is what this
- * does, and why it is only half a feature on its own.
+ * does.
+ *
+ * The bigger artwork can come from either of two places, and that is the difference between the
+ * canvas being welded to one resolution and following the display:
+ *
+ *   from disk    tools/convert_menu.py writes a converted set, and the canvas is read from it. The
+ *                files are a fixed size, so the canvas is the size they were made for and nothing
+ *                else. This came first and is still what a converted install does.
+ *
+ *   as it loads  menu_art_load.c replicates each picture between the engine reading it and
+ *                compressing it, so the artwork is whatever the canvas asks for. Then the DISPLAY
+ *                decides the canvas, and menu_scale_refit.c changes it while the game runs.
  *
  * ==============================================================================================
  * The things that have to move together
@@ -66,9 +77,10 @@
  * ==============================================================================================
  * What this does NOT do
  *
- * Nothing here upscales the artwork. The ratio is READ FROM the artwork instead, see below, so
- * the two can never disagree about it. The four animated previews are the exception, because they
- * are decoded at run time and have no converted file to read a ratio from.
+ * Nothing here upscales the artwork. Where a converted set exists the ratio is READ FROM it, see
+ * below, so the two can never disagree about it; where there is none, menu_art_load.c replicates
+ * each picture as the engine loads it. The four animated previews are the exception to both,
+ * because they are decoded at run time and have no file on disk at all.
  *
  * Four other gaps used to be listed here and were closed afterwards, each in a file of its own:
  * the pause panel's per-frame rectangle writes (the rectangle shadow in menu_scale.c), the SW_3D
@@ -96,16 +108,22 @@
 
 /* Installs the scale.
  *
- * `configured_ratio` is the MenuScale setting: 0 means "follow the artwork", which is the default
- * and the useful answer; 1.0 is off; anything else is an explicit ratio, which exists for testing.
+ * `configured_ratio` is the MenuScale setting: 0 means automatic, which is the default and the
+ * useful answer; 1.0 is off; anything else is an explicit ratio, which exists for testing.
  *
- * WHY THE ARTWORK DECIDES. The engine blits menu bitmaps one source pixel to one destination pixel,
- * so the size a widget is drawn at is simply the size of its bitmap. If the layout were scaled by
- * one ratio and the artwork resampled at another, they would disagree everywhere: gaps, overlaps,
- * and a canvas the background no longer covers, which leaves stale pixels because nothing repaints
- * them. Rather than ask a reader to keep two numbers in step, this reads the ratio out of the
- * converted artwork itself and uses that. One source of truth. No converted artwork means ratio 1
- * and nothing changes.
+ * WHERE AUTOMATIC TAKES ITS NUMBER FROM, and why it is one number rather than two. The engine blits
+ * menu bitmaps one source pixel to one destination pixel, so the size a widget is drawn at is
+ * simply the size of its bitmap. If the layout were scaled by one ratio and the artwork by another,
+ * they would disagree everywhere: gaps, overlaps, and a canvas the background no longer covers,
+ * which leaves stale pixels because nothing repaints them. So there is one ratio, and the two ends
+ * of the question are settled in whichever order the install can settle them:
+ *
+ *   a converted set on disk   its size is the ratio, and the canvas is welded to it. The artwork
+ *                             cannot follow a resolution change, so neither can the canvas.
+ *
+ *   no converted set          the DISPLAY is the ratio, and the artwork is replicated to meet it
+ *                             as the engine loads it. The canvas then follows the display for as
+ *                             long as the game runs; see menu_scale_refit.c.
  *
  * `cursor_cage_widens` is whether WidenMenuCursorArea is on. The cage is sized from this canvas, so
  * with it off the drawn cursor keeps the engine's 607x447 clamp while the widgets move outside it

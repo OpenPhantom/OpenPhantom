@@ -97,13 +97,27 @@
  * captured window still gets mouse input once the pointer is over another thread's window. Move
  * the pointer across the edge with no button held and the loop stops feeding itself.
  *
- * That was harmless in the shape the engine ships in: CreateWindowExA at 0x00499019 is called with
- * X = 0, Y = 0, GetSystemMetrics(SM_CXSCREEN) x GetSystemMetrics(SM_CYSCREEN) and style
+ * That was harmless in the shape the engine STARTS in: CreateWindowExA at 0x00499019 is called
+ * with X = 0, Y = 0, GetSystemMetrics(SM_CXSCREEN) x GetSystemMetrics(SM_CYSCREEN) and style
  * 0x80000000, and both SetWindowPos sites (0x00498CD1 and 0x00498D19) push uFlags = 6, i.e.
- * SWP_NOMOVE | SWP_NOZORDER. The window covered the whole screen and the edge was the edge of the
- * desktop. It is not harmless now: window_fit.c sizes the window to the display mode, and even at
- * full size on one monitor the warp parks the pointer at client (320,240), 320 pixels from the
- * left edge, with a second monitor beginning one pixel further left.
+ * SWP_NOMOVE | SWP_NOZORDER, so the origin stays (0,0) for the life of the process.
+ *
+ * That is NOT the shape the game runs in, and this file used to say it was. main_openGraphics
+ * 0x0043F4D4 calls stdWin95_setDisplayMode(1, 0x800, 0x800) at 0x0043F542 during the renderer
+ * bring-up (bytes 68 00 08 00 00 / 68 00 08 00 00 / 6A 01 / E8 3F 97 05 00), which restyles to
+ * 0x10000000, WS_VISIBLE alone, and resizes to 0x800 + borderW by 0x800 + borderH. Those two
+ * deltas are computed once in WinMain as 2 * SM_CXFRAME and SM_CYMENU + 2 * SM_CXFRAME, so the
+ * running window is about 2054 by 2077 at ordinary metrics.
+ *
+ * Which means the old claim, that the window covers the whole screen and its edge is the desktop
+ * edge, is true only up to about 2048 pixels wide. At 2560x1440 or 3840x2160 the window is
+ * NARROWER than the desktop, so the client edge is a real edge the pointer can cross, and the
+ * confinement below is load-bearing on those displays whatever FitWindowToMode is set to. Read
+ * statically from the retail image, not confirmed in a running game.
+ *
+ * It is not harmless with FitWindowToMode on either: window_fit.c sizes the window to the display
+ * mode, and even at full size on one monitor the warp parks the pointer at client (320,240), 320
+ * pixels from the left edge, with a second monitor beginning one pixel further left.
  *
  * And the capture the engine takes on WM_ACTIVATEAPP is not reaching it either. A graphics
  * wrapper in front of the window procedure logs, in the same session as the field report:
@@ -119,6 +133,8 @@
  * engine has no resume path is a claim about ABSENCE, which cannot be checked from the C at all.
  * ============================================================================================ */
 #include "focus_guard.h"
+
+#include "pointer_release.h"
 
 #include "window_fit.h"
 
@@ -357,7 +373,7 @@ static void apply_confinement(HWND window)
             focus_state.warned_clip_failed = true;
             log_warning("the pointer could not be confined to the window (ClipCursor refused). "
                         "The pointer keeps the engine's own behaviour, which holds it only while "
-                        "the window covers the whole screen.");
+                        "the window is at least as wide as the desktop.");
         }
         return;
     }
@@ -440,7 +456,14 @@ static void focus_guard_on_frame(void)
     inputs.had_focus        = focus_state.had_focus;
     inputs.has_focus        = has_focus;
     inputs.confining        = focus_state.confining;
-    inputs.confine_wanted   = focus_state.config.confine_pointer;
+    /* The confinement follows the release rather than the window mode. A framed window needs the
+     * pointer to be able to leave it, but only while the player has actually asked for it: the
+     * rest of the time the clip is what stops the pointer escaping during fast mouse movement,
+     * because the engine's own warp fires on mouse messages and a fast enough movement crosses
+     * the edge between two of them. Without this the pointer is loose for the whole session and
+     * turns up outside the window in the middle of turning the camera. */
+    inputs.confine_wanted   = focus_state.config.confine_pointer &&
+                              !pointer_release_is_active();
     inputs.reacquire_wanted = focus_state.config.reacquire_input;
 
     actions = focus_guard_actions(&inputs);
@@ -545,16 +568,22 @@ bool focus_guard_install(const focus_guard_config_t *config)
      * load-bearing in every session, because the engine has no resume path at all. */
     if (focus_state.config.confine_pointer) {
         if (config->window_is_moved) {
-            log_info("the pointer confinement is LOAD-BEARING in this session: FitWindowToMode is "
-                     "on, so the window is moved and sized away from the desktop edge and the "
-                     "pointer really can walk off it onto another monitor.");
+            /* Deliberately not naming one key. Two can set this now, FitWindowToMode and any
+             * WindowMode other than 0, and the caller hands over the OR of them. Naming one was
+             * wrong in a real log, which credited FitWindowToMode in a session where it was 0. */
+            log_info("the pointer confinement is LOAD-BEARING in this session: something in this "
+                     "DLL moves or reshapes the window (FitWindowToMode, or a WindowMode other "
+                     "than 0), so its edge is no longer the desktop edge and the pointer really "
+                     "can walk off it onto another monitor.");
         } else {
-            log_info("the pointer confinement is BELT-AND-BRACES in this session: nothing moves the "
-                     "window, so it stays at screen 0,0 at the size of the desktop and its client "
-                     "edge IS the desktop edge, which the pointer cannot cross anyway. It is left "
-                     "on because it costs nothing there, the rectangle is the whole desktop, "
-                     "and it is what makes a setup where something else repositions the window "
-                     "survivable.");
+            log_info("nothing in this session moves the window, so it stays at screen 0,0 and "
+                     "the pointer confinement is whatever the running window size makes it. The "
+                     "engine restyles and resizes itself during the renderer bring-up to about "
+                     "2054 by 2077, so on a desktop narrower than that the client edge IS the "
+                     "desktop edge and the confinement costs nothing, while on a wider one the "
+                     "window does not reach the screen edge and the confinement is doing real "
+                     "work. Either way it is what makes a setup where something else repositions "
+                     "the window survivable.");
         }
     }
     return true;

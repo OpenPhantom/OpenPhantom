@@ -75,7 +75,7 @@ void view_settings_load(view_distance_config_t *config)
     }
     config->authored_fog        = ini_read_bool (VIEW_DISTANCE_SECTION, "AuthoredFogBand", false);
     config->fog_min_end         = ini_read_float(VIEW_DISTANCE_SECTION, "FogMinEndFraction", 1.0f);
-    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 1.0f);
+    config->fog_band_scale      = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", 0.60f);
     config->level_open_seconds  = view_settings_clamp(
         ini_read_float(VIEW_DISTANCE_SECTION, "LevelOpenSeconds", 0.0f), 0.0f, 30.0f);
     config->level_open_range    = view_settings_clamp(

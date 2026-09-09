@@ -65,8 +65,7 @@ cannot see and this DLL cannot repair.
 Retail `WMAIN.EXE` (EN/DE), the Fix Pack build, and the Edit Tool's recompile. Every one of the five
 patterns resolves uniquely in all three builds. In `obi.exe` all five engine cells have **moved**,
 the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latch from `006CCFE0` to
-`006CCF90`, which is exactly why every address here is read out of a matched operand and none is
-written down.
+`006CCF90`. Every address here is read out of a matched operand and none is written down.
 
 ## Configuration: `[imuse_fix]`
 
@@ -89,7 +88,7 @@ five cells are **read**, and no byte of the image is written.
 | `bapMusicResume` | called. The only caller of `ImResume` |
 | `bapMusicPeriodic` | read: the "music system is up" flag |
 | the two cue getters | read: the state and sequence latches, for the log only |
-| `sys_pause` | read: the pause menu's own latch, which is what makes an owned pause distinguishable from an orphan |
+| `sys_pause` | read: the pause menu's own latch, which distinguishes an owned pause from an orphan |
 
 Cross-checks before any of it is believed: the pause latch is named by two independent patterns, the
 attached flag by three, and the re-entrancy counter by three. A disagreement refuses the whole
@@ -126,7 +125,7 @@ only when none of them is inside the function. If one is, they are resumed and i
 after eight attempts the patch declines, and a declined lock is rolled back exactly as any other
 failure is.
 
-Nothing is allocated while threads are suspended, which is why the `ImUnlock` detour is installed
+Nothing is allocated while threads are suspended, so the `ImUnlock` detour is installed
 outside that window: `detour_install` builds a trampoline with `VirtualAlloc`, and taking the
 address space lock while holding threads still is a worse trade than what it would buy. `ImUnlock`
 does not need the window anyway, because its patch puts a five byte `jmp` where a five byte `mov`

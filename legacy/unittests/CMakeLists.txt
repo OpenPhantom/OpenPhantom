@@ -46,6 +46,7 @@ add_unit_test(mouse_look enhanced_input
     enhanced_input/input_slider.c
     enhanced_input/mouse_rate.c
     enhanced_input/raw_mouse.c
+    enhanced_input/input_foreground.c
     enhanced_input/menu_cursor.c
 )
 
@@ -61,6 +62,7 @@ add_unit_test(view_lead enhanced_input
     enhanced_input/view_lead.c
     enhanced_input/free_look_math.c
     enhanced_input/raw_mouse.c
+    enhanced_input/input_foreground.c
 )
 
 # Whether the delivery survives a SLOW MOUSE, which is the question a field test on one desk
@@ -69,10 +71,24 @@ add_unit_test(delivery_rates enhanced_input
     enhanced_input/mouse_rate.c
 )
 
-add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_anchor.c)
+# pointer_release.c comes along because cursor_anchor asks it whether the player has taken the
+# pointer before it re-centres. It is the real file rather than a stub: a stub would only prove
+# that the stub returns false.
+add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_anchor.c
+                                                enhanced_resolution/pointer_release.c)
 add_unit_test(window_fit    enhanced_resolution enhanced_resolution/window_fit.c)
+
+# The whole of the window mode's policy: what shape is asked for, given a monitor and the size
+# the engine is rendering. window_fit.c comes along because window_mode.c asks it for that
+# size, and the rule here is to link the real module rather than a stub.
+add_unit_test(window_mode   enhanced_resolution enhanced_resolution/window_mode.c
+    enhanced_resolution/window_fit.c
+)
 add_unit_test(focus_guard   enhanced_resolution
     enhanced_resolution/focus_guard.c
+    # asked every frame whether the player has taken the pointer, so the confinement can stand
+    # down while they use the window frame
+    enhanced_resolution/pointer_release.c
     enhanced_resolution/window_fit.c
 )
 
@@ -90,8 +106,35 @@ add_unit_test(pointer_cage enhanced_resolution
 # at 3840x2160 the hovered button's halo is cut exactly at island x=1600 instead of stamping the
 # border. window_fit.c comes along for the same reason it does above: the hook asks it for the
 # display mode.
+add_unit_test(menu_art_resample enhanced_resolution enhanced_resolution/menu_art_resample.c)
+
+# Whether the canvas a screen was authored for can be recovered by dividing, which is what decides
+# whether the rectangle shadow has to keep it. The rest of the refit is engine writes and is not
+# testable here; the rounding is, and the rounding is where the answer turned out to be no.
+add_unit_test(menu_refit enhanced_resolution
+    enhanced_resolution/menu_scale.c
+    # the two halves of the same feature: menu_scale.c's hooks call into both
+    enhanced_resolution/menu_scale_install.c
+    enhanced_resolution/menu_scale_refit.c
+    enhanced_resolution/menu_scale_3d.c
+    enhanced_resolution/menu_scale_sites.c
+    enhanced_resolution/menu_preview.c
+    enhanced_resolution/menu_art_census.c
+    enhanced_resolution/menu_art_load.c
+    enhanced_resolution/menu_art_resample.c
+    enhanced_resolution/menu_art_source.c
+    enhanced_resolution/menu_loading_bar.c
+    enhanced_resolution/menu_island_clip.c
+    enhanced_resolution/pointer_cage.c
+    enhanced_resolution/window_fit.c
+)
+
 add_unit_test(menu_island_clip enhanced_resolution
     enhanced_resolution/menu_island_clip.c
+    # the census the sprite hook reports to, the real file rather than a stub, and the site
+    # table it resolves its own detours from
+    enhanced_resolution/menu_art_census.c
+    enhanced_resolution/menu_scale_sites.c
     enhanced_resolution/window_fit.c
 )
 
@@ -166,6 +209,8 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 # executable neither of them could resolve.
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
+    # the Window group, whose rows the model dispatches to, same as the Utilities group below
+    dev_overlay/overlay_window.c
     dev_overlay/fog_band_row.c
     dev_overlay/view_range_live_row.c
     dev_overlay/overlay_key_name.c
@@ -173,6 +218,7 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/open_key_row.c
     dev_overlay/fog_follow_row.c
     dev_overlay/auto_range_row.c
+    dev_overlay/dismemberment_row.c
     dev_overlay/fov_row.c
     dev_overlay/menu_extras_row.c
     dev_overlay/sensitivity_row.c

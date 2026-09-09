@@ -22,6 +22,11 @@
  * within that interval. controller_input.dll makes the same allowance for the same reason. */
 #define ABSENT_RECHECK_MS 2000u
 
+/* Long enough that a player who has not reached for the pad yet is never accused of a broken one,
+ * short enough to be in the log before anybody gives up and files a report. The title screen and
+ * the opening movies comfortably exceed it. */
+#define SILENT_PAD_MS 15000u
+
 static struct {
     bool  enabled;
     int   controller_index;
@@ -38,6 +43,24 @@ static struct {
     bool     absent;
     ULONGLONG absent_next_tick;
     bool     logged_present;
+
+    /* Said once, the first time a poll finds nothing. Every other line this file writes describes
+       what it WOULD do with a stick, so without this a pad that cannot be seen reads exactly like
+       a pad that works. That silence cost a Steam Deck session. */
+    bool     reported_absent;
+
+    /* A connected pad that sends NOTHING is its own failure and looks like neither of the two
+       above. XInputGetState succeeds, every line here says the stick is being read, and the device
+       never puts anything in any field. Measured on a Steam Deck in desktop mode, where Steam holds
+       the controls in its desktop layout and drives mouse and keyboard with them: Wine enumerates a
+       pad, so the call succeeds, and not one report ever carries a value.
+
+       Time is what tells it apart from a pad sitting at rest, because at rest is exactly what the
+       first report of a healthy pad looks like. Nothing is claimed until the pad has been connected
+       a while and every field of every report in that time has been zero. */
+    ULONGLONG connected_since;
+    bool      seen_any_report;
+    bool      reported_silent;
 } pad_state;
 
 void pad_stick_configure(bool enabled, int controller_index, float deadzone,
@@ -88,12 +111,64 @@ void pad_stick_poll(void)
     ZeroMemory(&state, sizeof state);
     result = XInputGetState((DWORD)pad_state.controller_index, &state);
     if (result != ERROR_SUCCESS) {
+        if (!pad_state.reported_absent) {
+            pad_state.reported_absent = true;
+            log_info("no XInput controller was found in slot %d, so the left stick and the "
+                     "run threshold do nothing. That is not a fault in this patch and nothing "
+                     "further will be "
+                     "reported about it; a pad plugged in later is picked up on its own. "
+                     "If one is plugged in NOW then it is a pad this cannot see, because only "
+                     "XInput devices are visible here. An XBOX pad works as it is; anything else "
+                     "has to be presented as one. Add the game to Steam as a non-Steam game and "
+                     "launch it from there, which is what Steam Input does for almost any "
+                     "controller, or run something that emulates XInput such as DS4Windows for a "
+                     "PlayStation pad. Without one of those, an older or off-brand pad, a "
+                     "PlayStation controller plugged straight in or a flight stick is invisible "
+                     "here; the game's own Controls screen still reads those.",
+                     pad_state.controller_index);
+        }
         pad_state.absent           = true;
         pad_state.absent_next_tick = GetTickCount64() + ABSENT_RECHECK_MS;
         pad_state.running          = false;
+
+        /* Restarted, so the silent watch below times how long THIS connection has been quiet. The
+         * line it writes says "connected for N seconds", and carrying the clock across a gap when
+         * the pad was not connected at all would make that sentence untrue. */
+        pad_state.connected_since  = 0u;
         return;
     }
-    pad_state.absent = false;
+    pad_state.absent          = false;
+    pad_state.reported_absent = false;
+
+    {
+        ULONGLONG now = GetTickCount64();
+
+        if (pad_state.connected_since == 0u) {
+            pad_state.connected_since = now;
+        }
+        if (state.Gamepad.sThumbLX != 0 || state.Gamepad.sThumbLY != 0 ||
+            state.Gamepad.sThumbRX != 0 || state.Gamepad.sThumbRY != 0 ||
+            state.Gamepad.bLeftTrigger != 0 || state.Gamepad.bRightTrigger != 0 ||
+            state.Gamepad.wButtons != 0) {
+            pad_state.seen_any_report = true;
+        } else if (!pad_state.seen_any_report && !pad_state.reported_silent &&
+                   now - pad_state.connected_since >= SILENT_PAD_MS) {
+            pad_state.reported_silent = true;
+            log_info("pad: slot %d has been connected for %u seconds and every field of "
+                     "every report in that time has been zero. The device is answering and "
+                     "sending nothing, which is a third thing, different from no pad at all and "
+                     "from a pad this cannot see. On a Steam Deck in desktop mode that is Steam "
+                     "holding the controls in its desktop layout, where they drive mouse and "
+                     "keyboard instead of a gamepad. The fix is to ADD the game to Steam as a non-Steam game "
+                     "and launch it from Steam: that is the configuration confirmed working on a "
+                     "Deck, and it gives the window modes and every input feature here at the "
+                     "same time. Elsewhere this usually means another program has taken the pad "
+                     "exclusively. "
+                     "Nothing is wrong with this patch and it goes on watching; touch the stick "
+                     "and it will be used.",
+                     pad_state.controller_index, (unsigned)(SILENT_PAD_MS / 1000u));
+        }
+    }
 
     if (!pad_state.logged_present) {
         pad_state.logged_present = true;
@@ -104,6 +179,18 @@ void pad_stick_poll(void)
                  "saturates at half the stick's travel and a diagonal past that point reads as a "
                  "corner whichever way it is really pointing",
                  pad_state.controller_index, (double)(pad_state.deadzone * 100.0f));
+
+        /* The raw report, once, stated and not interpreted. All zero here is the normal reading
+         * for a pad nobody is touching, which is what a pad at the title screen always is, so this
+         * line proves the call works and nothing more. The claim that a pad is SILENT is made
+         * below, on time, and only after nothing has arrived for long enough to mean it. */
+        log_info("pad: first raw report from slot %d, left stick %d,%d right stick %d,%d "
+                 "triggers %u,%u buttons %04X",
+                 pad_state.controller_index,
+                 (int)state.Gamepad.sThumbLX, (int)state.Gamepad.sThumbLY,
+                 (int)state.Gamepad.sThumbRX, (int)state.Gamepad.sThumbRY,
+                 (unsigned)state.Gamepad.bLeftTrigger, (unsigned)state.Gamepad.bRightTrigger,
+                 (unsigned)state.Gamepad.wButtons);
     }
 
     /* No sign change: XInput reports Y positive UP, and up is forward, which is the sense every

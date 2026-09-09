@@ -17,8 +17,8 @@ here or distributed with this project.
 ## What it installs
 
 From the disc: the launcher, the program and the runtimes beside it, the music and cutscene audio,
-the localisation archive and the data tree. `big.lab` is unpacked from `GAMEDATA\GOBS\BIG.Z` while
-the wizard runs, which is what the C helper is for.
+the localisation archive and the data tree. The C helper unpacks `big.lab` from
+`GAMEDATA\GOBS\BIG.Z` while the wizard runs.
 
 `BIG.Z` and `MENACE.DAT` are left behind, about 747 MB between them. `BIG.Z` is 711 MB on the
 pressing although its archive is only the first 81 MB, and `MENACE.DAT` starts out byte identical to
@@ -27,9 +27,8 @@ it and stops short of the archive's end, so nothing can read it.
 The registry entry the game reads for its CD path is pointed at the installation folder, which
 removes the need for the disc in the drive.
 
-Everything else ships inside the installer, in `dist/`. Nothing is downloaded at any point, which
-is what makes an installation reproducible years from now rather than dependent on somebody else's
-hosting.
+Everything else ships inside the installer, in `dist/`. Nothing is downloaded at any point, so an
+installation is reproducible years from now rather than dependent on somebody else's hosting.
 
 ## Components
 
@@ -54,12 +53,11 @@ different numbers on purpose, and both are set by hand:
 | `OPENPHANTOM_VERSION` in `legacy/CMakeLists.txt` | the patch's number: every DLL's version resource, and the log header | `0.4.2` |
 
 **The last digit of the installer counts installer builds.** Build a new one, add one. It is not a
-judgement about how much changed, which is what an earlier rule here tried to be.
+judgement about how much changed. An earlier rule here tried to be that.
 
 **The binaries carry the patch's number.** The DLLs are the patch, so their version resources and
 the first line of `engine_fixes.log` both read `0.4.2`, while the installer that delivered them
-reads `1.4.2`. Two numbers on one machine is the cost of two lines, which is why both are written
-down here.
+reads `1.4.2`. Two numbers on one machine is the cost of two lines, so both are written down here.
 
 **One release was published with the two merged**, as `v1.5.0` and `i1.5.0`. The lines are separate
 again, so that release is renamed on GitHub to `v0.4.1` and `i1.4.1`, which puts it where it belongs
@@ -149,8 +147,8 @@ different target folder, and completed without pausing for anything. Its folder 
 same way: twenty DLLs, all twenty-one patch files hash equal to the build, no section for a removed
 component, and libVLC, FFmpeg, DSOAL, dxwrapper and the tools all in place. The game was started
 from it afterwards and its own log shows all twenty DLLs loading and arming. One site does not
-resolve, `view_distance_fix`'s `thing_draw`, and that is a pre-existing fault of the patch on every
-install rather than anything the installer did.
+resolve, `view_distance_fix`'s `thing_draw`, a pre-existing fault of the patch on every install
+rather than anything the installer did.
 
 **The starting settings component has been installed with, on a fresh installation.** The folder was
 read back afterwards: all fifty-nine bindings are byte for byte the layout they were taken from,
@@ -158,8 +156,8 @@ read back afterwards: all fifty-nine bindings are byte for byte the layout they 
 
 The backup beside it is the part worth recording, because it shows the merge rather than merely the
 result. `obi.ini.previous` came out at 79 bytes holding two lines, `[options]` and the sound driver
-key, which is exactly the state the file was in at that moment: the sound provider had created it a
-step earlier, and this component then backed that up and merged sixty more keys into it. On a fresh
+key. That was the state of the file at that moment: the sound provider had created it a step
+earlier, and this component then backed that up and merged sixty more keys into it. On a fresh
 installation there is no player file to preserve yet, and this is what preserving it looks like
 anyway.
 

@@ -13,8 +13,13 @@
 #include "menu_scale.h"
 
 #include "menu_art_source.h"
+#include "menu_island_clip.h"
+#include "menu_loading_bar.h"
 #include "menu_preview.h"
+#include "pointer_cage.h"
 #include "menu_scale_3d.h"
+#include "menu_art_census.h"
+#include "menu_art_load.h"
 #include "menu_scale_internal.h"
 #include "menu_scale_sites.h"
 
@@ -36,41 +41,6 @@
  * and the artwork disagreeing. */
 #define MENU_SCALE_WITNESS_BITMAP "splash3.BMP"
 
-/* The cells the three operands are repointed at. Written once, at install, and read by the engine
- * on every mode change afterwards. They are floats because the instructions reading them are
- * fsub and fld on dword operands. */
-static float menu_scaled_width  = (float)MENU_SCALE_CANVAS_WIDTH;
-static float menu_scaled_height = (float)MENU_SCALE_CANVAS_HEIGHT;
-
-/* g_menuScale gets a cell of its OWN, and this is not a tidiness choice.
- *
- * It is computed as `cell / g_screenW` and drives glyph size, the base font size and the 3-D
- * widgets. Glyphs are scaled UNIFORMLY by that one number, so it has to be the ratio the layout
- * advances vertically by: text that is scaled horizontally but laid out vertically comes out too
- * tall for the row it sits in, and the lines pile into each other.
- *
- * So this holds 640 * the VERTICAL ratio, while the origin cells above hold the real canvas.
- * When the artwork is scaled uniformly the two are equal and this changes nothing; they differ
- * only when a 4:3 canvas has been stretched onto a wider display. */
-static float menu_text_scale_numerator = (float)MENU_SCALE_CANVAS_WIDTH;
-
-/* The inverse of scaled_coordinate, for putting a rectangle back. Rounding means this is not exact
- * to the pixel on every value, which is acceptable: it runs once, when the scale is abandoned, and
- * the alternative is leaving the screen laid out for a canvas that no longer exists. */
-static int32_t unscaled_coordinate(int32_t value, float ratio)
-{
-    float restored;
-
-    if (!(ratio > 0.0f)) {
-        return value;
-    }
-    restored = (float)value / ratio;
-    return (restored >= 0.0f) ? (int32_t)(restored + 0.5f) : -(int32_t)(-restored + 0.5f);
-}
-
-/* Defined below, next to the install it rolls back. */
-static void restore_canvas_clip(uintptr_t site);
-
 /* Puts everything back and stops scaling, because the canvas no longer fits the screen.
  *
  * THIS IS A MEMORY SAFETY MEASURE, not a cosmetic one. swrle_blit clips against the canvas rather
@@ -90,13 +60,17 @@ static void restore_canvas_clip(uintptr_t site);
  * screen already scaled by an earlier open keeps its rectangles, which is wrong-looking and safe,
  * and that is the right way round.
  *
- * The cursor cage keeps the clamp it was installed with, so the drawn pointer can still travel
- * outside the picture. That is cosmetic and pointer_cage owns those immediates, so it is said in the
- * log rather than reached into from here. */
+ * The three things sized from the canvas when they were installed are put back to the authored one
+ * as well: the cursor cage, the sprite island and the loading bar. The cage used to be left where
+ * it was, on the grounds that pointer_cage owns those immediates, which left the drawn pointer able
+ * to travel outside the picture and stamp a copy of itself on every pixel nothing repaints. Each of
+ * them now has a way to be told a new canvas, because the refit needed one. */
 static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
 {
-    int32_t origin_x = (screen_width  - MENU_SCALE_CANVAS_WIDTH)  / 2;
-    int32_t origin_y = (screen_height - MENU_SCALE_CANVAS_HEIGHT) / 2;
+    int32_t origin_x   = 0;
+    int32_t origin_y   = 0;
+    float   previous_x = scale_state.ratio_x;
+    float   previous_y = scale_state.ratio_y;
 
     if (scale_state.stood_down) {
         return;
@@ -105,37 +79,32 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
 
     log_warning("the menu artwork is %dx%d but the game is running at %dx%d, so the menus are NOT "
                 "scaled. Drawing a canvas larger than the screen writes past the end of the frame "
-                "buffer and crashes. Convert the artwork for %dx%d with tools\\Convert Menu Art.bat, "
-                "or set the game back to the size it was converted for",
+                "buffer and crashes. Delete the converted artwork and the patch will size the "
+                "menus from the display itself, or set the game back to the size that artwork was "
+                "made for",
                 (int)scale_state.canvas_width, (int)scale_state.canvas_height,
                 (int)screen_width, (int)screen_height, (int)screen_width, (int)screen_height);
 
-    if (menu_scale_sites[SITE_RLE_BLIT].address != 0) {
-        restore_canvas_clip(menu_scale_sites[SITE_RLE_BLIT].address);
+    /* Ratio 1 IS the authored canvas, so the two calls that put a ratio into force put the whole
+     * of it back: the clip, the three cells the repointed operands read, the list box row floor
+     * and insets and the drawn cursor's size. The operands stay repointed, and cells holding the
+     * authored numbers behave exactly as the constants they replaced. */
+    if (!menu_scale_apply_canvas(1.0f, 1.0f)) {
+        log_error("the menu canvas clip could NOT be put back to 640x480. The menus are still "
+                  "clipped to %dx%d against a smaller frame buffer, which is the write past the "
+                  "end of it that this whole function exists to prevent",
+                  (int)scale_state.canvas_width, (int)scale_state.canvas_height);
     }
+    menu_scale_apply_trimmings(false);
 
-    /* The cells the repointed operands read. The operands stay repointed; holding the authored
-     * numbers makes them behave exactly as the constants they replaced. */
-    menu_scaled_width         = (float)MENU_SCALE_CANVAS_WIDTH;
-    menu_scaled_height        = (float)MENU_SCALE_CANVAS_HEIGHT;
-    menu_text_scale_numerator = (float)MENU_SCALE_CANVAS_WIDTH;
-
-    if (menu_scale_sites[SITE_LISTBOX_FLOOR].address != 0) {
-        (void)patch_write_u8(menu_scale_sites[SITE_LISTBOX_FLOOR].address + LISTBOX_FLOOR_COMPARE,
-                             (uint8_t)LISTBOX_SHIPPED_FLOOR);
-        (void)patch_write_u32(menu_scale_sites[SITE_LISTBOX_FLOOR].address + LISTBOX_FLOOR_VALUE,
-                              (uint32_t)LISTBOX_SHIPPED_FLOOR);
-    }
     if (menu_scale_sites[SITE_SET_WIDGET_IMAGE].address != 0) {
         (void)patch_write_u8(menu_scale_sites[SITE_SET_WIDGET_IMAGE].address +
                                  SET_WIDGET_IMAGE_COMPRESS, 1);
     }
-    if (menu_scale_sites[SITE_DRAW_CURSOR].address != 0) {
-        (void)patch_write_u8(menu_scale_sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_WIDTH,
-                             (uint8_t)DRAW_CURSOR_SHIPPED);
-        (void)patch_write_u8(menu_scale_sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_HEIGHT,
-                             (uint8_t)DRAW_CURSOR_SHIPPED);
-    }
+
+    pointer_cage_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
+    menu_island_clip_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
+    (void)menu_loading_bar_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
 
     /* Every menu already scaled is put back to its authored rectangles. Without this the fallback
      * is merely non-fatal rather than usable: a screen scaled for a 3840 canvas, drawn against a 640
@@ -156,11 +125,22 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
             widgets = *(char *const *)((const char *)tracked->menu + MENU_WIDGET_ARRAY);
             for (widget = 0; widgets != NULL && widget < tracked->widgets; ++widget) {
                 int32_t *rect = (int32_t *)(widgets + widget * WIDGET_STRIDE + WIDGET_RECT_X);
+                const int32_t *kept =
+                    (tracked->shadow != NULL) ? &tracked->shadow[widget * SHADOW_STRIDE] : NULL;
 
-                rect[0] = unscaled_coordinate(rect[0], scale_state.ratio_x);
-                rect[1] = unscaled_coordinate(rect[1], scale_state.ratio_y);
-                rect[2] = unscaled_coordinate(rect[2], scale_state.ratio_x);
-                rect[3] = unscaled_coordinate(rect[3], scale_state.ratio_y);
+                /* From the rectangle the screen was authored with where there is one, which is
+                 * exact; by dividing where the shadow could not be allocated, which is not. */
+                if (kept != NULL) {
+                    rect[0] = kept[SHADOW_AUTHORED_X];
+                    rect[1] = kept[SHADOW_AUTHORED_Y];
+                    rect[2] = kept[SHADOW_AUTHORED_W];
+                    rect[3] = kept[SHADOW_AUTHORED_H];
+                } else {
+                    rect[0] = unscaled_coordinate(rect[0], previous_x);
+                    rect[1] = unscaled_coordinate(rect[1], previous_y);
+                    rect[2] = unscaled_coordinate(rect[2], previous_x);
+                    rect[3] = unscaled_coordinate(rect[3], previous_y);
+                }
             }
             free(tracked->shadow);
             tracked->shadow = NULL;
@@ -169,21 +149,14 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
         scale_state.scaled_menu_count = 0;
     }
 
-    /* Ratio 1 is what switches off everything that is not a patched byte: the widget scaling, the
-     * per-frame correction, the font height, the preview upscaler and the 3-D placement all test it
-     * or multiply by it, and the 3-D hook hands the engine its own body back once stood_down is up. */
-    scale_state.ratio_x       = 1.0f;
-    scale_state.ratio_y       = 1.0f;
-    scale_state.canvas_width  = MENU_SCALE_CANVAS_WIDTH;
-    scale_state.canvas_height = MENU_SCALE_CANVAS_HEIGHT;
+    /* The origin, g_menuScale and g_menuTextScale, all four derived the way the engine derives
+     * them. Waiting for the engine to do it is not an option: its own block runs on a mode change
+     * and this is reached without one. g_menuScale is the piece that used to be missed here, and
+     * left behind it keeps the scaled canvas's glyph size against a 640x480 layout. */
+    menu_scale_derive_engine_cells(&origin_x, &origin_y);
 
-    if (origin_x < 0) { origin_x = 0; }
-    if (origin_y < 0) { origin_y = 0; }
-    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_X_CELL = origin_x;
-    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_Y_CELL = origin_y;
-
-    log_info("  menu origin put back to %d,%d. The drawn cursor keeps the wider area it was caged "
-             "to, which is cosmetic", (int)origin_x, (int)origin_y);
+    log_info("  menu origin put back to %d,%d, and the glyph scale with it", (int)origin_x,
+             (int)origin_y);
 }
 
 /* True when the canvas still fits the screen. Checked on every menu open rather than once, because
@@ -267,34 +240,41 @@ static bool ratio_from_artwork(float *out_x, float *out_y)
     return true;
 }
 
-/* Puts the two canvas immediates back. Used only to roll back a half-done install. */
-static void restore_canvas_clip(uintptr_t site)
-{
-    (void)patch_write_u32(site + RLE_BLIT_WIDTH_IMMEDIATE,  (uint32_t)MENU_SCALE_CANVAS_WIDTH);
-    (void)patch_write_u32(site + RLE_BLIT_HEIGHT_IMMEDIATE, (uint32_t)MENU_SCALE_CANVAS_HEIGHT);
-}
-
 bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
 {
     uintptr_t origin_sites[ORIGIN_SITE_COUNT];
     size_t    origin_hits;
-    size_t    index;
-    uintptr_t blit_site;
     float     ratio_x;
     float     ratio_y;
+    bool      follows_display = false;
 
     if (scale_state.installed) {
         return true;
     }
 
+    /* Before the artwork test below, and deliberately: the census exists to measure whether that
+     * artwork could stop being needed, so it has to run on an installation that has none. */
+    (void)menu_art_census_install();
+
     if (configured_ratio > 0.0f) {
         ratio_x = ratio_y = configured_ratio;  /* an explicit setting, which exists for testing */
-    } else {
-        if (!ratio_from_artwork(&ratio_x, &ratio_y)) {
-            log_info("MenuScale is automatic and no converted menu artwork was found beside the "
-                     "game, so the menus stay at their authored 640x480 canvas. Convert the "
-                     "artwork for your display and this follows it.");
-            return true;
+    } else if (!ratio_from_artwork(&ratio_x, &ratio_y)) {
+        /* No converted set, so the display decides instead and the artwork is replicated to meet
+         * it as it loads. That inverts this file's older doctrine, which was that the artwork is
+         * the one source of truth because a number read from the pictures cannot disagree with the
+         * pictures. It could not survive contact with a resolution that changes: the artwork
+         * cannot follow one and the display always can.
+         *
+         * This is also the only arrangement in which the canvas may be refitted later, and it is
+         * recorded as such rather than worked out again: a converted set is a fixed size on disk,
+         * so a canvas read from it can only be checked against the display and abandoned. */
+        follows_display = true;
+        if (!menu_art_load_display_ratio(&ratio_x, &ratio_y)) {
+            /* 640x480, or a settings file that could not be read. The authored canvas is the right
+             * answer for both, and the scale is installed at it rather than declined, so that a
+             * reader who then makes the window larger gets a canvas that grows with it. Every
+             * write below is absolute, so at ratio 1 all of them write the shipped numbers. */
+            ratio_x = ratio_y = 1.0f;
         }
     }
 
@@ -308,7 +288,7 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     }
     if (ratio_y > MENU_SCALE_MAX_RATIO) { ratio_y = MENU_SCALE_MAX_RATIO; }
 
-    if (ratio_x <= 1.0f && ratio_y <= 1.0f) {
+    if (ratio_x <= 1.0f && ratio_y <= 1.0f && !follows_display) {
         log_info("the menu scale is 1, so the menus stay at their authored 640x480 canvas");
         return true;
     }
@@ -317,10 +297,10 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
      * cage shut, every widget the scale moves outside the old 607x447 box becomes unreachable and
      * nothing reports it. See the header. */
     if (!cursor_cage_widens) {
-        log_warning("a menu scale of %.3f was asked for, but WidenMenuCursorArea=0, so the "
-                    "drawn cursor would keep the engine's 607x447 clamp while the widgets "
-                    "move outside it and become unreachable. NOT scaling. Set "
-                    "WidenMenuCursorArea=1 to use this", (double)ratio_y);
+        log_warning("the menus would be drawn on a canvas of %.3f, but WidenMenuCursorArea=0, so "
+                    "the drawn cursor would keep the engine's 607x447 clamp while the widgets "
+                    "move outside it and become unreachable. NOT scaling, and NOT following the "
+                    "display either. Set WidenMenuCursorArea=1 to use this", (double)ratio_y);
         return false;
     }
 
@@ -331,8 +311,6 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
                     (menu_scale_sites[SITE_RLE_BLIT].address == 0) ? "swrle_blit" : "swmenu_open");
         return false;
     }
-    blit_site = menu_scale_sites[SITE_RLE_BLIT].address;
-
     /* Exactly two, because the engine computes the menu origin in exactly two places. */
     origin_hits = menu_scale_find_origin_sites(origin_sites, ORIGIN_SITE_COUNT);
     if (origin_hits != ORIGIN_SITE_COUNT) {
@@ -341,58 +319,46 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
         return false;
     }
 
-    scale_state.ratio_x       = ratio_x;
-    scale_state.ratio_y       = ratio_y;
-    scale_state.canvas_width  = (int32_t)((float)MENU_SCALE_CANVAS_WIDTH  * ratio_x + 0.5f);
-    scale_state.canvas_height = (int32_t)((float)MENU_SCALE_CANVAS_HEIGHT * ratio_y + 0.5f);
-
-    /* The cells the operands read. Rounded to the same integers as the clip, so the origin
-     * centres exactly the canvas that is clipped rather than one half a pixel wider. */
-    menu_scaled_width  = (float)scale_state.canvas_width;
-    menu_scaled_height = (float)scale_state.canvas_height;
-    menu_text_scale_numerator = (float)MENU_SCALE_CANVAS_WIDTH * ratio_y;
+    scale_state.follows_display = follows_display;
 
     /* The canvas clip first. On its own it changes nothing visible, because nothing yet draws past
      * canvas 640, which makes it the safest of the writes to have applied on its own. */
-    if (patch_write_u32(blit_site + RLE_BLIT_WIDTH_IMMEDIATE,
-                        (uint32_t)scale_state.canvas_width) != PATCH_RESULT_OK ||
-        patch_write_u32(blit_site + RLE_BLIT_HEIGHT_IMMEDIATE,
-                        (uint32_t)scale_state.canvas_height) != PATCH_RESULT_OK) {
-        restore_canvas_clip(blit_site);
+    if (!menu_scale_apply_canvas(ratio_x, ratio_y)) {
         log_warning("the canvas clip could not be widened, so the menus are left at their authored "
                     "size");
         return false;
     }
 
-    /* Then the three operands at each of the two origin sites. A failure here rolls the clip back
-     * as well: a widened canvas with a 1x origin draws the menu off centre, which is a worse state
-     * than either end of the change. */
-    for (index = 0; index < ORIGIN_SITE_COUNT; ++index) {
-        uintptr_t site = origin_sites[index];
-
-        if (patch_write_pointer32(site + ORIGIN_WIDTH_OPERAND,  &menu_scaled_width)
-                != PATCH_RESULT_OK ||
-            patch_write_pointer32(site + ORIGIN_HEIGHT_OPERAND, &menu_scaled_height)
-                != PATCH_RESULT_OK ||
-            patch_write_pointer32(site + ORIGIN_SCALE_OPERAND,  &menu_text_scale_numerator)
-                != PATCH_RESULT_OK) {
-            restore_canvas_clip(blit_site);
-            log_warning("a menu origin operand at %08X could not be repointed, so nothing is "
-                        "scaled", (unsigned)site);
-            return false;
-        }
-    }
-
-    /* Last, because it is the only piece that changes what is in memory rather than what the image
-     * reads, and because the two above are what make its arithmetic correct. */
-    if (!detour_install(&scale_state.menu_open_detour, menu_scale_sites[SITE_MENU_OPEN].address,
-                        (const void *)hook_menu_open, MENU_OPEN_PROLOGUE)) {
-        restore_canvas_clip(blit_site);
-        log_warning("swmenu_open could not be hooked, so nothing is scaled. The origin operands "
-                    "stay repointed and are harmless on their own: they only recentre a canvas "
-                    "nothing draws past");
+    /* Then the three operands at each of the two origin sites. A failure here puts the canvas back
+     * to the authored one, cells and clip together: a widened canvas with a 1x origin draws the
+     * menu off centre, which is a worse state than either end of the change. */
+    if (!menu_scale_repoint_origin(origin_sites, ORIGIN_SITE_COUNT)) {
+        (void)menu_scale_apply_canvas(1.0f, 1.0f);
         return false;
     }
+
+    /* Last of the things that can fail, because it is the only piece that changes what is in
+     * memory rather than what the image reads, and because the two above are what make its
+     * arithmetic correct. */
+    if (!detour_install(&scale_state.menu_open_detour, menu_scale_sites[SITE_MENU_OPEN].address,
+                        (const void *)hook_menu_open, MENU_OPEN_PROLOGUE)) {
+        (void)menu_scale_apply_canvas(1.0f, 1.0f);
+        log_warning("swmenu_open could not be hooked, so nothing is scaled. The origin operands "
+                    "stay repointed and are harmless on their own: they read cells that hold the "
+                    "authored canvas again");
+        return false;
+    }
+
+    /* HERE, and not before the gates above, because the redirect is only correct alongside a canvas
+     * that was really widened. Armed early, a scale that then declined would leave the engine
+     * loading pictures three times the size of a canvas still clipped at 640, which draws the top
+     * left corner of every one of them.
+     *
+     * Armed whatever the ratio came from, because a picture that is already the right size declines
+     * itself. That is what lets a converted set, a half converted one and none at all all work: the
+     * converted pictures pass straight through and only the ones still at their authored size are
+     * replicated. */
+    (void)menu_art_load_install(scale_state.ratio_x, scale_state.ratio_y);
 
     /* Everything below is optional, and comes after everything that can still fail, so none of it
      * can cost the scale itself.
@@ -420,26 +386,10 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
                     (int)((ratio_y - 1.0f) * 8.0f + 0.5f));
     }
 
-    if (menu_scale_sites[SITE_LISTBOX_FLOOR].address != 0) {
-        uintptr_t site  = menu_scale_sites[SITE_LISTBOX_FLOOR].address;
-        int32_t   floor = (int32_t)((float)LISTBOX_SHIPPED_FLOOR * ratio_y + 0.5f);
-
-        if (floor > 127) {
-            floor = 127;              /* the compare is a signed byte immediate */
-        }
-        if (patch_write_u8(site + LISTBOX_FLOOR_COMPARE, (uint8_t)floor) == PATCH_RESULT_OK &&
-            patch_write_u32(site + LISTBOX_FLOOR_VALUE, (uint32_t)floor) == PATCH_RESULT_OK) {
-            log_info("list box rows: the %d pixel minimum row height becomes %d, which is what the "
-                     "engine then derives the row count, the box height and the row hit test from",
-                     LISTBOX_SHIPPED_FLOOR, (int)floor);
-        } else {
-            log_warning("the list box row height floor could not be scaled, so list box rows will "
-                        "be bunched together. Nothing else is affected");
-        }
-    } else {
-        log_warning("the list box row height floor did not resolve, so list box rows will be "
-                    "bunched together. Nothing else is affected");
-    }
+    /* The row height floor, the drawn cursor's size and the list box text insets. All three are
+     * written from the ratio in force and are rewritten from it on every refit, so they live
+     * together in menu_scale_refit.c rather than one block each here. */
+    menu_scale_apply_trimmings(true);
 
     if (menu_scale_sites[SITE_SET_WIDGET_IMAGE].address != 0 &&
         patch_write_u8(menu_scale_sites[SITE_SET_WIDGET_IMAGE].address + SET_WIDGET_IMAGE_COMPRESS,
@@ -449,53 +399,6 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     } else {
         log_warning("save game thumbnails could not be left uncompressed, so they stay at their "
                     "authored 160x120 inside a scaled frame. Nothing else is affected");
-    }
-
-    if (menu_scale_sites[SITE_DRAW_CURSOR].address != 0) {
-        int32_t size = (int32_t)((float)DRAW_CURSOR_SHIPPED * ratio_y + 0.5f);
-        bool    clamped = false;
-
-        if (size > 127) {                     /* both are signed byte immediates */
-            size = 127;
-            clamped = true;
-        }
-        if (patch_write_u8(menu_scale_sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_WIDTH,  (uint8_t)size)
-                == PATCH_RESULT_OK &&
-            patch_write_u8(menu_scale_sites[SITE_DRAW_CURSOR].address + DRAW_CURSOR_HEIGHT, (uint8_t)size)
-                == PATCH_RESULT_OK) {
-            log_info("the drawn menu pointer is %d pixels instead of %d%s", (int)size,
-                     DRAW_CURSOR_SHIPPED,
-                     clamped ? ", which is the largest a signed byte immediate can hold; the "
-                               "proportional size would have been larger" : "");
-        } else {
-            log_warning("the drawn menu pointer could not be resized, so it stays %d pixels and "
-                        "looks small on a large screen. Nothing else is affected",
-                        DRAW_CURSOR_SHIPPED);
-        }
-    }
-
-    /* The list box insets. */
-    if (menu_scale_sites[SITE_LISTBOX_DRAW].address != 0) {
-        uintptr_t draw = menu_scale_sites[SITE_LISTBOX_DRAW].address;
-        int32_t   inset_x = (int32_t)((float)LISTBOX_SHIPPED_X_INSET * ratio_x + 0.5f);
-        int32_t   inset_y = (int32_t)((float)LISTBOX_TOP_INSET_BASE * ratio_y + 0.5f);
-
-        if (inset_x > 127) { inset_x = 127; }      /* both are signed byte immediates */
-        if (inset_y > 127) { inset_y = 127; }
-
-        if (patch_write_u8(draw + LISTBOX_DRAW_X_INSET, (uint8_t)inset_x) == PATCH_RESULT_OK &&
-            patch_write_u8(draw + LISTBOX_DRAW_Y_INSET, (uint8_t)inset_y) == PATCH_RESULT_OK) {
-            log_info("list box text insets: %d -> %d across, %d -> %d down (the top one is "
-                     "given more than its share, see the note by LISTBOX_TOP_INSET_BASE)",
-                     LISTBOX_SHIPPED_X_INSET, (int)inset_x,
-                     LISTBOX_SHIPPED_Y_INSET, (int)inset_y);
-        } else {
-            log_warning("the list box text insets could not be scaled, so rows sit a little "
-                        "tight against the top and left of their box. Nothing else is affected");
-        }
-    } else {
-        log_info("swlistbx_draw did not resolve, so the list box text insets stay at their "
-                 "authored 6 and 3 and the rows sit a little tight. Nothing else is affected");
     }
 
     if (menu_scale_sites[SITE_SW3D_DRAW].address != 0 &&
@@ -543,11 +446,21 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     log_info("menus scaled %.3f wide by %.3f high (%s): canvas %dx%d, origin and g_menuScale "
              "recentred at %08X and %08X, widget rectangles scaled on open at %08X",
              (double)ratio_x, (double)ratio_y,
-             (configured_ratio > 0.0f) ? "MenuScale, set by hand" : "read from the artwork",
+             (configured_ratio > 0.0f) ? "MenuScale, set by hand"
+                                       : (follows_display ? "the display's own size"
+                                                          : "read from the artwork"),
              (int)scale_state.canvas_width, (int)scale_state.canvas_height,
              (unsigned)origin_sites[0], (unsigned)origin_sites[1],
              (unsigned)menu_scale_sites[SITE_MENU_OPEN].address);
-    log_info("  the artwork is not upscaled by this: the ratio above was read FROM it, so the two "
-             "cannot disagree");
+    if (follows_display) {
+        log_info("  and the canvas follows the display: change resolution and the menus are laid "
+                 "out again at the new size, with their artwork reloaded to match. That is what "
+                 "there being no converted artwork buys, because a converted set is a fixed size "
+                 "on disk and a canvas read from it cannot follow anything");
+    } else {
+        log_info("  the artwork is not upscaled by this: the ratio above was read FROM it, so the "
+                 "two cannot disagree, and the canvas is welded to the one resolution that "
+                 "artwork was made for");
+    }
     return true;
 }

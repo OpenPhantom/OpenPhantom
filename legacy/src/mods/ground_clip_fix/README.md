@@ -119,7 +119,7 @@ That is the shape the function already uses: it exempts a corpse and anything wi
 or more outright, and both keep their authored Z.
 
 An earlier attempt guarded the wrong invariant, refusing to leave a rider below the floor its own
-contact had selected. It never fired once, and that is itself the evidence: the floor under them
+contact had selected. It never fired once. That is itself the evidence: the floor under them
 descends with them, so by that measure nothing was ever wrong.
 
 ## Configuration: `[ground_clip_fix]`

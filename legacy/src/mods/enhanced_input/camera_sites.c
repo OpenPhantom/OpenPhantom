@@ -415,6 +415,54 @@ static const uint8_t MSK_PLAYER_AUTO_AIM[] = {
     0xFF,
     0xFF
 };
+/* --- 0x0044B788  Plr_StartFire: an attack begins, and this one runs for EVERY weapon ---------
+ *
+ *   55                       push ebp
+ *   8B EC                    mov  ebp,esp
+ *   A1 <pPlayer>             pPlayer                              <- operand at +0x04, masked
+ *   83 78 64 00              cmp  [eax+0x64],0                    pAuxAction, the early out
+ *   74 02 / EB 6A            je / jmp                             taken when one is already live
+ *   8B 0D <pPlayer>          pPlayer again                        <- operand at +0x12, masked
+ *
+ * Why this site exists at all, given the auto-aim is already hooked next door. The auto-aim was the
+ * only signal this DLL had that an attack had begun, and it is not one: the engine calls it only
+ * when the weapon asks for it.
+ *
+ *     if (g_weaponCfg[pr->weaponSlot].autoAimMode != 0)
+ *         Plr_AutoAim(g_weaponCfg[pr->weaponSlot].autoAimMode);
+ *
+ * That field is 0 in six of the thirteen shipped weapon slots, so for those weapons the aim snap
+ * never armed. The body went on facing its TRAVEL direction while the shot was still built as
+ * "camera minus heading", so walking sideways turned the character one way and left the weapon
+ * pointing another. Reported as the weapon always aiming forwards rather than where the character
+ * is pointed, which is exactly what those two disagreeing produces.
+ *
+ * The clip and the action handler below the auto-aim call are unconditional, so this function is
+ * the moment every weapon has in common. Both player reads are masked and cross-checked against
+ * the steering's own player pointer, the same way the two sites beside it are. */
+static const uint8_t SIG_PLAYER_START_FIRE[] = {
+    0x55,
+    0x8B, 0xEC,
+    0xA1, 0x00, 0x00, 0x00, 0x00,
+    0x83, 0x78, 0x64, 0x00,
+    0x74, 0x02,
+    0xEB, 0x6A,
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00
+};
+static const uint8_t MSK_PLAYER_START_FIRE[] = {
+    0xFF,
+    0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
+};
+_Static_assert(sizeof SIG_PLAYER_START_FIRE == sizeof MSK_PLAYER_START_FIRE,
+               "the start-fire pattern and its mask are different lengths");
+#define OFFSET_START_FIRE_PLAYER    0x04u
+#define OFFSET_START_FIRE_PLAYER_2  0x12u
+
 #define OFFSET_AUTO_AIM_PLAYER    0x13u
 #define OFFSET_AUTO_AIM_PLAYER_2  0x22u
 
@@ -492,6 +540,7 @@ enum {
     SITE_CAMERA_LAST_INTERP,
     SITE_PLAYER_AUTO_AIM,
     SITE_PLAYER_FIRE_SHOT,
+    SITE_PLAYER_START_FIRE,
     SITE_COUNT
 };
 
@@ -506,7 +555,9 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR_MASKED("player_auto_aim", SIG_PLAYER_AUTO_AIM, MSK_PLAYER_AUTO_AIM,
                                   PLAYER_AUTO_AIM_PROLOGUE_SIZE),
     SIGNATURE_ENTRY_DETOUR_MASKED("player_fire_shot", SIG_PLAYER_FIRE_SHOT, MSK_PLAYER_FIRE_SHOT,
-                                  PLAYER_FIRE_SHOT_PROLOGUE_SIZE)
+                                  PLAYER_FIRE_SHOT_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("player_start_fire", SIG_PLAYER_START_FIRE, MSK_PLAYER_START_FIRE,
+                                  PLAYER_START_FIRE_PROLOGUE_SIZE)
 };
 
 /* ============================================================================================
@@ -751,6 +802,29 @@ static void resolve_fire_shot_site(camera_sites_t *out, const void *expected_pla
     out->fire_shot = site;
 }
 
+static void resolve_start_fire_site(camera_sites_t *out, const void *expected_player_pointer)
+{
+    uintptr_t site = sites[SITE_PLAYER_START_FIRE].address;
+    uint32_t  player = 0;
+
+    if (site == 0 ||
+        !read_cell_twice(site, OFFSET_START_FIRE_PLAYER, OFFSET_START_FIRE_PLAYER_2,
+                         "the start-fire player pointer", &player)) {
+        log_warning("Plr_StartFire did not resolve, so the aim snap is still armed by the auto-aim "
+                    "alone. That leaves the six weapon slots whose autoAimMode is zero turning the "
+                    "body toward their travel while the shot leaves along the camera.");
+        return;
+    }
+    if ((uintptr_t)player != (uintptr_t)expected_player_pointer) {
+        log_warning("Plr_StartFire reads the player at %08X but the steering reads it at %08X; "
+                    "that is not the same player, so the aim snap keeps the auto-aim alone",
+                    (unsigned)player, (unsigned)(uintptr_t)expected_player_pointer);
+        return;
+    }
+
+    out->start_fire = site;
+}
+
 /* ============================================================================================ */
 bool camera_sites_resolve(camera_sites_t *out, const void *expected_player_pointer)
 {
@@ -759,6 +833,7 @@ bool camera_sites_resolve(camera_sites_t *out, const void *expected_player_point
     out->update_cam        = 0;
     out->auto_aim          = 0;
     out->fire_shot         = 0;
+    out->start_fire        = 0;
     out->camera_yaw_offset = NULL;
     out->yaw_lag           = NULL;
     out->region_yaw        = NULL;
@@ -784,6 +859,7 @@ bool camera_sites_resolve(camera_sites_t *out, const void *expected_player_point
     resolve_last_interp_site(out);
     resolve_auto_aim_site(out, expected_player_pointer);
     resolve_fire_shot_site(out, expected_player_pointer);
+    resolve_start_fire_site(out, expected_player_pointer);
 
     log_info("camera cells: offset=%08X recentreRate=%08X regionYaw=%08X headPrev=%08X "
              "headCur=%08X alpha=%08X gOver=%08X reset=%08X view=%08X region=%08X "

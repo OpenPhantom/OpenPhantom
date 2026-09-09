@@ -51,6 +51,8 @@ void __cdecl enhanced_input_steer_thunk(void)
     float    steer_forward = 0.0f;
     bool     pad_driving = false;
     bool     air_mode    = false;
+    bool     melee_mode  = false;
+    bool     melee_turn  = false;
     float    strafe;
     float    engine_rate = 0.0f;
     float    pad_turn = 0.0f;
@@ -141,6 +143,18 @@ void __cdecl enhanced_input_steer_thunk(void)
             stand_mode = (mode == PLAYER_MODE_STAND);
             air_mode   = (mode == PLAYER_MODE_JUMP || mode == PLAYER_MODE_JEDI_JUMP ||
                           mode == PLAYER_MODE_FALL);
+            /* A swing, either hero's. Both descriptors run the steer and the integrate, so the
+             * engine turns the body through one and this file's Stand gate is what stopped it. */
+            melee_mode = (mode == PLAYER_MODE_SABRE_ATTACK || mode == PLAYER_MODE_PANAKA);
+            /* And whether the swing needs anything folding back. Only with the sideways walk on:
+             * with it off the turn axis was never taken away in the first place, and the arm
+             * below that reads it is already open in every mode. */
+            melee_turn = melee_mode && input_config()->strafe;
+            if (melee_mode && !input_state.logged_melee_turn) {
+                input_state.logged_melee_turn = true;
+                log_info("a swing is running (mode %d) and the body may be turned through it",
+                         mode);
+            }
             mode_for_log = mode;
         }
     }
@@ -223,7 +237,7 @@ void __cdecl enhanced_input_steer_thunk(void)
     if (pad_driving) {
         steer_forward = pad_stick_y();      /* the RAW component, not the back-pedal deadbanded one:
                                              * facing your travel has no backward case to protect */
-    } else if (air_mode && pad_stick_is_active()) {
+    } else if ((air_mode || melee_mode) && pad_stick_is_active()) {
         /* THE VECTOR IS WANTED IN THE AIR TOO, and only the move bits are not.
          *
          * pad_stick_take_substep is gated on Stand because that is where it WRITES, and a
@@ -237,13 +251,33 @@ void __cdecl enhanced_input_steer_thunk(void)
          * written, exactly as before. */
         steer_forward = pad_stick_y();
         strafe        = input_config()->strafe_invert ? -pad_stick_x() : pad_stick_x();
+        if (melee_mode) {
+            /* The same deflection again and unmodified, for the turn fold below. That fold is
+             * shared with the handback, which is handed the raw axis and negates it itself, so
+             * inverting here as well would give the sideways walk's setting a say over which way
+             * a swing turns. */
+            pad_turn = pad_stick_x();
+        }
     } else {
         uint32_t bits = *(const uint32_t *)(record + PLAYER_MOVE_INPUT);
 
         steer_forward = (bits & 1u) ? 1.0f : ((bits & 2u) ? -1.0f : 0.0f);
     }
 
-    if (free_look_steer(record, mouse_step, strafe, steer_forward, stand_mode, air_mode)) {
+    /* The sideways component is withheld when the sideways walk is off, and that gate was missing.
+     * Two install lines have always claimed it: this DLL says the keyboard turn axis still turns
+     * the player, and free look says only forward and back are camera-relative. The first was true
+     * and the second was not. The same axis was turned into a sideways value a few lines above,
+     * unconditionally, and handed to free look, which builds a travel angle out of it and turns the
+     * body to face it. So with the sideways walk off the turn keys did both at once: they turned
+     * the player, correctly, and they also walked them sideways relative to the camera, which is
+     * the whole of the feature that was supposed to be switched off.
+     *
+     * Withheld here rather than at the assignment because this is the one consumer that was wrong:
+     * the walk driver below is already gated on the same setting, and the turn fold further down
+     * reads the raw axis rather than this value, so both keep working untouched. */
+    if (free_look_steer(record, mouse_step, input_config()->strafe ? strafe : 0.0f,
+                        steer_forward, stand_mode, air_mode, melee_mode)) {
         /* The cell is zeroed AFTER the lean has read it, not before: free look turns the CAMERA
          * with the mouse, and a turn rate left standing would make the engine turn the BODY's
          * heading on top of it in phase 7, the very coupling free look exists to break. */
@@ -312,7 +346,19 @@ void __cdecl enhanced_input_steer_thunk(void)
          * digital turn axis is POSITIVE FOR LEFT, which is also the direction increasing heading
          * turns, so it is added unnegated. (The sideways walk negates it because THAT file counts
          * right as positive; this does not.) */
-        if ((hand_back || !input_config()->strafe) && keyboard_axis != 0.0f) {
+        /* A swing joins the two cases that already fold, and for the same reason both of them
+         * do: nothing else is spending the axis this substep. The sideways walk is Stand-only
+         * and has just stood down, so with it switched on the turn keys had no consumer at all
+         * during a swing, while the engine's own turn went on being subtracted in phase 7 and
+         * never paid back. A sabre that only swung straight ahead was that and nothing more.
+         *
+         * The stick arm below EXCLUDES this one during a swing, and only during a swing. This
+         * axis is the engine's own absolute axis 0, which a pad bound through the engine's
+         * joystick path also lands on, so a stick that is already being folded there as XInput
+         * would arrive twice and at two different scales. In the handback both arms still run
+         * together, unchanged: a player holding a key and pushing a stick there wants the sum. */
+        if ((hand_back || !input_config()->strafe || (melee_turn && pad_turn == 0.0f)) &&
+            keyboard_axis != 0.0f) {
             input_state.pending_yaw_degrees +=
                 enhanced_input_clamp(keyboard_axis, -1.0f, 1.0f) *
                 input_config()->key_turn_rate * substep_seconds;
@@ -322,7 +368,7 @@ void __cdecl enhanced_input_steer_thunk(void)
          * because this file counts right as positive while the axis above is positive for LEFT,
          * so passing -x is what puts the pad on the keyboard's own footing rather than adding a
          * second sign convention. Analog, so a small push is a slow turn. */
-        if (hand_back && pad_turn != 0.0f) {
+        if ((hand_back || melee_turn) && pad_turn != 0.0f) {
             input_state.pending_yaw_degrees +=
                 enhanced_input_clamp(-pad_turn, -1.0f, 1.0f) *
                 input_config()->key_turn_rate * substep_seconds;

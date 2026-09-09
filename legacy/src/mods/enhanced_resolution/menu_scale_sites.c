@@ -432,6 +432,57 @@ static const uint8_t MSK_SW3D_DRAW[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 
+/* ---------------------------------------------------------------------------------------------
+ * swmenu_freeBitmaps, retail 0x0045DF05. Called, never patched.
+ *
+ *   55 8B EC 51                 push ebp / mov ebp,esp / push ecx
+ *   C7 45 FC 00000000           i = 0
+ *   EB 09 / 8B 45 FC 83 C0 01   the for loop's increment, jumped over on the first pass
+ *   89 45 FC
+ *   8B 4D 08 8B 55 FC 3B 51 14  cmp i,pMenu->nBitmaps
+ *   7D 4D                       jge out
+ *   ... res_markUnused(res,1); res_Free(res); pMenu->apBmpRes[i] = 0
+ *
+ * The whole body is those three lines, so it drops a screen's bitmap cache and nothing else. What
+ * makes it safe to call on a screen that is currently open is that the engine does exactly that
+ * itself: modal_window_stack_push calls it on the outgoing screen when one screen is pushed over
+ * another, and the screen underneath goes on being drawn. A picture whose slot is zero is reloaded
+ * by name on the next draw, which is where the load hook resamples it to the new canvas.
+ *
+ * Unique unmasked in both shipped WMAIN.EXE builds. */
+static const uint8_t SIG_FREE_BITMAPS[] = {
+    0x55, 0x8B, 0xEC, 0x51,                                  /* prologue                       */
+    0xC7, 0x45, 0xFC, 0x00, 0x00, 0x00, 0x00,                /* i = 0                          */
+    0xEB, 0x09, 0x8B, 0x45, 0xFC, 0x83, 0xC0, 0x01,          /* the increment, jumped over     */
+    0x89, 0x45, 0xFC,
+    0x8B, 0x4D, 0x08, 0x8B, 0x55, 0xFC, 0x3B, 0x51, 0x14,    /* cmp i,pMenu->nBitmaps          */
+    0x7D, 0x4D                                               /* jge out                        */
+};
+
+/* ---------------------------------------------------------------------------------------------
+ * swmenu_sendWidget, retail 0x00462773. Called, never patched.
+ *
+ *   55 8B EC 51                 prologue
+ *   83 7D 08 00 74 33           a null widget answers 0
+ *   8B 45 08 8B 08              type = pWidget->type
+ *   6B C9 0C                    imul ecx,ecx,12          the handler table's stride
+ *   8B 91 C8 6C 4B 00           mov edx,[ecx+0x004B6CC8] the handler for that type
+ *   83 7D FC 00 74 1C           an unhandled type answers 0 as well
+ *   ... five arguments pushed, call edx
+ *
+ * The table address is an absolute operand rather than a relative one, so it is matched rather
+ * than masked and the pattern names the table as well as the function. Reading that table is where
+ * WIDGET_LISTBOX_TYPE comes from.
+ *
+ * Unique unmasked in both shipped WMAIN.EXE builds. */
+static const uint8_t SIG_SEND_WIDGET[] = {
+    0x55, 0x8B, 0xEC, 0x51,                                  /* prologue                       */
+    0x83, 0x7D, 0x08, 0x00, 0x74, 0x33,                      /* a null widget answers 0        */
+    0x8B, 0x45, 0x08, 0x8B, 0x08,                            /* type = pWidget->type           */
+    0x6B, 0xC9, 0x0C,                                        /* imul ecx,ecx,12                */
+    0x8B, 0x91, 0xC8, 0x6C, 0x4B, 0x00                       /* the handler for that type      */
+};
+
 signature_t menu_scale_sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("swrle_blit", SIG_RLE_BLIT),
     SIGNATURE_ENTRY_DETOUR("swmenu_open", SIG_MENU_OPEN, MENU_OPEN_PROLOGUE),
@@ -444,7 +495,9 @@ signature_t menu_scale_sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("swlistbx_input row floor", SIG_LISTBOX_FLOOR, MSK_LISTBOX_FLOOR),
     SIGNATURE_ENTRY_MASKED("swpic_setWidgetImage", SIG_SET_WIDGET_IMAGE, MSK_SET_WIDGET_IMAGE),
     SIGNATURE_ENTRY_MASKED("swpic_drawCursor", SIG_DRAW_CURSOR, MSK_DRAW_CURSOR),
-    SIGNATURE_ENTRY_DETOUR_MASKED("sw3d_draw", SIG_SW3D_DRAW, MSK_SW3D_DRAW, SW3D_DRAW_PROLOGUE)
+    SIGNATURE_ENTRY_DETOUR_MASKED("sw3d_draw", SIG_SW3D_DRAW, MSK_SW3D_DRAW, SW3D_DRAW_PROLOGUE),
+    SIGNATURE_ENTRY("swmenu_freeBitmaps", SIG_FREE_BITMAPS),
+    SIGNATURE_ENTRY("swmenu_sendWidget", SIG_SEND_WIDGET)
 };
 
 /* Exactly two matches are expected here; see the note above the pattern for why one or three is

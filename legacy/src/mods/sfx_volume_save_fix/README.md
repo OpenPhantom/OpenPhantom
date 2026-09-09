@@ -43,8 +43,8 @@ whatever the engine itself last set, and that round-trip does not reliably refle
 just pushed with `_AIL_set_digital_master_volume`.
 
 This function has exactly two callers, and both are inside `options_audio`: an `E8` sweep of the
-whole `.text` finds call sites at `0x004420C1` and `0x004428C2` and nothing else, and the next
-function entry after `0x00441FA4` is `0x00442A98`, so both lie inside that one screen. They are
+whole `.text` finds two call sites, `0x004420C1` and `0x004428C2`, and the next function entry
+after `0x00441FA4` is `0x00442A98`, so both lie inside that one screen. They are
 the two things the screen does with the number: seeding the slider widget when it opens, and
 building the value written to `obi.ini`'s `SVOL` key when it closes.
 
@@ -76,7 +76,7 @@ symptom this DLL exists to remove, reintroduced for the no-sound case.
 
 **This bug is real and was confirmed in game** with a temporary diagnostic build: dragging the
 slider to 33 and closing the menu correctly produced `SVOL=33` in `obi.ini`. But fixing it alone
-did **not** fix "resets on reload"; that symptom survived unchanged, which is what led to bug 2.
+did **not** fix "resets on reload"; that symptom survived unchanged and led to bug 2.
 
 ## Bug 2: the loaded value was never applied (the actual cause of "resets to full on reload")
 
@@ -147,7 +147,7 @@ trip exactly. That is 1999 engine behaviour and not something this DLL changes, 
 
 All three patterns measured against every retail `WMAIN.EXE` available, including the German
 build: one match each, at the addresses this file names. The `master_get` prologue alone matches
-twice (`0x00417459` and `0x0041778C`), which is why the whole 30-byte body is the pattern.
+twice (`0x00417459` and `0x0041778C`), so the pattern is the whole 30-byte body.
 
 Bug 1 (wrong saved value) was confirmed fixed in game before the guard branch was restored. Bug 2
 (dropped load-time apply) was diagnosed from two real runs' logs and fixed per the analysis
@@ -160,5 +160,5 @@ in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.
 ## Why this is SFX and not a general save or load problem
 
 Music volume is unaffected by either bug. It round-trips through a simple engine-side float with
-no driver query and no ordering dependency on a "ready" flag, which is what pointed at these two
+no driver query and no ordering dependency on a "ready" flag. That pointed at these two
 SFX-specific sites rather than at the settings file or the code that reads it.

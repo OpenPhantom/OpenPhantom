@@ -30,7 +30,23 @@ bool air_control_row_set(bool enabled)
 
 bool air_control_row_available(void)
 {
-    /* Asked of the key the strafe row edits rather than of enhanced_input, so this answers
-     * correctly with that DLL absent and answers immediately when that row is flipped. */
-    return strafe_row_get();
+    /* Either scheme, because either one is enough to take the engine's own jump steering away.
+     *
+     * The engine steers a jump on its own, and that is the fact this row exists around. Both the
+     * Jump and Fall descriptors carry the ordinary steer phase, so in the shipped game the turn
+     * input turns the body while the player is off the ground, and always did. What removes it is
+     * free look: outside Stand our own steering handles the substep and the engine's turn no
+     * longer reaches the body, because the mouse is the camera there and a turn rate left standing
+     * would move the heading underneath it. So this row is not an addition to the game, it is the
+     * thing that gives back what our control scheme took.
+     *
+     * That is why the gate is either row rather than the sideways walk alone. Free look on with the
+     * sideways walk off used to be the one configuration with no jump steering at all: the engine's
+     * was suppressed and this row was greyed out. It still steers there, with fewer directions,
+     * because the angle is built from the sideways AND forward input and a lone forward key is a
+     * turn toward the camera rather than nothing.
+     *
+     * Asked of the keys the two rows edit rather than of enhanced_input, so this answers correctly
+     * with that DLL absent and answers immediately when either row is flipped. */
+    return strafe_row_get() || free_look_row_get();
 }

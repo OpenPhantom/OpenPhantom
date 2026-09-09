@@ -85,7 +85,7 @@ not have ruled out.
 
 ### Why Escape is the right key for Start
 
-Confirmed directly, this session, by decompiling `gameplay_wndproc_hotkey_handler` (`0x0043F681`):
+Confirmed directly, this session, by decompiling `gameplay_wndproc_hotkey_handler` (`0x0043F603`):
 Escape (`0x1b`) is the sole route into `gameplay_open_pause_menu` (`0x0043FAB5`) during normal
 gameplay, and the engine's own state gating (a separate handler owns Escape once a menu is
 already open) prevents a synthetic Escape from double-toggling anything. Two edge cases exist and
@@ -160,11 +160,72 @@ made somewhere else.
 The poll itself keeps running while unfocused, so the pad stays tracked and a return to the game is
 immediate.
 
+## Your controller has to be an XInput one
+
+This reads the pad with `XInputGetState` only. An Xbox pad works as it is; anything else has to be
+presented as one.
+
+**Add the game to Steam as a non-Steam game and launch it from there.** Steam Input then presents
+almost any controller as an XInput device, a Steam Deck's own controls included. This is the route
+confirmed end to end, on a Deck in desktop mode, where launching from Steam gives the window modes
+and every input feature here together. The alternative is something that emulates XInput directly,
+such as DS4Windows for a PlayStation pad.
+
+Without one of those, a DirectInput-only device is invisible here: an older or off-brand pad, a
+PlayStation controller plugged straight in, a flight stick. The game's own joystick support and its
+own Controls screen still read such a device, with the shipped faults `enhanced_input` documents.
+
+Note what is NOT the explanation, because it was guessed and then refuted by a log: Wine does supply
+XInput for any pad it recognises, with or without Steam, so a Steam Deck in desktop mode outside
+Steam still reports a device. It reports one that sends nothing, which is a different fault and is
+described in `enhanced_input`'s README.
+
+## Planned: reading more than XInput
+
+Wanted, not written. Recorded here so the next person starts from the constraint rather than the
+options.
+
+**Why XInput and not something wider in the first place.** `XInputGetState` answers the whole
+question in one call and answers it in normalised form: sticks already scaled, triggers already
+0..255, buttons already named by their position on a known layout. Everything below returns raw
+device state and leaves the caller to work out which axis is which, where the centre is, and what
+the buttons are called. That mapping problem is exactly what the engine's own joystick path gets
+wrong, in the ways `enhanced_input` sets out, so a second implementation of it is a second chance
+to get it wrong.
+
+**The candidates, and what each actually costs.**
+
+* **SDL's game controller layer.** The pragmatic answer. It normalises hundreds of devices onto the
+  same Xbox-shaped layout this code already speaks, using a community mapping database, so the
+  internal shape of `controller_input.c` would barely change: one backend swap behind the same
+  "give me sticks, triggers and buttons" call. The price is a new third-party binary to ship, with
+  the licence, the notices file and the checksum list that go with it, and one more DLL to load
+  under Wine.
+* **DirectInput 8.** No new dependency, and it is what the devices this is for actually speak. The
+  cost is the whole mapping problem by hand, per device, with no database to lean on. Workable for
+  a named list of popular pads and unbounded for anything else.
+* **Raw Input or HID directly.** Most control, most work, needs report descriptor parsing. Only
+  worth it if the two above are both ruled out, which they are not.
+* **Windows.Gaming.Input.** Modern and clean, and no use here: it is WinRT, and this has to keep
+  working under Wine on the Steam Deck, where the Linux confirmation in this project depends on it.
+
+**The shape to aim for.** One internal pad interface with XInput as the default backend, kept
+dependency-free, and a second backend chosen by a setting rather than by detection, so a reader with
+an unusual device opts in and a reader with an Xbox pad is never routed through anything new. Start
+by making the existing code call through that interface with XInput behind it and no behaviour
+change at all; that step is worth doing on its own and it makes the rest small.
+
+**What is not known yet.** Whether Steam Input covers enough of the affected devices in practice
+that the whole thing is unnecessary for anyone playing through Steam. Worth asking before building:
+if the answer is yes, the honest fix is documentation rather than code.
+
 ## Limitations
 
-* Only the right stick, Start and the two triggers are handled. Movement, face buttons and the
-  left stick do nothing here; use the game's own joystick support (via a real wrapper, or a real
-  legacy joystick) if those are wanted too, or extend this DLL.
+* Only XInput devices are read at all. See above.
+* Only the right stick, Start and the two triggers are handled *by this DLL*. The left stick is
+  read by `enhanced_input`'s `PadStick`, also through XInput and for the reasons its own README
+  gives, so movement is covered and is simply covered elsewhere. Face buttons are handled by
+  neither; the game's own Controls screen still reads those.
 * `SendInput` is OS-level synthetic input. It will also reach any other foreground window, though
   in practice this game holds input focus while running and the pause key/mouse movement are
   harmless if they ever did not.
@@ -210,7 +271,7 @@ tested separately with `[fmv_player] Enabled=0`, through the untouched retail Bi
 reads this game's roll input, unlike the doubt raised above, but holding the direction key down
 for as long as the trigger stayed pulled produced a diagonal drift rather than a clean roll.
 Confirmed with the player themselves: real play is "hold Alt, then tap Left or Right", not hold
-the direction key, which is what a held trigger was reproducing.
+the direction key, which a held trigger was reproducing.
 
 **Fix:** each trigger now taps its own arrow key repeatedly instead of holding it down, one tap
 the instant the trigger crosses the threshold and one more every 150ms for as long as it stays

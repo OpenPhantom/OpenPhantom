@@ -12,10 +12,13 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds two groups as well, split the same way and for the same reason the
-  Original tab is: **Cheats** are the things that change the game, **Utilities** are the settings
-  that configure this patch. It began as one group with a settings row appended, and the settings
-  outgrew the cheats, so a reader had to scroll past invincibility to reach the draw distance.
+* **OpenPhantom** holds three groups, split the same way and for the same reason the Original tab
+  is: **Cheats** are the things that change the game, **Utilities** are the settings that configure
+  this patch, and **Window mode** is the shape of the window. It began as one group with a settings
+  row appended, and the settings outgrew the cheats, so a reader had to scroll past invincibility to
+  reach the draw distance. Window mode came out of Utilities for the same reason plus one of its
+  own: its rows answer a single question a player arrives with, and half of them are unusable until
+  the game is restarted, which is worth saying in one place rather than eleven times.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
@@ -47,7 +50,7 @@ user interface library, for nothing the engine's own renderer does not already g
 | built in font | `0x0046B754` | the slot the engine loaded at startup, read as a cell |
 | font select | `0x0046B13B` | refuses below 0 and at or above 16 |
 | alignment | `0x0046B23C` | three modes, writing 1, 2 and 4 into one field |
-| glyph scale | `0x0046B293` | `+0x28`, which is what tells it from the position scale |
+| glyph scale | `0x0046B293` | `+0x28`, telling it from the position scale |
 | position scale | `0x0046B2BA` | `+0x38` |
 | text colour | `0x0046B179` | packed ARGB |
 | text | `0x0046B3C0` | a string at a position |
@@ -79,16 +82,16 @@ input switch, it simply does not run the phases in a menu, a dialogue or a cutsc
 what the mouse look in `enhanced_input` already watches for.
 
 **That alone was never a pause, and this file used to claim it was.** The player stopped and the
-world did not: NPCs kept walking, movers kept moving and timers kept running behind the panel, which
-is exactly what a player notices opening the overlay mid fight. So the simulation is now held as
-well, on the engine's own flag. `sys_frame` gates its own substep loop on it and the retail pause
-menu sets the same one, so nothing here is invented and nothing had to be hooked; `render_frameEnd`
-runs below that gate, which is why the picture keeps being drawn.
+world did not: NPCs kept walking, movers kept moving and timers kept running behind the panel. A
+player notices that opening the overlay mid fight. So the simulation is now held as well, on the
+engine's own flag. `sys_frame` gates its own substep loop on it and the retail pause menu sets the
+same one, so nothing here is invented and nothing had to be hooked; `render_frameEnd` runs below
+that gate. The picture keeps being drawn.
 
 **Sound and music keep playing behind the panel, deliberately.** The retail pause menu also
-broadcasts task command 8 on the way in and 9 on the way out, which is what silences audio. That
-pair is not borrowed, because the pause broadcast only marks a task paused when its handler returns
-0 and iMUSE's returns 2, so the mark is never set and the matching resume never fires `ImResume`.
+silences audio by broadcasting task command 8 on the way in and 9 on the way out. That pair is not
+borrowed, because the pause broadcast only marks a task paused when its handler returns 0 and
+iMUSE's returns 2, so the mark is never set and the matching resume never fires `ImResume`.
 Copying it would risk leaving the music stopped with nothing to start it again, and audio that keeps
 going is a smaller wrong than silence that does not come back.
 
@@ -96,9 +99,9 @@ Window messages are answered here rather than passed on, which covers the pause 
 **Alt combinations are handed back untouched**, so Alt+F4 and Alt+Tab still work: a modal panel that
 can trap somebody in a full screen game would be worse than anything it fixes.
 
-The panel closes itself if it is asked to paint into a frame the player is not seeing, which is what
-the front end and a movie look like from here. Otherwise a level ending could leave the game held
-with nothing on screen.
+The panel closes itself if it is asked to paint into a frame the player is not seeing. The front
+end and a movie look like that from here. Otherwise a level ending could leave the game held with
+nothing on screen.
 
 **Typing reaches the search box only after a click has landed on it, not the moment the panel
 opens.** The box used to take every character while the panel was up, which meant the key that
@@ -157,16 +160,16 @@ subtracting from it. A scripted death and the console's own `kill me now` both g
   the same isolation every feature DLL here keeps. While the cheat is on, a per-frame hook
   (`common/frame_hook.h`, the same one `fog_regime.c` uses for its own easing) pushes the level's
   fog band (`world+0x218`/`0x21C`, both world-unit floats) out past anything the world walk's own
-  draw-distance cull can still be showing, which is what makes it survive a level change rather
-  than lasting only until the next one.
+  draw-distance cull can still be showing. The per-frame push survives a level change rather than
+  lasting only until the next one.
 
   **The first version cleared `world+0x210` bit 0 instead, the level's "has fog" flag, and field
   testing found that breaks the renderer**: every moving actor drew as a flat, unlit silhouette,
   and setting the bit back did not undo it. Retail never toggles that bit at runtime at all, it is
   set once at level load and held fixed for the level's life, so a runtime flip exercises a
   combination of engine state nothing in 1999 ever produced. `fog_regime.c` never touches that bit
-  either, only the band, which is why this now does the same rather than the flag. See the
-  header comment in `cheats_no_fog.c` for the full account, kept in rather than quietly fixed for
+  either, only the band. This now does the same rather than the flag. See the header comment
+  in `cheats_no_fog.c` for the full account, kept in rather than quietly fixed for
   the same reason the graphics detail / red highlight mislabelling is kept in
   `cheats_original_actions.c`'s own history.
 
@@ -202,9 +205,9 @@ executed. The `+0x38` health field is the one `dismemberment.c` already establis
 retail's own death gate at `0x0043707D`.
 
 * **Invincible NPCs** skips the block, so health is untouched.
-* **One-shot NPCs (your damage)** writes health straight to zero, which is what the death gate
-  this function feeds actually tests for. It fires **only for damage that came from the
-  player**, so NPCs fighting each other are unaffected.
+* **One-shot NPCs (your damage)** writes health straight to zero. The death gate this function
+  feeds tests for exactly that. It fires **only for damage that came from the player**, so NPCs
+  fighting each other are unaffected.
 
 Invincible wins if both are somehow on at once: refusing the hit outright is more obviously
 correct than a hit that is at the same time "took no damage" and "died".
@@ -256,8 +259,8 @@ in that phase, and the floor went with it. Everything recorded against it, falli
 modelled floors most of all, followed from the site rather than from the idea.
 
 **Five things can stop the player, and each needed its own site.** Four of the five were found by
-measuring the running game rather than by reading it, which is why they are listed here: the set
-is not recoverable from any one of them.
+measuring the running game rather than by reading it. They are listed here because the set is not
+recoverable from any one of them.
 
 | what stops you | site | what it is |
 |---|---|---|
@@ -267,17 +270,17 @@ is not recoverable from any one of them.
 | edges catching you as you pass | `0x0044C78E` | phase 8 of mode Fall, the ledge grab |
 | people | `0x004131EB` | `bapobj_cylinderPush`, bodies being solid to each other |
 
-That the set is complete is checkable rather than hopeful: every write of zero into the player's
-moved flag was enumerated in the image, eleven sites in all. Four are the ones above, three are
-irrelevant (death, the tripod turret, non-player code) and the rest were already covered.
+That the set is complete is checkable: every write of zero into the player's moved flag was
+enumerated in the image, eleven sites in all. Four are the ones above, three are irrelevant
+(death, the tripod turret, non-player code) and the rest were already covered.
 
 **The floor is a different function and is never touched.** `bapmap_probeFloor` is not on this
-list and nothing here goes near it, which is what keeps the player standing on ground throughout.
+list and nothing here goes near it. The player keeps standing on ground throughout.
 
-**The air-block fences are not a rare case**, which is why the third hook matters: 73,360 faces
-across the eleven levels carry that flag, 22 per cent of every face in the game, and another
-29,968 carry the low-ceiling one. Without that hook clipping works on the ground and then stops
-working the moment the player leaves it.
+**The air-block fences are not a rare case.** The third hook matters: 73,360 faces across the
+eleven levels carry that flag, 22 per cent of every face in the game, and another 29,968 carry the
+low-ceiling one. Without that hook clipping works on the ground and then stops working the moment
+the player leaves it.
 
 **The ledge grab was the subtlest.** It is not a collision test at all, so no wall probe can reach
 it: it looks half a unit ahead for an edge and puts the player on it. A glide keeps the player in
@@ -327,8 +330,8 @@ route through different ones. Either alone still helps whichever characters use 
 free camera below a partial resolve here is kept: it is a real cheat for part of the cast rather
 than half a feature that does nothing.
 
-Each hook calls the original **first and unconditionally**, which is what makes this a boost and
-not a reimplementation. The jump happens exactly as retail built it, guard check and all, and
+Each hook calls the original **first and unconditionally**. This is a boost, not a
+reimplementation. The jump happens exactly as retail built it, guard check and all, and
 only once it has decided to jump and written its own vertical velocity does the cheat scale what
 is now sitting at `+0xB4`, whichever path the original took, the fallback constant or the
 per-character table value. The multiplier is a number you can type on the cheat's own row.
@@ -373,7 +376,7 @@ A fallback that always means the same thing is worth more than one more thing to
 Alt+F4 still closes the game, because Alt is not read here. With no key bound the cheat refuses
 to switch on at all.
 
-**One guard worth knowing about.** Mouse look measures the pointer's movement between frames
+**One guard.** Mouse look measures the pointer's movement between frames
 against an anchor it re-centres each frame. Anything else that also moves the pointer, a cursor
 cage or another overlay, turns that difference into a constant that is not hand movement and that
 arrives again on the next frame, and the frame after. A steady vertical bias drives pitch onto
@@ -394,7 +397,7 @@ downstream is patched.
 
 Both tables are found through the one piece of code that touches them together, the console's
 comparison loop, and read out of its operands. The name table has exactly **one** reference in the
-whole code section, which is why that site was chosen over the tidier looking ones nearby.
+whole code section. That site was chosen over the tidier looking ones nearby.
 
 The console also prints a confirmation line from a parallel table of message ids. That is left out
 on purpose: it exists to confirm a code somebody typed blind, and a panel that shows the state has
@@ -539,8 +542,8 @@ every row using it, and fog thickness starts at `0.25`, which a fiftieth rounds 
 the documented minimum could not be reached. That was caught in a log rather than by a test.
 
 **It writes the ini rather than calling `view_distance_fix`.** Feature DLLs here never depend on
-each other at run time, which is what lets any one of them be deleted from the `mods` folder without breaking
-the rest. The ini is a channel both already have and neither owns, `view_distance_fix` re-reads the
+each other at run time. Any one of them can be deleted from the `mods` folder without breaking the
+rest. The ini is a channel both already have and neither owns, `view_distance_fix` re-reads the
 key once a second and adopts it, and the setting survives a restart for free because it is written
 where the setting already lived. The cost is a fraction of a second between committing the row and
 the world changing.
@@ -600,9 +603,9 @@ governor is the only one of the four that acts in ordinary play at `1.00x`. The 
 real but conditional, and it is written here and in the ini rather than squeezed into a label.
 
 **The two switches are mutually exclusive, and the second one wins.** While strict is on the
-frame-rate row is greyed: it reads off, it cannot be clicked, and that is the state the game is
-genuinely in, because strict declines the governor outright. A row still reading ON over a governor
-that is not acting would be a lie in the one place a reader looks to find out what is happening.
+frame-rate row is greyed: it reads off and it cannot be clicked. The game is genuinely in that
+state, because strict declines the governor outright. A row still reading ON over a governor that
+is not acting would be a lie in the one place a reader looks to find out what is happening.
 
 What it deliberately does **not** do is write `FrameBackoff`. Someone who had the governor on, turns
 strict on to look at something and turns it off again gets their governor back, rather than
@@ -663,27 +666,36 @@ angle measured against the camera. Without free look neither has anything to wor
 dependency is one way, so switching either off leaves free look alone, and switching free look
 off takes both down with it.
 
-**The row writes both keys rather than calling the feature**, and that is not tidiness. Free
-look refuses while the player phases are stopped, which is exactly the state the game is in
-while this panel is open, so a row that asked it directly would be refused every time it was
-clicked. Written to the file instead, the once-a-second re-read applies them in its own order
-once play resumes, with the refusal handling it already has.
+**The row writes both keys rather than calling the feature**, and not for tidiness. Free look
+refuses while the player phases are stopped, the state the game is in while this panel is open,
+so a row that asked it directly would be refused every time it was clicked. Written to the file
+instead, the once-a-second re-read applies them in its own order once play resumes, with the
+refusal handling it already has.
 
-Both are **unavailable rather than hidden while `Strafe` is off**, because both are steered by
-the sideways input and there would be nothing to aim with.
+`Camera follows you` is **unavailable rather than hidden while `Strafe` is off**, because the walk
+never leaves the heading then and there is nothing to follow.
+
+`Steer a jump in the air` is available while **either** of them is on, and that difference is worth
+the sentence. **The shipped game steers a jump on its own**: the Jump and Fall descriptors both
+carry the ordinary steer phase, so the turn input has always turned the body in the air. What takes
+it away is free look, which handles the substep outside Stand so that the mouse stays on the camera.
+So this row is not an addition to the game, it is what gives back what our own scheme removed, and
+it is offered wherever that scheme is on. With free look on and the sideways walk off it still
+steers, with fewer directions, because a lone forward key is a turn toward the camera. With both
+off it is greyed out, because the engine is already doing the job.
 
 **All three needed the owning DLL to start reading its own settings back.** Both of those screens
 pushed outward only: they applied a change and then wrote the file, and nothing ever read it. A row
 here would have done nothing until the next launch. `variable_fov` and `enhanced_input` now re-read
 these keys once a second, the way `view_distance_fix` already did, so a row takes effect within the
-second. **A key is only re-read if it is named in that poll**, which is worth knowing before adding
-a row: one added without it writes the file, nothing reads it back, and the row looks dead until the
-next launch. `CameraFollow` and `AirControl` are both in it.
+second. **A key is only re-read if it is named in that poll.** One added without it writes the
+file, nothing reads it back, and the row looks dead until the next launch. `CameraFollow` and
+`AirControl` are both in it.
 
 **Naming a key in that poll is not quite enough, and the second half cost a released build.**
 The poll reads each key and compares it against the value it last saw, and it reads all of
 them before it acts on any of them. So when one setting switches another off as a dependency,
-which is what free look does to these two, the value it last saw for the other key is one that
+as free look does to these two, the value it last saw for the other key is one that
 no longer exists in the file or in the running game. Every later edit to that key then compares
 equal to it and is decided not to be a change, and the row goes dead until the game is
 restarted. It now re-reads what is live on any pass where it acted. A row whose key another
@@ -706,9 +718,9 @@ the engine's own widget table once while the game starts, and this project has n
 such a table back. A switch that appears to do nothing is worse than one that explains itself.
 
 **The mouse speed slider is gated with the rest, and that was the one real decision.** Mouse
-look ships on, so that slider was its only adjustment inside the game, which is exactly why the row
-above exists. Leaving one widget behind on a screen meant to look untouched would have been the
-worse answer: either the screen is the one the game shipped or it is not.
+look ships on, so that slider was its only adjustment inside the game. That is why the row above
+exists. Leaving one widget behind on a screen meant to look untouched would have been the worse
+answer: either the screen is the one the game shipped or it is not.
 
 ## The fog rows
 
@@ -764,8 +776,8 @@ subtitles are, as a multiple of the size they have at 640x480. Typed in like the
 the band in the label, and **dragged on the track beneath it**.
 
 **A track is right here, unlike the panel's own size.** That one was tried and taken back out,
-because dragging it moved the panel being dragged. This changes text somewhere else on the screen,
-which is exactly what a slider is for: bring up a line of dialogue and drag until it reads well.
+because dragging it moved the panel being dragged. This changes text somewhere else on the screen.
+That is what a slider is for: bring up a line of dialogue and drag until it reads well.
 
 **It goes through the ini, like the rows beside it.** The setting belongs to
 `enhanced_resolution.dll`, feature DLLs here never depend on each other at run time, and either can
@@ -790,12 +802,12 @@ already has a name for and the panel is an implementation detail of it.
 1080 display as on a 4K one, which is deliberate: what it cannot know is how big those pixels
 physically are. The engine has the resolution and not the screen, so on a high density laptop
 panel the size that is comfortable on a desktop monitor comes out too small to read. There is no
-number this can default to that is right everywhere, which is why it is a row and not a constant.
+number this can default to that is right everywhere, so it is a row and not a constant.
 
 **It takes effect on the next frame, and it moves itself while it is being used.** Committing a
-value redraws the menu at the new size immediately, including the row that was just typed into,
-which is why this row is near the bottom: a control that moves while you are working it is easier
-to find again at the end of a group than in the middle of one. Only the key binding sits below it,
+value redraws the menu at the new size immediately, including the row that was just typed into.
+This row is near the bottom because a control that moves while you are working it is easier to
+find again at the end of a group than in the middle of one. Only the key binding sits below it,
 and that one is used once.
 
 **The value is owned by `dev_menu_size_row.c`, not by the drawing.** The row is asked for the
@@ -867,7 +879,7 @@ feature, noclip, letting the player walk through walls and fly, was removed afte
 replaced it outright; see `cheats_openphantom.h`'s own header comment for why.
 
 **The bound key teleports, F4 does not.** The key set in the panel ends the flight and brings the
-player to wherever the camera is, which is what the camera is usually being flown for. F4 ends the
+player to wherever the camera is. That is usually what the camera is being flown for. F4 ends the
 flight and leaves the player exactly where they were, and is fixed rather than bindable because a
 fallback that always means the same thing is worth more than one more thing to configure. Both are
 read while the panel holds the simulation, so the move is written into a still-frozen world and
@@ -884,7 +896,7 @@ Three things this needed that were each found in the field, not predicted:
   the key doing nothing.
 * The panel is locked open while the camera is flying: neither Escape nor the open key will close
   it, because closing it mid-flight leaves the camera stranded with no cursor to recover it. The
-  only ways out are the bound key and F4, which is what the fly-controls fold now says.
+  only ways out are the bound key and F4. The fly-controls fold now says so.
 
 Tested in game on Windows: teleport across a room, teleport onto a ledge, F4 from mid-air, and the
 panel refusing to close while flying.
@@ -962,3 +974,78 @@ cap. The log lines to look for:
 [dev_overlay] the free camera teleport key dropped the player at 38.2 127.1 101.0
 [dev_overlay] the teleport was refused and the camera returned instead: it is 104 units of drop, past the 80 this engine can finish a fall from
 ```
+
+
+## Lightsaber dismemberment sits in Utilities, not in Cheats
+
+It is a cheat by any ordinary reading, and it is here for the same reason the no-fog row is: this
+row writes a settings key and the choice survives the session, while the cheats above it do not.
+A row whose effect outlives the run belongs with the settings.
+
+The row writes one key, `[dismemberment] Mode`, as 2 or 0. It does not reach into
+`dismemberment.dll` and could not: feature DLLs here never call each other, and the panel does not
+know whether that one is even loaded. That DLL re-reads the key about once a second and applies it,
+so a press changes the game within that second.
+
+The key also takes 1, which corrects which limb the engine's own seven authored severings take
+without adding any. Nobody wants that on purpose, so the row writes 2 or 0 and a reader who has set
+1 by hand sees the row lit and keeps their setting until they press it.
+
+## The Window mode group
+
+Eleven rows, and the group is a good deal more stateful than Utilities, so the rules it follows are
+worth writing down.
+
+**The five shape rows are one choice, not five switches.** Pressing the lit one does nothing. An
+earlier build treated a second press as "turn this off" and dropped the player to the engine's own
+shape, which looks exactly like the window feature having stopped working.
+
+**Fullscreen is the exception, and is a switch.** The engine's own shape covers most of a screen, so
+turning it on reads as going fullscreen and the next thing anyone does is press it again to come
+back. It remembers the mode it replaced and gives it back. That memory is kept in this DLL rather
+than written to the settings file: it is a memory of a gesture, not a setting, and a key in the file
+that nothing else reads would only leave a reader wondering what it was for.
+
+**The size list opens with `auto`, and that row is the whole reason it is a list of its own.** The
+entries below it are the display's own modes, asked of Windows rather than of the engine, so every
+one of them is a real size. `auto` is not: it writes zero to both axes. The rest of the feature
+already reads that as "take the size the game is rendering", and it is what a fresh install has.
+Without a row for it, choosing any size was a one-way door out of the state the panel started in,
+because nothing else anywhere writes those numbers back. The row is lit by the ABSENCE of a size,
+which is the same test the row above it uses to decide it says `auto`, so the two cannot disagree.
+
+**Choosing a shape also writes the device.** `WindowedPresent` had a row of its own and should not
+have: it has exactly one correct value for each shape above it, and one broken one. A window without
+it means an exclusive device owning the screen, so asking the engine for a smaller picture sets the
+real display resolution smaller, which was measured leaving a 4K desktop at 800x600. Fullscreen
+without it is not fullscreen. A row whose only two settings are the right answer and a trap is not a
+choice, so it is written wherever the shape is written and there is no row for it.
+
+**Everything greys until the device is windowed.** The gate is what the device actually IS, which is
+not the same question as what the settings file says: that file is read once, when the engine builds
+its device, so after a press the two disagree until the game is restarted. Reading it once, before
+anything in the group can be pressed, makes the rows follow the device rather than the file.
+Without that, switching fullscreen off un-greyed rows the device still could not carry.
+
+The two key bindings grey with everything else. Greying a binding row does not disable the key it
+names: Alt and Enter is the way out of fullscreen without opening this panel at all, and having the
+panel's own appearance take that away would be a trap rather than a tidy-up. What is given up while
+they are grey is the ability to rebind them.
+
+**The size is a list, not two typed numbers.** It unfolds into the sizes the display reports, one
+row each, and closes when one is chosen: the same shape the free camera's "how to fly" row uses, so
+the group's row count grows only while it is open. It was two text boxes first, and a typed number
+can be one no display offers. That matters more than it sounds, because the size chosen here is also
+written as the resolution to render at, the engine opens whatever it finds at startup, and a size it
+cannot open stops the game before it draws anything. Catching that afterwards and explaining it is
+worse than not being able to say it.
+
+The list comes from Windows rather than from the engine. The engine has one and `enhanced_resolution`
+owns it, but that is a different DLL and feature DLLs here do not depend on each other. Windows
+answers the same question from the same driver, and the DLL that actually writes the resolution
+checks its own list before it does, so a size offered here that the engine somehow does not know is
+refused there with a line saying so rather than reaching the settings file.
+
+Sizes under 640x480 are dropped. That is not tidiness: below roughly that much client area the
+engine's warp to client (320,240) lands outside the window, the pointer is clamped short of it, the
+echo test never matches, and a constant delta accumulates for as long as the window stays small.

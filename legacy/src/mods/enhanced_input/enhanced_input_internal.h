@@ -40,6 +40,7 @@ typedef struct enhanced_input_state {
     bool  steer_ran_this_substep;
 
     bool  logged_steer;
+    bool  logged_melee_turn;
     bool  logged_integrate;
     bool  logged_first_input;
     bool  warned_about_mode;

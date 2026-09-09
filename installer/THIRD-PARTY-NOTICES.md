@@ -35,6 +35,12 @@ binaries are unaltered. Those six are the ones to re-apply when the folder is re
 the way to find them is to diff the shipped file against the `dxwrapper.ini` inside the
 release archive rather than to trust this list.
 
+A seventh, `DdrawWriteToGDI`, ships at upstream's 0 and is written by the patch rather than by
+this folder. It decides how large the surfaces the wrapper hands the engine are, so it has to
+follow `WindowedPresent` and cannot be a fixed value here; `enhanced_resolution` writes it when
+that setting changes, only when the two disagree, and never when this file is absent. It is the
+only key in this file anything of ours ever writes.
+
 The licence text of every one of these is installed beside the game, and the files are in
 `dist/` next to the binaries they cover.
 

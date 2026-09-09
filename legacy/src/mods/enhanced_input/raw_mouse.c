@@ -1,13 +1,18 @@
 /* raw_mouse.c: the device's own counts, with their timing intact, on a thread of our own.
  *
- * SIZE NOTE. The file sits between the preferred 400 lines and the 600 mark, and roughly a third of
- * it is comment. The code is a window, a thread, a registration and two interlocked adds; what is
- * long is the account of the compatibility shim that made the first build of this feature inert,
- * the ladder that was built while the cause of that was still unknown, and the unit the reader has
- * to answer in. All three are invisible in the expressions and expensive to rediscover. One seam
- * was measured and rejected: moving the unshimmed resolution into the shared library. Nothing else
- * in the tree registers for raw input, so it would have been a single caller reaching into another
- * directory and the evidence would have ended up further from the call it explains.
+ * SIZE NOTE. The file is past the 600 mark, and roughly a third of it is comment. The code is a
+ * window, a thread, a registration and two interlocked adds; what is long is the account of the
+ * compatibility shim that made the first build of this feature inert, the ladder that was built
+ * while the cause of that was still unknown, and the unit the reader has to answer in. All three
+ * are invisible in the expressions and expensive to rediscover. One seam was measured and
+ * rejected: moving the unshimmed resolution into the shared library. Nothing else in the tree
+ * registers for raw input, so it would have been a single caller reaching into another directory
+ * and the evidence would have ended up further from the call it explains.
+ *
+ * The seam that is still available, and the one to take if this grows again, is the registration
+ * ladder: the rungs and the report they write are a whole responsibility and they are the largest
+ * block here. It was left in place rather than moved as part of the foreground gate below, because
+ * a refactor of that size does not belong in the same change as a behaviour fix.
  *
  * ==============================================================================================
  * Why a thread and a window of our own, rather than the game's
@@ -48,6 +53,8 @@
  * there is nothing to difference it against yet.
  */
 #include "raw_mouse.h"
+
+#include "input_foreground.h"
 
 #include "mouse_look.h"
 
@@ -179,6 +186,22 @@ static void handle_raw_input(HRAWINPUT handle)
     if (input.header.dwType != RIM_TYPEMOUSE) {
         return;
     }
+
+    /* Dropped while the game is not in front, and dropped HERE rather than at either consumer.
+     * Nothing accumulates, so no saved-up delta waits to be applied in one jump when the
+     * foreground returns, and both consumers are covered without each having to remember.
+     *
+     * The absolute origin is forgotten on the way out. An absolute packet is a position, so a
+     * movement is the difference between two of them; keeping the last background position and
+     * subtracting it from the first foreground one would turn the whole excursion into a single
+     * delta, which is the jump this is here to avoid. Forgetting it makes the first packet after
+     * the return establish the origin again and contribute nothing, exactly as the first packet
+     * of a session does. */
+    if (!input_foreground_is_ours()) {
+        raw_state.absolute_have_previous = false;
+        return;
+    }
+
     accumulate_packet(&input.data.mouse);
 }
 

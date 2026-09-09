@@ -195,6 +195,10 @@ add_unit_test(menu_patcher "")
 # detour that copied the first one's branch would report success and then loop forever.
 # The write guards: the range check and the read back. It writes into the test process rather
 # than the game, which is enough to prove a refusal refuses and a write lands.
+# The guarded reads. The case that matters is the refusal: the trying form has to answer no for
+# an address this process does not own rather than take the program down.
+add_unit_test(memory "")
+
 add_unit_test(patch "")
 
 add_unit_test(detour "")

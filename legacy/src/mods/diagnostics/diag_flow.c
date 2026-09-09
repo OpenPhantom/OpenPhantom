@@ -411,17 +411,17 @@ static void __cdecl hook_draw_poly_decals(void *poly, const float *verts, int32_
         uintptr_t record = (uintptr_t)flow_state.decal_table + i * DECAL_RECORD_STRIDE;
         uint32_t  record_poly = 0, material = 0, page = 0;
 
-        if (!memory_read_u32(record + DECAL_OFF_POLY, &record_poly) ||
+        if (!memory_try_read_u32(record + DECAL_OFF_POLY, &record_poly) ||
             record_poly != (uint32_t)(uintptr_t)poly) {
             continue;
         }
         ++found;
 
-        if (!memory_read_u32(record + DECAL_OFF_MATERIAL, &material) || material == 0) {
+        if (!memory_try_read_u32(record + DECAL_OFF_MATERIAL, &material) || material == 0) {
             ++no_material;
             continue;
         }
-        if (!memory_read_u32((uintptr_t)material + MATERIAL_OFF_PAGE, &page) || page == 0) {
+        if (!memory_try_read_u32((uintptr_t)material + MATERIAL_OFF_PAGE, &page) || page == 0) {
             ++no_page;
         } else {
             ++with_page;

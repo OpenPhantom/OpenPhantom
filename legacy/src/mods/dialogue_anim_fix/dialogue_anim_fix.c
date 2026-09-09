@@ -378,8 +378,8 @@ static void on_frame_correct_stale_speakers(void)
     if (!fix_state.armed || fix_state.anim_recheck == NULL || fix_state.tracked_count == 0) {
         return;
     }
-    memory_read_u32(DIALOG_CURRENT_SPEAKER_ADDR, &current_speaker);
-    memory_read_u32(DIALOG_ACTIVE_FLAG_ADDR, &dialogue_active);
+    memory_try_read_u32(DIALOG_CURRENT_SPEAKER_ADDR, &current_speaker);
+    memory_try_read_u32(DIALOG_ACTIVE_FLAG_ADDR, &dialogue_active);
 
     now = timeGetTime();
     if (current_speaker != 0 || dialogue_active != 0) {
@@ -400,7 +400,7 @@ static void on_frame_correct_stale_speakers(void)
         uint32_t body = 0;
         int32_t  target = 0;
 
-        if (!memory_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body))) {
+        if (!memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body))) {
             fix_state.forcing[i] = false;
             continue;
         }
@@ -415,7 +415,8 @@ static void on_frame_correct_stale_speakers(void)
             }
             continue;
         }
-        if (!memory_read((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET, &target, sizeof(target)) ||
+        if (!memory_try_read((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET, &target,
+                             sizeof(target)) ||
             target == ANIM_ID_IDLE) {
             fix_state.forcing[i] = false;
             continue;

@@ -191,9 +191,9 @@ static void sfx_mute_frame_tick(void)
     if (!mute_state.suppressing || mute_state.player_pointer_slot == NULL) {
         return;
     }
-    if (!memory_read((uintptr_t)mute_state.player_pointer_slot, &player, sizeof(player)) ||
+    if (!memory_try_read((uintptr_t)mute_state.player_pointer_slot, &player, sizeof(player)) ||
         player == 0 ||
-        !memory_read((uintptr_t)player + PLAYER_OVERRIDE_FLAG_OFFSET, &override_flag,
+        !memory_try_read((uintptr_t)player + PLAYER_OVERRIDE_FLAG_OFFSET, &override_flag,
                      sizeof(override_flag))) {
         return;
     }

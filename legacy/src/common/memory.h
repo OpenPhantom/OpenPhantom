@@ -51,4 +51,9 @@ bool memory_read_u32(uintptr_t address, uint32_t *out);
 bool memory_try_read(uintptr_t address, void *destination, size_t size);
 bool memory_try_readable(uintptr_t address, size_t size);
 
+/* The same two conveniences the asking form has, so a call site on a path the engine drives
+ * reads the same as one at install time and only the guard changes. */
+bool memory_try_read_u8 (uintptr_t address, uint8_t  *out);
+bool memory_try_read_u32(uintptr_t address, uint32_t *out);
+
 #endif /* COMMON_MEMORY_H */

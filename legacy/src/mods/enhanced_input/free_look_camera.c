@@ -245,7 +245,7 @@ static const char *seed_camera_yaw(void)
     float          engine_yaw;
     bool           recovered = false;
 
-    if (view == NULL || !memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+    if (view == NULL || !memory_try_readable((uintptr_t)view, BAPVIEW_READ_SIZE)) {
         return "";
     }
 
@@ -288,7 +288,7 @@ static void build_gate(free_look_gate_t *gate, uint8_t **out_record, const uint8
     gate->module_state    = (record != NULL) ? *(const int32_t *)(record + PLAYER_MODULE_STATE) : 0;
     gate->mode_index      = player_sites_mode_index(free_state->player, record);
     gate->view_valid      = (view != NULL) &&
-                            memory_is_readable_range((uintptr_t)view, sizeof(int32_t));
+                            memory_try_readable((uintptr_t)view, sizeof(int32_t));
     gate->view_state      = gate->view_valid ? *(const int32_t *)view : 0;
     gate->camera_override = *free_state->camera.camera_override;
     gate->snap_countdown  = *free_state->camera.snap_countdown;
@@ -297,7 +297,7 @@ static void build_gate(free_look_gate_t *gate, uint8_t **out_record, const uint8
 
     if (free_state->camera.current_region != NULL) {
         region = *free_state->camera.current_region;
-        if (region != NULL && memory_is_readable_range((uintptr_t)region, sizeof(uint32_t))) {
+        if (region != NULL && memory_try_readable((uintptr_t)region, sizeof(uint32_t))) {
             gate->region_known = true;
             gate->region_flags = *(const uint32_t *)region;
         }
@@ -573,7 +573,7 @@ static void finish_view_lead(float lead)
     float    yaw;
     float    adjusted;
 
-    if (view == NULL || !memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+    if (view == NULL || !memory_try_readable((uintptr_t)view, BAPVIEW_READ_SIZE)) {
         /* No camera object this frame, a load or the front end. Whatever is banked belongs to a
          * camera that no longer exists, and the measurement must not reach across the gap. */
         view_lead_release();

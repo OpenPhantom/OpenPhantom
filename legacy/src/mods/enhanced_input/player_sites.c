@@ -332,7 +332,7 @@ uint8_t *player_sites_record(const player_sites_t *resolved)
         return NULL;
     }
     record = *resolved->player_pointer;
-    if (record == NULL || !memory_is_readable_range((uintptr_t)record, PLAYER_RECORD_SIZE)) {
+    if (record == NULL || !memory_try_readable((uintptr_t)record, PLAYER_RECORD_SIZE)) {
         return NULL;
     }
     return record;

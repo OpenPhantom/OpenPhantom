@@ -42,11 +42,11 @@ void device_dither_on_frame(void)
     if (device == last_device) {
         return;                                /* set once per device, see the header */
     }
-    if (!memory_is_readable_range((uintptr_t)device, sizeof(void *))) {
+    if (!memory_try_readable((uintptr_t)device, sizeof(void *))) {
         return;
     }
     vtable = *(void ***)device;
-    if (!memory_is_readable_range((uintptr_t)vtable,
+    if (!memory_try_readable((uintptr_t)vtable,
                                   (VTABLE_SET_RENDER_STATE + 1u) * sizeof(void *))) {
         return;
     }

@@ -134,7 +134,7 @@ void camera_watch_sample(void)
     }
 
     view = (const uint8_t *)*watch_state.sites->view;
-    if (view == NULL || !memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+    if (view == NULL || !memory_try_readable((uintptr_t)view, BAPVIEW_READ_SIZE)) {
         /* No camera object this frame, a load, or the front end. The previous yaw is dropped so
          * that the first frame of the next one is not measured against a stale number and reported
          * as a jump it never made. */

@@ -571,13 +571,13 @@ static void on_frame_end(void)
     if (present_state.reports >= MAX_REPORTS) {
         return;
     }
-    if (!memory_read_u32(present_state.device_pointer_cell, &device) || device == 0u) {
+    if (!memory_try_read_u32(present_state.device_pointer_cell, &device) || device == 0u) {
         return;
     }
-    if (!memory_read_u32((uintptr_t)device + DEVICE_BACKEND_OFFSET, &backend)) {
+    if (!memory_try_read_u32((uintptr_t)device + DEVICE_BACKEND_OFFSET, &backend)) {
         return;
     }
-    if (!memory_read_u32(present_state.want_back_buffer_cell, &want_back_buffer)) {
+    if (!memory_try_read_u32(present_state.want_back_buffer_cell, &want_back_buffer)) {
         return;
     }
 

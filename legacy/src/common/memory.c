@@ -187,3 +187,13 @@ bool memory_try_readable(uintptr_t address, size_t size)
         return false;
     }
 }
+
+bool memory_try_read_u8(uintptr_t address, uint8_t *out)
+{
+    return memory_try_read(address, out, sizeof(*out));
+}
+
+bool memory_try_read_u32(uintptr_t address, uint32_t *out)
+{
+    return memory_try_read(address, out, sizeof(*out));
+}

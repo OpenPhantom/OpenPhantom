@@ -278,14 +278,14 @@ static void dump_nearby_placements(const float *player_position)
         float    position[3];
         float    dx, dy, dz;
 
-        if (!memory_read((uintptr_t)array + (uint32_t)index * 4u, &placement,
+        if (!memory_try_read((uintptr_t)array + (uint32_t)index * 4u, &placement,
                          sizeof(placement)) || placement == 0) {
             continue;
         }
-        if (!memory_read((uintptr_t)placement, &flags, sizeof(flags))) {
+        if (!memory_try_read((uintptr_t)placement, &flags, sizeof(flags))) {
             continue;
         }
-        if (!memory_read((uintptr_t)placement + PLACEMENT_POSITION_OFFSET, position,
+        if (!memory_try_read((uintptr_t)placement + PLACEMENT_POSITION_OFFSET, position,
                          sizeof(position))) {
             continue;
         }
@@ -301,7 +301,7 @@ static void dump_nearby_placements(const float *player_position)
         {
             uint32_t created = 0;
 
-            (void)memory_read((uintptr_t)placement + PLACEMENT_CREATED_FLAG_OFFSET, &created,
+            (void)memory_try_read((uintptr_t)placement + PLACEMENT_CREATED_FLAG_OFFSET, &created,
                               sizeof(created));
             log_info("spawn census: NEARBY \"%.*s\" at (%.1f, %.1f, %.1f), active=%d created=%u",
                      (int)PLACEMENT_NAME_MAX,
@@ -328,15 +328,15 @@ static void player_position_log_tick(void)
     }
     player_position_log.frame_count = 0;
 
-    if (!memory_read((uintptr_t)player_position_log.player_pointer_slot, &player_record,
+    if (!memory_try_read((uintptr_t)player_position_log.player_pointer_slot, &player_record,
                      sizeof(player_record)) || player_record == 0) {
         return;
     }
-    if (!memory_read((uintptr_t)player_record + PLAYER_ACTOR_OFFSET, &player_actor,
+    if (!memory_try_read((uintptr_t)player_record + PLAYER_ACTOR_OFFSET, &player_actor,
                      sizeof(player_actor)) || player_actor == 0) {
         return;
     }
-    if (!memory_read((uintptr_t)player_actor + PLAYER_CURRENT_POS_OFFSET, position,
+    if (!memory_try_read((uintptr_t)player_actor + PLAYER_CURRENT_POS_OFFSET, position,
                      sizeof(position))) {
         return;
     }
@@ -345,11 +345,11 @@ static void player_position_log_tick(void)
         uint32_t camera_view;
         float    pitch, yaw;
 
-        if (memory_read((uintptr_t)player_position_log.camera_view_pointer_slot, &camera_view,
+        if (memory_try_read((uintptr_t)player_position_log.camera_view_pointer_slot, &camera_view,
                         sizeof(camera_view)) && camera_view != 0 &&
-            memory_read((uintptr_t)camera_view + BAPVIEW_EULER_PITCH_OFFSET, &pitch,
+            memory_try_read((uintptr_t)camera_view + BAPVIEW_EULER_PITCH_OFFSET, &pitch,
                         sizeof(pitch)) &&
-            memory_read((uintptr_t)camera_view + BAPVIEW_EULER_YAW_OFFSET, &yaw, sizeof(yaw))) {
+            memory_try_read((uintptr_t)camera_view + BAPVIEW_EULER_YAW_OFFSET, &yaw, sizeof(yaw))) {
             log_info("spawn census: player at (%.1f, %.1f, %.1f), camera yaw %.1f pitch %.1f",
                      (double)position[0], (double)position[1], (double)position[2], (double)yaw,
                      (double)pitch);
@@ -601,7 +601,7 @@ static void __cdecl hook_actor_destroy(void *actor, int32_t reason)
     void        *placement;
     bool         have_placement;
 
-    have_placement = memory_read((uintptr_t)actor + 0x10u, &placement, sizeof(placement)) &&
+    have_placement = memory_try_read((uintptr_t)actor + 0x10u, &placement, sizeof(placement)) &&
                      placement != NULL;
 
     if (destroy_census.log_enabled) {

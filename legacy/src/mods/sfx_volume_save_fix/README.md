@@ -5,6 +5,10 @@
 The SFX volume slider resets to (about) full on every reload, no matter what it was set to when
 the game last closed. Two independent bugs, both fixed here.
 
+A third bug lives in the same screen and is fixed here too, because it is the same slider: both
+volume sliders lose 7 of 127 every time the audio screen is opened. That one takes the music
+slider with it, since the two share the code that drifts. See **The sliders walk downward** below.
+
 ## Supported executables
 
 Any build whose audio code matches the retail sites at `0x00417459` / `0x0041738D` /
@@ -22,7 +26,7 @@ declines with a log line, which is the intended answer.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | |
+| `Enabled` | `1` | `0` installs nothing and the log says so |
 
 ## Bug 1: the saved value was wrong
 
@@ -162,3 +166,67 @@ in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.
 Music volume is unaffected by either bug. It round-trips through a simple engine-side float with
 no driver query and no ordering dependency on a "ready" flag. That pointed at these two
 SFX-specific sites rather than at the settings file or the code that reads it.
+
+## The sliders walk downward
+
+Opening the audio screen costs 7 of 127 on the SFX slider, and the equivalent on the music one,
+without anything being touched. Four visits take 60 down to about 32. The reporter of this
+described it as a slider not being where they left it, which is how it looks from the outside.
+It is also why the fault seemed to follow the 3-D provider list around: the provider row is simply
+the thing people click on that screen.
+
+### Nineteen steps, truncated twice
+
+`[0x004A8634]` is `19.0f`, the number of steps the slider widget has. The screen seeds the widget
+from the live volume when it opens, and reads the widget back when it moves:
+
+    seed      widget = ftol(volume / 127.0f * 19.0f)     0x004420B1 music, 0x004420E1 sfx
+    readback  volume = ftol(widget / 19.0f * 127.0f)
+
+`__ftol` truncates toward zero. Neither step rounds, so the value can only ever fall:
+
+| SVOL in | widget | SVOL out | lost |
+|---|---|---|---|
+| 127 | 19 | 127 | 0 |
+| 106 | 15 | 100 | 7 |
+| 100 | 14 | 93 | 7 |
+| 60 | 8 | 53 | 7 |
+| 33 | 4 | 26 | 7 |
+
+Those are not worked examples. `106`, `100`, `93`, `60`, `53` and `33` are the values a field log
+recorded, in that order, over two sessions of a player opening the screen and touching only the
+provider list. Only full volume is stable.
+
+Music takes the same path through a 100 scale, so `0.47` seeds `8.93`, truncates to 8, returns as
+`0.421` and writes `MVOL=42`. A 47 becomes a 42 with nothing touched.
+
+### Rounding the seed is the whole fix
+
+`8.93` becomes 9, which reads back as `60.16`, truncates to 60, and the value is stable. Checked
+across the range: every value holds except 1, which has nowhere to sit among nineteen steps and
+becomes 0. Rounding the readback as well would be a second write for nothing, because by then the
+seed has already made the value representable.
+
+### Why two call redirects and not a detour
+
+`__ftol` is the compiler's own helper and the image calls it from everywhere, so rounding inside it
+would change every float-to-int conversion in the game. Only the two seed calls are redirected, to
+a thunk that adds a half and falls into the real helper. The helper is read out of the displacement
+being replaced rather than resolved separately, so a wrapper somebody else had already installed
+still runs. Both displacements are read and compared before either is written, and if they name
+different helpers nothing is touched.
+
+### Engine locations
+
+| What | Where |
+|---|---|
+| the music seed's `call __ftol` | `0x004420B1`, displacement rewritten |
+| the sfx seed's `call __ftol` | `0x004420E1`, displacement rewritten |
+| `__ftol` | `0x0049A44C`, read from those displacements, never modified |
+| the slider step count | `[0x004A8634]`, `19.0f`, read only |
+
+### Testing status
+
+Played. Before, the log read `get 60` then `set 53` one line later, the widget answering the seed
+with a different number; after, the `get 60` stands alone and `obi.ini` keeps `SVOL=60` across
+repeated visits and provider changes. Confirmed with the music slider in the same session.

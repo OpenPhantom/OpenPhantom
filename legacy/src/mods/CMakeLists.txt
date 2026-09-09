@@ -191,6 +191,7 @@ add_engine_fix(decal_fix
 add_engine_fix(sfx_volume_save_fix
     dll_main.c
     sfx_volume_save_fix.c
+    slider_rounding.c
 )
 
 add_engine_fix(ground_clip_fix

@@ -88,6 +88,7 @@
  * one call that the original code was never going to honour anyway.
  */
 #include "sfx_volume_save_fix.h"
+#include "slider_rounding.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -319,6 +320,13 @@ void sfx_volume_save_fix_install(void)
     }
 
     signature_resolve_table(sites, SITE_COUNT);
+
+    /* Independent of everything below, and placed here so it is reached whether or not the master
+     * volume work resolves: different sites, a different fault, and it fixes the music slider too
+     * because both sliders share the seed that drifts. After host_image_resolve and after
+     * log_init, or it would search an image that is not mapped yet and say so into a log that is
+     * not open yet. */
+    (void)slider_rounding_install();
 
     if (!resolve_operand(SITE_MIRROR_SITE, MIRROR_SITE_SCALE_OFFSET, "volume scale",
                          &scale_address) ||

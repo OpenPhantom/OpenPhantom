@@ -101,6 +101,9 @@ static void projectile_census_tick(void)
     uint32_t entry;
     uint32_t count;
     uint32_t sampled;
+    uint32_t i;
+    float    sample[PROJECTILE_SAMPLE_COUNT][3];
+    uint32_t sample_index[PROJECTILE_SAMPLE_COUNT];
 
     if (!projectile_census.armed) {
         return;
@@ -115,18 +118,18 @@ static void projectile_census_tick(void)
         return;
     }
 
+    /* Kept rather than written out as they are walked, because whether they are worth writing at
+     * all depends on the TOTAL, and the total is not known until the walk ends. Comparing the walk
+     * index against the threshold instead made the threshold a start offset: the first ten were
+     * skipped and entries ten to fourteen named, so a list of ten reported nothing at all and a
+     * list of twelve named two, neither of them the first few. */
     count = 0;
     sampled = 0;
     while (entry != 0 && count < PROJECTILE_WALK_MAX) {
-        if (count < PROJECTILE_SAMPLE_THRESHOLD || sampled >= PROJECTILE_SAMPLE_COUNT) {
-            /* Below the threshold, or already sampled enough for this report. */
-        } else {
-            float position[3];
-
-            if (memory_read((uintptr_t)entry + PROJECTILE_POSITION_OFFSET, position,
-                            sizeof(position))) {
-                diag_log_write("prj    #%u at (%.1f, %.1f, %.1f)", (unsigned)count,
-                               (double)position[0], (double)position[1], (double)position[2]);
+        if (sampled < PROJECTILE_SAMPLE_COUNT) {
+            if (memory_read((uintptr_t)entry + PROJECTILE_POSITION_OFFSET, sample[sampled],
+                            sizeof(sample[sampled]))) {
+                sample_index[sampled] = count;
                 ++sampled;
             }
         }
@@ -145,6 +148,14 @@ static void projectile_census_tick(void)
     diag_log_write("prj  census: %u live entries on the projectile list%s", (unsigned)count,
                    count >= PROJECTILE_WALK_MAX ? " (hit the walk cap, list may be longer or "
                                                    "cyclic)" : "");
+
+    if (count < PROJECTILE_SAMPLE_THRESHOLD) {
+        return;                 /* a short list says nothing a count has not already said */
+    }
+    for (i = 0; i < sampled; ++i) {
+        diag_log_write("prj    #%u at (%.1f, %.1f, %.1f)", (unsigned)sample_index[i],
+                       (double)sample[i][0], (double)sample[i][1], (double)sample[i][2]);
+    }
 }
 
 int diag_projectiles_install(int projectiles_level)

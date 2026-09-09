@@ -183,6 +183,33 @@ is the expensive part, not the detour.
 * Both music setters latch **before** the DLL call, so a cue the DLL rejects leaves the latch out of
   step with what is audible. The hook therefore logs the latch before *and* after.
 
+## The projectile census named the wrong entries
+
+The census is meant to add positions to its count once the list is long enough, because a count
+alone does not say whether the entries are spread across the level or stacked on one spot. It
+compared the walk index against the threshold instead, which made the threshold a start offset: the
+first ten were skipped and entries ten to fourteen named. A list of exactly ten reported nothing but
+its count, and a list of twelve named two, neither of them the first few the comment promised.
+
+The first five positions are now kept as the list is walked and written out after it, once the total
+is known and only when the total clears the threshold.
+
+## A re-armed write watch could miss the first write
+
+Arming a watch cleared the address, the counts and the label, but not the value remembered from
+whatever was watched before. Only writes that change the value are recorded, so the first write to
+the new field was compared against a number belonging to a different field, and whenever the two
+happened to match it was counted as unchanged and never recorded. There is no predecessor to compare
+a first write against, and arming now clears the flag beside the value as well.
+
+## The debug register helper had the caller's stack
+
+The helper thread that writes the debug registers is handed a request block and the caller waits up
+to five seconds for it. That block was a local, so a helper that overran the wait would write its
+result into a stack frame the caller had already left. It is now a static: a late helper writes into
+a cell whose only reader has already reported the failure, rather than into whatever the game put
+there next.
+
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes for every observer pattern on both

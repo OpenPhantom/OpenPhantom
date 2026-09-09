@@ -169,8 +169,13 @@ static DWORD WINAPI apply_debug_registers(LPVOID parameter)
 
 static bool apply(uintptr_t address)
 {
-    apply_request_t request;
-    HANDLE          helper;
+    /* Static rather than a local, because the helper thread writes into it and the wait below is
+       bounded. On a timeout this function returns while that thread may still be running, and a
+       local would by then be somebody else's stack. A helper that finishes late writes into this
+       cell instead, where the only thing it can spoil is a result already reported as failed.
+       Nothing else reads it, and every apply sets both fields before starting. */
+    static apply_request_t request;
+    HANDLE                 helper;
 
     request.address = address;
     request.ok = false;
@@ -233,6 +238,12 @@ bool diag_write_watch_arm(uintptr_t address, const char *what)
     watch_state.count = 0;
     watch_state.overflow = 0;
     watch_state.reported = 0;
+    /* The remembered value belongs to whatever was being watched before this. Carried into a watch
+       on a different field, it made the first write compare against a number from somewhere else
+       and, whenever the two happened to match, be counted as unchanged and never recorded. There
+       is no predecessor to compare the first write against, and have_last says so. */
+    watch_state.have_last = false;
+    watch_state.last_value = 0;
     watch_state.what[0] = '\0';
     if (what != NULL) {
         size_t length = strlen(what);

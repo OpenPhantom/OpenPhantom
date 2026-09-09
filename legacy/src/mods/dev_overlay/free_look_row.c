@@ -24,11 +24,11 @@ bool free_look_row_set(bool enabled)
     /* Both of the features built on this go off with it, rather than being left reading ON with
      * nothing under them. One way only: switching free look ON switches neither of them on.
      *
-     * The air steer was missing here and that is what was reported. enhanced_input turns it off
-     * correctly when it sees free look go, but that is a poll a second later, so until it ran the
-     * row read ON while doing nothing, and with that DLL absent it would have read ON forever.
-     * Writing it here means the row tells the truth the instant free look is switched off, and it
-     * means one click brings the air steer back rather than two. */
+     * The air steer was missing here. That is the defect that was reported. enhanced_input turns
+     * it off correctly when it sees free look go, but that is a poll a second later, so until it
+     * ran the row read ON while doing nothing, and with that DLL absent it would have read ON
+     * forever. Writing it here means the row tells the truth the instant free look is switched
+     * off, and it means one click brings the air steer back rather than two. */
     if (!enabled) {
         (void)ini_write_int(INPUT_SECTION, CAMERA_FOLLOW_KEY, 0);
         (void)ini_write_int(INPUT_SECTION, AIR_CONTROL_KEY, 0);

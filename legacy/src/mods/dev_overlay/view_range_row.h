@@ -45,7 +45,7 @@ bool view_range_row_parse(const char *text, float *out);
 void view_range_row_format(float scale, char *out, size_t size);
 
 /* The current setting, read from the ini, clamped. Falls back to the minimum when the key is
- * absent or unreadable, which is what an untouched installation reads as. */
+ * absent or unreadable, as an untouched installation reads. */
 float view_range_row_get(void);
 
 /* Writes the setting to the ini, clamped first. False when the file could not be written, which

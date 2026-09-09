@@ -49,7 +49,7 @@ bool open_key_row_set(int32_t virtual_key)
         return false;
     }
     /* The running panel first, so a player who binds a key can use it immediately even if the file
-     * could not be written; the write is what makes it survive a restart, and its failure is worth
+     * could not be written; the write is what carries it across a restart, and its failure is worth
      * reporting but not worth undoing a binding that already works. */
     overlay_input_set_key(virtual_key);
     return ini_write_int(DEV_OVERLAY_SECTION, OPEN_KEY_KEY, (int)virtual_key);

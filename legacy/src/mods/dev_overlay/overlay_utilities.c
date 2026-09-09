@@ -377,7 +377,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
     default:
         /* Past the end. Answered as an empty unavailable row rather than left as whatever the
          * caller's struct held: a caller asking for a slot that does not exist has a bug, and a
-         * blank row is what makes it visible instead of showing stale text. */
+         * blank row makes that bug visible instead of showing stale text. */
         copy_label(out->label, "");
         out->available = false;
         return;
@@ -404,7 +404,7 @@ bool overlay_utilities_toggle(uint32_t slot)
     switch ((utilities_slot_t)slot) {
     case UTILITIES_AUTO_RANGE:
         if (strict_range_row_get()) {
-            return false;              /* greyed; the model refuses first, this is the second lock */
+            return false;            /* greyed; the model refuses first, this is the second lock */
         }
         return auto_range_row_set(!auto_range_row_get());
     case UTILITIES_STRICT_RANGE:
@@ -486,7 +486,7 @@ bool overlay_utilities_slider_set(uint32_t slot, float fraction)
         fraction = 1.0f;
     }
     if ((utilities_slot_t)slot == UTILITIES_VIEW_RANGE_TRACK) {
-        /* Rounded to a HUNDREDTH, which is exactly what the row's own formatter shows (%.2f).
+        /* Rounded to a HUNDREDTH, the precision the row's own formatter shows (%.2f).
          * Without it a drag writes more decimals than the text beside it displays and the two
          * disagree about what was set.
          *

@@ -32,7 +32,8 @@
 
 /* And what it draws right now, which is more than that while the size list is open. The list is a
  * fold on one row rather than a group of its own, the same shape the free-camera "how to fly" row
- * already uses, because it belongs to the row above it and closes as soon as something is chosen. */
+ * already uses, because it belongs to the row above it and closes as soon as something is
+ * chosen. */
 uint32_t overlay_window_row_count(void);
 
 /* Closes the size list, so the panel opens the way the groups do: folded. Without it a list left

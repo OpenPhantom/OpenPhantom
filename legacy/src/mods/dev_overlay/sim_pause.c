@@ -87,8 +87,8 @@ void sim_pause_hold(sim_pause_holder_t who, bool held)
         pause_state.holders &= ~(uint32_t)who;
     }
     if (pause_state.holders == before) {
-        /* That holder was already in that state. Returning here is what makes this safe to call
-           every frame: without it, a repeated hold would remember the value this one just wrote
+        /* That holder was already in that state. Returning here keeps this safe to call every
+           frame: without it, a repeated hold would remember the value this one just wrote
            and the release would restore a pause instead of lifting it. */
         return;
     }

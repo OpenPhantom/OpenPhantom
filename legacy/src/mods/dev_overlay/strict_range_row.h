@@ -16,8 +16,8 @@
  *
  * So this row is not "turn off an annoyance". It is "I accept those two outcomes in exchange for
  * the number I set being the number in force". That is a legitimate thing to want from a developer
- * menu and a poor thing to leave on, which is why it ships off and says so in the log the moment
- * it is switched on.
+ * menu and a poor thing to leave on, so it ships off and says so in the log the moment it is
+ * switched on.
  *
  * The watchdog keeps running underneath it and keeps writing its warnings to engine_fixes.log, so
  * a session that ends badly still says why. What it cannot do while this is on is act.

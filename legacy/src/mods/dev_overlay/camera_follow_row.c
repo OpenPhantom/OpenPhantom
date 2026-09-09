@@ -26,8 +26,8 @@ bool camera_follow_row_set(bool enabled)
      *
      * Both keys are written and neither feature is called. enhanced_input re-reads these keys once
      * a second and applies them in its own order, with its own refusals: free look declines while
-     * the player phases are stopped, which is exactly the state the game is in while this menu is
-     * open, so anything that asked it directly from here would be refused every time. */
+     * the player phases are stopped, the state the game is in while this menu is open, so
+     * anything that asked it directly from here would be refused every time. */
     if (enabled && !free_look_row_get() && !free_look_row_set(true)) {
         return false;
     }

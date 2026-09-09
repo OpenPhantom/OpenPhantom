@@ -78,7 +78,7 @@
  * Plr_AirMoveGate rather than in any wall probe, and this file used to say they were out of scope
  * and left them alone. That was wrong, and it is what made the cheat look like it half worked; see
  * the third hook below for what changed and why. They are only ever consulted for a move made in
- * the AIR, which is why the fault was invisible until the glide started lifting the player.
+ * the AIR, so the fault was invisible until the glide started lifting the player.
  *
  * ============================ Falling into the space between rooms =============================
  *
@@ -162,7 +162,7 @@
  * The six-byte prologue is a plain frame set-up with no rel32 in it, so it relocates into a
  * trampoline verbatim. The pattern runs past it to twenty eight bytes purely for uniqueness: the
  * frame set-up alone appears all over the image, and the two zeroed locals plus the first argument
- * load are what make this one site. Matched exactly once across the whole of .text, and verified
+ * load are what make this one site. Matched exactly once across the entire .text, and verified
  * at THIS length rather than at some other length that was then not the one written down.
  *
  * The function is cdecl and returns the blocking bapPoly*, or NULL. Its five arguments are
@@ -465,11 +465,11 @@ static bool probe_belongs_to_a_clipping_player(const void *from, uint32_t mask)
  * nothing to decide about when nothing was in the way to begin with.
  *
  * When the cheat IS on and the probe is the player's own, the answer is simply that nothing
- * blocked them. No geometry is modified and there is nothing to restore afterwards, which is what
- * makes this the version that stayed: both of the larger builds described in this file's header
- * had to hide faces from the engine's own candidate loop and put them back, and both needed that
- * only because they were being SELECTIVE about which faces to pass through. Passing all of them
- * needs none of it.
+ * blocked them. No geometry is modified and there is nothing to restore afterwards. That is the
+ * reason this is the version that stayed: both of the larger builds described in this file's
+ * header had to hide faces from the engine's own candidate loop and put them back, and both needed
+ * that only because they were being SELECTIVE about which faces to pass through. Passing all of
+ * them needs none of it.
  *
  * The player's other wall probes are untouched, so the ledge grab, the pull-up and the swing all
  * still find what they look for: the gate's `from` test only matches the blocking probes that
@@ -486,8 +486,8 @@ static void *__cdecl hook_probe_wall(const void *from, const void *to,
 }
 
 /* The airborne wall test, answered the same way and for the same probes. Its mask is a u16 in the
- * engine's own signature but arrives as a pushed dword, which is why the gate masks the low
- * sixteen bits rather than trusting all of it. */
+ * engine's own signature but arrives as a pushed dword, so the gate masks the low sixteen bits
+ * rather than trusting all of it. */
 static void *__cdecl hook_probe_wall_at(const void *pos, float z_lift, float radius, uint32_t mask)
 {
     void *hit = own_state.probe_wall_at_original(pos, z_lift, radius, mask);
@@ -595,7 +595,7 @@ void cheats_noclip_tick(void)
     desired           = (float *)(player + PLAYER_DESIRED_POSITION_OFFSET);
     vertical_velocity = (float *)(player + PLAYER_VERTICAL_VELOCITY_OFFSET);
 
-    /* Renewed every frame the cheat is on, not only while holding, and that is a correction. The
+    /* Renewed every frame the cheat is on, not only while holding. That is a correction: the
      * grace used to be granted only on the frames the glide was actually holding, so the one case
      * that most needed it, the glide releasing when it should not have and the player falling, was
      * the exact case that got none. Death by falling is never a useful outcome of a cheat whose

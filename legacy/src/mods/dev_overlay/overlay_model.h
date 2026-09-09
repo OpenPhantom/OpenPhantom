@@ -1,16 +1,16 @@
 /* overlay_model.h: what the panel shows, with no window, no drawing and no engine in it.
  *
- * The whole of the panel's behaviour lives here: which tab is open, what has been typed into the
+ * All of the panel's behaviour lives here: which tab is open, what has been typed into the
  * search box, which groups are folded, and therefore which rows are on screen and in what order.
  * Drawing reads this and paints it; the mouse reads this and asks it to act. Neither owns any of
- * it, which is what makes the interesting half testable without the game.
+ * it, so the interesting half is testable without the game.
  *
  * Rows are produced fresh on every rebuild rather than cached, because the state they show belongs
  * to the engine: the game's own console can flip a cheat behind us, and a panel showing a value it
  * remembered from a second ago would be lying about the thing it exists to display.
  *
- * The search matches anywhere in the label and ignores case, which is what people expect of a
- * search box. A group with a match is shown expanded even if it is folded, because a search that
+ * The search matches anywhere in the label and ignores case, as people expect of a search
+ * box. A group with a match is shown expanded even if it is folded, because a search that
  * hides its own hits is a search nobody can use; folding it again is remembered separately from
  * that, so clearing the box puts everything back where it was.
  */
@@ -39,7 +39,8 @@ typedef enum overlay_tab {
 
 /* One entry per group, and a group belongs to exactly one tab. The Original tab holds two: the
  * eleven codes that are real toggles, and the sixteen that run once. Splitting them is what lets a
- * fire-once row and a switched row sit in the same tab without either pretending to be the other. */
+ * fire-once row and a switched row sit in the same tab without either pretending to be the
+ * other. */
 typedef enum overlay_group {
     OVERLAY_GROUP_ORIGINAL_TOGGLES = 0,
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
@@ -53,13 +54,13 @@ typedef enum overlay_row_kind {
     OVERLAY_ROW_GROUP = 0,      /* a foldable heading */
     OVERLAY_ROW_CHEAT,          /* something that can be switched, shown ON / OFF */
     OVERLAY_ROW_ACTION,         /* something that runs once, shown as a plain button */
-    OVERLAY_ROW_HOTKEY,         /* a key binding, shown as a button that captures the next keypress -
-                                  * see overlay_model_is_capturing_hotkey() */
+    OVERLAY_ROW_HOTKEY,         /* a key binding, shown as a button that captures the next
+                                  * keypress; see overlay_model_is_capturing_hotkey() */
     OVERLAY_ROW_VALUE,          /* a typed-in number, shown as a chip that starts free text entry on
                                   * click; see overlay_model_is_editing_value() */
     OVERLAY_ROW_INFO,           /* plain text, no chip, not clickable, a note attached to the row
                                   * above it rather than a cheat of its own */
-    OVERLAY_ROW_SLIDER          /* a track and nothing else, on its own line under the value row it
+    OVERLAY_ROW_SLIDER          /* just a track, on its own line under the value row it
                                   * belongs to. It gets a line of its own rather than sharing one so
                                   * that it can run the width of the panel: a track squeezed into
                                   * the gap between a name and its chip is both hard to hit and
@@ -76,7 +77,7 @@ typedef struct overlay_row {
                                       * or when it is gated safe and running it now would not be */
     bool               pending;     /* actions only: queued to run when the panel closes, not yet
                                       * run; see cheats_original_actions.h for why the four
-                                      * play-as codes work this way and nothing else does */
+                                      * play-as codes work this way and no other action does */
     /* Sixteen, not eight. Eight fitted "2.50x" and every state word, and then the dev menu
      * size row began reporting "auto 1.33x" and a player read "auto 1.", a truncation with no
      * ellipsis, in the one place a number was the whole point of the row. Nothing here is a fixed
@@ -117,7 +118,7 @@ void overlay_model_search_backspace(void);
 void overlay_model_toggle_group(uint32_t group);
 
 /* Rebuilds the visible list from the engine's current state and the current tab, search and folds.
- * Cheap enough to call once per drawn frame, which is what the overlay does. */
+ * Cheap enough to call once per drawn frame, as the overlay does. */
 void overlay_model_rebuild(void);
 
 uint32_t overlay_model_row_count(void);

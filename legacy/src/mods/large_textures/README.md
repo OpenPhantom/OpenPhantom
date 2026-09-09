@@ -158,8 +158,8 @@ patch. The pattern work below is what establishes where it acts.
 
 * `unittests/texture_size.c` covers what a requested size is allowed to do: the identity case, both
   clamps and the values on either side of them, a size that is not a power of two, a negative one,
-  and the two numbers the engine's own instructions hold. It runs with the rest of the suite, so it is a
-  statement about the arithmetic and not yet evidence that the arithmetic passes.
+  and the two numbers the engine's own instructions hold. It runs with the rest of the suite, so
+  it is a statement about the arithmetic, not yet evidence that the arithmetic passes.
 * The clamp site was located in all three builds and its operand read out of the image in each:
   `0x00488757` in the retail `WMAIN.EXE` and in `wmain.exe`, `0x004886F7` in `obi.exe`, all three
   holding `0x100`.

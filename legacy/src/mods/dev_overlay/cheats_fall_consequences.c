@@ -18,8 +18,8 @@
  * staying whole: each of the five needs its own site, its own naked detour and the disassembly
  * justifying it, and none means anything without the others. They are one behaviour reached
  * through one engine function and gated on one question, so splitting them from each other would
- * scatter the evidence for that behaviour, which is what the size rule exists to prevent rather
- * than to cause. Cutting the install pass off into a third file was considered and rejected: it
+ * scatter the evidence for that behaviour. The size rule exists to prevent that scattering, not
+ * to cause it. Cutting the install pass off into a third file was considered and rejected: it
  * separates every cross-check from the offset it validates, and the resume pointers the naked
  * stubs jump through would then be reachable only through accessors written for the split. */
 #include "cheats_openphantom.h"
@@ -67,7 +67,7 @@
  *   0044f5ce  CALL 0x00459ece              ; the SAME generic damage-apply function SIG_DAMAGE
  *                                          ; above already resolves independently
  *   0044f5d3  ADD  ESP,0x4
- *   0044f5d6  PUSH 0x3f                    ; landing animation/state, runs whether or not damage did
+ *   0044f5d6  PUSH 0x3f                    ; landing animation/state, runs regardless of damage
  *
  * Confirmed by disassembling the whole function directly, not decompiled text. The call site itself
  * is not matched by its own signature; a hand-encoded pattern for ten bytes buried five hundred
@@ -125,8 +125,8 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  *     0044f4bd  CALL 0x004500b0              ; DEATH, cause 1
  *     0044f4c2  ADD ESP,0x4
  *     0044f4c5  JMP 0x0044f88d               ; UNCONDITIONAL early return, the function bails out
- *                                            ; the instant death fires, skipping the rest of its own
- *                                            ; landing bookkeeping entirely.
+ *                                            ; the instant death fires, skipping the rest of its
+ *                                            ; own landing bookkeeping entirely.
  *   That trailing JMP is why this site needs a different shape from the other two below: simply
  *   skipping the CALL and falling through to it anyway would still take the early return, leaving
  *   the player's own fall-state machine (+0x358/+0x360) never reset and mode never returned to
@@ -139,8 +139,8 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * entry plus a fixed, confirmed offset, and, since 0x004500B0 has no earlier independent
  * confirmation anywhere in this project the way 0x00459ece did, the two sites are cross-checked
  * against EACH OTHER instead: both must resolve to the exact same address before either is
- * trusted, which is exactly the kind of second, independent measurement THING_DRAW_TO_SCALE_
- * CALL_OFFSET's own comment argues for and didn't have available to it. */
+ * trusted. That is the second, independent measurement THING_DRAW_TO_SCALE_CALL_OFFSET's own
+ * comment argues for and did not have available to it. */
 #define TIME_DEATH_CALL_OFFSET           0x1AFu   /* 0x0044F311 - 0x0044F162: the PUSH, not the CALL
                                                     * two bytes later; the block starts where the
                                                     * ten bytes this file actually detours starts */
@@ -162,7 +162,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
 /* A THIRD SIDE EFFECT OF THE SAME "SIGNIFICANT FALL" TRANSITION: THE CAMERA DETACHES AND STICKS.
  *
  * Field reported: with damage and death both suppressed, a high boosted jump still pitches the
- * camera down to look at the player from above partway through the fall, and it never lets go -
+ * camera down to look at the player from above partway through the fall, and it never lets go; it
  * stays stuck looking down even after landing and moving away. This is retail's own dramatic-fall
  * camera, confirmed by decompiling every function named below directly rather than inferring from
  * the call site alone, and it fires from the EARLIEST of the three fall-consequence branches in
@@ -217,7 +217,8 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
                                            * ONE byte of push, not two: this pushes a REGISTER
                                            * (0x51), not an immediate, so its own prologue is nine
                                            * bytes, not ten, verified separately from the shared
-                                           * push-imm8 shape every other site in this section uses */
+                                           * push-imm8 shape every other site in this section
+                                           * uses */
 #define CAMERA_FREEZE_PROLOGUE_SIZE 9u
 /* PLAYER_POSITION_OFFSET moved to cheats_internal.h: free camera's exit teleport reads the same
  * field, and one number in one place cannot drift. The evidence line moved with it. */
@@ -341,14 +342,14 @@ static bool fall_consequences_suppressed(void)
     return own_state.cheats[CHEATS_OWN_JUMP_BOOST].on || fall_grace_active();
 }
 
-/* Fall damage, suppressed only while jump boost is on; see SIG_PLAYER_GROUND_CONTACT's own
- * comment for the mechanism and why the call this replaces is never replayed through a relocated
- * trampoline. Calls hook_damage(), the C function above rather than the engine's own site, instead of
- * own_state.damage_original directly: that is what lets Unlimited health still win if both are on
- * at once, the same composition every other pair of cheats in this file that could interact gets,
- * instead of this one quietly bypassing it. own_state.damage_original being non-NULL is verified
- * once, at install time (see install_fall_punishment_immunity), specifically so this never has to
- * check it on every single landing. */
+/* Fall damage, suppressed only while jump boost is on; see SIG_PLAYER_GROUND_CONTACT's own comment
+ * for the mechanism and why the call this replaces is never replayed through a relocated
+ * trampoline. Calls hook_damage(), the C function above rather than the engine's own site, instead
+ * of own_state.damage_original directly: that is what lets Unlimited health still win if both are
+ * on at once, the same composition every other pair of cheats in this file that could interact
+ * gets, instead of this one quietly bypassing it. own_state.damage_original being non-NULL is
+ * verified once, at install time (see install_fall_punishment_immunity), specifically so this
+ * never has to check it on every single landing. */
 static void __cdecl on_fall_damage(void)
 {
     /* Asked BEFORE the state below is cleared, because clearing it would change the answer. */
@@ -475,8 +476,8 @@ static void __cdecl on_camera_lock(void)
 {
     /* Retail fires this at the moment a fall first becomes significant, which makes it the place
      * to ask whether this fall has anywhere to end. Asked whether or not the camera latch itself
-     * is suppressed: the question is about the FALL, not about what this cheat does to the
-     * camera, and asked ONCE per fall rather than every frame because the answer cannot change while
+     * is suppressed: the question is about the FALL, not about what this cheat does to the camera,
+     * and asked ONCE per fall rather than every frame because the answer cannot change while
      * falling straight down and a probe is not free. */
     fall_has_landing = floor_exists_under_player();
 
@@ -676,7 +677,8 @@ void install_fall_punishment_immunity(void)
         call_site = fn_entry + CAMERA_LOCK_CALL_OFFSET;
         if (!detour_install(&own_state.camera_lock_detour, call_site,
                             (const void *)&hook_camera_lock, GROUND_CONTACT_CALL_PROLOGUE_SIZE)) {
-            log_warning("the camera-lock call site at %08X could not be detoured", (unsigned)call_site);
+            log_warning("the camera-lock call site at %08X could not be detoured",
+                        (unsigned)call_site);
         } else {
             own_state.camera_type_select = (camera_type_fn_t)call_target;
             camera_lock_continue = (void *)(call_site + GROUND_CONTACT_CALL_PROLOGUE_SIZE);

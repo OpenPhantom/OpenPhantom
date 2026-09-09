@@ -195,8 +195,7 @@ void overlay_input_set_key(int32_t virtual_key)
 }
 
 /* The engine answers zero for a message it did not act on and non-zero for one it consumed. The
- * panel answers consumed for everything it sees while it is open, which is what stops the game
- * from ever seeing it. */
+ * panel answers consumed for everything it sees while it is open, so the game never sees it. */
 #define HANDLED             1
 
 typedef int32_t (__cdecl *key_hook_fn_t)(uint32_t window, int32_t message,
@@ -226,9 +225,9 @@ static overlay_input_state_t input_state;
 
 /* ============================================================================================ */
 
-/* The modal cell is NOT touched, and that is a correction.
+/* The modal cell is NOT touched. That is a correction.
  *
- * It was raised here on the belief that it is what makes the engine stop listening. A byte census
+ * It was raised here on the belief that it is what stops the engine listening. A byte census
  * says otherwise on both counts. The cell at the operand this file resolves has exactly three
  * references in the whole code section: a store of literal 1 and a store of literal 0, both inside
  * the game's own cheat console, and the one read in the hook. So it is a flag, not a count, and the
@@ -280,8 +279,8 @@ static void set_open(bool open)
     sim_pause_hold(SIM_PAUSE_PANEL, open);
     if (!open) {
         /* AFTER input_freeze_set(false), not before: a queued play-as swap has its own precondition
-         * that reads as unmet while the player is suspended, which is exactly what closing this
-         * call just ended. See cheats_original_actions.h's note on invoke() for why the swap is
+         * that reads as unmet while the player is suspended, and this call has just ended that
+         * suspension. See cheats_original_actions.h's note on invoke() for why the swap is
          * queued rather than run the moment its row is pressed. */
         cheats_original_actions_apply_pending();
         overlay_model_reset();
@@ -307,8 +306,8 @@ bool overlay_input_is_open(void)
  * The first attempt integrated the device deltas the game was being denied. It moved, but it was
  * not usable: a relative stream has no home position, it drifts, and its speed is a number somebody
  * has to guess. The engine does not do that for its own menu pointer either. It takes the system
- * cursor's position and works from that, which is why the blue pointer in the front end behaves
- * like a pointer and not like a stick.
+ * cursor's position and works from that, so the blue pointer in the front end behaves like a
+ * pointer and not like a stick.
  *
  * So this does the same. The cursor keeps moving while the panel is open, because the panel is not
  * a window and takes nothing away from it, and the position is simply mapped into the panel's own
@@ -316,8 +315,8 @@ bool overlay_input_is_open(void)
 /* The wheel, once a frame, and only while the panel is open.
  *
  * It consumes the same accumulator the free camera's fly speed reads. That is not a clash: the
- * camera needs the wheel while FLYING, which is exactly when the panel is closed and this does not
- * run. Whichever of the two is on screen owns the wheel, and neither ever sees the other's notches.
+ * camera needs the wheel while FLYING, and the panel is closed then, so this does not run.
+ * Whichever of the two is on screen owns the wheel, and neither ever sees the other's notches.
  *
  * One notch is WHEEL_DELTA, 120. Three rows a notch is the shape Windows itself uses by default and
  * it reads about right against a row this tall. */
@@ -367,8 +366,8 @@ static void update_drag(void)
 
     /* Mapped from the pointer's CURRENT position against the row the drag started on, not against
      * whatever row is under the pointer now. Dragging off the row sideways or vertically keeps
-     * driving the handle it grabbed, which is what every slider does and what stops a drag from
-     * jumping to the row below when the hand wanders. */
+     * driving the handle it grabbed, as every slider does, so a drag never jumps to the row below
+     * when the hand wanders. */
     if (!overlay_draw_slider_fraction(input_state.drag_row, input_state.pointer_x, &fraction)) {
         return;
     }
@@ -376,7 +375,7 @@ static void update_drag(void)
     /* Recorded before the throttle, and read by the drawer, so the HANDLE follows the pointer at
      * the full frame rate while the WRITE is throttled. Drawing the handle from the value read back
      * out of the file was the first version, and it moved in thirty steps a second against a
-     * pointer moving in sixty, which is exactly what a slider must not do. */
+     * pointer moving in sixty, which a slider must not do. */
     input_state.drag_fraction = fraction;
 
     now = (uint32_t)GetTickCount();
@@ -410,8 +409,8 @@ void overlay_input_update_pointer(void)
     /* Two rectangles, and they are not the same one. The window's client area is in desktop pixels
      * and can be any size; the engine draws into a picture of its own chosen size. The panel lives
      * in the second, so the pointer is mapped from the first into it. They are usually equal and
-     * the mapping is then the identity, which is exactly why getting this wrong was invisible until
-     * the panel moved out of its old fixed size box and the pointer stayed behind in it. */
+     * the mapping is then the identity, so getting this wrong was invisible until the panel moved
+     * out of its old fixed size box and the pointer stayed behind in it. */
     if (!overlay_draw_screen(&screen_w, &screen_h)) {
         return;
     }
@@ -447,12 +446,12 @@ static void click(float x, float y)
     int32_t tab;
     int32_t row;
 
-    /* A click anywhere ends the search box's focus except a click ON it, which is what starts it.
-     * That is the whole of the click-to-type rule: typing goes into the box only between these two
-     * moments, never just because the panel is open. The jump-scale edit follows the same rule via
-     * the unconditional cancel below; it is cancelled on every click, then immediately re-armed by
+    /* A click anywhere ends the search box's focus except a click ON it, which starts it. That is
+     * the click-to-type rule entire: typing goes into the box only between these two moments,
+     * never just because the panel is open. The jump-scale edit follows the same rule via the
+     * unconditional cancel below; it is cancelled on every click, then immediately re-armed by
      * overlay_model_activate() a few lines down if and only if the click actually landed back on
-     * its own row, which is exactly the "click it again to redo it" shape that row already has. */
+     * its own row, the "click it again to redo it" shape that row already has. */
     if (overlay_draw_search_at(x, y)) {
         input_state.search_focused = true;
         overlay_model_value_cancel();
@@ -504,10 +503,10 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         /* WHAT IS DELIBERATELY NOT SWALLOWED. Alt+F4 and Alt+Tab belong to the system and to the
          * person at the keyboard, not to a panel: a modal overlay that can trap somebody in a full
          * screen game is a worse defect than any it fixes. Both arrive with the alt bit set in the
-         * message's own context, bit 29 of the flags, which is what MSG_SYS_KEY_DOWN means, so the
-         * test is simply to hand a system key combination back untouched. Escape closes the panel
-         * and is handled below rather than passed on, which is the same thing from the user's side.
-         */
+         * message's own context, bit 29 of the flags, and that bit is what MSG_SYS_KEY_DOWN means,
+         * so the test is simply to hand a system key combination back untouched. Escape closes the
+         * panel and is handled below rather than passed on, which is the same thing from the
+         * user's side. */
         if (message == MSG_SYS_KEY_DOWN && !is_open_key(wparam)) {
             return false;
         }

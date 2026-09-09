@@ -12,8 +12,8 @@
  * sensitivity row rather than a widget left behind on a screen meant to look untouched. Either the
  * screen is the one the game shipped or it is not.
  *
- * IT TAKES EFFECT ON THE NEXT LAUNCH, and that is structural rather than laziness. Both screens
- * are patched by repointing the engine's own widget table once, while the game starts, and this
+ * IT TAKES EFFECT ON THE NEXT LAUNCH, for a structural reason. Both screens are patched by
+ * repointing the engine's own widget table once, while the game starts, and this
  * project has no path that puts such a table back. So the row writes the setting and says when it
  * will be seen.
  *

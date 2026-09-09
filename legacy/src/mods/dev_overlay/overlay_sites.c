@@ -86,8 +86,8 @@ _Static_assert(sizeof(SIG_DRAW_QUAD) == sizeof(MSK_DRAW_QUAD),
  * far too common a shape to find on its own: that pattern alone matches twenty five places.
  *
  * So this is not used to CALL anything. The pattern starts five bytes earlier, in the tail of the
- * function before it, which is what makes it unique, and the cell's address is read out of the
- * operand and then read directly. That is better than a call would have been anyway: the slot is
+ * function before it; that tail makes it unique. The cell's address is read out of the operand
+ * and then read directly. That is better than a call would have been anyway: the slot is
  * fetched fresh wherever it is needed instead of once at install time.
  *
  *   0046B74F  83 C4 10 5D C3           the previous function ending
@@ -137,7 +137,7 @@ _Static_assert(sizeof(SIG_SELECT) == sizeof(MSK_SELECT),
  *   0046B188  C7 45 FC 00 00 00 00     the index, cleared
  *   0046B18F  EB 09                    into the test
  *   0046B191  8B 45 FC 83 C0 01 89 45 FC   ++index
- *   0046B19A  83 7D FC 04              cmp index,4     <- four corners, and that is the tell */
+ *   0046B19A  83 7D FC 04              cmp index,4     <- four corners, the tell */
 static const uint8_t SIG_SET_COLOUR[] = {
     0x55, 0x8B, 0xEC,                                /* push ebp; mov ebp,esp    */
     0x51,                                            /* push ecx                 */
@@ -185,8 +185,8 @@ _Static_assert(sizeof(SIG_DRAW_TEXT) == sizeof(MSK_DRAW_TEXT),
 /* --- 0x0046B293 and 0x0046B2BA, the two scales. Text is not drawn in pixels: the font layer keeps
  * a position scale and a glyph scale, and the engine sets both before every string of its own,
  * 1/width and 1/height for the first and 640/width and 480/height for the second. Setting neither
- * draws at whatever the last user of the font left behind, which is why the panel first came out
- * enormous and off the screen.
+ * draws at whatever the last user of the font left behind, so the panel first came out enormous
+ * and off the screen.
  *
  * The two setters are identical for their first twenty four bytes, both being the same guard around
  * the same pool. They part at the field they write, +0x28 against +0x38, so each pattern has to

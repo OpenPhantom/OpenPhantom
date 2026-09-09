@@ -3,7 +3,7 @@
  * DevMenuSize exists because the engine knows the resolution and not the screen: a fixed pixel size
  * reads the same at 1080 and at 4K, and on a high density laptop panel those same pixels are tiny.
  *
- * IT SIZES ITSELF BY DEFAULT. DevMenuSize=0, which is what ships, holds the size the panel reads
+ * IT SIZES ITSELF BY DEFAULT. DevMenuSize=0, the shipped value, holds the size the panel reads
  * at on a 1080 screen as the resolution changes: 1.0x at 1080 and below, 2.0x at 2160. That is a
  * READING size and deliberately not the largest that fits, which at 4K fills the screen. An
  * explicit number still overrides it, because only the person looking at the screen knows how far
@@ -45,8 +45,8 @@ void  dev_menu_size_row_format(float scale, char *out, size_t size);
 float dev_menu_size_row_get(void);
 
 /* The value the panel is being drawn at: taken from the ini on the first ask and from the row
- * after that. The drawing layer calls this rather than being told, which is what lets this file be
- * linked into a test with no renderer behind it. */
+ * after that. The drawing layer calls this rather than being told, so this file can be linked
+ * into a test with no renderer behind it. */
 float dev_menu_size_row_current(void);
 
 /* Clamp, apply to the drawing immediately, and write it to the ini. Applying is what view_range_row

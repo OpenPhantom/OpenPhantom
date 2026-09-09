@@ -5,7 +5,7 @@
  * one, and renaming a shipped DLL would break every configuration file that mentions it.
  *
  * Nothing here draws into a window of its own. The panel is drawn with the engine's own two
- * dimensional primitives, inside the frame the game has already built, which is why it composites
+ * dimensional primitives, inside the frame the game has already built, so it composites
  * properly, survives a full screen mode and cannot take the focus away from the game.
  *
  * The parts are separate on purpose, and each one can be read without the others. overlay_model

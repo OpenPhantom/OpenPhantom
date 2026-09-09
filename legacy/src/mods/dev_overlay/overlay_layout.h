@@ -7,8 +7,8 @@
  * EVERYTHING IS A MULTIPLE OF H
  *
  * H is the height of a capital in the font the engine actually has. The engine keeps that at about
- * sixteen pixels whatever the display does, so a panel sized in H is sized in pixels, and that is
- * right: it should be as large as its text needs, not a fraction of a display it knows nothing
+ * sixteen pixels whatever the display does, so a panel sized in H is sized in pixels, correctly:
+ * it should be as large as its text needs, not a fraction of a display it knows nothing
  * about. It fills most of a 640 wide screen and a fifth of a 1920 wide one, and both are correct.
  *
  * If the whole panel is ever too tight or too loose, the knob is the single multiplier on the
@@ -34,7 +34,7 @@
 
 /* The layout stores where each tab ended up, because a tab is as wide as its own word rather than
  * half the panel. A four character word inside a twelve character box has no visible relationship
- * to the word that names it, which is why the tabs did not read as tabs. */
+ * to the word that names it, so the tabs did not read as tabs. */
 #define OVERLAY_LAYOUT_TABS 2u
 
 typedef struct layout {

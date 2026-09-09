@@ -2,7 +2,7 @@
  *
  * The same setting the video options screen offers, reachable without leaving the game to find it.
  *
- * IT SHOWS DEGREES AND WRITES AN OFFSET, and that is the only awkward thing here. variable_fov
+ * IT SHOWS DEGREES AND WRITES AN OFFSET, the only awkward thing here. variable_fov
  * stores ExtraDegrees, a signed offset from a base that depends on the canvas, the aspect mode and
  * the engine's own projection. None of those exist in this DLL, so an offset is a number this row
  * could show and nobody could read. variable_fov therefore publishes BaseFov, and the width of the

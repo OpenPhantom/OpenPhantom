@@ -123,7 +123,7 @@ typedef struct cheats_own_state {
                                                           * directly rather than detoured; NULL if
                                                           * its own site did not resolve */
     uintptr_t               camera_view_address;       /* address OF the camera object pointer;
-                                                          * 0 = unresolved, free camera unavailable */
+                                                          * 0 = unresolved, no free camera */
     float                   jump_boost_scale;           /* see JUMP_BOOST_SCALE_DEFAULT above */
 } cheats_own_state_t;
 

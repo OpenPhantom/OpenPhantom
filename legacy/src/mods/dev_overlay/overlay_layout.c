@@ -36,7 +36,7 @@
  * between the two, one H of padding inside the chip, and the right hand padding. It is
  * NAME_X + GUTTER_MIN + 1 + EDGE_PAD from overlay_draw.c, and it is exact rather than an estimate.
  *
- * It was 8.00 and it included "the widest state chip" as part of that guess, which is what left a
+ * It was 8.00 and it included "the widest state chip" as part of that guess, and that left a
  * label clipped after the width ceiling was raised: a chip reading "RUN" costs about 2.4H, one
  * reading "auto 1.00x" costs nearly 9, and no single number covers both. The caller now measures
  * the widest chip as well and hands both in, so what is left here is only the part that really is

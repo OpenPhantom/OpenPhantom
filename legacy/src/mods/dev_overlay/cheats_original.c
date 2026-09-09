@@ -22,7 +22,7 @@
  *
  * The name table has exactly one reference in the whole code section and the flag array has four,
  * three of them in these few instructions. So this pattern is the only place both can be picked up
- * together, which is why the site was chosen rather than the tidier looking ones nearby.
+ * together, and it was chosen over the tidier looking sites nearby for that reason.
  *
  * `xor eax,1` is the entire operation the console performs ON THE FLAG. It does one more thing
  * afterwards that this does not: it prints a line, taken from a parallel table of message ids

@@ -51,7 +51,7 @@
  * every frame, and the record is freed and replaced whole on every level load, so a single write at
  * the moment the cheat is switched on would last exactly until the next level change undoes it.
  * Holding the band out every frame, through the same common/frame_hook.h tick fog_regime.c already
- * uses for its own easing, is what makes the cheat survive a level change rather than needing to be
+ * uses for its own easing, carries the cheat through a level change rather than needing it
  * pressed again after every one.
  *
  * A first version of THIS file also declined to restore anything on the way back off, the same
@@ -128,8 +128,8 @@ typedef struct no_fog_state {
     void *volatile  *level_pointer;   /* [g_level], the same site fog_regime.c reads */
 
     /* The level currently remembered, the band it was authored with (captured once, before this
-     * file ever wrote to it), and the band this file itself last wrote, which is what tells the
-     * next frame whether the record still holds ours or has been freed and reallocated under us. */
+     * file ever wrote to it), and the band this file itself last wrote, so the next frame can
+     * tell whether the record still holds ours or has been freed and reallocated under us. */
     void            *remembered_level;
     void            *last_seen_level;   /* only to notice a level change; see the tick */
     bool             have_authored;
@@ -281,7 +281,7 @@ bool cheats_no_fog_toggle(void)
 
     /* Remembered for the next run, and deliberately not conditional on the write succeeding. This
      * is a cheat rather than a setting: its point is the effect on the picture in front of the
-     * player, so a read-only ini costs the memory of the choice and nothing else. The rows that
+     * player, so a read-only ini costs only the memory of the choice. The rows that
      * refuse on a failed write are the ones whose whole effect IS the file. */
     if (!ini_write_int(NO_FOG_SECTION, NO_FOG_KEY, st.on ? 1 : 0)) {
         log_warning("no fog: switched %s, but %s could not be written, so this run is the only one "

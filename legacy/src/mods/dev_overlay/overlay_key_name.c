@@ -12,8 +12,8 @@ void overlay_key_name(int32_t vk, char *out, size_t out_size)
         return;
     }
     if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) {
-        /* Both ranges are their own virtual key codes, which is why this is a cast and not a
-           lookup table. */
+        /* Both ranges are their own virtual key codes, so this is a cast and not a lookup
+           table. */
         _snprintf(out, out_size, "%c", (char)vk);
     } else if (vk >= VK_F1 && vk <= VK_F24) {
         _snprintf(out, out_size, "F%d", (int)(vk - VK_F1 + 1));
@@ -99,7 +99,7 @@ static const key_alias_t ALIASES[] = {
     { "pause",       VK_PAUSE },
     { "numpad+",     VK_ADD },
     { "numpadplus",  VK_ADD },
-    { "numplus",     VK_ADD },      /* the underscore form above collapses to this, not to numpad+ */
+    { "numplus",     VK_ADD },      /* the underscore form above collapses to this, not numpad+ */
     { "num+",        VK_ADD },
     { "numpad-",     VK_SUBTRACT },
     { "numpadminus", VK_SUBTRACT },
@@ -166,8 +166,8 @@ bool overlay_key_from_name(const char *text, int32_t *out)
         return false;
     }
 
-    /* A bare number is a virtual key code, which is what this setting has always been and what
-     * every ini written before this understood. It is also the only way to reach a key with no
+    /* A bare number is a virtual key code, as this setting has always been and as every ini
+     * written before this understood. It is also the only way to reach a key with no
      * name here, including the number row, whose keys are their own codes: 53 is the 5 key.
      *
      * THE NUMBER ROW THEREFORE DOES NOT READ BACK from what the panel shows. The panel prints the

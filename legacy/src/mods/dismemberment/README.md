@@ -92,9 +92,9 @@ seconds, with 112 of 120 samples in the damping arm. **The piece lies still in t
 
 The cause is in `bapobj_drawAll`: the drawn attitude is interpolated between `prevRot` and `rot`,
 and `candy_stuntTick` maintains `prevPos` by hand but `prevRot` **never**. So `prevRot` stays at its
-creation value while `rot` runs to -29 degrees, and the drawn yaw saws 32 times a second. **That is a
-defect of the original engine**; this DLL maintains the field the way the engine already maintains
-`prevPos`.
+creation value while `rot` runs to -29 degrees, and the drawn yaw saws 32 times a second. **That is
+a defect of the original engine**; this DLL maintains the field the way the engine already
+maintains `prevPos`.
 
 Three earlier diagnoses, the contact re-roll, the undamped arm, the distance-inverse impulse, were
 each byte-correct descriptions and **none** was the cause. The rule that came out of it: a byte path

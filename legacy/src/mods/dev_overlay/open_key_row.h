@@ -8,7 +8,7 @@
  *
  * This row is that way in, once. A player binds the key they want and it is written to the ini, so
  * the next start already has it. Reported as a keyboard layout problem rather than a missing
- * feature, which is why the fix is a binding rather than a different default.
+ * feature, so the fix is a binding rather than a different default.
  *
  * Unlike the other rows here this one calls straight into overlay_input, because that is the same
  * DLL: the rule against feature DLLs depending on each other does not apply inside one, and going

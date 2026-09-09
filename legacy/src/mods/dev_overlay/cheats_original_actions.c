@@ -138,8 +138,9 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
                "the console function pattern and its mask are different lengths");
 
 /* Every offset is `instruction address - 0x0042fc90` in retail, read straight off the disassembly.
- * An "OP_" constant is where an instruction's own address-bearing operand starts, which is what
- * gets read as data; the plain offsets are where a CALL itself sits, for patch_read_call_target. */
+ * An "OP_" constant is where an instruction's own address-bearing operand starts, and that
+ * operand is read as data; the plain offsets are where a CALL itself sits, for
+ * patch_read_call_target. */
 #define OFF_KILL_CALL           0x284u   /* FUN_00459e85(0), also reused for full health's (100) */
 #define OFF_SWAP_CALL           0x3D1u   /* FUN_004302aa(0..3), the four character swaps         */
 #define OFF_LOWER_A_CALL        0x319u   /* FUN_00457eee(), "i stink"                             */
@@ -168,7 +169,7 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
 #define MSG_LOWER_DIFFICULTY 0x34   /* both "i stink" and "i really stink" print this same one */
 #define MSG_INCREASE_DIFFICULTY 0x35
 #define MSG_RED_HIGHLIGHT    0x47
-#define MSG_DURATION_BITS    0x40800000   /* 4.0f's bit pattern, the seconds every message shows for */
+#define MSG_DURATION_BITS    0x40800000   /* 4.0f's bits, the seconds every message shows for */
 
 /* String operands, for the three codes too short for the image's own string analysis to have
  * named on its own. Nothing stops a SHORT string being missed the other way, by never being
@@ -207,7 +208,8 @@ typedef struct actions_state {
     volatile int32_t *debug_var;
     volatile int32_t *counter_var;   /* the difficulty-pinning counter, DAT_00872efc */
     const volatile int32_t *ammo_mode_var;
-    const volatile int32_t *graphics_level_var;   /* DAT_004ac538, read after cycling for a message */
+    const volatile int32_t *graphics_level_var;   /* DAT_004ac538, read after cycling, for a
+                                                   * message */
 
     /* -1 means none queued. See the comment above cheats_original_actions_invoke()'s character
      * swap cases for why a swap is queued rather than run immediately. */
@@ -627,7 +629,7 @@ bool cheats_original_actions_invoke(cheats_action_id_t id)
      * the player suspended, which is the engine's own idle state and is exactly what the panel asks
      * for on every other frame it is open. Calling the swap now can silently do nothing, with no
      * error to show for it. Queuing it instead and applying it once the panel closes and the player
-     * is un-suspended again is what makes it reliable rather than "usually" reliable. Only the last
+     * is un-suspended again makes it reliable rather than "usually" reliable. Only the last
      * press before closing wins; the four are mutually exclusive anyway, so overwriting a pending
      * one rather than queuing several is the honest behaviour, not a limitation of the queue. */
     case CHEATS_ACTION_PLAY_OBI:
@@ -721,7 +723,8 @@ bool cheats_original_actions_is_pending(cheats_action_id_t id)
 const char *cheats_original_actions_pending_label(void)
 {
     if (!st.resolved) {
-        return NULL;      /* see the same zero-vs-sentinel note in cheats_original_actions_is_pending() */
+        /* See the same zero-vs-sentinel note in cheats_original_actions_is_pending(). */
+        return NULL;
     }
     switch (st.pending_character) {
     case 0: return st.slots[CHEATS_ACTION_PLAY_OBI].label;

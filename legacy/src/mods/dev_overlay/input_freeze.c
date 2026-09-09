@@ -4,7 +4,7 @@
  * THE TWO SITES
  *
  * Retail WMAIN.EXE, 829,952 bytes, ImageBase 0x400000. Both open the same way and both already
- * know how to answer when there is nothing to report, which is what this borrows.
+ * know how to answer when there is nothing to report; this borrows that answer.
  *
  *   0048D38D  55 8B EC 83 EC 14        the axis read, answering a float
  *             83 3D C8 19 86 00 00     cmp [008619C8],0     ; the device layer is up
@@ -65,7 +65,7 @@
  *   00450FDB  A1 20 52 4B 00           mov eax,[004B5220]      ; the player block
  *   00450FE0  83 78 04 00              cmp dword [eax+4],0     ; the module state
  *   00450FE4  75 07                    non zero: jump PAST the 1, so answer 0
- *   00450FE6  B8 01 00 00 00           zero: answer 1, which is what "suspended" means
+ *   00450FE6  B8 01 00 00 00           zero: answer 1, and 1 is what "suspended" means
  *   00450FEF  5D C3
  *
  * Setting that field to zero while the panel is open is therefore not an invention: it is the state
@@ -224,9 +224,9 @@ bool input_freeze_install(void)
         if (suspended != 0 && memory_read_u32(suspended + OFFSET_PLAYER_BLOCK, &block) &&
             memory_is_inside_image(block, sizeof(void *))) {
             freeze_state.player_block = (void *const volatile *)(uintptr_t)block;
-            log_info("while the panel is open the player's phases are stopped, which is what the "
-                     "engine does for a menu and a cutscene and is the only thing that really "
-                     "holds this game still (player block at %08X)", (unsigned)block);
+            log_info("while the panel is open the player's phases are stopped, as the engine "
+                     "does for a menu and a cutscene; that is the only thing that really holds "
+                     "this game still (player block at %08X)", (unsigned)block);
         } else {
             log_warning("the player's own suspend state did not resolve, so the player will keep "
                         "moving while the panel is open");

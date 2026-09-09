@@ -10,7 +10,7 @@
  * textures were read out of their own headers. The most common sizes are 32 by 32 (1063), 16 by 32
  * (471), 64 by 32 (329), 64 by 64 (320) and 16 by 16 (317), and none of the 4000 exceeds 256 on
  * either axis. So on the original artwork the clamp never fires and any ceiling at or above 256 is
- * the identity. The remaining 2482 were not measured, which is why this says 4000 and not all.
+ * the identity. The remaining 2482 were not measured, so this says 4000 and not all.
  *
  * The engine enforces a size limit twice, in different modules, for different reasons. A player
  * who raises one and not the other gets either cropped artwork or a corrupted heap, and neither
@@ -51,12 +51,12 @@
  * bResident = 0. That is why running out of texture memory in this engine shows as untextured
  * geometry rather than a crash, and a too large ceiling ends up in the same place.
  *
- * Both values have to stay powers of two, and that is enforced by this feature rather than by the
- * device for the same reason: D3DPTEXTURECAPS_POW2 is a capability the engine also never checks.
- * The clamped size is handed straight to surface creation, and the page builder at 0x0040EC33
- * derives its addressing masks by subtracting one from each axis, which is the mask form of a
- * power of two and nothing else. That check lives in texture_size.c with the accepted ranges and
- * the conversion from pixels to bytes.
+ * Both values have to stay powers of two, enforced by this feature rather than by the device for
+ * the same reason: D3DPTEXTURECAPS_POW2 is a capability the engine also never checks. The clamped
+ * size is handed straight to surface creation, and the page builder at 0x0040EC33 derives its
+ * addressing masks by subtracting one from each axis; only a power of two minus one gives a
+ * usable mask. That check lives in texture_size.c with the accepted ranges and the conversion
+ * from pixels to bytes.
  */
 #include "large_textures.h"
 
@@ -156,6 +156,8 @@ static const uint8_t MSK_TEXTURE_CEILING[] = {
     0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_TEXTURE_CEILING == sizeof MSK_TEXTURE_CEILING,
+               "the texture ceiling pattern and its mask are different lengths");
 #define OFFSET_CEILING_OPERAND  1u
 
 /* The engine's authored ceiling, and the value the operand must hold before it is written. */
@@ -188,9 +190,9 @@ static const uint8_t MSK_TEXTURE_CEILING[] = {
  *
  * The block is used for exactly two things and then freed on every exit path: it is the
  * destination of that read, and it is the source pointer handed to the page builder. Nothing else
- * in the function depends on its size, which is what makes the one immediate the whole limit.
+ * in the function depends on its size, so the one immediate is the whole limit.
  *
- * The sub esp, 0x1C at the head of the pattern is what makes it unique; without it this is a
+ * The sub esp, 0x1C at the head of the pattern makes it unique; without it this is a
  * common idiom. Census over the retail image's .text, allocate-and-bail forms with the size
  * immediate wildcarded:
  *
@@ -234,19 +236,21 @@ static const uint8_t MSK_WORLD_SCRATCH[] = {
     0xFF, 0xFF,
     0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_WORLD_SCRATCH == sizeof MSK_WORLD_SCRATCH,
+               "the world scratch block pattern and its mask are different lengths");
 #define OFFSET_SCRATCH_OPERAND  4u
 
 /* The measurement that made this second patch necessary. Census over the 11 shipped levels: 116
  * world pages, of which 98 are 256 by 256, 14 are 64 by 64 and 4 are 128 by 128. Since 256 times
- * 256 is 65536, which is exactly the fixed block, the stock loader can grow only the 18 small
+ * 256 is 65536, the size of the fixed block, the stock loader can grow only the 18 small
  * pages, and only as far as 256:
  *
  *   upscale factor                   x2          x4          x8         x16
  *   pages in the level files      18/116      14/116       0/116       0/116
  *   pages in the other files    2725/2725   2725/2725   2725/2725   2725/2725
  *
- * Only the first row goes through this loader, and that is why a session run with the ceiling
- * raised as far as it goes showed no change in the levels at all.
+ * Only the first row goes through this loader, so a session run with the ceiling raised as far
+ * as it goes showed no change in the levels at all.
  *
  * What growing this block does NOT change: the world's page array is still 64 entries, it is
  * inline at world+0xC4 and ends before numLights at world+0x1C4; the palette count is still
@@ -256,7 +260,7 @@ static const uint8_t MSK_WORLD_SCRATCH[] = {
 
 /* The engine's own world page scratch, in bytes, and the value the operand must still hold. A
  * world page is one palette index per pixel, so this is also the pixel count: exactly 256 by 256,
- * which is exactly the size 98 of the 116 shipped world pages already are. */
+ * the size 98 of the 116 shipped world pages already are. */
 #define ORIGINAL_SCRATCH_BYTES  0x10000u
 
 /* The same block expressed as an axis, which is the unit the ini key uses. */

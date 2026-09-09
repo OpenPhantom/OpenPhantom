@@ -15,8 +15,8 @@
  *
  * ITS REACH IS STILL BOUNDED, AND NOT BY THAT RULE. Before any of that runs, the function rounds
  * the point to integers, asks the world at 0x008A0060 for the cell containing it, and then walks
- * only the polygons that cell offers. A point outside every cell, which is what any position well
- * above the level is, yields no candidates at all, so dist keeps its 3.4e38 seed and the answer is
+ * only the polygons that cell offers. A point outside every cell, as any position well above the
+ * level is, yields no candidates at all, so dist keeps its 3.4e38 seed and the answer is
  * indistinguishable from a genuine void.
  *
  * So this answers "is there ground under this point" only for a point the world still contains.

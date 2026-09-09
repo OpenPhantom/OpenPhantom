@@ -2,8 +2,8 @@
  *
  * There is no window and no second surface. The panel is drawn with the engine's own two
  * dimensional primitives from inside the frame, just before the scene is closed, so it composites
- * with the finished picture the way the game's own letterbox bars do. That is what makes it survive
- * a full screen mode, cost nothing in focus, and blend with real alpha per shape.
+ * with the finished picture the way the game's own letterbox bars do. It therefore survives a
+ * full screen mode, costs nothing in focus, and blends with real alpha per shape.
  *
  * Everything is in real screen pixels. The proportions are in overlay_layout.c and are multiples of
  * the font's measured height; the entry points are resolved in overlay_sites.c. What is here is
@@ -29,7 +29,7 @@ bool overlay_draw_resolve(void);
  * it, which is established; the other two are left and right in an order the bytes do not say. */
 void overlay_draw_set_align(int32_t mode);
 
-/* The panel's size is owned by dev_menu_size_row.c and asked for while drawing, not set from here. */
+/* The panel's size is owned by dev_menu_size_row.c and asked for while drawing, not set here. */
 
 /* Paints the current model, and answers whether it could. False means the engine has no display
  * mode to draw into, which the caller treats as "this panel is not being seen" rather than as a
@@ -51,8 +51,8 @@ int32_t overlay_draw_slider_at(float x, float y, float *fraction);
  * height entirely. False when that row had no track or has scrolled out of the panel.
  *
  * A drag in progress uses this rather than the hit test above: once a handle has been grabbed it
- * keeps following the pointer even when the hand wanders off the row, which is what every slider
- * does and what stops a drag from jumping to the row below. */
+ * keeps following the pointer even when the hand wanders off the row, as every slider does, and
+ * a drag therefore never jumps to the row below. */
 bool overlay_draw_slider_fraction(int32_t index, float x, float *fraction);
 
 /* Which tab the pointer is over, or -1. */

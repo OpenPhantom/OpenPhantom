@@ -183,7 +183,7 @@ static void prepare_font(void)
      * setting these scales, so the measurement described a different font than the drawing did.
      * That is fixed above, and changing this at the same time only hid it.
      *
-     * DevMenuSize multiplies both, and that is the only place it is applied. Every band, row and
+     * DevMenuSize multiplies both, and is applied nowhere else. Every band, row and
      * the width clamp are multiples of the height this font measures, and both measurements run
      * through this function first, so scaling here scales the whole panel and its text together
      * rather than growing the boxes around text that stayed put. */
@@ -242,8 +242,8 @@ static void write(const char *what, float x, float y, uint32_t argb)
 /* A string, vertically centred in a band of `height` starting at `y`.
  *
  * THE ENGINE'S TEXT GROWS UPWARD FROM THE POSITION IT IS GIVEN. That position is the baseline, not
- * the top edge, which is why treating it as a top left corner put every label at the top of its own
- * band with the rule and the chip sitting under it. Centring a glyph box of one text height in a
+ * the top edge, so treating it as a top left corner put every label at the top of its own band
+ * with the rule and the chip sitting under it. Centring a glyph box of one text height in a
  * band therefore puts the baseline at the BOTTOM of that box, not the top. */
 static void write_in(const char *what, float x, float y, float height, uint32_t argb)
 {
@@ -484,7 +484,7 @@ bool overlay_draw_paint(void)
                  lay.title_h - lay.cap_h, C_ROW_TEXT_DIM);
     }
 
-    /* --- the tabs. The inactive one gets NO fill, and that is the move that makes them read as
+    /* --- the tabs. The inactive one gets NO fill, and without that absence they do not read as
      * tabs: one rectangle among words is unambiguously the selected one at any scene brightness,
      * while a second rectangle both competes with the first and converges on it as the game gets
      * brighter. --- */
@@ -632,13 +632,14 @@ bool overlay_draw_paint(void)
         }
 
         {
-            /* A hotkey row, and now a value row too, get the action's own chip styling, since both are
-             * buttons that start something rather than a plain switch, the same as ACTION, but
+            /* A hotkey row, and now a value row too, get the action's own chip styling, since both
+             * are buttons that start something rather than a plain switch, the same as ACTION, but
              * never fall through to "RUN": source_row() always populates value for either kind
              * (the bound key's name / "Set" / "...", or the current number / what is being typed),
              * so that arm of the word choice below is dead for both and kept only because ACTION
              * still needs it. */
-            const bool  is_action = (row.kind == OVERLAY_ROW_ACTION || row.kind == OVERLAY_ROW_HOTKEY ||
+            const bool  is_action = (row.kind == OVERLAY_ROW_ACTION ||
+                                     row.kind == OVERLAY_ROW_HOTKEY ||
                                      row.kind == OVERLAY_ROW_VALUE);
             const char *word = chip_word(&row);
             const float chip_w = text_width(word) + lay.text_h;
@@ -682,7 +683,7 @@ bool overlay_draw_paint(void)
         }
     }
 
-    /* --- the scroll indicator, and only when there is something to indicate -----------------------
+    /* --- the scroll indicator, and only when there is something to indicate -------------------
      * A thumb on the inside of the right border, as long a fraction of the track as the visible
      * rows are of all of them, and as far down it as the list is scrolled. It is drawn rather than
      * clickable on purpose: the wheel and the keys already move the list, and a draggable bar this

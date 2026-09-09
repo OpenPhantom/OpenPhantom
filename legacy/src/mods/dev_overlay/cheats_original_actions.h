@@ -62,8 +62,8 @@ bool cheats_original_actions_is_available(cheats_action_id_t id);
  * player suspended, which is the engine's own idle state and is true on every frame the panel is
  * open. Running the swap here could silently do nothing depending on the exact frame pressed, with
  * nothing to show for it. Queuing it and applying it once the panel closes and the player is
- * un-suspended again is what makes it reliable. cheats_original_actions_apply_pending() is what
- * actually runs it, and the caller is responsible for calling that after un-suspending the player,
+ * un-suspended again makes it reliable. cheats_original_actions_apply_pending() actually runs
+ * it, and the caller is responsible for calling that after un-suspending the player,
  * not before. */
 bool cheats_original_actions_invoke(cheats_action_id_t id);
 

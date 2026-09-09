@@ -111,7 +111,7 @@ static const uint8_t SIG_SEVER_PROBE[] = {
  *   8B 45 FC / C7 40 20 0B000000                 ; state = kEnemy_Death (11)
  *
  * The site is only reached when health <= 0 (0x437070 `cmp [eax+0x38],0` / `jg`), i.e. exactly on
- * the lethal hit. Prologue 6 bytes (3+3), clean boundary. This 26-byte pattern contains NO rel32. */
+ * the lethal hit. Prologue 6 bytes (3+3), clean boundary. This 26-byte pattern holds NO rel32. */
 static const uint8_t SIG_DEATH_GATE[] = {
     0x8B, 0x4D, 0xFC, 0x8B, 0x51, 0x14, 0x81, 0xE2, 0x00, 0x00, 0x01, 0x00,
     0x85, 0xD2, 0x75, 0x0A, 0x8B, 0x45, 0xFC, 0xC7, 0x40, 0x20, 0x0B, 0x00, 0x00, 0x00
@@ -271,12 +271,12 @@ static void load_config(void)
 
     config->spin_scale     = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SpinScale", 0.35f),
                                          0.0f, 2.0f);
-    config->gravity_scale  = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "GravityScale", 0.40f),
-                                         0.1f, 2.0f);
-    config->settle_seconds = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleSeconds", 1.20f),
-                                         0.0f, 5.0f);
-    config->settle_damping = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleDamping", 0.80f),
-                                         0.1f, 1.0f);
+    config->gravity_scale  = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "GravityScale",
+                                                        0.40f), 0.1f, 2.0f);
+    config->settle_seconds = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleSeconds",
+                                                        1.20f), 0.0f, 5.0f);
+    config->settle_damping = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleDamping",
+                                                        0.80f), 0.1f, 1.0f);
     config->yaw_scale      = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "YawScale", 0.12f),
                                          0.0f, 2.0f);
     config->diagnostics    = ini_read_bool(DISMEMBERMENT_SECTION, "Diagnostics", false);
@@ -353,7 +353,7 @@ static bool model_has_part_mask(const char *model, const char *nodes, uint32_t n
  * The census over 265 actor .baf files says: only ten rigs carry a body-part mask at all (anakin,
  * baron, baronsec, obiwan, quigon, queen, panaka, pitdroid, sithmrc2, jawagun); on every other
  * model EVERY node reads 0x1 = generic. A pure `type & 0x6E` gate therefore refuses on those
- * outright, which is exactly why decapitation did not happen on all enemies.
+ * outright, so decapitation did not happen on all enemies.
  *
  * Hence two stages, and the ORDER is the statement:
  *   1. if the model carries a real mask ANYWHERE, that mask is the truth, a node without a limb
@@ -459,7 +459,7 @@ static int32_t blade_node(void *victim_body, void *attacker)
 static int32_t __cdecl hook_sever_probe(void *victim_body, void *attacker)
 {
     /* Always call the original: its side effects (bapmap_eulerToMatrixT and, behind the poseStamp
-     * gate, rdPuppet_buildJointMatrices) are what bapobj_detachNode's throw direction depends on. */
+     * gate, rdPuppet_buildJointMatrices) are what bapobj_detachNode's throw direction rests on. */
     int32_t original_node = limb_state.engine_probe(victim_body, attacker);
     int32_t blade;
 

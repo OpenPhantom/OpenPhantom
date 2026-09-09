@@ -134,7 +134,7 @@ with a warning rather than honoured.
 * **`fx_rampFog`.** The cutscene tint walks the *device's* fog start and is inert under
   `view_distance_fix`'s vertex-fog regime. Unrelated to decals and unchanged here.
 
-## Testing status: ACCEPTED IN GAME (2026-08-07)
+## Testing status: accepted in game (2026-08-07)
 
 Ground shadows, scorch marks and footprints are back under `dxwrapper` with `Dd7to9=1`, with
 `NeutraliseZBias=1` and `DepthBias=0.0`. The single byte at `0x00488270` is the whole fix.

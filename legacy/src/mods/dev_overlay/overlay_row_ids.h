@@ -22,7 +22,7 @@
 /* The teleport-key row takes over free camera's own numeric slot in this group's id space, and
  * free camera itself moves one slot later (FREECAM_ROW_ID), so walking ids in order puts the
  * hotkey row directly BEFORE the cheat it gates rather than after it, the same order a player
- * reads the panel in. Read top to bottom, that tells the whole story on its own: set a teleport key,
+ * reads the panel in. Read top to bottom, that tells the story on its own: set a teleport key,
  * then the toggle right below it stops reading unavailable. Neither is a cheats_own_id_t, and
  * deliberately outside that enum's range instead of extending it: both are rows this panel adds,
  * not cheats cheats_openphantom.c itself offers a name or an on/off for.
@@ -87,8 +87,8 @@ _Static_assert(OVERLAY_ROWS_MAX >= OPENPHANTOM_TAB_ROWS_MAX,
                "the row array is smaller than the rows the OpenPhantom tab can build");
 
 /* "Skip to next level", one slot after the free-camera info fold's own SUMMARY row (INFO_ROW_ID)
- * but before its child lines, which is what keeps this row's own id fixed regardless of whether
- * that fold happens to be open: the child lines are only sometimes present in the count, so
+ * but before its child lines, so this row's own id stays fixed regardless of whether that fold
+ * happens to be open: the child lines are only sometimes present in the count, so
  * anything placed after them would move every time the fold opens or closes. Nothing about this
  * row depends on free camera at all; it only needs a slot that will not move. */
 #define END_LEVEL_ROW_ID (INFO_ROW_ID + 1u)

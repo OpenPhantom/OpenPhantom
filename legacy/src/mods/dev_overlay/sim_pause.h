@@ -2,8 +2,8 @@
  *
  * WHY THIS EXISTS SEPARATELY FROM input_freeze.c. That file answers the two functions the game
  * reads input through with "nothing pressed", which stops the player taking orders. It does not
- * stop the world: NPCs keep walking, movers keep moving and timers keep running behind the panel,
- * which is exactly what a player notices when they open the overlay mid fight.
+ * stop the world: NPCs keep walking, movers keep moving and timers keep running behind the
+ * panel, and a player opening the overlay mid fight notices all of it.
  *
  * WHAT THE ENGINE ALREADY DOES. sys_frame gates its own simulation step on a flag:
  *

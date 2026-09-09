@@ -132,7 +132,7 @@ bool dev_menu_size_row_parse(const char *text, float *out)
     }
 
     /* "auto", in any case, and whatever follows it. The chip displays the word together with the
-       size it currently works out to, so this is what makes that string typeable back verbatim. */
+       size it currently works out to, so that string can be typed back verbatim. */
     if ((text[0] == 'a' || text[0] == 'A') && (text[1] == 'u' || text[1] == 'U') &&
         (text[2] == 't' || text[2] == 'T') && (text[3] == 'o' || text[3] == 'O')) {
         *out = DEV_MENU_SIZE_AUTOMATIC;
@@ -214,7 +214,7 @@ float dev_menu_size_row_get(void)
  *
  * This is the one owner of the number, and the drawing layer asks for it rather than being told.
  * That direction matters: it lets this file be linked into a test on its own, with no engine and no
- * renderer behind it, which is what makes the parser and the clamp testable at all. */
+ * renderer behind it, so the parser and the clamp are testable at all. */
 static float applied = DEV_MENU_SIZE_AUTOMATIC;
 static bool  applied_read = false;      /* automatic IS zero, so zero cannot mean "not yet read" */
 
@@ -246,5 +246,6 @@ bool dev_menu_size_row_set(float scale)
        is a reason to lose the setting next launch, not a reason to refuse to resize the panel the
        player is looking at right now. */
     applied = wanted;
-    return ini_write_float(DEV_MENU_SIZE_SECTION, DEV_MENU_SIZE_KEY, wanted, DEV_MENU_SIZE_DECIMALS);
+    return ini_write_float(DEV_MENU_SIZE_SECTION, DEV_MENU_SIZE_KEY, wanted,
+                           DEV_MENU_SIZE_DECIMALS);
 }

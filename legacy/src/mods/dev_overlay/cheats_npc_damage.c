@@ -41,9 +41,9 @@
  * Traced forward to the end of the function (0x00433985), NOTHING after this block ever reads EAX,
  * ECX or EDX left over from it; every later use of the victim record reloads it fresh from
  * [ebp+8], and the first flag-testing instruction after it (FCOMP/FNSTSW at 0x004338FE) sets its
- * own flags rather than reading the SUB's. That is what makes this block safe to detour as a whole
- * and either skip entirely or replace outright, rather than needing to preserve anything about how
- * it executed. Unlike updateCam's chained detour above, which must run the original underneath
+ * own flags rather than reading the SUB's. This block is therefore safe to detour as a whole and
+ * either skip entirely or replace outright, rather than needing to preserve anything about how it
+ * executed. Unlike updateCam's chained detour above, which must run the original underneath
  * every time, this site's own hook is free to decide whether the trampoline runs at all. */
 static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
     0x8B, 0x55, 0x08,             /* mov edx,[ebp+8]      victim (character*)            */
@@ -81,8 +81,10 @@ static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
  * itself. on_npc_damage() communicates that choice through the static flag rather than a return
  * value in EAX, because popad below would overwrite EAX with whatever it held before the call and
  * erase any answer left in a register. */
-static void  *npc_damage_trampoline;   /* the original 15 bytes, replayed when neither cheat is on */
-static void  *npc_damage_continue;     /* site + NPC_DAMAGE_PROLOGUE_SIZE, resumed when one skips it */
+/* The original 15 bytes, replayed when neither cheat is on. */
+static void  *npc_damage_trampoline;
+/* site + NPC_DAMAGE_PROLOGUE_SIZE, resumed when one of the two skips the block. */
+static void  *npc_damage_continue;
 static bool   npc_damage_skip;
 
 /* Character record fields the one shot cheat needs, all of them read by diagnostics in the running
@@ -149,18 +151,20 @@ static void __cdecl on_npc_damage(char *frame_pointer)
          * health down through the band and the script fires. One store of zero steps over the band
          * entirely, so the script never sees a value inside it.
          *
-         * What that costs is visible in the game. When the engine takes the death instead, an actor
-         * whose model has no death animation completes the death state in a single tick and lands in
-         * the corpse state, which turns its collision off and leaves it drawn. It stays there for
-         * twenty minutes of level time, solid to look at and walked straight through, and its script
-         * never runs again because the interpreter only runs in the active state. Killed by hand
-         * that same machine explodes correctly; killed by this cheat it became a permanent ghost.
+         * What that costs is visible in the game. When the engine takes the death instead, an
+         * actor whose model has no death animation completes the death state in a single tick and
+         * lands in the corpse state, which turns its collision off and leaves it drawn. It stays
+         * there for twenty minutes of level time, solid to look at and walked straight through,
+         * and its script never runs again because the interpreter only runs in the active state.
+         * Killed by hand that same machine explodes correctly; killed by this cheat it became a
+         * permanent ghost.
          *
-         * So the cheat cleans up after itself. If the script already owns the death, the 0x10000 bit
-         * is set and everything it authored still happens, including its explosion, so nothing here
-         * touches it. If the engine is about to take the death, this claims it instead and hands the
-         * actor to the fade out state, which the engine finishes on its own: alpha decays, the actor
-         * asks to be removed, and it is freed. That is a clean disappearance rather than a ghost. */
+         * So the cheat cleans up after itself. If the script already owns the death, the 0x10000
+         * bit is set and everything it authored still happens, including its explosion, so nothing
+         * here touches it. If the engine is about to take the death, this claims it instead and
+         * hands the actor to the fade out state, which the engine finishes on its own: alpha
+         * decays, the actor asks to be removed, and it is freed. That is a clean disappearance
+         * rather than a ghost. */
         uint32_t state_flags = *(const uint32_t *)((const char *)victim + NPC_STATE_FLAGS_OFFSET);
 
         *(int32_t *)((char *)victim + 0x38) = 0;
@@ -171,8 +175,8 @@ static void __cdecl on_npc_damage(char *frame_pointer)
             *(uint32_t *)((char *)victim + NPC_STATE_FLAGS_OFFSET) =
                 state_flags | NPC_SCRIPT_OWNS_DEATH;
             if (body != NULL) {
-                /* Collision off, which is what every death in this engine does first and what the
-                 * fade state does not do for itself. */
+                /* Collision off. Every death in this engine does that first, and the fade state
+                 * does not do it for itself. */
                 *(uint32_t *)((char *)body + NPC_BODY_CLASS_OFFSET) = 0;
             }
             *(uint32_t *)((char *)victim + NPC_STATE_OFFSET) = NPC_STATE_FADEOUT;
@@ -194,8 +198,8 @@ static void __cdecl on_npc_damage(char *frame_pointer)
  * pushes three more, the ninth push does not fault: it marks the register indefinite. The engine
  * then carries on with a NaN where a coordinate used to be, and it surfaces somewhere else
  * entirely, frames later, as a camera that snaps to nowhere or a fall that never registers. Two
- * of these six sit in camera code and three in ground contact, which is exactly where the engine
- * is most likely to be holding a full stack.
+ * of these six sit in camera code and three in ground contact, where the engine is most likely
+ * to be holding a full stack.
  *
  * fnsave writes the whole x87 state out and reinitialises the unit, so the handler starts on a
  * clean FPU; frstor puts the engine's stack, tags and control word back exactly. 112 rather than

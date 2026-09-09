@@ -82,7 +82,7 @@ static const uint8_t SIG_DECAL_SUBMIT[] = {
 #define DECAL_SUBMIT_PROLOGUE 8u
 
 /* --- 0x00487672  which way is "nearer"? ------------------------------------------------------ *
- * This engine does not always use a less-THAN DEPTH TEST, and getting that wrong makes every
+ * This engine does not always use a less-than depth test, and getting that wrong makes every
  * value of DepthBias useless; it pushes the decal AWAY instead of forward. The compare function
  * is chosen from a device capability at run time:
  *

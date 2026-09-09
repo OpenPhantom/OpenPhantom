@@ -126,11 +126,11 @@ _Static_assert(sizeof(SIG_CAMERA_UPDATE) == sizeof(MSK_CAMERA_UPDATE),
 #define DEG_TO_RAD               0.017453293f
 #define RAD_TO_DEG               57.295780f
 #define FREECAM_MOVE_SPEED       12.0f    /* world units/second, only the STARTING value now that
-                                            * the wheel adjusts it at runtime (see freecam_speed) -
-                                            * still a first guess, pending a field round, for what
-                                            * the wheel then tunes away from */
+                                            * the wheel adjusts it at runtime (see
+                                            * freecam_speed); still a first guess, pending a field
+                                            * round, for what the wheel then tunes away from */
 #define FREECAM_MOUSE_DEGREES_PER_COUNT 0.15f   /* degrees of turn per pixel of cursor delta */
-#define FREECAM_PITCH_LIMIT      89.0f    /* degrees; kept short of vertical to avoid a gimbal flip */
+#define FREECAM_PITCH_LIMIT      89.0f    /* degrees; short of vertical to avoid a gimbal flip */
 #define FREECAM_MIN_SPEED        0.5f     /* world units/second */
 #define FREECAM_MAX_SPEED        200.0f   /* world units/second */
 #define FREECAM_SPEED_PER_NOTCH  1.1f     /* multiplicative, Blender's own fly-mode feel: constant
@@ -250,10 +250,11 @@ void cheats_openphantom_freecam_set_hotkey(int32_t virtual_key)
 }
 
 /* Chained: this file's own override runs strictly AFTER the original updateCam, on every DLL's
- * behalf whichever order they loaded in (see common/detour.h). Calling the original unconditionally,
- * before even looking at whether the cheat is on, is what keeps this a well-behaved link in that
- * chain rather than a break in it; enhanced_input's own free-look feature is chained on this exact
- * same site and must keep running underneath this one regardless of what this cheat is doing. */
+ * behalf whichever order they loaded in (see common/detour.h). Calling the original
+ * unconditionally, before even looking at whether the cheat is on, is what keeps this a
+ * well-behaved link in that chain rather than a break in it; enhanced_input's own free-look
+ * feature is chained on this exact same site and must keep running underneath this one regardless
+ * of what this cheat is doing. */
 static void __cdecl hook_camera_update(void)
 {
     void **view_slot;
@@ -268,10 +269,10 @@ static void __cdecl hook_camera_update(void)
 
     if (!own_state.cheats[CHEATS_OWN_FREECAM].on) {
         if (freecam_valid) {
-            /* The teleport, if the bound key asked for it, and before the simulation is released: one
-             * write into a world that is still frozen, so the player's own physics resumes FROM
-             * the new place rather than being fought at it. That ordering is the whole difference
-             * between this and the noclip this feature replaced.
+            /* The teleport, if the bound key asked for it, and before the simulation is released:
+             * one write into a world that is still frozen, so the player's own physics resumes
+             * FROM the new place rather than being fought at it. That ordering is the whole
+             * difference between this and the noclip this feature replaced.
              *
              * The position is all that moves. Velocity, mode and heading keep whatever they held
              * when flight began, so stepping out mid-air is a fall from wherever the camera was
@@ -293,10 +294,11 @@ static void __cdecl hook_camera_update(void)
                 void **player_slot = (void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
                 uint8_t *player = (player_slot != NULL) ? (uint8_t *)*player_slot : NULL;
 
-                /* Too high to survive the arrival? Asked before anything is written, because refusing
-                 * has to leave the player exactly where they were. A refusal then falls through to the
-                 * same path the plain return key takes, so the camera snaps back to the player and the
-                 * key reads as "not from here" rather than as a key that did nothing.
+                /* Too high to survive the arrival? Asked before anything is written, because
+                 * refusing has to leave the player exactly where they were. A refusal then falls
+                 * through to the same path the plain return key takes, so the camera snaps back to
+                 * the player and the key reads as "not from here" rather than as a key that did
+                 * nothing.
                  *
                  * Height only. There is no floor probe here on purpose; see the note on
                  * FREECAM_MAX_TELEPORT_DROP for the one that was tried and what it cost. */
@@ -305,19 +307,21 @@ static void __cdecl hook_camera_update(void)
                     float        above    = freecam_z - standing[2];
                     float        player_air = 0.0f;
 
-                    /* The player may be off the ground themselves, mid-fall from a previous teleport or
-                     * stood on something with a long way down. Then the drop is farther than the
-                     * camera's height above them and measuring only that would wave through exactly the
-                     * fall this refuses. The probe is asked HERE, at the player, and that is the one
-                     * place it can be trusted: the player is inside the world, so the cell lookup it
-                     * depends on succeeds. Asking it about the camera is what broke this before. */
+                    /* The player may be off the ground themselves, mid-fall from a previous
+                     * teleport or stood on something with a long way down. Then the drop is
+                     * farther than the camera's height above them and measuring only that would
+                     * wave through exactly the fall this refuses. The probe is asked HERE, at the
+                     * player, the one place it can be trusted: the player is inside the world, so
+                     * the cell lookup it depends on succeeds. Asking it about the camera is what
+                     * broke this before. */
                     if (floor_probe_below(standing, &player_air) == FLOOR_PROBE_FOUND) {
                         above += player_air;
                     }
 
                     if (above > FREECAM_MAX_TELEPORT_DROP) {
-                        log_info("the teleport was refused and the camera returned instead: it is %.0f "
-                                 "units of drop, past the %.0f this engine can finish a fall from",
+                        log_info("the teleport was refused and the camera returned instead: it "
+                                 "is %.0f units of drop, past the %.0f this engine can finish a "
+                                 "fall from",
                                  (double)above, (double)FREECAM_MAX_TELEPORT_DROP);
                         player = NULL;
                     }
@@ -365,7 +369,7 @@ static void __cdecl hook_camera_update(void)
 
                     /* F4 means "put me there and play", and the panel holds the simulation just as
                      * the camera does; without this the move would not resolve until the panel was
-                     * closed by hand, which is what made the first attempt look like it did nothing
+                     * closed by hand, and the first attempt therefore looked like it did nothing
                      * until then. */
                     overlay_input_close();
 
@@ -378,9 +382,9 @@ static void __cdecl hook_camera_update(void)
             }
             freecam_teleport_pending = false;
 
-            /* Falling edge: hand the world back. The camera itself needs no un-write, because the very
-             * next updateCam call recomputes it from the player the ordinary way, since nothing
-             * here touches state (+0x00) or anything else the follow logic reads. */
+            /* Falling edge: hand the world back. The camera itself needs no un-write, because the
+             * very next updateCam call recomputes it from the player the ordinary way, since
+             * nothing here touches state (+0x00) or anything else the follow logic reads. */
             sim_pause_hold(SIM_PAUSE_FREE_CAMERA, false);
             if (freecam_cursor_hidden) {
                 ShowCursor(TRUE);
@@ -412,13 +416,13 @@ static void __cdecl hook_camera_update(void)
         freecam_z = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Z_OFFSET);
 
         /* ORIENTATION is computed fresh, a look-at from the retail camera's own eye position
-         * toward its anchor (which tracks the player every frame; see updateCam's own site
-         * comment above), rather than copied from the raw euler fields the way position is.
+         * toward its anchor (which tracks the player every frame; see updateCam's own site comment
+         * above), rather than copied from the raw euler fields the way position is.
          * Field-reported: switching free camera on could start it pointing "at the sky". The raw
          * pitch is periodic (FUN_004181b9 wraps it every frame, confirmed by decompiling it) so
-         * that alone should not have caused it, since sin/cos already handle any wrap correctly, which
-         * points instead at the retail camera's own momentary rotation (lag catching up, a look at
-         * something tall) simply not being a sensible starting orientation for a DIFFERENT
+         * that alone should not have caused it, since sin/cos already handle any wrap correctly,
+         * which points instead at the retail camera's own momentary rotation (lag catching up, a
+         * look at something tall) simply not being a sensible starting orientation for a DIFFERENT
          * camera's use. Anchor and eye are both positions, immune to whatever the retail camera's
          * rotation happened to be doing, so a look-at from one to the other is deterministic
          * regardless of the cause. */
@@ -483,7 +487,7 @@ static void __cdecl hook_camera_update(void)
      * all, and does not touch how the mouse behaves while flying. Whether the panel itself is ever
      * usable mid-flight is a separate question, unresolved, and no longer the one that mattered. */
     /* The bound key brings the player. It ends the flight and drops them wherever the camera
-     * is, which is what the camera is usually being flown FOR, so it is the action worth putting
+     * is, usually the reason the camera is being flown at all, so it is the action worth putting
      * on a key of the player's own choosing. The plain return is on F4 below.
      *
      * The write itself happens on the falling edge above, one call later, so both keys share a
@@ -559,8 +563,8 @@ static void __cdecl hook_camera_update(void)
              * dy drives pitch onto its own clamp and pins it there: the camera stares at the
              * floor, W flies into it, and no hand movement lifts it because the bias comes back
              * before the next frame is drawn. It reads as the camera diving under the map and
-             * refusing to come up, which is exactly how it was reported, and the reporter
-             * confirmed these two guards fixed it on the rig it happened on. It was never
+             * refusing to come up, which is how it was reported; the reporter confirmed
+             * these two guards fixed it on the rig it happened on. It was never
              * reproduced here, which is the point: the writer this collides with is not
              * something every machine has.
              *
@@ -615,13 +619,13 @@ static void __cdecl hook_camera_update(void)
 
         /* Scroll wheel adjusts fly speed, the same feel Blender's own fly/walk navigation uses.
          * WM_MOUSEWHEEL is observed unconditionally, panel open or closed, because this needs it
-         * while FLYING and the panel is closed then. The message does reach the hook: the
-         * engine's top-level window procedure special-cases only four message types and falls
-         * through to the same registered-handler chain for everything else, wheel included.
-         * Multiplicative per notch rather than additive, so the same scroll feels proportionate
-         * whether the current speed is barely-crawling or already fast. wheel_source is NULL if
-         * dev_overlay.c never wired it in (its own site did not resolve), and then this simply never
-         * fires, the same as every other optional site in this file failing quietly. */
+         * while FLYING and the panel is closed then. The message does reach the hook: the engine's
+         * top-level window procedure special-cases only four message types and falls through to
+         * the same registered-handler chain for everything else, wheel included. Multiplicative
+         * per notch rather than additive, so the same scroll feels proportionate whether the
+         * current speed is barely-crawling or already fast. wheel_source is NULL if dev_overlay.c
+         * never wired it in (its own site did not resolve), and then this simply never fires, the
+         * same as every other optional site in this file failing quietly. */
         if (wheel_source != NULL) {
             int32_t wheel = wheel_source();
 
@@ -688,7 +692,7 @@ static void __cdecl hook_camera_update(void)
                 float right_x   = cos_yaw;
                 float right_y   = sin_yaw;
                 float planar    = sqrtf(forward * forward + strafe * strafe);
-                float scale     = (planar > 1.0f) ? (1.0f / planar) : 1.0f;   /* no diagonal boost */
+                float scale     = (planar > 1.0f) ? (1.0f / planar) : 1.0f; /* no diagonal boost */
                 float speed     = freecam_speed * dt;
 
                 freecam_x += (fwd_x * forward + right_x * strafe) * scale * speed;

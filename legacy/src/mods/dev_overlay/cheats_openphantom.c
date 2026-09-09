@@ -202,8 +202,8 @@ static const uint8_t SIG_THING_DRAW[] = {
 
 /* The matrix-scale composer at 0x0047E185, found as a CALL rel32 operand rather than matched by
  * its own signature. A hand-transcribed byte pattern for a thirteen-instruction function, derived
- * from disassembly text rather than raw bytes, is exactly the kind of thing that fails silently -
- * signature_find_unique just answers zero, indistinguishable from "this build does not have it" -
+ * from disassembly text rather than raw bytes, is exactly the kind of thing that fails silently:
+ * signature_find_unique just answers zero, indistinguishable from "this build does not have it",
  * and a first attempt at exactly that here did fail silently. This is lower-risk: the CALL sits at
  * a fixed, confirmed offset from rdThing_Draw's own entry (0x67 bytes, measured directly off two
  * addresses already trusted for the detour above: entry 0x0040FE70, call instruction 0x0040FED7),
@@ -338,7 +338,8 @@ static void install_player_scale(void)
     uint32_t  rel32;
     uintptr_t scale_target;
 
-    if (!cheats_install_one(SIG_THING_DRAW, NULL, sizeof SIG_THING_DRAW, (const void *)&hook_thing_draw,
+    if (!cheats_install_one(SIG_THING_DRAW, NULL, sizeof SIG_THING_DRAW,
+                     (const void *)&hook_thing_draw,
                      &own_state.thing_draw_detour, THING_DRAW_PROLOGUE_SIZE,
                      "the object render call")) {
         return;
@@ -478,7 +479,8 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
      * is also what the dev panel and the game's own pause menu need, and there is no way to close
      * this cheat again without one. The authoritative gate lives here rather than only in the
      * panel's own row.available, so nothing that reaches this function directly can bypass it. */
-    if (id == CHEATS_OWN_FREECAM && !own_state.cheats[id].on && cheats_openphantom_freecam_hotkey() == 0) {
+    if (id == CHEATS_OWN_FREECAM && !own_state.cheats[id].on &&
+        cheats_openphantom_freecam_hotkey() == 0) {
         return false;
     }
     own_state.cheats[id].on = !own_state.cheats[id].on;

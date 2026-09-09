@@ -16,7 +16,7 @@
 bool camera_follow_row_get(void);
 bool camera_follow_row_set(bool enabled);
 
-/* Whether the switch can do anything, which is exactly whether strafe is on. */
+/* Whether the switch can do anything: strafe has to be on. */
 bool camera_follow_row_available(void);
 
 #endif /* DEV_OVERLAY_CAMERA_FOLLOW_ROW_H */

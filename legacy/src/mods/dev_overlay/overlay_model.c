@@ -56,7 +56,8 @@
 #include <string.h>
 
 /* One entry per group. Which tab a group belongs to is fixed by GROUP_TAB below, not stored here:
- * a group cannot change tabs at runtime, so there is nothing to keep in sync by getting it wrong. */
+ * a group cannot change tabs at runtime, so there is nothing to keep in sync by getting it
+ * wrong. */
 typedef struct group_state {
     const char *title;
     bool        expanded;
@@ -163,7 +164,7 @@ void overlay_model_reset(void)
     model.row_count = 0;
     model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
     model.freecam_info_expanded = false;   /* folds closed on every open, same as the groups do */
-    overlay_window_reset();                /* and the window group's size list, for the same reason */
+    overlay_window_reset();              /* and the window group's size list, same reason */
     model.freecam_was_on = false;   /* re-synced against the real state on the very next rebuild */
     model.editing_value = false;   /* same reasoning as capturing_hotkey just above */
     model.value_edit_buf[0] = '\0';
@@ -187,8 +188,8 @@ overlay_tab_t overlay_model_tab(void)
     return model.tab;
 }
 
-/* The first drawn row, as a REQUEST rather than a fact: the reader below is what makes it true
- * against a row count that changes under it. */
+/* The first drawn row, as a REQUEST rather than a fact: the reader below reconciles it with a
+ * row count that changes under it. */
 static int32_t scroll_want = 0;
 
 void overlay_model_scroll_by(int32_t rows)
@@ -327,7 +328,7 @@ static uint32_t source_count(overlay_group_t group)
          * count already uses in append_group() below.
          *
          * This number and the row ids above move together. Adding a row and forgetting this
-         * leaves the new row built but never drawn, which is what happened when one was added. */
+         * leaves the new row built but never drawn, as happened when one was added. */
         return (uint32_t)CHEATS_OWN_COUNT + OPENPHANTOM_EXTRA_ROWS +
                (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
     }
@@ -790,7 +791,7 @@ void overlay_model_value_commit(void)
     }
     if (row >= UTILITIES_FIRST_ID) {
         /* Every typed row in that group, parsed and written by the group itself. A refusal leaves
-         * the setting alone, which is what the row then shows. */
+         * the setting alone, and the row then shows it unchanged. */
         (void)overlay_utilities_commit(row - UTILITIES_FIRST_ID, model.value_edit_buf);
         return;
     }

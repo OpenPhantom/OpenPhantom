@@ -39,8 +39,8 @@
  *
  * Both functions open identically for the first twenty bytes: a guard that skips the whole jump if
  * some player-record float at +0x168 fails a threshold check against a shared constant at
- * 0x004A86A4, which is exactly the shape this file's own SIG_USE_AMMO/SIG_DAMAGE comment already
- * warns about: a pattern that stopped at the shared prefix would match either function, or others
+ * 0x004A86A4, the shape this file's own SIG_USE_AMMO/SIG_DAMAGE comment already warns about: a
+ * pattern that stopped at the shared prefix would match either function, or others
  * like it for the remaining mode-entry functions (Sabre Attack, Panaka Attack, Push Block) this
  * feature has no reason to touch. Both patterns below therefore reach all the way to the
  * `mov [ecx+0x60],<that mode's own descriptor address>` instruction, the exact table[6]/table[7]
@@ -115,7 +115,7 @@ static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
  * higher, not silly" the same way TINY_PLAYER_SCALE above is; no retail precedent either direction.
  * Runtime-adjustable rather than fixed; the dev panel's own value row (see overlay_model.c) reads
  * and writes this through the getter/setter below, so this is only ever where a fresh install
- * starts, not the whole of what the cheat can be. Clamped on every write into a range wide enough
+ * starts, not the limit of what the cheat can be. Clamped on every write into a range wide enough
  * to be useful in both directions (a player weaker than retail is exactly as legitimate an ask as
  * one much stronger) but short of anything that turns a launch into a projectile the level's own
  * collision was never built to catch at the far end, or a no-op at the near one. */
@@ -126,7 +126,7 @@ static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
  * because the player kept simulating. FUN_0043e9f2, the per-frame pump, gates the entire
  * fixed-timestep substep driver on two cells, confirmed byte-for-byte against the running image:
  *
- *   0043ea13  83 3D 44134838 00     cmp [00881344],0        ; a movie/quit-adjacent state, untouched
+ *   0043ea13  83 3D 44134838 00     cmp [00881344],0        ; a movie/quit state, untouched
  *   0043ea1a  75 13                 jnz past the substep call
  *   0043ea1c  83 3D 00000000 00     cmp [SIM PAUSE FLAG],0  ; THE CELL THIS FEATURE USES
  *   0043ea23  75 0A                 jnz past the substep call
@@ -161,7 +161,7 @@ static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
  * resolves its own copy rather than reaching into another mod's DLL, the same independence every
  * other site in this file already keeps.
  *
- * updateCam itself, 0x00418544, is THE proven multi-tenant detour target of this whole project -
+ * updateCam itself, 0x00418544, is THE proven multi-tenant detour target of this whole project;
  * signature.h's own docs name it as chained by two DLLs already, and the chaining exists
  * specifically so a second detour on the same prologue does not have to scan for bytes the first
  * detour already overwrote. SIG_CAMERA_UPDATE and CAMERA_UPDATE_PROLOGUE_SIZE are copied from
@@ -222,7 +222,7 @@ void cheats_openphantom_resume_jump_boost(void)
     own_state.cheats[CHEATS_OWN_JUMP_BOOST].on = true;
 }
 
-/* Jump boost. Calling the original FIRST and unconditionally is what makes this a boost and not a
+/* Jump boost. Calling the original FIRST and unconditionally keeps this a boost rather than a
  * reimplementation: the jump still happens exactly as retail built it, guard check and all, and
  * only once it has already decided to jump and written its own velocity does this cheat touch
  * anything, scaling whatever value is now sitting at +0xB4, either the fallback constant or the

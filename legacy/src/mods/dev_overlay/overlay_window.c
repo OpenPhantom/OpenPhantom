@@ -14,7 +14,7 @@
 #define RESOLUTION_SECTION "enhanced_resolution"
 
 /* Mirrors window_mode_kind_t, which lives in the other DLL's header and is deliberately not
- * included: these are file format values, and the file is the whole of the contract between the
+ * included: these are file format values, and the file is the entire contract between the
  * two. A number written here that the other side does not know is refused there and logged, which
  * is the behaviour wanted anyway. */
 #define MODE_AUTHENTIC        0
@@ -85,7 +85,8 @@ static void build_size_list(void)
         mode.dmSize = sizeof mode;
 
         /* The floor the engine's own mouse re-centring needs: below roughly 640x480 of client area
-         * its warp to client (320,240) lands outside the window and a constant delta accumulates. */
+         * its warp to client (320,240) lands outside the window and a constant delta builds
+         * up. */
         if (w < 640 || h < 480) {
             continue;
         }
@@ -99,7 +100,7 @@ static void build_size_list(void)
         }
 
         /* Inserted in order rather than sorted afterwards: the list is short, this runs once, and
-         * an ordered list is what makes it readable. */
+         * only an ordered list is readable. */
         for (at = size_list_count; at > 0u; --at) {
             if (size_list[at - 1u].width < w ||
                 (size_list[at - 1u].width == w && size_list[at - 1u].height <= h)) {
@@ -121,8 +122,8 @@ void overlay_window_reset(void)
 /* Auto is the FIRST entry, ahead of every size the display reports, and it is a row rather than
  * only a label.
  *
- * The size row shows "auto" whenever no size has been chosen, which is what a fresh install reads,
- * and auto means the window takes the size the game is rendering so the picture is one pixel for
+ * The size row shows "auto" whenever no size has been chosen, as a fresh install reads, and auto
+ * means the window takes the size the game is rendering so the picture is one pixel for
  * one pixel. Without a row that writes it back there was no way to return: the list held nothing
  * but real modes, so picking one was a one way door out of the state the panel started in.
  *
@@ -212,7 +213,7 @@ static bool shape_rows_usable(void)
     return device_is_windowed() && current_mode() != MODE_AUTHENTIC;
 }
 
-/* True while the file and the device disagree, which is the whole of what a restart would settle. */
+/* True while the file and the device disagree, the only thing a restart would settle. */
 static bool restart_is_pending(void)
 {
     return device_is_windowed() != (current_mode() != MODE_AUTHENTIC);
@@ -241,8 +242,8 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
             out->value[0]  = 0;
 
             if (entry == 0u) {
-                /* Lit by the absence of a size rather than by a number, which is exactly what the
-                 * row above reads to decide it says auto. One test, one meaning. */
+                /* Lit by the absence of a size rather than by a number, the same test the row
+                 * above reads to decide it says auto. One test, one meaning. */
                 out->on = !(chosen_width > 0 && chosen_height > 0);
                 copy_label(out->label, "    auto (match the game's own size)");
                 return;
@@ -277,8 +278,8 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
      * the game is in while fullscreen is on, so nothing below it should look settable: switch
      * fullscreen off and the shape rows come back, already showing the one that will be used.
      *
-     * The model refuses to act on a row it has been told is unavailable, so this is the whole of
-     * the gate and there is no second check in the toggle to keep in step with it. */
+     * The model refuses to act on a row it has been told is unavailable, so this is the entire
+     * gate and there is no second check in the toggle to keep in step with it. */
     case WINDOW_MODE_ROW_BORDERLESS:
         copy_label(out->label, "Borderless, the whole monitor");
         out->on        = current_mode() == MODE_BORDERLESS;
@@ -443,8 +444,8 @@ bool overlay_window_toggle(uint32_t slot)
 {
     uint32_t entry = 0;
 
-    /* Choosing one closes the list, which is what a list of choices does: the answer is on the row
-     * above now and there is nothing left to pick. */
+    /* Choosing one closes the list, as a list of choices does: the answer is on the row above
+     * now and there is nothing left to pick. */
     if (slot_is_size_entry(slot, &entry)) {
         size_list_open = false;
 
@@ -466,8 +467,8 @@ bool overlay_window_toggle(uint32_t slot)
     case WINDOW_MODE_ROW_BORDERLESS_SIZED: {
         int32_t wanted = SLOT_MODE[slot];
 
-        /* Pressing the row that is already lit does NOTHING, which is what a set of choices does
-         * everywhere else. Answering true rather than false because nothing failed: the answer is
+        /* Pressing the row that is already lit does NOTHING, as a set of choices does everywhere
+         * else. Answering true rather than false because nothing failed: the answer is
          * already the one being asked for. */
         if (current_mode() == wanted) {
             return true;

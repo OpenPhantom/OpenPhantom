@@ -22,9 +22,9 @@
  * every NPC's health, at character record +0x38, is ever subtracted through. Invincible NPCs
  * declines that subtraction outright, the same "decline, don't top up" shape as the player's own
  * unlimited health. One-shot NPCs cannot decline the same way, because the point is to change the
- * outcome, not skip it, so it forces the write to zero instead, which is exactly what the death
- * gate this function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0)
- * already treats as lethal. See cheats_openphantom.c's own site comment for the byte evidence,
+ * outcome, not skip it, so it forces the write to zero instead, a value the death gate this
+ * function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0) already
+ * treats as lethal. See cheats_openphantom.c's own site comment for the byte evidence,
  * and for why both cheats can share one detour instead of needing their own like ammunition and
  * player health do.
  *
@@ -152,7 +152,8 @@ bool cheats_openphantom_is_on(cheats_own_id_t id);
 /* Jump boost's own multiplier; see this file's own header comment above for what it is applied
  * to. The getter always answers something usable, even before the cheat's own sites have resolved
  * or if they never do; the setter clamps into a fixed sane range rather than trusting whatever a
- * player typed, since this is fed straight into a real physics quantity rather than merely stored. */
+ * player typed, since this feeds straight into a real physics quantity rather than merely
+ * stored. */
 float cheats_openphantom_jump_boost_scale(void);
 void cheats_openphantom_jump_boost_set_scale(float scale);
 
@@ -194,7 +195,7 @@ void cheats_openphantom_resume_jump_boost(void);
  * unittests/CMakeLists.txt's own "never a stub" rule), a wheel source it would then have no way
  * to provide. NULL until dev_overlay.c wires the real one in once both cheats_openphantom_install()
  * and overlay_input_install() have run, and free camera treats "no source" exactly like "no
- * scrolling happened yet", which is what it already was for every DLL build before this existed. */
+ * scrolling happened yet", the state it was in for every DLL build before this existed. */
 typedef int32_t (*cheats_openphantom_wheel_source_fn_t)(void);
 void cheats_openphantom_set_wheel_source(cheats_openphantom_wheel_source_fn_t fn);
 

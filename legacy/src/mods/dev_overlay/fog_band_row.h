@@ -31,7 +31,7 @@
 #define FOG_BAND_MIN 0.25f
 #define FOG_BAND_MAX 1.0f
 
-/* What the game runs at with the key absent, which is what the row has to show then. Its own name
+/* What the game runs at with the key absent, and what the row has to show then. Its own name
  * rather than a reuse of the maximum even while it holds the same number: the two mean different
  * things, and this one has moved four times while the maximum has not moved at all. */
 #define FOG_BAND_DEFAULT 1.0f
@@ -56,7 +56,7 @@ bool fog_band_row_parse(const char *text, float *out);
 /* Formats for the row's chip. Always terminates when `size` is at least one. */
 void fog_band_row_format(float scale, char *out, size_t size);
 
-/* The current setting, read from the ini and clamped. An absent key reads as 1.0, which is what an
+/* The current setting, read from the ini and clamped. An absent key reads as 1.0, the value an
  * untouched installation runs at. */
 float fog_band_row_get(void);
 

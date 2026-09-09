@@ -464,12 +464,13 @@ either way.
 
 So a press does not call the swap. It records which character was asked for, the row shows `QUEUED`
 in place of `RUN`, and the title bar swaps its usual `Esc closes` hint for `Close applies the queued
-swap`, and then `cheats_original_actions_apply_pending()` runs it once, from `overlay_input.c`, right
-after the panel closes and the player has been un-suspended again. Only the last press before closing
-takes effect; the four are mutually exclusive characters anyway, so replacing a pending one rather
-than queuing several is the honest behaviour. Every other action in this file still runs the instant
-its row is pressed; this is the one exception, and it exists because of a real, confirmed collision
-between two of this project's own subsystems, not a general pattern the other fifteen needed too.
+swap`, and then `cheats_original_actions_apply_pending()` runs it once, from `overlay_input.c`,
+right after the panel closes and the player has been un-suspended again. Only the last press before
+closing takes effect; the four are mutually exclusive characters anyway, so replacing a pending one
+rather than queuing several is the honest behaviour. Every other action in this file still runs the
+instant its row is pressed; this is the one exception, and it exists because of a real, confirmed
+collision between two of this project's own subsystems, not a general pattern the other fifteen
+needed too.
 
 Two of these, the graphics detail cycler and the red highlight toggle, were **field-corrected**
 after their first ship: they were named from a fan-made cheat sheet before either callee was
@@ -495,9 +496,9 @@ the anchor itself.
 **Three of the sixteen are shown by a code text this project never had to know in advance.** Debug
 mode, the forced power colour and the stronger third weapon all compare against strings under five
 characters, too short for the image's own string analysis to have catalogued them the way
-`cheats_original.c`'s `MAX_NAME_LENGTH` note already flags happening the other way round. Rather than
-guess the words, the panel reads them live out of the image at the same offset the comparison itself
-uses, the same "never a hardcoded address" rule as everything else here.
+`cheats_original.c`'s `MAX_NAME_LENGTH` note already flags happening the other way round. Rather
+than guess the words, the panel reads them live out of the image at the same offset the comparison
+itself uses, the same "never a hardcoded address" rule as everything else here.
 
 ### The gate, what the counter really does, and why the gate matches retail's own `< 10` anyway
 
@@ -550,8 +551,9 @@ where the setting already lived. The cost is a fraction of a second between comm
 the world changing.
 
 **The row shows the setting, not necessarily what the game is drawing at.** The cell watchdog lowers
-the scale on its own when a dense scene fills its buffers, so in a heavy area the row can honestly
-read `2.50x` while the game is really drawing at `1.00x`. The note directly under it is what says so.
+the scale on its own when a dense scene fills its buffers, so in a heavy area the row can
+honestly read `2.50x` while the game is really drawing at `1.00x`. The note directly under the row
+says so.
 
 ## The note under the draw distance
 
@@ -580,8 +582,8 @@ worth and comes back when the scene gets cheaper. That moves the fog with it, so
 opens and closes as the frame rate wanders, which some people want to stop.
 
 `Keep the draw distance (costs frame rate)` is `[view_distance_fix] StrictViewRange`, and it is the
-bigger hammer. It declines the governor, the level-opening window, the scripted-camera raise **and the cell
-watchdog**, so the number typed two rows above is the number in force on every frame.
+bigger hammer. It declines the governor, the level-opening window, the scripted-camera raise **and
+the cell watchdog**, so the number typed two rows above is the number in force on every frame.
 
 **The watchdog is the part to understand before leaving this on.** It is not automation for taste,
 it is a memory-corruption guard. The cell table ends exactly where the bucket list heads begin, its
@@ -653,11 +655,11 @@ widening the in-game slider widens this row with it.
 
 `Free look` and `Strafe` are `[enhanced_input] FreeLook` and `Strafe`, the two check boxes on the
 game's own controls screen. They carry that screen's own captions rather than a description this
-panel invented, so a reader who has seen it recognises these rows. **Either can be refused**, and the row cannot
-tell in advance: strafe needs mouse look and the keyboard axis reader, because the engine's
-`turnWheel` is the only turn channel and driving it sideways would clear the mouse with it; free
-look needs a follow camera that `enhanced_input` recognises. When one is declined it says why in the
-log and the row reads back off on its next rebuild, which is the honest outcome.
+panel invented, so a reader who has seen it recognises these rows. **Either can be refused**, and
+the row cannot tell in advance: strafe needs mouse look and the keyboard axis reader, because the
+engine's `turnWheel` is the only turn channel and driving it sideways would clear the mouse with
+it; free look needs a follow camera that `enhanced_input` recognises. When one is declined it says
+why in the log and the row reads back off on its next rebuild, which is the honest outcome.
 
 **Two rows below those are the pad's, and both are built on free look.** `Camera follows you`
 writes `[enhanced_input] CameraFollow` and `Steer a jump in the air` writes `AirControl`. Each
@@ -852,8 +854,8 @@ logged. Closing the list first and then pressing the row always worked, so this 
 
 * The pointer arrives in the window's client pixels and is mapped into the picture the engine draws.
   Those are the same size in every mode this project ships, so the mapping is usually the identity.
-* A cheat or action whose site did not resolve is shown as `n/a` rather than hidden, so a panel on an
-  unsupported executable says what is missing instead of looking empty.
+* A cheat or action whose site did not resolve is shown as `n/a` rather than hidden, so a panel on
+  an unsupported executable says what is missing instead of looking empty.
 * The panel selects a font, sets an alignment, two scales and a colour, and puts none of them back.
   Nothing else draws text between the panel and the end of the frame, so nothing is affected today.
 * The call the paint is redirected from cannot chain behind another DLL that redirected it first.
@@ -1062,11 +1064,12 @@ written as the resolution to render at, the engine opens whatever it finds at st
 cannot open stops the game before it draws anything. Catching that afterwards and explaining it is
 worse than not being able to say it.
 
-The list comes from Windows rather than from the engine. The engine has one and `enhanced_resolution`
-owns it, but that is a different DLL and feature DLLs here do not depend on each other. Windows
-answers the same question from the same driver, and the DLL that actually writes the resolution
-checks its own list before it does, so a size offered here that the engine somehow does not know is
-refused there with a line saying so rather than reaching the settings file.
+The list comes from Windows rather than from the engine. The engine has one and
+`enhanced_resolution` owns it, but that is a different DLL and feature DLLs here do not depend on
+each other. Windows answers the same question from the same driver, and the DLL that actually
+writes the resolution checks its own list before it does, so a size offered here that the engine
+somehow does not know is refused there with a line saying so rather than reaching the settings
+file.
 
 Sizes under 640x480 are dropped. That is not tidiness: below roughly that much client area the
 engine's warp to client (320,240) lands outside the window, the pointer is clamped short of it, the

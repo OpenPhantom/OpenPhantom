@@ -78,7 +78,7 @@ static const uint8_t SIG_STUNT_CONTACT[] = {
  *                                                             it has four readers)
  *   D8 0D 88834A00               fmul [0x4A8388] = 6.6       <- operand at +0x0E
  *   D8 2D 8C834A00               fsubr[0x4A838C] = 3.3       <- operand at +0x14
- *   ... (a call rel32 in between, which is why the pattern ends after 24 bytes)
+ *   ... (a call rel32 in between, so the pattern ends after 24 bytes)
  *   D8 0D 90834A00               fmul [0x4A8390] = 4.0       <- operand at +0x40
  *   D8 2D 94834A00               fsubr[0x4A8394] = 2.0       <- operand at +0x46
  *

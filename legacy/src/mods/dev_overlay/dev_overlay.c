@@ -46,7 +46,7 @@ static bool overlay_entered;
  * The right instant is after the world and its overlays are drawn and before the scene is closed.
  * The engine puts both of those next to each other:
  *
- *   0046C32D  6A 00 E8 .. 83 C4 04            the call before it, which is what makes this unique
+ *   0046C32D  6A 00 E8 .. 83 C4 04            the call before it, and the reason this is unique
  *   0046C337  C7 05 C4 6F 86 00 00 00 00 00   a flag, cleared
  *   0046C341  E8 BA B8 01 00                  close the scene      <- this call is redirected
  *   0046C346  E8 07 2D 02 00                  show the page
@@ -150,7 +150,7 @@ void dev_overlay_install(void)
 
     overlay_model_reset();
     /* Read as TEXT, so the file can be typed into. A person who cannot open the panel cannot use
-     * the row inside it that binds a key, and that is exactly the person this setting is for, so
+     * the row inside it that binds a key, and this setting is for exactly that person, so
      * "F8" and "numpad +" have to work as well as a number. A bare number still means what it
      * always did. Anything unreadable is reported and falls back to the default rather than being
      * taken as zero, which would have been indistinguishable from asking for the default. */
@@ -189,8 +189,8 @@ void dev_overlay_install(void)
         return;
     }
     /* The freeze is not a condition of the panel. If it does not arm, the panel still opens and
-     * still switches cheats; the player simply keeps moving behind it, which is what happened
-     * before this existed. The log says which of the two the session got. */
+     * still switches cheats; the player simply keeps moving behind it, as happened before this
+     * existed. The log says which of the two the session got. */
     (void)input_freeze_install();
     /* Neither is a condition of the panel, and they fail independently: one stops the player being
        given orders, the other stops the simulation stepping at all. */

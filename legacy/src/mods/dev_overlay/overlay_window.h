@@ -23,6 +23,13 @@
  * and the note. */
 #define OVERLAY_WINDOW_BASE_ROWS 10u
 
+/* How many sizes the list will hold. Thirty two is well past what any display reports once
+ * duplicates at other depths and refresh rates are folded together; the ones seen in testing offer
+ * around fifteen. The list also carries one entry of its own above the sizes, so the group's
+ * ceiling is the base rows plus this plus one. */
+#define OVERLAY_WINDOW_SIZE_LIST_MAX 32u
+#define OVERLAY_WINDOW_ROWS_MAX     (OVERLAY_WINDOW_BASE_ROWS + OVERLAY_WINDOW_SIZE_LIST_MAX + 1u)
+
 /* And what it draws right now, which is more than that while the size list is open. The list is a
  * fold on one row rather than a group of its own, the same shape the free-camera "how to fly" row
  * already uses, because it belongs to the row above it and closes as soon as something is chosen. */

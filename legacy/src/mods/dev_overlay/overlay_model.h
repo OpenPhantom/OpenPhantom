@@ -21,8 +21,15 @@
 #include <stdint.h>
 
 #define OVERLAY_SEARCH_MAX   32u
-#define OVERLAY_ROWS_MAX     64u
 #define OVERLAY_LABEL_MAX    48u
+
+/* Every group on the open tab is built at once, headings included, and the OpenPhantom tab holds
+ * three of them. With all three open, the "how to fly" fold open and a display offering a full size
+ * list, that tab reaches 91 rows. This was 64, so 27 of them were built and then dropped by a
+ * bounds test with no log and no way to scroll to what went missing. overlay_model.c asserts this
+ * against the parts it is made of, so a group that grows past it stops the build rather than
+ * quietly losing its last rows. */
+#define OVERLAY_ROWS_MAX     128u
 
 typedef enum overlay_tab {
     OVERLAY_TAB_ORIGINAL = 0,

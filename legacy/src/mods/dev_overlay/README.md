@@ -817,6 +817,19 @@ session. Writing goes the other way, straight to the ini, so the setting survive
 same place the drawing would have looked for it anyway. Nothing here calls into another mod, so
 this row works whatever else is or is not in the `mods` folder.
 
+## The panel had a row limit it could reach
+
+Every group on the open tab is built into one array each time the panel redraws, headings included,
+and the OpenPhantom tab holds three groups. With all three open, the "how to fly" fold open and a
+display offering a full size list, that tab wants 91 rows. The array held 64, and the row that did
+not fit was dropped by a bounds test that logged nothing. There is no scrolling, so a player had no
+way to tell a missing row from a feature that was never written.
+
+The array now holds 128, and `overlay_model.c` asserts that against the parts the number is made of
+rather than restating it, so a group that grows past the array stops the build. The parts that only
+the display knows, the size list among them, cannot be asserted, so an overflow also writes one
+warning naming the first row it dropped.
+
 ## Configuration: `[dev_overlay]`
 
 | Key | Default | Meaning |

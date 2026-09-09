@@ -244,6 +244,7 @@ static signature_t sites[SITE_COUNT] = {
 #define MOVER_ID          0x08
 #define MOVER_POSE        0x2C
 #define MOVER_DIRECTION   0x34
+#define MOVER_TIME_BASE   0x30
 
 #define CHARACTER_NAME       0x04   /* char[12] */
 #define CHARACTER_ENMY_INDEX 0x18
@@ -363,12 +364,33 @@ static void __cdecl hook_mover_close(void *world, int32_t index)
     }
 }
 
+/* A mover's step is now minus the time it last ticked, and the integrator then makes that its new
+ * base, so an ordinary step is one frame. A step of seconds means the mover did not tick for that
+ * long and is about to integrate the whole interval at once, which is a door or a platform arriving
+ * at its far end in a single frame. That is what this looks for: the size of the step, before the
+ * original has a chance to overwrite the base it came from. */
+#define MOVER_STEP_SUSPICIOUS 0.25f
+
 static void __cdecl hook_mover_tick(void *mover, float now)
 {
     mover_tick_fn_t original = (mover_tick_fn_t)world_state.mover_tick.original;
     uint8_t *record = (uint8_t *)mover;
     int32_t  direction_before = (record != NULL)
                               ? *(const int32_t *)(record + MOVER_DIRECTION) : -1;
+    float    time_base = (record != NULL)
+                       ? *(const float *)(record + MOVER_TIME_BASE) : now;
+    float    step      = now - time_base;
+
+    if (record != NULL && step > MOVER_STEP_SUSPICIOUS) {
+        diag_log_write("trg  mover %d (%s) is about to step %.3f s in one tick: now %.3f, last "
+                       "ticked %.3f, pose %.3f, dir %s. An ordinary step is one frame",
+                       (int)*(const int32_t *)(record + MOVER_ID),
+                       diag_numbered_name(diag_mover_types,
+                                          *(const int32_t *)(record + MOVER_TYPE)),
+                       (double)step, (double)now, (double)time_base,
+                       (double)*(const float *)(record + MOVER_POSE),
+                       diag_numbered_name(diag_mover_directions, direction_before));
+    }
 
     /* Taken first, and before the original runs, because both of the function's early returns are
      * decided on state the call itself may change. The detour replaced the prologue with a branch,

@@ -22,7 +22,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Enabled` | `0` | the master switch |
 | `Audio` | `0` | 1 play/stop/volume/zones, 2 plus the channel allocation |
 | `Music` | `0` | 1 state/sequence/volume, with the muscript symbol names |
-| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change, 3 plus the mover call-site census, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
+| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change, 3 plus the mover call-site census and any mover about to take an oversized step, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
 | `Fsm` | `0` | 1 AI mode changes, 2 plus **every executed opcode** |
 | `Level` | `0` | 1 level loading and the cutscene lock |
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |
@@ -192,3 +192,19 @@ retail builds.
 release observer reported three voices holding an owner handle that pointed into the calling
 thread's stack, named the sound in each and where the write would land. The fix was built
 from that. The other areas are still offline only.
+
+## A mover about to take an oversized step
+
+At `Trigger=3` and above, the integrator observer reports any mover whose next step exceeds a
+quarter of a second, naming the mover, its type, the step, the clock and the pose. An ordinary step
+is one frame.
+
+It is worth having because a mover's step is `now` minus the time it last ticked, and the
+integrator then makes `now` its new base. Anything that moves that clock in a jump is charged to
+every mover at once, and a mover in motion covers the whole interval in a single frame. Doors slam,
+platforms arrive. Movers at rest absorb the same jump invisibly, so without this the only symptom
+is the one thing that happened to be moving.
+
+It found exactly that: 59 movers each stepping 2.031 s on the frame a quicksave loaded, which was
+`framerate_fix` dropping its banked clock offset a frame later than the level opened. The reading
+is taken before the original runs, because the integrator overwrites the base it came from.

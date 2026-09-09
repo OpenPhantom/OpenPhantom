@@ -1,8 +1,8 @@
 /* mover_blend.c: the arithmetic that decides what a moving door looks like between two simulation
  * steps.
  *
- * Every way this can be wrong is silent in review and loud on screen, which is why it is tested
- * rather than argued about:
+ * Every way this can be wrong is silent in review and loud on screen, so it is tested rather
+ * than argued about:
  *
  *   a scale destroyed      the mover snaps to its unscaled size on every drawn frame and grows back
  *                          on the next simulation step, which reads as a flickering model
@@ -28,8 +28,8 @@
  * discontinuity of that size has to be rejected. The threshold sits between them at the cosine of
  * 45 degrees, the threshold the Quake family uses for the same decision, and it leaves half again
  * as much room as the fastest mover needs. Three other movers in the same level wrap by so little
- * that no geometric threshold can catch them at all, which is why the module that calls this also
- * detects a wrap directly, by comparing the track position at mover+0x2C before and after the
+ * that no geometric threshold can catch them at all, so the module that calls this also detects
+ * a wrap directly, by comparing the track position at mover+0x2C before and after the
  * engine's own tick, and marks those subnodes un-interpolatable for one frame. This file tests the
  * geometry only.
  */
@@ -221,7 +221,7 @@ static void the_guard_measures_an_angle_and_not_a_length(void)
     /* The other half of the scale defect. A dot product between two rows that are not unit length
      * is not a cosine: a subnode scaled by 0.5 produces 0.25 for no rotation at all and would fail
      * a 0.707 threshold on every single frame, while one scaled by 3 produces 9 and could never
-     * fail it however far it turned. Normalising first is what makes the threshold mean 45 degrees
+     * fail it however far it turned. Only after normalising does the threshold mean 45 degrees
      * for every subnode. */
     make_world(previous, 0.0, 0.5f, 0.0f, 0.0f, 0.0f);
     make_world(current, 5.0, 0.5f, 0.0f, 0.0f, 0.0f);

@@ -297,10 +297,10 @@ static void test_repeating_the_call_changes_nothing(void)
           "eight repeats of the same inputs give bit-identical output");
 
     /* The failure this guards against: feeding the previous OUTPUT back in as the authored band,
-     * which is what a coupling that reads the live field would do on the second apply. */
+     * as a coupling that reads the live field would do on the second apply. */
     fog_regime_target_band(&config, &first, WIDE_FOV, 23.0f, 23.0f, &again);
     ut_check(again.end < first.end,
-          "feeding the output back in DOES shrink it, which is why the module keeps the "
+          "feeding the output back in DOES shrink it, so the module keeps the "
           "authored band and never re-reads the field");
 }
 
@@ -358,7 +358,7 @@ static void test_easing_degenerate_input(void)
     ut_check(fog_regime_ease(10.0f, 20.0f, -1.0f, 1.5f) == 10.0f,
           "a negative frame delta moves nothing");
     ut_check(fog_regime_ease(10.0f, 20.0f, 1.0f / 60.0f, 0.0f) == 20.0f,
-          "settle 0 is the instant step, which is what the setting promises");
+          "settle 0 is the instant step the setting promises");
 
     /* A three-second hitch must not sweep the fog across the level in one frame: the delta is
      * clamped, so the step is the one an eighth of a second would have made. */
@@ -452,7 +452,7 @@ static void test_the_band_scale(void)
     config.band_scale = 0.0f;
     fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
     ut_check(near.end == full.end,
-             "and a zero, which is what an absent or unreadable setting comes through as, is "
+             "and a zero, the value an absent or unreadable setting comes through as, is "
              "ignored rather than collapsing the band onto the camera");
 
     /* The one place this differs from every other term here: those all exist to hide the edge the

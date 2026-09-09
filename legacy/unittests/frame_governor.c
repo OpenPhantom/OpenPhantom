@@ -49,7 +49,7 @@ int main(void)
                  FRAME_GOVERNOR_RAISE,
              "and more than enough is still a raise, not an error");
 
-    ut_section("the dead zone, which is what stops it oscillating");
+    ut_section("the dead zone, which stops it oscillating");
     /* Between the two thresholds the governor must do NOTHING, no matter how long it has been
        healthy. If this band ever closes, a scale that lands inside it is lowered, recovers,
        raised, and lowered again forever. */
@@ -104,7 +104,7 @@ int main(void)
               "nudged at",
               frame_governor_step_size(14.6f, 13.333f, 0.15f, 0.10f));
     ut_checkf(frame_governor_step_size(13.7f, 13.333f, 0.15f, 0.10f) < 0.06f,
-              "but a 3%% miss still only nudges (%.3f), which is what stops it overshooting a "
+              "but a 3%% miss still only nudges (%.3f), which stops it overshooting a "
               "target it is nearly meeting",
               frame_governor_step_size(13.7f, 13.333f, 0.15f, 0.10f));
     ut_checkf(frame_governor_step_size(19.1f, 13.333f, 0.15f, 0.10f) > 0.25f,
@@ -138,7 +138,7 @@ int main(void)
             }
         }
         run_one_end = scale;
-        /* It still walks a long way down, and that is CORRECT: in that scene the target was not
+        /* It still walks a long way down. That is CORRECT: in that scene the target was not
            reachable at any scale, the field run measured 13.8 ms even at 1.15, so there was no
            setting the governor could have stopped at and been right. Sizing the step is not a way
            of pretending a scene is cheaper than it is. */

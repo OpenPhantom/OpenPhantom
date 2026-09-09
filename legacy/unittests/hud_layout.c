@@ -170,7 +170,7 @@ static void test_classification_refusals(void)
     ut_check(hud_classify(NULL, 1920.0f, 1080.0f) == HUD_BLOCK_NONE, "a null rectangle is refused");
     ut_check(hud_classify(&r, 0.0f, 0.0f) == HUD_BLOCK_NONE, "a zero screen is refused");
     ut_check(hud_classify(&r, -1.0f, -1.0f) == HUD_BLOCK_NONE,
-          "a negative screen size is refused, which is what the engine leaves behind on shutdown");
+          "a negative screen size is refused; the engine leaves one behind on shutdown");
 }
 
 static void test_number_split(void)
@@ -300,7 +300,8 @@ static void test_identities(void)
         }
     }
 
-    ut_check(authored_modes > 0, "the mode list contains 4:3 modes to check the second identity on");
+    ut_check(authored_modes > 0,
+          "the mode list contains 4:3 modes to check the second identity on");
     ut_check(worst_off == 0.0f,
           "SquareHud=0 with HudScale=1.0 is bit-exact at every one of the 26 display modes");
     ut_check(worst_43 == 0.0f,
@@ -463,7 +464,7 @@ static void test_hud_glyph_rule(void)
     float sy = 0.8f;
 
     /* The renderer draws at (sx*W/640, sy*H/480). Under squaring the bars grow by H/480, so the
-     * digits have to grow by exactly that too, which is what the corrected pair produces. */
+     * digits have to grow by exactly that too, and the corrected pair produces it. */
     hud_glyph_scale(&sx, &sy, 1920.0f, 1080.0f, 1.0f, true);
     ut_near(sx, 0.6f, 0.0005f, "the HUD glyph horizontal drops to 0.6 at 16:9");
     ut_near(sy, 0.8f, 0.0005f, "the HUD glyph vertical is unchanged at scale 1.0");

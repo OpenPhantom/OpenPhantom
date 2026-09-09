@@ -1,6 +1,6 @@
 /* menu_art_resample.c: the map, the rounding and the replication, checked without a game.
  *
- * The whole of what this module decides is arithmetic, so all of it is here. What is not here is
+ * Everything this module decides is arithmetic, so all of it is here. What is not here is
  * the hook that swaps the buffer into the engine's surface, which cannot be tested without one.
  */
 #include "unittest.h"
@@ -35,8 +35,8 @@ static void test_the_map_covers_every_source_pixel(void)
                 int32_t at = menu_art_resample_source_index(i, dest_extent, source_extent);
 
                 ut_check(at >= 0 && at < source_extent,
-                      "every destination pixel maps inside the source, which is what makes the "
-                      "replication a copy rather than a read off the end of the picture");
+                      "every destination pixel maps inside the source, so the "
+                      "replication is a copy rather than a read off the end of the picture");
                 seen[at] = 1;
             }
             for (i = 0; i < source_extent; ++i) {
@@ -163,8 +163,8 @@ static void test_transparency_survives(void)
                                 dest[i] == 0x0800;
 
         ut_check(matches_a_source,
-              "every destination pixel is a value that was already in the source. This is the whole "
-              "of the transparency rule: an exactly zero pixel is a SKIP to this engine, so a "
+              "every destination pixel is a value that was already in the source. This is the "
+              "whole transparency rule: an exactly zero pixel is a SKIP to this engine, so a "
               "filter that invented a value between 0x0001 and 0x0000 would turn a dark opaque "
               "pixel transparent, and one that invented a value between 0x0000 and 0x0800 would "
               "put an opaque halo around a transparent edge");
@@ -193,7 +193,7 @@ static void test_the_refusals(void)
           "a missing buffer on either side is refused rather than written through");
     ut_check(!menu_art_resample_16(SOURCE, 0, 2, 2, dest, 4, 4, 4) &&
              !menu_art_resample_16(SOURCE, 2, 2, 2, dest, 4, 0, 4),
-          "and a zero extent, which is what an unreadable surface header looks like");
+          "and a zero extent, which is how an unreadable surface header reads");
     ut_check(!menu_art_resample_16(SOURCE, 2, 2, 1, dest, 4, 4, 4),
           "a pitch narrower than the picture is refused, because reading rows at that stride walks "
           "diagonally through the buffer and off the end of it");

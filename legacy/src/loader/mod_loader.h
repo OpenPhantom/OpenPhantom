@@ -1,7 +1,7 @@
 /* mod_loader.h: load every DLL in <game>\mods and give each one its entry point.
  *
- * The loader is a jumping-off point and nothing else. It knows no engine addresses, patches no
- * bytes and has no opinion about what a mod does. It:
+ * The loader is only a jumping-off point. It knows no engine addresses, patches no bytes and has
+ * no opinion about what a mod does. It:
  *
  *   1. enumerates <game>\<ModDirectory>\*.dll in sorted order, so the sequence is reproducible
  *      rather than dependent on the file system;

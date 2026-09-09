@@ -222,7 +222,8 @@ static void test_a_session(void)
         known = true;
     }
 
-    ut_check(leaked == 0, "no frame of the session ends with the pointer confined and no foreground");
+    ut_check(leaked == 0,
+             "no frame of the session ends with the pointer confined and no foreground");
     ut_check(confining, "the session ends focused, so it ends confined");
 }
 

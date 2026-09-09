@@ -1,7 +1,7 @@
 /* view_range_row: the draw distance row's own arithmetic.
  *
- * The parser here is hand written rather than handed to strtof, and that is the part worth
- * testing. strtof reads a full stop as a decimal point only where the locale agrees it is one, so
+ * The parser here is hand written rather than handed to strtof. That is the part worth testing.
+ * strtof reads a full stop as a decimal point only where the locale agrees it is one, so
  * on a German Windows "2.5" would come back as 2 with ".5" left over as trailing rubbish. That is
  * the kind of fault nobody finds on their own machine, so the cases below pin the behaviour rather
  * than trusting a library call to be locale blind.
@@ -69,8 +69,8 @@ static void test_text_that_is_not_a_number(void)
 
     ut_check(!view_range_row_parse("", &value), "empty text is not a number");
     ut_check(!view_range_row_parse(".", &value),
-             "a lone decimal point is not a number, which is exactly the input atof would answer "
-             "zero for and a clamp would then turn into the minimum");
+             "a lone decimal point is not a number; atof would answer zero for it and a clamp "
+             "would then turn that into the minimum");
     ut_check(!view_range_row_parse("abc", &value), "letters are not a number");
     ut_check(!view_range_row_parse("2.5.1", &value), "a second decimal point is refused");
     ut_check(!view_range_row_parse("2.5q", &value), "trailing rubbish is refused, x aside");

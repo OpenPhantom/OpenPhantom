@@ -21,9 +21,9 @@
  *   74 02 / EB E9     until it hits one
  *
  * The count matters because the engine's own lookup checks only that an index is not negative,
- * `cmp [index],0 / jge` and nothing else, so one index too far is an unchecked read that ends in
- * a file loader. This is the same class of defect as the unbounded string-table index, which is
- * already guarded a layer up. */
+ * `cmp [index],0 / jge`, so one index too far is an unchecked read that ends in a file loader.
+ * This is the same class of defect as the unbounded string-table index, which is already guarded
+ * a layer up. */
 #define BITMAP_NAME_STRIDE 8u
 #define MAX_BITMAP_NAMES   256u
 
@@ -65,7 +65,8 @@ static size_t count_bitmap_names(uintptr_t table_address)
 
 /* Every bitmap index an append writes goes through here first. `highest` is the largest index the
  * widget can ever ASK for, which is not always the one supplied: a check box draws
- * `parameter + state` and its state reaches 1, so the frame after the one named has to exist too. */
+ * `parameter + state` and its state reaches 1, so the frame after the one named has to exist
+ * too. */
 static bool bitmap_index_is_usable(const menu_patch_context_t *context, int32_t index,
                                    int32_t highest, const char *what)
 {
@@ -361,8 +362,8 @@ bool menu_patcher_append_pic(menu_patch_context_t *context,
     slot->type       = SW_TYPE_PIC;
     slot->action     = SW_ACTION_STATIC;   /* a backdrop: never focused, never hit-tested */
     slot->visible    = 1;
-    /* The bitmap index a picture draws is `start + state`, not `state` alone. Writing 0 into
-     * `start` is what makes putting the index in `state` correct, so the two lines below are one
+    /* The bitmap index a picture draws is `start + state`, not `state` alone. Putting the index
+     * in `state` is only correct because `start` is written 0, so the two lines below are one
      * decision and must not be separated. Read out of all three authored pictures on the shipped
      * controls screen, whose `start` is 0 and whose `state` fields are 11, 7 and 17,
      * splashol.bmp, controls.bmp and popup.bmp, in the order that table lists them. */

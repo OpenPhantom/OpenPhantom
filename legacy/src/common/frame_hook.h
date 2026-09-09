@@ -1,9 +1,9 @@
 /* frame_hook.h: "call me once per rendered frame", without every feature re-deriving the site.
  *
- * render_frameEnd 0x0046C139 sits inside sys_frame, which is what every game loop AND every
- * blocking menu loop calls. It is therefore the only place guaranteed to run in both, and a
- * menu that blocks in its own `while (result < 0) { sys_frame(); }` is exactly where a live
- * slider preview has to work.
+ * render_frameEnd 0x0046C139 sits inside sys_frame, which every game loop and every blocking
+ * menu loop calls. It is therefore the only place guaranteed to run in both, and a menu that
+ * blocks in its own `while (result < 0) { sys_frame(); }` is exactly where a live slider
+ * preview has to work.
  *
  * Each feature DLL links its own copy of this module and installs its own detour. Two DLLs on the
  * same target are fine: common/detour.c chains them, so the callbacks of both run, in whichever

@@ -65,7 +65,8 @@ static void check_angle(float strafe, float forward, float drive_sign,
     ut_near(strafe_walk_travel_offset(strafe, forward, drive_sign), expected, 0.001f, what);
 }
 
-/* Runs the damper for `seconds` of wall time in steps of `substep`, from `start` toward `target`. */
+/* Runs the damper for `seconds` of wall time in steps of `substep`, from `start` toward
+ * `target`. */
 static float damp_for(float start, float target, float substep, float seconds,
                       float settle, float rate)
 {
@@ -87,11 +88,12 @@ static void test_travel_angle(void)
     check_angle(NONE, NONE,     DRIVE_FWD,   0.0f, "no input is no offset");
     check_angle(NONE, FORWARD,  DRIVE_FWD,   0.0f, "forward alone is unchanged");
 
-    /* The row that matters. Backward alone must be a true no-op, or vanilla backpedalling breaks. */
+    /* The row that matters. Backward alone must be a true no-op, or vanilla backpedalling
+     * breaks. */
     check_angle(NONE, BACKWARD, DRIVE_BACK,  0.0f, "backward alone is unchanged");
 
     /* A lone sideways key. `forward` is the player's OWN input and stays 0 even though a walk is
-     * forced on their behalf, which is what makes this a right angle rather than a diagonal. */
+     * forced on their behalf, so this is a right angle rather than a diagonal. */
     check_angle(RIGHT, NONE, DRIVE_FWD, -90.0f, "right alone walks to the right");
     check_angle(LEFT,  NONE, DRIVE_FWD, +90.0f, "left alone walks to the left");
 
@@ -144,7 +146,7 @@ static void test_damper(void)
     ut_near(strafe_walk_damp_step(0.0f, 90.0f, SUBSTEP_64, SETTLE, RATE),
                 RATE * SUBSTEP_64, 0.001f, "the first step at 1/64 is half of it");
 
-    /* IT SETTLES, exactly, and in finite time, which is what lets the body latch be given up. */
+    /* IT SETTLES, exactly, and in finite time, so the body latch can be given up. */
     current = 0.0f;
     for (steps = 0; steps < 1000 && current != 90.0f; ++steps) {
         current = strafe_walk_damp_step(current, 90.0f, SUBSTEP_32, SETTLE, RATE);
@@ -462,9 +464,9 @@ static void test_free_look_release_reasons(void)
     }
 }
 
-/* The bounded recovery. It is the whole of the fix for "the camera rotates at random while
- * walking", and its one hazard is the opposite defect: a limit large enough to snap the camera a
- * long way when an authored region really did re-aim the shot. */
+/* The bounded recovery. It is the entire fix for "the camera rotates at random while walking",
+ * and its one hazard is the opposite defect: a limit large enough to snap the camera a long way
+ * when an authored region really did re-aim the shot. */
 static void test_free_look_recovery(void)
 {
     ut_section("free look: taking the wanted yaw back after an authored region");

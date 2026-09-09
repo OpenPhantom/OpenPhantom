@@ -4,7 +4,7 @@
  *
  *   * 256 is the ceiling the engine's own clamp already holds, the 0x100 in the immediate at
  *     0x00488758, so asking for 256 has to come out as "nothing to do" and write nothing at all;
- *   * a 256 by 256 world page has to come out as 65536 bytes, which is exactly the block pushed at
+ *   * a 256 by 256 world page has to come out as 65536 bytes, the size of the block pushed at
  *     0x0041DAB6 for the level loader to read every world page into.
  *
  * If either drifts, this has stopped matching the engine, and the feature would either rewrite an

@@ -4,8 +4,8 @@
  * WHY THIS EXISTS, a measured failure, not a precaution
  *
  * The loader originally did all its work on the game's call to DirectInputCreateA. That call is
- * outside the loader lock, which is what makes LoadLibrary legal there, and it looked like the
- * ideal trigger. It is too late.
+ * outside the loader lock, so LoadLibrary is legal there, and it looked like the ideal trigger.
+ * It is too late.
  *
  * The proof is in the log of the first real run. The old build, which patched from DllMain,
  * wrote:
@@ -36,7 +36,7 @@
  *   in DllMain   save the first 5 bytes of the entry point, write `jmp our_stub` over them
  *   in the stub  restore those 5 bytes, load the mods, jump back to the entry point
  *
- * Restoring before jumping back is what makes this safe without decoding a single instruction:
+ * Restoring before jumping back makes this safe without decoding a single instruction:
  * the entry point is re-executed from its first byte, so it does not matter whether those 5 bytes
  * happened to end mid-instruction. Only one thread exists at that point, so nothing can be
  * executing them while they are swapped.

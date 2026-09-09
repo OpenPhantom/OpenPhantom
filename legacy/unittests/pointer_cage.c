@@ -104,7 +104,8 @@ static void test_recomputation_is_absolute(void)
     int again_height = 0;
     int i;
 
-    ut_check(pointer_cage_extent(1920, 1080, &first_width, &first_height), "the first pass succeeds");
+    ut_check(pointer_cage_extent(1920, 1080, &first_width, &first_height),
+             "the first pass succeeds");
     for (i = 0; i < 8; ++i) {
         check_extent(1920, 1080, 1, first_width, first_height,
                      "recomputing the same mode gives the same clamp, never a drifting one");

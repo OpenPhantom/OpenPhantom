@@ -29,7 +29,7 @@
  * reset at 0x0048477B. The simulation clock at 0x00868728 has seven references and two writers,
  * 0x004757F4 inside the loop and 0x0047562D in the time module's own reset, and all seven of those
  * references lie between 0x0047562D and 0x00475807. Nothing else in the image reads or writes it,
- * which is what makes it the cell that separates a gameplay window from a menu window.
+ * so it is the cell that separates a gameplay window from a menu window.
  *
  * The substep period is deliberately not read out of the engine, and the third cell above is the
  * reason. sys_runSubsteps at 0x004756FC saves the incoming frame delta into a local at 0x00475734,
@@ -136,9 +136,9 @@ static void an_unresolved_clock_never_claims_a_verdict(void)
 
 static void simulation_without_any_tick_is_impossible_and_never_clean(void)
 {
-    /* The clock is only advanced inside the loop that ticks the counter, which is what the six
-     * instructions at 0x004757DB show, so this pair cannot occur while both cells are the ones they
-     * are believed to be. If it ever appears in a log, one of the two operands was resolved to the
+    /* The clock is only advanced inside the loop that ticks the counter, as the six instructions
+     * at 0x004757DB show, so this pair cannot occur while both cells are the ones they are
+     * believed to be. If it ever appears in a log, one of the two operands was resolved to the
      * wrong cell, and the one thing the verdict must not do is call that clean. */
     ut_check(framerate_stats_classify_window(CLOCK_PRESENT, 1.0f, 0u) != WINDOW_VERDICT_CLEAN,
              "an advance with no ticks means an operand is wrong, not that the window is good");

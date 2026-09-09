@@ -1,6 +1,6 @@
 /* menu_patcher.c: the shared widget-table patcher, exercised without the game.
  *
- * The source tables below are STATIC, which is what makes this testable at all:
+ * The source tables below are STATIC, and nothing here would be testable otherwise:
  * menu_patcher_begin() insists that the source table lies inside the host image, and a static
  * array in this executable does. A heap table would be refused, correctly, because in the game
  * a widget table that is not in the image is not the engine's table.
@@ -43,8 +43,8 @@ static sw_widget_t unterminated_source[8] = {
 
 /* The controls screen exactly as it ships, read out of the retail image: eight authored widgets
  * and the terminator, with their real ids and rects. It is here rather than paraphrased because
- * the two check boxes enhanced_input appends are placed against these rects and must not shadow these
- * ids, and both of those are claims about THIS table.
+ * the two check boxes enhanced_input appends are placed against these rects and must not shadow
+ * these ids, and both of those are claims about THIS table.
  *
  * Widget ids in use: 50, 0, 1, 2, 3, 4, 5, 6. Neither 0x70 nor 0x71 is among them.
  */
@@ -61,7 +61,7 @@ static sw_widget_t controls_source[9] = {
 };
 
 /* A screen's bitmap-name table, laid out as the engine lays it out: 8-byte records ended by a
- * first dword of -1. Eighteen names, which is what the shared options table [0x4AEE10] carries, so
+ * first dword of -1. Eighteen names, the count the shared options table [0x4AEE10] carries, so
  * the valid index range here is 0..17 exactly as it is in the game. Static, so the patcher can
  * read it, and the content of each record does not matter, only where the terminator is. */
 #define TEST_BITMAP_NAME_COUNT 18
@@ -194,7 +194,7 @@ static void test_append_and_commit(void)
  * back with no symptom until it was clicked, and that the layout invariants hold against the
  * shipped table rather than only in prose.
  *
- * There is no plate, and that is the point of this version. The previous one appended one and then
+ * There is no plate. That is the point of this version. The previous one appended one and then
  * checked that every widget of the group sat inside the plate's RECTANGLE. That check passed while
  * the screen was wrong, because a picture's rectangle is not where its bitmap goes: the blit takes
  * x and y and no size at all, so the plate drew its full 640x480 from the rectangle's corner and
@@ -252,7 +252,7 @@ static void test_append_controls_group(void)
     ut_check(target[8].action == SW_ACTION_SELECT && target[9].action == SW_ACTION_SELECT,
           "both carry a non-static action, which the hit test requires");
     ut_check(target[8].visible == 1 && target[9].visible == 1,
-          "both are visible == 1, which is what the draw loop and the hit test compare against");
+          "both are visible == 1, the value the draw loop and the hit test compare against");
     ut_check(target[8].start == 0x7655 && target[9].start == 0x7656,
           "the label string id lands in `start`, and the two ids are distinct");
     ut_check(target[8].state == 0 && target[9].state == 1,
@@ -268,7 +268,8 @@ static void test_append_controls_group(void)
           "a box shadowing the authored BACK id is refused");
 
     /* The slider and its caption, which the controls screen ships neither of. The two bitmap
-     * indices are the ones the shared table [0x4AEE10] carries: 2 = slgauge.bmp, 3 = slslide.bmp. */
+     * indices are the ones the shared table [0x4AEE10] carries: 2 = slgauge.bmp,
+     * 3 = slslide.bmp. */
     ut_check(menu_patcher_append_slider(&context, 0x72, 100, 330, 96, 255, 50, 3, 2, &slider_index),
           "the mouse speed slider is appended");
     ut_check(menu_patcher_append_label(&context, 0x73, 330, 148, 250, 40, 1, slider_caption,
@@ -323,7 +324,8 @@ static void test_bitmap_index_bounds(void)
     ut_check(context.bitmap_name_count == TEST_BITMAP_NAME_COUNT,
           "the bitmap-name table is counted to its -1 terminator, stride 8");
 
-    ut_check(menu_patcher_append_pic(&context, 0x90, TEST_BITMAP_NAME_COUNT - 1, 0, 0, 10, 10, NULL),
+    ut_check(menu_patcher_append_pic(&context, 0x90, TEST_BITMAP_NAME_COUNT - 1, 0, 0, 10, 10,
+                                     NULL),
           "the last valid bitmap index is accepted");
     ut_check(!menu_patcher_append_pic(&context, 0x91, TEST_BITMAP_NAME_COUNT, 0, 0, 10, 10, NULL),
           "one index past the table is refused rather than read");

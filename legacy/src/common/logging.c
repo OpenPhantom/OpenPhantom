@@ -16,16 +16,16 @@
 #define LOG_LINE_MAX  1024
 
 /* ==============================================================================================
- * WHY THIS USES WriteFile AND NOT fopen("a").
+ * Why this uses WriteFile and not fopen("a").
  *
- * Eleven modules in one process write to this one file. With eleven CRT streams in append mode
- * each stream keeps its own file position, and two flushes that land in the same instant overwrite
- * each other; one observed line lost its first 46 characters that way, taking the address of a
- * hooked function with it.
+ * Every module in this project writes to this one file, and they are all in one process. Given a
+ * CRT stream each in append mode, every stream keeps its own file position, and two flushes that
+ * land in the same instant overwrite each other; one observed line lost its first 46 characters
+ * that way, taking the address of a hooked function with it.
  *
  * A handle opened with FILE_APPEND_DATA (and WITHOUT FILE_WRITE_DATA) makes every WriteFile an
- * atomic append at the current end of file, which is exactly the guarantee needed here. The whole
- * line is therefore formatted into one buffer and written in one call.
+ * atomic append at the current end of file. The whole line is therefore formatted into one buffer
+ * and written in one call.
  * ============================================================================================ */
 typedef struct log_state {
     HANDLE      file;
@@ -49,13 +49,13 @@ void log_init(const char *feature_name, bool truncate)
     _snprintf(log_state.path, sizeof(log_state.path), "%s%s", host_directory(), LOG_FILE_NAME);
     log_state.path[sizeof(log_state.path) - 1] = '\0';
 
-    /* The truncation is a separate open, and that is not a detail. FILE_APPEND_DATA only means
-     * "append" when FILE_WRITE_DATA is ABSENT; with both, the handle keeps an ordinary file
-     * pointer. The first attempt gave the loader's handle both, so the loader wrote at its own
-     * position while the feature DLLs appended at the end, and the loader's next line overwrote
-     * what they had just written. crash_report, crt_copy_fix and diagnostics lost every line they
-     * logged, silently, because they happen to install first. */
-    /* The previous run is kept, and that is not a nicety either. The way this project is used is:
+    /* The truncation is a separate open. FILE_APPEND_DATA only means "append" when
+     * FILE_WRITE_DATA is ABSENT; with both, the handle keeps an ordinary file pointer. The first
+     * attempt gave the loader's handle both, so the loader wrote at its own position while the
+     * feature DLLs appended at the end, and the loader's next line overwrote what they had just
+     * written. crash_report, crt_copy_fix and diagnostics lost every line they logged, silently,
+     * because they happen to install first. */
+    /* The previous run is kept. The way this project is used is:
      * play, quit, then read the log. Truncating on every start means a single accidental restart,
      * or a launcher that starts the game twice, erases the session that is being investigated,
      * and the file that is left describes a run in which nothing happened. That has already cost
@@ -70,8 +70,8 @@ void log_init(const char *feature_name, bool truncate)
         previous[sizeof(previous) - 1] = '\0';
         DeleteFileA(previous);
         if (!MoveFileA(log_state.path, previous)) {
-            /* Nothing to move on the very first run; anything else is worth knowing, because it
-             * means the previous session's log was lost rather than kept. */
+            /* Nothing to move on the very first run; any other error means the previous
+             * session's log was lost rather than kept. */
             DWORD error = GetLastError();
             if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) {
                 rotate_error = error;

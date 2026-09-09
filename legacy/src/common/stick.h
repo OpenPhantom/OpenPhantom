@@ -5,7 +5,7 @@
  * is 1.41 times its edge. A stick pushed to a true diagonal is therefore still dead on both axes at
  * a deflection that would already be live on either axis alone, and the boundary the player feels
  * changes with the direction they push. Taking the deadzone out of the MAGNITUDE instead gives one
- * circular boundary that is the same in every direction, which is what Microsoft's own XInput
+ * circular boundary that is the same in every direction, the form Microsoft's own XInput
  * documentation recommends.
  *
  * WHY IT RESCALES. Cutting the deadzone out without rescaling means the first live sample is
@@ -32,8 +32,8 @@
 bool stick_apply_radial_deadzone(short raw_x, short raw_y, float deadzone, float *out_x,
                                  float *out_y);
 
-/* The magnitude of a vector this function already produced, which is what a caller wants for a
- * speed or a walk/run threshold. Never above 1, because the function above caps what it returns,
+/* The magnitude of a vector this function already produced, for a caller that needs a speed or a
+ * walk/run threshold. Never above 1, because the function above caps what it returns,
  * and the clamp here is kept so a caller passing its own pair cannot exceed the range either. A
  * raw XInput pair describes a SQUARE and a stick held to a corner is 1.41 long, so anything
  * measuring one of those directly wants this rather than a bare sqrt. */

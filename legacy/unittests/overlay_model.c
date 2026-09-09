@@ -8,9 +8,8 @@
  *
  * The cheat sources are deliberately not stubbed. None has resolved anything in a test process,
  * so the game's own toggles and one-shot actions are both empty and this project's tab holds
- * its rows with no site behind them, which is exactly the state a player sees on an unsupported
- * executable. That is worth pinning down: it is the case where the panel must still
- * open and still be usable.
+ * its rows with no site behind them, the state a player sees on an unsupported executable. That
+ * is worth pinning down: it is the case where the panel must still open and still be usable.
 
  *
  * SIZE NOTE: a little over six hundred lines, and it grows by a few every time a row is
@@ -37,9 +36,10 @@
  *
  * The sources under test reach across to the other half of the overlay in three places: the size
  * row asks the renderer how big the screen is, the level skip and the free camera both ask the
- * input half to close the panel, and the open-key row hands it a new key. Linking the real overlay_draw.c and overlay_input.c to satisfy
- * those would drag Direct3D and a window procedure into a process that has neither, which is a
- * much larger dependency than the model test wants for two calls it does not exercise.
+ * input half to close the panel, and the open-key row hands it a new key. Linking the real
+ * overlay_draw.c and overlay_input.c to satisfy those would drag Direct3D and a window procedure
+ * into a process that has neither, which is a much larger dependency than the model test wants
+ * for two calls it does not exercise.
  *
  * The screen stub answers "no screen", which is the honest answer here and the one the size row is
  * already written to survive: no device means no measurement, so automatic sizing falls back to its
@@ -424,7 +424,7 @@ int main(void)
              "the subtitle size, named for what it changes rather than for the key it writes");
     ut_check(overlay_model_row(UTIL_ROW(20), &row) && row.kind == OVERLAY_ROW_SLIDER,
              "with a track of its own beneath it: unlike the panel's own size, this "
-             "one moves text somewhere else on the screen, which is what a slider is for");
+             "one moves text somewhere else on the screen, which is a slider's job");
 
     ut_check(overlay_model_row(UTIL_ROW(21), &row) && row.kind == OVERLAY_ROW_VALUE &&
                  strcmp(row.label, "Dev menu size (0.33 to 4.0)") == 0,
@@ -616,7 +616,7 @@ int main(void)
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES);
-    /* THE WINDOW GROUP IS OPENED HERE TOO, and leaving it out is how a 54-character note reached a
+    /* The window group is opened here too, and leaving it out is how a 54-character note reached a
      * screenshot past a 48-character budget: this walks the rows that are on screen, so a group
      * that is folded is a group that is not checked. Every group this tab has belongs in this
      * list, and the next one added does too. */

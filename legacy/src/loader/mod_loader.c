@@ -76,7 +76,7 @@ static bool collect_mods(const char *directory, mod_list_t *list)
     return true;
 }
 
-/* WHICH BUILD IS THIS, answered on the line that announces the module rather than by asking
+/* Which build is this, answered on the line that announces the module rather than by asking
  * somebody to look at file properties.
  *
  * The cost of not having this was three rounds of a field investigation. A tester reported a
@@ -85,7 +85,7 @@ static bool collect_mods(const char *directory, mod_list_t *list)
  * message. The one whose constant had changed logged nothing different at all, so its build was
  * unknowable from a log; a fix was briefly credited to the wrong DLL because of it.
  *
- * THE PE TIMESTAMP AND NOT THE FILE DATE. IMAGE_FILE_HEADER.TimeDateStamp is the link time,
+ * The PE timestamp and not the file date. IMAGE_FILE_HEADER.TimeDateStamp is the link time,
  * written into the bytes of the file, so it survives copying, zipping, emailing and anything
  * else that happens between a build and a tester. A file date is metadata and any of those can
  * reset it. It is read out of the already mapped headers, so this costs no file I/O.
@@ -117,7 +117,7 @@ static void describe_build(HMODULE module, char *out, size_t size)
     }
     stamp = nt->FileHeader.TimeDateStamp;
 
-    /* 1970 in hundred nanosecond units since 1601, which is what a FILETIME counts. */
+    /* 1970 in hundred nanosecond units since 1601, the units a FILETIME counts. */
     hundred_ns = 116444736000000000ULL + (ULONGLONG)stamp * 10000000ULL;
     utc.dwLowDateTime  = (DWORD)hundred_ns;
     utc.dwHighDateTime = (DWORD)(hundred_ns >> 32);

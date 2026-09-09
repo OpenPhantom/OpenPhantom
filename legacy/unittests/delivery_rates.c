@@ -75,9 +75,9 @@ static delivery_result_t deliver_at(double report_hz, double ceiling_ms)
 
         /* Every report that fell inside this frame. The span is measured the way the collector
          * measures it, from the previous take to the newest report rather than across the reports
-         * inside this frame, which is what makes span over packets the device's own interval rather
-         * than one interval short of it. Getting that wrong here made this test report a defect in
-         * code that did not have one. */
+         * inside this frame, so span over packets is the device's own interval rather than one
+         * interval short of it. Getting that wrong here made this test report a defect in code
+         * that did not have one. */
         while (next_report <= frame_end) {
             newest = next_report;
             sample += units_per_report;
@@ -176,13 +176,13 @@ static void a_written_zero_is_still_obeyed(void)
 /* ==============================================================================================
  * A real hand, which is where the remaining complaint lives.
  *
- * Everything above uses a hand at a constant speed, which proves the sampling and nothing else. The
+ * Everything above uses a hand at a constant speed, which proves only the sampling. The
  * movements a player calls restless are not constant: a flick accelerates hard, stops and reverses.
  * A reversal is the interesting one, because the delivery carries an estimate of the rate, an
  * estimate has to be wrong for as long as it takes to notice that the sign has changed, and this
  * module has a documented history of paying an overdraft back as motion in the wrong direction.
  *
- * The hand is a sinusoid, which is what looking left and right actually is: it accelerates, decays
+ * The hand is a sinusoid, the shape looking left and right actually has: it accelerates, decays
  * and reverses twice a cycle, smoothly, so any roughness in the output is not in the input. The
  * reports are whole counts taken from that curve, exactly as a device produces them.
  * ============================================================================================ */

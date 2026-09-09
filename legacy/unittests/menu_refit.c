@@ -31,8 +31,8 @@ static const float RATIOS[] = { 2.25f, 3.0f, 1.6875f, 4.5f, 2.0f };
  *     pWidget->rect.height = pLBox->numLines * pLBox->lineHeight + 6;
  *
  * The floor and the font are both scaled by the canvas, so the row height is the authored 16 times
- * the ratio. The height the engine leaves behind is a whole number of rows plus six, which is why
- * it is not the scaled authored height and cannot be divided back into one. */
+ * the ratio. The height the engine leaves behind is a whole number of rows plus six, so it is not
+ * the scaled authored height and cannot be divided back into one. */
 static int32_t engine_row_height(float ratio)
 {
     return scaled_coordinate(16, ratio);

@@ -33,7 +33,7 @@ bool memory_is_readable_range(uintptr_t address, size_t size)
     }
 
     /* One region at a time. A single VirtualQuery only describes the region the START address
-     * falls into, which is exactly the check that misses a table running off its last page. */
+     * falls into, so it misses a table running off its last page. */
     for (cursor = address; cursor < end; cursor = (uintptr_t)information.BaseAddress
                                                  + information.RegionSize) {
         if (VirtualQuery((LPCVOID)cursor, &information, sizeof(information))

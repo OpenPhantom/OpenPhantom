@@ -159,7 +159,8 @@ int main(void)
              "a game directory without a trailing backslash still gets exactly one separator");
     ut_check(movie_path_directory("C:\\g\\", "d\\", path, sizeof path) && equals(path, "C:\\g\\d"),
              "a movie directory written with a trailing backslash loses it");
-    ut_check(movie_path_directory("C:\\g\\", "d\\\\", path, sizeof path) && equals(path, "C:\\g\\d"),
+    ut_check(movie_path_directory("C:\\g\\", "d\\\\", path, sizeof path) &&
+                 equals(path, "C:\\g\\d"),
              "several trailing separators are all removed");
     ut_check(movie_path_directory("", "d", path, sizeof path) && equals(path, "d"),
              "an unknown game directory leaves the movie directory relative");

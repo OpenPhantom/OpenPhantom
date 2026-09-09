@@ -1,9 +1,9 @@
 /* import_patch.h: replace one entry in another module's import address table.
  *
- * Everything else in this tree patches the GAME. This patches a library the game loads, which is a
- * different thing and worth being explicit about: it changes which function one named module calls
- * for one named import, and nothing else in the process is affected. Our own calls to the same
- * function are untouched, because they resolve through our own import table.
+ * Everything else in this tree patches the GAME. This patches a library the game loads: it changes
+ * which function one named module calls for one named import, and nothing else in the process is
+ * affected. Our own calls to the same function are untouched, because they resolve through our own
+ * import table.
  *
  * The entry is found by ADDRESS rather than by name. A module's import names live in
  * OriginalFirstThunk, which the loader is free to leave at zero for a bound import, in which case

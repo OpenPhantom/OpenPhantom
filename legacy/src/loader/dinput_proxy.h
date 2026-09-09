@@ -5,7 +5,7 @@
  *
  * WMAIN.EXE imports exactly ONE function from DINPUT.dll. DirectInputCreateA. Verified in all
  * three engine builds that ship in the game folder: the import descriptor names that one function
- * and nothing else, the IAT slot is 0x008C148C, and it is reached through a single thunk at
+ * alone, the IAT slot is 0x008C148C, and it is reached through a single thunk at
  * 0x00499220 with exactly ONE caller, at 0x0048D0CF, in the input startup path. The result is
  * stored to a local and never tested.
  *

@@ -6,11 +6,11 @@
  * cancels in closed form. A model that feeds a filter a clean signal measures what the filter does
  * to the sampling and never what it does to the signal.
  *
- * The model below jitters both clocks, and that is not decoration. A first version made the reports
- * perfectly periodic and the frames even, and at 1000 reports a second against 64 frames a second
- * everything divided exactly and the plain path scored a flawless zero. That zero is a coincidence
- * of periodicity and nothing else. A real device does not tick on a metronome, least of all a
- * virtual one fed over a network.
+ * The model below jitters both clocks. A first version made the reports perfectly periodic and
+ * the frames even, and at 1000 reports a second against 64 frames a second everything divided
+ * exactly and the plain path scored a flawless zero. That zero is a coincidence of periodicity
+ * alone. A real device does not tick on a metronome, least of all a virtual one fed over a
+ * network.
  *
  * So the model is the real chain. A device reports at its own rate in whole counts, which is where
  * the noise comes from: a hand at a constant speed produces one count on one report and two on
@@ -42,7 +42,7 @@
  *     500 Hz     15 or 16            6.4 %          3.1 %   12.0 Hz
  *     1000 Hz    31 or 32            3.2 %          1.4 %    8.0 Hz
  *
- * That is two shapes rather than one, which is why 62.5 and 104 both appear below. At 62.5 Hz it is
+ * That is two shapes rather than one, so 62.5 and 104 both appear below. At 62.5 Hz it is
  * a fifty per cent lurch one and a half times a second; at 104 Hz it is an eight hertz shimmer. A
  * filter can pass one of those and fail the other, so both are driven.
  *
@@ -60,12 +60,11 @@
 #define SUBSTEP     0.03125f
 #define MAX_STEPS   8192
 
-/* The ceiling on the adaptive time constant, in seconds, which is what a player sets with
- * MouseSmoothMaxMs. The filter asks for six of the device's own report intervals, so it wants 96 ms
- * at 62.5 reports a second and 6 ms at 1000. A ceiling of 120 ms therefore binds nothing above 50
- * reports a second, and that is deliberate: the delay assertion below has to measure the filter and
- * not the clamp. Below 50 the ceiling is what answers, which is the slow device the last check
- * drives. */
+/* The ceiling on the adaptive time constant, in seconds, set by a player with MouseSmoothMaxMs.
+ * The filter asks for six of the device's own report intervals, so it wants 96 ms at 62.5 reports
+ * a second and 6 ms at 1000. A ceiling of 120 ms therefore binds nothing above 50 reports a
+ * second, deliberately: the delay assertion below has to measure the filter and not the clamp.
+ * Below 50 the ceiling is what answers, which is the slow device the last check drives. */
 #define MAX_TAU     0.120f
 
 /* A deterministic pseudo-random source, so the model jitters the same way on every run and a
@@ -351,7 +350,7 @@ static void test_a_frame_without_a_report_is_not_a_zero(void)
      * interval. The hand has not stopped; the device simply has not reported yet. Nothing here may
      * pull the estimate down. The version this replaced handed those frames to the filter as a zero
      * count over the frame's own duration, which dragged the rate to zero between every pair of
-     * reports and then snapped it back, and that is a shimmer built by the smoother. */
+     * reports and then snapped it back: a shimmer built by the smoother. */
     for (i = 0; i < 4; ++i) {
         mouse_rate_observe(&rate, 0.0f, 0u, 0.0f, 0.004f, MAX_TAU);
     }

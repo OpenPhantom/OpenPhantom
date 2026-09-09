@@ -37,7 +37,7 @@ int main(void)
 
     ut_section("nothing owing");
     ut_check(!handback_rule_owes_camera(true, 0, 0),
-             "the engine released the camera itself, which is what happens whenever a choice menu "
+             "the engine released the camera itself, as it does whenever a choice menu "
              "was open, so there is nothing to hand back");
     ut_check(!handback_rule_owes_camera(false, 0, 0),
              "and the empty case does nothing at all");

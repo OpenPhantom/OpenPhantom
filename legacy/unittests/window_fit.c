@@ -13,8 +13,8 @@
 #include <stdint.h>
 
 /* The desktop from the field report: a 2560x1440 primary at 0,0 and a 1920x1080 secondary whose
- * origin is NEGATIVE, which is what put the engine's fixed screen point 320,240 on the wrong
- * display once the window had been moved there. */
+ * origin is NEGATIVE, which put the engine's fixed screen point 320,240 on the wrong display
+ * once the window had been moved there. */
 static const window_fit_monitor_t field_desktop[] = {
     {     0, 0, 2560, 1440 },
     { -1920, 0, 1920, 1080 }
@@ -27,14 +27,17 @@ static void test_the_regression(void)
     ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_PRIMARY, 640, 480) == FIELD_PRIMARY,
           "a 640x480 mode stays on the 1440p monitor the window is already on");
 
-    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_PRIMARY, 2560, 1440) == FIELD_PRIMARY,
+    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_PRIMARY, 2560, 1440)
+                 == FIELD_PRIMARY,
           "a mode that fills the current monitor stays on it");
 
-    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_SECONDARY, 640, 480) == FIELD_SECONDARY,
+    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_SECONDARY, 640, 480)
+                 == FIELD_SECONDARY,
           "a window already on the secondary is not dragged back to the primary");
 
     /* The one case in which moving IS right: the monitor the window is on cannot show the mode. */
-    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_SECONDARY, 2560, 1440) == FIELD_PRIMARY,
+    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_SECONDARY, 2560, 1440)
+                 == FIELD_PRIMARY,
           "a 1440p mode moves off the 1080p monitor, because that one cannot show it");
 }
 
@@ -59,7 +62,8 @@ static void test_exact_match_does_not_beat_the_current_monitor(void)
     /* A 1920x1080 mode on a 1440p primary: the secondary matches it exactly, and the window still
      * does not move. Being teleported to another display is a bigger surprise to the player than a
      * window that is not flush with the edges of its own monitor. */
-    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_PRIMARY, 1920, 1080) == FIELD_PRIMARY,
+    ut_check(window_fit_choose_monitor(field_desktop, 2, FIELD_PRIMARY, 1920, 1080)
+                 == FIELD_PRIMARY,
           "an exact match elsewhere does NOT pull the window off the monitor it is on");
 }
 
@@ -92,7 +96,7 @@ static void test_the_single_monitor_desktop(void)
     ut_check(window_fit_choose_monitor(one, 1, 0, 1920, 1080) == 0,
           "one monitor, its own size: that monitor");
     ut_check(window_fit_choose_monitor(one, 1, 0, 2560, 1440) == WINDOW_FIT_NO_MONITOR,
-          "one monitor, a larger mode: nothing can show it, and that is reported");
+          "one monitor, a larger mode: nothing can show it, and the answer says so");
 }
 
 int main(void)

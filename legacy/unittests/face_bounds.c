@@ -56,7 +56,7 @@ static void test_vertex_bound(void)
     ut_check(face_bounds_vertex_count_refused(33u, HIGHEST_ALLOWED),
              "no configurable limit lets the 33rd vertex through");
 
-    /* A limit the caller lowered, which is what the ini key is for on a build where the authored
+    /* A limit the caller lowered, the case the ini key is for on a build where the authored
      * one turns out to be wrong. */
     ut_check(!face_bounds_vertex_count_refused(1u, 1u), "a limit of 1 accepts a single vertex");
     ut_check(face_bounds_vertex_count_refused(2u, 1u), "a limit of 1 refuses two");
@@ -66,7 +66,8 @@ static void test_vertex_bound(void)
     ut_check(!face_bounds_vertex_count_refused(0u, 0u),
              "a limit of 0 still accepts a face with no vertices");
     ut_check(face_bounds_vertex_count_refused(1u, 0u),
-             "a limit of 0 refuses every face that carries a vertex, it does not disable the bound");
+             "a limit of 0 refuses every face that carries a vertex, it does not disable "
+             "the bound");
 }
 
 static void test_pool_bound(void)
@@ -110,7 +111,8 @@ static void test_pool_bound(void)
 
 /* The property the expression is written for, and the one a handful of ordinary values would not
  * have caught. Forming used + count and comparing that against the ceiling wraps, and a wrapped sum
- * is small, so the naive form answers "it fits" for exactly the faces that overrun the pool worst. */
+ * is small, so the naive form answers "it fits" for exactly the faces that overrun the pool
+ * worst. */
 static void test_no_wrap(void)
 {
     ut_section("the sum that is never formed");

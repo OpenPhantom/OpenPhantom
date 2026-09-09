@@ -48,7 +48,8 @@
 
 typedef struct detour {
     uintptr_t target;
-    void     *original;       /* call this to reach the previous behaviour; never NULL if installed */
+    /* call this to reach the previous behaviour; never NULL if installed */
+    void     *original;
     size_t    prologue_size;  /* 0 when we chained onto an existing hook */
     bool      installed;
     bool      chained;        /* true = we linked in front of a hook that was already there */

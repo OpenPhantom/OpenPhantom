@@ -132,7 +132,7 @@ uintptr_t signature_find_unique(const uint8_t *bytes, const uint8_t *mask, size_
 size_t signature_count_matches(const uint8_t *bytes, const uint8_t *mask, size_t size,
                                uintptr_t *addresses, size_t max_addresses);
 
-/* The same search over a caller-supplied buffer, which is what the one above is built on.
+/* The same search over a caller-supplied buffer; the one above is built on it.
  *
  * It is separate so that the matcher can be checked without a game: every patch in this project
  * stands on this loop, and driving it through the host's own code section means the needle has to

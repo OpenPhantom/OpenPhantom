@@ -4,7 +4,7 @@
  * by hand, so every shape it does not recognise has to be refused rather than turned into some
  * other key: a name that silently became the wrong code would move the panel's hotkey to a key
  * nobody pressed, and the only symptom is that the menu stops opening. That was already reported
- * once from a test build, which is why names exist at all.
+ * once from a test build. Names exist because of it.
  *
  * The bare number is the other reason. OpenKey has always been a virtual key code and every ini
  * written before names existed holds one, so a digit string has to keep meaning exactly what it
@@ -46,7 +46,8 @@ static void test_naming_a_code(void)
     overlay_key_name(VK_OEM_3, text, sizeof text);
     ut_check(strcmp(text, "Backtick") == 0, "the key below Escape on a British or American layout");
     overlay_key_name(VK_ESCAPE, text, sizeof text);
-    ut_check(strcmp(text, "Esc") == 0, "and a named key uses the short form the panel has room for");
+    ut_check(strcmp(text, "Esc") == 0,
+             "and a named key uses the short form the panel has room for");
 
     overlay_key_name(VK_CONTROL, text, sizeof text);
     ut_check(strcmp(text, "Ctrl") == 0, "and the modifiers have short names of their own");
@@ -88,7 +89,7 @@ static void test_reading_a_name(void)
     ut_check(overlay_key_from_name("tilde", &vk) && vk == VK_OEM_3,
              "including the several names people give the same key");
     ut_check(overlay_key_from_name("default", &vk) && vk == 0,
-             "the word for the shipped answer reads as 0, which is what the code treats as unset");
+             "the word for the shipped answer reads as 0, the value the code treats as unset");
     ut_check(overlay_key_from_name("ctrl", &vk) && vk == VK_CONTROL,
              "the modifiers read back, because a name the panel can show and the file cannot take "
              "is a name that moves the hotkey to the default the next time the game starts");
@@ -116,7 +117,7 @@ static void test_the_number_that_was_always_allowed(void)
              "a single digit is the virtual key code 5, NOT the 5 key on the number row, because "
              "an older ini holding a bare code has to keep meaning what it meant");
     ut_check(overlay_key_from_name("53", &vk) && vk == '5',
-             "the 5 key is reached by its code, 53, which is what the panel cannot show without "
+             "the 5 key is reached by its code, 53, which the panel cannot show without "
              "giving up the obvious label");
     ut_check(overlay_key_from_name("8", &vk) && vk == VK_BACK,
              "and 8 stays Backspace rather than becoming the 8 key, which is the compatibility the "

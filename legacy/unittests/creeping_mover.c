@@ -3,8 +3,8 @@
  * The rates here are not invented. They were decoded out of every level file the executable names,
  * all eleven of them, by reading each animated-object record's proven open displacement and its
  * travel time and dividing by the simulation's 32 ticks a second. Every crusher in the game that
- * carries walkable faces and descends is represented below, which is what makes the gap between the
- * one at fault and the slowest genuine platform a measurement rather than a guess.
+ * carries walkable faces and descends is represented below, so the gap between the one at fault
+ * and the slowest genuine platform is a measurement rather than a guess.
  */
 #include "creeping_mover.h"
 

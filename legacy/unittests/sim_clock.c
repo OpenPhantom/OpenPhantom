@@ -76,8 +76,8 @@ static void the_step_is_always_a_power_of_two_below_the_clock(void)
     float live;
 
     /* Both properties matter and for different reasons. A power of two is a whole multiple of the
-     * ulp of anything at least as large, which is what makes the subtraction exact. Not exceeding
-     * the clock is what keeps it positive. */
+     * ulp of anything at least as large, so the subtraction is exact. Not exceeding the clock is
+     * what keeps it positive. */
     for (live = 2.5f; live < 4000.0f; live *= 1.37f) {
         double step = sim_clock_rebase_step(live);
 

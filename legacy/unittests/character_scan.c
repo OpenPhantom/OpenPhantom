@@ -242,7 +242,7 @@ static void test_remembering_a_height_between_reports(void)
 
     character_scan_track_reset(table, 4u);
     ut_check(!character_scan_track(table, 4u, 0x1000u, 26.4f, &change),
-             "a reset forgets everything, which is what a new level needs: a slot address from the "
+             "a reset forgets everything, as a new level needs: a slot address from the "
              "previous one would be compared against a different character");
 }
 

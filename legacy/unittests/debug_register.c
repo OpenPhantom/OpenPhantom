@@ -51,7 +51,7 @@ static void test_slots_do_not_disturb_each_other(void)
     ut_check((dr7 & 0x10u) == 0u, "disarming clears slot 2's own enable, bit 4");
     ut_check(((dr7 >> 24) & 0xFu) == 0u, "and clears its condition and length");
     ut_check((dr7 & 0x1u) != 0u && ((dr7 >> 16) & 0xFu) == 0xDu,
-             "while slot 0 is still armed exactly as it was, which is what lets this instrument "
+             "while slot 0 is still armed exactly as it was, so this instrument can "
              "share the registers with anything else already using them");
 
     dr7 = debug_register_arm(0xDu << 16 | 1u, 0u, DEBUG_WATCH_READ_WRITE, DEBUG_LENGTH_1);

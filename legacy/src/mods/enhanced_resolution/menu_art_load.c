@@ -191,7 +191,7 @@ static void __cdecl resample_then_compress(void *vbuffer)
         load_state.reported = true;
         log_info("menu artwork is being replicated as it loads: the first was %dx%d and is now "
                  "%dx%d. Whole pixels only, so every pixel drawn is one that was already in the "
-                 "picture, which is what keeps an exactly black pixel transparent to this engine "
+                 "picture, keeping an exactly black pixel transparent to this engine "
                  "rather than turning it into a halo or a hole.",
                  (int)width, (int)height, (int)new_width, (int)new_height);
     }
@@ -245,8 +245,8 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
     signature_resolve_table(sites, SITE_COUNT);
     if (sites[SITE_LOAD_COMPRESS].address == 0 || sites[SITE_MEM_ALLOC].address == 0 ||
         sites[SITE_MEM_FREE].address == 0) {
-        log_warning("the menu bitmap load path did not resolve, so artwork keeps the size it has on "
-                    "disk and the menus need a converted set to fill the canvas");
+        log_warning("the menu bitmap load path did not resolve, so artwork keeps the size it has "
+                    "on disk and the menus need a converted set to fill the canvas");
         return false;
     }
 

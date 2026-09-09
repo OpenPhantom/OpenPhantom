@@ -68,15 +68,15 @@ static bool escape_pressed_now(bool *was_down)
  * time video_overlay.c put a TOP LEVEL window up. An X11 window manager focuses a newly mapped top
  * level window, and the HWND behind that one is WS_EX_NOACTIVATE, so Wine had been handed the focus
  * for a window that refuses activation and the key went nowhere. Nothing this file could read would
- * have found it, which is why three read paths all failed the same way.
+ * have found it, and three read paths all failed the same way.
  *
  * The fix is in video_overlay.c and it is a window, not a key: under Wine the movie is drawn into a
  * CHILD of the game's own window, so no X11 window is ever created and the focus never moves.
- * FIELD CONFIRMED on Linux Mint. GetAsyncKeyState then answers exactly as it does on Windows, which
- * is why there is one test here again and no Wine-only path at all. */
+ * FIELD CONFIRMED on Linux Mint. GetAsyncKeyState then answers exactly as it does on Windows, so
+ * there is one test here again and no Wine-only path at all. */
 
 
-/* True for the posted message that BEGINS a close by mouse, as opposed to WM_QUIT, which is what a
+/* True for the posted message that BEGINS a close by mouse, as opposed to WM_QUIT, the message a
  * close has already turned into.
  *
  * The close box arrives as WM_NCLBUTTONDOWN on hit-test area HTCLOSE, and it is not a close yet:
@@ -91,11 +91,11 @@ static bool escape_pressed_now(bool *was_down)
  * range, Alt+F4 queues VK_MENU before VK_F4, and holding Alt autorepeats more behind it, so the F4
  * was never examined. An external audit found that and was right about the code.
  *
- * It was wrong about the consequence. The game IGNORES WM_CLOSE at all times: its window procedure
- * at 0x0049905E takes case 0x10 in the switch, sets the result to zero and breaks, so DefWindowProcA
- * never runs and the default destroy never happens, and the chained handlers never see it either.
- * Only WM_DESTROY calls PostQuitMessage, raised by the game's own quit path. Confirmed in play:
- * Alt+F4 does nothing during ordinary gameplay with no movie involved.
+ * It was wrong about the consequence. The game IGNORES WM_CLOSE at all times: its window
+ * procedure at 0x0049905E takes case 0x10 in the switch, sets the result to zero and breaks, so
+ * DefWindowProcA never runs and the default destroy never happens, and the chained handlers
+ * never see it either. Only WM_DESTROY calls PostQuitMessage, raised by the game's own quit
+ * path. Confirmed in play: Alt+F4 does nothing during ordinary gameplay with no movie involved.
  *
  * So there was no close being lost here to restore. Detecting the combination properly was tried,
  * and it ended the movie and then posted a close the engine discarded. Making Alt+F4 genuinely
@@ -120,8 +120,8 @@ static bool is_close_request(const MSG *message)
  * where they lie, and only THEY are then removed and re-posted, so the game's own pump finds them
  * once this call returns. Everything else stays exactly where it was, in order.
  *
- * The range filter is what makes this cheap: both requests live in the keyboard and non-client
- * mouse ranges, so nothing else is even looked at. */
+ * The range filter keeps this cheap: both requests live in the keyboard and non-client mouse
+ * ranges, so nothing else is even looked at. */
 static bool close_was_requested(HWND game_window)
 {
     static const struct { UINT first; UINT last; } ranges[] = {
@@ -141,10 +141,10 @@ static bool close_was_requested(HWND game_window)
         if (!is_close_request(&message)) {
             continue;
         }
-        /* Take this one and put it straight back. Removing it first is what stops this returning
-         * true again on the next turn before the game's pump has had a chance to run; re-posting
-         * it unchanged is what makes the request survive to be honoured a moment later, by the
-         * engine's own window procedure, on a thread that is no longer parked inside a movie. */
+        /* Take this one and put it straight back. Removing it first stops this returning true
+         * again on the next turn before the game's pump has had a chance to run; re-posting it
+         * unchanged lets the request survive to be honoured a moment later, by the engine's own
+         * window procedure, on a thread that is no longer parked inside a movie. */
         if (PeekMessageW(&message, game_window, ranges[index].first, ranges[index].last,
                          PM_REMOVE)) {
             PostMessageW(message.hwnd, message.message, message.wParam, message.lParam);
@@ -272,8 +272,8 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game
             if (!vlc_runtime_api()->player_is_playing(player)) {
                 break;   /* stopped on its own: the end of the file, or a rare error */
             }
-            /* Losing the foreground ends the movie, which is what the engine's own movie window
-             * procedure does on WM_ACTIVATE. Retail does not leave a cutscene running behind
+            /* Losing the foreground ends the movie, as the engine's own movie window procedure
+             * does on WM_ACTIVATE. Retail does not leave a cutscene running behind
              * somebody else's window, and a movie that carried on playing inaudibly under another
              * program was one of the things that made this feel like a separate application. The
              * test is only applied once playback is under way, because the foreground has not

@@ -9,8 +9,8 @@
  *
  * This replaces a Media Foundation backend that flickered black through six different fixes. The
  * one thing every one of those attempts shared was MFPlay and its EVR renderer; VLC, standalone,
- * played the same converted file with no flicker at all, which is why its engine was tried rather
- * than a seventh round of window management around MFPlay.
+ * played the same converted file with no flicker at all, so its engine was tried rather than a
+ * seventh round of window management around MFPlay.
  */
 #ifndef VLC_PLAYBACK_H
 #define VLC_PLAYBACK_H
@@ -55,8 +55,8 @@ void vlc_playback_set_stretch(bool stretch);
  *
  * What is left is the DEVICE. libVLC's default video output on Windows is Direct3D, so playing a
  * movie creates a SECOND Direct3D device while the engine is holding an exclusive mode one through
- * dxwrapper. That is window independent, which is exactly the shape of what was measured. An output
- * that paints through GDI instead creates no device and cannot take the engine's away.
+ * dxwrapper. That is window independent, the shape of what was measured. An output that paints
+ * through GDI instead creates no device and cannot take the engine's away.
  *
  * Passed straight to libVLC as --vout=NAME, so the names are libVLC's own: "gdi" for the plain
  * Windows blitter, "opengl" or "gl", "direct3d9", "direct3d11". A name libVLC does not know makes

@@ -44,7 +44,7 @@ The force bar's edges are each built as "the matching health edge, lifted by one
 one more pixel", so its bottom is `H-2-0.06667*H` and not `H-1-0.06667*H`. That single pixel is the
 whole tolerance budget of the recogniser that finds it.
 
-Three consequences, and they are what this DLL exists for.
+Three consequences, and they are why this DLL exists.
 
 **The bars stretch, the icon does not.** A bar is `0.2*W` wide and `0.06667*H` tall, so its shape
 follows the aspect ratio, 4:1 at 4:3, 5.33:1 at 16:9. The weapon icon takes its *width* from the
@@ -159,6 +159,6 @@ engine's size.
   `HudScale=1.0` at every mode, and both `SquareHud` values at every 4:3 mode.
 * **Every byte pattern verified offline** against both retail builds. All six patterns resolve
   uniquely on each.
-* **Accepted in game**, at 3840x2160, which is a 16:9 canvas and therefore the case this exists
-  for: the HUD blocks stay square and the text is not stretched. The bit exact identities above
-  are what say it changes nothing at 4:3.
+* **Accepted in game**, at 3840x2160, a 16:9 canvas and therefore the case this exists for: the
+  HUD blocks stay square and the text is not stretched. The bit exact identities above are the
+  evidence that it changes nothing at 4:3.

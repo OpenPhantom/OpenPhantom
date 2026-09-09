@@ -1,7 +1,7 @@
 /* mode_depth.h: which colour depth the whole mode chain runs at.
  *
- * The engine is 16 bit ON THE MODE LIST AND RENDERER SIDE, and that is three hardcoded comparisons
- * rather than a pervasive assumption. The DirectDraw enumeration callback itself already handles
+ * The engine is 16 bit on the MODE LIST and RENDERER side, three hardcoded comparisons rather
+ * than a pervasive assumption. The DirectDraw enumeration callback itself already handles
  * every depth: it switches on the bit count through a jump table, converts pitch to pixels with a
  * `pitch >> 2` arm for 32, and sizes the surface generically as `w * h * (bpp >> 3)`. So a 32-bit
  * mode is RECORDED correctly, with correct channel widths and shifts, and then thrown away by:
@@ -61,7 +61,8 @@
  * written or none of them are. */
 uint32_t mode_depth_install(uint32_t bits);
 
-/* The depth in force, for the enumeration filter and for log lines. 16 until install says otherwise. */
+/* The depth in force, for the enumeration filter and for log lines. 16 until install says
+ * otherwise. */
 uint32_t mode_depth_bits(void);
 
 #endif /* ENHANCED_RESOLUTION_MODE_DEPTH_H */

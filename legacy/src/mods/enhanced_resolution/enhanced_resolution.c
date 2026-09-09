@@ -35,9 +35,9 @@
  *
  * ==============================================================================================
  * SIZE NOTE: past the 600 line mark, and about half of it is the byte evidence above and at each
- * hooked site. That evidence belongs at the site, and it is what makes a patch that rewrites a
- * conditional jump reviewable at all: without the acceptance rule written out in code order,
- * `EB 32` is an unaccountable two bytes.
+ * hooked site. That evidence belongs at the site. A patch that rewrites a conditional jump cannot
+ * be reviewed without it: with no acceptance rule written out in code order, `EB 32` is an
+ * unaccountable two bytes.
  */
 #include "enhanced_resolution.h"
 
@@ -267,10 +267,10 @@ static void load_config(void)
     config->windowed_fill         = ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true);
     config->pointer_release_key   = ini_read_int (RESOLUTION_SECTION, "PointerReleaseKey", 0x91);
 
-    /* Default ON, and the reason it is safe to default a behaviour change on: on a window that
-     * sits at screen 0,0, which is where the engine puts it and where it stays without the line
-     * above, the correction is the identity, bit for bit. It can only change what happens on a
-     * window this DLL has moved somewhere else, and there the current behaviour is already wrong. */
+    /* Default ON, and the reason it is safe to default a behaviour change on: on a window that sits
+     * at screen 0,0, which is where the engine puts it and where it stays without the line above,
+     * the correction is the identity, bit for bit. It can only change what happens on a window this
+     * DLL has moved somewhere else, and there the current behaviour is already wrong. */
     config->keep_cursor_in_window = ini_read_bool(RESOLUTION_SECTION, "KeepCursorInWindow", true);
 
     /* Default ON, and the reason a new piece of process-global OS state may default on: the engine
@@ -515,7 +515,7 @@ static int32_t __cdecl hook_set_resolution(uint32_t width, uint32_t height)
     set_resolution_fn_t original =
         (set_resolution_fn_t)resolution_state.set_resolution_detour.original;
 
-    /* This detour exists for ForceWidth/ForceHeight and nothing else. The window fit used to be
+    /* This detour exists for ForceWidth/ForceHeight only. The window fit used to be
      * driven from here and that was the defect: this function is not the choke point, and the mode
      * changes a player triggers do not pass through it. */
     /* MEASUREMENT, off unless asked for. graphics_setResolution has SIX callers and
@@ -707,8 +707,8 @@ static bool install_window_mode(void)
     return window_mode_install(&mode_config);
 }
 
-/* The window fit is a whole responsibility of its own and lives in window_fit.c; this hands it the
- * two table pointers that were resolved here and nothing else. */
+/* The window fit is a whole responsibility of its own and lives in window_fit.c; this hands it
+ * only the two table pointers that were resolved here. */
 static bool install_window_fit(void)
 {
     window_fit_config_t fit_config;
@@ -743,7 +743,7 @@ void enhanced_resolution_install(void)
 
     resolution_state.installed = true;
 
-    /* FIRST of all the patches here, and that is an ordering constraint rather than a reading
+    /* FIRST of all the patches here, an ordering constraint rather than a reading
      * order. The display mode enumeration runs once, inside graphics startup, so the depth choice
      * and the filter can only work on an enumeration that has not happened yet, and the filter has
      * to agree with whatever depth this settled on. Everything below acts on the list that

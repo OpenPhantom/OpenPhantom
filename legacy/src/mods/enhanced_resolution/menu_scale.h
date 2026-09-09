@@ -4,7 +4,7 @@
  * What this is for
  *
  * With MenuKeepsResolution=1 the menus keep the display mode instead of dropping it to 640x480,
- * which is what stops a full Direct3D 9 device rebuild on every menu open and close. The price is
+ * which stops a full Direct3D 9 device rebuild on every menu open and close. The price is
  * that the front end, the pause screens and the loading screen become a 640x480 island in the
  * middle of the picture: about 15 per cent of the area at 1080p and under 4 per cent at 2160p, so
  * the higher the resolution the smaller it looks. That price is the subject of issue #31.
@@ -12,16 +12,16 @@
  * The engine draws its menu bitmaps through swrle_blit, a run-length blitter that copies one source
  * pixel to one destination pixel. There is no scale term in it, and there is no stretching blit
  * anywhere in the image: all four arms of stdDisplay_blit were disassembled and none takes a
- * destination extent. So the canvas cannot be enlarged by asking the engine to stretch it. What CAN
- * be done is to make the canvas itself bigger and put bigger artwork into it, which is what this
- * does.
+ * destination extent. So the canvas cannot be enlarged by asking the engine to stretch it. What
+ * CAN be done, and what this does, is to make the canvas itself bigger and put bigger artwork
+ * into it.
  *
- * The bigger artwork can come from either of two places, and that is the difference between the
- * canvas being welded to one resolution and following the display:
+ * The bigger artwork can come from either of two places, the difference between the canvas being
+ * welded to one resolution and following the display:
  *
  *   from disk    a converted set on disk, and the canvas is read from it. The
- *                files are a fixed size, so the canvas is the size they were made for and nothing
- *                else. This came first and is still what a converted install does.
+ *                files are a fixed size, so the canvas is exactly the size they were made for.
+ *                This came first and is still what a converted install does.
  *
  *   as it loads  menu_art_load.c replicates each picture between the engine reading it and
  *                compressing it, so the artwork is whatever the canvas asks for. Then the DISPLAY
@@ -127,7 +127,7 @@
  *
  * `cursor_cage_widens` is whether WidenMenuCursorArea is on. The cage is sized from this canvas, so
  * with it off the drawn cursor keeps the engine's 607x447 clamp while the widgets move outside it
- * and become unreachable, which is why this declines rather than install alongside it.
+ * and become unreachable, so this declines rather than install alongside it.
  *
  * Returns true only when every site resolved AND every write landed. A partial install is rolled
  * back: a menu drawn at one scale and hit tested at another is unusable in a way that looks like a

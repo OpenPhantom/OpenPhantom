@@ -3,7 +3,7 @@
  * The seam: every other menu picture is scaled by converting the artwork on disk, so the canvas
  * scale never has to look at a pixel. These four are decoded at run time, so they are the one
  * place in the feature that owns pixel buffers, a filter and a per-frame cost. None of that is
- * shared with anything else here, which is why it is a file of its own; what it takes from the
+ * shared with anything else here, so it is a file of its own; what it takes from the
  * rest is the two ratios and the widget's own blit mode.
  */
 #include "menu_preview.h"
@@ -24,8 +24,8 @@
  *
  * title_main_menu creates four 232x100 video surfaces, opens ss0.bik..ss3.bik into them as looping
  * previews, and plants each surface into widgets 1..4 through swmenu_setWidgetImage. That is the
- * ONLY call to that function in the game, so a picture widget carrying a pData is one of these four
- * and nothing else, which is what makes the test below safe.
+ * ONLY call to that function in the game, so a picture widget carrying a pData can only be one of
+ * these four, and the test below is safe.
  *
  * They are the one part of the front end the canvas scale cannot reach on its own. Every other menu
  * bitmap comes out of the archives and is whatever size the converted artwork made it, but these
@@ -66,8 +66,8 @@
  * Nearest neighbour, deliberately. A 232x100 clip on a 4K button is a six times blow up with no
  * extra detail in it, so a smoothing filter would buy blur rather than sharpness while costing
  * arithmetic per pixel per frame on four buffers. Whole pixel replication also means each distinct
- * source row is expanded once and then copied for its repeats, which is what keeps this off the
- * frame time.
+ * source row is expanded once and then copied for its repeats, which keeps this off the frame
+ * time.
  */
 #define VBUFFER_WIDTH          0x0Cu   /* these five are contiguous, and are saved and restored */
 #define VBUFFER_HEIGHT         0x10u   /* as one block in the hook below                        */
@@ -139,7 +139,7 @@ typedef void(__cdecl *pic_draw_fn_t)(void *widget, void *menu);
 
 /* Finds the slot for this surface, or takes one, and makes sure its buffers are the right size.
  * Returns NULL only when memory could not be had, in which case the preview is drawn at its
- * authored size, which is what happens without this file at all. */
+ * authored size, as it would be without this file at all. */
 static preview_slot_t *preview_claim(const void *frame, int32_t source_width,
                                      int32_t source_height, int32_t width, int32_t height,
                                      const preview_format_t *format)
@@ -210,8 +210,8 @@ static preview_slot_t *preview_claim(const void *frame, int32_t source_width,
     }
 
     /* The source position of every destination column, as an index and an eight bit fraction.
-     * Sampling from pixel CENTRES, which is what keeps the resampled picture from drifting half a
-     * source pixel up and left of where the nearest neighbour version put it. */
+     * Sampling from pixel CENTRES, which keeps the resampled picture from drifting half a source
+     * pixel up and left of where the nearest neighbour version put it. */
     {
         int32_t step = (source_width << 8) / width;
         int32_t x;
@@ -255,7 +255,8 @@ static uint32_t preview_read_pixel(const uint8_t *row, int32_t index, int32_t by
     return row[(size_t)index * (size_t)bytes_per_pixel];
 }
 
-static void preview_write_pixel(uint8_t *row, int32_t index, int32_t bytes_per_pixel, uint32_t value)
+static void preview_write_pixel(uint8_t *row, int32_t index, int32_t bytes_per_pixel,
+                                uint32_t value)
 {
     if (bytes_per_pixel == 2) {
         *(uint16_t *)(row + (size_t)index * 2u) = (uint16_t)value;
@@ -493,7 +494,8 @@ static preview_slot_t *preview_upscale(const char *frame)
     hash = preview_source_hash(pixels, source_width, source_height, source_stride,
                                format.bytes_per_pixel);
     if (slot->has_content && slot->source_hash == hash) {
-        return slot;                          /* the picture has not moved; the buffer still holds it */
+        /* the picture has not moved; the buffer still holds it */
+        return slot;
     }
     slot->source_hash = hash;
     slot->has_content = true;
@@ -528,7 +530,8 @@ void __cdecl hook_pic_draw(void *widget, void *menu)
     *(int32_t *)(frame + VBUFFER_HEIGHT)         = slot->height;
     *(int32_t *)(frame + VBUFFER_SIZE)           = (int32_t)slot->pixel_bytes;
     *(int32_t *)(frame + VBUFFER_BYTES_PER_LINE) = slot->bytes_per_line;
-    *(int32_t *)(frame + VBUFFER_PITCH_PIXELS)   = slot->bytes_per_line / slot->format.bytes_per_pixel;
+    *(int32_t *)(frame + VBUFFER_PITCH_PIXELS)   =
+        slot->bytes_per_line / slot->format.bytes_per_pixel;
     *(uint8_t **)(frame + VBUFFER_PIXELS)        = slot->pixels;
 
     original(widget, menu);

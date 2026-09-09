@@ -21,8 +21,8 @@
  *
  * The bare compare matches five times in the image, so the pattern carries the kind test in front
  * of it and both branches behind. The two short jumps differ between this site and findMode below,
- * which is what makes each of them unique; they are instruction encoding rather than addresses, so
- * nothing here has to be read out of an operand. */
+ * so each of them is unique; they are instruction encoding rather than addresses, so nothing
+ * here has to be read out of an operand. */
 static const uint8_t SIG_BUILD_LIST_DEPTH[] = {
     0x8B, 0x45, 0xFC, 0x83, 0x78, 0x1C, 0x01, 0x74, 0x02, 0xEB, 0xD4,
     0x8B, 0x4D, 0xFC, 0x83, 0x79, 0x20, 0x10, 0x74, 0x02, 0xEB, 0xC9
@@ -50,8 +50,8 @@ static const uint8_t SIG_FIND_MODE_DEPTH[] = {
  * returns the highest scorer rather than nothing, so a template asking for 16 against a table of
  * 32-bit modes scores every entry alike and hands back an arbitrary resolution.
  *
- * The three fives are left alone ON PURPOSE. The obvious reading is that 5/5/5 should become
- * 8/8/8, and it should not: the channel widths only decide the scorer's exact-match early exit, never
+ * The three fives are left alone ON PURPOSE. The obvious reading is that 5/5/5 should become 8/8/8,
+ * and it should not: the channel widths only decide the scorer's exact-match early exit, never
  * which entry wins the partial match, and changing them would be a guess dressed as a fix. */
 static const uint8_t SIG_FALLBACK_TEMPLATE[] = {
     0xC7, 0x45, 0xC0, 0x01, 0x00, 0x00, 0x00,
@@ -129,11 +129,11 @@ uint32_t mode_depth_install(uint32_t bits)
 
     bits_in_force = ENGINE_BITS_32;
     log_info("ModeBitDepth=32: the three depth gates are opened at %08X, %08X and %08X. The engine "
-             "now lists, selects and falls back to 32-bit modes. This needs the graphics wrapper to "
-             "be offering them; asking for a depth nothing offers leaves the list empty. Two things "
-             "are known to be optimistic afterwards: the video-memory test in buildModeList counts "
-             "two bytes a pixel, so it now under-counts by half, and the engine's own software "
-             "blitters write two-byte pixels.",
+             "now lists, selects and falls back to 32-bit modes. This needs the graphics wrapper "
+             "to be offering them; asking for a depth nothing offers leaves the list empty. Two "
+             "things are known to be optimistic afterwards: the video-memory test in "
+             "buildModeList counts two bytes a pixel, so it now under-counts by half, and the "
+             "engine's own software blitters write two-byte pixels.",
              (unsigned)(address[0] + SITES[0].offset), (unsigned)(address[1] + SITES[1].offset),
              (unsigned)(address[2] + SITES[2].offset));
     return ENGINE_BITS_32;

@@ -13,16 +13,16 @@
  * player who set up a resizable window and pressed this twice should get their resizable window
  * back, not the fixed one.
  *
- * What it does NOT do is change the engine's resolution, and that is worth being plain about. The
- * picture is scaled to the window either way, so this changes how much of the screen the game
- * covers and nothing about what is being rendered. Going to fullscreen this way is not the same as
- * setting a fullscreen resolution, and it costs nothing to come back from.
+ * What it does NOT do is change the engine's resolution. The picture is scaled to the window
+ * either way, so this changes how much of the screen the game covers and nothing about what is
+ * being rendered. Going to fullscreen this way is not the same as setting a fullscreen
+ * resolution, and it costs nothing to come back from.
  *
  * ==============================================================================================
  * Why Alt has to be held, and why the key is a setting anyway
  *
- * Enter on its own is a key the game uses. The modifier is what makes it safe, and it is also what
- * makes it the gesture people already know, so it is not optional and not configurable. Which key
+ * Enter on its own is a key the game uses. The modifier makes it safe, and it also makes it the
+ * gesture people already know, so it is not optional and not configurable. Which key
  * Alt is held with is configurable, because a keyboard layout or a conflicting overlay is not
  * something this can predict.
  *

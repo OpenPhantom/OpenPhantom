@@ -10,14 +10,14 @@
  * island's edge is drawn once and can never be erased. The hovered button's glow does exactly
  * that: authored at canvas x=7 with a halo wider than its plate, it pokes a few pixels past the
  * island's left border, and every hover stamps a blue smear onto the border that stays until the
- * screen closes. At real 640x480 the screen edge IS the canvas edge and the rasterizer cropped
- * that halo for free, which is why the retail arrangement never showed it.
+ * screen closes. At real 640x480 the screen edge IS the canvas edge and the rasteriser cropped
+ * that halo for free, so the retail arrangement never showed it.
  *
  * The repair clamps the sprite rectangle to the island, but only while the engine's own "the
  * menu's widgets are drawing" flag is up, so the gameplay HUD, the frozen pause backdrop and
  * everything else that shares the blitter passes through untouched. Details, byte evidence and
  * the honest limitations (a clamped sprite is squashed by the poked-out fraction where the retail
- * rasterizer cropped it, and a partly drawn sprite is left alone entirely) are at the top of
+ * rasteriser cropped it, and a partly drawn sprite is left alone entirely) are at the top of
  * menu_island_clip.c.
  * ============================================================================================ */
 #ifndef MENU_ISLAND_CLIP_H
@@ -33,7 +33,7 @@
  * moves the engine's own clip immediates and origin arithmetic to match, so the island this clamps
  * to has to be told what the canvas actually is. Clamping to 640x480 while the menus draw on a
  * 3840x2160 canvas cuts real widgets off at a border that no longer exists. These two remain the
- * AUTHORED size, which is what the island is when nothing has scaled it. */
+ * AUTHORED size, the island's size when nothing has scaled it. */
 #define MENU_ISLAND_WIDTH  640
 #define MENU_ISLAND_HEIGHT 480
 
@@ -57,8 +57,8 @@ bool menu_island_clip_fill_is_whole(float fill);
 /* Resolves its two sites and installs the sprite-blitter detour. Returns true only when the
  * clamp is really in force. Call AFTER window_fit_install(): the island origin is derived from
  * window_fit_current_mode_size(), and that accessor is resolved there. */
-/* `canvas_width` and `canvas_height` are the menu canvas menu_scale settled on, which is what
- * the island actually is; pass 640x480 when nothing scaled it. Call this AFTER menu_scale_install,
+/* `canvas_width` and `canvas_height` are the menu canvas menu_scale settled on. The island is
+ * that canvas; pass 640x480 when nothing scaled it. Call this AFTER menu_scale_install,
  * for the same reason the cursor cage is installed after it. */
 bool menu_island_clip_install(bool enabled, int canvas_width, int canvas_height);
 

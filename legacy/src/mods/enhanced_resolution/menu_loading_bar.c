@@ -4,8 +4,8 @@
  * The sites
  *
  * menu_progressStep, retail 0x00446A4B, matched from 0x00446A54. Every number the bar is drawn
- * from is set up in one contiguous prologue block before the loop that draws it, which is what
- * makes this one pattern rather than eight:
+ * from is set up in one contiguous prologue block before the loop that draws it, so this is one
+ * pattern rather than eight:
  *
  *   00446A54  A1 5C FD 6C 00     mov  eax,[g_uiOriginY]
  *   00446A59  05 90 01 00 00     add  eax,400            <- y of the bar, at +0x06

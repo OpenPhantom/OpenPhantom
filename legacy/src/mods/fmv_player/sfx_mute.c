@@ -22,14 +22,14 @@
  * for being out of range, or a menu sound from well before the level even loads. Named for whatever
  * put it there, not for what it is; the timing is the evidence.
  *
- * This is not one sound, it is a FAMILY, one per playable character. Field-confirmed with a second
- * live capture: playing as Qui-Gon (cheats_original_actions.c's own "iamquigon"), the same transient
- * at a DIFFERENT level's own opening (race.b3d, not fedship.b3d, so the transient itself is not
- * unique to the one level this was first found on either) plays `FSUJSND1.wav` instead. Both share
- * the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
- * sound-specific suffix, which is what this file matches on rather than either exact name, so
- * Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having to
- * catch each one individually first.
+ * This is not one sound, it is a FAMILY, one per playable character. Field-confirmed with a
+ * second live capture: playing as Qui-Gon (cheats_original_actions.c's own "iamquigon"), the same
+ * transient at a DIFFERENT level's own opening (race.b3d, not fedship.b3d, so the transient itself
+ * is not unique to the one level this was first found on either) plays `FSUJSND1.wav` instead.
+ * Both share the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`,
+ * then a sound-specific suffix. This file matches on that suffix rather than on either exact
+ * name, so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered
+ * without having to catch each one individually first.
  *
  * ==============================================================================================
  * WHAT THIS DOES
@@ -56,7 +56,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* --- bapsound_play 0x0041681F, byte-identical to diagnostics/diag_audio.c's own SIG_SOUND_PLAY -- */
+/* --- bapsound_play 0x0041681F, byte-identical to diagnostics/diag_audio.c's own SIG_SOUND_PLAY */
 static const uint8_t SIG_SOUND_PLAY[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18, 0xA1, 0x88, 0xAE, 0x5B, 0x00, 0x89,
     0x45, 0xFC, 0x83, 0x3D, 0xB8, 0xB4, 0x5B, 0x00
@@ -82,7 +82,7 @@ static bool name_has_suppressed_prefix(const char *name)
     if (name[1] != 'S' && name[1] != 's') {
         return false;
     }
-    /* name[2] is the character letter, deliberately unchecked, and that is the whole point */
+    /* name[2] is the character letter, deliberately unchecked */
     return name[3] == 'J' || name[3] == 'j';
 }
 

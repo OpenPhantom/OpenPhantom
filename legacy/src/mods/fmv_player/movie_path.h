@@ -26,7 +26,7 @@ bool movie_path_basename(const char *name, char *out, size_t out_size);
  * "C:\Games\TPM\movies_hd\arena.mp4".
  *
  * A trailing separator on either directory is optional and exactly one is written either way,
- * which is what lets host_directory() keep its documented trailing backslash and an ini value keep
+ * so host_directory() can keep its documented trailing backslash and an ini value can keep
  * whatever the player typed, without this function needing to know about either.
  *
  * A single leading dot on `extension` is ignored, because "mp4" and ".mp4" are both what somebody

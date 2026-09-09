@@ -5,7 +5,7 @@
  * observable to a unit test without a running game and a real video file. movie_path.c is where
  * the part that can be checked went. See fmv_player.c for the byte-evidenced call site that
  * decides WHEN this runs; the only engine memory this file touches is the drawn menu cursor, and
- * that is menu_cursor_cells.c's business, not this one's.
+ * that belongs to menu_cursor_cells.c, not to this file.
  */
 #ifndef VIDEO_OVERLAY_H
 #define VIDEO_OVERLAY_H

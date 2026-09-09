@@ -1,4 +1,5 @@
-/* enhanced_resolution.h: modern resolutions, listed in the options screen as if they belonged there.
+/* enhanced_resolution.h: modern resolutions, listed in the options screen as if they belonged
+ * there.
  *
  * Produces: enhanced_resolution.dll
  */

@@ -283,20 +283,20 @@ rectangles null and asks for a whole surface to whole back buffer copy, and the 
 that to the client area. That is the behaviour we want, and it is already written: it is what the
 code does when its own clip fails.
 
-So the correction makes the clip fail. `user32!GetClientRect` is replaced in the wrapper's own import
-table, and only there, and it answers with an empty rectangle in exactly the case above that is
-broken. Our own code keeps the truth from the same function, which matters: `focus_guard` confines
-the pointer with it and `window_fit` measures with it. It lies in one case out of three because the
-other two already put the whole picture on the screen, so correcting them would be a change with no
-purpose and some risk.
+So the correction makes the clip fail. `user32!GetClientRect` is replaced in the wrapper's own
+import table, and only there, and it answers with an empty rectangle in exactly the case above
+that is broken. Our own code keeps the truth from the same function, which matters: `focus_guard`
+confines the pointer with it and `window_fit` measures with it. It lies in one case out of three
+because the other two already put the whole picture on the screen, so correcting them would be a
+change with no purpose and some risk.
 
 ## Why the pointer could not leave a window with a frame
 
 Two things hold it, and only one of them is ours.
 
 `focus_guard`'s `ClipCursor` is ours, and it stands down while the pointer is released. Tying it to
-the window mode instead was tried and was wrong: it left the pointer loose for the whole session, and
-the clip is what stops it escaping during fast mouse movement.
+the window mode instead was tried and was wrong: it left the pointer loose for the whole session,
+and the clip is what stops it escaping during fast mouse movement.
 
 The engine's is not a clip at all. `control_recentreMouse` warps the pointer back to the middle of
 the client area on every mouse message, which is how a 1999 engine reads a relative mouse: it moves
@@ -324,9 +324,9 @@ swallowing it stopped a stray keypress ending a level.
 
 Giving the window a frame gave it a button the engine has never had a handler for. So the window
 procedure is wrapped, the message is answered, and the engine's own `sys_shutdown` runs a frame
-later. Not a synthesised quit: it is the same function `sys_main` calls when the game exits normally,
-and the settings file is unaffected either way because this game writes its settings when they change
-rather than on the way out.
+later. Not a synthesised quit: it is the same function `sys_main` calls when the game exits
+normally, and the settings file is unaffected either way because this game writes its settings when
+they change rather than on the way out.
 
 Two details that are not incidental. It runs a frame later rather than inside the window procedure,
 because freeing the world from inside a message dispatched from a frame that is still running is a
@@ -357,7 +357,7 @@ largest quad measured was 216x107, which is button sized: nothing approaching a 
 was drawn on any path watched.
 
 **So the artwork conversion was not buying geometry.** The menus already scale. What the conversion
-bought was what happens to a small texture when a quad stretches it, against the rasterizer's own
+bought was what happens to a small texture when a quad stretches it, against the rasteriser's own
 bilinear filter, which is the smoothing the retired `convert_menu.py` refused to use, and for a
 stated reason: after the engine converts a bitmap to 16 bit, a pixel that is exactly zero is a
 SKIP, so a smoothing filter invents near black where black was transparent and new exact zeros
@@ -486,7 +486,8 @@ unacquires a foreground device by itself when the window goes to the background.
 The only function that acquires is `stdControl_setFocus 0x48D719`, and none of its five callers can
 be reached by a focus change:
 
-* `0x48D195` / `0x48D1B6`, `stdControl_open` / `stdControl_close`, driven by module messages 3 and 4;
+* `0x48D195` / `0x48D1B6`, `stdControl_open` / `stdControl_close`, driven by module messages 3
+  and 4;
 * `0x464A8E` / `0x464AA1`, the Control module's cases for messages **0x12** and **0x13**, which are
   `setFocus(0)` and `setFocus(1)` + `stdControl_resync`. Every one of the 24 `module_broadcast`
   `0x46F3C3` and 14 `module_broadcastDt` `0x46F4A9` call sites pushes its message id as an
@@ -499,9 +500,9 @@ be reached by a focus change:
 
 So the engine authored a suspend/resume pair for its input and shipped without a sender. After a
 focus loss the devices are unacquired and nothing in the retail build ever acquires them again;
-`stdControl_bAcquired [0x8619C8]` stays 1 while every `GetDeviceState` fails. `ReacquireInputOnFocus`
-sends the two messages that are missing, by calling exactly the leaves the engine's own case `0x13`
-calls, in the same order.
+`stdControl_bAcquired [0x8619C8]` stays 1 while every `GetDeviceState` fails.
+`ReacquireInputOnFocus` sends the two messages that are missing, by calling exactly the leaves the
+engine's own case `0x13` calls, in the same order.
 
 **What is not ours.** The engine does not pause when it loses focus and never did: the message pump
 `0x498BCA` uses `PeekMessageA` with `PM_NOREMOVE` and returns when the queue is empty, and the frame
@@ -681,14 +682,15 @@ turning on one key and not the other and nobody has run it.
 either, and it is known to be wrong: that setting arms the wrapper's own window management, which
 strips the frame and recentres the window. The shipped `dxwrapper.ini` has it at 0.
 
-Untested and worth naming: two monitors, Wine and the Steam Deck, a resolution change during play,
-and a display with scaling set to anything other than 100 per cent. The per-apply log line prints
-the monitor rectangle, `GetSystemMetrics` and the window rectangle read back precisely so that the
-last of those can be told apart from a fault when somebody does run it. The running window is about 2054 by 2077 rather than the
-desktop-sized popup this module's headers used to describe, and that size is read from the retail
-image; it has not been measured in a running game. The pointer confinement log line was
-rewritten because of it, and that half has been seen: a launch since carries the new wording, which
-describes the running window size rather than claiming the client edge is the desktop edge.
+Untested: two monitors, Wine and the Steam Deck, a resolution change during play, and a display
+with scaling set to anything other than 100 per cent. The per-apply log line prints the monitor
+rectangle, `GetSystemMetrics` and the window rectangle read back precisely so that the last of
+those can be told apart from a fault when somebody does run it. The running window is about 2054 by
+2077 rather than the desktop-sized popup this module's headers used to describe, and that size is
+read from the retail image; it has not been measured in a running game. The pointer confinement
+log line was rewritten because of it, and that half has been seen: a launch since carries the new
+wording, which describes the running window size rather than claiming the client edge is the
+desktop edge.
 
 The offline verification below still stands and is what the individual patches rest on.
 

@@ -9,7 +9,7 @@
  *     g_menuOriginY = (H - 480) / 2
  *
  * and ADDS both in the widget draw path and in the widget hit test, 18 references and 16
- * references respectively, which is what guarantees that what is drawn and what is clickable cannot
+ * references respectively, which guarantees that what is drawn and what is clickable cannot
  * drift apart. A 640x480 menu therefore already appears in the middle of a 1920x1080 screen and
  * already responds where it appears. None of that is changed here.
  *
@@ -42,8 +42,8 @@
  *
  * So the shipped clamp is not a small-mindedness to correct. It is the guarantee that the cursor
  * never goes where the erase cannot follow, and this file keeps that guarantee rather than
- * breaking it: the cage is widened to the CANVAS, which is exactly the region that repaints, and
- * never to the screen. An earlier version of this file did widen it to the display mode, which
+ * breaking it: the cage is widened to the CANVAS, the region that repaints, and never to the
+ * screen. An earlier version of this file did widen it to the display mode, which
  * is the fault above, and that was invisible only for as long as the feature never armed.
  * menu_island_clip.c repairs the same class of defect for the sprites the WIDGETS draw; that one
  * IS reproduced, and the two are independent: the widget smears survive WidenMenuCursorArea=0.
@@ -88,8 +88,8 @@
  * re-resolved. The clamps are computed ABSOLUTELY from the canvas size and never as a delta on
  * what is already there, so writing them twice writes the same numbers.
  *
- * A consequence worth naming: if an earlier generation of this DLL is already in the process and
- * has already patched the block, this resolve finds nothing and the feature declines with a log
+ * One consequence: if an earlier generation of this DLL is already in the process and has
+ * already patched the block, this resolve finds nothing and the feature declines with a log
  * line. That is the correct answer, the cage is already wide, and it is reported rather than
  * silently treated as a failure to find the engine.
  *
@@ -235,8 +235,8 @@ static signature_t sites[SITE_COUNT] = {
 };
 
 /* The two cells the origin operands are repointed at. They are read by the engine on every mouse
- * message and never written by anything, so a plain zero is the whole of it: the clamp becomes
- * [0, W-33] x [0, H-33] in absolute screen coordinates, which is the whole display mode. */
+ * message and never written by anything, so a plain zero is all of it: the clamp becomes
+ * [0, W-33] x [0, H-33] in absolute screen coordinates, the whole display mode. */
 static const int32_t cage_origin_zero_x = 0;
 static const int32_t cage_origin_zero_y = 0;
 
@@ -358,7 +358,7 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
         return false;
     }
 
-    /* The whole of it. The cage becomes [origin, origin + canvas - 33]: larger than it shipped,
+    /* All of it. The cage becomes [origin, origin + canvas - 33]: larger than it shipped,
      * still anchored at the menu origin, and every widget still reachable. */
     if (!write_clamps(width, height)) {
         log_error("the menu cursor clamp could not be widened, nothing has been changed and the "
@@ -392,7 +392,7 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
         return;
     }
 
-    /* The canvas, not the display mode, and that is the whole of this feature.
+    /* The canvas, not the display mode. That is the entire feature.
      *
      * The engine clamps the drawn menu cursor to `g_menuOriginX + immediate`, so the immediate is a
      * canvas extent and the clamp is already anchored where the menus are. The canvas is also
@@ -406,7 +406,7 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
      * Deriving the clamp from the canvas also removes every reason this was fragile. Nothing here
      * needs the display mode, so there is no accessor to resolve, nothing to re-read when the mode
      * changes, and no waiting on graphics startup. At MenuScale=1 the immediates come out 607 and
-     * 447, which is what the engine shipped, so this is then a no-op that writes the same numbers. */
+     * 447, the numbers the engine shipped, so this is then a no-op that writes the same ones. */
     if (canvas_width  < MENU_SCALE_CANVAS_WIDTH)  { canvas_width  = MENU_SCALE_CANVAS_WIDTH;  }
     if (canvas_height < MENU_SCALE_CANVAS_HEIGHT) { canvas_height = MENU_SCALE_CANVAS_HEIGHT; }
 

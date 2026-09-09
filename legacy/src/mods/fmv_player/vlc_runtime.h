@@ -28,7 +28,8 @@ typedef void (__cdecl *libvlc_release_fn)(libvlc_instance_t *instance);
 typedef libvlc_media_t *(__cdecl *libvlc_media_new_path_fn)(libvlc_instance_t *instance,
                                                             const char *path);
 typedef void (__cdecl *libvlc_media_release_fn)(libvlc_media_t *media);
-typedef libvlc_media_player_t *(__cdecl *libvlc_media_player_new_from_media_fn)(libvlc_media_t *media);
+typedef libvlc_media_player_t *(__cdecl *libvlc_media_player_new_from_media_fn)(
+    libvlc_media_t *media);
 typedef void (__cdecl *libvlc_media_player_release_fn)(libvlc_media_player_t *player);
 typedef void (__cdecl *libvlc_media_player_set_hwnd_fn)(libvlc_media_player_t *player,
                                                          void *drawable);

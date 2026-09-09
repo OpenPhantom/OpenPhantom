@@ -2,9 +2,9 @@
  * evidence for each.
  *
  * The seam: this file answers where the code is and nothing in it decides what to do with the
- * code. It is all pattern bytes and disassembly, which is what made it the natural half to lift
- * out of a file that had grown to more than twice what this project allows. The offsets and cells
- * the rest of the feature needs are in menu_scale_sites.h.
+ * code. It is all pattern bytes and disassembly, the natural half to lift out of a file that had
+ * grown to more than twice what this project allows. The offsets and cells the rest of the
+ * feature needs are in menu_scale_sites.h.
  *
  * ==============================================================================================
  * The sites, and how they are found
@@ -40,8 +40,8 @@
  *   +0x33  A3 5C FD 6C 00      mov  [g_menuOriginY],eax
  *   +0x38  D9 05 90 88 4A 00   fld  [640.0f]      <- operand at +0x3A, the g_menuScale numerator
  *
- * The three constants are shared cells the rest of the engine also reads, which is exactly why the
- * OPERANDS are repointed and the cells are left alone. Writing 640*N into 0x004A8890 would move
+ * The three constants are shared cells the rest of the engine also reads, so the OPERANDS are
+ * repointed and the cells are left alone. Writing 640*N into 0x004A8890 would move
  * every other reader of 640.0f in the image.
  *
  * swmenu_open, retail 0x0045D9F5. Detoured on an 8 byte prologue, which is three whole
@@ -96,6 +96,8 @@ static const uint8_t MSK_MENU_ORIGIN[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_MENU_ORIGIN == sizeof MSK_MENU_ORIGIN,
+               "the menu origin pattern and its mask are different lengths");
 
 /* ---------------------------------------------------------------------------------------------
  * swlistbx_draw, for the two insets it holds its rows in by
@@ -155,6 +157,8 @@ static const uint8_t MSK_DRAW_MENU[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_DRAW_MENU == sizeof MSK_DRAW_MENU,
+               "the drawn menu pattern and its mask are different lengths");
 
 /* ---------------------------------------------------------------------------------------------
  * sw3d_rectToViewOffset, retail 0x0045C3D8, matched from 0x0045C3DE.
@@ -165,9 +169,9 @@ static const uint8_t MSK_DRAW_MENU[] = {
  *     x =  f * ((rect.x + rect.width / 2)      - 320.0f)
  *     z = -f * ((rect.y + rect.height - 5.0f)  - 240.0f)
  *
- * 554.256 is 320 / tan(30 deg), the same lens as the game camera, and that is what makes the
- * shipped arithmetic come out at exactly one world unit per canvas pixel. 320 and 240 are the
- * authored canvas centre.
+ * 554.256 is 320 / tan(30 deg), the same lens as the game camera, and it brings the shipped
+ * arithmetic out at exactly one world unit per canvas pixel. 320 and 240 are the authored
+ * canvas centre.
  *
  * Working the projection through: a canvas pixel px lands at
  *
@@ -186,12 +190,12 @@ static const uint8_t MSK_DRAW_MENU[] = {
  * the live camera on every menu frame instead, which also means it follows the FOV slider while
  * the options screen is open.
  *
- * THIS TAKES AN OPERAND variable_fov ALSO WANTS. That mod repoints the same fdiv for the same
+ * This takes an operand variable_fov ALSO wants. That mod repoints the same fdiv for the same
  * reason, from the other side: it knows the focal and assumes the canvas is 640 wide. This file
  * loads first, so this repoint wins, and variable_fov then reports `menu_3d_focal NOT RESOLVED,
  * this patch is DISABLED` because the bytes it scans for are the ones this changed. That warning is
  * expected and is not a fault: the two are doing the same job and only one of them can know both
- * halves of the answer, which is this one, because it reads the focal live.
+ * halves of the answer, and this is the one that does, because it reads the focal live.
  *
  * The 5.0f is the inset that stands a model up off the bottom edge of its box, so it scales with
  * the box. The 2.0f is a halving and stays 2.0f.
@@ -229,14 +233,14 @@ static const uint8_t SIG_SW3D_PROJECT[] = {
  * Scaling the answer here rather than patching swtext_draw fixes the left and right aligned cases
  * too, which place their baseline at `rect.y + lineH` and were high by the same reasoning.
  *
- * IT IS GATED ON A MENU BEING OPEN, and that gate was not there at first, which was a bug.
+ * It is GATED on a menu being open. That gate was not there at first, and its absence was a bug.
  *
  * The reasoning for leaving it out was that swtext_draw and the list box's SWMSG_RESET are the only
  * callers in the image. That came from grepping the decompilation, and the decompilation says of
  * itself, in game/dialog.c, that text_emitRow is "the part that was not reconstructed", the very
  * function that places a row of subtitle text. In game subtitles came out mis-positioned and the
  * cause was invisible to a search of the source, because the calling code is not in the source.
- * They came right the moment the converted artwork was removed, which is what proved it was ours.
+ * They came right the moment the converted artwork was removed, and that proved it was ours.
  *
  * So the answer is only scaled when a menu is actually open. Subtitles, the HUD and anything else
  * the game draws during play get the raw field the engine has always had. The list box case is
@@ -263,11 +267,12 @@ static const uint8_t SIG_QUERY_FONT[] = {
  * has to be 16 times the ratio, and both immediates move together: the comparison and the value.
  *
  * WHY NOT CORRECT THIS AFTERWARDS. An earlier version of this file multiplied the row height after
- * the reset had run, which produced the right spacing but left the engine's own snap, `rect.height =
- * numLines * lineHeight + 6`, computed from the SMALLER height. Reset runs on every open, so the box
- * lost a row every time it was opened. Moving the floor instead means the engine derives the row
- * height, the row count and the box height from one consistent number, which is stable across opens
- * and, unlike a correction of ours, is also what the row hit test reads.
+ * the reset had run, which produced the right spacing but left the engine's own snap,
+ * `rect.height = numLines * lineHeight + 6`, computed from the SMALLER height. Reset runs on
+ * every open, so the box lost a row every time it was opened. Moving the floor instead means the
+ * engine derives the row height, the row count and the box height from one consistent number,
+ * which is stable across opens and, unlike a correction of ours, is also what the row hit test
+ * reads.
  */
 static const uint8_t SIG_LISTBOX_FLOOR[] = {
     0xE8, 0x00, 0x00, 0x00, 0x00,              /* call font3d_queryFont, displacement masked   */
@@ -354,7 +359,7 @@ _Static_assert(sizeof SIG_SET_WIDGET_IMAGE == sizeof MSK_SET_WIDGET_IMAGE,
  * Unlike every other menu picture, this one can simply be made BIGGER. It does not go through
  * swrle_blit, the run length blitter with no scale term that made converting the artwork necessary
  * in the first place; it goes through texture_drawSprite, which takes the destination extents as
- * arguments. So the two `+ 0x20` immediates are the whole of it.
+ * arguments. So the two `+ 0x20` immediates are all of it.
  *
  * ONE RATIO, NOT TWO. Scaling width and height separately would stretch the pointer on a display
  * that is not 4:3, and a stretched arrow reads as a rendering fault rather than as a design. The
@@ -403,17 +408,17 @@ _Static_assert(sizeof SIG_DRAW_CURSOR == sizeof MSK_DRAW_CURSOR,
  *     pos[0] = pos[1] = pos[2] = g_menuScale;
  *     rdMatrix_scale(mat, pos);
  *
- * A model's size on screen is its world size times focalPx over depth, exactly like anything else in
- * the world, so a wider field of view makes it smaller. That is not a fault in the placement: the
- * hero really is a 3-D object sitting at a fixed distance, and a wider lens really does shrink it.
- * It is still wrong for a menu, where the hero should be the same size whatever lens the reader
- * prefers for the game.
+ * A model's size on screen is its world size times focalPx over depth, exactly like anything else
+ * in the world, so a wider field of view makes it smaller. That is not a fault in the placement:
+ * the hero really is a 3-D object sitting at a fixed distance, and a wider lens really does shrink
+ * it. It is still wrong for a menu, where the hero should be the same size whatever lens the
+ * reader prefers for the game.
  *
- * Dividing the matrix scale by the lens cancels it, and the reference lens is the one the game would
- * have at its AUTHORED vertical field of view for this canvas: 554.256 is that focal at 640x480, and
- * it scales with the canvas the same way everything else here does. So at the default field of view
- * the model is exactly the size it is today, and at any other it stays that size instead of
- * following the lens.
+ * Dividing the matrix scale by the lens cancels it, and the reference lens is the one the game
+ * would have at its AUTHORED vertical field of view for this canvas: 554.256 is that focal at
+ * 640x480, and it scales with the canvas the same way everything else here does. So at the
+ * default field of view the model is exactly the size it is today, and at any other it stays
+ * that size instead of following the lens.
  *
  * Three reads of the same global, one per axis, all repointed at one cell.
  */
@@ -431,6 +436,8 @@ static const uint8_t MSK_SW3D_DRAW[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_SW3D_DRAW == sizeof MSK_SW3D_DRAW,
+               "the 3-D widget draw pattern and its mask are different lengths");
 
 /* ---------------------------------------------------------------------------------------------
  * swmenu_freeBitmaps, retail 0x0045DF05. Called, never patched.
@@ -443,8 +450,8 @@ static const uint8_t MSK_SW3D_DRAW[] = {
  *   7D 4D                       jge out
  *   ... res_markUnused(res,1); res_Free(res); pMenu->apBmpRes[i] = 0
  *
- * The whole body is those three lines, so it drops a screen's bitmap cache and nothing else. What
- * makes it safe to call on a screen that is currently open is that the engine does exactly that
+ * The whole body is those three lines, so it drops a screen's bitmap cache and does nothing more.
+ * It is safe to call on a screen that is currently open because the engine does exactly that
  * itself: modal_window_stack_push calls it on the outgoing screen when one screen is pushed over
  * another, and the screen underneath goes on being drawn. A picture whose slot is zero is reloaded
  * by name on the next draw, which is where the load hook resamples it to the new canvas.

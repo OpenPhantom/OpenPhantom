@@ -23,7 +23,7 @@ const vlc_api_t *vlc_runtime_api(void)
 /* ============================================================================================ */
 /* Resolves one export and says which one was missing rather than only that something was. A
  * missing name here means the libVLC on this machine is not the API this file was written
- * against, and that is worth naming in the log by the name that was not there. */
+ * against, so the log names the export that was not there. */
 static void *resolve(const char *name)
 {
     void *address = (void *)GetProcAddress(vlc_api.module, name);
@@ -43,7 +43,8 @@ static bool resolve_exports(void)
     vlc_api.player_new_from_media =
         (libvlc_media_player_new_from_media_fn)resolve("libvlc_media_player_new_from_media");
     vlc_api.player_release = (libvlc_media_player_release_fn)resolve("libvlc_media_player_release");
-    vlc_api.player_set_hwnd = (libvlc_media_player_set_hwnd_fn)resolve("libvlc_media_player_set_hwnd");
+    vlc_api.player_set_hwnd =
+        (libvlc_media_player_set_hwnd_fn)resolve("libvlc_media_player_set_hwnd");
     vlc_api.player_play = (libvlc_media_player_play_fn)resolve("libvlc_media_player_play");
     vlc_api.player_stop = (libvlc_media_player_stop_fn)resolve("libvlc_media_player_stop");
     vlc_api.player_is_playing =

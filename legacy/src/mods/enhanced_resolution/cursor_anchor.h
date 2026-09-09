@@ -18,8 +18,8 @@
  * file sits next to window_fit.c.
  *
  * What it is not: this is not the confinement. The engine's own confinement is "warp the pointer
- * back to the middle of the client area on every mouse message"; this file repairs the coordinate
- * space that warp works in and nothing else. It calls neither ClipCursor nor SetCapture, so it
+ * back to the middle of the client area on every mouse message"; this file repairs only the
+ * coordinate space that warp works in. It calls neither ClipCursor nor SetCapture, so it
  * holds no state that could survive an Alt-Tab or a crash and has nothing to release on exit, and
  * it refuses to warp at all while the foreground window belongs to another process.
  *

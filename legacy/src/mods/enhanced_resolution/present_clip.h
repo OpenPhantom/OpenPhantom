@@ -51,8 +51,8 @@
 #include <stdbool.h>
 
 typedef struct present_clip_config {
-    /* WindowedFill. Off leaves the wrapper's own arithmetic alone, which is what every release
-     * before this one did, and is the way to see the uncorrected behaviour for comparison. */
+    /* WindowedFill. Off leaves the wrapper's own arithmetic alone, as every release before this
+     * one did, and is the way to see the uncorrected behaviour for comparison. */
     bool enabled;
 
     /* Only so the "not installed" line can say WHICH of the two reasons it was. */

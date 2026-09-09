@@ -5,7 +5,7 @@
  *
  * res_addSource, retail 0x004719E0. Matched on its prologue, which is unmistakable: it takes the
  * string's length with a REPNE SCASB and then tests the LAST character against 0x5C. That one
- * character is the whole of its behaviour, and it is the reason the path this passes must end in a
+ * character is its entire behaviour, and it is the reason the path this passes must end in a
  * backslash: with one it mounts a DIRECTORY, without one it tries to open the path as an archive.
  * There is no extension test and no probing of the file's contents.
  *

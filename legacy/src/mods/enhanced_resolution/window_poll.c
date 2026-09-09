@@ -46,14 +46,15 @@ bool window_poll_shape_is_live(int32_t mode)
 /* The chosen size is also the render size, from the next start.
  *
  * Borderless fullscreen is always the monitor, and a windowed mode is always the size chosen from
- * the panel's list. Both are DELIBERATE sizes, which is what makes this safe where following a drag
- * was not: a drag lands on wherever the mouse was let go, and 2452x1401 is not a display mode.
+ * the panel's list. Both are DELIBERATE sizes, so this is safe where following a drag was not:
+ * a drag lands on wherever the mouse was let go, and 2452x1401 is not a display mode.
  *
  * A drag is left alone entirely, and that includes leaving the chosen size alone. The window
  * changes, the picture stretches to fill it, and the resolution stays where the last deliberate
- * choice put it. A drag used to overwrite the chosen size, which made sense while that setting meant
- * "how big the window is"; once it became "the resolution you picked" the same write silently
- * replaced a choice with a mouse gesture, and this file then had no idea anything had changed.
+ * choice put it. A drag used to overwrite the chosen size, which made sense while that setting
+ * meant "how big the window is"; once it became "the resolution you picked" the same write
+ * silently replaced a choice with a mouse gesture, and this file then had no idea anything had
+ * changed.
  *
  * Refused rather than approximated when the size is not one this machine reports. Nothing here can
  * make the engine open a mode at startup that no display offers, and writing one anyway is how a
@@ -83,7 +84,7 @@ static void align_render_size(int32_t mode, int32_t wanted_width, int32_t wanted
          * list can help with that. */
         if (width < wanted_width || height < wanted_height) {
             log_info("%dx%d does not fit on this monitor once the window's border and caption are "
-                     "added, so the window is %dx%d instead, and that is not a mode this machine "
+                     "added, so the window is %dx%d instead, not a mode this machine "
                      "reports. The game's own resolution is left where it is and the picture is "
                      "scaled into the window. A borderless window mode has no frame and can show "
                      "the whole screen at its own size.",
@@ -176,7 +177,7 @@ static void poll_window_settings(void)
 
     /* Watched but never applied. The device is built once, so this cannot change what is running;
      * what it can do is have the wrapper's file already saying the right thing by the time the
-     * player restarts, which is what the panel's row tells them to do. */
+     * player restarts, as the panel's row tells them to do. */
     {
         bool present_now = ini_read_bool(RESOLUTION_SECTION, "WindowedPresent", false);
 

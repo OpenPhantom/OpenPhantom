@@ -30,24 +30,24 @@ patterns do not resolve and the feature disables itself with a log line.
 ### The slider is now an absolute angle
 
 It used to select an **offset** on top of whatever the aspect mode computed, so notch 0 was "the
-unmodified view". That reads well at 4:3, where the authored horizontal really is 60 degrees, and badly
-anywhere else: on a 16:9 frame the Hor+ correction already puts the horizontal near 75 degrees, and an
-offset that can only add cannot come back down. There was no way to ask for 60.
+unmodified view". That reads well at 4:3, where the authored horizontal really is 60 degrees, and
+badly anywhere else: on a 16:9 frame the Hor+ correction already puts the horizontal near 75
+degrees, and an offset that can only add cannot come back down. There was no way to ask for 60.
 
-Now notch *n* means an absolute `SliderMinFovDegrees + n times 2` degrees, the number on the slider is
-the number in the caption. The offset is still what is stored and applied; it is simply computed
-from the angle picked, so the same notch is the same **angle** at every resolution and the offset
-behind it differs.
+Now notch *n* means an absolute `SliderMinFovDegrees + n times 2` degrees, so the number on the
+slider is the number in the caption. The offset is still what is stored and applied; it is simply
+computed from the angle picked, so the same notch is the same **angle** at every resolution and the
+offset behind it differs.
 
-Two consequences worth naming. `ExtraDegrees` **can now be negative**, and it has to be for this to
-work at all. And choosing less than the aspect mode's own answer costs vertical view: at 16:9 an
-absolute 60 degrees horizontal gives about 36 degrees vertical against the authored 46.8 degrees, i.e. narrower than the
-original game. That is a legitimate choice and it is not the default, the default range simply
-starts there.
+Two consequences follow. `ExtraDegrees` **can now be negative**, and it has to be for this to work
+at all. And choosing less than the aspect mode's own answer costs vertical view: at 16:9 an
+absolute 60 degrees horizontal gives about 36 degrees vertical against the authored 46.8 degrees,
+i.e. narrower than the original game. That is a legitimate choice, and it is not the default; the
+default range simply starts there.
 
 `SliderMaxDegrees` is **no longer read**. It was renamed rather than reinterpreted: a tuned `40`
-read as an absolute angle would have meant 40 degrees of view. A file still carrying it is told once in
-the log.
+read as an absolute angle would have meant 40 degrees of view. A file still carrying it is told
+once in the log.
 
 ## Engine locations
 
@@ -134,7 +134,7 @@ audio screen's panel art sits on the **right**, where this screen already has it
 ## Fallback behaviour
 
 If the per-frame hook cannot be installed, live preview is unavailable and the log says so. The
-slider's final value is still read, applied and saved when the screen closes, the same apply path
+slider's final value is still read, applied and saved when the screen closes; the same apply path
 is used for both.
 
 If the camera hook fails, the slider is **not** added at all: a slider that drives nothing is
@@ -142,16 +142,16 @@ worse than no slider.
 
 If the screen's bitmap-name table cannot be read or an index would fall past its end, the slider is
 **not** added either. The engine's own bitmap lookup checks only that an index is not negative, so
-an index one past that table is an unchecked read that ends in a file loader, refusing is the only
+an index one past that table is an unchecked read that ends in a file loader; refusing is the only
 honest answer.
 
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. `unittests/fov_math.c`, 43 checks, all passing, including two
-cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000 degrees,
-and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded 3-D menu constant.
-Offline verification of every pattern passes on both retail builds. **Accepted in game**, at
-3840x2160 with a non zero `ExtraDegrees`, which is the configuration it is played in.
+cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000
+degrees, and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded
+3-D menu constant. Offline verification of every pattern passes on both retail builds. **Accepted
+in game**, at 3840x2160 with a non zero `ExtraDegrees`, the configuration it is played in.
 
 To check in game: open Options -> Video, confirm the slider is under the check boxes, that dragging
 it changes the view live, that the caption names both angles, and that leaving the screen writes

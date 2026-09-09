@@ -46,7 +46,7 @@ static detour_t menu_open_detour;
 /* AFTER the original, and that one word is the correction. The first version read the widget's own
  * picture field before the draw, found it null on 4805 widgets across eight screens, and reported
  * that almost nothing in a menu is a picture. The engine's own code says otherwise: when that field
- * is null swpic_draw LOOKS THE PICTURE UP, and then writes its size into the widget's rectangle
+ * is null swpic_draw LOOKS the picture up, and then writes its size into the widget's rectangle
  * before blitting it. So the field is empty for most widgets and the picture is real, and reading
  * before the draw measured the one moment at which that is not visible.
  *
@@ -99,8 +99,8 @@ bool menu_art_census_install(void)
 
     census.armed = true;
     log_info("LogMenuArt=1: every distinct menu picture will be reported once, with the blit path "
-             "it takes, and a summary follows the eighth screen. This counts what PICTURE WIDGETS "
-             "draw and nothing else, so a screen whose reported shapes do not add up to what is on "
+             "it takes, and a summary follows the eighth screen. This counts only what PICTURE "
+             "WIDGETS draw, so a screen whose reported shapes do not add up to what is on "
              "it is itself the finding. A diagnostic, so it ships off.");
     return true;
 }
@@ -242,14 +242,14 @@ static void report(void)
              "surface.",
              (unsigned)raw, (unsigned)compressed,
              (unsigned)census.widgets_without_a_picture, (unsigned)census.not_a_surface);
-    log_info("  textured sprites drawn: %u, the largest %dx%d. Those are quads with float edges, so "
-             "that path scales whatever it is handed and needs no bigger source to fill a bigger "
-             "canvas. A large number here against the handful of widget pictures above means the "
-             "menu's furniture is drawn as quads, and the artwork is converted on disk for "
-             "sharpness rather than for geometry.",
+    log_info("  textured sprites drawn: %u, the largest %dx%d. Those are quads with float edges, "
+             "so that path scales whatever it is handed and needs no bigger source to fill a "
+             "bigger canvas. A large number here against the handful of widget pictures above "
+             "means the menu's furniture is drawn as quads, and the artwork is converted on disk "
+             "for sharpness rather than for geometry.",
              (unsigned)census.sprites, (int)census.sprite_widest, (int)census.sprite_tallest);
     if (census.overflowed != 0u) {
-        log_warning("  and %u further shapes did not fit the table, so this list is not the whole "
-                    "of what was drawn", (unsigned)census.overflowed);
+        log_warning("  and %u further shapes did not fit the table, so this list is not all of "
+                    "what was drawn", (unsigned)census.overflowed);
     }
 }

@@ -5,8 +5,8 @@
  *
  * Finishing the game appears to MINIMISE it. The ending cutscene and the credits keep running, and
  * clicking back into the process finds the game as a small 640x480 window in the corner of the
- * screen. Every other menu holds the resolution correctly, which is what makes this one look like
- * a bug in the credits.
+ * screen. Every other menu holds the resolution correctly, so this one looks like a bug in the
+ * credits.
  *
  * ==============================================================================================
  * What it actually is, and it is not the credits

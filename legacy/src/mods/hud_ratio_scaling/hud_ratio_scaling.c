@@ -109,7 +109,7 @@ _Static_assert(sizeof(SIG_DRAW_HUD) == sizeof(MSK_DRAW_HUD),
 #define DRAW_HUD_PROLOGUE 9u
 
 /* --- 0x0042963B  texture_drawSprite(texture, xL, xR, yT, yB, colour, fill) -------------------- *
- *   55 8B EC 81 EC 94 00 00 00     prologue, 9 bytes, which is what a detour overwrites
+ *   55 8B EC 81 EC 94 00 00 00     prologue, 9 bytes, the span a detour overwrites
  *   8B 45 08 / 50 / E8 <rel32>     the texture argument goes straight into a lookup
  *   83 C4 04 / 89 45 F8            the page it returned
  *   D9 45 20 / D8 1D <abs32>       fill compared against 1.0
@@ -121,14 +121,14 @@ _Static_assert(sizeof(SIG_DRAW_HUD) == sizeof(MSK_DRAW_HUD),
  * fraction of the sprite that is drawn. The blitter CROPS to that fraction rather than squashing
  * to it, so resizing the rectangle does not change what is drawn inside it.
  *
- * THE PATTERN REACHES WELL PAST THE PROLOGUE, AND THAT IS THE POINT. Another DLL in this tree
- * wants the same function, and whichever installs first replaces those nine bytes with a branch.
- * The second one then has to find the site by the bytes AFTER the prologue, which is what
- * SIGNATURE_ENTRY_DETOUR falls back to. A short tail cannot carry that: `8B 45 08 50 E8` alone
- * occurs 275 times in the image, and it only separated because exactly one of those had the
- * authored prologue in front of it. Once other DLLs have detoured other functions, their branches
- * make further candidates acceptable, the tail stops being unique and the fallback refuses. This
- * tail is unique on its own in all six shipped images, so the load order stops mattering. */
+ * The pattern reaches well past the prologue on PURPOSE. Another DLL in this tree wants the same
+ * function, and whichever installs first replaces those nine bytes with a branch. The second one
+ * then has to find the site by the bytes AFTER the prologue, the tail SIGNATURE_ENTRY_DETOUR
+ * falls back to. A short tail cannot carry that: `8B 45 08 50 E8` alone occurs 275 times in the
+ * image, and it only separated because exactly one of those had the authored prologue in front
+ * of it. Once other DLLs have detoured other functions, their branches make further candidates
+ * acceptable, the tail stops being unique and the fallback refuses. This tail is unique on its
+ * own in all six shipped images, so the load order stops mattering. */
 static const uint8_t SIG_DRAW_SPRITE[] = {
     0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x94, 0x00, 0x00, 0x00,   /* the overwritten prologue     */
     0x8B, 0x45, 0x08, 0x50, 0xE8, 0x00, 0x00, 0x00, 0x00,   /* call, operand wildcarded     */
@@ -537,8 +537,8 @@ static int32_t __cdecl hook_set_mode(int32_t raw_mode_index)
 
     /* The engine also returns success for a request that names the mode already in use, and then
      * nothing has changed. Comparing the size we can now read against the one this hook last
-     * acted on is what keeps it from announcing a change that never happened, and it is what
-     * makes the hook idempotent when a caller retries, which the resolution path does. */
+     * acted on is what keeps it from announcing a change that never happened, and it keeps the
+     * hook idempotent when a caller retries, which the resolution path does. */
     if (width == hud_state.last_mode_width && height == hud_state.last_mode_height) {
         return result;
     }

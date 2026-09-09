@@ -135,7 +135,8 @@ typedef struct variable_fov_state {
     variable_fov_config_t config;
     detour_t         build_projection_detour;
 
-    /* Our own cell for the front-end menu focal. It replaces [0x4A8888] for that ONE instruction. */
+    /* Our own cell for the front-end menu focal. It replaces [0x4A8888] for that ONE
+     * instruction. */
     volatile float   menu_focal_cell;
 
     /* The camera BuildProjection was last called on. rdCamera_BuildProjection is NOT a per-frame
@@ -176,8 +177,9 @@ static void load_config(void)
     fov_state.config.base_vertical_degrees =
         fov_clamp_float(ini_read_float(FOV_SECTION, "BaseVerticalDegrees", 46.826f), 30.0f, 60.0f);
     fov_state.config.extra_degrees =
-        /* NEGATIVE IS ALLOWED, and it has to be: on any frame wider than 4:3 the aspect correction
-         * already puts the horizontal well above 60, so selecting 60 means subtracting. */
+        /* A NEGATIVE value is allowed, and it has to be: on any frame wider than 4:3 the aspect
+         * correction already puts the horizontal well above 60, so selecting 60 means
+         * subtracting. */
         fov_clamp_float(ini_read_float(FOV_SECTION, "ExtraDegrees", 0.0f), -120.0f, 120.0f);
 
     fov_state.config.menu_slider = ini_read_bool(FOV_SECTION, "MenuSlider", false);
@@ -322,7 +324,7 @@ static uint32_t __cdecl hook_build_projection(int32_t *camera)
 }
 
 /* Re-derives the projection from the CURRENT configuration without waiting for a canvas event.
- * This is what makes the slider mean anything: rdCamera_BuildProjection is a pure recompute,
+ * The slider changes nothing until this runs. rdCamera_BuildProjection is a pure recompute:
  * it reads pCanvas, projType and fovDeg and writes focal plus the frustum record, with no
  * allocation and no global (byte-read at 0x475FFA..0x4760F9), so calling it again is exactly
  * what the engine's own five setters do. */
@@ -410,8 +412,8 @@ void variable_fov_set_extra_degrees(float degrees)
  * offset this DLL stores, and it cannot work the base out: it depends on the canvas, the aspect
  * mode and the engine's own projection, none of which exist in that DLL.
  *
- * THE BASE IS PUBLISHED, NOT THE PICTURE'S CURRENT WIDTH, and the difference is the whole reason
- * this works. The base moves only when the canvas or the aspect mode changes. The width moves
+ * What is published is the BASE, not the picture's current width, and the two behave very
+ * differently. The base moves only when the canvas or the aspect mode changes. The width moves
  * every time ExtraDegrees does, which is every frame of a slider being dragged, so a reader
  * computing "base = width - offset" from a width written even a moment ago would pair a stale
  * width with a current offset and get a base that drifts. Each drag step would then be measured
@@ -445,7 +447,8 @@ static void poll_extra_degrees(void)
     publish_base_fov();
 
     if (generation == seen_generation) {
-        return;                                /* the file has not been written since the last look */
+        /* the file has not been written since the last look */
+        return;
     }
     seen_generation = generation;
 
@@ -542,7 +545,7 @@ void variable_fov_install(void)
 
     /* AFTER the menu, because the menu's own hook is the one that has to exist for the slider to
      * preview live and this one only makes an ini edit arrive sooner. Losing it costs a restart,
-     * which is what the setting did before, so it warns rather than refusing anything. */
+     * as the setting did before, so it warns rather than refusing anything. */
     if (!frame_hook_add(poll_extra_degrees)) {
         log_warning("no per-frame hook, so ExtraDegrees is read once at startup and an edit made "
                     "while the game runs waits for the next launch");

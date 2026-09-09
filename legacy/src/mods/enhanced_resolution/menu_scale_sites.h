@@ -80,8 +80,8 @@
 #define WIDGET_LISTBOX_TYPE 5
 
 /* SWMSG_RESET. swmenu_reset sends it to every widget when a screen is opened, and a list box's arm
- * is what derives its row height, its row count and its own height from the font. Sending it again
- * is what makes those three follow a canvas that has changed under an open screen. It carries no
+ * derives its row height, its row count and its own height from the font. Sending it again makes
+ * those three follow a canvas that has changed under an open screen. It carries no
  * allocation and leaves the selected row alone, so a second one is not a second open. */
 #define SWMSG_RESET 0
 
@@ -119,7 +119,8 @@
 #define ENGINE_MENU_BASE_TEXT_CELL  0x004B683CU
 
 /* The display the engine settled on, as floats, and the menu origin it derived from them. Read to
- * check the canvas still fits, and the origin is WRITTEN when it does not. See menu_scale_stand_down.
+ * check the canvas still fits, and the origin is WRITTEN when it does not. See
+ * menu_scale_stand_down.
  */
 #define ENGINE_SCREEN_WIDTH_CELL  0x0086A440U
 #define ENGINE_SCREEN_HEIGHT_CELL 0x0086A438U
@@ -181,7 +182,7 @@ extern signature_t menu_scale_sites[SITE_COUNT];
 
 /* The origin block is matched by COUNT rather than by uniqueness, so the pattern and its mask stay
  * beside the disassembly that explains them and the caller asks for the addresses instead. The
- * return value is the true number of matches, which is what the install decides on. */
+ * return value is the true number of matches, and the install decides on it. */
 size_t menu_scale_find_origin_sites(uintptr_t *addresses, size_t max_addresses);
 
 #endif /* MENU_SCALE_SITES_H */

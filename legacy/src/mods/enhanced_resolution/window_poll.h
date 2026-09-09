@@ -44,7 +44,7 @@ void window_poll_note_mode(int32_t mode);
  * and reshaping the window under it makes the engine set the real display resolution instead;
  * and it cannot for the engine's own shape, because that shape goes with an exclusive device and
  * the device is built once. Both cases are what the panel's fullscreen row means when it says it
- * takes effect on a restart, and this is what makes that true rather than merely written. */
+ * takes effect on a restart, and this call keeps that promise true rather than merely written. */
 bool window_poll_shape_is_live(int32_t mode);
 
 #endif /* WINDOW_POLL_H */

@@ -28,13 +28,13 @@
  * to, so nothing walks off screen, is the knob for that.
  *
  * The unit is a multiplier on what the engine already computed, never a re-derivation from the
- * authored 640x480 constants. That is what makes the identity exact: the engine's own fixed-pixel
- * terms (the left edge at 1, the bottom at H-1, the 1-pixel gap between bar and icon) are carried
+ * authored 640x480 constants. The identity is then exact: the engine's own fixed-pixel terms
+ * (the left edge at 1, the bottom at H-1, the 1-pixel gap between bar and icon) are carried
  * through untouched whenever the multiplier is 1.
  *
  * A rectangle is only ever changed when it matches one of the four formulas above. Anything else
- * passes through untouched, and that is not only about the engine: the sprite blitter draws far
- * more than the HUD, and another DLL that chains onto the HUD-draw function can push its own
+ * passes through untouched. The engine is not the only source: the sprite blitter draws far more
+ * than the HUD, and another DLL that chains onto the HUD-draw function can push its own
  * rectangles through the same gate.
  */
 #ifndef HUD_LAYOUT_H
@@ -96,8 +96,8 @@ void hud_transform_point(float *x, float *y, hud_block_t block,
                          float scale, bool square);
 
 /* The glyph scale for text drawn INSIDE the HUD. The renderer multiplies the caller's pair by
- * (W/640, H/480), so this pair is what makes the digits grow by exactly the factor the bars grow
- * by instead of by the width ratio. Identity at scale 1.0 with squaring off. */
+ * (W/640, H/480), so this pair grows the digits by exactly the factor the bars grow by instead
+ * of by the width ratio. Identity at scale 1.0 with squaring off. */
 void hud_glyph_scale(float *horizontal, float *vertical,
                      float screen_width, float screen_height,
                      float scale, bool square);

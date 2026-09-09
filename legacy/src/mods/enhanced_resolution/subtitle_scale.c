@@ -70,7 +70,7 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 /* --- the line wrap, compared twice against 580.0 at 0x004A83E8 ------------------------------- *
  *   D8 1D E8 83 4A 00     fcomp dword [580.0]     once before the loop and once inside it
  *
- * THIS HAS TO MOVE WITH THE BOX, and finding out why cost a screenshot. font3d_measureChar hands
+ * This has to move with the BOX, and finding out why cost a screenshot. font3d_measureChar hands
  * the glyph scale to the measurement, so the width it answers follows that scale; the wrap limit
  * is a bare constant and does not. Growing the box therefore made every character measure larger
  * against an unchanged limit, and lines broke after two or three words inside a box four times
@@ -86,7 +86,7 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 /* --- the two offset clamps, at 0x00431793 and 0x004317B6 -------------------------------------- *
  *   7D 0A                 jge over `mov [offset], 0`
  *
- * BOTH HAVE TO GO, and this is the wall that made a scale above the fit produce an empty box.
+ * BOTH have to go; this is the wall that made a scale above the fit produce an empty box.
  * The engine floors each centring offset at zero, which is right for a box that is always at
  * most the size of the screen. Ours can be larger: the moment the box is taller than the
  * display, its top belongs ABOVE the top edge, and a floor of zero pins it there instead and
@@ -120,7 +120,7 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
  *     x' = W/2 + k*(x - W/2)      scaled about the horizontal CENTRE
  *     y' = H   + k*(y - H)        scaled about the BOTTOM edge
  *
- * which is exactly where the text is anchored, and is the identity at k = 1. */
+ * The bottom edge is where the text is anchored, and the transform is the identity at k = 1. */
 static const uint8_t SIG_DRAW_BAR[] = {
     0x55, 0x8B, 0xEC, 0x81, 0xEC, 0xB0, 0x00, 0x00, 0x00, 0x57, 0x68, 0x00,
     0x00, 0x00, 0x3F, 0x8B, 0x45, 0x18, 0x50, 0xE8
@@ -147,7 +147,7 @@ typedef void(__cdecl *draw_bar_fn_t)(float x0, float y0, float x1, float y1, uin
  * So three divisors and two getters all read one pair of values, and that pair is the only thing
  * that has to be right.
  *
- * K IS FITTED BY HEIGHT, k = H/480, and that is what makes a 4:3 box behave on a 16:9 screen. By
+ * k is fitted BY HEIGHT, k = H/480, and only that fit makes a 4:3 box behave on a 16:9 screen. By
  * width it would be W/640, which at 16:9 makes the box taller than the screen and pushes the
  * baseline off the bottom. By height the box comes out 1.333*H wide, narrower than the screen, so
  * it pillarboxes exactly as the layout expects.
@@ -290,8 +290,8 @@ static void on_frame(void)
 
     wanted = clamp_scale(ini_read_float(RESOLUTION_SECTION, SUBTITLE_SCALE_KEY, 1.0f));
     if (wanted == SUBTITLE_SCALE_ENGINE) {
-        /* Zero asks for the engine's own box back, and that is the one value this cannot honour
-         * while the game runs: the operands and the two calls would have to be put back, which is
+        /* Zero asks for the engine's own box back, the one value this cannot honour while the
+         * game runs: the operands and the two calls would have to be put back, which is
          * a code write rather than a number. The last good scale stands until the next launch. */
         wanted = state.scale;
     }
@@ -401,7 +401,7 @@ void subtitle_scale_install(void)
     state.scale = clamp_scale(ini_read_float(RESOLUTION_SECTION, SUBTITLE_SCALE_KEY, 1.0f));
     if (state.scale == SUBTITLE_SCALE_ENGINE) {
         log_info("SubtitleScale=0, so the subtitles keep the engine's own behaviour: a 640x480 box "
-                 "of fixed PIXELS centred on the screen, which is why the text shrinks as the "
+                 "of fixed PIXELS centred on the screen, so the text shrinks as the "
                  "display grows");
         return;
     }
@@ -422,7 +422,7 @@ void subtitle_scale_install(void)
     state.bar_site   = bar_site;
     state.resolved   = true;
 
-    /* NOTHING IS WRITTEN until the display is known, on the order the game starts in rather than
+    /* NOTHING is written until the display is known, on the order the game starts in rather than
      * on caution. This runs from the loader, before any mode has been set, so the two size
      * cells are still zero and the numbers every one of the five writes depends on cannot be
      * computed yet. Patching anyway with the authored 640x480 in them would draw the box across

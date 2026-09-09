@@ -38,7 +38,7 @@
  *   00460C41  8B 15 5C FD 6C 00     mov   edx,[g_menuOriginY]          ; 0x006CFD5C
  *   ...       clamp g_menuCursorY to [originY, originY+0x1BF]
  *
- * So a synthetic move only ever ADDS a delta to whatever the cells already held, which is why
+ * A synthetic move therefore only ever ADDS a delta to whatever the cells already held, and
  * warping could not put the drawn cursor anywhere in particular. Writing the cells does, with no
  * message, no prior value and no resolution-dependent arithmetic involved at all. The two origin
  * cells are the same pair the resolution fix's cursor cage documents, which is a cross-check on
@@ -118,8 +118,8 @@ _Static_assert(sizeof(SIG_CURSOR_ACCUMULATOR) == sizeof(MSK_CURSOR_ACCUMULATOR),
 #define OFFSET_ORIGIN_X_LOAD   0x39u
 
 /* `mov edx,[originY]`, measured from the match base. The clamp between it and the match is
- * straight-line code of fixed length in every image measured, which is what makes the distance a
- * constant worth checking rather than a constant worth trusting. */
+ * straight-line code of fixed length in every image measured, so the distance is a constant
+ * worth checking rather than a constant worth trusting. */
 #define OFFSET_ORIGIN_Y_SITE   0x75u
 #define ORIGIN_Y_OPERAND       0x02u
 static const uint8_t ORIGIN_Y_HEAD[] = { 0x8B, 0x15 };

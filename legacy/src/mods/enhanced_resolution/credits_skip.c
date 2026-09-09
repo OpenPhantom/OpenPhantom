@@ -110,7 +110,7 @@ static int32_t __cdecl hook_credits_read_line(int32_t slot, char *out, int32_t *
     }
 
     if (skip_state.skip_requested) {
-        /* An empty line and "not a heading", which is what the real function answers at end of
+        /* An empty line and "not a heading", the answer the real function gives at end of
          * file. The engine blanks its own rows a step later; matching it here keeps the two
          * consistent in the meantime rather than leaving whatever the buffer last held. */
         if (out != NULL) {

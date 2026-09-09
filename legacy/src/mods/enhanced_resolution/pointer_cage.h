@@ -45,9 +45,8 @@ bool pointer_cage_is_active(void);
  *
  * The clamp the engine should carry for a canvas of a given size. The engine's own constants are
  * 640-33 and 480-33: the cursor quad is 32 pixels wide and the clamp leaves one more, so that the
- * cursor is still drawn whole at the far edge. Keeping the same margin at every size is what makes
- * the widened clamp identical to the shipped one at 640x480, which is the reason this may default
- * to on.
+ * cursor is still drawn whole at the far edge. Keeping the same margin at every size makes the
+ * widened clamp identical to the shipped one at 640x480, so this may default to on.
  *
  * Returns false, writing nothing, for a canvas too small to hold a cursor at all, which would be
  * a box the cursor could never be inside. */

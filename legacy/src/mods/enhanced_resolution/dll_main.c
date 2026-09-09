@@ -1,7 +1,7 @@
 /* dll_main.c: entry point of enhanced_resolution.dll.
  *
- * There is one thing to do on the way out: the pointer confinement is a ClipCursor rectangle, and
- * that is process-global state which outlives this DLL if nobody drops it.
+ * There is one thing to do on the way out: the pointer confinement is a ClipCursor rectangle,
+ * process-global state that outlives this DLL if nobody drops it.
  */
 #include "enhanced_resolution.h"
 

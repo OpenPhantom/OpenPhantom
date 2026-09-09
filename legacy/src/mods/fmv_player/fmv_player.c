@@ -43,8 +43,8 @@
  * either, because when it takes over it never runs any of the retail code that would have.
  *
  * The signature is the function's own prologue plus enough of its body to be unique: the bare
- * `push ebp / mov ebp,esp / sub esp,0x90` shape recurs elsewhere in an 830 KB image, which is
- * exactly why the two-stage detour rule exists, and why this signature reaches two branches into
+ * `push ebp / mov ebp,esp / sub esp,0x90` shape recurs elsewhere in an 830 KB image, the reason
+ * the two-stage detour rule exists and the reason this signature reaches two branches into
  * the function rather than stopping at the prologue. Measured against the real retail WMAIN.EXE
  * (829,952 bytes): exactly one match, all 72 bytes, at 0x0046C35A.
  *
@@ -97,7 +97,8 @@
  *   0046C398  C7 05 3C A4 86 00 01 00 00 00  mov [0086a43c],1
  */
 static const uint8_t SIG_MOVIE_PLAY[] = {
-    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00,         /* push ebp; mov ebp,esp; sub esp,0x90 */
+    /* push ebp; mov ebp,esp; sub esp,0x90 */
+    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00,
     0xA1, 0xF0, 0x77, 0x4B, 0x00,                                 /* mov eax,[004b77f0]      */
     0x89, 0x85, 0x74, 0xFF, 0xFF, 0xFF,                           /* mov [ebp-0x8c],eax      */
     0xC7, 0x85, 0x78, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x00, 0x00,   /* mov [ebp-0x88],1        */
@@ -123,8 +124,8 @@ static const uint8_t SIG_MOVIE_PLAY[] = {
  * nothing and it is the cheapest possible check that the pattern really did land where it was
  * meant to: two independent encodings of the same address in one matched run.
  *
- * The cells are read out of the matched bytes rather than written down as constants, which is what
- * keeps them right under forced ASLR and after another patch has edited a nearby immediate. All
+ * The cells are read out of the matched bytes rather than written down as constants, so they stay
+ * right under forced ASLR and after another patch has edited a nearby immediate. All
  * three offsets are past the nine bytes a detour overwrites, so they survive this file's own hook
  * and one another DLL placed there first. */
 #define GFX_UP_OPERAND_OFFSET      32u
@@ -157,10 +158,10 @@ typedef struct fmv_player_state {
      * act is to refuse and return 0 while it is clear.
      *
      * `in_movie` is what the engine means by "a cutscene is on screen". Retail sets it for the
-     * whole of a movie, and other parts of the engine read it: the display hot keys are ignored
+     * length of a movie, and other parts of the engine read it: the display hot keys are ignored
      * while it is set, and the game's own key hook steps aside entirely. Holding it for the length
-     * of OUR playback is what makes the rest of the engine behave the way it does during a retail
-     * movie rather than the way it does during gameplay. */
+     * of OUR playback makes the rest of the engine behave as it does during a retail movie
+     * rather than as it does during gameplay. */
     const int32_t  *graphics_up;
     int32_t        *in_movie;
 } fmv_player_state_t;
@@ -207,12 +208,12 @@ static void load_config(void)
 
     /* Which video output libVLC uses.
      *
-     * The default DEPENDS ON WHERE this is running, and that is the whole point. On Windows the
-     * choice is left to libVLC, exactly as it always has been, so nothing about a Windows
-     * installation changes. Under Wine the default is gdi, because libVLC's own choice there is
-     * Direct3D and building a second Direct3D device takes the engine's exclusive mode one away:
-     * the cutscenes play, and every frame after them is drawn into nothing. FIELD CONFIRMED on
-     * Linux Mint under Lutris, where gdi fixed it and the window based theories did not.
+     * The default depends on WHERE this is running. On Windows the choice is left to libVLC,
+     * exactly as it always has been, so nothing about a Windows installation changes. Under Wine
+     * the default is gdi, because libVLC's own choice there is Direct3D and building a second
+     * Direct3D device takes the engine's exclusive mode one away: the cutscenes play, and every
+     * frame after them is drawn into nothing. FIELD CONFIRMED on Linux Mint under Lutris, where
+     * gdi fixed it and the window based theories did not.
      *
      * The ini still wins if it names an output, so this is a better default and not a decision
      * taken away from anybody. See vlc_playback.h. */
@@ -223,8 +224,8 @@ static void load_config(void)
         ini_read_string(FMV_PLAYER_SECTION, "VideoOutput", default_output,
                         video_output, sizeof video_output);
         /* Present and empty is not absent: see the note by MovieSurface above. Without this the
-         * shipped ini would hand libVLC no video output at all on Linux, which is exactly the
-         * black menu this setting exists to prevent. */
+         * shipped ini would hand libVLC no video output at all on Linux, the black menu this
+         * setting exists to prevent. */
         const char *chosen_output = (video_output[0] != 0) ? video_output : default_output;
 
         vlc_playback_set_video_output(chosen_output);
@@ -247,12 +248,13 @@ static void load_config(void)
 
     /* A live probe on the player's own body around the level 6 opening cutscene measured a real
      * position-settle transient, the player's authoritative position rather than its render
-     * blend, overshooting by 1.48 units and taking about 650 ms to read flat again, entirely under an
-     * engine position-override flag that retail's own resolution switch around every movie
-     * incidentally outlives before its picture is ever shown. This DLL's own faster transition does
-     * not spend that time, so this holds the picture back, still solid black, for a short beat after
-     * the movie itself has already finished, buying the same runway back without switching
-     * anything. Zero disables it outright. See render_curtain.c for how it is actually drawn. */
+     * blend, overshooting by 1.48 units and taking about 650 ms to read flat again, entirely
+     * under an engine position-override flag that retail's own resolution switch around every
+     * movie incidentally outlives before its picture is ever shown. This DLL's own faster
+     * transition does not spend that time, so this holds the picture back, still solid black,
+     * for a short beat after the movie itself has already finished, buying the same runway back
+     * without switching anything. Zero disables it outright. See render_curtain.c for how it is
+     * actually drawn. */
     post_movie_hold_ms = ini_read_int(FMV_PLAYER_SECTION, "PostMovieHoldMs", 2500);
     if (post_movie_hold_ms < 0) {
         post_movie_hold_ms = 0;
@@ -300,7 +302,7 @@ static bool movie_directory_exists(void)
     attributes = GetFileAttributesA(path);
     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
         log_info("no converted movies: \"%s\" is not a folder. Every movie uses the retail Bink "
-                 "path, which is what an installation with nothing converted is supposed to do.",
+                 "path, as an installation with nothing converted is supposed to.",
                  path);
         return false;
     }
@@ -367,7 +369,8 @@ static void resolve_engine_cells(uintptr_t site)
  * happen once a level and its player object already exist. The two startup splash movies play
  * before any level is loaded, so there is nothing for the curtain to hide, only an unwanted
  * extra pause on every single launch. `name` is still the retail backslash-relative name at this
- * point ("movie\\logo", "movie\\bigape", "movie\\scene1", ...), so only its own base is compared. */
+ * point ("movie\\logo", "movie\\bigape", "movie\\scene1", ...), so only its own base is
+ * compared. */
 static bool movie_wants_post_movie_curtain(const char *name)
 {
     const char *base = name;
@@ -407,7 +410,7 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
         return original(name, param2, param3);
     }
 
-    /* Every branch below reaches a log line, and that is a property worth keeping deliberately.
+    /* Every branch below reaches a log line, deliberately.
      * A movie that quietly used Bink is indistinguishable, from outside, from a feature that was
      * never armed, and a log that says "intercepted" at startup and then nothing at all is the
      * failure this whole DLL is most likely to present as. So the name is resolved into a path in
@@ -463,11 +466,11 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
 
     log_info("playing \"%s\" from %s", name, ansi_path);
 
-    /* Held for exactly as long as the picture is on screen, which is what the retail function does
-     * with the same cell. It is not bookkeeping: the engine's display hot keys check it before
-     * changing resolution or gamma, and the game's own key hook steps aside entirely while it is
-     * set. Without it a cutscene played by this DLL is, to the rest of the engine, ordinary
-     * gameplay with a window over it, which is what "it does not feel like the game" is made of.
+    /* Held for exactly as long as the picture is on screen, as the retail function does with the
+     * same cell. It is not bookkeeping: the engine's display hot keys check it before changing
+     * resolution or gamma, and the game's own key hook steps aside entirely while it is set.
+     * Without it a cutscene played by this DLL is, to the rest of the engine, ordinary gameplay
+     * with a window over it. That is what "it does not feel like the game" is made of.
      *
      * Set immediately before and cleared immediately after, with nothing in between that can
      * return early, so it cannot be left standing. A stuck value would make the engine refuse

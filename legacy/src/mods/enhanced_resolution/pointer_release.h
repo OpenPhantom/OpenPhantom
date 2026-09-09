@@ -60,7 +60,7 @@ bool pointer_release_install(const pointer_release_config_t *config);
 bool pointer_release_set_key(int32_t virtual_key);
 
 /* True while the pointer belongs to Windows rather than to the game. cursor_anchor.c asks this
- * before re-centring, which is the whole of the mechanism. Safe to call before install, and false
+ * before re-centring; the mechanism is no more than that. Safe to call before install, and false
  * then, so the caller needs no guard of its own. */
 bool pointer_release_is_active(void);
 

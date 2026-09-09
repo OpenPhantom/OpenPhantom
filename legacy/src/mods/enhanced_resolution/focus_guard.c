@@ -43,7 +43,7 @@
  * ----------------------------------------------------------------------------------------------
  * BYTE BASIS 2. the input devices are acquired once and never again
  *
- * stdControl_openMouse 0x0048DA7C sets the cooperative level and nothing else does:
+ * stdControl_openMouse 0x0048DA7C sets the cooperative level, and it is the only site that does:
  *
  *   0048DAEA  6A 06                 push 6                     ; NONEXCLUSIVE | FOREGROUND
  *   0048DAEC  E8 <rel32>            call 00498967              ; the engine's window
@@ -90,7 +90,7 @@
  * ----------------------------------------------------------------------------------------------
  * BYTE BASIS 3. why the pointer still leaves, and why capture does not save it
  *
- * The confinement is warp-on-every-WM_MOUSEMOVE and nothing else: the import table has ClipCursor
+ * The confinement is warp-on-every-WM_MOUSEMOVE, nothing more: the import table has ClipCursor
  * nowhere, and the whole USER32 cursor vocabulary is SetCapture, ReleaseCapture, SetCursor and
  * SetCursorPos. A warp only happens when a message arrives, and a message only arrives while the
  * pointer is over the window, or while a button is down, which is the only case in which a
@@ -124,8 +124,8 @@
  *     WndProc::Handler Warning: filtering WM_ACTIVATEAPP: 0
  *     WndProc::Handler Warning: filtering WM_ACTIVATEAPP: 1
  * so 0x0046A155 and 0x0046A17E never run there. That is why the focus signal used here is polled
- * from the frame hook instead of taken from a message: a message can be filtered, GetForegroundWindow
- * cannot.
+ * from the frame hook instead of taken from a message: a message can be filtered,
+ * GetForegroundWindow cannot.
  *
  * SIZE NOTE: the file is over the preferred 400 lines and the excess is the three
  * listings above. They are what make a feature that holds process-global OS state reviewable:
@@ -541,7 +541,7 @@ bool focus_guard_install(const focus_guard_config_t *config)
         return false;
     }
 
-    /* THE FALLBACK IS "DO NOTHING", and it has to be. Without a per-frame tick nothing would ever
+    /* The fallback is DO NOTHING, and it has to be. Without a per-frame tick nothing would ever
      * observe the foreground being lost, so a confinement applied once would be held for the
      * rest of the session, across every Alt-Tab, which is a worse bug than the one being fixed.
      * The re-acquire has the same single source of truth and goes with it. */

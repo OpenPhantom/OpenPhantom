@@ -1,4 +1,4 @@
-/* menu_scale_internal.h: the one state record the menu scale files share, and nothing else.
+/* menu_scale_internal.h: just the one state record the menu scale files share.
  *
  * The scale was a single file of over two thousand lines until it was split by responsibility.
  * The parts still share one record, because they share one install pass and one canvas: the
@@ -89,8 +89,8 @@ extern menu_scale_state_t scale_state;
 /* Canvas units to scaled ones, and back. Both are defined in menu_scale.c; the first is used by the
  * preview upscaler as well, because a preview grows by exactly the ratio its widget did.
  *
- * Rounding means the two are not an exact round trip on every value, which is why the shadow keeps
- * the authored rectangle and unscaled_coordinate is only the fallback for a menu that has no
+ * Rounding means the two are not an exact round trip on every value, so the shadow keeps the
+ * authored rectangle and unscaled_coordinate is only the fallback for a menu that has no
  * shadow to keep it in. */
 int32_t scaled_coordinate(int32_t value, float ratio);
 int32_t unscaled_coordinate(int32_t value, float ratio);
@@ -107,13 +107,13 @@ bool canvas_still_fits(void);
  * blitter's clip and the three cells the origin operands read. Every one is absolute, so applying
  * the same ratio twice writes the same numbers.
  *
- * False when a clip immediate could not be written, and then the clip has been put back and
- * nothing else was touched. */
+ * False when a clip immediate could not be written, and then the clip has been put back, with
+ * nothing else touched. */
 bool menu_scale_apply_canvas(float ratio_x, float ratio_y);
 
 /* The rest of what the ratio in force decides: the list box row height floor and text insets, and
- * the drawn cursor's size. None of them can fail the scale, so each is attempted on its own and
- * a failure costs only itself. `verbose` is the install; a refit writes the same numbers quietly. */
+ * the drawn cursor's size. None of them can fail the scale, so each is attempted on its own and a
+ * failure costs only itself. `verbose` is the install; a refit writes the same numbers quietly. */
 void menu_scale_apply_trimmings(bool verbose);
 
 /* Points the three origin operands at this file's cells. Done once, at install: after it, changing

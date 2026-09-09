@@ -7,8 +7,8 @@
  *     640.0 / screenWidth
  *
  * so at the game's authored 640x480 the scale is exactly 1 and at 1920 it is a third. That holds
- * the text at a constant number of PIXELS, which is what a 1999 game wanted and is why subtitles
- * shrink into nothing the higher the display goes. The credits crawl has the same fault from the
+ * the text at a constant number of PIXELS, as a 1999 game wanted, and it is why subtitles shrink
+ * into nothing the higher the display goes. The credits crawl has the same fault from the
  * other direction, its row spacing being hardcoded for a 480 line screen, and ending_resolution.h
  * already says that belongs with this rather than with the mode switch.
  *
@@ -29,8 +29,8 @@
  * font layer draws every menu string and every HUD readout, and a detour on it would have had to
  * work out which caller it was serving, which is the classifier problem hud_ratio_scaling had to
  * solve for the same reason. And because the cell is ours and live, a new value takes effect on
- * the next subtitle drawn, with no repatching, which is what lets the developer menu's slider be
- * dragged and watched.
+ * the next subtitle drawn, with no repatching, so the developer menu's slider can be dragged and
+ * watched.
  *
  * ============================== Why the box and not the font =================================
  *

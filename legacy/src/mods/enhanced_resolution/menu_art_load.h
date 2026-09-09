@@ -9,9 +9,9 @@
  * second and the third the pixels are raw, 16 bit, and about to be discarded, which is the one
  * moment a larger copy can be put in their place for nothing.
  *
- * The CALL is redirected rather than the compressor detoured, and that is the whole design.
- * swrle_compressVBuffer has exactly two callers: this one, and swpic_setWidgetImage. The second
- * compresses the save game thumbnail, which swmenu_loadSaveThumb reallocates at a fixed 160x120 on
+ * The design is one redirected CALL rather than a detour on the compressor. swrle_compressVBuffer
+ * has exactly two callers: this one, and swpic_setWidgetImage. The second compresses the save
+ * game thumbnail, which swmenu_loadSaveThumb reallocates at a fixed 160x120 on
  * every row change and then copies a fixed 160x120 image into. Resampling that buffer would leave
  * the engine writing 160x120 pixels into a header claiming something larger, and reading past the
  * end of what it allocated. Redirecting one call site cannot reach it.
@@ -60,8 +60,8 @@ void menu_art_load_set_ratio(float ratio_x, float ratio_y);
 /* The canvas the DISPLAY can hold, as a multiple of the authored 640x480.
  *
  * The menu scale has always taken its ratio from the converted artwork, on the doctrine that one
- * number read from the pictures cannot disagree with the pictures. Replicating at load inverts that:
- * the display decides and the artwork is made to fit, which is what lets there be no converted
+ * number read from the pictures cannot disagree with the pictures. Replicating at load inverts
+ * that: the display decides and the artwork is made to fit, so there need be no converted
  * artwork at all.
  *
  * The size is read from the game's own settings file rather than from the engine, because this runs

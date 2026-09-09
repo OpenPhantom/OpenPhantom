@@ -44,7 +44,7 @@
  * frame. Measured at 3840 to 1920, half the source columns are never sampled.
  *
  * Above a ratio of 1 nothing is ever lost: each source pixel owns an interval at least one pixel
- * long, which always contains an integer, so the map is onto. That is the whole of the difference
+ * long, which always contains an integer, so the map is onto. That is the entire difference,
  * and it is why this refuses to shrink a picture.
  */
 #ifndef MENU_ART_RESAMPLE_H

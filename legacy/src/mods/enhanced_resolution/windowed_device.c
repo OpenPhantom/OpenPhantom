@@ -50,7 +50,7 @@ static const uint8_t SIG_DD_SET_MODE[] = {
 /* Named for what they are rather than after the DDSCL_ constants they encode. DDSCL_NORMAL is a
  * real macro in the Windows SDK's ddraw.h, and defining it here would become a C4005 redefinition,
  * and therefore an error under /W4 /WX, the moment anything in this DLL's include chain pulled that
- * header in. Nothing does today, which is exactly the sort of thing that changes quietly. */
+ * header in. Nothing does today, and that can change quietly. */
 #define COOP_FLAGS_EXCLUSIVE 0x11u   /* DDSCL_FULLSCREEN|DDSCL_EXCLUSIVE, what the engine ships */
 #define COOP_FLAGS_NORMAL    0x08u   /* DDSCL_NORMAL, what this writes                          */
 
@@ -103,7 +103,8 @@ static void report_surfaces(void)
              "a corner of a larger surface and everything outside it is whatever was there, "
              "because the engine draws from a size it copied out of the mode table and never "
              "refreshes.",
-             (unsigned)primary_desc[DESC_OFF_WIDTH / 4], (unsigned)primary_desc[DESC_OFF_HEIGHT / 4],
+             (unsigned)primary_desc[DESC_OFF_WIDTH / 4],
+             (unsigned)primary_desc[DESC_OFF_HEIGHT / 4],
              (unsigned)back_desc[DESC_OFF_WIDTH / 4], (unsigned)back_desc[DESC_OFF_HEIGHT / 4]);
 }
 
@@ -220,8 +221,8 @@ bool windowed_device_install(const windowed_device_config_t *config)
     flags_at = site + COOPERATIVE_FLAGS_OFFSET;
 
     /* Read back before writing. The pattern makes this redundant on a first install and it is kept
-     * because it is what makes the write idempotent: a second install finds 0x08 rather than 0x11
-     * and declines instead of writing again. */
+     * because it makes the write idempotent: a second install finds 0x08 rather than 0x11 and
+     * declines instead of writing again. */
     if (!patch_validate_bytes(flags_at, expect_exclusive, sizeof expect_exclusive)) {
         if (patch_validate_bytes(flags_at, expect_normal, sizeof expect_normal)) {
             log_info("the cooperative level at %08X is already DDSCL_NORMAL, so this is a second "

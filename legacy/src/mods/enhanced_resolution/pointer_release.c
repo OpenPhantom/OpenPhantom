@@ -82,8 +82,8 @@ static HCURSOR frame_cursor(void)
 
 /* The engine answers WM_SETCURSOR by calling SetCursor(NULL) and returning 1, which tells Windows
  * that the cursor has been dealt with and to leave it alone. It does that for the WHOLE window and
- * not only for the picture, so a released pointer is invisible over the title bar too, which is
- * exactly where it has to be seen to be used.
+ * not only for the picture, so a released pointer is invisible over the title bar too, the one
+ * place it has to be seen to be used.
  *
  * Rather than argue with the message, the argument is changed: while the pointer is released a
  * NULL becomes the ordinary arrow, and the engine's own "I handled it" then makes that arrow
@@ -121,7 +121,7 @@ static void poll_release_key(void)
      * it once at the press was enough to move the window until the first time it was minimised, and
      * never again after that: the capture was back and every click went to the game instead of to
      * the title bar under the pointer. Anything else that re-captures is covered by the same line,
-     * which is why it asks the OS rather than tracking what the engine did. */
+     * so it asks the OS rather than tracking what the engine did. */
     if (release_state.released && GetCapture() != NULL) {
         (void)ReleaseCapture();
     }
@@ -138,7 +138,7 @@ static void poll_release_key(void)
     release_state.released = !release_state.released;
     if (release_state.released) {
         /* Dropped so that a click on the title bar reaches the title bar. The engine takes it back
-         * for itself the next time it handles an activation, which is exactly when we want it to. */
+         * for itself the next time it handles an activation, exactly when we want it to. */
         (void)ReleaseCapture();
         log_info("the pointer has been handed back to Windows: it can leave the window now, and "
                  "the title bar and its buttons are clickable. Press the same key to give it back "

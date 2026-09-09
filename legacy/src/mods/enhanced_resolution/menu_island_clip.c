@@ -17,14 +17,14 @@
  *
  *   2. The draw and the erase clip against different things. The glow is drawn through the
  *      textured-sprite blitter (texture_drawSprite, retail 0x0042963B), whose quad is clipped by
- *      the rasterizer against the SCREEN, 3840x2160 here. The menus repair themselves in canvas
+ *      the rasteriser against the SCREEN, 3840x2160 here. The menus repair themselves in canvas
  *      coordinates, and every blit in that toolkit clips against a hard-coded 640x480 (the same
  *      constant pair fov_menu.c and input_menu.c document for the widget blit). A pixel outside
  *      the island is therefore write-once: drawable, unrepairable.
  *
  *   3. Retail never had the mismatch because retail never had the gap: every menu bolted the
  *      display mode to 640x480 (swmenu_enterMenuMode, 0x45F7AC), where the screen edge IS the
- *      canvas edge and the rasterizer cropped the poked-out halo for free. MenuKeepsResolution=1
+ *      canvas edge and the rasteriser cropped the poked-out halo for free. MenuKeepsResolution=1
  *      removed the bolt, which is worth keeping (the bolt costs a Direct3D device rebuild per
  *      menu and has hung a wrapper mid-rebuild before), and inherited the stamp.
  *
@@ -56,8 +56,8 @@
  * embedded 3-D preview raises and lowers it around its draws too, and the projection setup reads
  * it. Everything else that shares the blitter, the gameplay HUD above all, draws with the flag
  * down and passes through this hook untouched. The pause menu's TOP page draws the frozen world
- * behind its widgets with the flag down as well, which is exactly right: that backdrop is
- * full-screen by design.
+ * behind its widgets with the flag down as well. That is right: the backdrop is full-screen by
+ * design.
  *
  * The pattern below is address-free: the four absolute operands are wildcarded and the flag's
  * address is READ out of the matched `C7 05` operand, then cross-checked three ways before it is
@@ -70,8 +70,8 @@
  * The island origin is not read from the engine's origin cells. It is recomputed the way the
  * engine computes it, ((W-canvas)/2) on each axis from the mode accessor window_fit already
  * resolved, against the canvas menu_scale settled on rather than the authored one. That is the
- * same "one owner per question" rule the cage follows. It is recomputed per sprite rather than cached
- * per widget pass, and that is deliberate: caching it needs the pass's rising edge, this hook only
+ * same "one owner per question" rule the cage follows. It is recomputed per sprite rather than
+ * cached per widget pass, deliberately: caching it needs the pass's rising edge, this hook only
  * observes the flag on the sprites it happens to be handed, and a pass whose first sprite is
  * missed would then run on a stale origin. The accessor reads two engine globals, which is not
  * worth a correctness risk to avoid.
@@ -79,7 +79,7 @@
  * ==============================================================================================
  * WHAT THIS IS NOT, stated honestly
  *
- * The retail rasterizer CROPPED a quad at the screen edge; clamping the rectangle SQUASHES the
+ * The retail rasteriser CROPPED a quad at the screen edge; clamping the rectangle SQUASHES the
  * texture into the remaining width instead, by the poked-out fraction. The reason is in the
  * blitter: it writes u = 0 at the left bound and u = fill at the right one, whatever those bounds
  * are, so moving a bound moves the picture rather than cutting it. For the halos that actually
@@ -145,7 +145,7 @@ _Static_assert(sizeof(SIG_MENU_DRAW_FLAG) == sizeof(MSK_MENU_DRAW_FLAG),
 #define OFFSET_FLAG_SET      0x11u
 /* `mov dword [flag],0`, the close of the bracket, measured from the match base. The two draw
  * passes between the stores are position-independent code of fixed length in every shipped
- * WMAIN image, which is what makes the distance a constant worth checking. */
+ * WMAIN image, so the distance is a constant worth checking. */
 #define OFFSET_FLAG_CLEAR    0x41u
 static const uint8_t FLAG_CLEAR_HEAD[] = { 0xC7, 0x05 };
 static const uint8_t FLAG_CLEAR_TAIL[] = { 0x00, 0x00, 0x00, 0x00 };
@@ -343,7 +343,7 @@ static void __cdecl hook_draw_sprite(void *texture, float left, float right, flo
             if (!clip_state.logged_skip) {
                 clip_state.logged_skip = true;
                 log_info("a menu sprite lay entirely outside the %dx%d island and was dropped, "
-                         "which is what the engine's own canvas clip does with it. Reported once.",
+                         "as the engine's own canvas clip does with it. Reported once.",
                          clip_state.island_width, clip_state.island_height);
             }
             return;

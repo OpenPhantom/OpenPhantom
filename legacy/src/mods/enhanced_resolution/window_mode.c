@@ -20,7 +20,7 @@
  *   6A F0                    push -16                      GWL_STYLE
  *
  * The two absolute operands are masked so the anchor is the shape and the style word rather than
- * where that global happens to live, which is what keeps it resolving under forced ASLR. The push
+ * where that global happens to live, which keeps it resolving under forced ASLR. The push
  * of 0x10CF0000 is the part that makes it unique: it is the only place in the image that word is
  * pushed, and it is inside the tail rather than the prologue, so it survives the detour. */
 static const uint8_t SIG_SET_DISPLAY_MODE[] = {
@@ -46,7 +46,8 @@ static const uint8_t MSK_SET_DISPLAY_MODE[] = {
 _Static_assert(sizeof SIG_SET_DISPLAY_MODE == sizeof MSK_SET_DISPLAY_MODE,
                "the set-display-mode pattern and its mask are different lengths");
 
-/* Six: push ebp, mov ebp,esp, mov eax,[ebp+8]. Nothing in it is relative, so all of it relocates. */
+/* Six: push ebp, mov ebp,esp, mov eax,[ebp+8]. Nothing in it is relative, so all of it
+ * relocates. */
 #define SET_DISPLAY_MODE_PROLOGUE 6u
 
 /* The engine's own frameless word, and it is deliberately the same one. The game already runs with
@@ -77,11 +78,11 @@ _Static_assert(sizeof SIG_SET_DISPLAY_MODE == sizeof MSK_SET_DISPLAY_MODE,
  *
  * Why this site and not only the style switch beside it. stdWin95_setDisplayMode fires exactly
  * once in a session, from main_openGraphics at 0x0043F542, and by then the device already exists:
- * the same function calls graphics_setResolution fifty one bytes earlier at 0x0043F50F, and that
- * is where DirectDraw is first asked for anything. A window shaped only from the later site is
- * therefore shaped after the first device was built against the shape it replaced, which is what a
- * graphics wrapper was seen doing, reporting the window as the full desktop at device creation and
- * our rectangle only once, later.
+ * the same function calls graphics_setResolution fifty one bytes earlier at 0x0043F50F, where
+ * DirectDraw is first asked for anything. A window shaped only from the later site is therefore
+ * shaped after the first device was built against the shape it replaced. A graphics wrapper was
+ * seen doing exactly that, reporting the window as the full desktop at device creation and our
+ * rectangle only once, later.
  *
  * Hooking here fixes both halves of that. The call before the original puts the window in its
  * final shape before the device is created, on the very first mode set as well as every later one.
@@ -89,7 +90,8 @@ _Static_assert(sizeof SIG_SET_DISPLAY_MODE == sizeof MSK_SET_DISPLAY_MODE,
  *
  * Two detours now sit on this address, this one and window_fit's. common/detour.c chains, so that
  * is safe, and the install order in enhanced_resolution.c puts the fit in first, which makes this
- * the outer hook and its writes the last to land. That ordering is wanted rather than incidental. */
+ * the outer hook and its writes the last to land. That ordering is wanted rather than incidental.
+ */
 static const uint8_t SIG_GRAPHICS_SET_MODE[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10,
     0x83, 0x7D, 0x08, 0x00, 0x7D, 0x1A,
@@ -176,7 +178,7 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
     width  = size_is_plausible(wanted_width)  ? wanted_width  : mode_width;
     height = size_is_plausible(wanted_height) ? wanted_height : mode_height;
 
-    /* Each axis falls back on its own, which is what the setting's own documentation promises.
+    /* Each axis falls back on its own, as the setting's own documentation promises.
      * Resetting both because one was implausible would make a single bad number throw away a good
      * one beside it. */
     if (!size_is_plausible(width)) {
@@ -340,7 +342,7 @@ static void apply_window_mode(void)
     /* The wanted CLIENT rectangle turned into the outer one the API wants, using the style that is
      * now in force rather than the one that was. GetMenu is asked rather than assumed: this window
      * has no menu today, and an adjustment computed as though it did would be short by SM_CYMENU,
-     * which is exactly the mistake the engine's own border deltas make. */
+     * the mistake the engine's own border deltas make. */
     outer.left   = client.left;
     outer.top    = client.top;
     outer.right  = client.left + client.width;
@@ -540,8 +542,8 @@ bool window_mode_install(const window_mode_config_t *config)
      *   the client OVERLAPS it in part              a fragment is sent, stretched over the window
      *   the client MISSES it entirely               the wrapper sends the whole surface instead
      *
-     * The first is a window at the monitor's origin at least as large as the render size, which is
-     * what WINDOW_MODE_BORDERLESS gives. The third is any window whose client starts past the render
+     * The first is a window at the monitor's origin at least as large as the render size, which
+     * WINDOW_MODE_BORDERLESS gives. The third is any window whose client starts past the render
      * size on either axis, reachable by rendering small and placing the window right of or below
      * that rectangle. The second is everything between, and it is the case this warns about: a
      * fragment stretched over the window reads as a rendering fault rather than a geometry one, and

@@ -27,7 +27,7 @@
  * itself went: alt-tab became free and the graphics wrapper stopped resetting. It was still wrong
  * here, for three reasons that only appeared once it ran.
  *
- * THE ENGINE READS BACK FROM ITS FRONT BUFFER. swmenu_open 0x0045D9F5 renders one last frame and
+ * The engine READS BACK from its front buffer. swmenu_open 0x0045D9F5 renders one last frame and
  * then copies the FRONT buffer into a system-memory snapshot, which message 0x15 at 0x0045D4E0
  * paints over the whole back buffer on every frame a pause page is up. The loading screen does the
  * same at 0x004469CC. Both take the source format from the front record, which says the mode's
@@ -36,7 +36,7 @@
  * underneath correctly drawn widgets. That was the reported corruption, and it is why a windowed
  * primary cannot simply be the desktop for this engine.
  *
- * THE PRESENT LEFT THE GPU. In DDSCL_NORMAL the wrapper this project ships puts a primary that is
+ * The present left the GPU. In DDSCL_NORMAL the wrapper this project ships puts a primary that is
  * not part of a flip chain into system memory, so a Blt into it can never be a hardware copy. It
  * falls through StretchRect, UpdateSurface and two D3DXLoadSurfaceFromSurface paths and lands on a
  * hand written per-pixel converter, once per frame at desktop size. Measured as a halving of the
@@ -89,8 +89,8 @@ bool windowed_device_install(const windowed_device_config_t *config);
  *
  * Its name describes something it does not do here. The blit it is named for needs the surface to
  * be emulated and the game to not be using Direct3D, and this game fails the second test from its
- * first scene, so that path never runs. What it does for us is decide which arm of the wrapper's
- * surface sizing is taken, and nothing else.
+ * first scene, so that path never runs. All it does for us is decide which arm of the wrapper's
+ * surface sizing is taken.
  *
  * Writes only when the value differs, logs whenever it writes, and does nothing at all when the
  * file is not there, which is the case on a machine with no wrapper installed. The wrapper reads

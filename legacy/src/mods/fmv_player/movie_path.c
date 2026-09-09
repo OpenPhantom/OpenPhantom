@@ -48,11 +48,11 @@ static bool append_separator_if_needed(char *out, size_t out_size, size_t *lengt
 }
 
 /* A directory has to name something. Refusing the empty string is not enough on its own: a value of
- * "\" or "\\" is not empty, survives that check, and then means the game folder itself, which is
- * exactly the state the empty-value refusal exists to prevent. It also makes the two public
- * functions disagree: on a drive root one of them trims down to "C:", which names the current
- * directory on that drive rather than its root, while the other keeps a separator. Refusing the
- * whole class here is cheaper than making both agree about a value nobody meant to write. */
+ * "\" or "\\" is not empty, survives that check, and then means the game folder itself, the
+ * state the empty-value refusal exists to prevent. It also makes the two public functions
+ * disagree: on a drive root one of them trims down to "C:", which names the current directory on
+ * that drive rather than its root, while the other keeps a separator. Refusing the whole class
+ * here is cheaper than making both agree about a value nobody meant to write. */
 static bool names_something(const char *directory)
 {
     const char *cursor;
@@ -105,7 +105,7 @@ static bool build_directory(const char *host_directory, const char *movie_direct
 
     /* host_directory() answers with a trailing backslash, and with an empty string when it could
      * not work out where the executable is. The empty case must not turn into a leading backslash,
-     * which is why the separator is appended conditionally rather than unconditionally. */
+     * so the separator is appended conditionally rather than unconditionally. */
     if (!append(out, out_size, length, host_directory)) {
         return false;
     }

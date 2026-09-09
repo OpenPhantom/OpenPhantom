@@ -8,7 +8,7 @@
  * without the other being read.
  *
  * The artwork witness stays here rather than in a file of its own: reading the converted
- * background is how the install decides its ratio, and nothing else asks that question.
+ * background is how the install decides its ratio, and no other file asks that question.
  */
 #include "menu_scale.h"
 
@@ -43,12 +43,12 @@
 
 /* Puts everything back and stops scaling, because the canvas no longer fits the screen.
  *
- * THIS IS A MEMORY SAFETY MEASURE, not a cosmetic one. swrle_blit clips against the canvas rather
+ * This is a MEMORY SAFETY measure, not a cosmetic one. swrle_blit clips against the canvas rather
  * than against the surface it is drawing into: it reads the destination's real width and height and
  * then throws both away for the two immediates this file writes. So a canvas wider or taller than
- * the back buffer does not merely draw off the edge, it writes PAST THE END OF THE BUFFER, and the
- * game crashes. The report that led to this was exactly that: artwork converted for 3840x2160 and
- * obi.ini left at something smaller.
+ * the back buffer does not merely draw off the edge, it writes PAST the end of the buffer, and
+ * the game crashes. The report that led to this was exactly that: artwork converted for 3840x2160
+ * and obi.ini left at something smaller.
  *
  * The origin is written too, and it has to be. Restoring the clip alone leaves g_menuOrigin holding
  * the value the engine derived for the old canvas, which is NEGATIVE when the canvas was wider than
@@ -57,8 +57,8 @@
  *
  * Everything undone here is undone completely, because this runs before any widget rectangle has
  * been scaled: swmenu_open scales them, and this is the first thing swmenu_open's hook does. A
- * screen already scaled by an earlier open keeps its rectangles, which is wrong-looking and safe,
- * and that is the right way round.
+ * screen already scaled by an earlier open keeps its rectangles, wrong-looking and safe, which is
+ * the right way round of the two.
  *
  * The three things sized from the canvas when they were installed are put back to the authored one
  * as well: the cursor cage, the sprite island and the loading bar. The cage used to be left where
@@ -85,8 +85,8 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
                 (int)scale_state.canvas_width, (int)scale_state.canvas_height,
                 (int)screen_width, (int)screen_height, (int)screen_width, (int)screen_height);
 
-    /* Ratio 1 IS the authored canvas, so the two calls that put a ratio into force put the whole
-     * of it back: the clip, the three cells the repointed operands read, the list box row floor
+    /* Ratio 1 IS the authored canvas, so the two calls that put a ratio into force put all of it
+     * back: the clip, the three cells the repointed operands read, the list box row floor
      * and insets and the drawn cursor's size. The operands stay repointed, and cells holding the
      * authored numbers behave exactly as the constants they replaced. */
     if (!menu_scale_apply_canvas(1.0f, 1.0f)) {
@@ -107,10 +107,10 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
     (void)menu_loading_bar_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
 
     /* Every menu already scaled is put back to its authored rectangles. Without this the fallback
-     * is merely non-fatal rather than usable: a screen scaled for a 3840 canvas, drawn against a 640
-     * clip, is a heap of widgets in the top left corner. The engine re-derives the parts it owns on
-     * the next open anyway, a picture adopts its bitmap's size and a list box re-runs SWMSG_RESET,
-     * so only the authored positions have to be restored here. */
+     * is merely non-fatal rather than usable: a screen scaled for a 3840 canvas, drawn against a
+     * 640 clip, is a heap of widgets in the top left corner. The engine re-derives the parts it
+     * owns on the next open anyway, a picture adopts its bitmap's size and a list box re-runs
+     * SWMSG_RESET, so only the authored positions have to be restored here. */
     {
         size_t index;
 
@@ -305,7 +305,8 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     }
 
     signature_resolve_table(menu_scale_sites, SITE_COUNT);
-    if (menu_scale_sites[SITE_RLE_BLIT].address == 0 || menu_scale_sites[SITE_MENU_OPEN].address == 0) {
+    if (menu_scale_sites[SITE_RLE_BLIT].address == 0 ||
+        menu_scale_sites[SITE_MENU_OPEN].address == 0) {
         log_warning("a menu scale of %.3f was asked for, but %s did not resolve, so the menus "
                     "are left at their authored size", (double)ratio_y,
                     (menu_scale_sites[SITE_RLE_BLIT].address == 0) ? "swrle_blit" : "swmenu_open");
@@ -420,7 +421,8 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     }
 
     if (menu_scale_sites[SITE_SW3D_PROJECT].address != 0 &&
-        detour_install(&scale_state.sw3d_project_detour, menu_scale_sites[SITE_SW3D_PROJECT].address,
+        detour_install(&scale_state.sw3d_project_detour,
+                       menu_scale_sites[SITE_SW3D_PROJECT].address,
                        (const void *)hook_sw3d_project, SW3D_PROJECT_PROLOGUE)) {
         log_info("the 3-D widgets on the pause screens are placed from the camera's live focal "
                  "length, so the hero and the inventory models follow the canvas and hold still "

@@ -15,10 +15,10 @@
  *   - the screen size cells, identical to overlay_sites.c's own SIG_SCREEN_SIZE.
  *
  * Drawn every real frame while armed, right before the scene closes and the page is shown, so the
- * same instant dev_overlay's own panel paints into, which is why a panel opened on top of this
- * still shows on top of it: this file's hook runs as the outer wrapper (loading after
- * "dev_overlay" alphabetically), draws its own quad, THEN calls original, which is what reaches
- * dev_overlay's own hook and its own, later paint.
+ * same instant dev_overlay's own panel paints into. A panel opened on top of this still shows on
+ * top of it: this file's hook runs as the outer wrapper (loading after "dev_overlay"
+ * alphabetically), draws its own quad, THEN calls original, and that call reaches dev_overlay's
+ * own hook and its own, later paint.
  */
 #include "render_curtain.h"
 
@@ -52,6 +52,8 @@ static const uint8_t MSK_SCENE_END[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_SCENE_END == sizeof MSK_SCENE_END,
+               "the scene end pattern and its mask are different lengths");
 #define OFFSET_SCENE_END_CALL 20u
 
 /* --- 0x00419660, the engine's own filled shape, byte-identical to overlay_sites.c's own
@@ -66,6 +68,8 @@ static const uint8_t MSK_DRAW_QUAD[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_DRAW_QUAD == sizeof MSK_DRAW_QUAD,
+               "the filled shape pattern and its mask are different lengths");
 
 /* --- 0x00439476, the screen size, byte-identical to overlay_sites.c's own SIG_SCREEN_SIZE. */
 static const uint8_t SIG_SCREEN_SIZE[] = {
@@ -82,6 +86,8 @@ static const uint8_t MSK_SCREEN_SIZE[] = {
     0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_SCREEN_SIZE == sizeof MSK_SCREEN_SIZE,
+               "the screen size pattern and its mask are different lengths");
 #define OFFSET_SCREEN_HEIGHT 1u
 #define OFFSET_SCREEN_WIDTH  8u
 
@@ -89,7 +95,7 @@ static const uint8_t MSK_SCREEN_SIZE[] = {
 #define CALL_REL32_OPCODE 0xE8u
 #define CALL_REL32_LENGTH  5u
 
-/* patch_read_call_target() refuses a target outside WMAIN.EXE's own image, which is exactly right
+/* patch_read_call_target() refuses a target outside WMAIN.EXE's own image. That is exactly right
  * for validating an UNTOUCHED site, and exactly wrong here. dev_overlay.dll already redirects this
  * same call site to its own hook, in its own module, well outside WMAIN.EXE's image, whenever it
  * loads first (alphabetically, "dev_overlay" sorts before "fmv_player"). Reading THAT as garbage

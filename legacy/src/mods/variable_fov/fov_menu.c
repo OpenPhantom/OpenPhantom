@@ -276,7 +276,8 @@ static int notch_for_current_view(void)
     absolute = (base > 0.0f) ? base + variable_fov_extra_degrees()
                              : (float)variable_fov_slider_min_fov_degrees();
 
-    notch = (int)((absolute - (float)variable_fov_slider_min_fov_degrees()) / NOTCH_STEP_DEGREES + 0.5f);
+    notch = (int)((absolute - (float)variable_fov_slider_min_fov_degrees())
+                  / NOTCH_STEP_DEGREES + 0.5f);
     if (notch < 0) {
         notch = 0;
     }
@@ -321,8 +322,9 @@ static bool apply_notch(bool force)
     menu_state.last_notch = notch;
 
     /* Save immediately rather than only on leaving the screen. A crash or a hung graphics wrapper
-     * must not swallow a setting the user has just made, which is exactly what happened once.
-     * WritePrivateProfileString buffers; with a 31-notch slider that is not measurable work. */
+     * must not swallow a setting the user has just made; that happened once.
+     * WritePrivateProfileString buffers, and with a 31-notch slider that is not measurable
+     * work. */
     variable_fov_set_extra_degrees(offset_for_notch(notch));
 
     /* AFTER the refresh, never before: the caption quotes numbers the rebuild has just set. */
@@ -373,7 +375,8 @@ static int32_t __cdecl hook_options_video(void)
     if (notch != menu_state.seed_notch) {
         apply_notch(true);
         log_info("video options closed: offset %.1f deg (notch %d), hFOV now %.3f",
-                 (double)variable_fov_extra_degrees(), notch, (double)variable_fov_horizontal_degrees());
+                 (double)variable_fov_extra_degrees(), notch,
+                 (double)variable_fov_horizontal_degrees());
     } else {
         log_info("video options closed, the slider was not touched, the ini is left alone");
     }
@@ -392,9 +395,15 @@ static bool table_has_shipped_shape(const menu_patch_context_t *context)
     for (index = 0; index < context->original_count; ++index) {
         const sw_widget_t *widget = &context->widgets[index];
 
-        if (widget->id == WIDGET_ID_GAMMA     && widget->type == SW_TYPE_SLIDER)  { has_gamma = true; }
-        if (widget->id == WIDGET_ID_MODE_LIST && widget->type == SW_TYPE_LISTBOX) { has_list  = true; }
-        if (widget->id == WIDGET_ID_APPLY     && widget->type == SW_TYPE_TEXT)    { has_apply = true; }
+        if (widget->id == WIDGET_ID_GAMMA && widget->type == SW_TYPE_SLIDER) {
+            has_gamma = true;
+        }
+        if (widget->id == WIDGET_ID_MODE_LIST && widget->type == SW_TYPE_LISTBOX) {
+            has_list = true;
+        }
+        if (widget->id == WIDGET_ID_APPLY && widget->type == SW_TYPE_TEXT) {
+            has_apply = true;
+        }
     }
 
     if (has_gamma && has_list && has_apply) {
@@ -498,8 +507,9 @@ void fov_menu_install(void)
         return;
     }
 
-    menu_state.notch_count = (variable_fov_slider_max_fov_degrees() - variable_fov_slider_min_fov_degrees())
-                           / (int)NOTCH_STEP_DEGREES + 1;
+    menu_state.notch_count = (variable_fov_slider_max_fov_degrees()
+                              - variable_fov_slider_min_fov_degrees())
+                             / (int)NOTCH_STEP_DEGREES + 1;
     if (menu_state.notch_count < 2) {
         menu_state.notch_count = 2;                /* swslider divides by start - 1 */
     }

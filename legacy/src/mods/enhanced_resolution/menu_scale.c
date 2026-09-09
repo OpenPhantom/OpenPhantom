@@ -69,7 +69,7 @@ int32_t scaled_coordinate(int32_t value, float ratio)
 }
 
 /* The inverse, for a menu whose shadow could not be allocated and so has no authored rectangle
- * kept for it. Rounding makes it approximate, which is why it is the fallback rather than the
+ * kept for it. Rounding makes it approximate, so it is the fallback rather than the
  * method: a screen put back this way can sit a pixel off, and a screen refitted this way twice can
  * sit two. Every menu that has a shadow is scaled from the authored numbers instead. */
 int32_t unscaled_coordinate(int32_t value, float ratio)
@@ -149,8 +149,8 @@ static bool scaled_menu_room_left(void)
  *
  * All of that has already happened by the time anything here runs. So scaling the box on its own
  * leaves the rows 16 pixels apart inside a box two or three times taller, while the glyphs drawn
- * into them have grown with g_menuScale. The rows pile into each other, which is what the
- * resolution list, the sound providers and the keyboard controls all look like.
+ * into them have grown with g_menuScale. The rows pile into each other. The resolution list, the
+ * sound providers and the keyboard controls all look like that.
  *
  * The repair is not here. It is in menu_scale_install.c, which moves the engine's own row-height
  * floor and hooks font3d_queryFont, so the engine derives the row count and the box height from a
@@ -271,11 +271,12 @@ void __cdecl hook_draw_menu(void *menu)
         return;
     }
 
-    /* HERE AND NOT ONLY AT swmenu_open, because the resolution is changed FROM a menu. The options
-     * screen is open the whole time: the mode changes, the engine recomputes the origin from the
-     * cells this file owns, and the very next frame blits a canvas wider than the new back buffer.
-     * Nothing reopens, so a check on open never runs, and the first thing that happens is the write
-     * past the end of the buffer. Two float reads and two compares, before anything is drawn.
+    /* HERE, and not only at swmenu_open, because the resolution is changed FROM a menu. The
+     * options screen is open the whole time: the mode changes, the engine recomputes the origin
+     * from the cells this file owns, and the very next frame blits a canvas wider than the new
+     * back buffer. Nothing reopens, so a check on open never runs, and the first thing that
+     * happens is the write past the end of the buffer. Two float reads and two compares, before
+     * anything is drawn.
      *
      * The canvas is refitted to the new mode here rather than merely checked against it, which is
      * the difference between the menus following a resolution change and giving up on one. */
@@ -315,7 +316,8 @@ void __cdecl hook_draw_menu(void *menu)
  * They cannot be done in the same walk as the rectangles. A list box keeps its row height and row
  * count in a record hung off the widget, and that record does not exist yet when swmenu_open is
  * entered: swmenu_open is what sends SWMSG_RESET, and the reset is what allocates it, measures the
- * font and derives both numbers. Running earlier finds a null pointer, which is what it did.
+ * font and derives both numbers. Running earlier finds a null pointer. That is what an earlier
+ * version did.
  *
  * Worse than nothing, in fact: the reset derives `numLines` from `(rect.height - 3) / lineHeight`,
  * so once the box has been scaled it computes how many SIXTEEN pixel rows fit in a box two or three
@@ -337,8 +339,8 @@ int32_t __cdecl hook_menu_open(void *menu)
                                                       * carries */
     }
 
-    /* The rectangles BEFORE the original, because the original is what makes the menu current and
-     * starts drawing from it, and because its own reset pass reads the box heights this writes.
+    /* The rectangles BEFORE the original, because the original makes the menu current and starts
+     * drawing from it, and because its own reset pass reads the box heights this writes.
      * Scaling afterwards would leave one frame at the authored size. */
     if (!scale_state.stood_down) {
         menu_scale_follow_display();

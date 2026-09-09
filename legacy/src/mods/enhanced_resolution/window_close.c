@@ -53,6 +53,8 @@ static const uint8_t MASK_SYS_MAIN[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_SYS_MAIN == sizeof MASK_SYS_MAIN,
+               "the sys_main pattern and its mask are different lengths");
 
 /* Where the shutdown call sits inside that pattern, and how long it is. Written as offsets into the
  * pattern so the two cannot drift apart. */

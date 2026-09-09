@@ -13,7 +13,7 @@ design tried here, and each of the first three taught something the next one kep
    of trying to make touching it cheaper.
 2. Windows' own Media Foundation (`MFPlay`), in a borderless window inside the game's own process,
    flickered black for the whole length of every movie. Five fixes for that, each chasing a real
-   hypothesis, none of them the actual cause: re-asserting `WS_EX_TOPMOST` every 200 ms; minimizing
+   hypothesis, none of them the actual cause: re-asserting `WS_EX_TOPMOST` every 200 ms; minimising
    the game window outright; a real `WM_ERASEBKGND` bug (fixed, not the cause); dropping
    `WS_EX_TOPMOST` and all Z-order reassertion; filtering the game window's own messages out of the
    shared message loop.
@@ -25,20 +25,20 @@ design tried here, and each of the first three taught something the next one kep
    while another process created a window owned by its window deadlocked the whole desktop once,
    not just the game). Once fixed, the overlay rendered on top, but taking foreground on a
    monitor-sized window made Windows' shell treat it as switching to a different fullscreen app and
-   auto-minimize the game, a minimize that persisted, "random" and then immediate, through
+   auto-minimise the game, a minimise that persisted, "random" and then immediate, through
    dropping `SetForegroundWindow` and then `WS_EX_NOACTIVATE`. Separately, standalone VLC playing
    the exact same converted file showed zero flicker from the start, which settled that `MFPlay`
    itself, not the process boundary, was the flicker's real cause; swapping it for libVLC
    (`vlc_playback.c`) fixed the flicker immediately, still running as a separate process, and that
    swap was a single-variable change: same process, same window, same file, different decoder.
    Reading `dxwrapper`'s own source (it is open source; this was checked directly) then settled the
-   minimize too: this game gets a real exclusive-mode Direct3D9 device by default, translated from
-   its own DirectDraw `DDSCL_EXCLUSIVE` request, and exclusive-mode devices auto-minimize on
+   minimise too: this game gets a real exclusive-mode Direct3D9 device by default, translated from
+   its own DirectDraw `DDSCL_EXCLUSIVE` request, and exclusive-mode devices auto-minimise on
    `WM_ACTIVATEAPP(deactivate)` as a decades-old, fundamental part of the D3D9 runtime, unrelated
    to and unaffected by Windows' Fullscreen Optimizations (confirmed by disabling that setting for
    `WMAIN.EXE` directly: no change). `dxwrapper` has a windowed-mode override that avoids this by
    never requesting exclusive mode (`EnableWindowMode=1`), confirmed via its own log to eliminate
-   the minimize, but at a real cost: this game switches its own internal DirectDraw resolution
+   the minimise, but at a real cost: this game switches its own internal DirectDraw resolution
    between menus (640x480) and gameplay constantly, something true exclusive fullscreen never
    exposed because the GPU always scales the backbuffer to fill the physical screen regardless;
    windowed mode instead physically resizes the actual window on every such change, landing on
@@ -58,7 +58,7 @@ design tried here, and each of the first three taught something the next one kep
    the loop filters on. An Alt-Tab during a movie therefore does reach the engine's window
    procedure, re-entrantly, on the thread parked inside the movie call.
 
-   And the exclusion turned out to cost more than it bought, which is the first fix below.
+   And the exclusion turned out to cost more than it bought, as the first fix below describes.
 
 **The message pump no longer touches the game window's queue at all.** Excluding a window from
 *dispatch* is not the same as leaving its messages alone: `PM_REMOVE` takes a message off the queue
@@ -92,9 +92,9 @@ theory held.
 **A stray OS "loading" cursor after the intro movies:** `SetForegroundWindow(game_window)` followed
 by `SetCursor(NULL)`, both immediately after `DestroyWindow()`, once per movie. What explained it:
 launching with `fmv_player` *disabled* visibly flashes the screen several times before the game
-settles, real minimize/restore cycles consistent with this game's exclusive-mode Direct3D9 device
+settles, real minimise/restore cycles consistent with this game's exclusive-mode Direct3D9 device
 reacting to however Bink touches the display, while `fmv_player` *enabled* shows none of that,
-which is this DLL doing exactly what it was built to do. Something early in start-up leaves the OS
+this DLL doing exactly what it was built to do. Something early in start-up leaves the OS
 cursor undone, and the retail path's own incidental flashing was quietly re-triggering a full
 activation handshake and curing it before the player ever saw it. A smooth, flicker-free window
 removes that accidental cure along with the flicker, so the symptom only ever appeared with this
@@ -193,7 +193,7 @@ This project ships no game assets, converted or otherwise; that rule does not ch
 files this DLL reads happen to be `.mp4` instead of `.bik`. `convert_movies.ps1`, in `src\tools\`
 and in `tools\` in an installed copy, is a **tool**, not content: it reads the `.bik` files inside
 your own legally owned copy of the game and writes `.mp4` next to nothing you did not already have
-a license to.
+a licence to.
 
 **Simplest way, no command line:** drag your game folder onto `Convert Movies.bat`. Double-clicking
 it works too; it asks for the folder instead.
@@ -301,9 +301,9 @@ well before the level even loads.
 fedship.b3d either: a second live capture, playing as Qui-Gon (`iamquigon`), catches the same
 transient at a DIFFERENT level's own opening (race.b3d) playing `FSUJSND1.wav` instead. Both share
 the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
-sound-specific suffix. That shape is what `sfx_mute.c` matches on now rather than either exact
-name, so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without
-having to catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
+sound-specific suffix. `sfx_mute.c` now matches on that shape rather than on either exact name,
+so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having
+to catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
 byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips every call whose
 sound record's own name matches `FS?J*` (case-insensitive, third character a wildcard) while
 suppression is armed, tracking `pPlayer+0xA0` directly so suppression ends the moment the transient
@@ -356,9 +356,9 @@ Everything that made the first design slow was on the far side of a DirectDraw s
 `fmv_player.dll` nor `video_overlay.c` owns. A borderless window sized to the game's own client
 rect, owned by the game window (Windows keeps an owned window above its owner in Z-order
 automatically, so no `WS_EX_TOPMOST` is needed) and `WS_EX_NOACTIVATE` (it never needs keyboard
-focus, since Escape-to-skip reads `GetAsyncKeyState`, physical key state, not per-window input), sidesteps that
-surface entirely: libVLC renders into that window directly via `libvlc_media_player_set_hwnd`,
-which is also why `video_overlay.c` has no Direct3D or DXGI code in it at all.
+focus, since Escape-to-skip reads `GetAsyncKeyState`, physical key state, not per-window input),
+sidesteps that surface entirely: libVLC renders into that window directly via
+`libvlc_media_player_set_hwnd`, so `video_overlay.c` has no Direct3D or DXGI code in it at all.
 
 ## Byte basis
 
@@ -369,7 +369,7 @@ through one function, confirmed by an xref sweep of its four `UNCONDITIONAL_CALL
 ```
 0043EB93  LEA EDX,[EBP-0x84]      ; a local buffer already filled with e.g. "movie\arena"
 0043EB99  PUSH EDX
-0043EB9A  CALL 0x0046C35A         ; the movie player - THIS is what this file detours
+0043EB9A  CALL 0x0046C35A         ; the movie player, the call THIS file detours
 0043EB9F  ADD ESP,0xC             ; caller cleans 12 bytes: __cdecl, 3 arguments
 ```
 
@@ -445,23 +445,23 @@ the host image.
 window procedure at `0x0049905E` takes `WM_CLOSE` in the switch and returns zero without reaching
 `DefWindowProcA`, so the default destroy never happens, and because the switch takes it the message
 never reaches the chained handlers either. Only `WM_DESTROY` calls `PostQuitMessage`, and the game's
-own quit path is what raises that. Confirmed in play with no movie involved.
+own quit path raises it. Confirmed in play with no movie involved.
 
 The close box is still read off the game's queue here, because a close request that the engine
 chooses to discard is still a request this loop should not eat on the way past.
 
-**What was actually wrong here**, and an external audit found it: `WM_SYSKEYDOWN` with `VK_F4` was in
-the peeked range and could never match. A filtered peek returns the first message in its range,
-Alt+F4 queues `VK_MENU` before `VK_F4`, and holding Alt autorepeats more `VK_MENU` behind it, so the
-F4 was never examined. That dead branch is gone, along with the comment that described the mechanism
-at length without it being able to work.
+**What was actually wrong here**, and an external audit found it: `WM_SYSKEYDOWN` with `VK_F4`
+was in the peeked range and could never match. A filtered peek returns the first message in its
+range, Alt+F4 queues `VK_MENU` before `VK_F4`, and holding Alt autorepeats more `VK_MENU` behind
+it, so the F4 was never examined. That dead branch is gone, along with the comment that described
+the mechanism at length without it being able to work.
 
 The audit's stated consequence, that a player could not close the game for the length of a movie,
 does not follow: they cannot close it during ordinary gameplay either. Detecting the combination
 properly was tried and did exactly nothing useful, ending the movie and then posting a close the
 engine discarded. Making Alt+F4 genuinely close the game would be overriding a decision the engine
-took for itself, which is a behaviour change rather than a repair and does not belong in the movie
-player.
+took for itself. That is a behaviour change rather than a repair, and it does not belong in the
+movie player.
 
 ## Known limitations
 
@@ -494,7 +494,7 @@ player.
 
 Be precise about which claim is which, because these are three different things.
 
-**Design 4 was live-tested on the reporting machine** in its earlier form: no flicker, no minimize,
+**Design 4 was live-tested on the reporting machine** in its earlier form: no flicker, no minimise,
 movies playing at full quality over the game window.
 
 **Three of the later fixes were live-tested, on the reporting machine, in the form they were
@@ -521,10 +521,10 @@ startup ordering, the honoured playback gate, the Escape edge trigger and the te
 detour signature is measured against the real retail `WMAIN.EXE` and counted for uniqueness: one
 match, at the address named above.
 
-`video_overlay.c`, `vlc_locate.c`, `vlc_runtime.c` and `vlc_playback.c` have no engine dependency and therefore no
-byte evidence to verify the same way, and no behaviour a unit test can observe without a live
-window and a real video file. They rest on documented Win32 window-ownership and message-delivery
-behaviour and on libVLC's own long-stable C ABI.
+`video_overlay.c`, `vlc_locate.c`, `vlc_runtime.c` and `vlc_playback.c` have no engine dependency
+and therefore no byte evidence to verify the same way, and no behaviour a unit test can observe
+without a live window and a real video file. They rest on documented Win32 window-ownership and
+message-delivery behaviour and on libVLC's own long-stable C ABI.
 
 **What to check first in `engine_fixes.log`,** in the order the code actually writes them:
 
@@ -546,8 +546,8 @@ behaviour and on libVLC's own long-stable C ABI.
    quietly failing.
 
    A machine with nothing converted never mentions libVLC at all: the readiness question is asked
-   only once there is a file to play, which is also why "no usable libVLC" is a warning rather than
-   a note. It means a converted movie was found and could not be used.
+   only once there is a file to play, so "no usable libVLC" is a warning rather than a note. It
+   means a converted movie was found and could not be used.
 
 Two deliberate tests are worth doing by hand:
 

@@ -128,6 +128,8 @@
 #define DEFAULT_REGION_RECOVER_DEG 25.0f
 #define MAX_REGION_RECOVER_DEG    180.0f
 
+/* __cdecl from the bytes: the function at 0x0044B804 has four plain rets after epilogues and
+ * no ret imm16, so the caller clears its argument. */
 typedef int32_t (__cdecl *auto_aim_fn_t)(int32_t kind);
 
 /* The fire handler takes NOTHING: its prologue reads no argument slot, and its only caller reaches

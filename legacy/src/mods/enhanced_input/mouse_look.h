@@ -21,6 +21,8 @@
 
 /* The engine's own axis reader, resolved out of the call site inside Plr_Steer. Answers the axis
  * already scaled by the binding, not raw device counts. */
+/* __cdecl from the bytes: the axis reader at 0x00449F94 ends in a plain ret after its
+ * epilogue and has no ret imm16, so the caller clears its one argument. */
 typedef float (__cdecl *input_axis_fn_t)(int axis);
 
 /* control_applyMouseDefaults at 0x0046586C registers one binding on function 0, source 6, with

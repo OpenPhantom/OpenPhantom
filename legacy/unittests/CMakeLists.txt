@@ -23,6 +23,10 @@ endfunction()
 
 
 add_unit_test(fov_math   variable_fov      variable_fov/fov_math.c)
+
+# The music volume latch. The detours cannot be linked without a patched process, so this covers
+# the two-deep rule that decides what a provider change puts back.
+add_unit_test(music_volume imuse_fix)
 add_unit_test(sound_owner sound_lifetime_fix sound_lifetime_fix/sound_lifetime_fix.c)
 add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
 

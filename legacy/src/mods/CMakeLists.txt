@@ -165,6 +165,7 @@ add_engine_fix(imuse_fix
     imuse_fix.c
     music_sites.c
     music_probe.c
+    music_volume.c
     imuse_sites.c
     imuse_guard.c
 )

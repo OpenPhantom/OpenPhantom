@@ -45,6 +45,7 @@
 #include "imuse_fix.h"
 
 #include "music_probe.h"
+#include "music_volume.h"
 #include "music_sites.h"
 
 #include "common/frame_hook.h"
@@ -411,6 +412,9 @@ void imuse_fix_install(void)
      * arm and fail independently and neither is a precondition for the other. The probe is armed
      * first because it is the one being used to chase an open defect. */
     state.probe_active = music_probe_install();
+    /* Independent of everything above it: its own three sites, its own key, and it
+     * declines on its own terms without touching the pause work. */
+    (void)music_volume_install();
 
     if (config.pause_on_focus_loss || config.resume_orphaned_pause || config.log_transitions) {
         if (music_sites_resolve(&state.sites)) {

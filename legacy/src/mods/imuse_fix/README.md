@@ -76,6 +76,7 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 | `ResumeOrphanedPause` | `1` | | resume a pause with no owner. Switches itself **off** when the pause-menu latch cannot be resolved, because without it an owned pause and an orphan look the same |
 | `OrphanGraceFrames` | `120` | 12-6000 | consecutive frames the ownerless state must persist first |
 | `MusicLog` | `0` | | one line per **change** of the music state, capped at 400 a session |
+| `MusicVolumeAcrossProvider` | `1` | | keep the music volume across a 3-D provider change. See **The provider change discards a slider move** |
 
 ## Engine locations
 
@@ -153,3 +154,59 @@ resolving it does not carry over. The scanner searched an empty range. The refus
 correct and the game was left untouched, which is precisely why it was not obvious. Fixed; **the
 corrected build has still not been observed doing anything**, and no claim is made that it repairs
 the looping-music defect, see the warning above.
+
+## The provider change discards a slider move
+
+Changing the 3-D provider on the audio screen throws away a music slider move made in the same
+visit. The screen does this, at `0x004427AF` and the calls after it:
+
+    bapMusicSetVolume(0.0f);      silence the music for the switch
+    bapMusicDetach();
+    bapsnd3d_openProvider(pick);
+    bapMusicAttach();             ends by reloading MVOL from obi.ini and applying it
+
+The slider's new position has not reached `obi.ini` yet, because the screen only writes it on the
+way out. So the re-attach puts the file's old value back, and the exit write then saves that
+instead of what was dragged. Move the slider and switch provider, and the move is gone; switch
+first and then move, and it holds. That order dependence is why it reads as intermittent.
+
+If music was already detached the re-attach is skipped, so the `0.0f` from the first line survives
+and `MVOL=0` is written.
+
+The SFX slider is immune to this one: nothing on that path zeroes or re-reads `SVOL`, and its exit
+write takes an integer straight from the getter without a trip through the file. It has a separate
+fault of its own, which `sfx_volume_save_fix` covers.
+
+### How it is put back
+
+`bapMusicSetVolume` is detoured and keeps the current value and the one before it. `bapMusicDetach`
+sees a zero standing in front of it and remembers the previous value as the player's.
+`bapMusicAttach` puts that value back after the original has run, because the original's last act
+is the reload being corrected.
+
+The two-deep history is what removes the guesswork. A player who drags to silence has already put
+their own zero into the previous slot before the screen's zero arrives, so zero is what comes back
+and the rule needs no opinion about what a zero means.
+
+### Engine locations
+
+| What | Where | Prologue |
+|---|---|---|
+| `bapMusicAttach` | `0x00410331` | 6 |
+| `bapMusicDetach` | `0x0041046C` | 10 |
+| `bapMusicSetVolume` | `0x004106CC` | 11 |
+
+All three patterns mask their absolute operands, so they survive a build that relinked its data
+section rather than resolving to nothing there. All three or none: a detour cannot be taken back
+out, so a half-installed feature would leave hooks belonging to something that reports itself
+absent.
+
+### Testing status
+
+Unit tested, `legacy/unittests/music_volume.c`, which drives the two-deep rule exactly as the
+screen does: a drag then a switch, chosen silence then a switch, two switches in one visit, an
+ordinary detach that must not override the file, and a detach before any volume was set.
+
+**Not yet seen to fire in the game.** On the machine it was written on, the provider change never
+reaches `bapMusicDetach`, so the fault is real in the code and latent there. The restore writes one
+log line the first time it acts, so that is the line to look for.

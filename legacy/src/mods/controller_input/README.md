@@ -36,7 +36,7 @@ itself, not in how it gets loaded.
 | `RollEnabled` | `1` | Left/right trigger holds Alt and taps Left / Right while it is pulled. |
 | `ControllerIndex` | `0` | Which XInput slot (0-3) to read. |
 | `Deadzone` | `0.24` | Radial deadzone on the right stick, 0 to just under 1. |
-| `LookSensitivity` | `4000.0` | Synthesised mouse counts per second at full stick deflection. |
+| `LookSensitivity` | `4000.0` | Synthesised mouse counts per second at full stick deflection, 1 to 100000. |
 | `TriggerThreshold` | `30` | How far a trigger must travel (0-255) before roll engages. |
 
 `LookSensitivity` is in the same units `enhanced_input.dll`'s own `MouseDegreesPerCount` scales
@@ -139,6 +139,26 @@ an empty slot at the ordinary 125Hz cadence would reintroduce a smaller version 
 polling cost this DLL exists to remove. While no pad has been seen, this checks once every 500ms
 instead; once one is found, the ordinary cadence begins and stays on for the rest of the session.
 
+## The deadzone is the shared one
+
+The radial deadzone is `common/stick.c`, the same code `enhanced_input.dll` runs on the left stick.
+This DLL used to carry a private copy of it. The two had already drifted: the copy had lost the
+guard against a nonsense `Deadzone` and the guard against a centred stick, so `Deadzone=0` plus a
+stick at rest divided by its own zero magnitude.
+
+The shared version also had the diagonal wrong, and both did. It clamped the magnitude to 1 and
+then divided by it to get the direction, which leaves the direction unnormalised: a stick held to
+the corner of a square range arrived as 32767,32767, divided 1,1 by 1, and came back 1.41 long. A
+diagonal therefore looked 41 percent faster than a straight push, on the right stick as a faster
+turn and on the left stick as faster movement. The direction is now taken from the true magnitude
+and the speed capped afterwards.
+
+It only shows on a pad that reports a square range. A stick whose hardware is circular never sends
+the corner. Steam Input does, so it was visible on the Deck.
+
+`legacy/unittests/stick.c` covers it: the corner case reads 1.414 against the old code and 1.000
+against this one.
+
 ## Nothing is injected unless the game has focus
 
 `SendInput` does not aim at a window. It goes to whatever has focus, which is the whole reason this
@@ -237,6 +257,14 @@ if the answer is yes, the honest fix is documentation rather than code.
   uninstall" convention). The OS reclaims the thread when the process exits.
 
 ## Testing status
+
+The diagonal correction and the `LookSensitivity` range check are built and unit tested, and
+**not yet played**. The look will turn more slowly on a diagonal than it used to, by up to 41
+percent at the corner. A straight push up, down, left or right is unchanged to the last decimal.
+Worth a pass with the right stick pushed into each corner to say whether the speed feels right, not
+only whether it is right.
+
+Everything below this predates that change.
 
 Played five times, three real bugs found and fixed, all three confirmed working on replay. Look,
 pause (opening and closing the menu, and skipping a movie through both `fmv_player`'s libVLC path

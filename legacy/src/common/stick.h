@@ -33,9 +33,10 @@ bool stick_apply_radial_deadzone(short raw_x, short raw_y, float deadzone, float
                                  float *out_y);
 
 /* The magnitude of a vector this function already produced, which is what a caller wants for a
- * speed or a walk/run threshold. Clamped to 1, because the raw pair describes a SQUARE and a stick
- * held to a corner is 1.41 long; without the clamp a diagonal push would read as faster than a
- * straight one. */
+ * speed or a walk/run threshold. Never above 1, because the function above caps what it returns,
+ * and the clamp here is kept so a caller passing its own pair cannot exceed the range either. A
+ * raw XInput pair describes a SQUARE and a stick held to a corner is 1.41 long, so anything
+ * measuring one of those directly wants this rather than a bare sqrt. */
 float stick_magnitude(float x, float y);
 
 #endif /* COMMON_STICK_H */

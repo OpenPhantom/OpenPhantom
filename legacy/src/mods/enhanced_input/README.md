@@ -596,10 +596,18 @@ toward forward. A true forty five degree push came out at thirty five degrees, a
 deflection at nineteen.
 
 `pad_stick.c` reads the left stick from XInput instead, which is where the right stick already comes
-from, and applies one radial deadzone. It disables nothing and unbinds nothing: phase 2 runs after
-the engine's own steer, so it simply writes the movement fields again from its own vector, and a
-substep it has nothing to say about leaves the engine's numbers alone. That is what keeps the
-keyboard, and a hand-bound pad, working unchanged.
+from, and applies one radial deadzone, the shared `common/stick.c` one. It disables nothing and
+unbinds nothing: phase 2 runs after the engine's own steer, so it simply writes the movement fields
+again from its own vector, and a substep it has nothing to say about leaves the engine's numbers
+alone. That is what keeps the keyboard, and a hand-bound pad, working unchanged.
+
+That shared deadzone used to hand back a vector longer than 1 on a diagonal. It clamped the
+magnitude to 1 and then divided by it to get the direction, so a stick reporting a square range
+arrived at the corner as 32767,32767, divided 1,1 by 1, and came back 1.41 long. The run threshold
+was safe, because that is measured with `stick_magnitude`, which clamps; the movement components
+were not, so a diagonal walked faster than a straight one. The direction now comes from the true
+magnitude and the speed is capped afterwards. Only a pad reporting a square range ever sent the
+corner, which on this project means Steam Input.
 
 ### It needs an XInput pad, and it now says so when it has not got one
 

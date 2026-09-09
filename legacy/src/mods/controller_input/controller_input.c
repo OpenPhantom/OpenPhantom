@@ -22,11 +22,11 @@
 
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/stick.h"
 
 #include <windows.h>
 #include <xinput.h>
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -68,6 +68,13 @@
  * second, brisk but controllable; independent of and not read from enhanced_input's own
  * configuration, since this DLL does not depend on that one at run time. */
 #define DEFAULT_LOOK_SENSITIVITY 4000.0f
+
+/* The accepted range for that key. The floor is 1 rather than 0 because a zero is better said with
+ * LookEnabled=0, which also stops the poll doing the work. The ceiling is a long way above any
+ * usable value and exists to catch a typed exponent rather than to judge anyone's taste: at 100000
+ * a full deflection would cross a 1920 wide screen more than fifty times a second. */
+#define MIN_LOOK_SENSITIVITY 1.0f
+#define MAX_LOOK_SENSITIVITY 100000.0f
 
 /* How far a trigger has to travel before it counts as pressed, matching Microsoft's own
  * XINPUT_GAMEPAD_TRIGGER_THRESHOLD (30 of 255). Below this a trigger at rest, which is not
@@ -132,28 +139,6 @@ typedef struct controller_input_state {
 } controller_input_state_t;
 
 static controller_input_state_t ci_state;
-
-/* The magnitude-scaled stick vector, deadzone already applied, both axes in [-1, 1]. Returns false
- * (and leaves the two outputs untouched) when the stick is inside the deadzone. */
-static bool apply_radial_deadzone(SHORT raw_x, SHORT raw_y, float deadzone, float *out_x,
-                                  float *out_y)
-{
-    float x = (float)raw_x / 32767.0f;
-    float y = (float)raw_y / 32767.0f;
-    float magnitude = (float)sqrt((double)(x * x + y * y));
-    float scaled;
-
-    if (magnitude < deadzone) {
-        return false;
-    }
-    if (magnitude > 1.0f) {
-        magnitude = 1.0f;
-    }
-    scaled = (magnitude - deadzone) / (1.0f - deadzone);
-    *out_x = (x / magnitude) * scaled;
-    *out_y = (y / magnitude) * scaled;
-    return true;
-}
 
 static double seconds_since_last_poll(void)
 {
@@ -409,8 +394,8 @@ static void poll_once(void)
     if (ci_state.config.look_enabled) {
         float x, y;
 
-        if (apply_radial_deadzone(state.Gamepad.sThumbRX, state.Gamepad.sThumbRY,
-                                  ci_state.config.deadzone, &x, &y)) {
+        if (stick_apply_radial_deadzone(state.Gamepad.sThumbRX, state.Gamepad.sThumbRY,
+                                        ci_state.config.deadzone, &x, &y)) {
             synthesize_look(x, y, dt);
         }
     }
@@ -466,6 +451,18 @@ static void load_config(controller_input_config_t *config)
         log_warning("TriggerThreshold=%d is out of range (0 to 255), using %d",
                     config->trigger_threshold, DEFAULT_TRIGGER_THRESHOLD);
         config->trigger_threshold = DEFAULT_TRIGGER_THRESHOLD;
+    }
+    /* Written as a NOT so that a NaN fails it. atof answers nan for the word, and a NaN sensitivity
+     * survives every ordinary comparison, reaches the cast in the look synthesis as INT_MIN and
+     * sends the pointer to the far corner on every poll for the rest of the session. The ceiling is
+     * loose on purpose: it is there to catch a typed exponent, not to hold an opinion about how
+     * fast anyone likes their look. */
+    if (!(config->look_sensitivity >= MIN_LOOK_SENSITIVITY) ||
+        !(config->look_sensitivity <= MAX_LOOK_SENSITIVITY)) {
+        log_warning("LookSensitivity=%.1f is out of range (%.0f to %.0f), using %.0f",
+                    (double)config->look_sensitivity, (double)MIN_LOOK_SENSITIVITY,
+                    (double)MAX_LOOK_SENSITIVITY, (double)DEFAULT_LOOK_SENSITIVITY);
+        config->look_sensitivity = DEFAULT_LOOK_SENSITIVITY;
     }
 }
 

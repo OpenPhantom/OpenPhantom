@@ -27,11 +27,16 @@ bool stick_apply_radial_deadzone(short raw_x, short raw_y, float deadzone, float
     if (magnitude < deadzone || magnitude <= 0.0f) {
         return false;
     }
-    if (magnitude > 1.0f) {
-        magnitude = 1.0f;
+
+    /* The direction comes from the TRUE magnitude and the speed is capped afterwards. Clamping the
+     * magnitude first and then dividing by it leaves the direction unnormalised: a stick held to
+     * the corner of a square range divided 1,1 by 1 and came back 1.41 long, so a diagonal ran 41
+     * percent faster than a straight push. The clamp was put there to prevent exactly that. */
+    scaled = (magnitude - deadzone) / (1.0f - deadzone);
+    if (scaled > 1.0f) {
+        scaled = 1.0f;
     }
 
-    scaled = (magnitude - deadzone) / (1.0f - deadzone);
     *out_x = (x / magnitude) * scaled;
     *out_y = (y / magnitude) * scaled;
     return true;

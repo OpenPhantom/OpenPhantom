@@ -24,6 +24,11 @@ endfunction()
 
 add_unit_test(fov_math   variable_fov      variable_fov/fov_math.c)
 
+# The shared thumbstick deadzone, which two DLLs both drive and neither had a test for. The corner
+# case is the point: a square range reports 1.41 at a true diagonal, and every caller reads what
+# comes back as a speed.
+add_unit_test(stick "")
+
 # The music volume latch. The detours cannot be linked without a patched process, so this covers
 # the two-deep rule that decides what a provider change puts back.
 add_unit_test(music_volume imuse_fix)

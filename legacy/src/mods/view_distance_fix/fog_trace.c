@@ -52,6 +52,8 @@ static const uint8_t MSK_VERT_CACHE[] = {
     1, 1, 0, 0, 0, 0, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_VERT_CACHE == sizeof MSK_VERT_CACHE,
+               "the vertex cache counter pattern and its mask are different lengths");
 
 /* sort_heap     00734C0C, out of the operand at 00487C8F + 2 */
 static const uint8_t SIG_SORT_HEAP[] = {
@@ -62,6 +64,8 @@ static const uint8_t MSK_SORT_HEAP[] = {
     1, 1, 0, 0, 0, 0, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_SORT_HEAP == sizeof MSK_SORT_HEAP,
+               "the sort heap counter pattern and its mask are different lengths");
 
 /* deferred      00866FB0, out of the operand at 00487D1D + 4 */
 static const uint8_t SIG_DEFERRED[] = {
@@ -72,6 +76,8 @@ static const uint8_t MSK_DEFERRED[] = {
     1, 1, 1, 1, 0, 0, 0, 0, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_DEFERRED == sizeof MSK_DEFERRED,
+               "the deferred list counter pattern and its mask are different lengths");
 
 /* vert_pool     004DD6EC, out of the operand at 00401D3E + 2 */
 static const uint8_t SIG_VERT_POOL[] = {
@@ -82,6 +88,8 @@ static const uint8_t MSK_VERT_POOL[] = {
     1, 1, 0, 0, 0, 0, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_VERT_POOL == sizeof MSK_VERT_POOL,
+               "the vertex pool counter pattern and its mask are different lengths");
 
 /* materials     005959F8, out of the operand at 00401F46 + 2 */
 static const uint8_t SIG_MATERIALS[] = {
@@ -92,6 +100,8 @@ static const uint8_t MSK_MATERIALS[] = {
     1, 1, 0, 0, 0, 0, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_MATERIALS == sizeof MSK_MATERIALS,
+               "the material counter pattern and its mask are different lengths");
 
 /* face_recs     004DD6E0, out of the operand at 00401D33 + 3 */
 static const uint8_t SIG_FACE_RECS[] = {
@@ -102,6 +112,8 @@ static const uint8_t MSK_FACE_RECS[] = {
     1, 1, 1, 0, 0, 0, 0, 1, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_FACE_RECS == sizeof MSK_FACE_RECS,
+               "the face record counter pattern and its mask are different lengths");
 
 /* triv_reject   008A0064, out of the operand at 0041A2F9 + 4 */
 static const uint8_t SIG_TRIV_REJECT[] = {
@@ -112,6 +124,8 @@ static const uint8_t MSK_TRIV_REJECT[] = {
     1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_TRIV_REJECT == sizeof MSK_TRIV_REJECT,
+               "the trivial reject counter pattern and its mask are different lengths");
 
 /* cells         0059DEBC, out of the operand at 004048CD + 7 */
 static const uint8_t SIG_CELLS[] = {
@@ -122,6 +136,8 @@ static const uint8_t MSK_CELLS[] = {
     1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
     0, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_CELLS == sizeof MSK_CELLS,
+               "the cell counter pattern and its mask are different lengths");
 
 /* region_mask   0059DF44, out of the operand at 00404FB1 + 6 */
 static const uint8_t SIG_REGION_MASK[] = {
@@ -132,6 +148,8 @@ static const uint8_t MSK_REGION_MASK[] = {
     1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_REGION_MASK == sizeof MSK_REGION_MASK,
+               "the region mask pattern and its mask are different lengths");
 
 /* crossfade     0059DF60, out of the operand at 00404FB9 + 5 */
 static const uint8_t SIG_CROSSFADE[] = {
@@ -142,6 +160,8 @@ static const uint8_t MSK_CROSSFADE[] = {
     1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_CROSSFADE == sizeof MSK_CROSSFADE,
+               "the crossfade flag pattern and its mask are different lengths");
 
 /* dev_fog_start 00866FA8, out of the operand at 00487AC2 + 7 */
 static const uint8_t SIG_DEV_FOG_START[] = {
@@ -152,6 +172,8 @@ static const uint8_t MSK_DEV_FOG_START[] = {
     1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
     0, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_DEV_FOG_START == sizeof MSK_DEV_FOG_START,
+               "the device fog start pattern and its mask are different lengths");
 
 /* dev_fog_end   00866FA4, out of the operand at 00487ACB + 4 */
 static const uint8_t SIG_DEV_FOG_END[] = {
@@ -162,6 +184,8 @@ static const uint8_t MSK_DEV_FOG_END[] = {
     1, 1, 1, 1, 0, 0, 0, 0, 1, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_DEV_FOG_END == sizeof MSK_DEV_FOG_END,
+               "the device fog end pattern and its mask are different lengths");
 
 /* vertex_fog_on 004DD6D0, out of the operand at 00401DF1 + 5 */
 static const uint8_t SIG_VERTEX_FOG_ON[] = {
@@ -172,6 +196,8 @@ static const uint8_t MSK_VERTEX_FOG_ON[] = {
     1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
     1, 1, 1, 1, 1, 1,
 };
+_Static_assert(sizeof SIG_VERTEX_FOG_ON == sizeof MSK_VERTEX_FOG_ON,
+               "the vertex fog flag pattern and its mask are different lengths");
 
 static counter_site_t COUNTERS[] = {
     { "vertCache", SIG_VERT_CACHE, MSK_VERT_CACHE, sizeof SIG_VERT_CACHE,
@@ -296,6 +322,8 @@ static const uint8_t MSK_BATCH_FLUSH[] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 0, 0, 0, 0, 1, 1, 1
 };
+_Static_assert(sizeof SIG_BATCH_FLUSH == sizeof MSK_BATCH_FLUSH,
+               "the batch flush pattern and its mask are different lengths");
 #define BATCH_FLUSH_PROLOGUE 9u
 
 typedef void (__cdecl *batch_flush_fn_t)(void);
@@ -394,7 +422,7 @@ void fog_trace_counts(uint32_t cells, uint32_t vertices, float frame_seconds)
         return;
     }
     /* The peak since the last frame, then start again. A counter with no flush between frames
-       still reads live, which is what the two the flush does not touch need. */
+       still reads live, and the two the flush does not touch need that. */
     sample_peaks();
     for (i = 0; i < COUNTER_COUNT; ++i) {
         last->engine[i] = peak[i];

@@ -67,8 +67,8 @@ static const uint8_t SIG_OBJECT_DRAW_EULER[] = {
  * freezes pose and placement together.
  *
  * g_tickCounter [0x4B8860] has two increment sites in the whole image: sys_runSubsteps (per
- * SUBSTEP) and swmenu_render (per MENU frame), which is why the 3-D inventory model already
- * animated smoothly while the world did not.
+ * SUBSTEP) and swmenu_render (per MENU frame), so the 3-D inventory model already animated
+ * smoothly while the world did not.
  *
  * One shared-state note, and it is a return to the original rather than a new coupling.
  * poseStamp is shared: the draw path builds the pose from the INTERPOLATED transform, the

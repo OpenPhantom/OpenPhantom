@@ -43,8 +43,8 @@
  * did nothing", which is the worst possible symptom to debug.
  *
  * So this measures it instead of arguing about it. Per call site: how often it is reached, and how
- * often the mover it was handed had a clock older than the time being passed in, which is exactly
- * the condition under which the function does anything at all.
+ * often the mover it was handed had a clock older than the time being passed in, the condition
+ * under which the function does anything at all.
  *
  * The call sites are discovered, not written down. The tick's own address comes from the pattern,
  * and every `call rel32` in the host's code section that targets it is a call site. The census then

@@ -23,7 +23,7 @@
  * own status bit and continues execution. It never alters a register, a flag or a game field, and
  * the write that triggered it has already happened by the time it runs.
  *
- * LIMITS worth knowing before trusting a report:
+ * LIMITS to know before trusting a report:
  *
  *   A debugger attached to the game owns these registers. If one is attached the arm will appear
  *   to succeed and then be overwritten, so do not run this under a debugger and believe it.

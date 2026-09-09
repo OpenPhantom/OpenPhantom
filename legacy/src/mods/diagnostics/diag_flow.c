@@ -45,7 +45,7 @@ static const uint8_t SIG_LOCK_LEAVE[] = {
 /* --- Plr_RunPhases 0x00448297 ----------------------------------------------------------------- *
  * The player mode is NOT an enum but a POINTER to a descriptor (player+0x60, the state-object
  * pattern). It becomes a number only through the NULL-terminated pointer table at [0x4B54B0], and
- * that is exactly what this hook does. It runs per SUBSTEP (32 Hz) and logs only the CHANGE.
+ * this hook resolves it there. It runs per SUBSTEP (32 Hz) and logs only the CHANGE.
  *   +0x27 : &pPlayer [0x4B5220] */
 static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,
@@ -109,9 +109,9 @@ static const uint8_t SIG_ADD_DECAL[] = {
  * and the blob shadow is re-stamped every frame, so an undrawn record can carry a current
  * timestamp. Only the page pointer is read here.
  *
- * void, and that is checked at the callers rather than assumed: all four (0x0041B987, 0x0041BA17,
- * 0x0041C324, 0x0041C3B9) do `add esp,0x10` and then overwrite EAX without ever reading it. Four
- * cdecl arguments. Prologue `81 EC 94 00 00 00` is six bytes on a clean boundary. Level 3. */
+ * void, checked at the callers rather than assumed: all four (0x0041B987, 0x0041BA17, 0x0041C324,
+ * 0x0041C3B9) do `add esp,0x10` and then overwrite EAX without ever reading it. Four cdecl
+ * arguments. Prologue `81 EC 94 00 00 00` is six bytes on a clean boundary. Level 3. */
 static const uint8_t SIG_DRAW_POLY_DECALS[] = {
     0x81, 0xEC, 0x94, 0x00, 0x00, 0x00, 0x53, 0x55, 0x8B, 0xAC, 0x24, 0xA0,
     0x00, 0x00, 0x00, 0x33, 0xC0, 0x56, 0x57, 0x8A
@@ -148,8 +148,8 @@ static const uint8_t SIG_DECAL_TABLE[] = {
  *
  * The surrounding material module is barely understood: which texture formats the retail renderer
  * really produces is an open question, and even which source file this routine belonged to is
- * disputed. None of that matters here, because the hook reports the return value and nothing
- * else. It draws no conclusion from the material it observes. */
+ * disputed. None of that matters here: the hook reports only the return value, and draws no
+ * conclusion from the material it observes. */
 static const uint8_t SIG_SELECT_CEL[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x10, 0x8B, 0x4D, 0x0C,
     0x8B, 0x54, 0x81, 0x1C, 0x89, 0x55, 0xFC, 0x8B

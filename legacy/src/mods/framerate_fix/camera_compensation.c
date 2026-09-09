@@ -47,7 +47,7 @@ static const uint8_t SIG_CAMERA_PITCH_LAG[] = {
  *   0x418F76  fld [0x4A8170] / fmul [ebp-0x70]   the target angle, which gets 1-k
  *
  * The two operand fields are nine bytes apart, and repointing one without the other is the worst
- * outcome available here, which is why the pair is written transactionally further down. */
+ * outcome available here, so the pair is written transactionally further down. */
 static const uint8_t SIG_CAMERA_FOLLOW_YAW[] = {
     0xD9, 0x05, 0x70, 0x81, 0x4A, 0x00, 0xD8, 0x4D, 0xE0,
     0xD9, 0x05, 0x70, 0x81, 0x4A, 0x00, 0xD8, 0x4D, 0x90, 0xDE, 0xC1
@@ -90,12 +90,11 @@ static const uint8_t TARGET_SLOT[3] = { 0xE4, 0xE8, 0xEC };   /* the look-at tar
  *   D9 45 8C           fld  [ebp-0x74]            ; |turn|, this frame's heading change
  *   D8 1D 78814A00     fcomp[0x4A8178] = 0.05     ; <- operand at +0x05, one reader in the image
  *
- * A turn of zero is what makes bapview_followYaw take its rigid snap arm instead of easing. The
+ * A turn of zero makes bapview_followYaw take its rigid snap arm instead of easing. The
  * threshold is compared against a per-frame angle, so it scales with the frame rate: a 15 deg/s
  * turn is 0.5 deg/frame at 30 fps, which eases, and 0.03 deg/frame at 500 fps, which snaps. Around
- * that boundary the camera flips between hard locked and eased many times a second, which is
- * exactly what rubber-banding looks like. Scaled by dt*30 it means the same angular rate at any
- * frame rate. */
+ * that boundary the camera flips between hard locked and eased many times a second: the
+ * rubber-band symptom. Scaled by dt*30 it means the same angular rate at any frame rate. */
 static const uint8_t SIG_CAMERA_YAW_DEADBAND[] = {
     0xD9, 0x45, 0x8C, 0xD8, 0x1D, 0x78, 0x81, 0x4A, 0x00, 0xDF, 0xE0,
     0xF6, 0xC4, 0x01, 0x74, 0x0A

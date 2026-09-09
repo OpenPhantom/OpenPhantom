@@ -110,8 +110,8 @@
  * --- the backend anchor, deliberately not unique ----------------------------------------------- *
  * Three functions in the display layer open with the same "load the selected device, branch on its
  * backend field" sequence, so this pattern matches three times by design. The key is the triple of
- * an address free pattern, the expected match count, and the address read out of the operand, which
- * is what signature_count_matches() serves. All three sites must name the same cell; a build where
+ * an address free pattern, the expected match count, and the address read out of the operand, the
+ * case signature_count_matches() serves. All three sites must name the same cell; a build where
  * they disagree is not a build this understands, and the observer declines rather than picking one.
  *
  * Measured across the three builds that ship in one installation:
@@ -121,7 +121,7 @@
  *   obi.exe            0x0048EB4C  0x0048EF5F  0x0048EFF6   all name 0x00861FC0
  *
  * obi.exe is the recompile. It puts the cell 0x50 lower and the three sites at different addresses,
- * which is the whole argument for reading the operand rather than writing the address down: a table
+ * the entire argument for reading the operand rather than writing the address down: a table
  * of addresses would have read a different global on that build and reported a confident wrong
  * answer. The German retail executable is byte identical to the English one, so it is the same
  * build and not a fourth measurement.
@@ -143,6 +143,8 @@ static const uint8_t MSK_DEVICE_BACKEND[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_DEVICE_BACKEND == sizeof MSK_DEVICE_BACKEND,
+               "the device backend pattern and its mask are different lengths");
 #define EXPECTED_BACKEND_SITES    3u
 #define BACKEND_OPERAND_OFFSET    0x01u
 
@@ -158,10 +160,10 @@ static const uint8_t MSK_DEVICE_BACKEND[] = {
  * same cross build behaviour as the backend anchor and the reason the relative call operand is
  * decoded rather than ignored: a candidate whose call target falls outside the image is rejected.
  *
- * The call displacement is a wildcard, and that is what makes this anchor survive the redirect
- * installed further down. The observer rewrites exactly those four bytes and the pattern does not
- * depend on them, so a second generation of this DLL in the same process still resolves the site
- * instead of switching itself off with a "did not resolve" warning. */
+ * The call displacement is a wildcard, so this anchor survives the redirect installed further
+ * down. The observer rewrites exactly those four bytes and the pattern does not depend on them,
+ * so a second generation of this DLL in the same process still resolves the site instead of
+ * switching itself off with a "did not resolve" warning. */
 static const uint8_t SIG_FLIP_GATE[] = {
     0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,        /* cmp [stdDisplay_bWantBackBuffer], 0 */
     0x74, 0x07,                                      /* je  past the flip                   */
@@ -176,6 +178,8 @@ static const uint8_t MSK_FLIP_GATE[] = {
     0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_FLIP_GATE == sizeof MSK_FLIP_GATE,
+               "the flip gate pattern and its mask are different lengths");
 #define FLIP_GATE_OPERAND_OFFSET  0x02u
 #define FLIP_CALL_OPCODE_OFFSET   0x09u
 
@@ -214,6 +218,8 @@ static const uint8_t MSK_FLIP_FLAGS[] = {
     0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_FLIP_FLAGS == sizeof MSK_FLIP_FLAGS,
+               "the flip flags pattern and its mask are different lengths");
 #define FLIP_FLAGS_OPERAND_OFFSET 0x0Fu
 
 /* A changing answer is worth printing; a flapping one is worth stopping. */
@@ -407,7 +413,7 @@ static bool redirect_flip_call(void)
      * return value as a boolean inverts it, which is how the first build of this file reported
      * "the flip call could not be redirected" about a redirect that had in fact succeeded. A field
      * run came back with the path and the flip flags and no timing at all, nothing was wrong with
-     * any address, and the log line was the whole of the defect. When a helper in this tree returns
+     * any address, and the log line was the entire defect. When a helper in this tree returns
      * a `*_result_t`, compare it against its OK enumerator rather than testing it for truth. */
     return patch_redirect_call(present_state.flip_call_site, (const void *)&hook_flip) ==
            PATCH_RESULT_OK;
@@ -540,10 +546,10 @@ static void report_second(void)
     present_state.second_start_cycles = cycles_now;
 }
 
-/* The pointer is null until the display has been opened, which is why this runs per frame rather
- * than once at install: the graphics startup runs well after the loader has put the mods in, so a
- * read at install time would see null on every launch and would have to report either nothing or a
- * guess. A frame on which it is still null is not an error, says nothing, and costs one image read.
+/* The pointer is null until the display has been opened, so this runs per frame rather than once
+ * at install: the graphics startup runs well after the loader has put the mods in, so a read at
+ * install time would see null on every launch and would have to report either nothing or a guess.
+ * A frame on which it is still null is not an error, says nothing, and costs one image read.
  *
  * Reporting again on change rather than latching the first answer is deliberate. A mode change
  * closes and reopens the display, and a backend that changed under a running game is exactly the

@@ -20,7 +20,7 @@
  * No address anywhere in the run, so no mask is needed, and it matches once.
  *
  * The patch is the last byte, BF to FF: `and ebp, -1`, which changes nothing. Three bytes stay
- * three bytes, no branch moves, and reading it back is what makes it idempotent. */
+ * three bytes, no branch moves, and reading it back makes it idempotent. */
 static const uint8_t SIG_TRANSLUCENT_FOG_OFF[] = {
     0x8B, 0x6C, 0x24, 0x40, 0xF7, 0xC5, 0x00, 0x00, 0x06, 0x00,
     0x74, 0x75, 0xF7, 0xC5, 0x00, 0x00, 0x20, 0x00, 0x75, 0x03,

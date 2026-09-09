@@ -5,11 +5,11 @@
  * region index from the forced cell instead of the region the player is actually standing in, so
  * the flag is not advisory: it decides which camera the level uses.
  *
- * Two one-line functions are the ONLY writers in the whole image, which is what makes this
- * observable cheaply. Seven places call the setter and six call the clearer, and they are not
- * paired one to one, so a flag that never comes back is a real possibility rather than a
- * hypothesis. It presents as a camera stuck on a shot the player has long walked away from, and it
- * survives until the level is reloaded, because nothing else clears the cell.
+ * Two one-line functions are the ONLY writers in the whole image, so watching it is cheap. Seven
+ * places call the setter and six call the clearer, and they are not paired one to one, so a flag
+ * that never comes back is a real possibility rather than a hypothesis. It presents as a camera
+ * stuck on a shot the player has long walked away from, and it survives until the level is
+ * reloaded, because nothing else clears the cell.
  *
  * What this answers is only "which caller set it last and did anybody clear it". That is enough,
  * because the setters are few and each one belongs to a different subsystem: the dialogue, the

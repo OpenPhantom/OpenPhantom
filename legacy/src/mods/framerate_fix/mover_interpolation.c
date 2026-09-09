@@ -94,7 +94,7 @@
  * B differs from A only in registers: the base and index of the `lea`, and the register pushed as
  * argument two. C starts at the same store into the parked subnode pointer and differs in argument
  * two, which it forms out of the global at 0x006F83E4 plus 8 rather than out of a register. All
- * three end with the same destination push, which is what identifies them as the mover set. */
+ * three end with the same destination push, which identifies them as the mover set. */
 static const uint8_t SIG_MOVER_MATMUL_A[] = {
     0x8D, 0x84, 0x90, 0x84, 0x00, 0x00, 0x00,
     0xA3, 0xE4, 0xF9, 0x5B, 0x00,
@@ -113,9 +113,9 @@ static const uint8_t SIG_MOVER_MATMUL_C[] = {
 
 /* --- the invert, the fourth consumer ---------------------------------------------------------- *
  * The disassembly is in the file header. Same rule: the pattern ends at the E8, so the call is at
- * 0x00419B81. patch_redirect_call keeps that E8 and rewrites only its displacement, which is why
- * the callee itself is never touched and neither are the other callers: nine of the twelve calls
- * to bapmap_matMul3, and two of the three calls to mat34_invertRigid. */
+ * 0x00419B81. patch_redirect_call keeps that E8 and rewrites only its displacement, so the callee
+ * itself is never touched and neither are the other callers: nine of the twelve calls to
+ * bapmap_matMul3, and two of the three calls to mat34_invertRigid. */
 static const uint8_t SIG_MOVER_INVERT[] = {
     0x8B, 0x15, 0xE4, 0xF9, 0x5B, 0x00,
     0x83, 0xC4, 0x0C, 0x83, 0xC2, 0x14, 0x52, 0x68, 0x48, 0xB5, 0x5B, 0x00, 0xE8
@@ -488,8 +488,8 @@ static void __cdecl hook_tick_mover(void *mover, float now)
     /* A drop is not automatically a wrap. Direction arm 3 integrates a reversing mover as
      * `pose = pose - rate * dt`, so a door on its return leg decreases on every single tick.
      * Treating that as a wrap would leave a whole class of mover smoothed on the way out and
-     * stepped on the way back, which is exactly the seam the all or nothing rule elsewhere in this
-     * file exists to prevent.
+     * stepped on the way back, the seam the all or nothing rule elsewhere in this file exists to
+     * prevent.
      *
      * The two are separable exactly rather than by tolerance: a wrap subtracts a whole track
      * length and a reversal at most one substep of travel, so half a track length lies strictly

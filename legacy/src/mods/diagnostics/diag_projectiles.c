@@ -45,17 +45,17 @@
  * carries that flag and is removed correctly on its own first hit.
  *
  * WHAT IT COSTS: nothing measurable, and this is the part that was got wrong for a long time. The
- * pileup was believed to cause a severe frame-rate stall at two lift platforms, and a fix that
- * force-removed stuck entries did make the stall smaller, which is why it was believed. It was
- * removing collision traces that were hammering a hook in another DLL. With that hook repaired
- * (see framerate_fix's mover_interpolation.c), holding a full pileup costs nothing at all: 57
+ * pileup was believed to cause a severe frame-rate stall at two lift platforms, on the evidence
+ * that a fix which force-removed stuck entries did make the stall smaller. It was removing
+ * collision traces that were hammering a hook in another DLL. With that hook repaired (see
+ * framerate_fix's mover_interpolation.c), holding a full pileup costs nothing at all: 57
  * entries at a flat 30 fps with no mods loaded, 57 entries at a flat 60 fps with the whole mod set
  * loaded and no cleanup running. Do not reintroduce a cleanup for this list on frame-rate grounds
  * without measuring the list against the frame rate first, the way these lines were.
  *
  * A count on its own never answered the question either way. What answered it was correlating the
- * count against per-second frame timing BY TIMESTAMP, which is why this census and diag_frame.c are
- * worth switching on together. */
+ * count against per-second frame timing BY TIMESTAMP, so switch this census and diag_frame.c on
+ * together. */
 #include "diag_projectiles.h"
 
 #include "diag_install.h"
@@ -84,7 +84,8 @@
 
 /* Past this many live entries, the report also names the first few by position, because a count
  * on its own does not say whether they are spread across the level (normal, many fights at once)
- * or stacked on top of each other (the shape a stuck or repeatedly-retriggered spawn would take). */
+ * or stacked on top of each other (the shape a stuck or repeatedly-retriggered spawn would
+ * take). */
 #define PROJECTILE_SAMPLE_THRESHOLD 10u
 #define PROJECTILE_SAMPLE_COUNT     5u
 

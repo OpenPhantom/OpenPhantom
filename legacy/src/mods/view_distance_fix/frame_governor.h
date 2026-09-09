@@ -95,7 +95,7 @@ frame_governor_action_t frame_governor_decide(float median_ms,
  * `full_step_shortfall`, the shortfall at which a whole step is the right answer, then clamped so
  * that neither end can produce a step of nothing or a lurch.
  *
- * Sizing rather than gating is what makes this converge. The steps shrink as the target is
+ * Sizing rather than gating makes this converge. The steps shrink as the target is
  * approached, so it settles instead of overshooting, and they grow when the scene turns sharply
  * heavier, so a collapse to 52 fps is answered in a second or two rather than seven. A frame time
  * already inside the target answers zero, since there is nothing to correct. */

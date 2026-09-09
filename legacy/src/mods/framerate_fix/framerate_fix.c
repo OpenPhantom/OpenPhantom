@@ -85,11 +85,11 @@ static const uint8_t SIG_WAIT_FOR_FRAME[] = {
 #define OFFSET_CAP_30_IMMEDIATE  0x10u
 #define OFFSET_CAP_60_IMMEDIATE  0x19u
 
-/* THE 1/30 IMMEDIATE IS INSIDE THE SIGNATURE AND THE 1/60 ONE IS NOT. The pattern above is 22
- * bytes, so it ends at +0x15 and a match already proves what sits at +0x10. +0x19 is three bytes past the
- * end of it and was written on the strength of the match alone, which is the one code write in this
- * DLL that did not check what it was overwriting. On a build that diverges after the matched
- * prologue that is four bytes of unknown instruction inside sys_waitForFrame.
+/* The 1/30 immediate is inside the signature and the 1/60 one is NOT. The pattern above is 22
+ * bytes, so it ends at +0x15 and a match already proves what sits at +0x10. +0x19 is three
+ * bytes past the end of it and was written on the strength of the match alone, the one code
+ * write in this DLL that did not check what it was overwriting. On a build that diverges after
+ * the matched prologue that is four bytes of unknown instruction inside sys_waitForFrame.
  *
  * What actually sits there is the immediate of the instruction that starts at +0x16:
  *
@@ -97,7 +97,7 @@ static const uint8_t SIG_WAIT_FOR_FRAME[] = {
  *
  * so the seven bytes from +0x16 are checked as a unit before either cap is written. Checking the
  * immediate alone would accept the right four bytes in the wrong instruction; checking the
- * instruction as well is what makes the offset mean something. */
+ * instruction as well makes the offset mean something. */
 #define OFFSET_CAP_60_MOV        0x16u
 static const uint8_t EXPECTED_CAP_60_MOV[] = {
     0xC7, 0x45, 0xFC, 0x89, 0x88, 0x88, 0x3C
@@ -525,7 +525,7 @@ static void on_frame(void)
     /* A zero or absurd frame delta is not an invitation to invent one. Substituting 1/30 here
      * made the camera take a full 30 Hz-sized step on a frame that took no time at all, pure
      * jitter at a high frame rate. Skipping is correct: the constants simply keep the value they
-     * had, which is what a zero-length frame deserves. */
+     * had. */
     if (!(frame_delta > 0.0f) || frame_delta > MAX_PLAUSIBLE_DELTA) {
         return;                                    /* also catches NaN */
     }

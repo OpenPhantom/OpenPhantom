@@ -6,8 +6,8 @@
  * each site and the arithmetic itself.
  *
  * SIZE NOTE. Back under the 600 line mark. The note stays because how it got there still matters.
- * Most of what is left is byte evidence at each site rather than code, and that is where the
- * evidence belongs.
+ * Most of what is left is byte evidence at each site rather than code. Evidence belongs at the
+ * site it came from.
  *
  * It was once past the hard limit, carrying four jobs its section banners named. Two have gone:
  * the arithmetic to fog_band.c, which needed no engine memory and is the half a unit test can
@@ -54,8 +54,8 @@
  * Why a level opens with no fog: a level load hands the engine the level's authored band, and the
  * coupling then recomputes the end from the cut edge the renderer reports on the first walked
  * frame. Those two are not the same number: Mos Espa authors 32 and its draw edge is 21.3, so the
- * fog visibly closes in by a third over the first seconds of the level. Easing it is what makes
- * that a slow slide rather than a jump, and on a level whose opening is an establishing camera a
+ * fog visibly closes in by a third over the first seconds of the level. Easing it turns that into
+ * a slow slide rather than a jump, and on a level whose opening is an establishing camera a
  * long way from the player, which is most of them, the slide is the most conspicuous thing on
  * screen. Reported on the podrace, twice.
  *
@@ -73,8 +73,8 @@
  * position instead, and the ordinary easing brings it in over FogSettleSeconds. Where it starts
  * from is the constant below. */
 
-/* The fade starts from the LEVEL'S OWN band, not from the one the coupling is heading for, and
- * that choice is what makes this independent of when anything else happens.
+/* The fade starts from the LEVEL'S OWN band, not from the one the coupling is heading for. That
+ * choice makes this independent of when anything else happens.
  *
  * Three attempts read the target at the moment the window closed, and all three read it against
  * the RAISED draw distance, because the scale is applied at the end of a frame and governs the
@@ -143,12 +143,12 @@ void fog_regime_note_cut(int32_t reference_range, int32_t effective_range)
  * the level's own authored view distance: the reference is that distance, and the live side is
  * where this DLL's own scale and radius cap put it, asked of the one function that owns that
  * arithmetic. The prediction is exact wherever the level has no per-cell override, which is the
- * ordinary case, and it is what lets a level open on the band it is going to keep.
+ * ordinary case, and it lets a level open on the band it is going to keep.
  *
  * It used to use the authored distance for BOTH sides, a ratio of one, which is only the same
  * answer at ViewRangeScale=1. RACE authors 22 and the real cut at 2.5 is 39, and a band computed
  * from 22 sits far nearer the camera than it belongs; that was reported, and predicting the live
- * side rather than assuming it is what stops it coming back. */
+ * side rather than assuming it keeps that from coming back. */
 static void current_cut(float *reference, float *live)
 {
     if (fog_state.cut_observed) {
@@ -170,8 +170,8 @@ static void target_now(fog_regime_band_t *out)
      * at a wide field of view they are not: the edge limit takes a band ending at 32 down to 21.3
      * on a level that draws to 22, so the level opened on almost no fog and the ease then drove
      * the fog wall in at 19 units a second, in a world 22 units deep. Measured over 442 frames
-     * with everything else on that path constant, which is what the reports of flashing at the
-     * start of a level turned out to be.
+     * with everything else on that path constant. The reports of flashing at the start of a level
+     * turned out to be this.
      *
      * current_cut predicts both sides instead, so the band a level opens on is the band it keeps
      * and there is nothing to travel. Whatever the first real cut then reports is a correction,
@@ -431,7 +431,7 @@ void fog_regime_on_frame(void)
          * fields every frame and whatever was in them took effect. The device path does not: the
          * band only reaches FOGSTART and FOGEND through applyLevelFog. So a writer who is not us
          * would be writing into a record nobody reads, and their fog would never change. Pushing
-         * their value, not ours, is what keeps that promise. */
+         * their value, not ours, keeps that promise. */
         if (fog_state.pixel_fog_active) {
             const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
 
@@ -471,7 +471,7 @@ void fog_regime_on_frame(void)
                  * distance is raised for this window and the engine culls whole cells at that
                  * edge, so a cell arriving there takes its near end with it and no band placed at
                  * the edge can cover it. A band laid well inside the raised cut can, and laying it
-                 * absolutely is what stops it moving while the window runs. */
+                 * absolutely stops it moving while the window runs. */
                 open_band.start = fog_state.config.open_fog_start;
                 open_band.end   = fog_state.config.open_fog_end;
             } else {
@@ -513,7 +513,7 @@ void fog_regime_on_frame(void)
      * to ours is EASED rather than snapped. It used to snap, and correctly: the starting point was
      * then a value computed from an assumed cut, and sliding away from a wrong number only draws
      * attention to it. Now that the starting point is the level's own, a snap is a visible jump on
-     * the first frame of every level, which is what a couple of them were reported flashing on. */
+     * the first frame of every level, and a couple of them were reported flashing on it. */
     fog_state.cut_first_seen = false;
 
     target_now(&target);
@@ -524,7 +524,7 @@ void fog_regime_on_frame(void)
                                               fog_state.config.settle_seconds);
 
     /* Settled means OUR band has not moved AND the device is showing it. The second half matters
-     * only on the device path, and it is what lets fog come back after another feature has held
+     * only on the device path, and it lets fog come back after another feature has held
      * the band: the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping
      * sees nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the
      * fog can be switched off and never on again. */

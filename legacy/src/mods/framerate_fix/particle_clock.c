@@ -167,8 +167,8 @@ static const uint8_t SIG_EMITTER_POOL[] = {
  * A recycled emitter slot cannot smear either, twice over. There is no previous position to
  * inherit, because the record is birth position, velocity, acceleration and birth time and there
  * is no previous field anywhere in the subsystem, and the allocator zeroes what it hands out, so a
- * freshly bound emitter's birth array is all zeros, which is exactly the free marker the
- * integrator tests at 0x004216A9.                                                                */
+ * freshly bound emitter's birth array is all zeros, the free marker the integrator tests at
+ * 0x004216A9.                                                                                    */
 #define EMITTER_NEWEST_BIRTH 0x10C
 
 /* The substep period, and the one constant in this file with no anchor in the image.
@@ -183,8 +183,8 @@ static const uint8_t SIG_EMITTER_POOL[] = {
  * If the period were ever really 1/64, the retardation computed here would be doubled and the
  * clamp above would fire on essentially every newly emitted particle: particles would still move
  * smoothly, would sit up to 15.6 ms of world time behind their emitter, and nothing would be
- * written into the simulation. The invariant at risk is ours rather than the engine's, which is
- * why it is named here instead of being left to be found.                                        */
+ * written into the simulation. The invariant at risk is ours rather than the engine's, so it is
+ * named here instead of being left to be found.                                                  */
 #define SUBSTEP_SECONDS 0.03125f
 
 /* --- 0x00411063  the substep alpha, and the engine's guard against a frozen simulation ------- *

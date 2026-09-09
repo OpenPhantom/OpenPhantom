@@ -332,7 +332,7 @@ fov 120.0  cut ref 22  live 32  -> band 4.9..15.7   (band was at 5.0..16.2)
 
 The field of view never moved and neither did the reference. The live cut fell, and the band spent
 the whole sequence chasing a target that had already moved again. Easing the **cut** rather than
-only the band is what fixes it: a step becomes a slope, several steps inside one settle become one
+only the band fixes it: a step becomes a slope, several steps inside one settle become one
 slope, and the fog ends where the draw distance ended without visiting every value on the way. It
 is deliberately slower than the band's own settle, because smoothing an input faster than its
 consumer only moves the problem.
@@ -578,7 +578,7 @@ The fog regime in particular was settled by running it rather than by reading it
 format, the capability bit, the two `FOGTABLEMODE` writers and the constant-zero specular
 fallback are all read out of
 the image, but whether the fog is then visible on screen is only answerable in play, and it is.
-The band reported in a real log matches the arithmetic exactly, which is also what proved the
+The band reported in a real log matches the arithmetic exactly; the same comparison proved the
 field-of-view cosine had stopped being applied.
 
 `FogBandScale` is newer than that session and has been played since. It ships at 0.60 rather than

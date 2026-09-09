@@ -60,8 +60,8 @@
  * result at [ebp-0x18].
  *
  * The completion test 0x42E3AD has exactly one caller, that call at 0x434109. The claim rests on
- * an E8 rel32 sweep of the whole .text, not on the call sites that were already known, and it is
- * what bounds this module to the facing command and nothing else:
+ * an E8 rel32 sweep of the whole .text, not on the call sites that were already known, and that
+ * single caller bounds this module to the facing command:
  *
  *     FIRST CALL   latches rec+0x1BC = rec+0x1C0, starts the clip, and when the opcode's third
  *                  operand is zero ORs RDMODE_HOLDEND into the track's mode flags at 0x42E456 and
@@ -99,7 +99,7 @@
 #include <stdint.h>
 
 /* 0x42E3AD, the completion test. The prologue is six bytes on an exact instruction boundary and
- * carries no relative operand, which is what lets the trampoline copy it:
+ * carries no relative operand, which lets the trampoline copy it:
  *
  *     0042E3AD  55              push ebp
  *     0042E3AE  8B EC           mov  ebp, esp

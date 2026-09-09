@@ -4,8 +4,8 @@
  * count and report and patch nothing; the hooks that feed them stay in diag_world.c with the
  * detours and the byte evidence they belong to, and what crosses the boundary is a record call
  * per hook and an install call per trigger level. Together with the mover census that is what
- * took diag_world.c back under the hard limit, and one census file would have landed near it
- * again, which is why there are two.
+ * took diag_world.c back under the hard limit; one census file would have landed near it again,
+ * so there are two.
  *
  * They are together in this one because they are a single question asked three times over, each
  * level earning the next: level 4 counts entries to the two render-path functions, level 5 asks
@@ -89,8 +89,8 @@ static void render_census_report(void)
  * routines (the engine dispatches drawing by object kind, and this is the shape that dispatch
  * takes in the binary); the other four are further out, at 0x42aafe, 0x43a5ff, 0x456e8b and
  * 0x457032. Which of those a live session actually goes through, and in what proportion, is
- * exactly what a call count without a call site cannot say, which is why the mover census took
- * the same approach rather than trusting a hand-written list. */
+ * exactly what a call count without a call site cannot say, so the mover census took the same
+ * approach rather than trusting a hand-written list. */
 #define POLY_CALL_SITES_MAX 24u
 #define POLY_CENSUS_FRAMES  200u
 
@@ -250,13 +250,14 @@ void render_census_count_transform_world(void)
 
 /* ============================================================================================
  * Who calls the two traces. Level 6. The poly-to-world census named FUN_0040e06b's own call site
- * as the dominant one during the stall, and FUN_0040e06b has exactly one job: it is the per-candidate
- * distance test both FUN_0040be00 (the general, mover-aware line trace) and FUN_0040c2be (the floor
- * trace) run inside the same shared broadphase walk. Neither of those two is a callee bapmap_polyToWorld
- * chooses for itself; they are the reason it runs at all in this path, so the next question is
- * which of THEIR OWN callers, spread across player movement, AI and physics, is the one actually
- * asking for a trace thousands of times in one frame. One shared shape, two independent instances,
- * the same reason the poly-to-world census above did not just reuse the mover census's own state. */
+ * as the dominant one during the stall, and FUN_0040e06b has exactly one job: it is the
+ * per-candidate distance test both FUN_0040be00 (the general, mover-aware line trace) and
+ * FUN_0040c2be (the floor trace) run inside the same shared broadphase walk. Neither of those
+ * two is a callee bapmap_polyToWorld chooses for itself; they are the reason it runs at all in
+ * this path, so the next question is which of THEIR OWN callers, spread across player movement,
+ * AI and physics, is the one actually asking for a trace thousands of times in one frame. One
+ * shared shape, two independent instances, the same reason the poly-to-world census above did
+ * not just reuse the mover census's own state. */
 #define CALL_CENSUS_SITES_MAX 24u
 #define CALL_CENSUS_FRAMES    200u
 

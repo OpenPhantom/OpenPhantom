@@ -166,6 +166,8 @@ static const uint8_t SIG_GATHER_GATE[] = {
 static const uint8_t MSK_GATHER_GATE[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_GATHER_GATE == sizeof MSK_GATHER_GATE,
+               "the gather gate pattern and its mask are different lengths");
 
 #define OFFSET_TABLE_PLUS_FOUR 0x09u   /* operand = table base + 4 */
 #define OFFSET_TABLE           0x0Fu   /* operand = table base */

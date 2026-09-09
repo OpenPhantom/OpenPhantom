@@ -87,12 +87,12 @@ static const uint8_t SIG_SOUND_PLACE_OFF[] = {
 #define SOUND_PLACE_OFF_PROLOGUE 10u
 
 /* --- bapMusicSetState 0x004105A3 -------------------------------------------------------------- *
- * Twenty lines, and that is the WHOLE music "state machine" on the game's side: refuse when not
- * attached, no-op when the cue is already pending, latch, call the DLL. Everything that looks like
- * an automaton lives in IMUSE.DLL and in the muscript records.
+ * Twenty lines are the WHOLE music "state machine" on the game's side: refuse when not attached,
+ * no-op when the cue is already pending, latch, call the DLL. Everything that looks like an
+ * automaton lives in IMUSE.DLL and in the muscript records.
  * WARNING: both setters LATCH BEFORE the DLL call. A cue the DLL rejects (GARDEN's 2950 has no
- * muscript record) therefore leaves the latch out of step with what is audible, which is why
- * this hook logs the latch BEFORE and AFTER the call.
+ * muscript record) therefore leaves the latch out of step with what is audible, so this hook
+ * logs the latch BEFORE and AFTER the call.
  *   +0x06 : &g_musicAttached [0x5BAB8C]  (0 => this function does NOTHING)
  *   +0x16 : &g_stateLatch    [0x4AA41C] */
 static const uint8_t SIG_MUSIC_STATE[] = {

@@ -98,7 +98,7 @@ Some detail that matters if you are reading a report:
 
 The debug registers are per thread, and they are written from a short lived helper thread that
 suspends the simulation thread first. A thread cannot reliably set its own, and the failure is
-silent rather than loud, which would read as a field nothing writes.
+silent rather than loud, so it reads as a field nothing writes.
 
 The handler does no file work. It records into a fixed buffer and returns, and the frame callback
 writes those records out afterwards. Logging from inside the handler would put file work between

@@ -8,8 +8,8 @@
  * signature and writes every byte. Nothing here runs again afterwards. What stayed behind is the
  * work that runs on every frame and on every level load.
  *
- * It writes the same record the rest of the module reads, through fog_regime_internal.h, and that
- * is deliberate rather than a leak: the fog regime is one machine and pretending otherwise would
+ * It writes the same record the rest of the module reads, through fog_regime_internal.h. That is
+ * deliberate rather than a leak: the fog regime is one machine and pretending otherwise would
  * mean inventing accessors for ten functions to reach the same fields.
  *
  * SIZE NOTE: past the 600 line mark, and the byte evidence is the reason. Five signatures sit at
@@ -46,12 +46,11 @@
  *
  * TWO CALLERS, and both matter here: 0x0041CAA7 in the level-load path and 0x00438F77 at the tail
  * of the effects fog restore. Without a remembered load value the scale would SQUARE itself on the
- * second run, which is why nothing in this file ever computes from the value currently in the
- * field.
+ * second run, so nothing in this file ever computes from the value currently in the field.
  *
  * The band it hands to the device is not what draws the fog in this regime, see the capability
- * query below, but it is the one place the AUTHORED numbers can be caught, which is what this
- * detour is for. */
+ * query below, but it is the one place the AUTHORED numbers can be caught. This detour is here
+ * to catch them. */
 static const uint8_t SIG_APPLY_LEVEL_FOG[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x08, 0x8B, 0x88, 0x14, 0x02, 0x00, 0x00, 0xC1
 };
@@ -73,7 +72,7 @@ static const uint8_t SIG_APPLY_LEVEL_FOG[] = {
  * the device evaluates that band against a device-space depth inside [0,1] and never fogs
  * anything, while issuing all five fog states exactly as asked.
  *
- * All three sites or none, and that is not tidiness: with the ramp disarmed the world pass writes
+ * All three sites or none. This is not tidiness: with the ramp disarmed the world pass writes
  * a CONSTANT ZERO into every world vertex's specular (0x00402459), and zero means FULLY FOGGED.
  * Clearing FOGTABLEMODE without arming the ramp paints the world in the fog colour.
  * The 2-D layer is unaffected, sprites and lines carry render-state words without the fog bit
@@ -253,7 +252,7 @@ void report_device_fog_caps(void)
     }
     /* The device is opened after this DLL installs, so the pointer is null for the first frames.
      * Waiting rather than reporting a zero is the difference between "no device yet" and "a device
-     * that offers nothing", which are not the same answer. */
+     * that offers nothing". */
     record = *(const void *const *)fog_state.device_record_ptr;
     if (record == NULL) {
         return;
@@ -286,8 +285,8 @@ void report_device_fog_caps(void)
  * device measuring fog against w. What decides whether the device measures w or device depth is the
  * projection matrix, and the engine never sets one: SetTransform is not called anywhere in the
  * image, so the runtime sees the identity, calls it affine, and measures depth in [0,1]. A
- * world-unit band against a [0,1] depth fogs nothing, which is why the game looks unfogged on any
- * device that reports table fog.
+ * world-unit band against a [0,1] depth fogs nothing, so the game looks unfogged on any device
+ * that reports table fog.
  *
  * So this does not convert the band. It sets a w-compliant projection and gives the engine its own
  * branch back, which removes the per-vertex ramp and with it the two artefacts the ramp cannot
@@ -390,14 +389,14 @@ void consider_pixel_fog(uint32_t caps)
     fog_state.pixel_fog_active = true;
     fog_state.projection_device = device;
 
-    /* ONE WAY, and that is the reason there is no switch back. Going the other way needs the
-     * device reprogrammed, because this engine only ever sets FOGTABLEMODE from inside
-     * applyLevelFog and that runs at a level load. Reverting the three writes changes what the
-     * NEXT load will push and nothing else, so the engine goes back to computing a per-vertex
-     * factor while the device is still told to ignore it, and nothing is fogged. Reverting the
-     * writes, handing the identity projection back, and calling applyLevelFog's original by hand
-     * were all tried in the game and none of them brought the fog back. So the delivery is chosen
-     * once, at startup, from FogImplementation, and what the panel offers is the band. */
+    /* ONE WAY, so there is no switch back. Going the other way needs the device reprogrammed,
+     * because this engine only ever sets FOGTABLEMODE from inside applyLevelFog and that runs at
+     * a level load. Reverting the three writes changes only what the NEXT load will push, so the
+     * engine goes back to computing a per-vertex factor while the device is still told to ignore
+     * it, and nothing is fogged. Reverting the writes, handing the identity projection back, and
+     * calling applyLevelFog's original by hand were all tried in the game and none of them brought
+     * the fog back. So the delivery is chosen once, at startup, from FogImplementation, and what
+     * the panel offers is the band. */
     log_info("pixel fog active: the device measures eye-space w, the band goes to it in world "
              "units unconverted, and the engine's own per-vertex ramp is switched back off. No "
              "8-bit fog factor and no interpolation of it across polygons.");

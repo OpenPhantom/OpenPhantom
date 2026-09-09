@@ -22,7 +22,7 @@ void sim_clock_install(bool enabled);
 
 /* How much to take off both clocks, or 0 when it is not time yet. Split out and declared here
  * because it is the one claim this feature stands on and it is pure arithmetic: the amount must be
- * a power of two no greater than the live value, which is what makes both subtractions exact and
+ * a power of two no greater than the live value, which makes both subtractions exact and
  * therefore leaves the difference the interpolation depends on untouched. Driven by the unit test.
  */
 double sim_clock_rebase_step(float live);

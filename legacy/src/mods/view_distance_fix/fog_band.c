@@ -129,7 +129,7 @@ void fog_regime_target_band(const fog_regime_config_t *config,
     /* And its mirror, for the same reason in the opposite direction. current_cut hands this the
      * EASED live cut, which lags low while the cut is rising. A pop-in cap computed from a low cut
      * is merely conservative, so that one takes the smaller. A no-saturation end computed from a
-     * low cut sits INSIDE the drawn world, which is exactly the flat region the rule exists to
+     * low cut sits INSIDE the drawn world, leaving exactly the flat region the rule exists to
      * remove, so this one takes the larger. Residual, stated rather than hidden: above
      * ViewRangeScale 1 the true live cut can still exceed both for up to FOG_CUT_SETTLE_SECONDS
      * after a governor step, leaving a shallow saturated shell until the ease catches up. */
@@ -155,10 +155,10 @@ void fog_regime_target_band(const fog_regime_config_t *config,
      * for, their authored fog is between 42 and 100 per cent opaque where the geometry ends, so
      * there was nothing to fix and the scaling only brought the fog nearer than the level wanted.
      * Two do not, Coruscant with no cover at all at its edge and the Federation ship with five per
-     * cent, and those two are what the scaling below exists for.
+     * cent, and the scaling below exists for those two.
      *
      * Which is right depends on whether covering those two matters more than leaving the other
-     * nine as authored, and that is taste rather than correctness. */
+     * nine as authored. That is taste, not correctness. */
     if (config->authored_band) {
         *out = *authored;
         bring_band_in(out, config->band_scale);

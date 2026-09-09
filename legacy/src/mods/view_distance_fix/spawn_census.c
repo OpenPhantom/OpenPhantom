@@ -110,8 +110,8 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
 
 #define PLAYER_POSITION_LOG_EVERY_FRAMES 10u   /* rough, and small on purpose: a 90-frame throttle
                                                  * turned into one sample per ~13 real seconds
-                                                 * during a 7 fps stall, which is exactly the
-                                                 * window this needs to resolve precisely */
+                                                 * during a 7 fps stall, the very window this
+                                                 * needs to resolve precisely */
 
 typedef struct player_position_log_state {
     bool      armed;
@@ -390,8 +390,8 @@ static int32_t __cdecl hook_spawn(void *a, void *b, void *c)
     if (census.original == NULL) {
         /* Not the window detour.c has: here the target is stored BEFORE the call is redirected,
          * so by the time this hook can run it is set. The guard stands because a null call would
-         * take the process down, and it must not be mistaken for a refusal, which is why nothing
-         * is counted on this path. */
+         * take the process down, and it must not be mistaken for a refusal, so nothing is
+         * counted on this path. */
         return 0;
     }
 
@@ -482,7 +482,7 @@ bool spawn_census_install(uintptr_t activation_scan, bool enabled)
  * sets it to 0 UNLESS the actor's own state field (actor+0x20) reads 14, in which case that too is
  * immediately overwritten back to 2. Zero is also activation_scan's own "not yet created" gate, so
  * a reason that lands on the zero path is a placement that will be recreated on the very next
- * scan tick, which is exactly the shape of what the field report described. */
+ * scan tick, exactly the shape the field report described. */
 static const uint8_t SIG_ACTOR_DESTROY[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x08, 0x8B, 0x48, 0x14,
     0x81, 0xE1, 0x00, 0x20, 0x00, 0x00, 0x85, 0xC9
@@ -507,7 +507,7 @@ static destroy_census_state_t destroy_census;
  * identical to the placement's own), so the level data is not at fault, and reason 0 is the only
  * reason this mechanism ever produces.
  *
- * SUPPRESSION WAS TRIED FOUR WAYS FROM THIS HOOK AND ALL OF IT IS GONE NOW. The account is kept
+ * Suppression was tried FOUR ways from this hook and all of it is gone now. The account is kept
  * because the mechanism above is still real and someone will find it again.
  *
  *   1. Re-check the activation radius before forwarding a reason-0 destroy. Field-tested at zero
@@ -522,7 +522,7 @@ static destroy_census_state_t destroy_census;
  *   4. A general version keyed on actor+0x108, a per-tick-refreshed field that decompiled as a
  *      pointer to whichever mover an actor is riding, refreshed by FUN_00435c67/FUN_0040be00 ahead
  *      of the deactivation check. Refusing the destroy whenever it was non-null would have covered
- *      any actor on any mover. It shipped, reviewed clean, and FIELD-TESTED AT ZERO SUPPRESSIONS:
+ *      any actor on any mover. It shipped, reviewed clean, and field-tested at ZERO suppressions:
  *      a played session logged 2,014 reason-0 destroys for the five known placements and it refused
  *      none of them. Whatever that field is, it did not behave as the decompile suggested. Do not
  *      re-attempt it on the strength of the decompile alone.

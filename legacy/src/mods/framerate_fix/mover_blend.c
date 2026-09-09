@@ -1,7 +1,7 @@
 /* mover_blend.c: what a moving door looks like between two simulation steps.
  *
- * This is the whole of the arithmetic and none of the engine, and it is a file of its own because
- * every way it can be wrong is silent in review and loud on screen:
+ * All of the arithmetic and none of the engine, in a file of its own because every way it can be
+ * wrong is silent in review and loud on screen:
  *
  *   a scale destroyed      the mover snaps to its unscaled size on every drawn frame and grows
  *                          back on the next simulation step, which reads as a flickering model
@@ -38,8 +38,8 @@
  *
  * The assumption this rests on is that the scale multiplies the ROWS. If it multiplies the columns
  * instead, the blend is still continuous and still exact at both ends, but the intermediate is a
- * mix rather than the exact answer. That is worth knowing before anybody reads a wobble here as a
- * defect in the lerp.
+ * mix rather than the exact answer. Check that before reading a wobble here as a defect in the
+ * lerp.
  */
 #include "mover_blend.h"
 

@@ -68,7 +68,7 @@
  * 0x00409191 tests equality only; a clock that moved backwards is not equal, so the body runs. The
  * delta it then computes is negative and is clamped to zero at 0x004091A3, and mover+0x30 is
  * restamped at 0x004091BD whichever way that clamp went. So a backwards world clock would cost one
- * zero length tick per mover and not a freeze, which is what the earlier reading claimed.
+ * zero length tick per mover, not the freeze the earlier reading claimed.
  *
  * What it would really cost is every absolute deadline stamped from world+0x54. Those would be
  * extended by the rebase and would never expire. So the offset is added back inside the hook, the
@@ -138,7 +138,7 @@ static const uint8_t SIG_SIM_CLOCK_PAIR[] = {
  *     0041F0E1  D8 0D 14824A00        fmul dword [0x004A8214]   1000.0, on the way to the tick
  *
  * The pattern reaches past the prologue into the two loads of the world pointer and the copy of the
- * previous millisecond tick, which is what makes it unique. */
+ * previous millisecond tick, which makes it unique. */
 static const uint8_t SIG_SET_WORLD_CLOCK[] = {
     0x55, 0x8B, 0xEC, 0x83, 0x7D, 0x08, 0x00, 0x74, 0x38,
     0x8B, 0x45, 0x08, 0x8B, 0x4D, 0x08, 0x8B, 0x51, 0x50, 0x89, 0x50, 0x58
@@ -218,7 +218,7 @@ static void __cdecl hook_set_world_clock(void *world, float time)
 }
 
 /* The largest power of two at or below the live value, or 0 while the clock is still small enough
- * that its resolution is not a problem. Being a power of two is what makes both subtractions exact:
+ * that its resolution is not a problem. Being a power of two makes both subtractions exact:
  * it is a whole multiple of the unit in the last place of anything at least as large, so nothing
  * rounds and the difference between the two clocks, which is all the interpolation depends on,
  * survives bit for bit. */
@@ -268,8 +268,8 @@ void sim_clock_sample(void)
     ++sim_state.rebases;
 
     /* One line the first time it happens. Without it the log cannot tell a feature that is working
-     * from one that resolved its sites and then never fired, and that is the failure that reads
-     * most like success. Afterwards it happens about every two seconds and is not worth a line. */
+     * from one that resolved its sites and then never fired, the failure that reads most like
+     * success. Afterwards it happens about every two seconds and is not worth a line. */
     if (sim_state.rebases == 1u) {
         log_info("first rebase at %.3f s of level time, %.0f s taken off both clocks and added "
                  "back to the world clock", (double)live, step);

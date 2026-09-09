@@ -20,9 +20,9 @@
  *   DB 44 24 2C              fild  dword [esp+0x2C]
  *   D8 0D <scale>            fmul  dword [scale]         1/64, so the byte spans about +-2 units
  *
- * The four scale bytes are WILDCARDED and the address is read back out of the operand, which is
- * what the repository asks for and what keeps this working across the three builds that ship at
- * this file size. With them masked the pattern still matches exactly once. */
+ * The four scale bytes are WILDCARDED and the address is read back out of the operand. The
+ * repository asks for that, and it keeps this working across the three builds that ship at this
+ * file size. With them masked the pattern still matches exactly once. */
 static const uint8_t SIG_POLY_BIAS_SCALE[] = {
     0x8A, 0x47, 0x36, 0xC6, 0x44, 0x24, 0x13, 0x3F, 0x84, 0xC0,
     0xC6, 0x44, 0x24, 0x30, 0x00, 0x74, 0x17, 0x0F, 0xBE, 0xC8,
@@ -65,8 +65,8 @@ void poly_bias_install(bool enabled)
                     "inside the image, refused", (unsigned)site, (unsigned)address);
         return;
     }
-    /* Read back before writing, which is what makes this idempotent and what catches a build whose
-     * pattern matched by accident. */
+    /* Read back before writing: it makes this idempotent and catches a build whose pattern
+     * matched by accident. */
     if (scale != EXPECTED_SCALE) {
         log_warning("the bias scale at %08X holds %.6f rather than the expected %.6f, refused",
                     (unsigned)address, (double)scale, (double)EXPECTED_SCALE);

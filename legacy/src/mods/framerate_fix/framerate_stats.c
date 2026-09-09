@@ -64,7 +64,7 @@ static const uint8_t SIG_SUBSTEP_TAIL[] = {
 #define OFFSET_SIM_TIME       0x0Fu   /* the fld's operand; the D9 05 opcode is verified first */
 #define OFFSET_SUBSTEP_ALPHA  0x3Eu   /* past the jmp; the opcode is verified before use */
 
-/* The counter is shared, and that is why the simulation clock is read as well.
+/* The counter is shared, so the simulation clock is read as well.
  *
  * An operand census over the text section, scanning for each cell's four byte little endian
  * encoding at any alignment and classifying every hit by the opcode in front of it:
@@ -82,12 +82,12 @@ static const uint8_t SIG_SUBSTEP_TAIL[] = {
  * Nothing else in the image reads or writes it. So a menu frame ticks the counter once per
  * rendered frame while the clock stands still, and a window taken in a menu used to be printed as
  * though it were a measurement of the simulation, reporting roughly one substep per frame at the
- * frame rate with an alpha that never moved. The clock is the cell that separates the two cases
- * and it is what a window's verdict is now decided on.
+ * frame rate with an alpha that never moved. The clock is the cell that separates the two cases,
+ * and a window's verdict is now decided on it.
  *
- * The period is not read out of the engine, and that is deliberate. g_frameTime [0x00868714] looks
- * like the obvious source, because it is exactly what the loop adds to the clock, and the
- * disassembly of the substep driver says why it is not:
+ * The period is deliberately not read out of the engine. g_frameTime [0x00868714] looks like the
+ * obvious source, because it is exactly what the loop adds to the clock, and the disassembly of
+ * the substep driver says why it is not:
  *
  *   004756FC  55 8B EC 51              prologue
  *   00475700  D9 05 14878600           fld  [g_frameTime]       the FRAME delta arrives here
@@ -466,10 +466,10 @@ static void log_frame_window(void)
      *
      * Stamping the marks when the first frame of a window arrives measures N-1 intervals while
      * counting N frames, so every figure derived from wall time came out N/(N-1) too high: at the
-     * shipped interval of 60 that is 1.7 percent, which is why every window in every field log
-     * reported a frame rate just above the cap and a flat "1.02x real time". Closing one window
-     * and opening the next at the same instant makes the windows contiguous and the interval count
-     * match the frame count, and it stops the substep total losing an interval as well. */
+     * shipped interval of 60 that is 1.7 percent, so every window in every field log reported a
+     * frame rate just above the cap and a flat "1.02x real time". Closing one window and opening
+     * the next at the same instant makes the windows contiguous and the interval count match the
+     * frame count, and it stops the substep total losing an interval as well. */
     stats_state.ticks_at_window_start =
         (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
     stats_state.sim_time_at_window_start =

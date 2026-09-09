@@ -73,7 +73,7 @@
 
 /* And at least this many milliseconds longer than the median, whatever the percentage says.
  *
- * The percentage on its own is scale free, which is what it was chosen for, and that turns into a
+ * The percentage on its own is scale free, the property it was chosen for, and that turns into a
  * defect as soon as the frame rate is high. At a 2.2 ms median and a 20 per cent trigger, a frame
  * that ran 0.44 ms long is called a hitch, and 0.44 ms is ordinary scheduler noise that nobody can
  * see. The instrument then reported a dozen hitches a second on a picture the player called
@@ -162,7 +162,7 @@ static double filetime_seconds(const FILETIME *time)
 
 /* The graphics counter, opened once and left open. A wildcard instance is used because a machine
  * has one engine per queue per adapter and the interesting one is whichever is doing the 3D work;
- * the values are summed and clamped, which is what a task manager shows. */
+ * the values are summed and clamped, the same figure a task manager shows. */
 typedef struct gpu_counter {
     bool         tried;
     bool         live;
@@ -316,7 +316,7 @@ static int compare_float(const void *left, const void *right)
     return (a > b) ? 1 : 0;
 }
 
-/* The median of the most recent frames, which is what a hitch is measured against. Taken from a
+/* The median of the most recent frames, the baseline a hitch is measured against. Taken from a
  * copy so that the ring itself is never reordered. */
 static float recent_median(void)
 {
@@ -459,8 +459,8 @@ static void on_frame_end(void)
         frame_state.window_worst = wall_ms;
     }
 
-    /* The dump is collected after the hitch, which is why it is a countdown rather than a call: the
-     * frames that follow one are part of the picture and they do not exist yet. */
+    /* The dump is collected after the hitch, so it is a countdown rather than a call: the frames
+     * that follow one are part of the picture and they do not exist yet. */
     if (frame_state.pending_dump > 0u) {
         --frame_state.pending_dump;
         if (frame_state.pending_dump == 0u) {

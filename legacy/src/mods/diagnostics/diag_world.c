@@ -40,8 +40,8 @@
 
 /* --- bapmap_openMover 0x00408B50 -------------------------------------------------------------- *
  * The open command. It fires EVERY FRAME while a body stands on a pressure plate
- * (bapmap_firePlate has no rising edge), which is why the hook snapshots the mover BEFORE and
- * AFTER the call and stays quiet when nothing changed.
+ * (bapmap_firePlate has no rising edge), so the hook snapshots the mover BEFORE and AFTER the
+ * call and stays quiet when nothing changed.
  *   world+0x620 = numMovers, world+0x624 = ppMover[] (an INLINE array, not a pointer to one)
  *   mover+0x00 = active, +0x04 = type, +0x08 = id, +0x2C = pose, +0x34 = dir */
 static const uint8_t SIG_MOVER_OPEN[] = {
@@ -125,7 +125,7 @@ static const uint8_t SIG_AI_RETURN_MODE[] = {
  * The only site in the whole DLL that does not sit on a function entry. The opcode dispatcher was
  * inlined by MSVC INTO ai_run (0x433D0B); it has no symbol and no frame of its own. There is
  * therefore no way to observe "which opcode is running" with an ordinary detour. What follows is a
- * detour INTO THE MIDDLE of a function, and that is deliberately tied to three conditions:
+ * detour INTO THE MIDDLE of a function, deliberately tied to three conditions:
  *
  *   (1) the pattern is the proof. The two stolen instructions
  *         0F BF 4D E4          movsx ecx, word ptr [ebp-0x1C]   ; the resolved opcode
@@ -174,13 +174,13 @@ static const uint8_t SIG_TRANSFORM_WORLD[] = {
 
 /* --- FUN_0040be00 0x0040be00 --------------------------------------------------------------------
  * The general line trace: clears a 0x22-dword result structure, then walks the SAME broadphase
- * candidate iterator (FUN_0040d7bf/FUN_0040d7dd) bapmap_polyToWorld's own callers were found sitting
- * behind, testing each candidate through FUN_0040e06b, the distance-along-a-ray-to-a-plane helper
- * that call site 0x0040e081 in the poly-to-world census names as the dominant one during the stall.
- * The result structure carries a hit mover pointer and subnode index (result+0x20, result+0x24) as
- * well as the hit distance, so this is mover-aware: it is what a sweep against the world, including
- * a moving lift, has to be. Decompiled as `void FUN_0040be00(undefined4 context, float *result)`,
- * plain cdecl, two arguments. */
+ * candidate iterator (FUN_0040d7bf/FUN_0040d7dd) bapmap_polyToWorld's own callers were found
+ * sitting behind, testing each candidate through FUN_0040e06b, the distance-along-a-ray-to-a-plane
+ * helper that call site 0x0040e081 in the poly-to-world census names as the dominant one during
+ * the stall. The result structure carries a hit mover pointer and subnode index (result+0x20,
+ * result+0x24) as well as the hit distance, so this is mover-aware, as a sweep against the world,
+ * including a moving lift, has to be. Decompiled as `void FUN_0040be00(undefined4 context,
+ * float *result)`, plain cdecl, two arguments. */
 static const uint8_t SIG_TRACE_GENERAL[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x7C, 0x57, 0xC7, 0x45, 0xC8, 0x00, 0x00, 0x00, 0x00,
     0x8B, 0x45, 0x0C, 0x8B, 0x48, 0x18
@@ -192,7 +192,8 @@ static const uint8_t SIG_TRACE_GENERAL[] = {
  * whose own type nibble at +0x3e is exactly 0xE before it is even tested, and it stops at the first
  * one rather than keeping the closest. A single-purpose "what floor polygon is under this point"
  * query built out of the same shared iterator and the same FUN_0040e06b distance helper. Decompiled
- * as `float10 FUN_0040c2be(undefined4 context)`, plain cdecl, one argument, returns through ST(0). */
+ * as `float10 FUN_0040c2be(undefined4 context)`, plain cdecl, one argument, returns through
+ * ST(0). */
 static const uint8_t SIG_TRACE_FLOOR[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44, 0x6A, 0x00, 0x8B, 0x45, 0x08, 0x50,
     0x8B, 0x0D, 0x60, 0x00, 0x8A, 0x00
@@ -526,11 +527,11 @@ static __declspec(naked) void hook_ai_opcode(void)
         pushfd
         sub     esp, 112
         fnsave  [esp]
-        movsx   eax, word ptr [ebp - 01Ch]     /* the resolved opcode, offset proven by the pattern */
-        mov     ecx, [ebp + 8]                 /* ai_run(character *actor)                            */
+        movsx   eax, word ptr [ebp - 01Ch]  /* the resolved opcode, offset proven by the pattern */
+        mov     ecx, [ebp + 8]              /* ai_run(character *actor)                          */
         push    ecx
         push    eax
-        call    diag_on_ai_opcode              /* __stdcall: cleans up after itself                   */
+        call    diag_on_ai_opcode           /* __stdcall: cleans up after itself                 */
         frstor  [esp]
         add     esp, 112
         popfd

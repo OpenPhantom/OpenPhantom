@@ -38,7 +38,7 @@ static const uint8_t SIG_OVERRIDE_ON[] = {
  *   5D C3                        pop ebp / ret
  *
  * Fifteen bytes, all taken, unique at thirteen. It takes no argument: it clears the flag and
- * leaves the forced region cell alone, which is why the flag rather than the cell is watched. */
+ * leaves the forced region cell alone, so the flag rather than the cell is watched. */
 static const uint8_t SIG_OVERRIDE_OFF[] = {
     0x55, 0x8B, 0xEC, 0xC7, 0x05, 0xE8, 0xB4, 0x5B, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x5D, 0xC3

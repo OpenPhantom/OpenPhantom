@@ -11,7 +11,7 @@
  * The name is NOT a unique identifier. The spawn path copies it out of the placement, and a
  * placement name turns out to be a reused archetype label rather than a per-placement id; two
  * earlier attempts to identify a specific placement by name matching were both wrong for that
- * reason. Position is what distinguishes one from another, which is why every line carries it.
+ * reason. Position is what distinguishes one from another, so every line carries it.
  *
  * ================================ The pool, and why it is walked by hand ======================
  *
@@ -39,7 +39,7 @@
  *   +0x7C  AI mode          local_8[0x1f], taken from the placement's own first dword.
  *
  * The body is the same structure the player's own +0x0C points at: both carry an rdThing at +0x9C,
- * which is what ties the two independent readings of this layout together.
+ * the field that ties the two independent readings of this layout together.
  *
  *   +0x18  position           float[3], world x/y/z
  *   +0x54  previous position  float[3], the same at the end of the previous simulation step
@@ -58,7 +58,9 @@
  * Reads go through memory_try_read, not memory_read. The per slot reads are the many ones here,
  * and the guarded readers cost a structured exception frame rather than a VirtualQuery syscall.
  * This project has already paid once for getting that the wrong way round in a walk that runs
- * often; the rule is written down in CONTRIBUTING.md.
+ * often. memory_read and memory_is_readable_range belong in installation code and in code that
+ * runs at human rates, never on a path the engine drives per object or per frame, because each of
+ * them calls VirtualQuery and a guarded pointer read through them costs two of those syscalls.
  */
 #include "diag_characters.h"
 
@@ -97,9 +99,8 @@
  *
  * The pattern HAS TO run this far. The first twenty bytes alone match twice in the retail image:
  * a second function at 0x00415B38 opens identically against a different global, 0x005BB4B8, and a
- * pattern
- * that matched both would have resolved to nothing and switched this observer off. The two
- * diverge at the instruction after the jump, where this one loads the global it just tested and
+ * pattern that matched both would have resolved to nothing and switched this observer off. The
+ * two diverge at the instruction after the jump, where this one loads the global it just tested and
  * the other stores a zero somewhere else, so the pattern runs on to that A1 opcode. Counted
  * against the retail executable, 829,952 bytes, MD5 7c5af8428c19b17cca09ae3a49bd10ef: one match.
  * The jump displacement and both addresses are wildcarded, since all three are what differ
@@ -128,14 +129,14 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x3C, 0x85, 0x28, 0x52, 0x4B, 0x00, 0x01, 0x0F, 0x84, 0x95, 0x00, 0x00,
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
-/* SEARCHED AS A DETOUR TARGET even though nothing here hooks it, and that is the whole of why
- * this census used to switch itself off.
+/* SEARCHED AS A DETOUR TARGET even though nothing here hooks it. Searching for the plain
+ * prologue instead is the entire reason this census used to switch itself off.
  *
  * diag_flow.c detours this same function, and with [diagnostics] Player=1 it gets there
  * first: the prologue is replaced by a jump before this table is resolved, so a search for
  * the prologue found nothing and the census declined with a warning that named the symptom
  * rather than the cause. Searching as a detour target finds the site by its tail instead,
- * which is what every other already-detoured site in this project does.
+ * as every other already-detoured site in this project does.
  *
  * The operand read below is at +0x27, well past the six bytes a detour overwrites, so the
  * address it yields is the same either way. */

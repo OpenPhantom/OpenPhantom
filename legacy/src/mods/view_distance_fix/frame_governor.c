@@ -25,8 +25,8 @@
 
 /* Impatient about pain, slow about recovery: one bad second is enough to take a step, and it takes
  * thirty good ones in a row to give the FIRST one back. Thirty consecutive good seconds is a much
- * stronger claim than one, and it is what distinguishes "the heavy scene is over" from a lull in
- * the middle of it.
+ * stronger claim than one, and it distinguishes "the heavy scene is over" from a lull in the
+ * middle of it.
  *
  * Once that first step back has been earned, the rest come every ten seconds. The expensive claim
  * is the first one; after it has been made, holding the remaining steps at half a minute each only
@@ -66,7 +66,7 @@
 #define GOVERNOR_UNCAPPED_BACKOFF_FPS 50.0f
 
 /* The fraction of a frame cap that counts as missing it. At TargetFps 100 this is 75 fps: not a
- * frame rate anybody would call broken, which is the point. The report this was built for was a
+ * frame rate anybody would call broken. The report this was built for was a
  * drop from 100 to 66, and a governor that only woke at 30 fps would have slept through it. */
 #define GOVERNOR_CAP_FRACTION 0.75f
 

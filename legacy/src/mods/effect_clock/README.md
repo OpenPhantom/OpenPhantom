@@ -99,8 +99,8 @@ fxfade     0x00439AB6   reached from bapobj_drawAll      PER FRAME
 * **The body sphere**, `fxshield`. It lives in the same module as the arcs, carries three of the
   eighteen sites across its two functions, and from the outside looks exactly like the arcs: a
   random shape rebuilt around a body. It is on message `0x0E`, the substep broadcast, so it is
-  already clocked correctly and pacing it would have made it worse. Reading the jump table rather
-  than trusting the resemblance is what caught that.
+  already clocked correctly and pacing it would have made it worse. Reading the jump table, rather
+  than trusting the resemblance, caught that.
 * **`bgl_randomUnitXYZ` at `0x0041FB9E`**, with its wrapper `bgl_randomUnit` at `0x0041FC2C`. Its
   two draws are the textbook uniform point on a sphere, `z = 2r/32767 - 1` and
   `theta = 360*r/32767`, then `1 - z*z`; the angle constant is 360, so the module works in degrees.
@@ -152,12 +152,11 @@ also builds `/W4 /WX` clean here with the unit test suite green, though neither 
 anything about the patch on its own: they say the code compiles and that the tests which exist
 still pass.
 
-**The mixers are unit tested.** The two replacement generators are pure arithmetic and are exactly the
-kind of thing this project expects to be testable without the game: same tick and same ordinal must
-give the same answer, a different tick must give an unrelated one, and every answer must land in 0
-to 32767 so the engine's own scaling still holds. `unittests/substep_noise.c` drives them: the range
-the engine's own scaling depends on, that one substep answers alike across its frames while the next
-re-rolls, that two objects in one frame do not agree, and the cancellation the comments name.
+**The mixers are unit tested.** The two replacement generators are pure arithmetic and are exactly
+the kind of thing this project expects to be testable without the game. `unittests/substep_noise.c`
+checks that every answer lands in 0 to 32767, so the engine's own scaling still holds; that one
+substep answers alike across its frames while the next re-rolls; that two objects in one frame do
+not agree; and the cancellation the comments name.
 
 Every byte level claim above is read out of the shipped executables, and the pattern resolution was
 re-run against all three builds while preparing this tree rather than taken from the source it

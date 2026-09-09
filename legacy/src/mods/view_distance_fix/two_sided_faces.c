@@ -56,17 +56,17 @@ static two_sided_state_t two_sided_state;
  *
  * Drawing two-sided globally would be the simpler patch (two bytes) but it is the wrong default:
  * the frame pools g_queuePoly (4096 records) and g_queueVert (8192 vertices) are GLOBAL, not per
- * asset. The backface pass throws away roughly half of everything today, which is exactly what
- * keeps the shipped game with its ~36 simultaneous actors of ~165 faces below the limit. If the
- * vertex buffer overflows, bapdraw_reserveVerts returns NULL and rdMesh_draw aborts silently: a
+ * asset. The backface pass throws away roughly half of everything today, and only that keeps the
+ * shipped game, with its ~36 simultaneous actors of ~165 faces, below the limit. If the vertex
+ * buffer overflows, bapdraw_reserveVerts returns NULL and rdMesh_draw aborts silently: a
  * WHOLE MODEL disappears.
  *
- * So per object, and SHIPPED OFF. The marking needs no bookkeeping of its own, a thing with a set
- * entry in pMeshHidden has a hole, and that is the severed piece. It is off by default because
- * this feature never once ran in a released build: dev_overlay hooks rdThing_Draw for giant and
- * tiny player and loads first, so the plain signature form the site was first declared in found
- * nothing and the warning that said so went unread for months. The first session in which it
- * did run drew a beam across the level, and one evening of testing is not enough to put it back
+ * So per object, and SHIPPED OFF. The marking needs no bookkeeping of its own: a thing with a set
+ * entry in pMeshHidden has a hole, and that thing is the severed piece. It is off by default
+ * because this feature never once ran in a released build: dev_overlay hooks rdThing_Draw for
+ * giant and tiny player and loads first, so the plain signature form the site was first declared
+ * in found nothing and the warning that said so went unread for months. The first session in which
+ * it did run drew a beam across the level, and one evening of testing is not enough to put it back
  * on by default.
  *
  * WARNING: the word has to be RESET at the end. rdMesh_draw has a second caller (0x456E17 in
@@ -101,11 +101,11 @@ static bool thing_has_hole(const void *thing)
     uint32_t    node_count;
     uint32_t    index;
 
-    /* Every read below is the faulting form rather than the asking one, and that is a performance
-     * decision with a measurable size. This function runs for every thing the engine draws, and it
-     * makes four of these reads each time; at three dozen actors that is a couple of hundred system
-     * calls per frame for nothing but permission to look. The guarantee is unchanged: a bad pointer
-     * still refuses rather than killing the process. */
+    /* Every read below is the faulting form rather than the asking one, a performance decision
+     * with a measurable size. This function runs for every thing the engine draws, and it makes
+     * four of these reads each time; at three dozen actors that is a couple of hundred system
+     * calls per frame for nothing but permission to look. The guarantee is unchanged: a bad
+     * pointer still refuses rather than killing the process. */
     if (record == NULL) {
         return false;
     }

@@ -8,8 +8,8 @@
  * The steps are therefore not in the fade, they are in the buffer. As the multiplier slides, a
  * stored 5-bit channel only changes when it crosses a boundary. An area of ONE flat colour crosses
  * everywhere at once and steps as a solid block; lit geometry crosses pixel by pixel and does not.
- * The boundary between the two is what reads as a flashing line, which is why it only shows where
- * the fog band saturates inside the draw cut and leaves a large flat region to step.
+ * The boundary between the two reads as a flashing line, so it only shows where the fog band
+ * saturates inside the draw cut and leaves a large flat region to step.
  *
  * Measured: in the fogged region every sampled pixel moved by an identical 4 to 6 levels with the
  * area bit-exactly static between steps, lit geometry moved by a fractional average on 90 to 96 per

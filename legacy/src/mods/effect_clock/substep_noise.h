@@ -10,7 +10,7 @@
  * so it answers between 0 and 32767, and both redirected call sites scale what they get by 1/32767
  * before using it: the flicker test at 0x00411449 through [0x004A812C], the halo at 0x00439FCE
  * through [0x004A8528]. An answer outside that band would mean patching the engine's own scaling as
- * well, which is exactly what this avoids.
+ * well.
  *
  * Everything here is a pure function of its arguments. The hook state, the engine cells it reads
  * and the sites it patches stay behind in effect_clock.c, because the half that can be checked

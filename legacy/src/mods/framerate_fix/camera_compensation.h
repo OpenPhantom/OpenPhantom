@@ -59,7 +59,7 @@ bool camera_compensation_build_anchor_blend(uint8_t *out, size_t out_size, const
  * the anchor is the ORIGIN OF THE WORLD GATHER, and any lag in it is a gather that trails the
  * camera: cells ahead of the eye fall outside the radius and are never collected, which is world
  * geometry silently not drawn. The count stays the same because the radius does; it is the
- * membership that is wrong, which is why measuring the cell count never showed it.
+ * membership that is wrong, so measuring the cell count never showed it.
  *
  * A followed camera wants the damping, and 30 fps behaviour restored is the right answer for it.
  * A placed camera wants none: the target it is given is already interpolated smoothly between

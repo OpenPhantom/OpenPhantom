@@ -732,6 +732,54 @@ most needed reaching easily was the one that could not be reached at all.
 `AirControlRate` at 180 against 540. The difference is the point: a jump that can be pivoted in
 place is a different game, and this is meant to be a lean.
 
+## Aiming a swing
+
+A gun goes where the player is pointing. A lightsabre did not: the swing left along whatever
+heading the body happened to hold when the button went down, and after that neither the turn keys
+nor the stick could move it.
+
+One real gap is the engine's. `Plr_HandleInput` [0x0044AF93] sends weapon slot 1 to
+`Plr_SelectSabreAction` and every other slot to `Plr_StartFire` [0x0044B788], so a swing arms
+neither of the two things that put a body on its aim, the fire entry and the auto-aim it calls.
+
+The mode was not. `kMode_SabreAttackDesc` [0x4B52C8] reads `{ default, default, default, default,
+Plr_SabreAttackTick, skip, skip, run-and-pin }`, so the steer phase runs throughout a swing and the
+pin at index 7 hands the integrate and everything after it back to the defaults. `Plr_Integrate`
+[0x0044A59E] then turns the heading from the turn cell with no test but Sidle. The shipped game
+turns the body through a swing on the turn keys, and its own 360-degree swings are triggered by
+exactly that: a turn held for half a second while a swing chains.
+
+What stopped it was this file's Stand gate, reached in three places at once, none of them a
+decision about melee. The pad stands down outside Stand because that is where it writes; free look
+returns before its travel turn; and the fold that pays the keyboard's turn back into the view runs
+only when nothing else is spending the axis. With `Strafe=1` the turn keys therefore had no
+consumer at all during a swing while the engine's own turn went on being subtracted in phase 7,
+and with `Strafe=0` the stick had none.
+
+So the direction the player asks for turns the body through a swing now, in both control modes and
+in Panaka's melee with it. The blade goes along: `Plr_TestSwingWorld` [0x0044E6E2] sweeps a capsule
+from the contact node's last world position to its current one every substep, so the arc is rebuilt
+against wherever the body has turned to. Nothing fixes it when the clip is chosen.
+
+**Nothing else of the Stand branch comes with it.** No forced move bit, which would change which
+clip the combo chains into and would lock a crate shove for good, and no walk drive, so a swing
+still travels on its own authored lunge. There is no setting for it either. The shipped controls
+aim a swing already; this stops taking that away.
+
+**A backward push asks for no turn.** That is the Stand gate's second reason arriving here rather
+than being escaped. Nothing forces a forward walk outside Stand, so a backward key keeps its
+backward move bit and its negative drive, and turning the body a half circle to face the
+camera-relative angle would then send the player forwards along it. The backward component is
+clamped at zero, so holding back during a swing is the engine's own back-pedal and the swing keeps
+its heading. Forward and sideways aim it.
+
+With `Strafe=0` nothing changes at all. The turn axis was never taken away in that configuration,
+so the arm that folds it is already open in every mode, a swing included. A pad bound through the
+engine's own joystick path lands on that same axis, so folding this DLL's XInput reading of the
+stick on top would turn the body twice and at two different scales. During a swing, and only during
+a swing, the stick arm therefore excludes the key arm. In the handback both still run together: a
+player holding a key and pushing a stick there wants the sum.
+
 ## Known limitations
 
 **Under `FreeLook=1` the walk-backward clip never plays.** Holding back is a half turn and a forward
@@ -752,7 +800,8 @@ With `FreeLook=0` the backward clip plays exactly as it shipped.
   the end of its own body, from the value it has just set itself, so overwriting `turnWheel`
   afterwards is too late.
 * With mouse look on and strafe off, keyboard axis 0 does nothing at all. Logged as a warning.
-* **Sideways walking is ground-only.** No air strafing, and none during a sabre attack.
+* **Sideways walking is ground-only.** No air strafing, and none during a sabre attack, where the
+  same input turns the body instead; see **Aiming a swing**.
 * **Diagonals are no longer faster.** One capped velocity is rotated instead of two being added.
 * **A shot fired mid-strafe leaves from a rotated hip.** The muzzle is a node on the body and the
   body is turned; the shot's direction is built from `heading` and is not. Cosmetic.
@@ -785,14 +834,16 @@ With `FreeLook=0` the backward clip plays exactly as it shipped.
   values, not a compromise, so the release hands the cut to the engine whole. No shipped region
   carries bit 2 on its own, the three that carry it are `flags 12`, world-fixed as well, so this
   is a rule about what the mask means rather than an observable difference.
-* **The body does not turn outside Stand, unless an attack is live or `AirControl=1`.** In a
-  launched sidestep and while swimming the mouse moves the camera and the body holds its heading.
+* **The body does not turn outside Stand, unless an attack is live, a swing is running or
+  `AirControl=1`.** In a launched sidestep and while swimming the mouse moves the camera and the
+  body holds its heading.
   That is not conservatism about animation: outside Stand the forced forward drive is not in
   force, so a backward key is still a *negative speed along an unchanged facing* rather than a
   half turn, and building the camera-relative angle there would double-count the reversal and
   send the player the wrong way. The body comes round of its own accord on the next Stand substep
-  in which a movement key is held. **Steering a jump** is the one case carved out of this, and
-  only because neither reason reaches it: see below.
+  in which a movement key is held. **Steering a jump** and **Aiming a swing** are the two cases
+  carved out of this. Neither forces a move bit, and a swing drops the backward half of its input
+  so the second reason cannot reach it either.
 * **The turn penalty is off and stays off.** `Plr_Integrate` scales the displacement from
   `|turnWheel|`, and mouse look clears `turnWheel`. Under free look the body turns fast and often and
   the penalty, which exists to stop exactly that, never bites. It cannot be restored by writing

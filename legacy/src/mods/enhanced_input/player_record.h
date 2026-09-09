@@ -42,6 +42,15 @@
 /* Index 0 of the mode table at [0x4B54B0], which lists the fourteen descriptors in the order of the
  * mode enum. Stand is the only mode whose own tick is the walk/run clip selector. */
 #define PLAYER_MODE_STAND       0
+/* The two melee modes. Their descriptors, kMode_SabreAttackDesc [0x4B52C8] and kMode_PanakaDesc
+ * [0x4B52E8], both read { default, default, default, default, own tick, skip, skip, run-and-pin }:
+ * index 2 is the steer phase and the pin at index 7 hands the integrate and every phase after it
+ * back to the defaults. So Plr_Integrate [0x0044A59E] turns the heading from the turn cell in a
+ * swing exactly as it does standing, and the blade goes with it: Plr_TestSwingWorld [0x0044E6E2]
+ * sweeps a capsule from the contact node's last world position to its current one every substep.
+ * Neither melee tick writes the heading; nothing outside them was swept for. */
+#define PLAYER_MODE_SABRE_ATTACK 3
+#define PLAYER_MODE_PANAKA       4
 /* The three modes the body is off the ground in and the engine still runs the steer and the
  * integrate: horizontal motion there is the ordinary facing times curSpeed, so turning the
  * heading redirects the flight. FixedJump is deliberately not among them, it follows an

@@ -470,7 +470,7 @@ static int32_t __cdecl hook_auto_aim(int32_t kind)
 }
 
 bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, float forward,
-                     bool stand_mode, bool air_mode)
+                     bool stand_mode, bool air_mode, bool melee_mode)
 {
     float input_angle = 0.0f;
 
@@ -527,10 +527,47 @@ bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, fl
      * forward drive is not in force, so a backward key is still a NEGATIVE SPEED along an
      * unchanged facing rather than a half turn, building the camera-relative angle there would
      * double-count the reversal and send the player the wrong way. Outside Stand the mouse
-     * therefore moves the camera while the body holds its heading, unless an attack is live or
-     * air control is on and the body is genuinely in flight. */
+     * therefore moves the camera while the body holds its heading, unless an attack is live, a
+     * swing is running, or air control is on and the body is genuinely in flight. */
     if (!stand_mode) {
-        /* AIR CONTROL, and it is the only thing that may happen outside Stand.
+        /* A SWING, aimed the way a shot is.
+         *
+         * A gun points the body at the camera the moment the trigger goes down, so the bolt leaves
+         * along the direction the player is holding and the feet keep working underneath. The
+         * sabre reaches none of that: Plr_HandleInput [0x0044AF93] sends weapon slot 1 to
+         * Plr_SelectSabreAction and every other slot to Plr_StartFire, and the aim snap is armed
+         * on the second of those, so a swing arms nothing.
+         *
+         * The mode was never the obstacle. Its descriptor [0x004B52C8] runs the steer at index 2
+         * and pins at index 7, so Plr_Integrate turns the heading from the turn cell throughout a
+         * swing exactly as it does standing; this file stopped it, at the Stand test below, and
+         * the swing was then left pointing wherever the body faced when the button went down.
+         *
+         * So the direction the player asks for turns the body here as well, and the swept blade
+         * follows it within the swing. Nothing else of the Stand branch comes with it: no forced
+         * move bit, which would change which clip the combo chains into and lock a crate shove,
+         * and no walk drive, so a swing still travels on its own authored lunge.
+         *
+         * The backward half is DROPPED. That is the second of the Stand gate's two reasons
+         * arriving here rather than being escaped: nothing forces a forward walk outside Stand, so
+         * a backward key keeps its backward move bit and its negative drive, and turning the body
+         * a half circle to face the camera-relative angle would then send the player forwards
+         * along it. Clamped at zero, a backward push keeps the engine's own back-pedal and asks
+         * for no turn. Forward and sideways aim the swing.
+         *
+         * Not gated on air control. That setting buys a jump an ability the shipped game
+         * withholds; this gives a swing back a turn the shipped game already has. */
+        if (melee_mode && !free_state.body_target_valid &&
+            free_look_input_angle(strafe, forward > 0.0f ? forward : 0.0f, &input_angle)) {
+            free_state.body_target           = free_look_wrap360(free_state.camera_yaw +
+                                                                 input_angle);
+            free_state.body_target_valid     = true;
+            free_state.target_settle_seconds = free_state.config.body_settle_seconds;
+            free_state.target_turn_rate      = free_state.config.body_turn_rate;
+            return true;
+        }
+
+        /* AIR CONTROL, and it is the only OTHER thing that may happen outside Stand.
          *
          * The gate above it stays exactly as strict as it was, for the reasons alongside it: a
          * forced move bit outside Stand would lock the crate shove for good, and a backward key

@@ -23,7 +23,8 @@
 /* Reads the configuration. Safe to call before anything is resolved. */
 void free_look_load_config(void);
 
-/* Resolves the camera cells and installs the two chained detours.
+/* Resolves the camera cells and installs the four chained detours: the camera update, which the
+ * feature cannot run without, and the three optional ones on the attack path.
  *
  * The machinery is installed whether or not the feature is switched on, and that is what makes the
  * control mode a live setting rather than a launch-time choice. While it is off the hooks write
@@ -55,6 +56,11 @@ bool free_look_is_enabled(void);
  * here as well, or the copy stands for the rest of the session and the feature looks dead. */
 void free_look_set_passive_follow(bool enabled);
 
+/* Re-derive the aim pairing after the sideways walk or the follow camera has been switched
+ * while the game runs. Does nothing to a key the ini states; both halves move in both
+ * directions, because the fire detour is placed whenever its site resolves. */
+void free_look_refresh_aim_pairing(void);
+
 /* True while the LEVEL AUTHOR's own camera is on the player, by the same test free look uses to
  * let go of it. Answered whether or not free look is switched on, because it is a fact about the
  * room rather than about this feature.
@@ -85,9 +91,9 @@ bool free_look_set_enabled(bool enabled);
  * `strafe` is +1 for right and -1 for left, already inverted per configuration.
  * `stand_mode` gates the forced walk exactly as the sideways walk gates it.
  * `melee_mode` is a swing in progress, where the body may be turned but no move bit may be set. */
-/* `forward` is SIGNED and may be analog. The caller derives it, because only the caller knows
+/* `forward` is SIGNED and may be analogue. The caller derives it, because only the caller knows
  * whether this substep's input came from a stick with a real magnitude or from keys that can
- * only ever say +1, -1 or 0. Mixing an analog sideways value with a quantised forward one is
+ * only ever say +1, -1 or 0. Mixing an analogue sideways value with a quantised forward one is
  * what pulled every diagonal on a pad toward straight ahead. */
 bool free_look_steer(uint8_t *record, float mouse_step_degrees, float strafe, float forward,
                      bool stand_mode, bool air_mode, bool melee_mode);

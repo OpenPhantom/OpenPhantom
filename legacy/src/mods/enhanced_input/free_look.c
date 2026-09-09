@@ -1,7 +1,7 @@
 /* free_look.c: the mouse turns the camera, the body turns toward where it travels.
  *
  * This file is the BODY half and the feature as a whole: its configuration, its live on/off
- * switch, the two detours on the attack path, and installation. The CAMERA half, the arming
+ * switch, the three detours on the attack path, and installation. The CAMERA half, the arming
  * gate, the release rules and the per-frame write into the two camera cells, is
  * free_look_camera.c, and the reasoning that belongs to the camera is at the top of that file.
  * The arithmetic is free_look_math.c and is tested without the game.
@@ -169,14 +169,21 @@ static float clamp_float(float value, float minimum, float maximum)
  * Configuration. Every float is passed through clamp_float, which turns NaN into the minimum and
  * either infinity into a bound, so a finite pair of limits is what guarantees a finite setting.
  * ============================================================================================ */
+/* Who is already aiming, if anyone. Either scheme points the body with the movement control, so
+ * either one makes the aim snap take that control away at the moment the trigger goes down. */
+static bool aim_pairing_owner(void)
+{
+    return input_config()->strafe || input_config()->camera_follow;
+}
+
 void free_look_load_config(void)
 {
     float settle_ms;
 
     /* OFF BY DEFAULT. This changes how the game plays, not how it looks. */
     free_state.config.enabled  = ini_read_bool(INPUT_SECTION, "FreeLook", false);
-    /* These two default off when the sideways walk is on, and the coupling is the point rather
-     * than a convenience.
+    /* These two default off when something else already aims, and the coupling is the point
+     * rather than a convenience.
      *
      * The aim snap exists to make aiming under free look feel like aiming without it: it points the
      * body at the camera while the trigger is held, so the camera is the aiming device in both
@@ -186,8 +193,13 @@ void free_look_load_config(void)
      * With the sideways walk on, the player has already chosen the other scheme. The body faces
      * where it travels and the movement keys point it, so squaring it up to the camera the moment
      * the trigger goes down takes the aiming away from the control they are already using and hands
-     * it to the mouse. The camera follow is caught by the same thing, because it stands off while
-     * the body is held at the camera, so it appears to stop working exactly while you shoot.
+     * it to the mouse.
+     *
+     * THE FOLLOW CAMERA COUNTS FOR THE SAME REASON, and leaving it out was a defect rather than a
+     * decision. It stands off while the body is held at the camera, so it appears to stop working
+     * exactly while you shoot, and a player who switches it on has chosen to aim by pointing the
+     * body. Keying only off the sideways walk meant they had to find these two keys and write them
+     * by hand to get the scheme the switch had promised them.
      *
      * So the default follows the scheme rather than being one answer for both. An explicit key in
      * the file still wins either way, which is what keeps this a default and not a rule.
@@ -195,10 +207,19 @@ void free_look_load_config(void)
      * Read once, so switching the sideways walk on during a session does not move these underneath
      * the player: the fire detour is placed at install from the answer below and there is no way to
      * take a detour back out again. */
-    free_state.config.aim_snap =
-        ini_read_bool(INPUT_SECTION, "FreeLookAimSnap", !input_config()->strafe);
-    free_state.config.aim_keeps_movement =
-        ini_read_bool(INPUT_SECTION, "FreeLookAimKeepsMovement", !input_config()->strafe);
+    {
+        /* Read as an int against an impossible default, so a written 0 can be told from no key at
+         * all. Only an absent key follows the pairing below; a stated one is the player's. */
+        int32_t snap  = ini_read_int(INPUT_SECTION, "FreeLookAimSnap", -1);
+        int32_t keeps = ini_read_int(INPUT_SECTION, "FreeLookAimKeepsMovement", -1);
+
+        free_state.config.aim_snap_written  = (snap >= 0);
+        free_state.config.aim_keeps_written = (keeps >= 0);
+        free_state.config.aim_snap =
+            free_state.config.aim_snap_written ? (snap != 0) : !aim_pairing_owner();
+        free_state.config.aim_keeps_movement =
+            free_state.config.aim_keeps_written ? (keeps != 0) : !aim_pairing_owner();
+    }
     free_state.config.aim_twist_max =
         ini_read_float(INPUT_SECTION, "FreeLookAimTwistMax", DEFAULT_AIM_TWIST_MAX);
     if (!(free_state.config.aim_twist_max >= 0.0f)) {
@@ -271,6 +292,22 @@ void free_look_set_air_control(bool enabled)
 void free_look_set_passive_follow(bool enabled)
 {
     free_state.config.passive_follow = enabled;
+}
+
+void free_look_refresh_aim_pairing(void)
+{
+    bool owned = aim_pairing_owner();
+
+    if (!free_state.config.aim_snap_written) {
+        free_state.config.aim_snap = !owned;
+    }
+
+    /* Both ways, because the fire detour is now placed whenever its site resolves and reads this
+     * on every call. When the site did not resolve the pairing still moves; what it cannot do is
+     * make the shot aim itself, and the branch that needs that already tests fire_shot_armed. */
+    if (!free_state.config.aim_keeps_written) {
+        free_state.config.aim_keeps_movement = !owned;
+    }
 }
 
 bool free_look_is_enabled(void)
@@ -664,9 +701,10 @@ void free_look_integrate(uint8_t *record, float substep_seconds)
 }
 
 /* ==============================================================================================
- * The two detours on the attack path. Both are OPTIONAL: each failure is a named degraded mode
- * rather than a refusal, because the camera half is already standing by the time these run and
- * there is no way to take a detour back out again.
+ * The three detours on the attack path, start_fire, fire_shot and auto_aim. All three are
+ * OPTIONAL: each failure is a named degraded mode rather than a refusal, because the camera
+ * half is already standing by the time these run and there is no way to take a detour back out
+ * again.
  *
  * fire_shot BEFORE auto_aim, and that order is load-bearing: hook_auto_aim only captures the
  * engine's target lock when fire_shot_armed is already true, so the reverse order would silently
@@ -689,8 +727,15 @@ static void install_attack_detours(void)
 
     /* This is what lets the aim snap stop stealing the walk. Without it the shot still leaves
      * along the BODY, so the snap has to keep turning the body to aim, and holding the trigger
-     * keeps walking the player forward whatever key is pressed. */
-    if (free_state.camera.fire_shot != 0 && free_state.config.aim_keeps_movement) {
+     * keeps walking the player forward whatever key is pressed.
+     *
+     * INSTALLED WHATEVER THE SETTING SAYS, and that is what makes the setting live. The hook reads
+     * config.aim_keeps_movement on every call and returns the original untouched when it is off,
+     * so a detour that is present costs nothing while the feature is not wanted. Installing it
+     * conditionally was the reason the setting could only ever be switched off during a session:
+     * a detour cannot be added afterwards, so a player who turned the pairing on had to relaunch
+     * before it meant anything. Nothing here writes the host until detour_install does. */
+    if (free_state.camera.fire_shot != 0) {
         if (detour_install(&free_state.fire_shot_detour, free_state.camera.fire_shot,
                            (const void *)hook_fire_shot, PLAYER_FIRE_SHOT_PROLOGUE_SIZE)) {
             free_state.fire_shot_armed = true;
@@ -782,8 +827,9 @@ bool free_look_install(const player_sites_t *player, bool strafe_enabled)
              (double)(free_state.config.body_settle_seconds * MILLISECONDS_PER_SECOND),
              (double)free_state.config.body_turn_rate,
              free_state.config.aim_snap
-                 ? (free_state.fire_shot_armed ? "on, and it yields to your keys"
-                                               : "on, and it owns the walk while firing")
+                 ? (free_state.config.aim_keeps_movement && free_state.fire_shot_armed
+                        ? "on, and it yields to your keys"
+                        : "on, and it owns the walk while firing")
                  : "off",
              strafe_enabled ? "on" : "off (only forward and back are camera-relative)");
 

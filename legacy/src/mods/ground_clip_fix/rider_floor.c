@@ -66,7 +66,7 @@ static struct {
 
 static bool is_known_creeper(const uint8_t *mover)
 {
-    return creeping_mover_known(&rider.creeping, *(const uint32_t *)(mover + MOVER_ID));
+    return creeping_mover_known(&rider.creeping, *(const uint32_t *)(mover + MOVER_ID), mover);
 }
 
 static bool is_crusher(const uint8_t *mover)
@@ -101,17 +101,17 @@ static void __cdecl hook_carry_rider(void *world, uint8_t *ground)
     }
     *(float *)(ground + GROUND_RIDER_Z) = before;
 
-    if (creeping_mover_note(&rider.creeping,
-                            *(const uint32_t *)(
-                                *(const uint8_t *const *)(ground + GROUND_MOVER) + MOVER_ID))) {
+    {
+    const uint8_t *mover = *(const uint8_t *const *)(ground + GROUND_MOVER);
+
+    if (creeping_mover_note(&rider.creeping, *(const uint32_t *)(mover + MOVER_ID), mover)) {
         log_info("crusher %u creeps down at %.5f of a unit a tick and is no longer carrying "
                  "characters. At that rate it is transporting nobody anywhere, and the only "
                  "thing carrying a rider on it achieves is to sink them through the floor. Every "
                  "genuine platform in the shipped levels moves at least twenty times faster and "
                  "is untouched",
-                 (unsigned)*(const uint32_t *)(
-                     *(const uint8_t *const *)(ground + GROUND_MOVER) + MOVER_ID),
-                 (double)fell);
+                 (unsigned)*(const uint32_t *)(mover + MOVER_ID), (double)fell);
+    }
     }
 }
 

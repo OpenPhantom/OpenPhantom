@@ -22,6 +22,11 @@
 /* The fastest, an articulated ninety unit lift, and the one it would be worst to break. */
 #define FASTEST_REAL 0.58195f
 
+/* Two stand-in movers. Only their addresses matter: the set pairs an id with the mover it was seen
+ * on, and these are what tell one level's mover 87 from another's. */
+static const int MOVER_A = 0;
+static const int MOVER_B = 0;
+
 int main(void)
 {
     creeping_mover_set_t set = {{0}, 0};
@@ -59,35 +64,50 @@ int main(void)
 
 
     ut_section("remembering which mover was refused");
-    ut_check(!creeping_mover_known(&set, 87u),
+    ut_check(!creeping_mover_known(&set, 87u, &MOVER_A),
              "an empty set knows no mover");
-    ut_check(creeping_mover_note(&set, 87u),
+    ut_check(creeping_mover_note(&set, 87u, &MOVER_A),
              "the first sighting of a mover is reported");
-    ut_check(!creeping_mover_note(&set, 87u),
+    ut_check(!creeping_mover_note(&set, 87u, &MOVER_A),
              "the second is not, so each mover is named once however many times it is refused");
-    ut_check(creeping_mover_known(&set, 87u),
+    ut_check(creeping_mover_known(&set, 87u, &MOVER_A),
              "and it is remembered afterwards, which is how the ground snap recognises the mover "
              "the rider carry refused without being able to measure the rate itself");
-    ut_check(!creeping_mover_known(&set, 49u),
+    ut_check(!creeping_mover_known(&set, 49u, &MOVER_A),
              "a different mover is still unknown, so one level's fault does not exempt another's "
              "platform");
 
-    ut_check(creeping_mover_note(&set, 0u),
+    /* An id is only unique inside its own level, and nothing here is told when a level opens. */
+    ut_check(!creeping_mover_known(&set, 87u, &MOVER_B),
+             "the same id on a different mover is not the mover that was refused, so a later "
+             "level reusing the number keeps its ground snap");
+    ut_check(creeping_mover_note(&set, 87u, &MOVER_B),
+             "and noting it reports it as new, because on that level it is");
+    ut_check(creeping_mover_known(&set, 87u, &MOVER_B),
+             "after which it is the one remembered");
+    ut_check(!creeping_mover_known(&set, 87u, &MOVER_A),
+             "and the mover from the level that closed is not, since it cannot come back");
+
+    ut_check(creeping_mover_note(&set, 0u, &MOVER_A),
              "mover id zero is a real id and is recorded like any other");
-    ut_check(creeping_mover_known(&set, 0u),
+    ut_check(creeping_mover_known(&set, 0u, &MOVER_A),
              "and is remembered, rather than reading as an empty slot");
 
     for (i = (unsigned)set.count; i < CREEPING_MOVER_MAX; i++) {
-        ut_check(creeping_mover_note(&set, 1000u + i), "the table fills to its stated capacity");
+        ut_check(creeping_mover_note(&set, 1000u + i, &MOVER_A),
+                 "the table fills to its stated capacity");
     }
-    ut_check(!creeping_mover_note(&set, 9999u),
+    ut_check(!creeping_mover_note(&set, 9999u, &MOVER_A),
              "a full table refuses a new mover rather than growing");
-    ut_check(creeping_mover_known(&set, 87u),
+    ut_check(creeping_mover_known(&set, 87u, &MOVER_B),
              "and keeps what it already had, because evicting one would let a mover already being "
              "refused start carrying again halfway through its run");
+    ut_check(creeping_mover_note(&set, 9999u, &MOVER_B) == false,
+             "a full table refuses an unheard-of id whichever mover carries it");
 
-    ut_check(!creeping_mover_note(NULL, 87u), "a null set is refused rather than written through");
-    ut_check(!creeping_mover_known(NULL, 87u), "and answers that it knows nothing");
+    ut_check(!creeping_mover_note(NULL, 87u, &MOVER_A),
+             "a null set is refused rather than written through");
+    ut_check(!creeping_mover_known(NULL, 87u, &MOVER_A), "and answers that it knows nothing");
 
     return ut_summary("creeping_mover");
 }

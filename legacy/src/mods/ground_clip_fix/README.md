@@ -164,6 +164,23 @@ and still be wrong about a population nobody thought to look at.
 The lesson worth keeping: counting what a hook actually sees is worth more than reasoning about
 what it should see.
 
+## A mover id only means something inside its own level
+
+The set of movers found to be creeping is what lets the ground snap recognise the one the rider
+carry refused, since the snap is handed no rate of its own to measure. It was keyed on the mover id
+alone, and nothing tells this DLL when a level opens, so an entry outlived the level that created
+it: a later level whose mover happened to carry the same number was taken for the one already being
+refused and had its ground snap declined for the rest of the session.
+
+An entry is now the id together with the mover it was seen on. The same number on a different mover
+takes the old entry over rather than sitting beside it, because that can only mean a level has
+opened since and the old one cannot come back. That also stops a long session filling the table with
+movers from levels that have closed.
+
+The no-eviction rule is unchanged: a full table still refuses a new mover rather than dropping one,
+because dropping one would let a mover already being refused start carrying again halfway through
+its run.
+
 ## Testing status
 
 **Accepted in the game, on both counts.** Bumped and jumped on in the level where the fault was

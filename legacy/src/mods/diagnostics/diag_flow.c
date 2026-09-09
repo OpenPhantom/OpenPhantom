@@ -186,24 +186,27 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("level_load",        SIG_LEVEL_LOAD),
+    SIGNATURE_ENTRY_DETOUR("level_load", SIG_LEVEL_LOAD, LEVEL_LOAD_PROLOGUE),
     /* No other DLL in this tree detours this exact site today, but the detour-aware form is kept
      * rather than narrowed back: a plain SIGNATURE_ENTRY searches for the PRISTINE bytes and finds
      * zero matches the moment anything else patches the prologue first, which is the
      * render_frameEnd lesson signature.h's own header documents. It costs nothing here and it
      * survives the next feature that takes this site. */
     SIGNATURE_ENTRY_DETOUR("lock_enter", SIG_LOCK_ENTER, LOCK_ENTER_PROLOGUE),
-    SIGNATURE_ENTRY("lock_leave",        SIG_LOCK_LEAVE),
-    SIGNATURE_ENTRY("player_run_phases", SIG_PLAYER_RUN_PHASES),
+    SIGNATURE_ENTRY_DETOUR("lock_leave", SIG_LOCK_LEAVE, LOCK_LEAVE_PROLOGUE),
+    /* A detour target, and this file is one of the DLLs that detours it. Declared plainly it
+     * resolved only when it happened to install before the others. */
+    SIGNATURE_ENTRY_DETOUR("player_run_phases", SIG_PLAYER_RUN_PHASES,
+                           PLAYER_RUN_PHASES_PROLOGUE),
     SIGNATURE_ENTRY("player_mode_table", SIG_PLAYER_MODE_TABLE),
-    SIGNATURE_ENTRY("dialog_speak",      SIG_DIALOG_SPEAK),
-    SIGNATURE_ENTRY("dialog_play_voice", SIG_DIALOG_VOICE),
-    SIGNATURE_ENTRY("fx_add_decal",      SIG_ADD_DECAL),
-    SIGNATURE_ENTRY("fx_draw_decals",    SIG_DRAW_POLY_DECALS),
+    SIGNATURE_ENTRY_DETOUR("dialog_speak", SIG_DIALOG_SPEAK, DIALOG_SPEAK_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("dialog_play_voice", SIG_DIALOG_VOICE, DIALOG_VOICE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_add_decal", SIG_ADD_DECAL, ADD_DECAL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_draw_decals", SIG_DRAW_POLY_DECALS, DRAW_POLY_DECALS_PROLOGUE),
     SIGNATURE_ENTRY("fx_decal_table",    SIG_DECAL_TABLE),
-    SIGNATURE_ENTRY("fx_select_cel",     SIG_SELECT_CEL),
-    SIGNATURE_ENTRY("fx_emitter_active", SIG_EMITTER_ACTIVE),
-    SIGNATURE_ENTRY("fx_emitter_destroy",SIG_EMITTER_DESTROY)
+    SIGNATURE_ENTRY_DETOUR("fx_select_cel", SIG_SELECT_CEL, SELECT_CEL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_emitter_active", SIG_EMITTER_ACTIVE, EMITTER_ACTIVE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_emitter_destroy", SIG_EMITTER_DESTROY, EMITTER_DESTROY_PROLOGUE)
 };
 
 #define PLAYER_CURRENT_MODE 0x60   /* a POINTER to the descriptor, not an enum */

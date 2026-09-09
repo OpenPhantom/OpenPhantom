@@ -216,8 +216,10 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY_MASKED("options_controls", SIG_OPTIONS_CONTROLS, MSK_OPTIONS_CONTROLS),
-    SIGNATURE_ENTRY_MASKED("swmenu_get_string", SIG_GET_STRING,      MSK_GET_STRING)
+    SIGNATURE_ENTRY_DETOUR_MASKED("options_controls", SIG_OPTIONS_CONTROLS, MSK_OPTIONS_CONTROLS,
+                                  OPTIONS_CONTROLS_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("swmenu_get_string", SIG_GET_STRING, MSK_GET_STRING,
+                                  GET_STRING_PROLOGUE)
 };
 
 /* Ids the shipped controls screen does not use. Authored: 0,1,2,3,4,5,6,50. */

@@ -99,6 +99,12 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
 #define OFFSET_PLAYER_POINTER     0x27u
+
+/* Six bytes: push ebp; mov ebp,esp; sub esp,8. Nothing here detours this function, but three other
+ * DLLs do, and the first of them replaces those six bytes with a jump. A plain pattern would then
+ * find nothing and this feature would switch itself off reporting an unsupported executable. */
+#define PLAYER_RUN_PHASES_PROLOGUE 6u
+
 #define PLAYER_ACTOR_OFFSET       0x0Cu   /* the same +0xC FUN_00447d18 itself reads */
 #define PLAYER_CURRENT_POS_OFFSET 0x18u
 
@@ -121,7 +127,9 @@ static uint32_t *resolve_player_pointer_slot(void)
 {
     uintptr_t   site;
     uint32_t    address = 0;
-    signature_t sig = SIGNATURE_ENTRY("spawn_census_player_run_phases", SIG_PLAYER_RUN_PHASES);
+    signature_t sig = SIGNATURE_ENTRY_DETOUR("spawn_census_player_run_phases",
+                                             SIG_PLAYER_RUN_PHASES,
+                                             PLAYER_RUN_PHASES_PROLOGUE);
 
     signature_resolve_table(&sig, 1);
     site = sig.address;

@@ -184,9 +184,10 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("level_load",         SIG_LEVEL_LOAD),
-    SIGNATURE_ENTRY_MASKED("dialog_box_start", SIG_DIALOG_BOX_START, MSK_DIALOG_BOX_START),
-    SIGNATURE_ENTRY("dialog_statement",   SIG_DIALOG_STATEMENT),
+    SIGNATURE_ENTRY_DETOUR("level_load", SIG_LEVEL_LOAD, LEVEL_LOAD_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("dialog_box_start", SIG_DIALOG_BOX_START, MSK_DIALOG_BOX_START,
+                                  DIALOG_BOX_START_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("dialog_statement", SIG_DIALOG_STATEMENT, DIALOG_STATEMENT_PROLOGUE),
     SIGNATURE_ENTRY("anim_recheck",       SIG_ANIM_RECHECK)
 };
 

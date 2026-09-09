@@ -38,8 +38,17 @@ void *diag_derive_address(signature_t *table, int index, uint32_t offset, const 
     }
     if (!memory_read_u32(site + offset, &address) ||
         !memory_is_inside_image(address, sizeof(uint32_t))) {
-        log_warning("%s from %s = %08X is outside the image, refused",
-                    what, table[index].name, (unsigned)address);
+        /* Naming the likely cause, because the number alone sends the reader hunting the wrong
+           thing. An operand inside a function's prologue is gone once another DLL has detoured
+           that function: the bytes are its jump and whatever padding followed it, and reading
+           them back gives a branch displacement or a run of 90s rather than an address. */
+        const bool detoured = (*(const uint8_t *)site == 0xE9u);
+
+        log_warning("%s from %s = %08X is outside the image, refused%s",
+                    what, table[index].name, (unsigned)address,
+                    detoured ? ". That site starts with a branch, so another DLL has detoured it "
+                               "and this operand sits inside the bytes it replaced"
+                             : "");
         return NULL;
     }
 

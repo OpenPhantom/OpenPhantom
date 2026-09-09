@@ -35,6 +35,15 @@ _Static_assert(sizeof SIG_CINEMATIC_LOCK == sizeof MSK_CINEMATIC_LOCK,
 
 #define OFFSET_LOCK_OPERAND 13u
 
+/* Eleven bytes: push ebp; mov ebp,esp; push ecx; mov [ebp-4],0. This function is a detour target,
+ * diagnostics observes it, and the first DLL to install replaces those eleven bytes with a jump.
+ * Searching for the pristine bytes then finds nothing and every DLL that loaded after it loses the
+ * gate. The first run of this showed it: the camera compensation reported the lock missing
+ * while the observer beside it had just resolved and detoured the same address.
+ *
+ * The operand this reads sits at 13, past the prologue, so it survives the detour. */
+#define CINEMATIC_LOCK_PROLOGUE 11u
+
 static const volatile int32_t *cinematic_lock;
 static bool                    resolved;
 
@@ -48,8 +57,8 @@ bool cinematic_gate_install(void)
     }
     resolved = true;
 
-    site = signature_find_unique(SIG_CINEMATIC_LOCK, MSK_CINEMATIC_LOCK,
-                                 sizeof SIG_CINEMATIC_LOCK);
+    site = signature_find_detour_target(SIG_CINEMATIC_LOCK, MSK_CINEMATIC_LOCK,
+                                        sizeof SIG_CINEMATIC_LOCK, CINEMATIC_LOCK_PROLOGUE);
     if (site == 0) {
         log_warning("the cutscene lock did not resolve, so the camera compensation cannot stand "
                     "aside for a scripted camera and behaves exactly as it did before");

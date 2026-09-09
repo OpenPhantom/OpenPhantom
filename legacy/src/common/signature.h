@@ -35,6 +35,11 @@ typedef struct signature {
     size_t         size;
     size_t         detour_prologue;  /* see below; 0 = this site is not a detour target */
     uintptr_t      address;  /* filled in by signature_resolve_table; 0 = unresolved */
+
+    /* For a function too short to be found once it has been detoured: see
+     * SIGNATURE_ENTRY_DETOUR_AFTER below. 0 in the first field means this entry does not use it. */
+    size_t         follows_entry;   /* 1-based position in this table of the entry in front */
+    size_t         follows_gap;     /* how many bytes past that entry's address this one starts */
 } signature_t;
 
 /* Convenience initialisers for a feature's own table. */
@@ -76,8 +81,39 @@ typedef struct signature {
     { (name_text), (array), (mask_array), sizeof(array), (prologue), 0 }
 
 /* The standalone form of the same two-stage rule, for a site that is not part of a table. */
+/* A detour target too short to be found on its own once something has detoured it.
+ *
+ * The search above drops the prologue and anchors on what is left, so a function whose whole body
+ * is barely longer than its own prologue has a tail of two or three bytes. Two bytes match
+ * everywhere, the candidate list overflows, and the site resolves to nothing.
+ * bapview_overrideOff is fifteen bytes with a thirteen byte prologue and is exactly that.
+ *
+ * Such a function is reached from the one in front of it instead. `previous` is the 1-based
+ * position in this same table of that neighbour, which must sit EARLIER in the table so it is
+ * already resolved, and `gap` is how many bytes past its address this function begins. The pattern
+ * is still checked at the address that produces, tail exactly and head as prologue or branch, so a
+ * build that laid the two out differently is refused rather than assumed. */
+#define SIGNATURE_ENTRY_DETOUR_AFTER(name_text, array, prologue, previous, gap) \
+    { (name_text), (array), NULL, sizeof(array), (prologue), 0, (previous), (gap) }
+
 uintptr_t signature_find_detour_target(const uint8_t *bytes, const uint8_t *mask, size_t size,
                                        size_t prologue_size);
+
+/* Confirm a pattern at an address already worked out some other way, rather than searching for it.
+ *
+ * For a function too short to be found once somebody has detoured it. The search above drops the
+ * prologue and anchors on what is left, so a function whose whole body is barely longer than its
+ * own prologue has a tail of two or three bytes, which matches everywhere and anchors nothing.
+ * bapview_overrideOff is fifteen bytes with a thirteen byte prologue and is exactly that case.
+ *
+ * Such a function is reached from its neighbour instead: resolve the one in front of it, add its
+ * length, and hand the result here. The checks are the same two the search applies, the tail
+ * matching exactly and the head being either the authored prologue or a branch, so a build that
+ * laid the two functions out differently is refused rather than guessed at.
+ *
+ * Returns `address` when it holds this pattern, and 0 when it does not. */
+uintptr_t signature_find_at(uintptr_t address, const uint8_t *bytes, const uint8_t *mask,
+                            size_t size, size_t prologue_size);
 
 /* Resolves every entry, logging one line each. Returns how many resolved uniquely. */
 size_t signature_resolve_table(signature_t *table, size_t count);

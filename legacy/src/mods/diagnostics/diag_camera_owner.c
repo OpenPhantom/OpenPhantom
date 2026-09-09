@@ -77,9 +77,14 @@ static const uint8_t SIG_DIALOG_CLOSE[] = {
 enum { SITE_OVERRIDE_ON, SITE_OVERRIDE_OFF, SITE_DIALOG_CLOSE, SITE_COUNT };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("bapview_overrideOn",  SIG_OVERRIDE_ON),
-    SIGNATURE_ENTRY("bapview_overrideOff", SIG_OVERRIDE_OFF),
-    SIGNATURE_ENTRY("Dialog_Close",        SIG_DIALOG_CLOSE)
+    /* Declared as detour targets, all three, because all three are detoured here and
+     * camera_handback_fix detours the same three functions. With plain patterns whichever DLL
+     * loaded second scanned for a prologue the first had already replaced with a jump, found
+     * nothing, and reported an unsupported executable instead of a collision. */
+    SIGNATURE_ENTRY_DETOUR("bapview_overrideOn",  SIG_OVERRIDE_ON,  OVERRIDE_ON_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_AFTER("bapview_overrideOff", SIG_OVERRIDE_OFF,
+                                OVERRIDE_OFF_PROLOGUE, 1u, sizeof SIG_OVERRIDE_ON),
+    SIGNATURE_ENTRY_DETOUR("Dialog_Close",        SIG_DIALOG_CLOSE, DIALOG_CLOSE_PROLOGUE)
 };
 
 /* Every call site of both functions in the image, by the address control returns to, which is the
@@ -242,6 +247,7 @@ int diag_camera_owner_install(int level)
         return 0;
     }
     signature_resolve_table(sites, SITE_COUNT);
+
 
     owner.flag = (const int32_t *)diag_derive_address(sites, SITE_OVERRIDE_ON,
                                                       OVERRIDE_ON_FLAG_OPERAND,

@@ -80,6 +80,12 @@ to install replaces the prologue with a jump. Every later DLL then searches for 
 begins with that prologue, finds nothing, and switches itself off. It happened on the first real
 run: four DLLs wanted `render_frameEnd` and only one got it. Use `SIGNATURE_ENTRY_DETOUR`, which
 falls back to the pattern's tail and proves the head is either the authored prologue or a branch.
+That applies to a pattern you only READ an operand out of as well, not just one you detour: the
+bytes are gone either way.
+
+A function barely longer than its own prologue has no usable tail, and two or three bytes match
+everywhere. `SIGNATURE_ENTRY_DETOUR_AFTER` reaches one of those from the function in front of it,
+naming that entry and the gap, and still checks the pattern where it lands.
 
 ## Writing into a live process
 

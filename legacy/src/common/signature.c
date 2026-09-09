@@ -137,6 +137,29 @@ static uintptr_t find_by_tail(const uint8_t *bytes, const uint8_t *mask, size_t 
     return (accepted_count == 1) ? accepted : 0;
 }
 
+uintptr_t signature_find_at(uintptr_t address, const uint8_t *bytes, const uint8_t *mask,
+                            size_t size, size_t prologue_size)
+{
+    if (address == 0 || prologue_size == 0 || prologue_size >= size) {
+        return 0;
+    }
+    if (address < host_image_text()) {
+        return 0;
+    }
+    /* The tail has to be exactly right: nothing has written there, whoever detoured this. */
+    if (!matches_at((const uint8_t *)(address + prologue_size), bytes + prologue_size,
+                    (mask != NULL) ? mask + prologue_size : NULL, size - prologue_size)) {
+        return 0;
+    }
+    /* And the head is either still the authored prologue or a branch away from it, which is the
+     * same pair find_by_tail accepts. */
+    if (!matches_at((const uint8_t *)address, bytes, mask, prologue_size) &&
+        *(const uint8_t *)address != JMP_REL32_OPCODE) {
+        return 0;
+    }
+    return address;
+}
+
 uintptr_t signature_find_detour_target(const uint8_t *bytes, const uint8_t *mask, size_t size,
                                        size_t prologue_size)
 {
@@ -173,6 +196,27 @@ size_t signature_resolve_table(signature_t *table, size_t count)
                 log_info("  site %-22s -> %08X (already detoured; found by its tail)",
                          table[index].name, (unsigned)address);
                 continue;
+            }
+        }
+
+        /* Last, and only for an entry that declared a neighbour: a function too short to anchor
+           on once its prologue is a jump. The neighbour sits earlier in the table, so it already
+           has an address. */
+        if (hits != 1 && address == 0 && table[index].follows_entry != 0) {
+            size_t previous = table[index].follows_entry - 1u;
+
+            if (previous < count && table[previous].address != 0) {
+                address = signature_find_at(table[previous].address + table[index].follows_gap,
+                                            table[index].bytes, table[index].mask,
+                                            table[index].size, table[index].detour_prologue);
+                if (address != 0) {
+                    table[index].address = address;
+                    ++resolved;
+                    log_info("  site %-22s -> %08X (too short to anchor once detoured; found "
+                             "behind %s)", table[index].name, (unsigned)address,
+                             table[previous].name);
+                    continue;
+                }
             }
         }
 

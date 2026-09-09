@@ -97,6 +97,12 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
 };
 #define OFFSET_PLAYER_POINTER 0x27u
 
+/* Six bytes: push ebp; mov ebp,esp; sub esp,8. Nothing here detours this function, but three other
+ * DLLs do, and the first of them replaces those six bytes with a jump. A plain pattern would then
+ * find nothing and this feature would switch itself off reporting an unsupported executable. */
+#define PLAYER_RUN_PHASES_PROLOGUE 6u
+
+
 /* Plr_CommitPose (0x0044C06B): while pPlayer+0xA0 is nonzero, the player's position is force-copied
  * every substep from pPlayer+0x124, the exact mechanism behind the position-settle transient
  * documented in fmv_player.c. Watched here (never written) so suppression can end the instant
@@ -112,7 +118,8 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR("sfx_mute_sound_play", SIG_SOUND_PLAY, SOUND_PLAY_PROLOGUE),
-    SIGNATURE_ENTRY("sfx_mute_player_run_phases", SIG_PLAYER_RUN_PHASES)
+    SIGNATURE_ENTRY_DETOUR("sfx_mute_player_run_phases", SIG_PLAYER_RUN_PHASES,
+                           PLAYER_RUN_PHASES_PROLOGUE)
 };
 
 typedef int32_t (__cdecl *sound_play_fn_t)(const void *sound, int32_t *handle, const float *pos);

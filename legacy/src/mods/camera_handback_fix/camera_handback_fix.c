@@ -63,6 +63,8 @@ static const uint8_t SIG_DIALOG_SPEAK_SINGLE[] = {
 };
 /* Its call to the setter sits at +0x5F and is five bytes, so control comes back at +0x64. */
 #define DIALOG_SPEAK_TAKE_RETURN 0x64u
+/* Six bytes: push ebp; mov ebp,esp; sub esp,0x0C. Nothing here detours it; diagnostics does. */
+#define DIALOG_SPEAK_SINGLE_PROLOGUE 6u
 
 /* --- Dialog_Close 0x00430E82 ------------------------------------------------------------------ *
  *   55 8B EC              push ebp / mov ebp,esp
@@ -90,6 +92,8 @@ static const uint8_t SIG_DIALOG_LEAVE_LOCK[] = {
     0x3D, 0x8C, 0x4D, 0x6C, 0x00, 0x00, 0x7E, 0x25
 };
 #define DIALOG_LEAVE_LOCK_OPERAND 0x0Du
+/* Eleven bytes, ending before the compare whose operand is read at 13. Same reason as above. */
+#define DIALOG_LEAVE_LOCK_PROLOGUE 11u
 
 enum {
     SITE_OVERRIDE_ON,
@@ -101,11 +105,20 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("bapview_overrideOn",    SIG_OVERRIDE_ON),
-    SIGNATURE_ENTRY("bapview_overrideOff",   SIG_OVERRIDE_OFF),
-    SIGNATURE_ENTRY("Dialog_SpeakSingle",    SIG_DIALOG_SPEAK_SINGLE),
-    SIGNATURE_ENTRY("Dialog_Close",          SIG_DIALOG_CLOSE),
-    SIGNATURE_ENTRY("Dialog_LeaveInputLock", SIG_DIALOG_LEAVE_LOCK)
+    /* The three that are detoured are declared as detour targets, so a pattern still matches
+     * after another DLL has replaced the prologue with its jump. diagnostics detours these same
+     * three functions, so whichever of the two loaded second used to find nothing at all. The
+     * other two entries stay plain because nothing detours them; they are read for an operand. */
+    SIGNATURE_ENTRY_DETOUR("bapview_overrideOn",  SIG_OVERRIDE_ON,  OVERRIDE_ON_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_AFTER("bapview_overrideOff", SIG_OVERRIDE_OFF,
+                                OVERRIDE_OFF_PROLOGUE, 1u, sizeof SIG_OVERRIDE_ON),
+    /* Not detoured here, but diagnostics detours both of these, so a plain pattern would find
+     * nothing whenever that DLL installed first. Both operands read below sit past the prologue. */
+    SIGNATURE_ENTRY_DETOUR("Dialog_SpeakSingle", SIG_DIALOG_SPEAK_SINGLE,
+                           DIALOG_SPEAK_SINGLE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("Dialog_Close",        SIG_DIALOG_CLOSE, DIALOG_CLOSE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("Dialog_LeaveInputLock", SIG_DIALOG_LEAVE_LOCK,
+                           DIALOG_LEAVE_LOCK_PROLOGUE)
 };
 
 typedef void(__cdecl *override_on_fn_t)(int32_t group);
@@ -213,15 +226,16 @@ void camera_handback_fix_install(void)
     }
 
     resolved = signature_resolve_table(sites, SITE_COUNT);
+
+
     if (resolved != SITE_COUNT) {
         log_warning("%u of %u sites resolved, so the camera hand-back stays off. Every one of "
                     "them is needed: two to see the camera change hands, one to know the dialogue "
                     "was the one that took it, one to act when it closes, and one to read the lock "
-                    "that says whether anybody above it is still running. If the diagnostics DLL "
-                    "got here first with CameraOwner=1, that is the reason: it takes the same two "
-                    "camera functions, they are fifteen and twenty three bytes long, and there is "
-                    "no room in either for a second detour to anchor behind the first. Switch the "
-                    "census off to run the repair",
+                    "that says whether anybody above it is still running. Another DLL reaching "
+                    "these functions first is no longer a reason for this: every pattern here is "
+                    "declared as a detour target and the one function too short to anchor on its "
+                    "own is found behind its neighbour",
                     (unsigned)resolved, (unsigned)SITE_COUNT);
         return;
     }

@@ -141,16 +141,19 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("sound_play",           SIG_SOUND_PLAY),
-    SIGNATURE_ENTRY("sound_start_channel",  SIG_SOUND_START_CHANNEL),
-    SIGNATURE_ENTRY("sound_free_channel",   SIG_SOUND_FREE_CHANNEL),
-    SIGNATURE_ENTRY("sound_master_volume",  SIG_SOUND_MASTER_VOLUME),
-    SIGNATURE_ENTRY("sound_periodic",       SIG_SOUND_PERIODIC),
-    SIGNATURE_ENTRY("sound_place_on",       SIG_SOUND_PLACE_ON),
-    SIGNATURE_ENTRY("sound_place_off",      SIG_SOUND_PLACE_OFF),
-    SIGNATURE_ENTRY("music_set_state",      SIG_MUSIC_STATE),
-    SIGNATURE_ENTRY("music_set_sequence",   SIG_MUSIC_SEQUENCE),
-    SIGNATURE_ENTRY("music_set_volume",     SIG_MUSIC_VOLUME)
+    SIGNATURE_ENTRY_DETOUR("sound_play", SIG_SOUND_PLAY, SOUND_PLAY_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_start_channel", SIG_SOUND_START_CHANNEL,
+                           SOUND_START_CHANNEL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_free_channel", SIG_SOUND_FREE_CHANNEL,
+                           SOUND_FREE_CHANNEL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_master_volume", SIG_SOUND_MASTER_VOLUME,
+                           SOUND_MASTER_VOLUME_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_periodic", SIG_SOUND_PERIODIC, SOUND_PERIODIC_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_place_on", SIG_SOUND_PLACE_ON, SOUND_PLACE_ON_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_place_off", SIG_SOUND_PLACE_OFF, SOUND_PLACE_OFF_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("music_set_state", SIG_MUSIC_STATE, MUSIC_STATE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("music_set_sequence", SIG_MUSIC_SEQUENCE, MUSIC_SEQUENCE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("music_set_volume", SIG_MUSIC_VOLUME, MUSIC_VOLUME_PROLOGUE)
 };
 
 /* B3D_SCAL, a "sound call", 0x40 bytes. */

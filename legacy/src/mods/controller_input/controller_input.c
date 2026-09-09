@@ -47,7 +47,7 @@
  * ordinary cadence begins and stays on for the rest of the session. */
 #define DISCONNECTED_POLL_INTERVAL_MS 500u
 
-/* How long a synthesized Escape is held down before its release is sent. A down and an up in the
+/* How long a synthesised Escape is held down before its release is sent. A down and an up in the
  * same SendInput call opened the pause menu fine (that path is a plain WM_KEYDOWN dispatch) but did
  * not close it again and did not skip a playing movie: closing the menu goes through
  * TranslateMessage producing WM_CHAR, and fmv_player's own skip check polls GetAsyncKeyState, and
@@ -62,7 +62,7 @@
  * XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE (8689 of 32767, about 0.265) rounded to a plainer default. */
 #define DEFAULT_DEADZONE 0.24f
 
-/* Counts per second of synthesized relative mouse movement at full stick deflection, in the same
+/* Counts per second of synthesised relative mouse movement at full stick deflection, in the same
  * units enhanced_input.dll's own MouseDegreesPerCount scales from. Chosen so that, at that
  * feature's own default of 0.050 degrees per count, full deflection turns at 200 degrees per
  * second, brisk but controllable; independent of and not read from enhanced_input's own
@@ -127,7 +127,7 @@ typedef struct controller_input_state {
     ULONGLONG roll_left_next_tap_tick;
     ULONGLONG roll_right_next_tap_tick;
 
-    double remainder_x;  /* fractional synthesized mouse counts carried across polls */
+    double remainder_x;  /* fractional synthesised mouse counts carried across polls */
     double remainder_y;
 } controller_input_state_t;
 
@@ -256,7 +256,7 @@ static void set_alt_held(bool want_held)
 /* One tap: down, held for ROLL_TAP_DOWN_MS, then up, blocking this thread only, the same shape
  * synthesize_pause_press already uses for Escape. The arrow keys are extended keys on a real
  * keyboard (the block they share a physical position with is the numeric keypad), and
- * KEYEVENTF_EXTENDEDKEY is what tells the receiving code which one a synthesized press means, the
+ * KEYEVENTF_EXTENDEDKEY is what tells the receiving code which one a synthesised press means, the
  * same way a real keyboard's own scan code would. */
 static void synthesize_roll_tap(WORD vk)
 {
@@ -326,7 +326,7 @@ static void handle_roll_triggers(const XINPUT_GAMEPAD *pad, int threshold)
  *
  * The foreground window's owning process is compared to this one rather than a HWND of our own
  * being tracked, which needs nothing set up anywhere else here. Byte for byte the same check
- * cheats_openphantom.c already makes before it reads a held key, so the pattern was in the tree and
+ * cheats_free_camera.c already makes before it reads a held key, so the pattern was in the tree and
  * this code simply did not use it. */
 static bool is_game_foreground(void)
 {
@@ -377,7 +377,7 @@ static void poll_once(void)
                      "and the triggers do nothing. That is not a fault in this patch and "
                      "nothing further will be "
                      "reported about it; a pad plugged in later is picked up on its own. "
-                     "Rechecked every two seconds. "
+                     "Rechecked twice a second. "
                      "If one is plugged in NOW then it is a pad this cannot see, because only "
                      "XInput devices are visible here. An XBOX pad works as it is; anything else "
                      "has to be presented as one. Add the game to Steam as a non-Steam game and "

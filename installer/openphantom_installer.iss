@@ -61,7 +61,7 @@
 ;
 ; Tagged i1.4.3, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
 ; tagged v0.4.3 on its own line.
-#define AppVer "1.4.3"
+#define AppVer "1.4.4"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"

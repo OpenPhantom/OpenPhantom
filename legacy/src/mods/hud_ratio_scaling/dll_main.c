@@ -1,4 +1,4 @@
-/* dll_main.c: entry point of hud_ratio_scaling.dll. See ../common/mod_entry.h for the contract. */
+/* dll_main.c: entry point of hud_ratio_scaling.dll. */
 #include "hud_ratio_scaling.h"
 
 #include "common/mod_entry.h"

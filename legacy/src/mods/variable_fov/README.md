@@ -20,7 +20,8 @@ patterns do not resolve and the feature disables itself with a log line.
 | `AspectMode` | `0` | 0-2 | 0 Hor+, 1 Vert-, 2 Stretch (touch nothing) |
 | `BaseVerticalDegrees` | `46.826` | 30-60 | the byte-native 4:3 vertical |
 | `ExtraDegrees` | `0.0` | -120-120 | the offset on top of what the aspect mode computes; the slider writes this back. **May be negative**, see below |
-| `Menu3dMode` | `0` | 0-2 | 0 fill width, 1 keep 4:3, 2 native 640 px |
+| `BaseFov` | `0.0` | | **written by the DLL, never read by it**: the horizontal width the picture would have with `ExtraDegrees` at zero. Editing it does nothing and it is rewritten from the projection. It exists because `ExtraDegrees` is an offset from a base that depends on the canvas, the aspect mode and the engine's own projection, so on its own it is a number nothing outside this DLL can interpret. With the base published, the width is `BaseFov` plus `ExtraDegrees`, both of them in the file. The BASE is published rather than the current width: the width moves every time the offset does, which is every frame of a slider being dragged, so a reader working the base out as "width minus offset" would pair a width written a moment ago with an offset written just now |
+| `Menu3dMode` | `0` | 0-2 | 0 fill width, 1 keep 4:3, 2 native 640 px. The code's default is `0`; the shipped `engine_fixes.ini` sets `2` |
 | `MenuSlider` | `0` | | add the slider to Options -> Video. Ships off, so that screen looks as it did in 1999; the developer menu has a row that turns this and the controls screen's two check boxes on together. Read once at startup, so it takes effect on the next launch |
 | `SliderMinFovDegrees` | `60` | 30-120 | the leftmost notch, as an **absolute** horizontal angle |
 | `SliderMaxFovDegrees` | `120` | min+2-170 | the rightmost notch, likewise absolute |

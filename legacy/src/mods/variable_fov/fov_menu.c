@@ -372,7 +372,7 @@ static int32_t __cdecl hook_options_video(void)
     notch = clamped_slider_notch();
     if (notch != menu_state.seed_notch) {
         apply_notch(true);
-        log_info("video options closed - offset %.1f deg (notch %d), hFOV now %.3f",
+        log_info("video options closed: offset %.1f deg (notch %d), hFOV now %.3f",
                  (double)variable_fov_extra_degrees(), notch, (double)variable_fov_horizontal_degrees());
     } else {
         log_info("video options closed, the slider was not touched, the ini is left alone");
@@ -415,7 +415,7 @@ static bool resolve_widget_table(uintptr_t site, uintptr_t *out_pointer_address,
 
     if (!memory_read_u8(site + OPTIONS_VIDEO_PUSH_OFFSET, &opcode) ||
         opcode != OPCODE_PUSH_IMM32) {
-        log_error("expected `push imm32` (68) at %08X, found %02X - refused",
+        log_error("expected `push imm32` (68) at %08X, found %02X; refused",
                   (unsigned)(site + OPTIONS_VIDEO_PUSH_OFFSET), opcode);
         return false;
     }
@@ -438,7 +438,7 @@ static bool resolve_bitmap_name_table(uintptr_t site, uintptr_t *out_table_addre
 
     if (!memory_read_u8(site + OPTIONS_VIDEO_BMP_PUSH_OFFSET, &opcode) ||
         opcode != OPCODE_PUSH_IMM32) {
-        log_error("expected `push imm32` (68) for the bitmap-name table at %08X, found %02X - "
+        log_error("expected `push imm32` (68) for the bitmap-name table at %08X, found %02X; "
                   "refused", (unsigned)(site + OPTIONS_VIDEO_BMP_PUSH_OFFSET), opcode);
         return false;
     }

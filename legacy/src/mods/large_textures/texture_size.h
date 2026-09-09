@@ -4,13 +4,13 @@
  * without the game. Everything else there is a signature scan and a write into a live process.
  * Every function here is a pure function of its arguments: the caller reads the ini, reports the
  * verdict to the log and does the patching, and this decides only what the verdict is.
- * See unittests/texture_size.c.
  *
  * None of this repairs anything, and it is careful not to overstate why. No page the game ships
  * exceeds either limit, so raising them changes nothing that is drawn; that is not the same as
  * writing nothing, because the shipped setting asks for 1024 and the clamp really is rewritten.
- * It simply has no artwork to act on. The validation exists for replacement artwork, which reaches surface creation
- * unchanged and is cropped without a word when it is too large for the clamp.
+ * It simply has no artwork to act on. The validation exists for replacement artwork, which
+ * reaches surface creation unchanged and is cropped without a word when it is too large for the
+ * clamp.
  */
 #ifndef TEXTURE_SIZE_H
 #define TEXTURE_SIZE_H

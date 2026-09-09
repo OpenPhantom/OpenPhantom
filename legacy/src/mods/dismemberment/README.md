@@ -113,7 +113,7 @@ that *could* produce the symptom is not a cause; only a measurement that sees it
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes on both retail builds.
-**Accepted in game**, in the 1.5.0 build, which was played through by hand.
+**Accepted in game**, in the v0.4.1 build, which was played through by hand.
 
 To re-check the `prevRot` fix after any change here: decapitate an enemy and watch without
 moving. The piece must fall, tumble briefly, and then **really** lie still. Then set

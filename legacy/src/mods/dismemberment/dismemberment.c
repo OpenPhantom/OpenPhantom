@@ -61,8 +61,8 @@
  * SAME space (both are pNode->+0x44), so the substitution is type-safe.
  *
  * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. Most of the excess is the byte
- * evidence above rather than code: it is what makes the six gates reviewable, and it has to
- * stand at the site rather than only in a document.
+ * evidence above rather than code. The six gates cannot be reviewed without it, and it has to
+ * stand at the site.
  */
 #include "dismemberment.h"
 
@@ -527,8 +527,8 @@ static void *death_gate_trampoline;
  * take control, and on_death_gate below is free to use the FPU. Without fnsave/frstor a handler
  * that pushes past the eighth register does not fault, it marks the register indefinite, and the
  * engine carries on with a NaN where a coordinate was. ebp still holds enemy_onContact's frame
- * pointer after the save: neither pushad nor the sub touches it. The long version of this reason
- * is in dev_overlay/cheats_openphantom.c, above its own naked detours.
+ * pointer after the save: neither pushad nor the sub touches it. The other naked detours in this
+ * project save the same state for the same reason.
  */
 static void __declspec(naked) hook_death_gate(void)
 {
@@ -586,7 +586,7 @@ static void __cdecl hook_hide_meshes(void *piece_thing, void *model3, uint8_t *n
                : (raw_mesh == original_keep)
                      ? " (node and mesh number are identical here, correct, no translation "
                        "needed)"
-                     : " (UNCHANGED - neither an own mesh nor one in the subtree)");
+                     : " (UNCHANGED: neither an own mesh nor one in the subtree)");
     }
 
     limb_state.engine_hide_meshes(piece_thing, model3, nodes, keep);
@@ -631,7 +631,7 @@ static void install_probe(void)
 
     call_site = site + OFFSET_PROBE_CALL;
     if (!patch_read_call_target(call_site, &target)) {
-        log_warning("no usable E8 at %08X - refused", (unsigned)call_site);
+        log_warning("no usable E8 at %08X, refused", (unsigned)call_site);
         return;
     }
 
@@ -668,7 +668,7 @@ static void install_death_gate(void)
     if (detour_install(&limb_state.death_gate_detour, gate_site,
                        (const void *)hook_death_gate, DEATH_GATE_PROLOGUE_SIZE)) {
         death_gate_trampoline = limb_state.death_gate_detour.original;
-        log_info("death gate hooked at %08X - on the lethal saber hit the node the blade touched "
+        log_info("death gate hooked at %08X: on the lethal saber hit the node the blade touched "
                  "is severed", (unsigned)gate_site);
     } else {
         log_error("the death-gate detour at %08X failed", (unsigned)gate_site);
@@ -689,7 +689,7 @@ static void install_mesh_index_fix(void)
 
     call_site = site + OFFSET_HIDE_CALL;
     if (!patch_read_call_target(call_site, &target)) {
-        log_warning("no usable E8 at %08X - refused", (unsigned)call_site);
+        log_warning("no usable E8 at %08X, refused", (unsigned)call_site);
         return;
     }
 

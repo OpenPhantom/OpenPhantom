@@ -1,4 +1,4 @@
-/* framerate_stats.c: the two instruments that measure what this DLL does, and nothing else.
+/* framerate_stats.c: the two instruments that measure what this DLL does.
  *
  * SIZE NOTE: a little over six hundred lines. Almost all of the excess is evidence rather than
  * code: a byte census that decides which cell a window may be judged on, the disassembly of the

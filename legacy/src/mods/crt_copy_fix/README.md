@@ -14,7 +14,7 @@ and version-agnostic. If the pattern is absent, nothing is changed and the log s
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | |
+| `Enabled` | `1` | `0` installs nothing and the log says so. |
 
 ## The defect
 
@@ -58,4 +58,4 @@ Idempotent: a second run no longer finds the rewritten sequence.
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification confirms exactly 40 matches on all four
-retail executables. **Accepted in game**, in the 1.5.0 build, which was played through by hand.
+retail executables. **Accepted in game**, in the v0.4.1 build, which was played through by hand.

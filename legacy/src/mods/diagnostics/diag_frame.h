@@ -40,7 +40,7 @@
  * ==============================================================================================
  * And it installs no hook of its own
  *
- * It uses the frame callback the shared layer already provides, and nothing else. Detouring the
+ * It uses the frame callback the shared layer already provides. Detouring the
  * frame limiter would give the one number this cannot produce, the split between working and
  * waiting, and it must not: the limiter's prologue is what framerate_fix searches for by pattern,
  * this DLL loads first, and a detour there would leave that feature unable to find its own site and

@@ -134,6 +134,8 @@ descends with them, so by that measure nothing was ever wrong.
 | Site | Retail VA | What |
 |---|---|---|
 | contact handler, `enemy.c` | `0x436A68` | detoured; a contact push is taken back off a character nothing will collision test |
+| `bapmap_carryRider` | `0x40AF4C` | detoured over a 9-byte prologue, **only** when `CrusherCarry=1`; the engine's body still runs and only the rider position it hands back is refused |
+| `move_snapToGround` | `0x42ADB4` | detoured over a 6-byte prologue, **only** when `CrusherCarry=1`; the snap is declined for a character standing on a crusher the carry already refused, and only while the floor is below the feet |
 
 The contacted body comes from a global read out of the matched operand at `+0x07` rather than
 written down, and is refused if it does not land inside the image. Fields read, all confirmed by the
@@ -179,7 +181,7 @@ suppressed.
 actually reached a player: a character whose velocity is unchanged either side of the handler is
 left alone whatever its mode.
 
-**Accepted in game**, in the 1.5.0 build, which was played through by hand. The risk this design
+**Accepted in game**, in the v0.4.1 build, which was played through by hand. The risk this design
 still carries is a contact that is supposed to move something the engine does not test, and no
 single playthrough covers every one of those. If something that used to be knocked about by
 walking into it now refuses to budge, that is this fix overreaching and worth reporting.

@@ -344,9 +344,9 @@ static bool apply_world_page_scratch(uint32_t axis)
     }
     log_info("world page scratch %u -> %u bytes at %08X, so a level texture page may now be up to "
              "%u by %u. The loader reads width times height bytes into this one block and checks "
-             "neither number, which is why the block has to grow first and why nothing larger may "
-             "be written into a level file before it has. The allocation is transient: it is made "
-             "once per level load and freed on every exit path.",
+             "neither number, so the block has to grow first and nothing larger may be written "
+             "into a level file before it has. The allocation is transient: it is made once per "
+             "level load and freed on every exit path.",
              (unsigned)ORIGINAL_SCRATCH_BYTES, (unsigned)bytes, (unsigned)site,
              (unsigned)axis, (unsigned)axis);
     return true;

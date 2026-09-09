@@ -1,4 +1,4 @@
-/* dll_main.c: entry point of variable_fov.dll. See ../common/mod_entry.h for the contract. */
+/* dll_main.c: entry point of variable_fov.dll. */
 #include "variable_fov.h"
 
 #include "common/mod_entry.h"

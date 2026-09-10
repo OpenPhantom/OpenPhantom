@@ -83,7 +83,7 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
                 "menus from the display itself, or set the game back to the size that artwork was "
                 "made for",
                 (int)scale_state.canvas_width, (int)scale_state.canvas_height,
-                (int)screen_width, (int)screen_height, (int)screen_width, (int)screen_height);
+                (int)screen_width, (int)screen_height);
 
     /* Ratio 1 IS the authored canvas, so the two calls that put a ratio into force put all of it
      * back: the clip, the three cells the repointed operands read, the list box row floor

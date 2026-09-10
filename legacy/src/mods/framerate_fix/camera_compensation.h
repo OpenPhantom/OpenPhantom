@@ -23,14 +23,23 @@
  * finds nothing in obi.exe, and gating the anchor behind it would have disabled the anchor there
  * without a word in the log.
  *
- * The anchor also feeds three consumers outside the camera: the 3-D sound listener via [0x8A0148],
- * the world render camera via [0x8A0060]+0x18, and an enemy distance gate. All three see the
- * unchanged value at 30 fps and a value closer to the authored one above it.
+ * Where the anchor lives, corrected. It is the view record's own field: the view pointer sits at
+ * [0x8A011C] and the anchor is the vec3 at +0x14, the cell the mean this file rewrites
+ * assigns. An earlier version of this comment placed it at [0x8A0060]+0x18. That is the level
+ * pointer plus the offset of the authored player spawn, a vec3 the level loader writes once and
+ * the camera never touches. Nothing was built on the wrong address, but it read as evidence.
+ *
+ * One consumer outside the camera is proven: the 3-D sound listener reads the same storage through
+ * a cached pointer at [0x8A0148], which holds the address of that field rather than a copy of it,
+ * so the listener follows the anchor without a second write. The same earlier comment claimed two
+ * more, a world render camera and an enemy distance gate. The render camera is not a separate
+ * consumer, it reads the anchor itself, and the distance gate was never established. Whatever
+ * else reads it sees the unchanged value at 30 fps and a value closer to the authored one above,
+ * which is the property that matters and does not depend on counting the readers.
  */
 #ifndef CAMERA_COMPENSATION_H
 #define CAMERA_COMPENSATION_H
 
-#include <stdbool.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

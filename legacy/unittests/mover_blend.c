@@ -85,15 +85,34 @@ static void the_endpoints_are_exact(void)
 
     /* Alpha reaches exactly 1.0 on every frame at 32 frames per second, so this case is the
      * original behaviour and it has to come back byte for byte as the current pose. */
-    ut_check(!mover_blend_world(out, previous, current, 1.0f, NO_TRANSLATION_LIMIT),
+    ut_check(!mover_blend_world(out, previous, current, 1.0f, NO_TRANSLATION_LIMIT, NULL),
              "alpha 1.0 is not a blend");
     for (index = 0; index < MOVER_WORLD_FLOATS; ++index) {
         ut_checkf(out[index] == current[index],
                   "alpha 1.0 must leave the current pose untouched, element %d", index);
     }
 
-    ut_check(!mover_blend_world(out, previous, current, 0.0f, NO_TRANSLATION_LIMIT),
-             "alpha 0.0 is not a blend either");
+    /* Zero is a real answer now and used to be a rejection, so the mode that
+     * produces it draw the NEWER pose on exactly the frames it meant to draw the older one. */
+    ut_check(mover_blend_world(out, previous, current, 0.0f, NO_TRANSLATION_LIMIT, NULL),
+             "a weight of zero is a blend, and it draws the earlier sample");
+    ut_near((double)out[MOVER_TRANSLATION], 0.0, 1e-6,
+            "a weight of zero puts the translation exactly where it was");
+
+    /* The range that cost two play sessions. The guard was the open interval (0, 1), so every
+     * weight the two clock-derived modes produced was refused and each of them silently drew the
+     * newest pose, which is the stepping they existed to remove. */
+    ut_check(mover_blend_world(out, previous, current, 1.5f, NO_TRANSLATION_LIMIT, NULL),
+             "a weight past the newer sample is an extrapolation and is allowed");
+    ut_near((double)out[MOVER_TRANSLATION], 15.0, 1e-4,
+            "and it carries the translation half an interval past the newer sample");
+
+    ut_check(!mover_blend_world(out, previous, current, 2.5f, NO_TRANSLATION_LIMIT, NULL),
+             "a weight more than one whole interval past it is refused");
+    ut_check(!mover_blend_world(out, previous, current, -0.1f, NO_TRANSLATION_LIMIT, NULL),
+             "and so is a weight before the earlier sample");
+    ut_check(!mover_blend_world(out, previous, current, (float)NAN, NO_TRANSLATION_LIMIT, NULL),
+             "a weight that is not a number is refused, which the comparisons are written for");
 }
 
 static void translation_is_exact_because_that_is_what_a_door_does(void)
@@ -107,7 +126,7 @@ static void translation_is_exact_because_that_is_what_a_door_does(void)
     make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
     make_world(current, 0.0, 1.0f, 8.0f, 4.0f, -2.0f);
 
-    ut_check(mover_blend_world(out, previous, current, 0.25f, NO_TRANSLATION_LIMIT),
+    ut_check(mover_blend_world(out, previous, current, 0.25f, NO_TRANSLATION_LIMIT, NULL),
              "a pure slide is blended");
     ut_near((double)out[MOVER_TRANSLATION + 0], 2.0, 1e-5, "x at a quarter");
     ut_near((double)out[MOVER_TRANSLATION + 1], 1.0, 1e-5, "y at a quarter");
@@ -131,7 +150,7 @@ static void rotation_lands_between_the_samples(void)
     make_world(current, 30.0, 1.0f, 0.0f, 0.0f, 0.0f);
     make_world(expected, 15.0, 1.0f, 0.0f, 0.0f, 0.0f);
 
-    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT),
+    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, NULL),
              "a 30 degree step is ordinary motion and must be blended");
     for (index = 0; index < 9; ++index) {
         ut_checkf(fabs((double)(out[index] - expected[index])) < 0.005,
@@ -153,7 +172,7 @@ static void the_basis_stays_orthonormal(void)
     make_world(current, 40.0, 1.0f, 0.0f, 0.0f, 0.0f);
 
     for (alpha = 0.1f; alpha < 0.95f; alpha += 0.1f) {
-        ut_checkf(mover_blend_world(out, previous, current, alpha, NO_TRANSLATION_LIMIT),
+        ut_checkf(mover_blend_world(out, previous, current, alpha, NO_TRANSLATION_LIMIT, NULL),
                   "40 degrees is inside the band, alpha %.1f", (double)alpha);
         ut_checkf(fabs((double)(row_length(out, 0) - 1.0f)) < 1e-4,
                   "row 0 stays unit length at alpha %.1f", (double)alpha);
@@ -190,7 +209,7 @@ static void a_scaled_subnode_keeps_its_scale(void)
     make_world(current, 20.0, 2.0f, 0.0f, 0.0f, 0.0f);
 
     for (alpha = 0.1f; alpha < 0.95f; alpha += 0.2f) {
-        ut_checkf(mover_blend_world(out, previous, current, alpha, NO_TRANSLATION_LIMIT),
+        ut_checkf(mover_blend_world(out, previous, current, alpha, NO_TRANSLATION_LIMIT, NULL),
                   "a scaled subnode is still ordinary motion, alpha %.1f", (double)alpha);
         ut_checkf(fabs((double)(row_length(out, 0) - 2.0f)) < 1e-3,
                   "the scale of 2 survives at alpha %.1f, got %.4f",
@@ -207,7 +226,7 @@ static void a_changing_scale_is_interpolated_too(void)
     make_world(previous, 0.0, 2.0f, 0.0f, 0.0f, 0.0f);
     make_world(current, 0.0, 4.0f, 0.0f, 0.0f, 0.0f);
 
-    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT),
+    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, NULL),
              "a growing subnode is blended");
     ut_near((double)row_length(out, 0), 3.0, 1e-3, "halfway between a scale of 2 and 4");
 }
@@ -225,12 +244,12 @@ static void the_guard_measures_an_angle_and_not_a_length(void)
      * for every subnode. */
     make_world(previous, 0.0, 0.5f, 0.0f, 0.0f, 0.0f);
     make_world(current, 5.0, 0.5f, 0.0f, 0.0f, 0.0f);
-    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT),
+    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, NULL),
              "a small turn on a subnode scaled down must still be blended");
 
     make_world(previous, 0.0, 3.0f, 0.0f, 0.0f, 0.0f);
     make_world(current, 90.0, 3.0f, 0.0f, 0.0f, 0.0f);
-    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT),
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, NULL),
              "a 90 degree jump on a subnode scaled up must still be rejected");
 }
 
@@ -246,7 +265,7 @@ static void a_discontinuity_is_not_smoothed(void)
      * largest wrap in the first level, and it has to be refused. */
     make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
     make_world(current, 101.0, 1.0f, 0.0f, 0.0f, 0.0f);
-    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT),
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, NULL),
              "a 101 degree wrap is rejected");
     for (index = 0; index < MOVER_WORLD_FLOATS; ++index) {
         ut_checkf(out[index] == current[index],
@@ -261,9 +280,9 @@ static void a_discontinuity_is_not_smoothed(void)
      * to reject ordinary travel. */
     make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
     make_world(current, 0.0, 1.0f, 298.0f, 0.0f, 0.0f);
-    ut_check(!mover_blend_world(out, previous, current, 0.5f, 10.0f),
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, 10.0f, NULL),
              "a 298 unit jump past a 10 unit limit is rejected");
-    ut_check(mover_blend_world(out, previous, current, 0.5f, 400.0f),
+    ut_check(mover_blend_world(out, previous, current, 0.5f, 400.0f, NULL),
              "the same jump under a 400 unit limit is ordinary motion");
 }
 
@@ -279,7 +298,7 @@ static void a_degenerate_row_is_refused(void)
     make_world(current, 10.0, 1.0f, 0.0f, 0.0f, 0.0f);
     memset(previous, 0, sizeof(previous));
 
-    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT),
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, NULL),
              "a zeroed previous pose is refused rather than divided by");
     ut_check(out[0] == current[0] && out[4] == current[4],
              "and the current pose is what comes back");

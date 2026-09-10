@@ -512,13 +512,22 @@ static void sample_frame_window(float frame_delta)
 /* ============================================================================================
  * The player draw, recomputed from the outside.
  *
- * bapobj_drawAll builds the player's draw transform as (byte-read at 0x4112xx):
+ * bapobj_drawAll built the player's draw transform as (byte-read at 0x4112xx):
  *     p   = prevPos + (pos, prevPos) * substepAlpha
  *     yaw = prevRot.y + angle_diff(prevRot.y, rot.y) * alpha
- * so logging alpha together with pos/prevPos/rot reproduces exactly what the renderer put on
- * screen, without touching the renderer. If `draw` walks smoothly and the picture does not, the
- * shake is not in the body transform; if `draw` itself stutters, the prev/cur pair is not two
- * clean substep samples and the interpolation has nothing to work with.
+ * so logging alpha together with pos/prevPos/rot reproduces that arithmetic without touching the
+ * renderer. If `draw` walks smoothly and the picture does not, the shake is not in the body
+ * transform; if `draw` itself stutters, the prev/cur pair is not two clean substep samples and
+ * the interpolation has nothing to work with.
+ *
+ * It is no longer what the renderer put on screen, and this comment said it was. Under
+ * InterpolateRiders=1 those instructions are replaced by a call that blends from a previous
+ * position remembered outside the object, precisely because the object's own goes flat while a
+ * platform carries it. So for a rider this recomputation reproduces the arithmetic that SHIPPED,
+ * which now differs from what was drawn, and the difference is the whole point of that feature.
+ * Read the two together: this says what the engine would have drawn and the picture shows what it
+ * did. For anything the tracker has no answer for they are still the same, because that case
+ * falls back on the object's own pair.
  * ============================================================================================ */
 static void dump_animation_clock(const uint8_t *object)
 {

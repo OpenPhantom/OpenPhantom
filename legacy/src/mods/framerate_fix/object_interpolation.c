@@ -2,6 +2,7 @@
 #include "object_interpolation.h"
 
 #include "object_track.h"
+#include "substep_counter.h"
 
 #include "common/logging.h"
 #include "common/patch.h"
@@ -72,32 +73,6 @@ static const uint8_t SIG_DRAW_POSITION[] = {
 
 static float object_travel_limit;
 
-/* The simulation step, counted from the alpha rather than read from a clock.
- *
- * The alpha climbs across a step and drops when a new one begins, so a drop is the boundary.
- * Every object drawn in one frame is handed the same alpha, so the comparison is guarded on the
- * value changing and fires once a frame rather than once an object.
- *
- * A frame slow enough to span two steps advances this once rather than twice. That is a real
- * limitation and a harmless one: the previous position is then one step older than it should be,
- * which is a bounded error in a blend, and at the frame rates this feature exists for a step
- * spans three frames or more. */
-static uint32_t object_step;
-static float    object_last_alpha;
-static bool     object_have_last_alpha;
-
-static void note_alpha(float alpha)
-{
-    if (object_have_last_alpha && alpha == object_last_alpha) {
-        return;
-    }
-    if (object_have_last_alpha && alpha < object_last_alpha) {
-        ++object_step;
-    }
-    object_last_alpha = alpha;
-    object_have_last_alpha = true;
-}
-
 /* 1 uses the remembered previous position, 2 reproduces the engine's own arithmetic, 3 uses
  * the engine's and reports where the remembered one would have disagreed. */
 static int   object_mode;
@@ -163,28 +138,45 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
     float        alpha   = *(const float *)(frame_pointer - LOCAL_SUBSTEP_ALPHA);
     float        previous[3];
     float        drawn[3];
+    uint32_t     step;
+    /* The engine's own pair is exactly one step apart, so a fallback leaves the weight equal to
+     * the alpha and the limit unscaled, which is the replaced arithmetic exactly. The tracker
+     * does not write through this on the paths where it has no answer, so it is set here
+     * rather than there. */
+    uint32_t     gap = 1u;
 
-    note_alpha(alpha);
+    if (!substep_counter_read(&step)) {
+        /* Unreachable: the install refuses to place the patch without the counter. The guard
+         * stays because that is a property of the install path rather than of this function, and
+         * a stamp that never changes would leave every object on the engine's own pair, which is
+         * the behaviour that shipped. */
+        step = 0u;
+    }
 
     if (object_mode == 3) {
         /* The engine's own answer is what gets drawn, so the game stays playable while this
          * says what the remembered one WOULD have been. */
-        float mine[3];
+        float    mine[3];
+        uint32_t mine_gap = 1u;
 
-        if (object_track_sample((uintptr_t)object, object_step, current, mine)) {
+        if (object_track_sample((uintptr_t)object, step, current, mine, &mine_gap)) {
             report_disagreement(object, mine, engine, current);
         }
         previous[0] = engine[0];
         previous[1] = engine[1];
         previous[2] = engine[2];
     } else if (object_mode != 1 ||
-               !object_track_sample((uintptr_t)object, object_step, current, previous)) {
+               !object_track_sample((uintptr_t)object, step, current, previous, &gap)) {
         previous[0] = engine[0];
         previous[1] = engine[1];
         previous[2] = engine[2];
     }
 
-    object_track_blend(previous, current, alpha, object_travel_limit, drawn);
+    /* The limit is per step, so two samples several steps apart are allowed proportionally more
+     * travel between them; without that a frame slow enough to span two steps reads an ordinary
+     * walk as a teleport and stops smoothing exactly where the frame rate needs it most. */
+    object_track_blend(previous, current, object_track_weight(alpha, gap),
+                       object_travel_limit * (float)gap, drawn);
 
     *(float *)(frame_pointer - LOCAL_DELTA_X) = current[0] - previous[0];
     *(float *)(frame_pointer - LOCAL_DELTA_Y) = current[1] - previous[1];
@@ -239,6 +231,17 @@ void object_interpolation_install(int mode, float travel_limit)
     object_mode = mode;
     object_travel_limit = (mode == 1) ? travel_limit : 0.0f;
     object_track_reset();
+
+    /* Before the patch, not after: with no way to tell one simulation step from the next there is
+     * nothing to remember a previous position against, and replacing the engine's blend with one
+     * that cannot work is worse than leaving it alone. Modes 2 and 3 read the counter too, mode 3
+     * because its whole purpose is to compare against what mode 1 would have drawn. */
+    if (!substep_counter_resolve()) {
+        log_warning("without the simulation step counter a carried character keeps stepping at "
+                    "the simulation rate. Nothing else is affected: the engine's own blend is "
+                    "left exactly as it shipped");
+        return;
+    }
 
     site = signature_find_unique(SIG_DRAW_POSITION, NULL, sizeof SIG_DRAW_POSITION);
     if (site == 0) {

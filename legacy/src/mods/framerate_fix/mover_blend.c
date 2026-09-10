@@ -107,7 +107,8 @@ bool mover_blend_world(float *out,
                        const float *previous,
                        const float *current,
                        float alpha,
-                       float translation_limit)
+                       float translation_limit,
+                       int *out_reason)
 {
     float previous_direction[MOVER_ROW_COUNT][3];
     float current_direction[MOVER_ROW_COUNT][3];
@@ -116,17 +117,34 @@ bool mover_blend_world(float *out,
     float current_length[MOVER_ROW_COUNT];
     int   row;
     int   axis;
+    int   reason = MOVER_BLEND_OK;
 
     /* The caller draws `current` whenever this returns false, so writing it first means every
      * rejection below leaves a complete and correct result rather than a half built one. */
     memcpy(out, current, MOVER_WORLD_FLOATS * sizeof(float));
 
-    if (!(alpha > 0.0f) || !(alpha < 1.0f)) {
-        /* At or past a simulation step there is nothing between the samples to draw, and alpha
-         * reaches exactly 1.0 on every frame at 32 frames a second. That is the property which
-         * makes this feature the identity at the rate the game was authored for. The comparisons
-         * are written so that a NaN alpha lands here as well. */
+    if (!(alpha >= 0.0f) || !(alpha <= MOVER_BLEND_WEIGHT_MAX)) {
+        /* Written as NOTs so that a weight which is not a number lands here rather than sailing
+         * through: every comparison against a NaN is false.
+         *
+         * The upper bound was 1.0 and that was a defect, not a safeguard. See the note at
+         * MOVER_BLEND_WEIGHT_MAX: it silently refused every pose two later modes produced, so
+         * each of them drew the newest pose instead and reproduced the stepping it was written to
+         * remove. Both ends are now inclusive, and zero draws the earlier sample, which is a real
+         * answer rather than a rejection. */
         return false;
+    }
+
+    if (alpha == 1.0f) {
+        /* Kept, and it is the one case that must not go through the arithmetic below. The caller
+         * draws `current` on a refusal, which is the newer sample byte for byte, and the alpha
+         * reaches exactly one on every frame at 32 frames a second. Running it through the lerp
+         * instead would be correct to within rounding and would stop being the identity at the
+         * rate the game was authored for, because `from + (to - from) * 1.0` rounds twice and the
+         * rotation rows are renormalised on the way. Mode 2 wants the newer sample here too, so
+         * nothing is lost. */
+        reason = MOVER_BLEND_IDENTITY;
+        goto refused;
     }
 
     for (row = 0; row < MOVER_ROW_COUNT; ++row) {
@@ -137,14 +155,16 @@ bool mover_blend_world(float *out,
         current_length[row]  = length3(to);
         if (!(previous_length[row] > MOVER_ROW_LENGTH_MINIMUM) ||
             !(current_length[row]  > MOVER_ROW_LENGTH_MINIMUM)) {
-            return false;
+            reason = MOVER_BLEND_ROW_LENGTH;
+            goto refused;
         }
         scale3(previous_direction[row], from, 1.0f / previous_length[row]);
         scale3(current_direction[row],  to,   1.0f / current_length[row]);
 
         if (!(dot3(previous_direction[row], current_direction[row])
               >= MOVER_ROTATION_COS_MINIMUM)) {
-            return false;       /* a discontinuity, not motion */
+            reason = MOVER_BLEND_ROTATION;   /* a discontinuity, not motion */
+            goto refused;
         }
     }
 
@@ -155,7 +175,8 @@ bool mover_blend_world(float *out,
             delta[axis] = current[MOVER_TRANSLATION + axis] - previous[MOVER_TRANSLATION + axis];
         }
         if (!(length3(delta) <= translation_limit)) {
-            return false;
+            reason = MOVER_BLEND_TRANSLATION;
+            goto refused;
         }
     }
 
@@ -163,7 +184,8 @@ bool mover_blend_world(float *out,
         lerp3(blended[row], previous_direction[row], current_direction[row], alpha);
     }
     if (!orthonormalise(blended)) {
-        return false;
+        reason = MOVER_BLEND_BASIS;
+        goto refused;
     }
 
     for (row = 0; row < MOVER_ROW_COUNT; ++row) {
@@ -175,5 +197,19 @@ bool mover_blend_world(float *out,
           previous + MOVER_TRANSLATION,
           current  + MOVER_TRANSLATION,
           alpha);
+
+    if (out_reason != NULL) {
+        *out_reason = MOVER_BLEND_OK;
+    }
     return true;
+
+    /* One exit for every rejection, so a guard cannot be added later that forgets to name itself.
+     * `out` already holds `current` from the top of the function, and a refusal is what the
+     * caller draws
+     * on a refusal, so there is nothing to unwind here. */
+refused:
+    if (out_reason != NULL) {
+        *out_reason = reason;
+    }
+    return false;
 }

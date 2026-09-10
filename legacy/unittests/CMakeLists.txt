@@ -160,7 +160,12 @@ add_unit_test(camera_anchor framerate_fix framerate_fix/camera_compensation.c)
 # The predicate that decides whether the facing command's completion is withheld. It can be wrong
 # in either direction and neither shows up at run time: too rare and the scripted scene never
 # progresses, too often and a clip that is still moving is delayed.
-add_unit_test(face_latch framerate_fix framerate_fix/face_latch.c)
+# substep_counter.c comes along because face_latch.c asks it which simulation step this is rather
+# than resolving the counter itself. The real file, not a stub: in a test process it resolves
+# nothing and answers "no counter", which is the case the install path has to survive.
+add_unit_test(face_latch framerate_fix framerate_fix/face_latch.c
+    framerate_fix/substep_counter.c
+)
 
 # The verdict that separates a gameplay window from a menu window. The counter it reports on is
 # shared with the menu, so before this existed the instrument printed a frame rate as a substep
@@ -173,11 +178,32 @@ add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c)
 # jump on a grown one, and a skewed basis shears the geometry.
 add_unit_test(mover_blend framerate_fix framerate_fix/mover_blend.c)
 
+# WHEN a mover is drawn, which is a separate question from how far it is allowed to move and was
+# the half that stayed wrong after the stepping stopped. A mover runs on the frame clock and the
+# substep alpha describes the simulation clock, so applying one to the other left a lag that
+# varied from frame to frame. The lattice case is the one that matters: a constant lag is smooth
+# and a varying one is judder, whatever its size.
+add_unit_test(mover_weight framerate_fix framerate_fix/mover_weight.c)
+
+# The instrument that has to settle what two derivations got wrong, so its own silent failures are
+# worth pinning down first: an unfilled range must say so rather than print its sentinel, and one
+# value that is not a number must not take a six hundred frame window with it.
+add_unit_test(mover_measure framerate_fix framerate_fix/mover_measure.c)
+
 # The one claim the simulation clock rebase stands on: taking the same amount off both clocks must
 # leave their difference exactly, because that difference IS the interpolation alpha. A rebase that
 # rounds would inject a fresh error into the quantity it exists to protect, and nothing on screen
 # would say so.
-add_unit_test(sim_clock framerate_fix framerate_fix/sim_clock.c)
+add_unit_test(sim_clock framerate_fix framerate_fix/sim_clock.c
+    # the un-clamping shares this file's one detour, so it comes along with it
+    framerate_fix/world_clock.c
+)
+
+# Removing the substep loop's clamp of the world clock. The clamp put a mover's sample pair on
+# the frame lattice while the alpha blending it was a phase within a simulation step. Three
+# attempts to compensate for that in the draw failed, so the cause is being removed instead. The
+# lattice walk is the claim: one substep per call, exactly, at any frame rate.
+add_unit_test(world_clock framerate_fix framerate_fix/world_clock.c)
 
 # The one predicate that decides whether a call is let into the music DLL. Wrong in either
 # direction and the failure is silent.
@@ -314,6 +340,13 @@ add_unit_test(look_counts controller_input controller_input/look_counts.c)
 # one, so a rider has nothing to blend. What is checked here is a property of a SEQUENCE: the
 # same answer for every frame inside a step, moving on exactly once when the step does.
 add_unit_test(object_track framerate_fix framerate_fix/object_track.c)
+
+# Whether a carried character is drawn smoothly at any frame rate a player might set, rather than
+# only at the one it was played at. The same arithmetic over a run of frames at nine rates, above
+# and below the simulation's own 32, and once more with the frame times jittered. What it pins
+# down is the invariant: the drawn moment trails the simulation by exactly one step and advances
+# evenly, at every one of them.
+add_unit_test(rate_independence framerate_fix framerate_fix/object_track.c)
 
 # Naming a virtual key, which the open-key row shows and the ini round-trips.
 add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)

@@ -89,6 +89,8 @@
  */
 #include "face_latch.h"
 
+#include "substep_counter.h"
+
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
@@ -115,47 +117,13 @@ static const uint8_t SIG_FACE_COMPLETE[] = {
 };
 #define FACE_COMPLETE_PROLOGUE 6u
 
-/* 0x4757DB, the tail of the substep loop, where the simulation step counter is incremented:
- *
- *     004757DB  A1 60884B00     mov  eax, [g_tickCounter]
- *     004757E0  83 C0 01        add  eax, 1
- *     004757E3  A3 60884B00     mov  [g_tickCounter], eax
- *     004757E8  D9 05 28878600  fld  [g_simTime]
- *     004757EE  D8 05 14878600  fadd [dt]
- *     004757F4  D9 1D 28878600  fstp [g_simTime]
- *
- * Every absolute operand is wildcarded so the pattern carries no address at all, and the counter
- * is read out of the operand it matched. This is the SIMULATION STEP counter, which is a different
- * cell from the per-frame animation counter the rest of this DLL uses. */
-static const uint8_t SIG_SUBSTEP_COUNTER[] = {
-    0xA1, 0x00, 0x00, 0x00, 0x00,
-    0x83, 0xC0, 0x01,
-    0xA3, 0x00, 0x00, 0x00, 0x00,
-    0xD9, 0x05, 0x00, 0x00, 0x00, 0x00,
-    0xD8, 0x05, 0x00, 0x00, 0x00, 0x00,
-    0xD9, 0x1D, 0x00, 0x00, 0x00, 0x00
-};
-static const uint8_t MSK_SUBSTEP_COUNTER[] = {
-    0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0xFF,
-    0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
-};
-_Static_assert(sizeof SIG_SUBSTEP_COUNTER == sizeof MSK_SUBSTEP_COUNTER,
-               "the substep counter pattern and its mask are different lengths");
-#define OFFSET_SUBSTEP_COUNTER 0x01u
-
 enum {
     SITE_FACE_COMPLETE,
-    SITE_SUBSTEP_COUNTER,
     SITE_COUNT
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY_DETOUR("face_complete",   SIG_FACE_COMPLETE, FACE_COMPLETE_PROLOGUE),
-    SIGNATURE_ENTRY_MASKED("substep_counter", SIG_SUBSTEP_COUNTER, MSK_SUBSTEP_COUNTER)
+    SIGNATURE_ENTRY_DETOUR("face_complete", SIG_FACE_COMPLETE, FACE_COMPLETE_PROLOGUE)
 };
 
 /* The walk from the script record to the animation track. Every offset is taken from inside the
@@ -188,7 +156,6 @@ typedef struct face_latch_state {
     bool                     installed;
     detour_t                 detour;
     face_complete_fn_t       original;
-    const volatile uint32_t *substep_counter;
     uint32_t                 yield_period;
     bool                     fallback_reported;
     uint32_t                 yields;
@@ -267,9 +234,10 @@ bool face_latch_should_yield(int32_t engine_result, uint32_t substep_counter,
 
 static int32_t __cdecl hook_face_complete(void *record, int32_t third_operand)
 {
-    int32_t result;
-    bool    holds;
-    bool    known;
+    int32_t  result;
+    bool     holds;
+    bool     known;
+    uint32_t step;
 
     /* detour_install writes the branch before it stores the pointer back to the engine, so in
      * principle this can be entered with no way through. It cannot happen here, because the mods
@@ -280,7 +248,7 @@ static int32_t __cdecl hook_face_complete(void *record, int32_t third_operand)
     }
     result = latch_state.original(record, third_operand);
 
-    if (result == 0 || latch_state.substep_counter == NULL) {
+    if (result == 0 || !substep_counter_read(&step)) {
         return result;
     }
 
@@ -291,8 +259,7 @@ static int32_t __cdecl hook_face_complete(void *record, int32_t third_operand)
      * that function's own first two rejections, so answering them here changes no behaviour and
      * only decides whether the walk was worth doing. The full test still runs below, so the
      * unit-tested function stays the authority on when a yield actually happens. */
-    if (latch_state.yield_period == 0 ||
-        (*latch_state.substep_counter % latch_state.yield_period) != 0) {
+    if (latch_state.yield_period == 0 || (step % latch_state.yield_period) != 0) {
         return result;
     }
 
@@ -303,34 +270,12 @@ static int32_t __cdecl hook_face_complete(void *record, int32_t third_operand)
                     "the clip clamps at its last frame is being taken from the opcode's own "
                     "operand instead. Reported once.");
     }
-    if (!face_latch_should_yield(result, *latch_state.substep_counter,
-                                 latch_state.yield_period, holds)) {
+    if (!face_latch_should_yield(result, step, latch_state.yield_period, holds)) {
         return result;
     }
 
     ++latch_state.yields;
     return 0;
-}
-
-/* ============================================================================================ */
-static bool resolve_substep_counter(void)
-{
-    uintptr_t site = sites[SITE_SUBSTEP_COUNTER].address;
-    uint32_t  address;
-
-    if (site == 0) {
-        log_warning("the substep counter pattern did not resolve, so there is no way to tell one "
-                    "simulation step from the next and the facing command is left alone");
-        return false;
-    }
-    if (!memory_read_u32(site + OFFSET_SUBSTEP_COUNTER, &address) ||
-        !memory_is_inside_image(address, sizeof(uint32_t))) {
-        log_warning("the substep counter operand at %08X is not an address inside the image, the "
-                    "facing command is left alone", (unsigned)(site + OFFSET_SUBSTEP_COUNTER));
-        return false;
-    }
-    latch_state.substep_counter = (const volatile uint32_t *)(uintptr_t)address;
-    return true;
 }
 
 bool face_latch_install(int yield_period)
@@ -353,7 +298,9 @@ bool face_latch_install(int yield_period)
                     "on every simulation step above 32 fps");
         return false;
     }
-    if (!resolve_substep_counter()) {
+    if (!substep_counter_resolve()) {
+        log_warning("without the simulation step counter there is no way to tell one step from "
+                    "the next, so the facing command is left alone");
         return false;
     }
 
@@ -373,6 +320,6 @@ bool face_latch_install(int yield_period)
              "its last frame. Below 32 fps the engine produced that answer by itself; above it, "
              "it never does. substepCounter=%08X",
              (unsigned)sites[SITE_FACE_COMPLETE].address, yield_period,
-             (unsigned)(uintptr_t)latch_state.substep_counter);
+             (unsigned)substep_counter_cell());
     return true;
 }

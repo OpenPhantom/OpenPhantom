@@ -227,6 +227,9 @@ typedef struct framerate_config {
     bool  interpolate_particles;
     bool  rebase_sim_clock;
     bool  interpolate_movers;
+    int   mover_blend_mode;
+    bool  mover_substep_clock;
+    bool  mover_wrap_veto;
     float mover_travel_limit;    /* world units a mover may cross in one simulation step */
 
     /* The same question for what STANDS on a mover. A carried character has its previous
@@ -276,7 +279,40 @@ static void load_config(void)
     config->interpolate_particles  =
         ini_read_bool(FRAMERATE_SECTION, "InterpolateParticles", true);
     config->rebase_sim_clock       = ini_read_bool(FRAMERATE_SECTION, "RebaseSimClock", true);
+    /* OFF by default and it has to be: it changes how movers move, not how they are drawn.
+     * world_clock.h has the arithmetic, what it repairs and what it shifts. */
+    config->mover_substep_clock    =
+        ini_read_bool(FRAMERATE_SECTION, "MoverSubstepClock", false);
+    /* On by default because it is what shipped, and under suspicion: mover_wraps.h has the
+     * measurement and the argument that it steps every looping mover twice a lap. */
+    config->mover_wrap_veto        = ini_read_bool(FRAMERATE_SECTION, "MoverWrapVeto", true);
     config->interpolate_movers     = ini_read_bool(FRAMERATE_SECTION, "InterpolateMovers", true);
+    /* Which moment a mover is drawn at, which is a different question from whether it is
+     * interpolated at all; mover_weight.h carries the arithmetic and mover_measure.h the reason
+     * the default is 0. Modes 1 and 2 were derived from the engine's clocks, built and played,
+     * and both were WORSE than the substep alpha they replaced, so the shipped arithmetic keeps
+     * the default until the measurement in mode 3 says which assumption was wrong. Out of range
+     * takes the default rather than switching the feature off. */
+    config->mover_blend_mode       = ini_read_int(FRAMERATE_SECTION, "MoverBlendMode", 0);
+    if (config->mover_blend_mode < 0 || config->mover_blend_mode > 4) {
+        log_warning("MoverBlendMode=%d is out of range (0 to 4), using 0",
+                    config->mover_blend_mode);
+        config->mover_blend_mode = 0;
+    }
+    /* A combination that contradicts itself, and neither setting is wrong on its own. The substep
+     * clock puts a mover's sample pair on the same lattice as the alpha, which makes the alpha the
+     * correct weight; modes 1 and 2 then apply a correction for a mismatch that is no longer
+     * there, and mode 2 in particular pushes a platform ahead of the character riding it. Named
+     * rather than refused, because someone comparing the two deliberately should be able to. */
+    if (config->mover_substep_clock &&
+        (config->mover_blend_mode == 1 || config->mover_blend_mode == 2)) {
+        log_warning("MoverSubstepClock=1 with MoverBlendMode=%d is a contradiction. The substep "
+                    "clock already puts a mover's sample pair on the same lattice as the alpha "
+                    "that blends it, so mode 0 is the correct weight and these modes correct for "
+                    "a mismatch that is no longer there. Mode 2 will push a platform ahead of "
+                    "anyone standing on it. Use MoverBlendMode=0, or 3 to measure.",
+                    config->mover_blend_mode);
+    }
     /* 2 and 3 are measurements rather than settings; see object_interpolation.h. Both were
      * needed to get 1 working and both are kept, because the next fault on this path will want
      * them again. */
@@ -536,6 +572,14 @@ static void on_frame(void)
     float frame_delta;
     float scale;
 
+    /* Before the guards below, deliberately. This counts rendered frames so the
+     * rider tracker can tell an object nobody has drawn for a while from one that is on screen,
+     * and a frame is a frame whatever its length: from the tail of this function it was skipped
+     * on any frame with no resolved delta or an implausible one, and a run of those aged nothing
+     * out at all. It measures frames and asks for no arguments, so there is nothing here it can
+     * be wrong about. */
+    object_interpolation_frame();
+
     if (framerate_state.frame_delta == NULL) {
         return;
     }
@@ -589,7 +633,6 @@ static void on_frame(void)
 
     framerate_stats_sample(frame_delta);
     mover_interpolation_sample();
-    object_interpolation_frame();
     sim_clock_sample();
 }
 
@@ -698,9 +741,12 @@ void framerate_fix_install(void)
      * the wait measured. */
     frame_delta_install(framerate_state.config.precise_frame_time);
     particle_clock_install(framerate_state.config.interpolate_particles);
-    sim_clock_install(framerate_state.config.rebase_sim_clock);
+    sim_clock_install(framerate_state.config.rebase_sim_clock,
+                      framerate_state.config.mover_substep_clock);
     mover_interpolation_install(framerate_state.config.interpolate_movers,
-                                framerate_state.config.mover_travel_limit);
+                                framerate_state.config.mover_travel_limit,
+                                framerate_state.config.mover_blend_mode,
+                                framerate_state.config.mover_wrap_veto);
 
     /* After the movers, because the two are read together in the log and a platform that is
      * not smoothed makes the rider question meaningless. Neither depends on the other at

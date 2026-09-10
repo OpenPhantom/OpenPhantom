@@ -24,9 +24,15 @@
  * between where it last walked and where it now stands, once per step, for as long as it stood
  * there. It cured the judder on a platform and planted the same judder on solid ground.
  *
- * The caller derives the stamp from the substep alpha, which climbs across a step and drops when
- * a new one begins, so no clock has to be resolved and no second reader of the engine's substep
- * counter is needed.
+ * The stamp is the engine's substep counter. The first version of this derived it from the substep
+ * alpha instead, taking the alpha dropping as the boundary. That is wrong in both directions:
+ * a frame spanning two steps advances it once, and at exactly 32 frames a second the alpha barely
+ * moves at all, so the drop that marks the boundary may never arrive.
+ *
+ * That counter is advanced by the menu renderer as well as by the simulation, so while a menu is
+ * on screen it can move without anything having stepped. Nothing here has to defend against that:
+ * a stamp that moves while a position does not brings previous up to current, which draws the
+ * object where it is, as the game did before any of this existed.
  *
  * Pure, so the awkward cases can be driven from a console test: an object seen for the first time,
  * one that has not moved, a table with no room left, and a jump too large to be motion.
@@ -62,13 +68,43 @@ void object_track_frame(void);
  * after the first, and it is what lets a stationary object settle: its previous becomes its
  * current on the next step and stays there.
  *
+ * `out_gap` is how many simulation steps separate the answer from `position`, which is one
+ * whenever a step is shared by two frames or more and larger when a frame spanned several steps.
+ * It is what object_track_weight below needs, and it holds its value for every frame inside a
+ * step rather than only on the frame that moved the record forward.
+ *
  * False means there is nothing to answer with and the caller must fall back on whatever the engine
- * holds: the first sighting of an object, and a sighting that found no free slot.
+ * holds: the first sighting of an object, and a sighting that found no free slot. Neither answer
+ * writes through `out_gap`, so a caller must treat the engine's own pair as one step apart, which
+ * it is.
  */
 bool object_track_sample(uintptr_t key, uint32_t stamp, const float *position,
-                         float *out_previous);
+                         float *out_previous, uint32_t *out_gap);
 
-/* The drawn position: `previous` blended toward `current` by `alpha`.
+/* How far along to draw, for a frame whose substep alpha is `alpha` and whose two samples are
+ * `gap` simulation steps apart.
+ *
+ * The engine's own blend uses the alpha directly, which draws an object exactly one step behind
+ * the simulation. That lag is not a defect; it is what keeps the drawn position between two
+ * positions the object really held instead of guessing at one it has not reached yet. Every frame
+ * inside a step raises the alpha by its own share of the step, so the drawn position advances by
+ * one frame of travel whatever the frame rate, and the lag stays put.
+ *
+ * All of that assumes a step shared by two frames or more. Below 32 frames a second a frame spans
+ * several steps, the samples either side of it are `gap` steps apart, and using the alpha alone
+ * would cover `gap` steps of travel in one step's worth of alpha: the object runs ahead of itself
+ * and drops back, once every frame.
+ *
+ * Asking instead for the same drawn moment, one step behind a simulation standing at
+ * stamp + alpha, gives (alpha + gap - 1) / gap. At a gap of one that is the alpha exactly, so
+ * nothing changes at the rates where a step is shared. A gap wide enough to be a hitch or an
+ * object coming back on screen tends towards one, which draws it where it is. For two samples
+ * with nothing to do with each other that is the right answer, and it needs no branch of its
+ * own.
+ */
+float object_track_weight(float alpha, uint32_t gap);
+
+/* The drawn position: `previous` blended toward `current` by `weight`.
  *
  * `limit` is the furthest a CHARACTER may travel in one simulation step, and getting that number
  * wrong is what made the first attempt at this unusable. It was set to 64 by copying
@@ -86,8 +122,16 @@ bool object_track_sample(uintptr_t key, uint32_t stamp, const float *position,
  * Past the limit the current position is used unblended, as the engine drew before any of this
  * existed. Being too strict costs a rider its smoothing; being too loose costs the player a
  * character flying across the map. Zero or less disables the test.
+ *
+ * `limit` is per STEP, so a caller whose samples are several steps apart has to scale it by the
+ * same gap it passed to object_track_weight, or a legitimate two-step move is read as a teleport.
+ *
+ * A position or a weight that is not finite answers with the current position. That case is
+ * checked before the limit rather than after, because the limit is a distance comparison and
+ * every comparison against a NaN is false, so the guard meant to catch a bad value would let
+ * that one through and draw it.
  */
-void object_track_blend(const float *previous, const float *current, float alpha, float limit,
+void object_track_blend(const float *previous, const float *current, float weight, float limit,
                         float *out_position);
 
 #endif /* OBJECT_TRACK_H */

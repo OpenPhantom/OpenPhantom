@@ -35,16 +35,23 @@ add_engine_fix(framerate_fix
     dll_main.c
     framerate_fix.c
     face_latch.c
+    # the engine's simulation step count, which the facing latch and the rider blend both need and
+    # neither should reconstruct for itself
+    substep_counter.c
     camera_compensation.c
     draw_interpolation.c
     framerate_stats.c
     frame_delta.c
     sim_clock.c
+    world_clock.c
     particle_clock.c
     mover_interpolation.c
     object_interpolation.c
     object_track.c
     mover_blend.c
+    mover_weight.c
+    mover_measure.c
+    mover_wraps.c
 )
 target_link_libraries(framerate_fix PRIVATE winmm)
 

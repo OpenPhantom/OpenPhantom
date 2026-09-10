@@ -51,6 +51,7 @@
 #include "frame_delta.h"
 #include "framerate_stats.h"
 #include "mover_interpolation.h"
+#include "object_interpolation.h"
 #include "particle_clock.h"
 #include "sim_clock.h"
 
@@ -227,6 +228,12 @@ typedef struct framerate_config {
     bool  rebase_sim_clock;
     bool  interpolate_movers;
     float mover_travel_limit;    /* world units a mover may cross in one simulation step */
+
+    /* The same question for what STANDS on a mover. A carried character has its previous
+     * position overwritten with its current one inside the same step, so the engine has
+     * nothing to blend; see object_track.h for the measurement. */
+    int   interpolate_riders;
+    float rider_travel_limit;
     int   process_priority;      /* 0 = leave it alone, 1 = above normal, 2 = high */
     int   stats_frame_interval;
     int   stats_player_frames;
@@ -270,6 +277,17 @@ static void load_config(void)
         ini_read_bool(FRAMERATE_SECTION, "InterpolateParticles", true);
     config->rebase_sim_clock       = ini_read_bool(FRAMERATE_SECTION, "RebaseSimClock", true);
     config->interpolate_movers     = ini_read_bool(FRAMERATE_SECTION, "InterpolateMovers", true);
+    /* 2 and 3 are measurements rather than settings; see object_interpolation.h. Both were
+     * needed to get 1 working and both are kept, because the next fault on this path will want
+     * them again. */
+    config->interpolate_riders     = ini_read_int(FRAMERATE_SECTION, "InterpolateRiders", 1);
+    if (config->interpolate_riders < 0 || config->interpolate_riders > 3) {
+        log_warning("InterpolateRiders=%d is out of range (0 to 3), using 0",
+                    config->interpolate_riders);
+        config->interpolate_riders = 0;
+    }
+    config->rider_travel_limit     =
+        ini_read_float(FRAMERATE_SECTION, "RiderTravelLimitPerStep", 2.0f);
     config->mover_travel_limit     =
         ini_read_float(FRAMERATE_SECTION, "MoverTravelLimitPerStep", 64.0f);
     config->stats_frame_interval   = ini_read_int (FRAMERATE_SECTION, "StatsFrameInterval", 0);
@@ -283,6 +301,7 @@ static void load_config(void)
     if (config->face_latch_yield < 0)  { config->face_latch_yield = 0; }
     if (config->face_latch_yield > 64) { config->face_latch_yield = 64; }
     if (!(config->mover_travel_limit > 0.0f)) { config->mover_travel_limit = 0.0f; }
+    if (!(config->rider_travel_limit > 0.0f)) { config->rider_travel_limit = 0.0f; }
     if (config->stats_frame_interval < 0) { config->stats_frame_interval = 0; }
     if (config->stats_player_frames  < 0) { config->stats_player_frames  = 0; }
 }
@@ -570,6 +589,7 @@ static void on_frame(void)
 
     framerate_stats_sample(frame_delta);
     mover_interpolation_sample();
+    object_interpolation_frame();
     sim_clock_sample();
 }
 
@@ -681,6 +701,12 @@ void framerate_fix_install(void)
     sim_clock_install(framerate_state.config.rebase_sim_clock);
     mover_interpolation_install(framerate_state.config.interpolate_movers,
                                 framerate_state.config.mover_travel_limit);
+
+    /* After the movers, because the two are read together in the log and a platform that is
+     * not smoothed makes the rider question meaningless. Neither depends on the other at
+     * run time. */
+    object_interpolation_install(framerate_state.config.interpolate_riders,
+                                 framerate_state.config.rider_travel_limit);
 
     if (framerate_state.config.pose_per_frame) {
         draw_interpolation_install_pose_throttle();

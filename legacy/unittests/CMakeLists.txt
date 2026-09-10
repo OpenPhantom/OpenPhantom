@@ -309,6 +309,12 @@ add_unit_test(frame_governor view_distance_fix view_distance_fix/frame_governor.
 # survive from one poll to the next or the stick is dead until it is pushed a long way.
 add_unit_test(look_counts controller_input controller_input/look_counts.c)
 
+# Where each drawn object was a simulation step ago. The engine keeps that beside the current
+# position and blends between the two, but a platform's carry overwrites it with the current
+# one, so a rider has nothing to blend. What is checked here is a property of a SEQUENCE: the
+# same answer for every frame inside a step, moving on exactly once when the step does.
+add_unit_test(object_track framerate_fix framerate_fix/object_track.c)
+
 # Naming a virtual key, which the open-key row shows and the ini round-trips.
 add_unit_test(overlay_key_name dev_overlay dev_overlay/overlay_key_name.c)
 

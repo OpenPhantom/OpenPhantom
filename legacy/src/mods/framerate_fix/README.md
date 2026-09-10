@@ -33,6 +33,8 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `InterpolateParticles` | `1` | draw particles between simulation steps rather than on them |
 | `InterpolateMovers` | `1` | the same for movers: doors, lifts and platforms |
 | `MoverTravelLimitPerStep` | `64.0` | world units a mover may cross in one simulation step before the blend refuses it and snaps instead. Guards against a teleport being smeared into a slide |
+| `InterpolateRiders` | `1` | keep each drawn object's previous position here rather than reading the engine's, which a platform's carry flattens. `2` and `3` are measurements rather than settings; see **A rider had nothing to be drawn between** |
+| `RiderTravelLimitPerStep` | `2.0` | the furthest a CHARACTER may travel in one simulation step before the blend refuses it and draws it where it landed. Not the mover's number: 64 here is what made the first attempt unusable |
 | `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames |
 | `StatsPlayerFrames` | `0` | >0: dump the player's draw interpolation for N frames |
 
@@ -157,6 +159,98 @@ only the cost per call.
 
 The rest of this DLL is accepted in game too, in the v0.4.1 build, which was played through by
 hand.
+
+## A rider had nothing to be drawn between
+
+A character riding a platform judders against the floor it is standing on. Smoothing the platform
+did not cause it and switching that smoothing off did not cure it, which is where the search
+started rather than where it ended.
+
+**The engine was never the problem.** `bapobj_drawAll` blends every drawn object between its
+previous and its current position on the substep alpha, and has since 1999. The pair it reads is
+what breaks.
+
+**The measurement.** The same field, the same object, the same instrument, twice:
+
+| | `prev` differs from `cur` | `prev` equals `cur` |
+|---|---|---|
+| walking on ordinary ground | 2111 frames | 0 |
+| carried by a platform | 0 | 600 frames |
+
+While carried, the previous position is identical to the current one on every frame, so the blend
+has nothing to work with and the rider steps 32 times a second against a platform drawn every
+frame. Walking, the same pair is maintained correctly and the same blend works.
+
+**Why the pair goes flat.** A hardware write watch named both writers, and they turn out to be the
+same six lines twice over. `Plr_CommitPose` captures `prev = cur` and then moves `cur` to where the
+simulation put it, which is correct. The carry runs a second commit in the same step, and because
+the first has already run, that one captures a previous position which is already the current one.
+The second write puts back the value that is already there. Finding it took a watch that names
+same-value writers.
+
+**What is done about it.** The previous position is remembered in `object_track.c`, keyed by the
+object, and the region of `bapobj_drawAll` that computes the blend is replaced by a call that fills
+the same six stack locals from it. A step boundary needs no clock: the ask happens once per object
+per frame and an object's position changes only when the simulation moves it, so a position that
+differs from the one last seen is the boundary.
+
+Nothing the simulation reads is written. `obj->pos` and `obj->prevPos` are read and never stored
+to, and the only writes are into the caller's own frame, which is the convention
+`draw_interpolation.c` already follows for the drawn pitch and roll. An object the table has no
+answer for falls back to the engine's own previous position, which reproduces the original
+arithmetic exactly, so the worst case is the behaviour that shipped.
+
+`RiderTravelLimitPerStep` is the same guard `MoverTravelLimitPerStep` gives a platform: past it the
+object is drawn where it landed rather than being smeared across the gap, because a jump that large
+is a teleport and not motion.
+
+### Testing status
+
+Built, and unit tested at 23 checks covering the sequence properties a game run cannot show: the
+same answer for every frame inside a step, moving on exactly once when the step does, two objects
+not reading each other's history, a full table refusing rather than guessing, a stale slot being
+reclaimed, and the travel limit on the whole vector rather than one axis.
+
+Played and confirmed: the judder on a platform is gone for the player and for NPCs alike, and
+standing on ordinary ground is steady.
+
+**It took two failed play sessions to get there, and both are worth recording.**
+
+The first sent characters flying around the level. Two explanations stood: the patch was in the
+wrong place, or the previous position it fed the blend was wrong. `InterpolateRiders=2` separated
+them in one run by placing the patch and then doing the engine's own arithmetic. The game was
+normal, so the region, the calling convention, the six locals and the alpha were all right and only
+the remembered position was wrong.
+
+`InterpolateRiders=3` then drew with the engine's values while reporting the worst disagreement
+every 200 frames. An earlier version reported the first forty instead, which spent the whole budget
+on two objects in the opening seconds and said only that the calm case is calm. The worst case
+named it at once:
+
+    mine(44.223 71.638 92.928)  engine(77.201 85.501 92.500)  cur(77.201 85.501 92.500)  apart 35.78
+    mine(50.501 71.851 92.000)  engine(83.801 101.501 92.000) cur(83.801 101.501 92.000) apart 44.59
+
+`engine == cur` exactly is the engine saying **do not interpolate this object**, which is how it
+marks a spawn, a teleport or a pooled slot being reused. The travel limit should have refused those
+and did not, because it was 64, copied from `MoverTravelLimitPerStep`, which describes a lift. A
+character carried by a platform moves 0.045 units in a step and a walking one about 0.017, so 35
+and 44 sailed underneath and were drawn smeared across the level. The limit is 2.0 now. The
+flatness of the pair cannot tell a rider from a teleport; the distance can.
+
+The second attempt cured the platform and planted the same judder on solid ground. The step
+boundary was being inferred from the position changing, which needs no clock and works for anything
+moving; a character standing still never changes position, so its previous was never brought
+forward and the blend swung it between where it last walked and where it stood, once per step, for
+as long as it stood there. The boundary is counted from the alpha now, and the previous position is
+brought forward whether or not the object moved.
+
+Both faults have a check that fails without the fix.
+
+**Still open, and separate from this.** The platform itself is a touch jittery, which is the
+mover's own interpolation rather than the rider's. The instrument line reports 35 to 84 refused
+poses per 600 frames against 10,000 to 15,000 blended, so about one pose in 250 is drawn unblended.
+Whether that accounts for what the eye sees is not established, and the refusal count does not yet
+say which of the guards refused.
 
 ## The offset has to be dropped where the level opens
 

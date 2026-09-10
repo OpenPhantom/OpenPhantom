@@ -42,6 +42,8 @@ add_engine_fix(framerate_fix
     sim_clock.c
     particle_clock.c
     mover_interpolation.c
+    object_interpolation.c
+    object_track.c
     mover_blend.c
 )
 target_link_libraries(framerate_fix PRIVATE winmm)

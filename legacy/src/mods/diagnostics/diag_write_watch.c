@@ -57,6 +57,10 @@
 
 /* Enough to hold a burst without the handler ever needing to allocate or block. A report that
  * overflows says so rather than silently dropping the tail. */
+/* Distinct instructions that rewrite the field with the value it already held. Eight is well
+ * past what has ever been seen; a ninth is dropped rather than growing this. */
+#define WATCH_UNCHANGED_SITES 8u
+
 #define WATCH_RECORD_MAX 64u
 
 typedef struct watch_record {
@@ -76,6 +80,18 @@ typedef struct write_watch_state {
     bool            have_last;
     volatile LONG   overflow;            /* changing writes the buffer could not hold */
     volatile LONG   unchanged;           /* writes that put the value back unchanged */
+
+    /* Who does those. Counting them without naming them was enough while this watched a field
+     * one writer rewrites out of habit. It is not enough for the question it is now asked: a
+     * character riding a platform has its previous position written TWICE a step, and the
+     * second write is the one that leaves nothing to interpolate. That write puts the same
+     * value back, so the tally hid the only address worth having. A tally per instruction
+     * rather than a record per write, so the cost stays a linear scan of eight and the buffer
+     * cannot fill. */
+    struct {
+        uint32_t      instruction;
+        volatile LONG count;
+    } unchanged_sites[WATCH_UNCHANGED_SITES];
     watch_record_t  records[WATCH_RECORD_MAX];
     LONG            reported;            /* records already drained by the frame callback */
 } write_watch_state_t;
@@ -108,7 +124,19 @@ static LONG CALLBACK on_debug_exception(EXCEPTION_POINTERS *info)
        than as a float so an unchanged NaN does not read as a change. */
     value = *(const volatile uint32_t *)watch_state.address;
     if (watch_state.have_last && value == watch_state.last_value) {
+        uint32_t writer = (uint32_t)info->ContextRecord->Eip;
+        size_t   slot;
+
         InterlockedIncrement(&watch_state.unchanged);
+        for (slot = 0; slot < WATCH_UNCHANGED_SITES; ++slot) {
+            if (watch_state.unchanged_sites[slot].count == 0) {
+                watch_state.unchanged_sites[slot].instruction = writer;
+            }
+            if (watch_state.unchanged_sites[slot].instruction == writer) {
+                InterlockedIncrement(&watch_state.unchanged_sites[slot].count);
+                break;
+            }
+        }
     } else {
         watch_state.have_last = true;
         watch_state.last_value = value;
@@ -316,8 +344,19 @@ void diag_write_watch_report(void)
         watch_state.overflow = 0;
     }
     if (watch_state.unchanged != 0) {
-        diag_log_write("watch  and %ld writes put the same value back, not listed",
+        size_t slot;
+
+        diag_log_write("watch  and %ld writes put the same value back, by:",
                        (long)watch_state.unchanged);
+        for (slot = 0; slot < WATCH_UNCHANGED_SITES; ++slot) {
+            if (watch_state.unchanged_sites[slot].count == 0) {
+                continue;
+            }
+            diag_log_write("watch    the instruction just before %08X, %ld of them",
+                           (unsigned)watch_state.unchanged_sites[slot].instruction,
+                           (long)watch_state.unchanged_sites[slot].count);
+            watch_state.unchanged_sites[slot].count = 0;
+        }
         watch_state.unchanged = 0;
     }
 }

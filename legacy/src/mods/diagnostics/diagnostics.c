@@ -87,8 +87,16 @@ static void load_config(void)
                           sizeof(diagnostics_state.characters_watch));
     diagnostics_state.characters_watch_velocity =
         ini_read_bool(DIAGNOSTICS_SECTION, "CharacterWatchVelocity", false) ? 1 : 0;
+    /* 0 off, 1 the drawn body's position height, 2 its PREVIOUS position X. Read as a number
+     * rather than a flag so that 1 keeps meaning exactly what it always meant. */
     diagnostics_state.player_body_watch =
-        ini_read_bool(DIAGNOSTICS_SECTION, "PlayerBodyWatch", false) ? 1 : 0;
+        ini_read_int(DIAGNOSTICS_SECTION, "PlayerBodyWatch", 0);
+    if (diagnostics_state.player_body_watch < 0 ||
+        diagnostics_state.player_body_watch > 2) {
+        log_warning("PlayerBodyWatch=%d is out of range (0 to 2), using 0",
+                    diagnostics_state.player_body_watch);
+        diagnostics_state.player_body_watch = 0;
+    }
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 

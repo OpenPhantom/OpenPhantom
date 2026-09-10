@@ -355,13 +355,28 @@ static bool report_character(uintptr_t record, const float player_position[3], b
 /* Arms the write watch on the player's own drawn body rather than on a character.
  *
  * Two hops, and each can fail on a frame where no level is up: the player pointer out of the
- * global the census already derives, then the body out of the record. Four bytes at the body's
- * Z, because the four watchable bytes have to be exactly the four being written or the report
- * names the wrong instruction. */
+ * global the census already derives, then the body out of the record. Exactly four bytes,
+ * because the four watchable bytes have to be the four being written or the report names the
+ * wrong instruction.
+ *
+ * WHICH four is a setting, and the second choice is why this exists at all. The drawn object
+ * carries a previous position beside its current one and the engine interpolates between the
+ * two, and that interpolation is how a character moves smoothly between steps. Measured on a
+ * platform, that pair is identical on every frame, so nothing is interpolated and the rider
+ * steps 32 times a second while the platform under it is drawn every frame. Walking, the same
+ * pair differs and the same interpolation works. Watching the PREVIOUS position names whatever
+ * flattens it.
+ *
+ * The height is the other choice and stays the default meaning of 1, but it is no use on a
+ * platform that travels horizontally, where the height never changes and the watch never
+ * fires. X is watched instead of Z for the same reason: it is the axis that moves in both
+ * cases, walking and carried. */
 static void arm_body_watch(void)
 {
-    uint32_t record = 0;
-    uint32_t body   = 0;
+    uint32_t  record = 0;
+    uint32_t  body   = 0;
+    uintptr_t field;
+    const char *label;
 
     if (character_census.player_slot == NULL ||
         !memory_try_read((uintptr_t)character_census.player_slot, &record, sizeof(record)) ||
@@ -372,8 +387,14 @@ static void arm_body_watch(void)
         body == 0) {
         return;
     }
-    (void)diag_write_watch_arm((uintptr_t)body + BODY_POSITION_OFFSET + (2u * sizeof(float)),
-                               "the player's drawn body, position Z");
+    if (character_census.watch_body == 2) {
+        field = (uintptr_t)body + OBJECT_PREVIOUS_POSITION_OFFSET;
+        label = "the player's drawn body, PREVIOUS position X";
+    } else {
+        field = (uintptr_t)body + BODY_POSITION_OFFSET + (2u * sizeof(float));
+        label = "the player's drawn body, position Z";
+    }
+    (void)diag_write_watch_arm(field, label);
 }
 
 static void character_census_tick(void)

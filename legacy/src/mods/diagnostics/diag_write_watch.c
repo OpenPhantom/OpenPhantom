@@ -299,8 +299,17 @@ void diag_write_watch_disarm(void)
     if (!watch_state.prepared || !watch_state.armed) {
         return;
     }
+    /* Cleared only once the debug registers really are clear. Clearing it first and ignoring the
+     * apply left DR0 and DR7 live with a handler that had stopped claiming the trap, which is an
+     * unhandled single step on the next write to the watched cell. If the apply fails, the helper
+     * thread not created or its wait expired, the watch stays armed and keeps reporting, which is
+     * the truthful state, and the log says why. */
+    if (!apply(0u)) {
+        diag_log_write("watch  could not be disarmed, so it stays armed and keeps reporting");
+        log_warning("the write watch could not clear its debug registers, so it stays armed");
+        return;
+    }
     watch_state.armed = false;
-    (void)apply(0u);
     diag_log_write("watch  disarmed");
 }
 

@@ -216,6 +216,12 @@ typedef struct character_census {
     uint32_t  tracked_pool;        /* the pool the table below belongs to */
     char      watch_name[16];      /* empty: watch nothing */
     bool      watch_velocity;      /* watch the velocity Z rather than the position Z */
+    /* Which record the character watch was armed on and under what name, so a slot that changes
+     * hands is noticed: a character that despawns leaves its slot to the next spawn, and a watch
+     * that only followed the pool pointer went on reporting the newcomer under the old label. */
+    uintptr_t watched_record;
+    char      watched_name[32];
+    bool      watched_seen;        /* the watched record turned up in the scan in progress */
     bool      watch_prepared;
     character_track_t tracked[CHARACTER_TRACK_MAX];
 } character_census_t;
@@ -279,6 +285,9 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     if (!memory_try_read(record + CHARACTER_BODY_OFFSET, &body, sizeof(body)) || body == 0) {
         return false;
     }
+    if (record == character_census.watched_record) {
+        character_census.watched_seen = true;   /* in the pool, whether or not in range */
+    }
     if (!memory_try_read((uintptr_t)body + OBJECT_POSITION_OFFSET, position, sizeof(position)) ||
         !memory_try_read((uintptr_t)body + OBJECT_PREVIOUS_POSITION_OFFSET, previous,
                          sizeof(previous))) {
@@ -335,6 +344,15 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     /* Arming on the Z rather than the whole position: the field this bug moves is the only one
        worth a breakpoint, and the four watchable bytes have to be exactly the four being written
        or the report names the wrong instruction. */
+    if (record == character_census.watched_record && diag_write_watch_is_armed()) {
+        if (strncmp(name, character_census.watched_name, sizeof(character_census.watched_name))
+            != 0) {
+            diag_log_write("chr    the watched slot now holds %s, not %s, so the watch is dropped",
+                           name, character_census.watched_name);
+            diag_write_watch_disarm();
+            character_census.watched_record = 0;
+        }
+    }
     if (watch_wanted(name) && !diag_write_watch_is_armed()) {
         char      label[48];
         uintptr_t field;
@@ -345,7 +363,13 @@ static bool report_character(uintptr_t record, const float player_position[3], b
         (void)_snprintf(label, sizeof(label) - 1u, "%s %s", name,
                         character_census.watch_velocity ? "velocity Z" : "position Z");
         label[sizeof(label) - 1u] = '\0';
-        (void)diag_write_watch_arm(field, label);
+        if (diag_write_watch_arm(field, label)) {
+            character_census.watched_record = record;
+            character_census.watched_seen   = true;
+            (void)_snprintf(character_census.watched_name,
+                            sizeof(character_census.watched_name) - 1u, "%s", name);
+            character_census.watched_name[sizeof(character_census.watched_name) - 1u] = '\0';
+        }
     }
 
     *out_named = true;
@@ -399,6 +423,7 @@ static void arm_body_watch(void)
 
 static void character_census_tick(void)
 {
+    bool     scan_complete;
     uint32_t pool = 0;
     uint32_t element_size = 0;
     uint32_t capacity = 0;
@@ -459,15 +484,19 @@ static void character_census_tick(void)
         return;
     }
 
+    character_census.watched_seen = false;
+    scan_complete = true;
     for (index = 0; index < capacity; ++index) {
         uint32_t offset = character_scan_slot_offset(element_size, index);
         uint32_t link = 0;
         bool     was_named = false;
 
         if (offset == 0u) {
+            scan_complete = false;
             break;
         }
         if (!memory_try_read((uintptr_t)pool + offset, &link, sizeof(link))) {
+            scan_complete = false;
             break;
         }
         if (!character_scan_slot_is_live(link)) {
@@ -475,6 +504,7 @@ static void character_census_tick(void)
         }
         ++live;
         if (named >= CHARACTER_NAMED_MAX) {
+            scan_complete = false;      /* the rest were not looked at, so nothing is absent */
             continue;
         }
         if (!report_character((uintptr_t)pool + offset + CHARACTER_POOL_LINK_SIZE, player_position,
@@ -485,6 +515,16 @@ static void character_census_tick(void)
         if (was_named) {
             ++named;
         }
+    }
+
+    /* A watched character that was not in this scan has despawned; its slot is free for the next
+     * spawn, and the watch would report that one under this one's name. */
+    if (character_census.watched_record != 0 && !character_census.watched_seen &&
+        diag_write_watch_is_armed() && scan_complete) {
+        diag_log_write("chr    %s is no longer in the pool, so the watch is dropped",
+                       character_census.watched_name);
+        diag_write_watch_disarm();
+        character_census.watched_record = 0;
     }
 
     diag_log_write("chr  census: %u named of %u live characters%s, player at (%.1f, %.1f, %.1f)%s",

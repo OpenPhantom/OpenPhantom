@@ -4,12 +4,14 @@
 #include "diag_install.h"
 #include "diag_log.h"
 
+#include "common/host_image.h"
 #include "common/logging.h"
 #include "common/signature.h"
 
 #include <intrin.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 /* --- bapview_overrideOn 0x0041840A ------------------------------------------------------------ *
  *   55 8B EC                     push ebp / mov ebp,esp
@@ -87,12 +89,16 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR("Dialog_Close",        SIG_DIALOG_CLOSE, DIALOG_CLOSE_PROLOGUE)
 };
 
-/* Every call site of both functions in the image, by the address control returns to, which is the
- * call site plus its five bytes. Found by scanning .text for direct calls to the two targets, so
- * this is the complete list for this build rather than the ones that happened to turn up.
+/* Every call site of both functions in the retail image, by the address control returns to, which
+ * is the call site plus its five bytes, with the name of the enclosing function. Where a caller
+ * belongs to a pair that sets in one branch and clears in the other, the note says so, because
+ * such a pair cannot leak.
  *
- * The names come from the enclosing function. Where a caller belongs to a pair that sets in one
- * branch and clears in the other, the note says so, because such a pair cannot leak. */
+ * These are notes about one build, not the list of callers. The list is made at install by
+ * scanning the code section for direct calls to the two resolved targets, and a note is attached
+ * to a caller only when the scan found a call at the address the note was written for. On a
+ * build that laid the code out differently the scan still names every caller as found or not
+ * found, and the notes do not apply. */
 typedef struct caller {
     uintptr_t   ret;
     const char *what;
@@ -122,12 +128,24 @@ static const caller_t GAVE_BACK[] = {
  * dialogue-heavy level speaks hundreds of lines. */
 #define OWNER_LINES 200
 
+/* The callers the scan can hold. Retail has seven and six; a build with more than twice that is
+ * reported as such and the overflow goes unnamed rather than unseen. */
+#define CALLERS_MAX 16u
+
+typedef struct callers {
+    uintptr_t ret[CALLERS_MAX];
+    size_t    count;                /* how many were kept */
+    size_t    found;                /* how many the scan saw, which may be more */
+} callers_t;
+
 static struct {
     detour_t        on;
     detour_t        off;
     detour_t        close;
     const int32_t  *flag;           /* the scripted-camera flag itself, read only */
     const int32_t  *choice_count;   /* what Dialog_Close tests before releasing   */
+    callers_t       takers;         /* every direct call to overrideOn in this build */
+    callers_t       givers;         /* and to overrideOff */
     int             lines;
     int             depth;          /* calls, NOT the flag: see the note on the census below */
     bool            armed;          /* both halves of the pair are in, so reporting is honest */
@@ -137,16 +155,88 @@ typedef void(__cdecl *override_on_fn_t)(int32_t group);
 typedef void(__cdecl *override_off_fn_t)(void);
 typedef void(__cdecl *dialog_close_fn_t)(int32_t from_op);
 
-static const char *name_of(const caller_t *table, unsigned count, uintptr_t ret)
+/* Every `call rel32` in the code section whose target is `target`, by return address. The scan is
+ * byte by byte, since the section is not disassembled: an E8 whose displacement happens to land
+ * on the target from inside another instruction's bytes would be counted, and none did in retail.
+ * Run once at install, before the detour goes in, so the target is the function itself. */
+static void scan_callers(uintptr_t target, callers_t *out)
+{
+    uintptr_t text = host_image_text();
+    size_t    size = host_image_text_size();
+    size_t    offset;
+
+    out->count = 0;
+    out->found = 0;
+    for (offset = 0; offset + 5u <= size; ++offset) {
+        uintptr_t at = text + offset;
+        int32_t   displacement;
+
+        /* Read straight out of the section rather than through the asking form: the section is
+         * the image's own and this is one pass over all of it. */
+        if (*(const uint8_t *)at != 0xE8u) {
+            continue;
+        }
+        memcpy(&displacement, (const void *)(at + 1u), sizeof displacement);
+        if (at + 5u + (uintptr_t)displacement != target) {
+            continue;
+        }
+        ++out->found;
+        if (out->count < CALLERS_MAX) {
+            out->ret[out->count++] = at + 5u;
+        }
+    }
+}
+
+static bool scan_found(const callers_t *callers, uintptr_t ret)
+{
+    size_t index;
+
+    for (index = 0; index < callers->count; ++index) {
+        if (callers->ret[index] == ret) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The retail note for a caller, attached only when the scan found a call at that address. */
+static const char *name_of(const caller_t *table, unsigned count, const callers_t *callers,
+                           uintptr_t ret)
 {
     unsigned i;
 
+    if (!scan_found(callers, ret)) {
+        return NULL;
+    }
     for (i = 0; i < count; i++) {
         if (table[i].ret == ret) {
             return table[i].what;
         }
     }
-    return NULL;
+    return "a caller the scan found, with no note for it";
+}
+
+/* How the callers of one function are described in the log at install. */
+static void report_callers(const callers_t *callers, const caller_t *table, unsigned count,
+                           const char *what)
+{
+    size_t index;
+    size_t noted = 0;
+
+    for (index = 0; index < callers->count; ++index) {
+        unsigned i;
+
+        for (i = 0; i < count; i++) {
+            if (table[i].ret == callers->ret[index]) {
+                ++noted;
+                break;
+            }
+        }
+    }
+    log_info("%u direct calls to %s found in this build, %u of them with a retail note%s",
+             (unsigned)callers->found, what, (unsigned)noted,
+             (callers->found > callers->count) ? "; more than the census can hold, so the rest "
+                                                "are reported by address only" : "");
 }
 
 /* False once the budget is spent, having said so exactly once. */
@@ -166,8 +256,9 @@ static bool may_report(void)
 }
 
 /* An unknown caller is worth more than a known one, so it is named as unknown rather than printed
- * as a bare address that reads like noise. Every direct call in this build is in the tables above,
- * so reaching that case means the call came from somewhere the scan did not cover. */
+ * as a bare address that reads like noise. Every direct call in this build was found by the scan
+ * at install, so reaching that case means the call came from somewhere a scan for direct calls
+ * cannot see: a call through a register, or a caller outside the code section. */
 static void __cdecl hook_override_on(int32_t group)
 {
     uintptr_t   ret = (uintptr_t)_ReturnAddress();
@@ -186,14 +277,14 @@ static void __cdecl hook_override_on(int32_t group)
         return;
     }
 
-    what = name_of(TOOK, (unsigned)(sizeof TOOK / sizeof TOOK[0]), ret);
+    what = name_of(TOOK, (unsigned)(sizeof TOOK / sizeof TOOK[0]), &owner.takers, ret);
     if (what != NULL) {
-        diag_log_write("cam  camera TAKEN, group %d: %s. Depth now %+d",
-                       (int)group, what, owner.depth);
+        diag_log_write("cam  camera TAKEN, group %d from %08X: %s. Depth now %+d",
+                       (int)group, (unsigned)ret, what, owner.depth);
         return;
     }
-    diag_log_write("cam  camera TAKEN, group %d from %08X, which is NOT one of the call sites "
-                   "found in this build. Depth now %+d",
+    diag_log_write("cam  camera TAKEN, group %d from %08X, which is NOT one of the direct call "
+                   "sites the scan found in this build. Depth now %+d",
                    (int)group, (unsigned)ret, owner.depth);
 }
 
@@ -211,13 +302,15 @@ static void __cdecl hook_override_off(void)
         return;
     }
 
-    what = name_of(GAVE_BACK, (unsigned)(sizeof GAVE_BACK / sizeof GAVE_BACK[0]), ret);
+    what = name_of(GAVE_BACK, (unsigned)(sizeof GAVE_BACK / sizeof GAVE_BACK[0]), &owner.givers,
+                   ret);
     if (what != NULL) {
-        diag_log_write("cam  camera GIVEN BACK: %s. Depth now %+d", what, owner.depth);
+        diag_log_write("cam  camera GIVEN BACK from %08X: %s. Depth now %+d", (unsigned)ret, what,
+                       owner.depth);
         return;
     }
-    diag_log_write("cam  camera GIVEN BACK from %08X, which is NOT one of the call sites found in "
-                   "this build. Depth now %+d", (unsigned)ret, owner.depth);
+    diag_log_write("cam  camera GIVEN BACK from %08X, which is NOT one of the direct call sites "
+                   "the scan found in this build. Depth now %+d", (unsigned)ret, owner.depth);
 }
 
 /* The flag is a BOOLEAN, not a count, so taking it twice running leaves it exactly as set as taking
@@ -266,6 +359,16 @@ int diag_camera_owner_install(int level)
     owner.choice_count = (const int32_t *)diag_derive_address(sites, SITE_DIALOG_CLOSE,
                                                               DIALOG_CLOSE_CHOICE_COUNT_OPERAND,
                                                               "the dialogue choice count");
+
+    /* Before the detours, so the calls still go to the functions themselves. */
+    if (sites[SITE_OVERRIDE_ON].address != 0 && sites[SITE_OVERRIDE_OFF].address != 0) {
+        scan_callers(sites[SITE_OVERRIDE_ON].address, &owner.takers);
+        scan_callers(sites[SITE_OVERRIDE_OFF].address, &owner.givers);
+        report_callers(&owner.takers, TOOK, (unsigned)(sizeof TOOK / sizeof TOOK[0]),
+                       "bapview_overrideOn");
+        report_callers(&owner.givers, GAVE_BACK,
+                       (unsigned)(sizeof GAVE_BACK / sizeof GAVE_BACK[0]), "bapview_overrideOff");
+    }
 
     on_live  = diag_install_observer(sites, SITE_OVERRIDE_ON, &owner.on,
                                      (const void *)hook_override_on, OVERRIDE_ON_PROLOGUE,

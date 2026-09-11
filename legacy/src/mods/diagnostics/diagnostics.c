@@ -154,14 +154,17 @@ void diagnostics_install(void)
         return;
     }
 
+    /* Second, as in every DLL, and before the configuration is read: the rule is unconditional,
+     * and a session that is switched off still says so in a log that names the right image. */
+    if (!host_image_resolve()) {
+        log_error("no 32-bit host image, diagnostics OFF");
+        return;
+    }
+
     load_config();
     if (!any_area_enabled()) {
         log_info("off (Enabled=0 or no area switched on), not one byte touched, .text is not "
                  "even read");
-        return;
-    }
-    if (!host_image_resolve()) {
-        log_error("no 32-bit host image, diagnostics OFF");
         return;
     }
     if (!diag_log_open(diagnostics_state.max_lines_per_second,

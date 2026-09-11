@@ -46,9 +46,13 @@ void translucent_fog_install(bool keep_fog_on_translucent)
         return;
     }
     if (!memory_read_u8(site + OFFSET_AND_IMMEDIATE, &immediate)) {
+        log_warning("the fog-disable immediate at %08X is not readable, so translucent faces "
+                    "keep losing their fog", (unsigned)(site + OFFSET_AND_IMMEDIATE));
         return;
     }
     if (immediate == IMMEDIATE_KEEPS_FOG) {
+        log_info("the fog-disable at %08X already keeps the fog, nothing to do",
+                 (unsigned)(site + OFFSET_AND_IMMEDIATE));
         return;                                /* already done, idempotent */
     }
     if (immediate != IMMEDIATE_CLEARS_FOG) {

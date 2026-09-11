@@ -358,6 +358,10 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
     for (word_index = 0; word_index < WORD_COUNT; ++word_index) {
         if (!memory_read_u32(table_state.words[word_index].address,
                              &table_state.words[word_index].old_value)) {
+            log_warning("vertex table: site %u/%u (%s) at %08X is not readable, nothing is "
+                        "patched", (unsigned)(word_index + 1), (unsigned)WORD_COUNT,
+                        table_state.words[word_index].description,
+                        (unsigned)table_state.words[word_index].address);
             table_state.word_count = 0;
             return false;
         }
@@ -432,6 +436,9 @@ void vertex_table_relocate(void)
     {
         uint32_t current = 0;
         if (!memory_read_u32(hits[0][0] + ADDRESS_PATTERNS[0].immediate_offset, &current)) {
+            log_warning("vertex table: the base operand at %08X is not readable, nothing is "
+                        "patched",
+                        (unsigned)(hits[0][0] + ADDRESS_PATTERNS[0].immediate_offset));
             return;
         }
         if (!memory_is_inside_image(current, sizeof(uint32_t))) {

@@ -335,6 +335,8 @@ static bool check_table_addresses(uintptr_t append_edx, uint32_t *out_table)
         !memory_read_u32(append_edx + OFFSET_TABLE,           &table) ||
         !memory_read_u32(append_edx + OFFSET_BUCKET,          &bucket) ||
         !memory_read_u32(append_edx + OFFSET_COUNT,           &counter)) {
+        log_warning("an operand of the edx anchor at %08X is not readable, nothing is patched",
+                    (unsigned)append_edx);
         return false;
     }
 
@@ -370,6 +372,8 @@ static bool check_ecx_anchors(const uintptr_t *append_ecx, uint32_t table)
 
         if (!memory_read_u32(append_ecx[index] + OFFSET_TABLE_PLUS_FOUR, &plus_four) ||
             !memory_read_u32(append_ecx[index] + OFFSET_TABLE, &base)) {
+            log_warning("an operand of the ecx anchor at %08X is not readable, nothing is "
+                        "patched", (unsigned)append_ecx[index]);
             return false;
         }
         if (plus_four != table + 4 || base != table) {
@@ -387,6 +391,8 @@ static bool check_gate_immediate(uintptr_t gate_immediate, uint32_t *out_value)
     uint32_t value;
 
     if (!memory_read_u32(gate_immediate, &value)) {
+        log_warning("the limit at %08X is not readable, nothing is patched",
+                    (unsigned)gate_immediate);
         return false;
     }
     if (value == GATE_NEW) {
@@ -468,6 +474,10 @@ static bool build_word_list(const uintptr_t *append_ecx, uintptr_t append_edx,
     for (index = 0; index < WORD_COUNT; ++index) {
         if (!memory_read_u32(table_state.words[index].address,
                              &table_state.words[index].old_value)) {
+            log_warning("pre-flight: site %u/%u (%s) at %08X is not readable, nothing is "
+                        "patched", (unsigned)(index + 1), (unsigned)WORD_COUNT,
+                        table_state.words[index].description,
+                        (unsigned)table_state.words[index].address);
             table_state.word_count = 0;
             return false;
         }

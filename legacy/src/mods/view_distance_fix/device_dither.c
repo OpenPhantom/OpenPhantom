@@ -42,22 +42,30 @@ void device_dither_on_frame(void)
     if (device == last_device) {
         return;                                /* set once per device, see the header */
     }
+    /* Remembered before the checks, so a device this cannot use is looked at once and said so
+     * once, rather than probed again on every frame it stays current. */
+    last_device = device;
     if (!memory_try_readable((uintptr_t)device, sizeof(void *))) {
+        log_warning("the device pointer %08X is not readable, so dithering is not enabled on it",
+                    (unsigned)(uintptr_t)device);
         return;
     }
     vtable = *(void ***)device;
     if (!memory_try_readable((uintptr_t)vtable,
                                   (VTABLE_SET_RENDER_STATE + 1u) * sizeof(void *))) {
+        log_warning("the device at %08X has no readable table of methods, so dithering is not "
+                    "enabled on it", (unsigned)(uintptr_t)device);
         return;
     }
     set_render_state = (set_render_state_fn_t)vtable[VTABLE_SET_RENDER_STATE];
     if (set_render_state == NULL ||
         !memory_is_executable_range((uintptr_t)set_render_state, 1)) {
+        log_warning("the device at %08X has no SetRenderState to call, so dithering is not "
+                    "enabled on it", (unsigned)(uintptr_t)device);
         return;
     }
 
     (void)set_render_state(device, D3DRENDERSTATE_DITHERENABLE, 1u);
-    last_device = device;
 
     log_info("dithering enabled on the device. The frame buffer is 16 bit, because the mode "
              "enumeration only accepts 16-bit RGB, so a full-screen fade multiplying the scene "

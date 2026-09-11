@@ -123,6 +123,8 @@ static void lower_cell_limit(bool relocation_active)
 
     immediate = site + OFFSET_GATHER_LIMIT_IMMEDIATE;
     if (!memory_read_u32(immediate, &current)) {
+        log_warning("the cell limit at %08X is not readable, the limit is unchanged",
+                    (unsigned)immediate);
         return;
     }
     if (current != CELL_LIMIT_RETAIL) {
@@ -159,6 +161,8 @@ static bool resolve_cell_counter(void)
     if (!memory_read_u32(site + OFFSET_GATHER_TABLE,  &table_plus_four) ||
         !memory_read_u32(site + OFFSET_GATHER_BUCKET, &bucket) ||
         !memory_read_u32(site + OFFSET_GATHER_COUNT,  &counter)) {
+        log_warning("an operand of the gather site at %08X is not readable, so the cell table "
+                    "is NOT watched", (unsigned)site);
         return false;
     }
     table = table_plus_four - 4;
@@ -195,6 +199,9 @@ static void resolve_vertex_counter(void)
     }
     if (!memory_read_u32(site + OFFSET_VERTEX_CACHE_COUNT, &counter) ||
         !memory_is_inside_image(counter, sizeof(uint32_t))) {
+        log_warning("the vertex cache counter operand at %08X names %08X, which is not a cell "
+                    "inside the image, so the vertex cache is NOT watched",
+                    (unsigned)(site + OFFSET_VERTEX_CACHE_COUNT), (unsigned)counter);
         return;
     }
     watchdog_state.vertex_count = (const uint32_t *)(uintptr_t)counter;

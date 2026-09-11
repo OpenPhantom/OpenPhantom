@@ -517,7 +517,10 @@ void fov_menu_install(void)
         menu_state.notch_count = MAX_NOTCHES;
     }
 
-    site = signature_find_unique(SIG_OPTIONS_VIDEO, NULL, sizeof(SIG_OPTIONS_VIDEO));
+    /* A detour target, searched for as one: a DLL that hooked this screen first has replaced the
+     * nine bytes it opens with. */
+    site = signature_find_detour_target(SIG_OPTIONS_VIDEO, NULL, sizeof(SIG_OPTIONS_VIDEO),
+                                        OPTIONS_VIDEO_PROLOGUE_SIZE);
     if (site == 0) {
         log_warning("options_video did not resolve, no field-of-view slider");
         return;

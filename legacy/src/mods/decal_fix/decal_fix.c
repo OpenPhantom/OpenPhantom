@@ -299,15 +299,12 @@ static void resolve_zfunc_mask(void)
  * opposite one, at every magnitude. */
 static bool depth_test_is_reversed(void)
 {
-    uint32_t mask = 0;
-
     if (decal_state.zfunc_mask == NULL) {
         return false;   /* unknown: assume the conventional LESS, and say so at install */
     }
-    if (!memory_read_u32((uintptr_t)decal_state.zfunc_mask, &mask)) {
-        return false;
-    }
-    return (mask & ZFUNC_MASK_GREATER) != 0u;
+    /* A plain read: the cell was checked to lie in the image at install, and this runs once per
+     * decal fan, where asking the operating system each time is the wrong shape. */
+    return (*decal_state.zfunc_mask & ZFUNC_MASK_GREATER) != 0u;
 }
 
 /* Pull every vertex of this fan towards the camera by the configured amount. The vertices are

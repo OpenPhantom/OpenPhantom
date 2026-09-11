@@ -105,7 +105,7 @@ void free_look_log_transition(bool armed, free_look_release_t reason, const char
     }
 
     view = (const uint8_t *)*log_state.camera->view;
-    if (view != NULL && memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+    if (view != NULL && memory_try_readable((uintptr_t)view, BAPVIEW_READ_SIZE)) {
         view_read  = true;
         shown_yaw  = *(const float *)(view + BAPVIEW_EULER_YAW_OFFSET);
         pitch      = *(const float *)(view + BAPVIEW_EULER_PITCH_OFFSET);

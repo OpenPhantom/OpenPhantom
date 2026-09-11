@@ -269,7 +269,12 @@ unit tests pass" the same as "it works in the game". Say which one you mean.
   and then did nothing, which is the failure mode that looks most like success
 * the feature's `README.md` updated: configuration keys, engine locations touched, limitations,
   and what you actually tested
-* `dist/engine_fixes.ini` updated if you added a setting, with the comment that explains it
+* `dist/engine_fixes.ini` updated if you added a setting, with the comment that explains it. The
+  default in the code and the value in the shipped file are two different things: the code default
+  is what a file that predates the key gets, and the shipped value is what a fresh install gets.
+  They are the same number unless the comment above the key says why they are not, and a key that
+  changes how the game plays keeps a code default that leaves the game alone, so an old file does
+  not switch a feature on that it never mentioned
 
 Say plainly what you could not verify. "Reviewed statically, not run in the game" is a useful
 sentence; "everything works" is not.

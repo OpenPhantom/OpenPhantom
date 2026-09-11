@@ -31,6 +31,8 @@ typedef struct frame_hook_state {
     uintptr_t             site;
     frame_hook_callback_t callbacks[MAX_FRAME_CALLBACKS];
     size_t                callback_count;
+    frame_hook_callback_t before[MAX_FRAME_CALLBACKS];
+    size_t                before_count;
 } frame_hook_state_t;
 
 static frame_hook_state_t frame_state;
@@ -39,6 +41,13 @@ static void __cdecl hook_frame_end(void)
 {
     frame_end_fn_t original = (frame_end_fn_t)frame_state.detour.original;
     size_t         index;
+
+    /* render_frameEnd is the END SCENE and the PRESENT, so a callback here sees the frame with
+     * its drawing done and nothing yet handed to the display, and one after sees the present
+     * finished, which under vertical sync includes the wait for the retrace. */
+    for (index = 0; index < frame_state.before_count; ++index) {
+        frame_state.before[index]();
+    }
 
     original();
 
@@ -97,6 +106,27 @@ bool frame_hook_add(frame_hook_callback_t callback)
 
     frame_state.callbacks[frame_state.callback_count] = callback;
     ++frame_state.callback_count;
+    return true;
+}
+
+bool frame_hook_add_before(frame_hook_callback_t callback)
+{
+    size_t index;
+
+    if (callback == NULL || !install_detour()) {
+        return false;
+    }
+    for (index = 0; index < frame_state.before_count; ++index) {
+        if (frame_state.before[index] == callback) {
+            return true;
+        }
+    }
+    if (frame_state.before_count >= MAX_FRAME_CALLBACKS) {
+        log_error("frame: more than %d before-present callbacks in one DLL; the last one is "
+                  "dropped", MAX_FRAME_CALLBACKS);
+        return false;
+    }
+    frame_state.before[frame_state.before_count++] = callback;
     return true;
 }
 

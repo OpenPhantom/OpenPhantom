@@ -22,6 +22,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
 | `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. The only patch here that rewrites *instructions* rather than an operand, so it has its own switch |
+| `CameraTargetPair` | `1` | the camera's two position samples stay two substeps apart while the player rides a mover. The player tick feeds the camera twice a substep on a mover and collapsed the pair, so the camera stepped at 32 Hz through every ride; see **The camera on a ride** |
 | `CompensateCameraInCutscenes` | `0` | at `0` a scripted camera gets an anchor weight of zero, so a placed shot holds its gather origin instead of easing toward it. The five lag cells stay compensated either way, because they damp the rig and the euler rather than the origin. `1` compensates the anchor during a scripted camera as well |
 | `CompensateAnimation` | `1` | the animation clock and the emitter dormancy counter |
 | `AnimationClockMode` | `1` | 1 = the authored 30 Hz rate |
@@ -90,6 +91,7 @@ with nothing wrong at all.
 | `bapview_followYaw` | `0x418F6D` | two operands repointed at `k` and `1-k` |
 | the anchor mean | `0x418623` | 63 bytes replaced by three 18-byte blends against a live weight |
 | the yaw deadband | `0x418715` | operand repointed at a scaled cell |
+| `bapview_setCamTarget` | `0x4184CC` | detoured, so the camera's two substep samples rotate once per substep. The player tick calls it twice a substep while the player rides a mover and collapsed the pair; the two operands it puts back, the previous anchor and the previous heading, are read off the site rather than carried here |
 | `bapobj_drawAll` position blend | `0x41125B` | 126 bytes replaced by a call, the largest patch here. The pattern is the whole region rather than a prefix, so every byte overwritten is checked before anything is written, and it carries no absolute address at all: every operand is relative to the frame pointer or to the object |
 | `bapobj_drawAll` euler | `0x4112D9` | 0x20 bytes replaced by a call. Immediately after the position blend above, in the same function, and the two regions do not overlap, so neither install order matters |
 | `rdThing_Draw` pose gate | `0x410019` | `74 19` -> `90 90` |
@@ -488,9 +490,47 @@ what the eye reads as a touch of jitter. At the authored 30 fps the same mismatc
 clock, so the rider advances on the same frame lattice the platform does. Both are then blended by
 the same alpha, so they agree with each other and a character looks steady on the platform. The
 error is not cancelled where there is nothing to agree with, which is the world scrolling past the
-camera at alternating speed. `bapview_updateCam` builds its target as a proper shift register
-pair, once per substep, and every per-frame factor in it is compensated, so camera jitter seen
-while riding is this defect rather than a camera one.
+camera at alternating speed.
+
+An earlier version of this paragraph went on to clear the camera: its target is a proper pair of
+substep samples, every per-frame factor in it is compensated, so jitter seen while riding had to be
+this defect. The first half is true and the conclusion was wrong, for a reason the next section
+measures.
+
+### The camera on a ride
+
+Played on 2026-09-11 at 72 frames a second on a 144 Hz screen with the display synchronised, on
+the Coruscant platform (mover 18, a push-button mover at speed 2, seven sub-nodes, carrying Panaka,
+the Queen and the droid). The platform juddered along its path while the riders and the buildings
+behind it looked smooth, and it had done so at every rate short of 144.
+
+A per-frame dump of that one mover cleared it in a column: its drawn position advanced 0.0205 or
+0.0206 units every frame, one hundred per cent of the expected step, through the whole 2.25
+frames per substep pattern. The same dump carried the camera. Its eye advanced 0.0144, 0.0224,
+0.0167, 0.0242, 0.0181, 0.0252, 0.0188, 0.0257, 0.0193 units on nine consecutive frames, a thirty
+per cent swing either way around the platform's mean, smaller on every frame with a substep in it
+and larger on every frame without. The platform was where it should be and the camera wobbled
+around it, and the object that moves with the camera is the one that shows a camera wobble; the
+background pans too fast to show it and the riders wobble with the camera.
+
+The camera's two samples, `gTargetAnchor` at `0x5BB4D8` and `gTargetAnchorPrev` at `0x5BB4C8`,
+were **identical on every frame**. The setter that rotates them, `bapview_setCamTarget` at
+`0x004184CC`, ran twice per substep (`gTargetCalls` read 2), and the player tick shows why: while
+the player stands on a mover the rider carry feeds the camera straight after moving him
+(`0x0044F891`) and `Plr_PublishGround` feeds it again a few phases later with the same position.
+Two rotations with one value leave previous equal to current, the interpolation returns the newest
+sample, and the camera moves in 32 Hz steps for as long as the ride lasts, which the compensated
+anchor ease then smooths into the sawtooth above. On foot there is one call and the pair is sound,
+so the camera never showed this anywhere else. At the authored 30 fps a substep and a
+frame were the same thing and none of it could be seen.
+
+`camera_target.c` detours the setter and lets the pair rotate once per substep: a second call in
+the same substep still updates the current sample, the heading, the turn rate and the ground block
+exactly as the engine's body does, and only the previous sample and heading are put back. The
+substep is told from the next by the engine's own step counter. Played after the change: the pair
+read 0.0462 units apart, one substep, on every frame of the ride, and the platform was smooth at
+72. This is every lift and platform in the game, not that one.
+
 ### A correction to the census above
 
 The claim that `bapmap_tickMovers` is reached from one place is about the plural, and the

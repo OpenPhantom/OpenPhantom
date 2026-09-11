@@ -45,6 +45,7 @@
 #include "framerate_fix.h"
 
 #include "camera_compensation.h"
+#include "camera_target.h"
 #include "common/cinematic_gate.h"
 #include "draw_interpolation.h"
 #include "face_latch.h"
@@ -219,6 +220,7 @@ typedef struct framerate_config {
     bool  compensate_camera;
     bool  compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
     bool  compensate_camera_in_cutscenes;
+    bool  camera_target_pair;    /* the camera's two samples stay two while the player rides */
     bool  compensate_animation;
     bool  spin_sleep;
     bool  pin_simulation_rate;
@@ -275,6 +277,7 @@ static void load_config(void)
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraAnchor", true);
     config->compensate_camera_in_cutscenes =
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraInCutscenes", false);
+    config->camera_target_pair     = ini_read_bool(FRAMERATE_SECTION, "CameraTargetPair", true);
     config->compensate_animation   = ini_read_bool(FRAMERATE_SECTION, "CompensateAnimation", true);
     config->spin_sleep             = ini_read_bool(FRAMERATE_SECTION, "SpinSleep", false);
     config->pin_simulation_rate    = ini_read_bool(FRAMERATE_SECTION, "PinSimulationRate", true);
@@ -734,6 +737,7 @@ void framerate_fix_install(void)
     } else {
         log_info("CompensateCamera=0, the camera will feel rigid above 30 fps");
     }
+    camera_target_install(framerate_state.config.camera_target_pair);
 
     if (framerate_state.config.interpolate_pitch_roll) {
         draw_interpolation_install_euler();

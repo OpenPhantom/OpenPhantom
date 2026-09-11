@@ -39,6 +39,7 @@ add_engine_fix(framerate_fix
     # neither should reconstruct for itself
     substep_counter.c
     camera_compensation.c
+    camera_target.c
     draw_interpolation.c
     framerate_stats.c
     frame_cap.c

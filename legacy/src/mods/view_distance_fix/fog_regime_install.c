@@ -561,8 +561,16 @@ static void resolve_tick_cells(void)
     fog_state.tick_active   = true;
 
     if (fog_state.frame_delta == NULL) {
-        log_warning("g_frameDelta did not resolve, the fog tick runs but cannot ease, so every "
-                    "change steps in one frame");
+        /* Turned off rather than left on with no clock. Easing with no seconds does not step in
+         * one frame, it never moves at all: fog_regime_ease answers `current` for a delta that is
+         * not positive, so the band would hold wherever it started, and with LevelOpenSeconds set
+         * that is the fog switched off for the whole session. Stepping is what the fix does
+         * without a settle time, and it is what this line always claimed. */
+        fog_state.config.settle_seconds = 0.0f;
+        fog_state.config.open_seconds   = 0.0f;
+        log_warning("g_frameDelta did not resolve, so the fog tick has no clock to ease against. "
+                    "Easing and the level-opening window are both off and every change steps in "
+                    "one frame");
     }
     log_info("fog tick active, g_level %08X, g_frameDelta %08X, settle %.2f s",
              (unsigned)from_cmp, (unsigned)delta_address,
@@ -630,10 +638,17 @@ void fog_regime_install(const fog_regime_config_t *config)
 
     install_vertex_fog();
 
+    /* Every term the level-fog detour applies has to be in this test, not just the first three.
+     * It was those three alone, and FogBandScale, AuthoredFogBand, FogMinEndFraction and
+     * LevelOpenSeconds were then silently doing nothing whenever the first three were at their
+     * defaults, while the line below said the band was left as authored. Somebody who had set
+     * one of those four asked for the opposite of both. */
     if (!fog_state.config.follow_fov && !fog_state.config.inside_cut &&
-        fog_state.config.fog_scale <= 1.0f) {
-        log_info("FogFollowFov=0, FogInsideCut=0 and FogScale=1, the fog band is left exactly as "
-                 "each level authored it");
+        fog_state.config.fog_scale <= 1.0f && !fog_state.config.authored_band &&
+        fog_state.config.band_scale == 1.0f && fog_state.config.min_end_fraction <= 0.0f &&
+        fog_state.config.open_seconds <= 0.0f) {
+        log_info("nothing here asks for a change to the fog band, so it is left exactly as each "
+                 "level authored it");
         return;
     }
 

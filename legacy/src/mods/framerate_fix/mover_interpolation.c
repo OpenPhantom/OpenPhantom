@@ -5,12 +5,11 @@
  * evidence: the census that found the four consumers of a mover pose, the disassembly of each of
  * them, the latch the substep alpha has to be read through, the subnode layout, and the three
  * designs that were tried and rejected: detouring the shared callee, trusting the engine's own
- * previous pose, and deciding a track wrap on geometry. The seam taken is mover_blend.c, which
- * holds all of the arithmetic, none of the engine, and is tested on its own; mover_wraps.c owns
- * the track wrap verdict and the argument it rests on. A seam between the tick side and the draw
- * side was looked at and rejected: both are the same side table, so splitting them would move the
- * table and its hash into a header and would separate the snapshot from the only code that reads
- * it.
+ * previous pose, and deciding a track wrap on geometry alone. Two seams are taken, each a file with
+ * no engine in it and a test of its own: mover_blend.c holds the arithmetic and mover_wraps.c the
+ * two verdicts on a track wrap. A seam between the tick side and the draw side was looked at and
+ * rejected: both are the same side table, so splitting them would move the table and its hash
+ * into a header and would separate the snapshot from the only code that reads it.
  *
  * This file briefly carried four ways of choosing when a mover is drawn, and the instruments built
  * to judge them, and passed 900 lines twice doing it. All of that is gone: the alternatives were
@@ -281,6 +280,11 @@ typedef struct mover_slot {
     uint32_t    tick_stamp;
     /* LogMoverEvenness only: this subnode's own drawn history. */
     mover_evenness_state_t evenness;
+    /* What this subnode's last ordinary tick did to it, the yardstick a track wrap is measured
+     * against: how far its origin moved and how far its first basis row turned. */
+    float       ordinary_step;
+    float       ordinary_angle;
+    bool        have_ordinary;
 } mover_slot_t;
 
 typedef struct mover_interpolation_state {
@@ -315,7 +319,9 @@ typedef struct mover_interpolation_state {
     uint32_t blended;
     uint32_t rejected;
     uint32_t unknown;
-    uint32_t wrapped;
+    uint32_t wrapped;           /* pose wraps seen at the tick */
+    uint32_t resets;            /* of those, subnodes the wrap moved unlike an ordinary tick */
+    uint32_t held_after_reset;  /* draws that fell back to the raw pose because of one */
     bool     reported_silence;
 } mover_interpolation_state_t;
 
@@ -437,7 +443,12 @@ static bool interpolated_world(float *out, const float *world)
         return false;
     }
     if (!slot->usable) {
+        /* The tick called this subnode's last move a track reset, so its two samples sit at
+         * opposite ends of the path and the raw pose is drawn until the next tick replaces them.
+         * Counted under its own name: this exit used to be the one refusal no guard owned up to,
+         * and it was most of them. */
         ++mover_state.rejected;
+        ++mover_state.held_after_reset;
         return false;
     }
     if (!current_alpha(&alpha)) {
@@ -503,26 +514,42 @@ static void __cdecl hook_mover_invert(void *destination, const float *world)
  * three other movers wrap by so little that the same threshold passes them and the whole track
  * would be drawn running backwards across a frame. Comparing the pose before and after the
  * original settles it with one subtraction and nothing to tune. */
-static void snapshot_subnodes(const uint8_t *mover, bool wrapped, float interval,
-                              float tick_alpha)
+/* The origin's travel and the first row's turn between two world matrices, the two numbers a wrap
+ * is compared on. */
+static void measure_step(const float *from, const float *to, float *step, float *angle)
+{
+    float dx = to[MOVER_TRANSLATION]     - from[MOVER_TRANSLATION];
+    float dy = to[MOVER_TRANSLATION + 1] - from[MOVER_TRANSLATION + 1];
+    float dz = to[MOVER_TRANSLATION + 2] - from[MOVER_TRANSLATION + 2];
+
+    *step  = (float)sqrt((double)(dx * dx + dy * dy + dz * dz));
+    *angle = mover_wraps_angle_degrees(to[0] * from[0] + to[1] * from[1] + to[2] * from[2]);
+}
+
+/* How many subnodes the record has, or 0 when the record or its array cannot be read. Both guards
+ * take the structured-exception form for the same reason the one in hook_tick_mover does: this
+ * runs underneath a detour the stall census measured at thousands of calls a frame, and a system
+ * call is not affordable there. */
+static int32_t readable_subnode_count(const uint8_t *mover)
 {
     int32_t count;
-    int32_t index;
 
-    /* Both guards take the structured-exception form for the same reason the one in
-     * hook_tick_mover above does: this runs underneath a detour the stall census measured at
-     * thousands of calls a frame, and a system call is not affordable there. */
     if (!memory_try_readable((uintptr_t)mover, MOVER_SUBNODE_ARRAY + SUBNODE_STRIDE)) {
-        return;
+        return 0;
     }
     count = *(const int32_t *)(mover + MOVER_SUBNODE_COUNT);
-    if (count <= 0 || count > 256) {
-        return;
-    }
-    if (!memory_try_readable((uintptr_t)(mover + MOVER_SUBNODE_ARRAY),
+    if (count <= 0 || count > 256 ||
+        !memory_try_readable((uintptr_t)(mover + MOVER_SUBNODE_ARRAY),
                              (size_t)count * SUBNODE_STRIDE)) {
-        return;
+        return 0;
     }
+    return count;
+}
+
+static void snapshot_subnodes(const uint8_t *mover, float interval, float tick_alpha)
+{
+    int32_t count = readable_subnode_count(mover);
+    int32_t index;
 
     for (index = 0; index < count; ++index) {
         const uint8_t *subnode = mover + MOVER_SUBNODE_ARRAY + (size_t)index * SUBNODE_STRIDE;
@@ -531,15 +558,42 @@ static void snapshot_subnodes(const uint8_t *mover, bool wrapped, float interval
         if (slot == NULL) {
             continue;
         }
-        if (wrapped) {
-            slot->usable = false;
-            continue;
+        if (slot->usable) {
+            /* The pose about to be replaced and the one replacing it are one ordinary tick
+             * apart, so their difference is the yardstick. A slot the last wrap held is not
+             * measured: its previous is the far end of a reset, not an ordinary step. */
+            measure_step(slot->previous, (const float *)(subnode + SUBNODE_WORLD),
+                         &slot->ordinary_step, &slot->ordinary_angle);
+            slot->have_ordinary = true;
         }
         memcpy(slot->previous, subnode + SUBNODE_WORLD, sizeof(slot->previous));
         slot->interval   = interval;
         slot->tick_alpha = tick_alpha;
         slot->tick_stamp = mover_state.frame_stamp;
         slot->usable     = true;
+    }
+}
+
+static void judge_wrap(const uint8_t *mover)
+{
+    int32_t count = readable_subnode_count(mover);
+    int32_t index;
+
+    for (index = 0; index < count; ++index) {
+        const uint8_t *subnode = mover + MOVER_SUBNODE_ARRAY + (size_t)index * SUBNODE_STRIDE;
+        mover_slot_t  *slot    = slot_find(subnode);
+        float          step;
+        float          angle;
+
+        if (slot == NULL || !slot->usable) {
+            continue;
+        }
+        measure_step(slot->previous, (const float *)(subnode + SUBNODE_WORLD), &step, &angle);
+        if (mover_wraps_is_reset(step, angle, slot->ordinary_step, slot->ordinary_angle,
+                                 slot->have_ordinary)) {
+            slot->usable = false;
+            ++mover_state.resets;
+        }
     }
 }
 
@@ -585,20 +639,23 @@ static void __cdecl hook_tick_mover(void *mover, float now)
         pose_before = *(const float *)(record + MOVER_POSE);
         /* `now` IS this pose's world time, which is the whole point: it does not matter where in
          * the frame this tick happened. */
-        snapshot_subnodes(record, false, now - previous_base, tick_alpha);
+        snapshot_subnodes(record, now - previous_base, tick_alpha);
 
     }
 
     original(mover, now);
 
-    /* The verdict itself is mover_wraps.c's, along with the argument it rests on. */
+    /* Whether the pose wrapped is mover_wraps.c's verdict, along with the argument it rests on.
+     * What the wrap did to each subnode is judged here, against that subnode's own last ordinary
+     * tick: a loop moved it as any tick does and blends from the snapshot taken above; a reset
+     * moved it unlike any tick and is held at the raw pose until the next tick. */
     if (integrating) {
         float pose_after = *(const float *)(record + MOVER_POSE);
         float track      = *(const float *)(record + MOVER_TRACK_LENGTH);
 
         if (mover_wraps_is_wrap(pose_before, pose_after, track)) {
             ++mover_state.wrapped;
-            snapshot_subnodes(record, true, 0.0f, 0.0f);
+            judge_wrap(record);
         }
     }
 }
@@ -810,15 +867,17 @@ void mover_interpolation_sample(void)
                     (unsigned)mover_state.frames, (unsigned)mover_state.unknown,
                     (unsigned)mover_state.rejected);
     } else if (mover_state.blended != 0) {
-        log_info("movers: %u poses blended, %u refused, %u unknown, %u track wraps over %u "
-                 "frames, the table emptied %u time%s so far. Refusals by guard: %u weight "
-                 "out of range, %u exactly at a step boundary, %u basis row too short, %u "
-                 "rotation past the limit, %u translation past the limit, %u basis not "
-                 "recoverable",
+        log_info("movers: %u poses blended, %u refused, %u unknown, %u track wraps of which %u "
+                 "reset a subnode, over %u frames, the table emptied %u time%s so far. Refusals "
+                 "by guard: %u held after a track reset, %u weight out of range, %u exactly at "
+                 "a step boundary, %u basis row too short, %u rotation past the limit, %u "
+                 "translation past the limit, %u basis not recoverable",
                  (unsigned)mover_state.blended, (unsigned)mover_state.rejected,
                  (unsigned)mover_state.unknown, (unsigned)mover_state.wrapped,
+                 (unsigned)mover_state.resets,
                  (unsigned)mover_state.frames, (unsigned)mover_state.levels_opened,
                  (mover_state.levels_opened == 1u) ? "" : "s",
+                 (unsigned)mover_state.held_after_reset,
                  (unsigned)mover_state.refusals[MOVER_BLEND_WEIGHT_RANGE],
                  (unsigned)mover_state.refusals[MOVER_BLEND_IDENTITY],
                  (unsigned)mover_state.refusals[MOVER_BLEND_ROW_LENGTH],
@@ -835,4 +894,6 @@ void mover_interpolation_sample(void)
     mover_state.rejected = 0;
     mover_state.unknown  = 0;
     mover_state.wrapped  = 0;
+    mover_state.resets   = 0;
+    mover_state.held_after_reset = 0;
 }

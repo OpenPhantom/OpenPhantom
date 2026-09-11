@@ -574,6 +574,25 @@ clock more than once while a level comes up, so that count runs ahead of the lev
 Played after the fix through several level loads and onto a platform: smooth, and the same window
 that read ninety per cent unknown reads none.
 
+### A loop is not a reset
+
+A free running track runs its pose up to the track length and back to the start, and until now
+every such wrap was drawn unblended for one step, on the argument that the two samples sit at
+opposite ends of the path. Coruscant has eight movers that wrap four times a second each, rotors
+and belts on a 29 unit track at speed 60 and 120, and every one of them was being held at its raw
+pose for a substep once a loop: twenty-three hitches a second across the scene, counted in the
+window line as refusals that no guard owned up to, because the exit that took them had no name.
+
+A census of what the wrap did to each of them settled it. A belt moved 9.35 units across the wrap
+and 9.88 on its ordinary tick; a rotor turned 84 degrees across the wrap and 89 ordinarily; those
+are loops, and the wrap is one more step of the same motion. One turned 55 degrees across the wrap
+against 19 ordinarily; that is a reset, and it has to be held. A fixed geometric threshold cannot
+tell the two apart, because a small reset and a large loop step look alike, so `mover_wraps.c` now
+compares the wrap's step and turn with that subnode's own last ordinary tick and calls it a reset
+when either differs by more than half, with a floor under each so a stationary subnode is not judged
+on rounding. The window line names the resets and the frames held after them. Played: the
+looping movers blend through their wraps and the genuine resets are still held.
+
 ### Removing the cause instead: `MoverSubstepClock`
 
 Three attempts to compute a better weight in the draw failed, and the fourth option is not another

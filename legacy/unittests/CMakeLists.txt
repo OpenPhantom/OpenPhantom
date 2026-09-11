@@ -182,6 +182,11 @@ add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c
 # jump on a grown one, and a skewed basis shears the geometry.
 add_unit_test(mover_blend framerate_fix framerate_fix/mover_blend.c)
 
+# Whether a mover that ran off the end of its track looped or reset, judged against its own
+# ordinary tick. A loop drawn as a reset is a hitch once a revolution on the fastest thing in the
+# scene; a reset drawn as a loop sweeps a piston backwards across a substep.
+add_unit_test(mover_wraps framerate_fix framerate_fix/mover_wraps.c)
+
 # The instrument that judges whether a mover draws evenly. Two earlier versions of it were wrong in
 # ways a play session could not reveal, and both wrong answers were believed: one measured a speed
 # range rather than jitter, and one reset its history on the second of the two calls each subnode

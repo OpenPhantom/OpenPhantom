@@ -47,6 +47,13 @@
 #define GOVERNOR_DECISION_MS 500u
 #define GOVERNOR_DECISIONS_PER(seconds)     (((seconds) * 1000u) / GOVERNOR_DECISION_MS)
 
+/* A window decides only once it holds this many frames. The window empties at every decision and
+ * the next decision fires on the first frame that arrives half a second later, so a level load
+ * could be the only sample in its window and its own median, and a scale above 1.00 lost a step
+ * at every load. Eight frames is under a fifth of a second at the lowest rate the governor targets
+ * and no number of loads. A window that has not filled keeps its samples and decides later. */
+#define GOVERNOR_MIN_SAMPLES 8u
+
 /* The shortfall at which a whole step is the right answer: 10 % past the frame time the scale is
  * allowed to cost. Below that the step shrinks towards a third of one, above it grows to four
  * times, so the governor eases into the target from a near miss and moves properly when a scene
@@ -184,6 +191,8 @@ static void apply(float *effective_view_scale, float configured_scale, float cel
     *effective_view_scale = allowed;
 }
 
+static void decide_on_window(float median, float configured_scale);
+
 void frame_governor_on_frame(float *effective_view_scale, float configured_scale,
                              float cell_ceiling)
 {
@@ -220,71 +229,78 @@ void frame_governor_on_frame(float *effective_view_scale, float configured_scale
         const float median = median_frame_ms();
 
         governor.second_began_at = now.QuadPart;
-        /* The window is spent. Everything below decides on THIS window, and the next one starts
-         * empty so that it describes the next half second rather than the last few. */
-        governor.sample_count = 0;
-        governor.cursor = 0;
-
-        switch (frame_governor_decide(median, governor.lower_above_ms, governor.raise_below_ms,
-                                      governor.healthy_seconds, governor.healthy_needed)) {
-        case FRAME_GOVERNOR_LOWER:
-            governor.healthy_seconds = 0;
-            /* Back to the patient count: whatever this scene is, it has just proved it is not over,
-             * and the first step back out of it has to be earned the hard way again. */
-            governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS);
-
-            if (governor.ceiling > GOVERNOR_SCALE_FLOOR) {
-                const float previous = governor.ceiling;
-                const float step = frame_governor_step_size(median, governor.lower_above_ms,
-                                                            GOVERNOR_SCALE_STEP,
-                                                            GOVERNOR_FULL_STEP_SHORTFALL);
-
-                governor.ceiling -= step;
-                if (governor.ceiling < GOVERNOR_SCALE_FLOOR) {
-                    governor.ceiling = GOVERNOR_SCALE_FLOOR;
-                }
-                log_info("frame governor: %.1f ms a frame (%.0f fps), %.0f%% past the %.1f ms this "
-                         "is allowed to cost. View scale %.2f -> %.2f (step %.3f).",
-                         (double)median, (double)(1000.0f / median),
-                         (double)(((median / governor.lower_above_ms) - 1.0f) * 100.0f),
-                         (double)governor.lower_above_ms,
-                         (double)previous, (double)governor.ceiling, (double)step);
-            }
-            break;
-
-        case FRAME_GOVERNOR_RAISE:
-            governor.healthy_seconds = 0;
-            if (governor.ceiling < configured_scale) {
-                const float previous = governor.ceiling;
-
-                governor.ceiling += GOVERNOR_SCALE_STEP;
-                if (governor.ceiling > configured_scale) {
-                    governor.ceiling = configured_scale;
-                }
-                log_info("frame governor: %u s at %.1f ms a frame (%.0f fps), so the view distance "
-                         "is given a step back. View scale %.2f -> %.2f, ceiling %.2f.",
-                         governor.healthy_needed * GOVERNOR_DECISION_MS / 1000u,
-                         (double)median, (double)(1000.0f / median),
-                         (double)previous, (double)governor.ceiling, (double)configured_scale);
-                governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS_AGAIN);
-            }
-            break;
-
-        case FRAME_GOVERNOR_HOLD:
-        default:
-            /* Healthy seconds only accumulate while there is something to give back. Counting
-             * them at the configured scale would mean the first slow second after a long quiet
-             * stretch was answered by an immediate raise. */
-            if (median < governor.raise_below_ms && governor.ceiling < configured_scale) {
-                governor.healthy_seconds++;
-            } else if (median >= governor.raise_below_ms) {
-                governor.healthy_seconds = 0;
-            }
-            break;
+        if (governor.sample_count >= GOVERNOR_MIN_SAMPLES) {
+            decide_on_window(median, configured_scale);
         }
     }
 
     apply(effective_view_scale, configured_scale, cell_ceiling);
+}
+
+/* One decision on a spent window. The next window starts empty so that it describes the next half
+ * second rather than the last few. */
+static void decide_on_window(float median, float configured_scale)
+{
+    governor.sample_count = 0;
+    governor.cursor = 0;
+
+    switch (frame_governor_decide(median, governor.lower_above_ms, governor.raise_below_ms,
+                                  governor.healthy_seconds, governor.healthy_needed)) {
+    case FRAME_GOVERNOR_LOWER:
+        governor.healthy_seconds = 0;
+        /* Back to the patient count: whatever this scene is, it has just proved it is not over,
+         * and the first step back out of it has to be earned the hard way again. */
+        governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS);
+
+        if (governor.ceiling > GOVERNOR_SCALE_FLOOR) {
+            const float previous = governor.ceiling;
+            const float step = frame_governor_step_size(median, governor.lower_above_ms,
+                                                        GOVERNOR_SCALE_STEP,
+                                                        GOVERNOR_FULL_STEP_SHORTFALL);
+
+            governor.ceiling -= step;
+            if (governor.ceiling < GOVERNOR_SCALE_FLOOR) {
+                governor.ceiling = GOVERNOR_SCALE_FLOOR;
+            }
+            log_info("frame governor: %.1f ms a frame (%.0f fps), %.0f%% past the %.1f ms this "
+                     "is allowed to cost. View scale %.2f -> %.2f (step %.3f).",
+                     (double)median, (double)(1000.0f / median),
+                     (double)(((median / governor.lower_above_ms) - 1.0f) * 100.0f),
+                     (double)governor.lower_above_ms,
+                     (double)previous, (double)governor.ceiling, (double)step);
+        }
+        break;
+
+    case FRAME_GOVERNOR_RAISE:
+        governor.healthy_seconds = 0;
+        if (governor.ceiling < configured_scale) {
+            const float previous = governor.ceiling;
+
+            governor.ceiling += GOVERNOR_SCALE_STEP;
+            if (governor.ceiling > configured_scale) {
+                governor.ceiling = configured_scale;
+            }
+            log_info("frame governor: %u s at %.1f ms a frame (%.0f fps), so the view distance "
+                     "is given a step back. View scale %.2f -> %.2f, ceiling %.2f.",
+                     governor.healthy_needed * GOVERNOR_DECISION_MS / 1000u,
+                     (double)median, (double)(1000.0f / median),
+                     (double)previous, (double)governor.ceiling, (double)configured_scale);
+            governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS_AGAIN);
+        }
+        break;
+
+    case FRAME_GOVERNOR_HOLD:
+    default:
+        /* Healthy seconds only accumulate while there is something to give back. Counting
+         * them at the configured scale would mean the first slow second after a long quiet
+         * stretch was answered by an immediate raise. */
+        if (median < governor.raise_below_ms && governor.ceiling < configured_scale) {
+            governor.healthy_seconds++;
+        } else if (median >= governor.raise_below_ms) {
+            governor.healthy_seconds = 0;
+        }
+        break;
+    }
 }
 
 /* ============================================================================================ */

@@ -79,6 +79,11 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 | `MusicVolumeAcrossProvider` | `1` | | keep the music volume across a 3-D provider change. See **The provider change discards a slider move** |
 | `MusicHeartbeatWatchdog` | `1` | | the net behind the lock repair, and it only ever releases: when no heartbeat body has run for the time below while the timer keeps firing and the lock is held, the lock is written back to zero. Neither it nor the stall report judges anything until the heartbeat has been seen to run once, because the baseline is stamped at process start and the first frame can arrive seconds later, before the music has attached |
 | `MusicHeartbeatWatchdogMs` | `400` | 200-10000 | how long the body has to be silent first. Its own threshold: it used to be reachable only from inside the 1500 ms stall report, so every value under 1500 was dead, the shipped 400 included |
+| `MusicLockFix` | `1` | | the repair itself: both sides of the heartbeat lock made atomic, and the five parameter ranges whose refusal inside the DLL keeps the lock forever refused before they reach it. Two writes into the mapped DLL; if either half cannot be installed both are rolled back |
+| `MusicProbe` | `0` | | measurement: reads the heartbeat count and the lock once a frame and writes nothing, so a stall shows as two numbers |
+| `MusicProbeSeconds` | `10` | | seconds between the probe's routine lines; 0 says nothing unless the heartbeat stalls |
+| `MusicTrace` | `0` | | measurement: copies the DLL's own running commentary into the log, each line stamped with the heartbeat count and the lock. Makes the log large |
+| `MusicStressHz` | `0` | | a reproduction tool: drives music changes this many times a second to provoke the stall on purpose. The music stutters and cuts while it is on |
 
 ## Engine locations
 

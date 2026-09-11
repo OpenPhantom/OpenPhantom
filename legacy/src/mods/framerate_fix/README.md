@@ -572,7 +572,10 @@ so far, so a log shows the mechanism working rather than only its absence; the e
 clock more than once while a level comes up, so that count runs ahead of the level count.
 
 Played after the fix through several level loads and onto a platform: smooth, and the same window
-that read ninety per cent unknown reads none.
+that read ninety per cent unknown reads none. The table lives in `mover_slots.c` with no engine in
+it, and its test pins both ways a slot comes back and the two ways it must not: a full table refuses
+a newcomer rather than handing over a live slot, and a subnode asking for its own stale slot gets it
+back rather than a second one.
 
 ### A loop is not a reset
 

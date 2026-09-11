@@ -5,11 +5,11 @@
  * evidence: the census that found the four consumers of a mover pose, the disassembly of each of
  * them, the latch the substep alpha has to be read through, the subnode layout, and the three
  * designs that were tried and rejected: detouring the shared callee, trusting the engine's own
- * previous pose, and deciding a track wrap on geometry alone. Two seams are taken, each a file with
- * no engine in it and a test of its own: mover_blend.c holds the arithmetic and mover_wraps.c the
- * two verdicts on a track wrap. A seam between the tick side and the draw side was looked at and
- * rejected: both are the same side table, so splitting them would move the table and its hash
- * into a header and would separate the snapshot from the only code that reads it.
+ * previous pose, and deciding a track wrap on geometry alone. Three seams are taken, each a file
+ * with no engine in it and a test of its own: mover_blend.c holds the arithmetic, mover_wraps.c
+ * the two verdicts on a track wrap, and mover_slots.c the side table with its emptying and its
+ * aging. A seam between the tick side and the draw side was looked at and rejected: both work the
+ * same table and the snapshot belongs next to the only code that reads it.
  *
  * This file briefly carried four ways of choosing when a mover is drawn, and the instruments built
  * to judge them, and passed 900 lines twice doing it. All of that is gone: the alternatives were
@@ -77,6 +77,7 @@
 
 #include "mover_blend.h"
 #include "mover_evenness.h"
+#include "mover_slots.h"
 #include "mover_wraps.h"
 
 #include "common/detour.h"
@@ -254,39 +255,6 @@ static const size_t REDIRECT_PATTERN_SIZE[REDIRECT_COUNT] = {
 #define SUBNODE_WORLD         0x14
 #define MOVER_TRACK_LENGTH    0x28
 
-/* One entry per subnode the game has ticked, keyed by its address. Open addressing on the pointer,
- * so a lookup on the draw path is a couple of loads. The table is deliberately much larger than
- * the 24 live movers a level was measured with, because the bound belongs to the data rather than
- * to that one observation, and a full table degrades to "not interpolated" rather than to a wrong
- * answer. */
-#define SLOT_COUNT 512u
-
-/* A slot whose subnode has not ticked for this many rendered frames may be given to a newcomer.
- * Ten seconds at 30 frames a second and two at 144, either of which is far longer than any mover
- * pauses between moves, and a mover that really has stopped for longer is drawn where it stands
- * anyway. Without this the table only ever filled: 512 slots for the whole session, and the third
- * level of one was drawn stepped from its first frame because the first two still owned them. */
-#define SLOT_STALE_FRAMES 300u
-
-typedef struct mover_slot {
-    const void *subnode;
-    bool        usable;
-    float       previous[MOVER_WORLD_FLOATS];
-    /* How much world time the move that produced the current pose covered, and the substep alpha
-     * at the frame it happened on. Together they say how far into that move the frame being drawn
-     * now stands, without either an absolute clock or an assumption about the frame rate. */
-    float       interval;
-    float       tick_alpha;
-    uint32_t    tick_stamp;
-    /* LogMoverEvenness only: this subnode's own drawn history. */
-    mover_evenness_state_t evenness;
-    /* What this subnode's last ordinary tick did to it, the yardstick a track wrap is measured
-     * against: how far its origin moved and how far its first basis row turned. */
-    float       ordinary_step;
-    float       ordinary_angle;
-    bool        have_ordinary;
-} mover_slot_t;
-
 typedef struct mover_interpolation_state {
     bool      installed;
     bool      enabled;
@@ -302,7 +270,7 @@ typedef struct mover_interpolation_state {
     const float    *alpha_global;
     const float    *alpha_latch;
 
-    mover_slot_t slots[SLOT_COUNT];
+    mover_slot_table_t slots;
     float        last_tick_now;     /* the world clock at the last tick, for the level test */
     uint32_t     levels_opened;     /* how many times the table has been emptied. The engine
                                      * zeroes the clock more than once while a level comes up,
@@ -338,82 +306,6 @@ typedef void (__cdecl *invert_fn_t)(void *destination, const float *world);
 typedef void (__cdecl *tick_mover_fn_t)(void *mover, float now);
 
 /* ============================================================================================ */
-static size_t slot_index_for(const void *subnode)
-{
-    /* The pointers are 0x9C apart, so the low bits alone would collide on every neighbour. */
-    uintptr_t value = (uintptr_t)subnode;
-
-    return (size_t)(((value >> 2) ^ (value >> 11)) & (SLOT_COUNT - 1u));
-}
-
-static mover_slot_t *slot_find(const void *subnode)
-{
-    size_t index = slot_index_for(subnode);
-    size_t probe;
-
-    for (probe = 0; probe < SLOT_COUNT; ++probe) {
-        mover_slot_t *slot = &mover_state.slots[(index + probe) & (SLOT_COUNT - 1u)];
-
-        if (slot->subnode == subnode) {
-            return slot;
-        }
-        if (slot->subnode == NULL) {
-            return NULL;
-        }
-    }
-    return NULL;
-}
-
-static bool slot_is_stale(const mover_slot_t *slot)
-{
-    return slot->subnode != NULL &&
-           (mover_state.frame_stamp - slot->tick_stamp) > SLOT_STALE_FRAMES;
-}
-
-static mover_slot_t *slot_reserve(const void *subnode)
-{
-    size_t        index = slot_index_for(subnode);
-    size_t        probe;
-    mover_slot_t *stale = NULL;
-
-    for (probe = 0; probe < SLOT_COUNT; ++probe) {
-        mover_slot_t *slot = &mover_state.slots[(index + probe) & (SLOT_COUNT - 1u)];
-
-        if (slot->subnode == subnode) {
-            return slot;
-        }
-        if (slot->subnode == NULL) {
-            break;
-        }
-        if (stale == NULL && slot_is_stale(slot)) {
-            /* Remembered but not taken: a slot further along may still hold this very subnode,
-             * and taking this one first would put it in the table twice. */
-            stale = slot;
-        }
-    }
-    if (stale == NULL) {
-        if (probe == SLOT_COUNT) {
-            return NULL;                            /* full of live movers: not smoothed */
-        }
-        stale = &mover_state.slots[(index + probe) & (SLOT_COUNT - 1u)];
-    }
-    /* A newcomer starts clean. Whatever the previous owner left is a different mover's history,
-     * and one of these is exactly what a freed address reused by the next level would inherit. */
-    memset(stale, 0, sizeof *stale);
-    stale->subnode = subnode;
-    return stale;
-}
-
-/* Everything forgotten at once, for the moment a level opens. The engine zeroes the world clock
- * then, so the tick hook sees time go backwards, which is the same event sim_clock reads. Every
- * subnode address the old level had is free to be reused by the new one, and a slot that matched
- * on address alone would hand the newcomer a stranger's previous pose. */
-static void slots_forget_level(void)
-{
-    memset(mover_state.slots, 0, sizeof mover_state.slots);
-}
-
-/* ============================================================================================ */
 static bool current_alpha(float *out)
 {
     if (mover_state.alpha_gate == NULL || mover_state.alpha_global == NULL ||
@@ -437,7 +329,7 @@ static bool interpolated_world(float *out, const float *world)
     if (!mover_state.enabled) {
         return false;
     }
-    slot = slot_find((const uint8_t *)world - SUBNODE_WORLD);
+    slot = mover_slots_find(&mover_state.slots, (const uint8_t *)world - SUBNODE_WORLD);
     if (slot == NULL) {
         ++mover_state.unknown;
         return false;
@@ -553,7 +445,8 @@ static void snapshot_subnodes(const uint8_t *mover, float interval, float tick_a
 
     for (index = 0; index < count; ++index) {
         const uint8_t *subnode = mover + MOVER_SUBNODE_ARRAY + (size_t)index * SUBNODE_STRIDE;
-        mover_slot_t  *slot    = slot_reserve(subnode);
+        mover_slot_t  *slot    = mover_slots_reserve(&mover_state.slots, subnode,
+                                                     mover_state.frame_stamp);
 
         if (slot == NULL) {
             continue;
@@ -581,7 +474,7 @@ static void judge_wrap(const uint8_t *mover)
 
     for (index = 0; index < count; ++index) {
         const uint8_t *subnode = mover + MOVER_SUBNODE_ARRAY + (size_t)index * SUBNODE_STRIDE;
-        mover_slot_t  *slot    = slot_find(subnode);
+        mover_slot_t  *slot    = mover_slots_find(&mover_state.slots, subnode);
         float          step;
         float          angle;
 
@@ -623,7 +516,7 @@ static void __cdecl hook_tick_mover(void *mover, float now)
      * table. Compared against the last tick rather than the last frame, because the un-clamped
      * substep clock can legitimately run a step ahead of the frame and back within it. */
     if (now < mover_state.last_tick_now) {
-        slots_forget_level();
+        mover_slots_forget(&mover_state.slots);
         ++mover_state.levels_opened;
     }
     mover_state.last_tick_now = now;

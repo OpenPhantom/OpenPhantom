@@ -187,6 +187,11 @@ add_unit_test(mover_blend framerate_fix framerate_fix/mover_blend.c)
 # scene; a reset drawn as a loop sweeps a piston backwards across a substep.
 add_unit_test(mover_wraps framerate_fix framerate_fix/mover_wraps.c)
 
+# The side table that remembers a mover's previous pose. For weeks nothing gave a slot back, and
+# the third level of a session was drawn stepped because the first two still owned the table; the
+# emptying on a level opening and the aging of a slot are the two ways back, and both are pinned.
+add_unit_test(mover_slots framerate_fix framerate_fix/mover_slots.c framerate_fix/mover_evenness.c)
+
 # The instrument that judges whether a mover draws evenly. Two earlier versions of it were wrong in
 # ways a play session could not reveal, and both wrong answers were believed: one measured a speed
 # range rather than jitter, and one reset its history on the second of the two calls each subnode

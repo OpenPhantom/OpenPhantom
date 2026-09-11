@@ -52,6 +52,7 @@ add_engine_fix(framerate_fix
     object_track.c
     mover_blend.c
     mover_evenness.c
+    mover_slots.c
     mover_wraps.c
 )
 target_link_libraries(framerate_fix PRIVATE winmm)

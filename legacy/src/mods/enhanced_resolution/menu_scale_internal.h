@@ -126,7 +126,9 @@ bool menu_scale_repoint_origin(const uintptr_t *sites, size_t count);
  * whatever changes the canvas afterwards has to do it instead. Either pointer may be NULL.
  *
  * Reads scale_state's canvas and the display, so call it after the canvas is in force. */
-void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y);
+/* False when the engine has no screen size yet, which is the one case it declines on; the two
+ * out parameters are written on every path either way, so a caller can report what it got. */
+bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y);
 
 /* Refits the canvas to the display if it has changed size, then checks the canvas still fits.
  * Called from both menu hooks in place of canvas_still_fits, which it ends with. */

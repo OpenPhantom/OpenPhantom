@@ -264,7 +264,7 @@ void menu_scale_apply_trimmings(bool verbose)
     }
 }
 
-void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y)
+bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y)
 {
     float   screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
     float   screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
@@ -272,8 +272,14 @@ void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y
     int32_t origin_y;
     float   scale;
 
+    /* Written before the one refusal below, so a caller that logs them cannot print whatever was
+     * on its stack. One did: it announced an origin it had never been given and said the glyph
+     * scale had been put back, on the one path where neither had happened. */
+    if (out_origin_x != NULL) { *out_origin_x = 0; }
+    if (out_origin_y != NULL) { *out_origin_y = 0; }
+
     if (!(screen_width > 0.0f) || !(screen_height > 0.0f)) {
-        return;                       /* no mode yet: the engine's own block has not run either */
+        return false;                 /* no mode yet: the engine's own block has not run either */
     }
 
     origin_x = ((int32_t)screen_width  - scale_state.canvas_width)  / 2;
@@ -299,6 +305,7 @@ void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y
 
     if (out_origin_x != NULL) { *out_origin_x = origin_x; }
     if (out_origin_y != NULL) { *out_origin_y = origin_y; }
+    return true;
 }
 
 /* ============================================================================================ */
@@ -406,7 +413,9 @@ static void refit(float ratio_x, float ratio_y, int32_t screen_width, int32_t sc
         return;
     }
     menu_scale_apply_trimmings(false);
-    menu_scale_derive_engine_cells(&origin_x, &origin_y);
+    /* The screen cells were read at the top of this function, so the derive cannot decline here
+     * and the result is nothing this path can act on. */
+    (void)menu_scale_derive_engine_cells(&origin_x, &origin_y);
 
     for (index = 0; index < scale_state.scaled_menu_count; ++index) {
         refit_menu(&scale_state.scaled_menus[index], previous_x, previous_y);

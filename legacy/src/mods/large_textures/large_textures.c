@@ -360,6 +360,7 @@ void large_textures_install(void)
 {
     uint32_t ceiling;
     uint32_t world_axis;
+    bool     ceiling_applied = false;
     bool     any = false;
 
     /* This comes before anything that logs. Without it every line this DLL writes is dropped,
@@ -389,13 +390,19 @@ void large_textures_install(void)
     }
 
     if (ceiling != 0u) {
-        any = apply_device_ceiling(ceiling) || any;
+        ceiling_applied = apply_device_ceiling(ceiling);
+        any = ceiling_applied || any;
     }
     if (world_axis != 0u) {
         /* The device ceiling still applies to a world page after it has been loaded, so a world
          * page larger than that ceiling would be cropped on upload even though it now loads. Say
          * so here instead of letting the player discover it as a wrong looking texture. */
-        uint32_t effective = texture_size_effective_ceiling(ceiling, ORIGINAL_CEILING);
+        /* What was APPLIED, not what was asked for. Passing the request meant that when the
+         * ceiling patch failed the engine kept its 256 while this compared against the larger
+         * number nobody got, so the one warning that would have named the cropping was skipped
+         * and the pages came out wrong with nothing in the log about why. */
+        uint32_t effective = texture_size_effective_ceiling(ceiling_applied ? ceiling : 0u,
+                                                            ORIGINAL_CEILING);
 
         if (world_axis > effective) {
             log_warning("MaxWorldPageSize %u is larger than the device ceiling %u. A world page "

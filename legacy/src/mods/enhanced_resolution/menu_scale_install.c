@@ -153,7 +153,11 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
      * them. Waiting for the engine to do it is not an option: its own block runs on a mode change
      * and this is reached without one. g_menuScale is the piece that used to be missed here, and
      * left behind it keeps the scaled canvas's glyph size against a 640x480 layout. */
-    menu_scale_derive_engine_cells(&origin_x, &origin_y);
+    if (!menu_scale_derive_engine_cells(&origin_x, &origin_y)) {
+        log_info("  the engine has no screen size yet, so the menu origin and the glyph scale are "
+                 "left for its own block to derive on the next mode change");
+        return;
+    }
 
     log_info("  menu origin put back to %d,%d, and the glyph scale with it", (int)origin_x,
              (int)origin_y);

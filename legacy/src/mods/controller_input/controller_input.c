@@ -383,6 +383,12 @@ static void poll_once(void)
                      "here; the game's own Controls screen still reads those.",
                      ci_state.config.controller_index);
         }
+        /* Whatever the pad was holding down goes up with it. The state is the zeroed one from
+           above, because a failed XInputGetState fills nothing in, so this releases Alt and
+           forgets the button and trigger edges rather than reading a pad that is not there.
+           Without it a trigger held at the moment the pad drops out leaves a synthetic Alt down
+           in the game, and in whatever gets focus after it, until the pad comes back. */
+        release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
         ci_state.pad_connected = false;
         return;
     }

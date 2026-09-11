@@ -83,6 +83,11 @@ and taps its own arrow key repeatedly while it does, one tap the instant the tri
 threshold and one more every 150ms after that for as long as it stays past it, each tap the same
 50ms-down shape as Escape's own press.
 
+A pad that disappears lets go of everything it was holding. The poll used to return on a failed
+read without releasing anything, so a trigger pulled at the moment the pad dropped out left a
+synthetic Alt down in the game, and in whatever took focus next, until the pad came back. The
+disconnect branch now releases exactly as the focus-loss branch always did.
+
 ### The fraction owed is its own file
 
 That fraction is the only part of this DLL with a right answer that can be checked without a

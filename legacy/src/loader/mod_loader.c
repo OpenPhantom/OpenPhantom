@@ -183,14 +183,23 @@ void mod_loader_run_once(void)
     char       directory[MAX_PATH];
     mod_list_t list;
     size_t     index;
+    bool       host_ok;
 
     if (loader_has_run) {
         return;
     }
     loader_has_run = true;
 
-    host_image_resolve();
+    /* The image before the log, the one place in the tree the order is reversed: the log's own
+     * path is the host's directory, which the resolve is what finds. The result is kept and
+     * judged once there is a log to say so in. */
+    host_ok = host_image_resolve();
     log_init("loader", true);
+    if (!host_ok) {
+        log_error("the host is not a 32-bit executable this loader can read, so no mod is loaded: "
+                  "every one of them patches a 32-bit image and would refuse for itself");
+        return;
+    }
 
     if (!early_trigger_armed()) {
         log_warning("the entry point hook did not arm, so the mods are loaded from the "

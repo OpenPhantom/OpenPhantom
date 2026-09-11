@@ -22,6 +22,7 @@
 
 #include "look_counts.h"
 
+#include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/stick.h"
@@ -495,6 +496,13 @@ void controller_input_install(void)
     ci_state.installed = true;
 
     log_init("controller_input", false);
+    /* Nothing here reads the image, and the call is still made: it is the first two lines of
+     * every DLL in this tree, and a DLL that found itself beside something other than the game's
+     * 32-bit executable has no business feeding that process synthetic input. */
+    if (!host_image_resolve()) {
+        log_error("no 32-bit host image, the controller is not read");
+        return;
+    }
 
     load_config(&ci_state.config);
     if (!ci_state.config.enabled) {

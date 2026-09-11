@@ -78,6 +78,7 @@ static bool try_load_chain(const char *path, const char *how)
         return false;
     }
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+        log_info("chain: no %s at %s", how, path);
         return false;
     }
 

@@ -13,6 +13,8 @@
  */
 #include "framerate_stats.h"
 
+#include "sim_clock.h"
+
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/signature.h"
@@ -193,6 +195,10 @@ typedef struct framerate_stats_state {
     uint32_t         frames_in_window;
     uint32_t         ticks_at_window_start;
     float            sim_time_at_window_start;
+    /* What the rebase had taken off when this window opened. The clock this reads is the one
+     * sim_clock subtracts from, so two samples of it are only comparable once the difference of
+     * these two is added back. */
+    double           sim_offset_at_window_start;
     float            delta_minimum;
     float            delta_maximum;
     float            delta_sum;
@@ -288,6 +294,7 @@ void framerate_stats_install(int frame_sample_interval, int player_frames)
         (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
     stats_state.sim_time_at_window_start =
         (stats_state.sim_time != NULL) ? *stats_state.sim_time : 0.0f;
+    stats_state.sim_offset_at_window_start = sim_clock_rebase_offset();
     if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
         stats_state.clock_at_window_start.QuadPart = 0;
     }
@@ -385,11 +392,24 @@ window_verdict_t framerate_stats_classify_window(bool clock_available,
     return WINDOW_VERDICT_MIXED;
 }
 
+/* How far the simulation advanced across this window, with the rebase added back.
+ *
+ * Without that term this read the clock jumping backwards about every two seconds and reported a
+ * level load that had not happened, which is worse than no line at all: it is a diagnostic saying
+ * the thing it exists to measure cannot be trusted, on a session where nothing was wrong. */
+static float window_simulation_advance(void)
+{
+    double taken = sim_clock_rebase_offset() - stats_state.sim_offset_at_window_start;
+
+    return (float)(((double)*stats_state.sim_time + taken) -
+                   (double)stats_state.sim_time_at_window_start);
+}
+
 /* The substep clause of the window line, which is the part that used to lie in a menu. */
 static void format_simulation_clause(char *text, size_t size, uint32_t ticks, double real)
 {
     float            advance  = (stats_state.sim_time != NULL)
-                              ? (*stats_state.sim_time - stats_state.sim_time_at_window_start)
+                              ? window_simulation_advance()
                               : 0.0f;
     window_verdict_t verdict  = framerate_stats_classify_window(stats_state.sim_time != NULL,
                                                                 advance, ticks);
@@ -474,6 +494,7 @@ static void log_frame_window(void)
         (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
     stats_state.sim_time_at_window_start =
         (stats_state.sim_time != NULL) ? *stats_state.sim_time : 0.0f;
+    stats_state.sim_offset_at_window_start = sim_clock_rebase_offset();
     if (!QueryPerformanceCounter(&stats_state.clock_at_window_start)) {
         stats_state.clock_at_window_start.QuadPart = 0;
     }

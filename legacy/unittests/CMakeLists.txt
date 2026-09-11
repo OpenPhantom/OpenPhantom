@@ -170,7 +170,10 @@ add_unit_test(face_latch framerate_fix framerate_fix/face_latch.c
 # The verdict that separates a gameplay window from a menu window. The counter it reports on is
 # shared with the menu, so before this existed the instrument printed a frame rate as a substep
 # rate, and an open item was raised against the simulation on the strength of it.
-add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c)
+# sim_clock.c comes with it: the window has to add back whatever the rebase took off the clock it
+# samples, so the two files are one measurement and linking only half of them does not build.
+add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c
+              framerate_fix/sim_clock.c framerate_fix/world_clock.c)
 
 # What a moving door looks like between two simulation steps. Pure arithmetic, and every way it
 # can be wrong is silent in review and loud on screen: a destroyed scale flickers the model, a
@@ -178,17 +181,16 @@ add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c)
 # jump on a grown one, and a skewed basis shears the geometry.
 add_unit_test(mover_blend framerate_fix framerate_fix/mover_blend.c)
 
-# WHEN a mover is drawn, which is a separate question from how far it is allowed to move and was
-# the half that stayed wrong after the stepping stopped. A mover runs on the frame clock and the
-# substep alpha describes the simulation clock, so applying one to the other left a lag that
-# varied from frame to frame. The lattice case is the one that matters: a constant lag is smooth
-# and a varying one is judder, whatever its size.
-add_unit_test(mover_weight framerate_fix framerate_fix/mover_weight.c)
+# The instrument that judges whether a mover draws evenly. Two earlier versions of it were wrong in
+# ways a play session could not reveal, and both wrong answers were believed: one measured a speed
+# range rather than jitter, and one reset its history on the second of the two calls each subnode
+# gets per frame and reported nothing at all from a real session.
+add_unit_test(mover_evenness framerate_fix framerate_fix/mover_evenness.c)
 
-# The instrument that has to settle what two derivations got wrong, so its own silent failures are
-# worth pinning down first: an unfilled range must say so rather than print its sentinel, and one
-# value that is not a number must not take a six hundred frame window with it.
-add_unit_test(mover_measure framerate_fix framerate_fix/mover_measure.c)
+# Which render cap to use, given a setting and a display. Three lines, and the reason they matter
+# took a whole evening: nothing in the shipped stack ties produced frames to shown ones, so a cap
+# below the refresh rate judders however correct the interpolation is.
+add_unit_test(frame_cap framerate_fix framerate_fix/frame_cap.c)
 
 # The one claim the simulation clock rebase stands on: taking the same amount off both clocks must
 # leave their difference exactly, because that difference IS the interpolation alpha. A rebase that
@@ -256,7 +258,7 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 # executable neither of them could resolve.
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
-    # the Window group, whose rows the model dispatches to, same as the Utilities group below
+    # the groups whose rows the model dispatches to, the same as the Utilities group below
     dev_overlay/overlay_window.c
     dev_overlay/fog_band_row.c
     dev_overlay/view_range_live_row.c

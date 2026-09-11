@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <math.h>
 #include <stdint.h>
 
 /* --- 0x0041125B  bapobj_drawAll, the position blend ------------------------------------------ *
@@ -73,6 +74,22 @@ static const uint8_t SIG_DRAW_POSITION[] = {
 
 static float object_travel_limit;
 
+/* How often the travel limit turns a rider away, and the furthest step it saw.
+ *
+ * Never counted before, so nobody knew. It matters because of what the camera does: the engine
+ * feeds bapview_setCamTarget the player record's own position once per substep and interpolates
+ * that pair on the same alpha, so the camera aims at the player's simulation position. A refused
+ * body is drawn at its current position instead, a whole step ahead of where the camera is
+ * pointing, and the difference shows as the body moving against the frame whenever the camera is
+ * following it.
+ *
+ * The limit is 2.0 units per step, chosen against a carried player moving 0.045. The mover guard
+ * allows a platform 64 units in the same step, so a rider on a fast platform can exceed 2.0 every
+ * step and be refused every step. */
+static uint32_t refused_by_limit;
+static uint32_t blends_seen;
+static float    worst_travel_squared;   /* squared, so the root is taken once at report time */
+
 /* 1 uses the remembered previous position, 2 reproduces the engine's own arithmetic, 3 uses
  * the engine's and reports where the remembered one would have disagreed. */
 static int   object_mode;
@@ -89,6 +106,8 @@ static float     worst_engine[3];
 static float     worst_current[3];
 static bool      worst_not_a_number;
 static unsigned  summary_countdown;
+static unsigned  limit_countdown;
+static bool      limit_reported;
 
 static bool finite3(const float *v)
 {
@@ -175,8 +194,19 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
     /* The limit is per step, so two samples several steps apart are allowed proportionally more
      * travel between them; without that a frame slow enough to span two steps reads an ordinary
      * walk as a teleport and stops smoothing exactly where the frame rate needs it most. */
-    object_track_blend(previous, current, object_track_weight(alpha, gap),
-                       object_travel_limit * (float)gap, drawn);
+    if (!object_track_blend(previous, current, object_track_weight(alpha, gap),
+                            object_travel_limit * (float)gap, drawn)) {
+        float dx = current[0] - previous[0];
+        float dy = current[1] - previous[1];
+        float dz = current[2] - previous[2];
+        float travel_squared = dx * dx + dy * dy + dz * dz;
+
+        ++refused_by_limit;
+        if (travel_squared > worst_travel_squared) {
+            worst_travel_squared = travel_squared;
+        }
+    }
+    ++blends_seen;
 
     *(float *)(frame_pointer - LOCAL_DELTA_X) = current[0] - previous[0];
     *(float *)(frame_pointer - LOCAL_DELTA_Y) = current[1] - previous[1];
@@ -189,6 +219,31 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
 void object_interpolation_frame(void)
 {
     object_track_frame();
+
+    /* Counted in every mode, because a refusal is invisible on screen except as the body drifting
+     * against a camera that is following it. Said ONCE, on the first window that sees one: it is
+     * a setting to change, not a running measurement, and a line every two hundred frames is a
+     * line every second and a half at a modern frame rate. Silence afterwards means nothing has
+     * been refused, or that the first report already named the number to raise. */
+    if (!limit_reported && ++limit_countdown >= DISAGREEMENT_SUMMARY_FRAMES) {
+        limit_countdown = 0;
+        if (refused_by_limit != 0) {
+            limit_reported = true;
+            log_warning("rider: the travel limit refused %u of %u blends over %u frames, worst "
+                        "step %.2f units against a limit of %.2f. A refused body is drawn at its "
+                        "current position while the camera keeps aiming at the interpolated one, "
+                        "so it moves against the frame. Raise RiderTravelLimitPerStep past the "
+                        "worst step if that is an ordinary ride rather than a teleport. Reported "
+                        "once.",
+                        (unsigned)refused_by_limit, (unsigned)blends_seen,
+                        (unsigned)DISAGREEMENT_SUMMARY_FRAMES,
+                        sqrt((double)worst_travel_squared),
+                        (double)object_travel_limit);
+        }
+        refused_by_limit = 0;
+        blends_seen      = 0;
+        worst_travel_squared = 0.0f;
+    }
 
     if (object_mode != 3) {
         return;

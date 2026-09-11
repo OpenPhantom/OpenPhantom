@@ -132,7 +132,8 @@ bool mover_blend_world(float *out,
          * each of them drew the newest pose instead and reproduced the stepping it was written to
          * remove. Both ends are now inclusive, and zero draws the earlier sample, which is a real
          * answer rather than a rejection. */
-        return false;
+        reason = MOVER_BLEND_WEIGHT_RANGE;
+        goto refused;
     }
 
     if (alpha == 1.0f) {
@@ -204,9 +205,10 @@ bool mover_blend_world(float *out,
     return true;
 
     /* One exit for every rejection, so a guard cannot be added later that forgets to name itself.
-     * `out` already holds `current` from the top of the function, and a refusal is what the
-     * caller draws
-     * on a refusal, so there is nothing to unwind here. */
+     * The weight guard above did exactly that: it returned directly, so its counter never moved
+     * and the one guard whose silence had already cost two play sessions was the one guard that
+     * could not be seen. `out` already holds `current` from the top of the function, so the
+     * caller has what it draws on a refusal and there is nothing to unwind here. */
 refused:
     if (out_reason != NULL) {
         *out_reason = reason;

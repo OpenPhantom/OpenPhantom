@@ -304,6 +304,69 @@ static void a_degenerate_row_is_refused(void)
              "and the current pose is what comes back");
 }
 
+/* Every refusal names itself, and it is the reason rather than the false that is checked.
+
+   This section exists because the counters lied. The weight guard returned directly instead of
+   through the one exit, so it never wrote a reason and its counter read zero for the whole life
+   of the feature, while every other guard was reporting honestly. Nothing in this file could see
+   that: every call passed NULL for the reason, and a NULL is what a broken guard and a working
+   one both look like. */
+static void every_refusal_names_itself(void)
+{
+    float previous[MOVER_WORLD_FLOATS];
+    float current[MOVER_WORLD_FLOATS];
+    float out[MOVER_WORLD_FLOATS];
+    int   reason;
+
+    make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
+    make_world(current, 20.0, 1.0f, 10.0f, 0.0f, 0.0f);
+
+    reason = MOVER_BLEND_OK;
+    ut_check(!mover_blend_world(out, previous, current, 2.5f, NO_TRANSLATION_LIMIT, &reason) &&
+                 reason == MOVER_BLEND_WEIGHT_RANGE,
+             "a weight past the end of the range is refused AS a weight out of range");
+
+    reason = MOVER_BLEND_OK;
+    ut_check(!mover_blend_world(out, previous, current, (float)NAN, NO_TRANSLATION_LIMIT,
+                                &reason) &&
+                 reason == MOVER_BLEND_WEIGHT_RANGE,
+             "and so is a weight that is not a number, under the same name");
+
+    reason = MOVER_BLEND_OK;
+    ut_check(!mover_blend_world(out, previous, current, 1.0f, NO_TRANSLATION_LIMIT, &reason) &&
+                 reason == MOVER_BLEND_IDENTITY,
+             "the identity is told apart from a fault, because it happens on every frame at 32");
+
+    make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
+    make_world(current, 101.0, 1.0f, 0.0f, 0.0f, 0.0f);
+    reason = MOVER_BLEND_OK;
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, &reason) &&
+                 reason == MOVER_BLEND_ROTATION,
+             "a wrap is named a rotation");
+
+    make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
+    make_world(current, 0.0, 1.0f, 298.0f, 0.0f, 0.0f);
+    reason = MOVER_BLEND_OK;
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, 10.0f, &reason) &&
+                 reason == MOVER_BLEND_TRANSLATION,
+             "and a jump past the travel limit is named a translation");
+
+    make_world(current, 10.0, 1.0f, 0.0f, 0.0f, 0.0f);
+    memset(previous, 0, sizeof(previous));
+    reason = MOVER_BLEND_OK;
+    ut_check(!mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, &reason) &&
+                 reason == MOVER_BLEND_ROW_LENGTH,
+             "a zeroed row is named a row length");
+
+    make_world(previous, 0.0, 1.0f, 0.0f, 0.0f, 0.0f);
+    make_world(current, 20.0, 1.0f, 10.0f, 0.0f, 0.0f);
+    reason = MOVER_BLEND_ROTATION;
+    ut_check(mover_blend_world(out, previous, current, 0.5f, NO_TRANSLATION_LIMIT, &reason) &&
+                 reason == MOVER_BLEND_OK,
+             "and a blend that happens says so, so nothing left over from a previous call reads "
+             "as this one's refusal");
+}
+
 int main(void)
 {
     the_endpoints_are_exact();
@@ -315,6 +378,7 @@ int main(void)
     the_guard_measures_an_angle_and_not_a_length();
     a_discontinuity_is_not_smoothed();
     a_degenerate_row_is_refused();
+    every_refusal_names_itself();
 
     return ut_summary("mover_blend");
 }

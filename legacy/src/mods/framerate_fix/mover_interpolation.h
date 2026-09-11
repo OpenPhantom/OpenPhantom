@@ -17,17 +17,10 @@
 
 /* `translation_limit` is the furthest a mover may legitimately travel in one simulation step; a
  * larger step is a teleport or a track wrapping round, and is drawn as the jump it is. Zero
- * disables that test and leaves only the rotation guard.
- *
- * `weight_mode` decides WHEN the mover is drawn rather than how far it may move, and the reasoning
- * behind the three answers sits with the arithmetic in mover_weight.h. An unrecognised value takes
- * the default rather than switching the feature off, because a mover drawn at a slightly wrong
- * moment is a smaller fault than a mover that steps. */
-/* `wrap_veto` keeps the pose-based track wrap test, which marks a wrapping mover unusable for
- * about two frames. mover_wraps.h has the case against it: for a looping track the wrap is not a
- * discontinuity in space, and a real one is caught by the blend's own geometric guards. */
-void mover_interpolation_install(bool enabled, float translation_limit, int weight_mode,
-                                 bool wrap_veto);
+ * disables that test and leaves only the rotation guard. */
+/* `log_evenness` turns on the drawn evenness measurement, which is off unless something is being
+ * investigated; mover_evenness.h says what it can and cannot tell you. */
+void mover_interpolation_install(bool enabled, float translation_limit, bool log_evenness);
 
 /* Called once per rendered frame. Emits the instrument line every so often, so that a build which
  * installed but never interpolated anything says so instead of looking like it worked. */

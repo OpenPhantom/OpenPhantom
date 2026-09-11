@@ -131,7 +131,11 @@ float object_track_weight(float alpha, uint32_t gap);
  * every comparison against a NaN is false, so the guard meant to catch a bad value would let
  * that one through and draw it.
  */
-void object_track_blend(const float *previous, const float *current, float weight, float limit,
+/* False when the pair was refused and `out_position` holds the current position unblended. The
+ * caller cannot tell otherwise, and the difference matters: the camera aims at the player's
+ * simulation position interpolated on the same alpha, so a refused body is drawn at a different
+ * moment from the one the camera is pointing at and moves against the frame. */
+bool object_track_blend(const float *previous, const float *current, float weight, float limit,
                         float *out_position);
 
 #endif /* OBJECT_TRACK_H */

@@ -31,6 +31,14 @@ void sim_clock_install(bool enabled, bool substep_clock);
  */
 double sim_clock_rebase_step(float live);
 
+/* Everything this feature has taken off the simulation clock since the level opened, in seconds.
+ * Zero when the rebase is off, and zero again from the moment a level opens.
+ *
+ * Published because framerate_stats reads the very cell this file subtracts from, and a window
+ * that spans a rebase otherwise sees the clock jump backwards and calls it a level load. A reader
+ * comparing two samples of that clock has to add back whatever was taken between them. */
+double sim_clock_rebase_offset(void);
+
 /* The world time the engine is currently at, as this file's detour last set it, rebase included.
  * False before the first substep of a level.
  *

@@ -67,8 +67,10 @@
  *
  * Answers `requested` unchanged whenever it cannot do better: the first call, a clock that has
  * gone backwards because a level opened, a step that is not positive, and anything not finite.
- * A requested value already a whole step or more past the previous one is on the lattice already
- * and is passed through, as every substep but the last of a frame produces.
+ * Otherwise it answers `previous + step` and does not consult `requested` at all. An earlier
+ * version passed a requested value through whenever it was already a step or more ahead; the
+ * reason that was wrong is at the return in world_clock.c, and it was measured rather than
+ * argued.
  */
 float world_clock_substep_time(float requested, float previous, bool have_previous, float step);
 

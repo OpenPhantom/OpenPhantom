@@ -16,6 +16,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | Key | Default | Meaning |
 |---|---|---|
 | `Enabled` | `1` | |
+| `MatchDisplayRefresh` | `1` | the cap follows the display's reported refresh rate and `TargetFps` is ignored. A cap below the refresh rate makes the screen repeat frames on an irregular pattern, which judders however correct the interpolation is; `frame_cap.h` carries the measurements. On by default, including when the key is absent, so an installation carrying an older `engine_fixes.ini` still gets it. When the display will not report a rate the configured number stands and the log says so |
 | `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
@@ -32,14 +33,38 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `RebaseSimClock` | `1` | take the same amount off both simulation clocks so their difference, which is the interpolation weight, keeps its precision on a long level |
 | `InterpolateParticles` | `1` | draw particles between simulation steps rather than on them |
 | `InterpolateMovers` | `1` | the same for movers: doors, lifts and platforms |
-| `MoverSubstepClock` | `0` | removes the substep loop's clamp of the world clock, so a mover integrates exactly one simulation step per substep and its sample pair lands on the same lattice as the alpha that blends it. This is the CAUSE of the residual mover jitter rather than a compensation for it, and unlike everything else here it changes how movers move rather than how they are drawn, so it ships off. Engine location `bapmap_setWorldClock`, shared with `RebaseSimClock` |
-| `MoverWrapVeto` | `1` | keeps the pose-based track wrap test, which draws a wrapping mover unblended for about two frames. It accounts for every refused pose measured, roughly 42 frames per 600 on the busiest mover, and for a looping track the wrap it refuses is not a discontinuity in space at all. 0 leaves the decision to the blend's own translation and rotation guards |
-| `MoverBlendMode` | `0` | the moment a mover is drawn at, as opposed to how far it may move. 0 is the substep alpha, as shipped, and still the best of them. 1 holds the mover one whole move behind and 2 extrapolates to the frame's own time; both were derived from the engine's clocks, played, and refused. 3 draws as 0 does and reports what the other two were working from |
+| `MoverSubstepClock` | `1` | removes the substep loop's clamp of the world clock, so a mover integrates exactly one simulation step per substep and its sample pair lands on the same lattice as the alpha that blends it. On by default on the strength of the measurement below: without it a mover's drawn step disagrees with its neighbours on about one frame in three, and with it on about one in eighty, so `InterpolateMovers` barely works without this. It changes how movers move rather than only how they are drawn, which is a phase shift of under one substep for everything else on that clock. Engine location `bapmap_setWorldClock`, shared with `RebaseSimClock` |
 | `MoverTravelLimitPerStep` | `64.0` | world units a mover may cross in one simulation step before the blend refuses it and snaps instead. Guards against a teleport being smeared into a slide |
 | `InterpolateRiders` | `1` | keep each drawn object's previous position here rather than reading the engine's, which a platform's carry flattens. `2` and `3` are measurements rather than settings; see **A rider had nothing to be drawn between** |
 | `RiderTravelLimitPerStep` | `2.0` | the furthest a CHARACTER may travel in one simulation step before the blend refuses it and draws it where it landed. Not the mover's number: 64 here is what made the first attempt unusable |
 | `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames |
 | `StatsPlayerFrames` | `0` | >0: dump the player's draw interpolation for N frames |
+
+## Produced frames against shown frames
+
+Worth its own heading, because it caused a long hunt in this DLL for a fault that was never here.
+
+`TargetFps` decides how fast frames are produced. Nothing in the shipped stack decides how fast
+they are shown. The game presents through `IDirectDrawSurface4_Flip`, and a flip on a flipping
+chain in exclusive fullscreen is scheduled for the next vertical retrace unless `DDFLIP_NOVSYNC`
+is passed, which the game does not pass. The wrapper that now translates that flip builds its
+device with `PresentationInterval = 0x80000000`, IMMEDIATE, so the pacing the flip used to
+guarantee is gone. Neither of the wrapper's two vsync settings changes it on the DirectDraw
+translation path, and its own DirectDraw section has no vsync key at all.
+
+The engine's own `stdDisplay_waitVBlank` at `0x0048F1F3` would have paced it, and it is dead code:
+a whole-image search finds no reference to it.
+
+So a produced rate below the refresh rate means the display repeats frames on an irregular
+pattern. Measured on a 144 Hz screen, a cap of 100 leaves 44 refreshes a second repeating a frame
+and a cap of 144 leaves none; on a 90 Hz Steam Deck OLED a cap of 60 leaves 30. Uncapped is smooth
+as well, measured at 256 to 310 frames a second, but by brute force rather than by pacing, and it
+loads one core fully. `MatchDisplayRefresh` picks the one option that is both smooth and cheap.
+
+The instrument caveat that goes with this: the drawn evenness figures below are only meaningful at
+a steady frame rate. A drawn object correctly moves further on a longer frame, so uncapped, where
+the frame time swings by a factor of three, the same measurement reads 35 to 40 per cent uneven
+with nothing wrong at all.
 
 ## Engine locations
 
@@ -324,6 +349,21 @@ never arrive and the record freezes. It is read from the engine's own counter no
 
 All three faults have a check that fails without the fix.
 
+**The travel limit was suspected of causing the camera jitter, and it is not.** The camera is fed
+the player record's own position by `bapview_setCamTarget`, once per substep, and the engine
+interpolates that pair on the same alpha, so it aims at the player's simulation position while the
+body is drawn from the remembered pair. A refused blend draws the body at its current position, a
+whole step ahead of where the camera points, and that would move against the frame only while the
+camera follows. Since `RiderTravelLimitPerStep` is 2.0 units, chosen against a carried player
+moving 0.045, and a platform is allowed 64 in the same step, a rider on a fast platform could have
+been refused on every step.
+
+Counted, over six windows of 200 frames: three refused nothing, and the others refused 2, 10 and 2
+blends out of roughly 4000, with worst steps of 26.89, 137.30 and 37.12 units. Those are spawns and
+pool reuses, the case the guard exists for. It never refuses a ride, and raising it would let a real
+teleport smear. The count stays in the log as a warning, because a refusal is invisible on screen
+except as the body drifting against a following camera.
+
 **Still open, and separate from this.** The platform itself is a touch jittery, which is the
 mover's own interpolation rather than the rider's. The instrument line reports 35 to 84 refused
 poses per 600 frames against 10,000 to 15,000 blended, so about one pose in 250 is drawn unblended.
@@ -425,120 +465,13 @@ separate from the guard.
 
 ### Testing status
 
-Built. `mover_weight` is unit tested at 16 checks, `mover_measure` at 17 covering the instrument's
-own silent failures, and `mover_blend` now covers the whole weight range including the
-extrapolating half that the old guard refused.
+Built, and `mover_blend` covers the whole weight range including the extrapolating half the old
+guard silently refused. The blend applies the substep alpha, as shipped, and the measurements above show that
+to be correct once the render cap matches the display.
 
-Mode 0 is what ships and is played.
-
-Mode 2 was then played with the guard widened, so the arithmetic ran for the first time, and it was
-worse: the platform jittered more and the character on it started jittering again. Both of those
-follow from what was already measured and neither is a surprise once it is written down.
-
-**The platform got worse because the elapsed time it is built on is wrong.** The measurement floor
-of exactly -14.58 ms is the alpha's own change from one frame to the next, so the phase ranges from
--0.875 to 1.0 rather than sweeping 0 to 1, and a weight of one plus that phase is noise between
-0.125 and 2.0. Extrapolating by a noisy amount is worse than not extrapolating. The cause is in the
-correction above: `bapmap_carryRider` ticks the mover a character stands on from the substep path,
-so the snapshot is taken mid-frame with that substep's alpha rather than on the frame sweep.
-
-**The character got worse for a different reason, and it is the important one.** A rider is drawn
-one simulation step behind, because that is what interpolating between two known positions costs.
-Mode 2 draws the platform at the frame's own time, with no lag at all. So the two stop agreeing,
-and the relative motion between a character and the surface it is standing on is far more visible
-than either one's absolute error. Mode 0 avoids this by accident: the platform and the rider are
-both on the frame lattice and both blended by the same alpha, so they are wrong together.
-
-That reframes the whole problem. The goal is not to draw a mover at the frame's own time. It is to
-draw a mover and whatever is riding it at the SAME moment, advancing uniformly. Any future attempt
-that fixes the platform without moving the rider with it will fail this way again, and the failure
-looks like a character problem rather than a mover one.
-
-### Three of the four blend modes corrected a lag that does not exist
-
-`bapvrt_transformWorld`, the world draw itself, calls `bapmap_tickMover(mover, world->worldTime)`
-at `0x419B2C` immediately before the `bapmap_matMul3` and `mat34_invertRigid` this DLL redirects,
-every time the draw moves to a new mover subnode. Movers are integrated LAZILY, from the draw. So
-every drawn mover is already at the current world clock at the instant it is drawn, whatever order
-the modules install in. It also explains a stall census counting thousands of tick calls per
-frame arriving through this DLL's own trampoline.
-
-That disposes of the reasoning behind modes 1, 2 and a fourth since deleted. The claim was that a
-mover ticked by the frame sweep is drawn from a pose predating the current step boundary while the
-mover a character stands on is not. Neither is: whoever ticked a mover earlier in the frame, the
-draw ticks it again before reading it. Mode 4 computed the staleness as
-`(world_now - pose_world) / step`, where both values are the same float read back out of
-`world+0x54`, so it was always zero and the mode drew exactly what mode 0 draws. It was played and
-credited with improving a measurement from 3.222 to 2.666, which is identical code disagreeing
-with itself.
-
-### The measurement that credited it was not measuring jitter
-
-The drawn step ratio divided the largest consecutive-frame step a subnode made by the smallest.
-That is a speed range. A lift easing into its stop, a door decelerating and a platform reversing
-all score three, six or twenty while moving perfectly smoothly, because the smallest step in the
-window is the last one before the mover stopped. Its two bounds also lived in the subnode rather
-than in the window and were never reset, so one slowdown tainted that subnode for the rest of the
-session.
-
-Jitter is a frame whose step disagrees with its neighbours, not a window whose steps span a range.
-The test now compares each frame's drawn step against the mean of the step before and the step
-after, counts the frames off by more than five per cent, and requires all three to clear the floor
-so a mover coming to rest is not condemned for stopping.
-
-### Where this stopped, and what is left
-
-`MoverBlendMode=4` was played, did not fix it, and has been deleted: it was arithmetically
-identical to mode 0, for the reason two sections above, and the numbers it was judged by were
-noise.
-
-**What is established.** The sample interval is exactly one simulation step with
-`MoverSubstepClock=1`, where it used to swing between one and two frames. The substep alpha
-advances uniformly, within 0.4 per cent of exact, over all 600 frames of a window including the
-320 where the pair rolls. Every refused pose is a genuine track wrap: the six blend guards account
-for none of them, and the busiest offender wraps 21 times per window with a drop of 27.12 against
-a track of 29.00, which is 94 per cent of the track. It is specific to movers, since the world
-scrolling past on foot is smooth.
-
-**What is ruled out.** The frame cadence and the display, because only movers show it. The blend's
-guards. The wrap verdict being too eager. The weight range. The step count. Three different ways
-of correcting the drawn moment, one of which never ran because a guard silently refused every
-weight it produced.
-
-**The wrap veto was the last hypothesis with evidence behind it, and it is eliminated.** The
-reasoning was sound: a wrap marks every subnode of that mover unusable until its next integrating
-tick, and because the draw is what integrates a mover that means the wrap frame plus every frame
-until the world clock next advances, about two at 60 fps. The busiest mover wraps 21 times per 600
-frames, so roughly 42 frames come out unblended, a hitch four times a second on that mover. For a
-looping track the wrap is not a discontinuity in space at all: the two poses either side are one
-step of travel apart, and refusing to blend them makes this DLL the cause of stepping. The
-genuinely discontinuous wraps, 298 units and 101 degrees, are caught anyway by the translation
-limit and the rotation guard, which judge the geometry rather than a track parameter.
-
-Played with `MoverWrapVeto=0`. Refused poses fell from 35 to 84 down to exactly zero, which
-confirms the veto accounts for every refusal in the log, and the platform jittered exactly as
-before. So the veto is not the residual. It is left on, because switching it off now would be a
-change with no evidence behind it, and the argument above says it is redundant rather than harmful
-for anything measured.
-
-**The alpha gate is closed too.** The mover blend reads the substep alpha through the engine's
-latch when the gate at `0x5BACE8` is set, and the world draw runs before `bapobj_drawAll`
-refreshes that latch, so a set gate would index movers by a different alpha from the one objects
-use. It is never set during play: the cell has exactly two writers, both one-instruction functions
-called from the Bapobj message handler, with message 8 setting it and messages 3, 5, 6 and 9
-clearing it. It is the pause latch, set while the simulation is suspended and cleared on resume,
-level open and level close. During play it is zero and both paths read the same global.
-
-**A previous version of this section proposed measuring the mover's own per-step travel.** That
-would be fooled by the same mistake the ratio made: a mover with authored easing has uneven
-per-step travel by design and should be drawn that way.
-
-**So the residual is unexplained, and six hypotheses are eliminated with evidence rather than by
-feel**: the frame cadence and the display, the six blend guards, the weight range, three separate
-corrections of the drawn moment, the wrap veto, and the alpha latch. What is left is a small
-visible imperfection on top of a large measured improvement, and the next idea should come from a
-fresh look rather than another variation on a correction applied to a pair that is already on the
-right lattice.
+Played at 144 frames a second on a 144 Hz screen with the cap matched, where the platform is smooth
+and a character stays put on it. The residual that was open through several sessions is closed and
+was never in this arithmetic.
 
 ### Removing the cause instead: `MoverSubstepClock`
 
@@ -560,7 +493,8 @@ and an earlier version of the check asked for more than 550 on the assumption th
 every frame. It does not, and that same assumption is what made the three draw-side attempts fail,
 so the count is pinned down deliberately.
 
-**It ships off, and the reason is not caution.** The world clock is a value the simulation reads,
+**It changes a value the simulation reads, so defaulting it on needed a measurement rather than a
+preference.** The world clock is read by the simulation,
 so this changes how movers move rather than how they are drawn. Un-clamped it runs up to one
 substep ahead of the frame's time, which is where the object simulation already sits. The average
 rate is untouched, since the loop runs the same number of substeps and each now advances the clock
@@ -569,6 +503,20 @@ every other reader of that clock. A constant offset of up to one step also remai
 because the first value after a level opens has no predecessor to be un-clamped against, and
 correcting it would need the loop's own simulation time and would move nothing relative to
 anything else.
+
+**Measured against itself, at a frame rate steady enough to trust.** Two runs at a matched 144 Hz,
+frame time inside 6.93 to 6.96 ms both times, five windows each, counting drawn frames whose step
+disagrees with the mean of its neighbours by more than five per cent:
+
+| | uneven frames | share |
+|---|---|---|
+| `MoverSubstepClock=0` | 226/618, 1034/3000, 1351/3658, 1443/3993, 431/1275 | about 35 per cent |
+| `MoverSubstepClock=1` | 36/1547, 29/1487, 49/4170, 49/3955, 52/4236 | about 1.5 per cent |
+
+A factor of about twenty five, and the second run was reported as fully smooth by eye. The stronger
+conclusion is that without it mover interpolation is largely defeated: one frame in three
+disagreeing with its neighbours is why movers still looked stepped with the feature switched on.
+`InterpolateMovers` and this are one fix in two halves.
 
 **Played, and it is much better.** A character stays put on a moving platform and the platform
 itself went from clearly stepping to barely jittery. Nothing paced off the world clock was

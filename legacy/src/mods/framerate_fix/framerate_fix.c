@@ -48,6 +48,7 @@
 #include "common/cinematic_gate.h"
 #include "draw_interpolation.h"
 #include "face_latch.h"
+#include "frame_cap.h"
 #include "frame_delta.h"
 #include "framerate_stats.h"
 #include "mover_interpolation.h"
@@ -213,6 +214,7 @@ static signature_t sites[SITE_COUNT] = {
 typedef struct framerate_config {
     bool  enabled;
     int   target_fps;            /* 0 = uncapped (clears g_frameLimiterOn) */
+    bool  match_display_refresh; /* the cap follows the screen, TargetFps ignored */
     bool  compensate_camera;
     bool  compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
     bool  compensate_camera_in_cutscenes;
@@ -227,9 +229,8 @@ typedef struct framerate_config {
     bool  interpolate_particles;
     bool  rebase_sim_clock;
     bool  interpolate_movers;
-    int   mover_blend_mode;
     bool  mover_substep_clock;
-    bool  mover_wrap_veto;
+    bool  log_mover_evenness;
     float mover_travel_limit;    /* world units a mover may cross in one simulation step */
 
     /* The same question for what STANDS on a mover. A carried character has its previous
@@ -262,6 +263,11 @@ static void load_config(void)
 
     config->enabled                = ini_read_bool(FRAMERATE_SECTION, "Enabled", true);
     config->target_fps             = ini_read_int (FRAMERATE_SECTION, "TargetFps", 0);
+    /* Recommended rather than default, because it changes the frame rate a player
+     * chose. frame_cap.h has the measurements: a cap below the refresh rate judders
+     * whatever this DLL does about interpolation. */
+    config->match_display_refresh  =
+        ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
     config->compensate_camera      = ini_read_bool(FRAMERATE_SECTION, "CompensateCamera", true);
     config->compensate_camera_anchor =
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraAnchor", true);
@@ -279,43 +285,16 @@ static void load_config(void)
     config->interpolate_particles  =
         ini_read_bool(FRAMERATE_SECTION, "InterpolateParticles", true);
     config->rebase_sim_clock       = ini_read_bool(FRAMERATE_SECTION, "RebaseSimClock", true);
-    /* OFF by default and it has to be: it changes how movers move, not how they are drawn.
-     * world_clock.h has the arithmetic, what it repairs and what it shifts. */
-    config->mover_substep_clock    =
-        ini_read_bool(FRAMERATE_SECTION, "MoverSubstepClock", false);
-    /* On by default because it is what shipped, and under suspicion: mover_wraps.h has the
-     * measurement and the argument that it steps every looping mover twice a lap. */
-    config->mover_wrap_veto        = ini_read_bool(FRAMERATE_SECTION, "MoverWrapVeto", true);
     config->interpolate_movers     = ini_read_bool(FRAMERATE_SECTION, "InterpolateMovers", true);
-    /* Which moment a mover is drawn at, which is a different question from whether it is
-     * interpolated at all; mover_weight.h carries the arithmetic and mover_measure.h the reason
-     * the default is 0. Modes 1 and 2 were derived from the engine's clocks, built and played,
-     * and both were WORSE than the substep alpha they replaced, so the shipped arithmetic keeps
-     * the default until the measurement in mode 3 says which assumption was wrong. Out of range
-     * takes the default rather than switching the feature off. */
-    config->mover_blend_mode       = ini_read_int(FRAMERATE_SECTION, "MoverBlendMode", 0);
-    if (config->mover_blend_mode < 0 || config->mover_blend_mode > 4) {
-        log_warning("MoverBlendMode=%d is out of range (0 to 4), using 0",
-                    config->mover_blend_mode);
-        config->mover_blend_mode = 0;
-    }
-    /* A combination that contradicts itself, and neither setting is wrong on its own. The substep
-     * clock puts a mover's sample pair on the same lattice as the alpha, which makes the alpha the
-     * correct weight; modes 1 and 2 then apply a correction for a mismatch that is no longer
-     * there, and mode 2 in particular pushes a platform ahead of the character riding it. Named
-     * rather than refused, because someone comparing the two deliberately should be able to. */
-    if (config->mover_substep_clock &&
-        (config->mover_blend_mode == 1 || config->mover_blend_mode == 2)) {
-        log_warning("MoverSubstepClock=1 with MoverBlendMode=%d is a contradiction. The substep "
-                    "clock already puts a mover's sample pair on the same lattice as the alpha "
-                    "that blends it, so mode 0 is the correct weight and these modes correct for "
-                    "a mismatch that is no longer there. Mode 2 will push a platform ahead of "
-                    "anyone standing on it. Use MoverBlendMode=0, or 3 to measure.",
-                    config->mover_blend_mode);
-    }
-    /* 2 and 3 are measurements rather than settings; see object_interpolation.h. Both were
-     * needed to get 1 working and both are kept, because the next fault on this path will want
-     * them again. */
+    /* ON by default, on the strength of a measurement rather than a preference. Without it a
+     * mover's drawn step disagrees with its neighbours on about one frame in three, and with it
+     * on about one in eighty, so the interpolation above barely works without this. It does
+     * change how movers move rather than only how they are drawn; world_clock.h has what that
+     * costs, and it is a phase shift of under one substep for everything else on that clock. */
+    config->mover_substep_clock    =
+        ini_read_bool(FRAMERATE_SECTION, "MoverSubstepClock", true);
+    config->log_mover_evenness     =
+        ini_read_bool(FRAMERATE_SECTION, "LogMoverEvenness", false);
     config->interpolate_riders     = ini_read_int(FRAMERATE_SECTION, "InterpolateRiders", 1);
     if (config->interpolate_riders < 0 || config->interpolate_riders > 3) {
         log_warning("InterpolateRiders=%d is out of range (0 to 3), using 0",
@@ -384,53 +363,35 @@ static void resolve_globals(void)
 static void patch_render_cap(void)
 {
     uintptr_t site = sites[SITE_WAIT_FOR_FRAME].address;
-    uint8_t   cmp_opcode[2];
-    uint32_t  limiter_address;
 
     if (site == 0) {
         log_warning("wait_for_frame did not resolve, the 30 Hz cap STAYS");
         return;
     }
 
-    if (framerate_state.config.target_fps > 0) {
-        float cap = 1.0f / (float)framerate_state.config.target_fps;
+    /* frame_cap.c owns the cap itself, because the cap has to be changeable while the game runs:
+     * the dev panel offers it, and matching the display is a setting rather than a one-off write.
+     * The site stays here, since this file owns the signature table for this function and the
+     * frame delta repair and the Sleep push below sit on the same pattern. */
+    if (frame_cap_install(site)) {
+        int refresh = frame_cap_refresh_hz();
 
-        /* BOTH WRITES OR NEITHER. If the cheat arm is not where it is expected, the 30 Hz write on
-           its own would still cap the frame rate, and the 60fps cheat could then undo it from
-           inside the game with nothing here to notice. A half applied cap is the shape this
-           project's own rule about unknown builds exists to refuse, so the whole cap declines and
-           says which byte disagreed. */
-        if (!patch_validate_bytes(site + OFFSET_CAP_60_MOV, EXPECTED_CAP_60_MOV,
-                                  sizeof(EXPECTED_CAP_60_MOV))) {
-            log_warning("the 60fps cheat arm is not the expected `mov [ebp-4],1/60` at %08X, so "
-                        "the render cap is left alone entirely rather than half applied",
-                        (unsigned)(site + OFFSET_CAP_60_MOV));
-            return;
+        if (framerate_state.config.match_display_refresh && refresh == 0) {
+            log_warning("MatchDisplayRefresh=1 but the display will not report a refresh rate, so "
+                        "TargetFps=%d stands. A cap that does not match the refresh leaves the "
+                        "screen repeating frames on an irregular pattern",
+                        framerate_state.config.target_fps);
         }
-
-        patch_write_f32(site + OFFSET_CAP_30_IMMEDIATE, cap);
-        patch_write_f32(site + OFFSET_CAP_60_IMMEDIATE, cap);   /* the cheat arm must not undo us */
-        log_info("render cap -> %d fps (%.8f s) at %08X and %08X",
-                 framerate_state.config.target_fps, (double)cap,
-                 (unsigned)(site + OFFSET_CAP_30_IMMEDIATE),
-                 (unsigned)(site + OFFSET_CAP_60_IMMEDIATE));
-    } else {
-        /* Uncapped: clear g_frameLimiterOn. Its address is the operand of `cmp [imm32], 0`, and
-         * the opcode pair is checked before the operand is believed. */
-        if (!memory_read(site + OFFSET_LIMITER_CMP, cmp_opcode, sizeof(cmp_opcode)) ||
-            cmp_opcode[0] != 0x83 || cmp_opcode[1] != 0x3D) {
-            log_warning("the limiter `cmp [imm32],0` shape is not at %08X, so the cap is left "
-                        "alone", (unsigned)(site + OFFSET_LIMITER_CMP));
-            return;
+        frame_cap_apply(frame_cap_effective(framerate_state.config.target_fps,
+                                            framerate_state.config.match_display_refresh,
+                                            refresh));
+        if (framerate_state.config.match_display_refresh && refresh > 0) {
+            log_info("MatchDisplayRefresh=1, so the cap follows the display at %d Hz rather than "
+                     "the configured TargetFps=%d. Nothing in the shipped stack ties produced "
+                     "frames to shown ones, so a cap below the refresh judders however correct "
+                     "the interpolation is",
+                     refresh, framerate_state.config.target_fps);
         }
-        if (!memory_read_u32(site + OFFSET_LIMITER_ADDRESS, &limiter_address) ||
-            !memory_is_inside_image(limiter_address, sizeof(uint32_t))) {
-            log_warning("the limiter address %08X is out of image, the cap is left alone",
-                        (unsigned)limiter_address);
-            return;
-        }
-        patch_write_u32(limiter_address, 0);
-        log_info("UNCAPPED, g_frameLimiterOn [%08X] cleared", (unsigned)limiter_address);
     }
 
     if (framerate_state.config.spin_sleep) {
@@ -567,6 +528,30 @@ static void patch_emitter_dormancy(void)
 #define SCALE_QUANTISATION 256.0f
 #define MAX_PLAUSIBLE_DELTA 0.25f
 
+/* The cap, re-read about once a second so the dev panel's own row takes effect while the game
+ * runs rather than at the next launch. Only the two keys it needs are read, and the write inside
+ * frame_cap_apply is skipped when the value has not moved, which is every second but the one
+ * somebody changes something. */
+#define FRAME_CAP_POLL_SECONDS 1.0f
+
+static void poll_frame_cap(void)
+{
+    static float since_poll;
+
+    since_poll += *framerate_state.frame_delta;
+    if (since_poll < FRAME_CAP_POLL_SECONDS) {
+        return;
+    }
+    since_poll = 0.0f;
+
+    {
+        int  configured = ini_read_int(FRAMERATE_SECTION, "TargetFps", 0);
+        bool match       = ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
+
+        frame_cap_apply(frame_cap_effective(configured, match, frame_cap_refresh_hz()));
+    }
+}
+
 static void on_frame(void)
 {
     float frame_delta;
@@ -634,6 +619,7 @@ static void on_frame(void)
     framerate_stats_sample(frame_delta);
     mover_interpolation_sample();
     sim_clock_sample();
+    poll_frame_cap();
 }
 
 /* ============================================================================================ */
@@ -745,8 +731,7 @@ void framerate_fix_install(void)
                       framerate_state.config.mover_substep_clock);
     mover_interpolation_install(framerate_state.config.interpolate_movers,
                                 framerate_state.config.mover_travel_limit,
-                                framerate_state.config.mover_blend_mode,
-                                framerate_state.config.mover_wrap_veto);
+                                framerate_state.config.log_mover_evenness);
 
     /* After the movers, because the two are read together in the log and a platform that is
      * not smoothed makes the rider question meaningless. Neither depends on the other at

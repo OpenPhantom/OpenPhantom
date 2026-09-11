@@ -6,15 +6,16 @@
  * them, the latch the substep alpha has to be read through, the subnode layout, and the three
  * designs that were tried and rejected: detouring the shared callee, trusting the engine's own
  * previous pose, and deciding a track wrap on geometry. The seam taken is mover_blend.c, which
- * holds all of the arithmetic, none of the engine, and is tested on its own. Two more have been
- * taken since, both whole responsibilities rather than trims: mover_weight.c for the weight a
- * mode asks for, and mover_measure.c for the diagnostic window, which owns both the gathering and
- * the reporting so the hooks here carry a call and not the arithmetic. This file passed 900 lines
- * once, during the mover clock work, and the second of those seams was taken then. A second
- * seam between
- * the tick side and the draw side was looked at and rejected: both are the same side table, so
- * splitting them would move the table and its hash into a header and would separate the snapshot
- * from the only code that reads it.
+ * holds all of the arithmetic, none of the engine, and is tested on its own; mover_wraps.c owns
+ * the track wrap verdict and the argument it rests on. A seam between the tick side and the draw
+ * side was looked at and rejected: both are the same side table, so splitting them would move the
+ * table and its hash into a header and would separate the snapshot from the only code that reads
+ * it.
+ *
+ * This file briefly carried four ways of choosing when a mover is drawn, and the instruments built
+ * to judge them, and passed 900 lines twice doing it. All of that is gone: the alternatives were
+ * refuted, the jitter they were chasing turned out to be the render cap not matching the display
+ * refresh rate, and frame_cap.h carries that. The README keeps the measurements.
  *
  * ================================ What is actually broken =====================================
  *
@@ -76,8 +77,7 @@
 #include "mover_interpolation.h"
 
 #include "mover_blend.h"
-#include "mover_measure.h"
-#include "mover_weight.h"
+#include "mover_evenness.h"
 #include "mover_wraps.h"
 
 #include "common/detour.h"
@@ -272,25 +272,14 @@ typedef struct mover_slot {
     float       interval;
     float       tick_alpha;
     uint32_t    tick_stamp;
-    /* The simulation step the snapshot was taken on, and how many steps its pair covers. Read
-     * from the engine's own counter, so the drawn moment can be stated rather than inferred from
-     * how far the alpha has travelled, which is read on both sides of the draw and was wrong for
-     * whichever mover fell on the other side. */
-    uint32_t    step_span;
-    /* The world time this pose belongs to. The engine's current world time is
-     * compared against to find out how stale it is. */
-    float       tick_world;
-    /* MoverBlendMode=3 only: this subnode's own drawn history, for the one measurement that is
-     * not a proxy for the alpha. */
-    mover_drawn_t drawn;
+    /* LogMoverEvenness only: this subnode's own drawn history. */
+    mover_evenness_state_t evenness;
 } mover_slot_t;
 
 typedef struct mover_interpolation_state {
     bool      installed;
     bool      enabled;
     float     translation_limit;
-    int       weight_mode;
-    bool      wrap_veto;
 
     detour_t  tick;
     uintptr_t original_matmul;
@@ -308,14 +297,7 @@ typedef struct mover_interpolation_state {
      * the report mode: the total on its own has twice now looked reassuring while hiding the
      * thing that mattered. */
     uint32_t            refusals[MOVER_BLEND_REASON_COUNT];
-    /* The largest pose drop seen while NOT wrapping, which is one substep of travel for the
-     * fastest mover in view and is the yardstick the wrap verdict has to beat. */
-    float               widest_drop;
 
-    /* MoverBlendMode=3 only. The stamp is monotonic and advances once per rendered frame, so a
-     * tick and a draw inside one frame read the same value and the difference between them is a
-     * count of whole frames. */
-    mover_measurement_t measurement;
     uint32_t            frame_stamp;
 
     uint32_t frames;
@@ -400,8 +382,6 @@ static bool interpolated_world(float *out, const float *world)
     mover_slot_t       *slot;      /* not const: the report mode keeps this subnode's own
                                     * drawn history in it */
     float               alpha;
-    float               weight;
-    float               elapsed;
     int                 reason = MOVER_BLEND_OK;
 
     if (!mover_state.enabled) {
@@ -425,24 +405,8 @@ static bool interpolated_world(float *out, const float *world)
      * frame this mover last moved on is the step period times how far the alpha has travelled.
      * That is the whole measurement; no absolute clock is read and nothing decays with level
      * time. */
-    elapsed = (alpha - slot->tick_alpha) * MOVER_SUBSTEP_SECONDS;
-    weight  = alpha;
-
-    if (mover_state.weight_mode == MOVER_WEIGHT_REPORT) {
-        /* The alpha is what gets drawn, so the game looks exactly as mode 0 does while this says
-         * what modes 1 and 2 were working from. */
-        mover_measure_draw(&mover_state.measurement, alpha, elapsed, slot->interval,
-                           mover_state.frame_stamp - slot->tick_stamp);
-    } else if (mover_state.weight_mode != MOVER_WEIGHT_ALPHA &&
-               !mover_weight_for(mover_state.weight_mode, elapsed, slot->interval,
-                                 &weight)) {
-        /* No phase to be had, so the engine's own newest pose is the honest answer. */
-        ++mover_state.rejected;
-        return false;
-    }
-
-    if (!mover_blend_world(out, slot->previous, world, weight, mover_state.translation_limit,
-                           &reason)) {
+    if (!mover_blend_world(out, slot->previous, world, alpha,
+                           mover_state.translation_limit, &reason)) {
         ++mover_state.rejected;
         if (reason >= 0 && reason < MOVER_BLEND_REASON_COUNT) {
             ++mover_state.refusals[reason];
@@ -451,11 +415,9 @@ static bool interpolated_world(float *out, const float *world)
     }
     ++mover_state.blended;
 
-    /* AFTER the blend, with what is actually about to be drawn. Every other number gathered here
-     * describes the alpha; this one describes the position on screen, which is the alpha applied
-     * to a pair of poses and is only as even as that pair rolling in step with it. */
-    mover_measure_drawn(&mover_state.measurement, &slot->drawn, out + MOVER_TRANSLATION,
-                        mover_state.frame_stamp);
+    /* After the blend, with what is actually about to be drawn, and it costs nothing unless
+     * LogMoverEvenness asked for it. */
+    mover_evenness_note(&slot->evenness, out + MOVER_TRANSLATION, mover_state.frame_stamp);
     return true;
 }
 
@@ -498,7 +460,7 @@ static void __cdecl hook_mover_invert(void *destination, const float *world)
  * would be drawn running backwards across a frame. Comparing the pose before and after the
  * original settles it with one subtraction and nothing to tune. */
 static void snapshot_subnodes(const uint8_t *mover, bool wrapped, float interval,
-                              float tick_alpha, float tick_world)
+                              float tick_alpha)
 {
     int32_t count;
     int32_t index;
@@ -533,11 +495,6 @@ static void snapshot_subnodes(const uint8_t *mover, bool wrapped, float interval
         slot->interval   = interval;
         slot->tick_alpha = tick_alpha;
         slot->tick_stamp = mover_state.frame_stamp;
-        /* Unsigned, so a counter that has wrapped still gives the true distance. One at minimum:
-         * a span of zero would be a division by it, and a snapshot taken twice on the same step
-         * has not moved the pair on. */
-        slot->step_span  = 1u;
-        slot->tick_world = tick_world;
         slot->usable     = true;
     }
 }
@@ -560,10 +517,6 @@ static void __cdecl hook_tick_mover(void *mover, float now)
      * every field read below, MOVER_TRACK_LENGTH at 0x28, MOVER_POSE at 0x2C and MOVER_TIME_BASE
      * at 0x30; only the way it is checked changed, to the structured-exception form common/memory.c
      * documents for exactly this case, which is a few instructions instead of a syscall. */
-    if (mover_state.weight_mode == MOVER_WEIGHT_REPORT) {
-        ++mover_state.measurement.calls;
-    }
-
     integrating = (record != NULL) &&
                   memory_try_readable((uintptr_t)record, MOVER_TIME_BASE + sizeof(float)) &&
                   (*(const float *)(record + MOVER_TIME_BASE) != now);
@@ -579,11 +532,8 @@ static void __cdecl hook_tick_mover(void *mover, float now)
         pose_before = *(const float *)(record + MOVER_POSE);
         /* `now` IS this pose's world time, which is the whole point: it does not matter where in
          * the frame this tick happened. */
-        snapshot_subnodes(record, false, now - previous_base, tick_alpha, now);
+        snapshot_subnodes(record, false, now - previous_base, tick_alpha);
 
-        if (mover_state.weight_mode == MOVER_WEIGHT_REPORT) {
-            mover_measure_tick(&mover_state.measurement, now - previous_base);
-        }
     }
 
     original(mover, now);
@@ -592,21 +542,10 @@ static void __cdecl hook_tick_mover(void *mover, float now)
     if (integrating) {
         float pose_after = *(const float *)(record + MOVER_POSE);
         float track      = *(const float *)(record + MOVER_TRACK_LENGTH);
-        float drop       = pose_before - pose_after;
 
         if (mover_wraps_is_wrap(pose_before, pose_after, track)) {
             ++mover_state.wrapped;
-            mover_wraps_note((uintptr_t)record, track, drop);
-            /* MoverWrapVeto. Off, the two geometric guards inside the blend decide instead, on
-             * the argument in mover_wraps.h: a looping track's wrap is not a discontinuity in
-             * space, and a real one is caught by the translation limit and the rotation guard. */
-            if (mover_state.wrap_veto) {
-                snapshot_subnodes(record, true, 0.0f, 0.0f, 0.0f);
-            }
-        } else if (drop > mover_state.widest_drop) {
-            /* The largest drop that was NOT a wrap, which is one substep of travel for the
-             * fastest mover in view and is the yardstick the wrap verdict has to beat. */
-            mover_state.widest_drop = drop;
+            snapshot_subnodes(record, true, 0.0f, 0.0f);
         }
     }
 }
@@ -751,19 +690,14 @@ static bool install_redirects(void)
     return true;
 }
 
-void mover_interpolation_install(bool enabled, float translation_limit, int weight_mode,
-                                 bool wrap_veto)
+void mover_interpolation_install(bool enabled, float translation_limit, bool log_evenness)
 {
     if (mover_state.installed) {
         return;
     }
-    mover_state.wrap_veto = wrap_veto;
     mover_state.installed         = true;
+    mover_evenness_enable(log_evenness);
     mover_state.translation_limit = (translation_limit > 0.0f) ? translation_limit : 0.0f;
-    mover_state.weight_mode =
-        (weight_mode >= MOVER_WEIGHT_ALPHA && weight_mode <= MOVER_WEIGHT_REPORT)
-            ? weight_mode : MOVER_WEIGHT_ALPHA;
-    mover_measure_reset(&mover_state.measurement);
 
     if (!enabled) {
         log_info("InterpolateMovers=0, doors and lifts keep stepping at the simulation rate");
@@ -794,18 +728,8 @@ void mover_interpolation_install(bool enabled, float translation_limit, int weig
 
     mover_state.enabled = true;
     log_info("movers are interpolated: 4 consumers redirected, alpha via the latch at %08X, "
-             "translation limit %.1f units per step, MoverBlendMode=%d (%s)",
-             (unsigned)(uintptr_t)mover_state.alpha_gate, (double)mover_state.translation_limit,
-             mover_state.weight_mode,
-             (mover_state.weight_mode == MOVER_WEIGHT_LAG)
-                 ? "one whole move behind, which is a constant lag of about 33 ms at 60 fps and "
-                   "keeps a platform level with the character it is carrying"
-                 : (mover_state.weight_mode == MOVER_WEIGHT_LEAD)
-                       ? "exactly where the frame wants it, extrapolated past the newest pose, so "
-                         "a mover that stops or reverses inside a frame overshoots by one frame"
-                       : "the substep alpha as it shipped, which is the comparison rather than a "
-                         "fix: a mover moves on the frame clock and the alpha describes the "
-                         "simulation clock, so the lag it produces varies from frame to frame");
+             "translation limit %.1f units per step",
+             (unsigned)(uintptr_t)mover_state.alpha_gate, (double)mover_state.translation_limit);
 }
 
 /* ============================================================================================ */
@@ -818,14 +742,6 @@ void mover_interpolation_sample(void)
     }
     ++mover_state.frames;
     ++mover_state.frame_stamp;
-
-    if (mover_state.weight_mode == MOVER_WEIGHT_REPORT) {
-        float alpha;
-
-        if (current_alpha(&alpha)) {
-            mover_measure_frame(&mover_state.measurement, alpha);
-        }
-    }
 
     if (mover_state.frames < REPORT_INTERVAL_FRAMES) {
         return;
@@ -854,42 +770,11 @@ void mover_interpolation_sample(void)
                  (unsigned)mover_state.refusals[MOVER_BLEND_ROTATION],
                  (unsigned)mover_state.refusals[MOVER_BLEND_TRANSLATION],
                  (unsigned)mover_state.refusals[MOVER_BLEND_BASIS]);
-        /* Each frame's drawn step against the mean of its neighbours. That is jitter.
-         * The old version of this divided the largest step by the smallest, which condemned any
-         * mover that accelerated and reported noise as a three-fold defect. */
-        log_info("drawn evenness: %u of %u judged frames disagreed with their neighbours by more "
-                 "than 5 per cent, worst %.1f per cent. A mover accelerating smoothly scores "
-                 "zero; a frame that jumps and the frame that holds after it both count",
-                 (unsigned)mover_state.measurement.steps_uneven,
-                 (unsigned)mover_state.measurement.steps_judged,
-                 (double)mover_state.measurement.worst_unevenness * 100.0);
-        mover_state.measurement.steps_judged     = 0;
-        mover_state.measurement.steps_uneven     = 0;
-        mover_state.measurement.worst_unevenness = 0.0f;
     }
 
-    if (mover_state.weight_mode == MOVER_WEIGHT_REPORT) {
-        /* The four numbers that decide this, and what each one has to be for the arithmetic in
-         * mover_weight.h to hold. Interval is how much world time one move covered: at 60 fps
-         * against a 32 Hz simulation it should sit between one and two frames, 16.7 to 33.3 ms.
-         * Ticks per frame says how often a mover integrates at all; if it is one per mover per
-         * frame then the world clock is advancing every frame and the whole premise is wrong.
-         * Elapsed is the render time since a mover last moved and should reach about one frame;
-         * if it stays near zero then the alpha is not changing between the two reads and the
-         * measurement, not the arithmetic, is broken. Phase is the ratio and should
-         * sweep 0 to 1. */
-        mover_measure_report(&mover_state.measurement, mover_state.frames);
-        mover_measure_reset(&mover_state.measurement);
-    }
-
-    /* One substep of travel for the mover's own pose scale. Half a track has to beat that
-     * for the wrap verdict to mean anything. The pose is a distance along the track and a
-     * substep advances it by rate times the step, so the largest drop seen in the window is the
-     * closest thing to it available here without reading a rate off every record. */
-    mover_wraps_report(mover_state.wrapped, mover_state.widest_drop);
-    mover_wraps_reset();
-    mover_state.widest_drop = 0.0f;
     memset(mover_state.refusals, 0, sizeof mover_state.refusals);
+    mover_evenness_report();
+
     mover_state.frames   = 0;
     mover_state.blended  = 0;
     mover_state.rejected = 0;

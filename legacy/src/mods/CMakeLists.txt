@@ -41,6 +41,7 @@ add_engine_fix(framerate_fix
     camera_compensation.c
     draw_interpolation.c
     framerate_stats.c
+    frame_cap.c
     frame_delta.c
     sim_clock.c
     world_clock.c
@@ -49,8 +50,7 @@ add_engine_fix(framerate_fix
     object_interpolation.c
     object_track.c
     mover_blend.c
-    mover_weight.c
-    mover_measure.c
+    mover_evenness.c
     mover_wraps.c
 )
 target_link_libraries(framerate_fix PRIVATE winmm)

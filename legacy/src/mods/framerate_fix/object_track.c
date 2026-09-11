@@ -131,7 +131,7 @@ float object_track_weight(float alpha, uint32_t gap)
     return (alpha + (float)(gap - 1u)) / (float)gap;
 }
 
-void object_track_blend(const float *previous, const float *current, float weight, float limit,
+bool object_track_blend(const float *previous, const float *current, float weight, float limit,
                         float *out_position)
 {
     float dx;
@@ -139,7 +139,7 @@ void object_track_blend(const float *previous, const float *current, float weigh
     float dz;
 
     if (previous == NULL || current == NULL || out_position == NULL) {
-        return;
+        return false;
     }
 
     /* The limit below is a distance test, and every comparison against a value that is not a
@@ -153,7 +153,7 @@ void object_track_blend(const float *previous, const float *current, float weigh
      * simulation produced, and it is not the place to paper over one of them being broken. */
     if (!finite3(previous) || !finite3(current) || !isfinite(weight)) {
         memcpy(out_position, current, 3u * sizeof(float));
-        return;
+        return false;
     }
 
     dx = current[0] - previous[0];
@@ -162,10 +162,11 @@ void object_track_blend(const float *previous, const float *current, float weigh
 
     if (limit > 0.0f && (dx * dx + dy * dy + dz * dz) > (limit * limit)) {
         memcpy(out_position, current, 3u * sizeof(float));
-        return;
+        return false;
     }
 
     out_position[0] = previous[0] + dx * weight;
     out_position[1] = previous[1] + dy * weight;
     out_position[2] = previous[2] + dz * weight;
+    return true;
 }

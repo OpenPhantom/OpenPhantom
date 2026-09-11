@@ -32,7 +32,7 @@ order of thing from a per-object syscall.
 | `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below |
 | `FrameBackoff` | `1` | | lower the view distance when it costs too much frame time, and give it back when it does not. Does nothing at scale 1.0 |
 | `StrictViewRange` | `0` | | hold the draw distance at exactly `ViewRangeScale` and let nothing move it: the governor, the two raises and the cell watchdog are all declined. The watchdog keeps measuring and warning, it just cannot act. See the key's comment in the ini before leaving it on |
-| `BackoffFps` | `0` | | the rate below which it backs off; `0` = three quarters of `framerate_fix`'s `TargetFps`, or 50 uncapped |
+| `BackoffFps` | `0` | | the rate below which it backs off; `0` = 50 while `framerate_fix` follows the display (its cap steps by itself, so there is no fixed number to take a fraction of), otherwise three quarters of `TargetFps`, or 50 uncapped |
 | `FogFollowFov` | `1` | | scale each level's band with the cut edge and the field of view; no effect while `AuthoredFogBand` is `1`, and overwritten by the shipped `FogInsideCut=2` |
 | `FogInsideCut` | `2` | 0-2 | where the band may end: `0` unbounded, `1` capped to the no-pop-in limit, `2` assigned from the draw distance. See the three rules below |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |

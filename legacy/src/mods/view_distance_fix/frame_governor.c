@@ -355,15 +355,22 @@ void frame_governor_configure(bool enabled, float backoff_fps, float configured_
     }
 
     if (!(target_fps > 0.0f)) {
-        /* framerate_fix owns the cap, and its own section is where the number lives. Reading
+        /* framerate_fix owns the cap, and its own section is where the numbers live. Reading
          * across sections is not new here: [diagnostics] Spawns is read by this same DLL, for the
-         * same reason: the setting belongs where its subject is, not where its reader is. */
-        const float cap = ini_read_float("framerate_fix", "TargetFps", 0.0f);
+         * same reason: the setting belongs where its subject is, not where its reader is.
+         *
+         * With MatchDisplayRefresh on, which it is when the key is absent, TargetFps is not the
+         * cap: the cap follows the display and steps between fractions of it on its own, so
+         * there is no fixed number to take three quarters of, and the floor is the threshold. */
+        const bool  matching = ini_read_bool("framerate_fix", "MatchDisplayRefresh", true);
+        const float cap      = matching ? 0.0f
+                                        : ini_read_float("framerate_fix", "TargetFps", 0.0f);
 
         target_fps = (cap > 0.0f) ? (cap * GOVERNOR_CAP_FRACTION) : GOVERNOR_UNCAPPED_BACKOFF_FPS;
         log_info("frame governor: BackoffFps is automatic -> %.0f fps (%s).", (double)target_fps,
-                 (cap > 0.0f) ? "three quarters of framerate_fix's TargetFps"
-                              : "no frame cap set, so the uncapped default");
+                 matching      ? "the cap follows the display and steps by itself, so the floor"
+                 : (cap > 0.0f) ? "three quarters of framerate_fix's TargetFps"
+                                : "no frame cap set, so the uncapped default");
     }
 
     governor.lower_above_ms = 1000.0f / target_fps;

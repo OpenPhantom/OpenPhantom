@@ -172,7 +172,10 @@ static signature_t sites[SITE_COUNT] = {
 
 #define DEPTH_BIAS_DEFAULT    0.0f
 #define DEPTH_BIAS_MAX        0.01f
-#define SUBMIT_REPORT_INTERVAL 2000u   /* a handful of lines a session, not a flood */
+/* Every so many decal fans, one line. A scene on Coruscant submits about two thousand a second, so
+ * the old interval of 2000 was a line a second and 422 lines in a five minute log; this is one
+ * every couple of minutes there and rarer everywhere else. */
+#define SUBMIT_REPORT_INTERVAL 250000u
 
 typedef int32_t (__cdecl *decal_submit_fn_t)(void *stage, uint32_t render_state, float *vertices,
                                              uint32_t count, int32_t clipped, void *sorted);

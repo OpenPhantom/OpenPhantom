@@ -17,7 +17,7 @@ The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover 
 | FFmpeg (gyan.dev `essentials` build) | 9.0 | **GPL v3** (the build bundles x264) | https://github.com/GyanD/codexffmpeg |
 | dxwrapper (the `dx7.games` build) | 1.8.8600.25 | see `dist/dxwrapper/dxwrapper-License.txt` | https://github.com/elishacloud/dxwrapper |
 
-`dist/dxwrapper/dxwrapper.ini` is **modified from upstream**. Six settings differ from the
+`dist/dxwrapper/dxwrapper.ini` is **modified from upstream**. Seven settings differ from the
 `dx7.games` file dxwrapper ships, and every one of them tunes this game rather than repairing
 dxwrapper:
 
@@ -29,9 +29,15 @@ dxwrapper:
 | `AnisotropicFiltering` | 0 | 16 |
 | `DepthBiasFactor` | 0 | 16 |
 | `ForceVsyncMode` | 0 | 1 |
+| `EnableVSync` | 0 | 1 |
+
+`EnableVSync` with `ForceVsyncMode` is the wrapper's "force vertical sync on", and it took until
+1.4.4 to ship that way: the pair used to read 0 and 1, which is "force it off", and a frame was
+shown at whatever scanline the display had reached. The patch's frame cap depends on the display
+being synchronised, and says so in `[framerate_fix]`.
 
 Everything else in the file is upstream's, taken from the release being shipped, and the
-binaries are unaltered. Those six are the ones to re-apply when the folder is refreshed, and
+binaries are unaltered. Those seven are the ones to re-apply when the folder is refreshed, and
 the way to find them is to diff the shipped file against the `dxwrapper.ini` inside the
 release archive rather than to trust this list.
 

@@ -113,7 +113,13 @@ static uintptr_t find_by_tail(const uint8_t *bytes, const uint8_t *mask, size_t 
     hits = signature_count_matches(bytes + prologue_size,
                                    (mask != NULL) ? mask + prologue_size : NULL,
                                    size - prologue_size, candidates, MAX_TAIL_CANDIDATES);
-    if (hits == 0 || hits > MAX_TAIL_CANDIDATES) {
+    if (hits == 0) {
+        return 0;                    /* the table's own "0 matches" line covers this */
+    }
+    if (hits > MAX_TAIL_CANDIDATES) {
+        log_warning("  a detour target's tail matched %u times, more than the %u this can sift, "
+                    "so the site is treated as unresolved", (unsigned)hits,
+                    (unsigned)MAX_TAIL_CANDIDATES);
         return 0;
     }
 
@@ -123,9 +129,9 @@ static uintptr_t find_by_tail(const uint8_t *bytes, const uint8_t *mask, size_t 
         if (start < host_image_text()) {
             continue;
         }
-        /* Either the prologue is still the authored one, or somebody has already branched away
-         * from it. Anything else is a coincidental match and is discarded. */
-        if (memcmp((const void *)start, bytes, prologue_size) != 0 &&
+        /* Either the prologue is still the authored one, mask honoured, or somebody has already
+         * branched away from it. Anything else is a coincidental match and is discarded. */
+        if (!matches_at((const uint8_t *)start, bytes, mask, prologue_size) &&
             *(const uint8_t *)start != JMP_REL32_OPCODE) {
             continue;
         }
@@ -134,7 +140,13 @@ static uintptr_t find_by_tail(const uint8_t *bytes, const uint8_t *mask, size_t 
         ++accepted_count;
     }
 
-    return (accepted_count == 1) ? accepted : 0;
+    if (accepted_count != 1) {
+        log_warning("  a detour target's tail matched %u times and %u of those carried its "
+                    "prologue or a jump, so the site is treated as unresolved", (unsigned)hits,
+                    (unsigned)accepted_count);
+        return 0;
+    }
+    return accepted;
 }
 
 uintptr_t signature_find_at(uintptr_t address, const uint8_t *bytes, const uint8_t *mask,

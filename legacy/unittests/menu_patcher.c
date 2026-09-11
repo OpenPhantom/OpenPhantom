@@ -175,7 +175,15 @@ static void test_append_and_commit(void)
     ut_check(!menu_patcher_append_label(&context, 0x72, 0, 0, 0, 0, 1, NULL, NULL),
           "a label with no text is refused");
 
+    /* The operand holds something other than the authored table: a screen somebody else has
+     * already repointed, or a second run. Refused, and the cell is left as it was. */
     table_pointer_cell = 0;
+    ut_check(!menu_patcher_commit(&context),
+             "a table pointer that does not hold the authored table is refused");
+    ut_check(table_pointer_cell == 0, "and is not written");
+    ut_check(!context.committed, "and the context is not marked committed");
+
+    table_pointer_cell = (uint32_t)(uintptr_t)good_source;
     ut_check(menu_patcher_commit(&context), "commit succeeds");
     ut_check(context.committed, "commit marks the context");
     ut_check(target[4].type == SW_TYPE_TERMINATOR, "commit writes the terminator behind the last "
@@ -302,7 +310,7 @@ static void test_append_controls_group(void)
     ut_check(target[9].rect.y + target[9].rect.height <= controls_source[5].rect.y,
           "and it ends above BACK's row, so the two cannot collide");
 
-    table_pointer_cell = 0;
+    table_pointer_cell = (uint32_t)(uintptr_t)controls_source;
     ut_check(menu_patcher_commit(&context), "the four-widget screen commits");
     ut_check(target[12].type == SW_TYPE_TERMINATOR, "the terminator lands behind all four");
 }

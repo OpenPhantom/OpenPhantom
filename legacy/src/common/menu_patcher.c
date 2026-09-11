@@ -406,8 +406,11 @@ bool menu_patcher_commit(menu_patch_context_t *context)
     terminator->type   = SW_TYPE_TERMINATOR;
     terminator->action = SW_ACTION_STATIC;  /* build writes this itself; pre-set for clarity */
 
-    if (patch_write_pointer32(context->table_pointer_address, context->widgets)
-        != PATCH_RESULT_OK) {
+    /* The operand has to hold the authored table it was resolved with, so a second run and a
+     * screen somebody else has already repointed are both refused. */
+    if (patch_repoint_operand(context->table_pointer_address,
+                              (uint32_t)context->source_table_address,
+                              (uint32_t)(uintptr_t)context->widgets) != PATCH_RESULT_OK) {
         log_error("menu: could not repoint the widget table at %08X; the screen keeps its own "
                   "%u widgets and nothing we built is reachable",
                   (unsigned)context->table_pointer_address, (unsigned)context->original_count);

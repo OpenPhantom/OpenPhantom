@@ -33,7 +33,7 @@ enable_language(RC)
 # things that are otherwise independent, so AppVer keeps its own copy and the two move together by
 # hand.
 #
-# The tags keep the prefixes they always had: this is v0.4.2 for the patch and i1.4.2 for the
+# The tags keep the prefixes they always had: this is v0.4.4 for the patch and i1.4.4 for the
 # installer, continuing v0.2.0..v0.4.0 and i1.0..i1.4. The one release made under the merged number,
 # v1.5.0 and i1.5.0, is renamed on GitHub into the two lines as v0.4.1 and i1.4.1, so the sequence
 # has no gap. That rename is presentational and nothing was rebuilt, so the binaries inside it still

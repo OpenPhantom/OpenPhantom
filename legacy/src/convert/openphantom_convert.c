@@ -128,7 +128,12 @@ static unsigned char *read_whole_file(const char *path, long *out_size)
         fclose(handle);
         return NULL;
     }
-    data = (unsigned char *)malloc((size_t)size);
+    /* One byte more than the file, and it is a terminator. Everything here is somebody else's
+     * file, and two readers below walk it with string functions: a name in a LAB whose table ends
+     * without one, and a line of obi.ini with no newline after it. Both used to run off the end of
+     * the allocation on an input that was merely truncated. The size handed back is still the
+     * file's, so nothing downstream sees the extra byte as content. */
+    data = (unsigned char *)malloc((size_t)size + 1u);
     if (data == NULL) {
         fclose(handle);
         return NULL;
@@ -138,6 +143,7 @@ static unsigned char *read_whole_file(const char *path, long *out_size)
         fclose(handle);
         return NULL;
     }
+    data[size] = 0;
     fclose(handle);
     *out_size = size;
     return data;
@@ -175,6 +181,11 @@ static void write_u32(unsigned char *p, unsigned value)
  *
  * Returns the new file, and its length through out_size, or NULL when this is not a bitmap this
  * understands, which the caller reports as a skip rather than a failure. */
+/* Both axes of any bitmap this will touch. The largest in the shipped artwork is under 1024 on
+ * its longest side; this is the bound that keeps the arithmetic below inside a 32-bit long, not a
+ * statement about what the game uses. */
+#define BITMAP_AXIS_MAX 16384
+
 static unsigned char *scale_bitmap(const unsigned char *data, long size,
                                    double ratio_x, double ratio_y, long *out_size,
                                    int *out_width, int *out_height)
@@ -197,13 +208,19 @@ static unsigned char *scale_bitmap(const unsigned char *data, long size,
     bpp          = (unsigned)(data[28] | (data[29] << 8));
     compression  = read_u32(data + 30);
 
+    /* An upper bound on both axes, because everything below multiplies them. A width of
+     * 0x40000000 is positive and passes a test for zero, and the stride computed from it wraps a
+     * 32-bit long: the truncation test then passes, the allocation comes out small, and the
+     * scaling loops write far past it. BITMAP_AXIS_MAX is far larger than any menu picture in
+     * this game and small enough that width times three times height cannot wrap. */
     if (bpp != 24 || compression != 0 || width <= 0 || height <= 0 ||
-        (long)pixel_offset >= size) {
+        width > BITMAP_AXIS_MAX || height > BITMAP_AXIS_MAX ||
+        (unsigned long)pixel_offset >= (unsigned long)size) {
         return NULL;
     }
 
     source_stride = ((long)width * 3 + 3) & ~3L;
-    if ((long)pixel_offset + source_stride * height > size) {
+    if (source_stride * height > size - (long)pixel_offset) {
         return NULL;                        /* truncated; not ours to guess at */
     }
 
@@ -319,6 +336,7 @@ static int read_lab_directory(const unsigned char *data, long size,
         unsigned member_size = read_u32(record + 8);
         char tag[5];
         const char *name;
+        const char *terminator;
         size_t length;
 
         /* Stored byte reversed, so 'MENU' is written 'UNEM'. */
@@ -330,15 +348,24 @@ static int read_lab_directory(const unsigned char *data, long size,
         if (strcmp(tag, "MENU") != 0 && strcmp(tag, "BMPS") != 0) {
             continue;
         }
-        if ((long)name_offset >= (long)name_bytes) {
+        /* Unsigned throughout, and the addition arranged so it cannot wrap. Cast to long, a
+         * member at or past 0x80000000 reads as negative and sails through a test meant to keep
+         * it inside the file. */
+        if (name_offset >= name_bytes) {
             continue;
         }
-        if ((long)data_offset + (long)member_size > size) {
+        if (data_offset > (unsigned long)size ||
+            member_size > (unsigned long)size - data_offset) {
             continue;
         }
 
         name = (const char *)(data + names_at + name_offset);
-        length = strlen(name);
+        /* The name has to END inside the name table, not merely start in it. */
+        terminator = (const char *)memchr(name, 0, (size_t)(name_bytes - name_offset));
+        if (terminator == NULL) {
+            continue;
+        }
+        length = (size_t)(terminator - name);
         if (length == 0 || length >= sizeof out[found].name) {
             continue;
         }
@@ -364,6 +391,7 @@ static void set_game_resolution(const char *game, int width, int height)
     unsigned char *data;
     long size;
     FILE *out;
+    char temp_path[MAX_PATH];
     long i, line_start;
     int wrote_width = 0, wrote_height = 0;
 
@@ -381,7 +409,14 @@ static void set_game_resolution(const char *game, int width, int height)
         return;
     }
 
-    out = fopen(path, "wb");
+    /* Written beside the file and moved over it at the end, never opened over the top of it.
+     * obi.ini is the player's own: their key bindings, their resolution, their gamma. Truncating
+     * it before the first line of the replacement has been written means a machine that loses
+     * power, or a converter that is killed, leaves them with an empty one. */
+    _snprintf(temp_path, sizeof temp_path - 1, "%s.openphantom-new", path);
+    temp_path[sizeof temp_path - 1] = 0;
+
+    out = fopen(temp_path, "wb");
     if (out == NULL) {
         free(data);
         note("  obi.ini could not be written; set screen_width=%d and screen_height=%d by hand",
@@ -421,6 +456,13 @@ static void set_game_resolution(const char *game, int width, int height)
 
     fclose(out);
     free(data);
+
+    if (!MoveFileExA(temp_path, path, MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileA(temp_path);
+        note("  obi.ini could not be replaced; it is unchanged, so set screen_width=%d and "
+             "screen_height=%d by hand", width, height);
+        return;
+    }
     note("  obi.ini set to screen_width=%d, screen_height=%d", width, height);
 }
 

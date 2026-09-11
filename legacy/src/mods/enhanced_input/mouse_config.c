@@ -177,11 +177,10 @@ void mouse_config_load(void)
                     "measured in degrees of view turn per MOUSE COUNT rather than per axis unit, "
                     "and the mouse is no longer sampled once per substep; nothing is discarded "
                     "any more, so the same feel needs a much smaller number. Your old value is "
-                    "%.3f in the new key; the default is %.3f and the usual band is 0.023 to "
-                    "0.045. MouseDegreesPerCount=%.3f is in force. Delete the old key to silence "
-                    "this.",
+                    "%.3f in the new key and the usual band is 0.023 to 0.045. "
+                    "MouseDegreesPerCount=%.3f is in force. Delete the old key to silence this.",
                     LEGACY_SENSITIVITY_KEY, (double)legacy,
-                    (double)(legacy * ENGINE_AXIS_SCALE), (double)DEFAULT_DEGREES_PER_COUNT,
+                    (double)(legacy * ENGINE_AXIS_SCALE),
                     (double)config.degrees_per_count);
     }
 

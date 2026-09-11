@@ -247,7 +247,11 @@ static void load_config(void)
     fix_state.enabled = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "Enabled", true);
 
     hold_seconds = ini_read_float(DIALOGUE_ANIM_FIX_SECTION, "HoldSeconds", DEFAULT_HOLD_SECONDS);
-    if (hold_seconds < 0.5f) {
+    /* Written as a NOT so that a value which is not a number lands on the floor rather than
+     * through both arms: every comparison against a NaN is false, and the cast of one to an
+     * unsigned is undefined. On x86 it produced 0x80000000, which is a hold of 24 days and no
+     * disarm for the rest of the session. */
+    if (!(hold_seconds >= 0.5f)) {
         hold_seconds = 0.5f;
     } else if (hold_seconds > 30.0f) {
         hold_seconds = 30.0f;

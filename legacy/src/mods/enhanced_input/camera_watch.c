@@ -41,7 +41,10 @@
  * turn ceiling is 120 deg/s and the mouse bolt cuts a hand off at 3000. It is deliberately well
  * below the reported symptom, "it whips completely round", so that the smaller swings leading
  * up to one are caught too. */
-#define DEFAULT_JUMP_DEGREES 25.0f
+/* Off, the same as the shipped file and the README both say. It was 25, so an installation whose
+ * engine_fixes.ini predates the key armed a measurement nobody asked for and wrote a line every
+ * time the camera moved that far. 25 is still the number worth typing to turn it on. */
+#define DEFAULT_JUMP_DEGREES 0.0f
 #define MIN_JUMP_DEGREES      1.0f
 #define MAX_JUMP_DEGREES    180.0f
 
@@ -81,7 +84,10 @@ void camera_watch_install(const camera_sites_t *sites)
     }
 
     threshold = ini_read_float(INPUT_SECTION, "CameraJumpWatchDeg", DEFAULT_JUMP_DEGREES);
-    if (threshold <= 0.0f) {          /* also catches NaN: switched off by configuration */
+    /* The NOT is what catches a value that is not a number. Written as `<= 0.0f` this let one
+     * through, and a NaN threshold fails the `fabsf(delta) < threshold` test below on every
+     * frame, so every frame was a camera jump. */
+    if (!(threshold > 0.0f)) {        /* switched off by configuration, or not a number */
         return;
     }
     if (threshold < MIN_JUMP_DEGREES) {

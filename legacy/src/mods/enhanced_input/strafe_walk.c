@@ -490,23 +490,19 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
     /* The engine's own formula, its own two fields, its own order of operations, so the result is
      * the number it would have written rather than an approximation of it.
      *
-     * The fold is a comparison rather than a modulo because one step either way is provably
-     * enough: it lands inside [0, 360) for any input in (-360, 720). Heading was inside [0, 360)
-     * at the top of the substep, and two things are added to it before this point: the mouse step,
-     * which the caller has clamped to well under a quarter turn, and the term below.
-     *
-     * That term is no longer zero. Phase 2 leaves the turn rate in the cell instead of a zero, so
-     * the engine's own formula really does contribute here now. It stays inside the single-step
-     * fold regardless: the rate is clamped to the engine's own 120 deg/s and the substep is at most
-     * 1/32 s, so the term cannot exceed 3.75 degrees. */
+     * Folded into [0, 360) by a whole number of turns rather than by one step. One step used to
+     * be argued enough because the mouse step was "well under a quarter turn"; it is not. The
+     * spike limit that bounds it is 3000 deg/s as shipped and 20000 at the key's ceiling, which is
+     * 93.75 and 625 degrees in one 1/32 s substep, and one subtraction left the heading past 360
+     * at the second. The other term is small: phase 2 leaves the turn rate in the cell, clamped
+     * to the engine's own 120 deg/s, so it is at most 3.75 degrees a substep. */
     float turned = read_field(record, PLAYER_TURN_WHEEL) * read_field(record, PLAYER_FRAME_DELTA)
                  + heading_before;
     float radians;
 
-    if (turned >= 360.0f) {
-        turned -= 360.0f;
-    } else if (turned < 0.0f) {
-        turned += 360.0f;
+    turned -= 360.0f * floorf(turned / 360.0f);
+    if (!(turned >= 0.0f && turned < 360.0f)) {
+        turned = 0.0f;                          /* not a number, or the fold's own rounding edge */
     }
     write_field(record, PLAYER_HEADING, turned);
 
@@ -719,6 +715,16 @@ static void draw_interpolated_angle(void)
 
     record = strafe_state.record;
     if (record == NULL || strafe_state.set_node_yaw == NULL || !strafe_state.turns_body) {
+        return;
+    }
+    /* The substep count above only ages the claim while substeps run. Between a level being torn
+     * down and its loading screen ticking the counter the simulation is stopped, frames are still
+     * drawn, and the record is a pointer into memory the engine may have given back. Read through
+     * the guarded form here, which costs no system call, and drop the claim rather than follow a
+     * pointer that no longer reads. */
+    if (!memory_try_readable((uintptr_t)record, PLAYER_DROP_TIMER + sizeof(float))) {
+        strafe_state.owns_node = false;
+        strafe_state.record    = NULL;
         return;
     }
     if (read_field(record, PLAYER_DROP_TIMER) != 0.0f) {

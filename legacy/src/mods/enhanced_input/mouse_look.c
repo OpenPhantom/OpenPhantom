@@ -366,15 +366,16 @@ static float bolt_implausible_sample(float sample, float seconds)
     float ceiling_units;
     float degrees;
 
-    /* With no clock and no scale there is nothing to measure plausibility against, so the sample
-     * is passed through to the existing bound rather than guessed at. */
-    if (!(seconds > 0.0f) || !(mouse_config()->degrees_per_axis_unit > 0.0f)) {
-        return sample;
-    }
-    /* A sample that is not a number would poison the bank for good, and no clamp downstream can
-     * undo it. Both comparisons fail for NaN. */
+    /* A sample that is not a number, or one past anything a device produces, is cut whatever the
+     * clock says: neither needs a clock to be judged, and the frame with no clock was the one that
+     * let them through to the bank. Both comparisons fail for NaN. */
     if (!(sample >= -MAX_PLAUSIBLE_AXIS_SAMPLE && sample <= MAX_PLAUSIBLE_AXIS_SAMPLE)) {
         return 0.0f;
+    }
+    /* With no clock and no scale there is nothing to measure a RATE against, so a plausible
+     * sample is passed through rather than guessed at. */
+    if (!(seconds > 0.0f) || !(mouse_config()->degrees_per_axis_unit > 0.0f)) {
+        return sample;
     }
 
     ceiling_units = (mouse_config()->max_turn_rate * seconds)

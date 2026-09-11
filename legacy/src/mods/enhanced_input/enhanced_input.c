@@ -291,6 +291,14 @@ static void __cdecl integrate_thunk(void)
         }
     }
 
+    /* A substep phase 2 did not run, a launched sidestep or a scripted jump, has no travel for the
+     * camera follow, and the follow used to take no step at all then: the offset it had reached
+     * held for the whole launch while the camera hold went on applying it. Letting go of the stick
+     * is a zero travel and a drift home; a mode that reads no stick is the same thing. */
+    if (record != NULL && !input_state.pending_valid) {
+        camera_follow_step(0.0f, frame_delta);
+    }
+
     /* Cleared before the original rather than after it, so that a mode which runs phase 7 without
      * phase 2, a launched sidestep, a scripted jump, can never consume a value phase 2 left
      * behind in an earlier substep. */

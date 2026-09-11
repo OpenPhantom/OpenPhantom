@@ -24,6 +24,7 @@
 #include "menu_scale_sites.h"
 
 #include "common/detour.h"
+#include "common/memory.h"
 #include "common/logging.h"
 #include "common/patch.h"
 #include "common/signature.h"
@@ -244,6 +245,34 @@ static bool ratio_from_artwork(float *out_x, float *out_y)
     return true;
 }
 
+/* The three scale operands are 0xAC and more past the matched prologue, so before any of them is
+ * repointed the instruction in front of each is checked and the three are checked to read one
+ * global. A build that matched the prologue and laid the body out differently would otherwise be
+ * handed a pointer into an arbitrary instruction. */
+static bool sw3d_scale_operands_are_expected(uintptr_t site)
+{
+    static const uint8_t MOV_EDX_ABS[2] = { 0x8B, 0x15 };
+    static const uint8_t MOV_EAX_ABS[1] = { 0xA1 };
+    static const uint8_t MOV_ECX_ABS[2] = { 0x8B, 0x0D };
+    uint32_t x;
+    uint32_t y;
+    uint32_t z;
+
+    if (!patch_validate_bytes(site + SW3D_SCALE_OPERAND_X - 2u, MOV_EDX_ABS, sizeof MOV_EDX_ABS) ||
+        !patch_validate_bytes(site + SW3D_SCALE_OPERAND_Y - 1u, MOV_EAX_ABS, sizeof MOV_EAX_ABS) ||
+        !patch_validate_bytes(site + SW3D_SCALE_OPERAND_Z - 2u, MOV_ECX_ABS, sizeof MOV_ECX_ABS) ||
+        !memory_read_u32(site + SW3D_SCALE_OPERAND_X, &x) ||
+        !memory_read_u32(site + SW3D_SCALE_OPERAND_Y, &y) ||
+        !memory_read_u32(site + SW3D_SCALE_OPERAND_Z, &z) || x != y || y != z ||
+        !memory_is_inside_image(x, sizeof(float))) {
+        log_warning("sw3d_draw at %08X does not carry the three reads of g_menuScale where the "
+                    "retail build has them, so the 3-D widget models keep following the lens",
+                    (unsigned)site);
+        return false;
+    }
+    return true;
+}
+
 bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
 {
     uintptr_t origin_sites[ORIGIN_SITE_COUNT];
@@ -407,6 +436,7 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     }
 
     if (menu_scale_sites[SITE_SW3D_DRAW].address != 0 &&
+        sw3d_scale_operands_are_expected(menu_scale_sites[SITE_SW3D_DRAW].address) &&
         detour_install(&scale_state.sw3d_draw_detour, menu_scale_sites[SITE_SW3D_DRAW].address,
                        (const void *)hook_sw3d_draw, SW3D_DRAW_PROLOGUE) &&
         patch_write_pointer32(menu_scale_sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_X,

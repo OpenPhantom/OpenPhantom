@@ -166,6 +166,8 @@ static float told_wrap   = AUTHORED_WRAP;
 static struct {
     detour_t  bar;
     bool      installed;        /* the ten writes are in place */
+    bool      abandoned;        /* one of them was refused, the rest were put back, and it is not
+                                 * tried again: a site that was wrong once is wrong every time */
     bool      resolved;         /* the sites are known, which happens long before the display is */
     uintptr_t pos_site;
     uintptr_t glyph_site;
@@ -317,6 +319,54 @@ static void on_frame(void)
  * where it goes does, and only at this one site. */
 /* The two wrap comparisons, each checked for its opcode before it is touched: both are the same
  * six byte `fcomp dword [imm32]`, so the operand sits two bytes in. */
+/* The nine reversible writes are journaled as they go, so a refusal part way through puts the
+ * earlier ones back and the engine draws its own box, the way the header promises. The detour is
+ * the tenth and last, because a detour cannot be taken out again. */
+typedef struct written_bytes {
+    uintptr_t at;
+    uint8_t   size;
+    uint8_t   before[4];
+} written_bytes_t;
+
+static written_bytes_t journal[9];
+static size_t          journal_count;
+
+static bool write_journaled(uintptr_t at, const void *bytes, size_t size)
+{
+    written_bytes_t *entry;
+
+    if (journal_count >= sizeof journal / sizeof journal[0] || size > sizeof entry->before) {
+        return false;
+    }
+    entry = &journal[journal_count];
+    if (!memory_read(at, entry->before, size)) {
+        return false;
+    }
+    entry->at   = at;
+    entry->size = (uint8_t)size;
+    if (patch_write_bytes(at, bytes, size) != PATCH_RESULT_OK) {
+        return false;
+    }
+    ++journal_count;
+    return true;
+}
+
+static void undo_journal(void)
+{
+    while (journal_count > 0u) {
+        const written_bytes_t *entry = &journal[--journal_count];
+
+        (void)patch_write_bytes(entry->at, entry->before, entry->size);
+    }
+}
+
+static bool write_pointer_journaled(uintptr_t at, const void *pointer)
+{
+    uint32_t value = (uint32_t)(uintptr_t)pointer;
+
+    return write_journaled(at, &value, sizeof value);
+}
+
 static bool retarget_operand(uintptr_t operand_site, const void *cell)
 {
     if (!memory_is_readable_range(operand_site - 2u, 6u) ||
@@ -326,7 +376,7 @@ static bool retarget_operand(uintptr_t operand_site, const void *cell)
                     "left alone", (unsigned)(operand_site - 2u));
         return false;
     }
-    return patch_write_pointer32(operand_site, cell) == PATCH_RESULT_OK;
+    return write_pointer_journaled(operand_site, cell);
 }
 
 /* Turns one `jge` into a `jmp`, having checked it is the conditional this expects. */
@@ -337,7 +387,11 @@ static bool unclamp(uintptr_t site)
                     "left alone", (unsigned)site);
         return false;
     }
-    return patch_write_u8(site, JMP_REL8) == PATCH_RESULT_OK;
+    {
+        uint8_t jmp = JMP_REL8;
+
+        return write_journaled(site, &jmp, sizeof jmp);
+    }
 }
 
 static bool retarget_call(uintptr_t site, const void *destination)
@@ -350,17 +404,18 @@ static bool retarget_call(uintptr_t site, const void *destination)
         return false;
     }
     rel = (int32_t)((uintptr_t)destination - (site + 5u));
-    return patch_write_u32(site + 1u, (uint32_t)rel) == PATCH_RESULT_OK;
+    return write_journaled(site + 1u, &rel, sizeof rel);
 }
 
 static bool install_patches(void)
 {
-    if (patch_write_pointer32(state.pos_site + POS_SCALE_HEIGHT_OPERAND, &told_height)
-            != PATCH_RESULT_OK ||
-        patch_write_pointer32(state.pos_site + POS_SCALE_WIDTH_OPERAND, &told_width)
-            != PATCH_RESULT_OK ||
-        patch_write_pointer32(state.glyph_site + GLYPH_SCALE_WIDTH_OPERAND, &told_width)
-            != PATCH_RESULT_OK ||
+    if (state.abandoned) {
+        return false;
+    }
+    journal_count = 0;
+    if (!write_pointer_journaled(state.pos_site + POS_SCALE_HEIGHT_OPERAND, &told_height) ||
+        !write_pointer_journaled(state.pos_site + POS_SCALE_WIDTH_OPERAND, &told_width) ||
+        !write_pointer_journaled(state.glyph_site + GLYPH_SCALE_WIDTH_OPERAND, &told_width) ||
         !retarget_operand(state.glyph_site + WRAP_FIRST_OPERAND_FROM_GLYPH, &told_wrap) ||
         !retarget_operand(state.glyph_site + WRAP_SECOND_OPERAND_FROM_GLYPH, &told_wrap) ||
         !retarget_call(state.glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH,
@@ -371,8 +426,10 @@ static bool install_patches(void)
         !unclamp(state.glyph_site + CLAMP_Y_FROM_GLYPH) ||
         !detour_install(&state.bar, state.bar_site, (const void *)hook_draw_bar,
                         DRAW_BAR_PROLOGUE)) {
-        log_warning("the subtitle box could not be fully repointed, so it may now be drawn at the "
-                    "wrong size. Set SubtitleScale=0 and relaunch for the engine's own back");
+        undo_journal();
+        state.abandoned = true;
+        log_warning("one of the subtitle box's ten sites was refused, so the ones already "
+                    "written were put back and the engine draws its own box this session");
         return false;
     }
 

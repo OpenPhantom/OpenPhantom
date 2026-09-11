@@ -27,9 +27,11 @@
 #define ORIGIN_SCALE_OPERAND  0x3Au
 #define ORIGIN_SITE_COUNT     2u
 
-/* swlistbx_draw: the two insets it holds its rows in by, and what the game ships them as. */
-#define LISTBOX_DRAW_X_INSET 0xA8u
-#define LISTBOX_DRAW_Y_INSET 0xB7u
+/* swlistbx_draw: the two insets it holds its rows in by, and what the game ships them as. Each
+ * is the imm8 of an `add r32,imm8`, and the opcode in front of it is checked before it is
+ * written, because both sit far past the matched pattern. */
+#define LISTBOX_DRAW_X_INSET 0xA8u          /* 83 C1 06   add ecx,6  at +0xA6 */
+#define LISTBOX_DRAW_Y_INSET 0xB7u          /* 83 C0 03   add eax,3  at +0xB5 */
 #define LISTBOX_SHIPPED_X_INSET 6
 #define LISTBOX_SHIPPED_Y_INSET 3
 
@@ -85,10 +87,12 @@
  * allocation and leaves the selected row alone, so a second one is not a second open. */
 #define SWMSG_RESET 0
 
-/* The three `mov reg,[g_menuScale]` operands, one per axis of the scale. */
-#define SW3D_SCALE_OPERAND_X 0xAEu
-#define SW3D_SCALE_OPERAND_Y 0xB6u
-#define SW3D_SCALE_OPERAND_Z 0xBFu
+/* The three `mov reg,[g_menuScale]` operands, one per axis of the scale. All three sit well past
+ * the matched pattern, so each opcode is checked before its operand is written, and the three
+ * operands have to name the same global, since they are three reads of one value. */
+#define SW3D_SCALE_OPERAND_X 0xAEu          /* 8B 15 disp32   mov edx,[g_menuScale] at +0xAC */
+#define SW3D_SCALE_OPERAND_Y 0xB6u          /* A1 disp32      mov eax,[g_menuScale] at +0xB5 */
+#define SW3D_SCALE_OPERAND_Z 0xBFu          /* 8B 0D disp32   mov ecx,[g_menuScale] at +0xBD */
 
 /* g_menuScale and g_menuTextScale, the two the repointed numerator feeds, and the base size the
  * second is the first multiplied by.

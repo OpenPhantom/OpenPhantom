@@ -246,7 +246,14 @@ void menu_scale_apply_trimmings(bool verbose)
     if (menu_scale_sites[SITE_LISTBOX_DRAW].address != 0) {
         uintptr_t draw = menu_scale_sites[SITE_LISTBOX_DRAW].address;
 
-        if (patch_write_u8(draw + LISTBOX_DRAW_X_INSET, (uint8_t)inset_x) == PATCH_RESULT_OK &&
+        static const uint8_t ADD_ECX_IMM8[2] = { 0x83, 0xC1 };
+        static const uint8_t ADD_EAX_IMM8[2] = { 0x83, 0xC0 };
+
+        /* Both insets sit far past the matched pattern, so the instruction each is the immediate
+         * of is checked first; a body laid out differently is left alone rather than written. */
+        if (patch_validate_bytes(draw + LISTBOX_DRAW_X_INSET - 2u, ADD_ECX_IMM8, 2u) &&
+            patch_validate_bytes(draw + LISTBOX_DRAW_Y_INSET - 2u, ADD_EAX_IMM8, 2u) &&
+            patch_write_u8(draw + LISTBOX_DRAW_X_INSET, (uint8_t)inset_x) == PATCH_RESULT_OK &&
             patch_write_u8(draw + LISTBOX_DRAW_Y_INSET, (uint8_t)inset_y) == PATCH_RESULT_OK) {
             if (verbose) {
                 log_info("list box text insets: %d -> %d across, %d -> %d down (the top one is "

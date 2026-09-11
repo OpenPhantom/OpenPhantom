@@ -1,6 +1,7 @@
 /* open_key_row.c: see open_key_row.h. */
 #include "open_key_row.h"
 
+#include "overlay_key_name.h"
 #include "overlay_input.h"
 
 #include "common/ini.h"
@@ -39,8 +40,21 @@ static bool key_is_refused(int32_t vk)
 
 int32_t open_key_row_get(void)
 {
-    /* 0 rather than a key code is the default, and it is what an untouched installation reads. */
-    return (int32_t)ini_read_int(DEV_OVERLAY_SECTION, OPEN_KEY_KEY, 0);
+    char    text[32];
+    int32_t key = 0;
+
+    /* Read as a NAME. The setting has accepted one since names were added, and dev_overlay.c
+     * itself reads it that way at startup. Reading it as a number here meant OpenKey=F8 opened
+     * the panel on F8 while this row showed the default, because a name is not a number and the
+     * integer read answered 0.
+     *
+     * A bare code still works: overlay_key_from_name takes one, so an older ini reads the same
+     * as it always did. 0 is the default, and it is what an untouched installation holds. */
+    if (ini_read_string(DEV_OVERLAY_SECTION, OPEN_KEY_KEY, "", text, sizeof text) &&
+        text[0] != '\0' && !overlay_key_from_name(text, &key)) {
+        key = 0;
+    }
+    return key;
 }
 
 bool open_key_row_set(int32_t virtual_key)

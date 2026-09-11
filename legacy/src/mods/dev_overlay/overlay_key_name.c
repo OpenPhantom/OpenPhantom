@@ -96,6 +96,13 @@ static const key_alias_t ALIASES[] = {
     { "right",       VK_RIGHT },
     { "capslock",    VK_CAPITAL },
     { "scrolllock",  VK_SCROLL },
+    /* The short forms are the ones the naming direction above prints. Without them these four
+     * keys failed the round trip this file promises: read "PgUp" off a panel row, put it in the
+     * settings file, and the parser refused it and fell back to the default key. */
+    { "scrlk",       VK_SCROLL },
+    { "backsp",      VK_BACK },
+    { "pgup",        VK_PRIOR },
+    { "pgdn",        VK_NEXT },
     { "pause",       VK_PAUSE },
     { "numpad+",     VK_ADD },
     { "numpadplus",  VK_ADD },

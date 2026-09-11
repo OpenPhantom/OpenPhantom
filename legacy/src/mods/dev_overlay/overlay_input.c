@@ -651,6 +651,11 @@ int32_t overlay_input_take_wheel_delta(void)
     return delta;
 }
 
+/* lParam bit 30: the key was already down when this message was made, so the message is a repeat
+ * rather than a press. Named here rather than as a bare 0x40000000 at the one place that reads
+ * it. */
+#define KEY_WAS_ALREADY_DOWN 0x40000000u
+
 static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam, uint32_t lparam)
 {
     /* The game's own window, taken from the first message rather than searched for. */
@@ -670,6 +675,13 @@ static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam
     observe_wheel(message, wparam);
 
     if (is_key_down(message) && is_open_key(wparam)) {
+        /* Bit 30 of lParam is set when the key was already down, which is Windows repeating it.
+         * Without this test, holding the key toggles the panel at the repeat rate, and each of
+         * those toggles freezes the game, takes or gives back the pause, applies whatever was
+         * pending, rebuilds the model and writes a line to the log. */
+        if ((lparam & KEY_WAS_ALREADY_DOWN) != 0u) {
+            return HANDLED;
+        }
         if (input_state.open && free_camera_holds_panel()) {
             /* Said once per attempt rather than silently swallowed: a key that does nothing needs
              * to say why, and the panel itself cannot say it while the camera owns the screen. */

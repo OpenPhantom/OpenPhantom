@@ -417,7 +417,7 @@ static void test_the_band_scale(void)
     fog_regime_config_t config = default_config();
     fog_regime_band_t   authored;
     fog_regime_band_t   full;
-    fog_regime_band_t   near;
+    fog_regime_band_t   nearer;
     float               cut = 22.0f;
 
     authored.start = 10.0f;
@@ -428,30 +428,30 @@ static void test_the_band_scale(void)
     fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &full);
 
     config.band_scale = 0.8f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
 
     ut_section("the band scale");
-    ut_check(near.end < full.end,
+    ut_check(nearer.end < full.end,
              "below 1 the fog ends nearer the eye than every other term put it, which is the "
              "whole point: the terms above decide where the fog HAS to be, this decides how much "
              "sooner than that a player wants it");
-    ut_check(near.end > full.end * 0.79f && near.end < full.end * 0.81f,
+    ut_check(nearer.end > full.end * 0.79f && nearer.end < full.end * 0.81f,
              "and it is the plain multiple it says it is, not an approximation of one");
-    ut_check(near.start < full.start,
+    ut_check(nearer.start < full.start,
              "the start comes in with it, so the level's authored proportions survive and the "
              "band does not simply get shorter at one end");
-    ut_check(near.end > near.start,
+    ut_check(nearer.end > nearer.start,
              "and the span never inverts, which would have the engine paint the world in the fog "
              "colour rather than showing less of it");
 
     config.band_scale = 1.0f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.end == full.end && near.start == full.start,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.end == full.end && nearer.start == full.start,
              "exactly 1 is a no-op, so the shipped default cannot move the band by rounding");
 
     config.band_scale = 0.0f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.end == full.end,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.end == full.end,
              "and a zero, the value an absent or unreadable setting comes through as, is "
              "ignored rather than collapsing the band onto the camera");
 
@@ -465,8 +465,8 @@ static void test_the_band_scale(void)
              "an authored band at 1.0 is the level's own numbers exactly, untouched");
 
     config.band_scale = 0.5f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.start == authored.start * 0.5f && near.end == authored.end * 0.5f,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.start == authored.start * 0.5f && nearer.end == authored.end * 0.5f,
              "and it brings an authored band in as well, both ends by the same factor, rather "
              "than doing nothing wherever the scaling terms do nothing");
 
@@ -474,8 +474,8 @@ static void test_the_band_scale(void)
     authored.start = 1.0f;
     authored.end   = 3.0f;
     config.band_scale = 0.25f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.end > near.start,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.end > nearer.start,
              "a band too short to survive the multiple is refused rather than clamped, since "
              "clamping one end past the other paints the world in the fog colour");
 }

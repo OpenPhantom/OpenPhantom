@@ -2,6 +2,7 @@
 #include "stick.h"
 
 #include <math.h>
+#include <stddef.h>
 
 #define STICK_RAW_FULL 32767.0f
 

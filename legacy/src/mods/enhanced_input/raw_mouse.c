@@ -631,8 +631,10 @@ bool raw_mouse_is_delivering(void)
 
     /* No lock and no counter query. This is asked once per mouse-move message, which arrives at
        whatever rate the device reports at, so it is one of the paths that must stay cheap. The
-       millisecond stamp is a single interlocked read, and the subtraction is done in a signed LONG
-       so that the tick counter's own wrap is a small difference rather than a huge one. */
+       millisecond stamp is a single interlocked read. The subtraction is unsigned, so the tick
+       counter's own wrap is a small difference rather than a huge one, and the result is then
+       read as signed so that a stamp the raw thread wrote a moment AFTER this thread read the
+       clock comes out slightly negative, which is fresh, rather than enormous. */
     newest = InterlockedCompareExchange(&raw_state.newest_ms, 0, 0);
-    return ((LONG)GetTickCount() - newest) < RAW_DELIVERY_STALE_MS;
+    return (int32_t)(GetTickCount() - (DWORD)newest) < RAW_DELIVERY_STALE_MS;
 }

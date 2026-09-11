@@ -30,7 +30,7 @@ static bool holds_libvlc(const wchar_t *directory)
     return GetFileAttributesW(probe) != INVALID_FILE_ATTRIBUTES;
 }
 
-static bool accept(const wchar_t *directory, wchar_t *out_dir, size_t out_capacity,
+static bool accept_directory(const wchar_t *directory, wchar_t *out_dir, size_t out_capacity,
                    const char *which)
 {
     if (!holds_libvlc(directory)) {
@@ -73,7 +73,7 @@ static bool try_bundled(wchar_t *out_dir, size_t out_capacity)
     }
     candidate[ARRAYSIZE(candidate) - 1] = L'\0';
 
-    return accept(candidate, out_dir, out_capacity, "bundled");
+    return accept_directory(candidate, out_dir, out_capacity, "bundled");
 }
 
 static bool try_program_files(wchar_t *out_dir, size_t out_capacity)
@@ -96,7 +96,7 @@ static bool try_program_files(wchar_t *out_dir, size_t out_capacity)
     }
     candidate[ARRAYSIZE(candidate) - 1] = L'\0';
 
-    return accept(candidate, out_dir, out_capacity, "default-location");
+    return accept_directory(candidate, out_dir, out_capacity, "default-location");
 }
 
 /* ============================================================================================ */
@@ -186,11 +186,12 @@ static bool try_registry(wchar_t *out_dir, size_t out_capacity)
     }
 
     if (read_registry_string(key, L"InstallDir", candidate, ARRAYSIZE(candidate))) {
-        found = accept(candidate, out_dir, out_capacity, "registered");
+        found = accept_directory(candidate, out_dir, out_capacity, "registered");
     }
     if (!found && read_registry_string(key, NULL, candidate, ARRAYSIZE(candidate))) {
         strip_file_name(candidate);
-        found = accept(candidate, out_dir, out_capacity, "registered (from the default value)");
+        found = accept_directory(candidate, out_dir, out_capacity,
+                                 "registered (from the default value)");
     }
     if (!found) {
         log_info("HKLM\\%ls exists but names no directory holding libvlc.dll",

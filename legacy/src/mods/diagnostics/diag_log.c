@@ -37,8 +37,9 @@ static void write_raw(const char *line)
     DWORD elapsed = timeGetTime() - diag_state.started_at;
 
     if (diag_state.file != NULL) {
-        fprintf(diag_state.file, "[%4u.%03u] %s\n",
-                elapsed / MILLISECONDS_PER_SECOND, elapsed % MILLISECONDS_PER_SECOND, line);
+        fprintf(diag_state.file, "[%4lu.%03lu] %s\n",
+                (unsigned long)(elapsed / MILLISECONDS_PER_SECOND),
+                (unsigned long)(elapsed % MILLISECONDS_PER_SECOND), line);
         fflush(diag_state.file);
     }
     if (diag_state.also_to_main_log) {

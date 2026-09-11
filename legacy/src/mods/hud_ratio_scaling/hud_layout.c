@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 /* The fractions the engine lays the HUD out with. Every one of them is a float constant read out
  * of the executable's data section, so they are written here to the precision the engine has. */

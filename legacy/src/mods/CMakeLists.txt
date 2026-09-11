@@ -170,6 +170,9 @@ add_engine_fix(enhanced_input
     camera_watch.c
     view_lead.c
 )
+# XInput is linked here as well as named by pad_stick.c's pragma, so a toolchain that ignores
+# the pragma still links, the same way controller_input does both.
+target_link_libraries(enhanced_input PRIVATE xinput)
 
 # music_sites.c is the patterns and the cross-checks that decide whether to believe them;
 # imuse_fix.c is the behaviour those cells drive. Same split as player_sites and camera_sites.

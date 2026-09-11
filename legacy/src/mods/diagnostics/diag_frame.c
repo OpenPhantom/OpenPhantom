@@ -208,7 +208,7 @@ static LONG gpu_read(void)
     }
 
     status = PdhGetFormattedCounterArrayA(gpu.counter, PDH_FMT_DOUBLE, &size, &count, NULL);
-    if (status != PDH_MORE_DATA || size == 0) {
+    if ((DWORD)status != PDH_MORE_DATA || size == 0) {
         return -1;
     }
     items = (PDH_FMT_COUNTERVALUE_ITEM_A *)LocalAlloc(LPTR, size);
@@ -235,7 +235,7 @@ static LONG gpu_read(void)
 static DWORD WINAPI sampler_main(LPVOID parameter)
 {
     HANDLE   process = GetCurrentProcess();
-    FILETIME creation, exit, kernel, user;
+    FILETIME creation, exited, kernel, user;
     FILETIME idle_before, kernel_before, user_before;
     double   cpu_before = 0.0;
     DWORD    faults_before = 0;
@@ -255,7 +255,7 @@ static DWORD WINAPI sampler_main(LPVOID parameter)
 
         Sleep(SAMPLER_PERIOD_MS);
 
-        if (GetProcessTimes(process, &creation, &exit, &kernel, &user)) {
+        if (GetProcessTimes(process, &creation, &exited, &kernel, &user)) {
             cpu_now = filetime_seconds(&kernel) + filetime_seconds(&user);
             if (have_previous) {
                 double share = (cpu_now - cpu_before) / ((double)SAMPLER_PERIOD_MS / 1000.0);

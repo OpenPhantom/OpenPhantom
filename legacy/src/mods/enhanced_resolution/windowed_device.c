@@ -92,8 +92,10 @@ static void report_surfaces(void)
     if (surfaces_reported || primary_desc == NULL || back_desc == NULL) {
         return;
     }
-    if (!memory_is_readable_range((uintptr_t)primary_desc, 0x20u) ||
-        !memory_is_readable_range((uintptr_t)back_desc, 0x20u)) {
+    /* The faulting probe rather than the asking one: this runs every frame until the surfaces
+     * exist, and the asking form is two VirtualQuery walks a frame for as long as that takes. */
+    if (!memory_try_readable((uintptr_t)primary_desc, 0x20u) ||
+        !memory_try_readable((uintptr_t)back_desc, 0x20u)) {
         return;
     }
     surfaces_reported = true;

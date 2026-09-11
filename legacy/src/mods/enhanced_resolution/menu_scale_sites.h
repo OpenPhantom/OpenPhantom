@@ -13,6 +13,7 @@
 
 #include "common/signature.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -94,12 +95,16 @@
 #define SW3D_SCALE_OPERAND_Y 0xB6u          /* A1 disp32      mov eax,[g_menuScale] at +0xB5 */
 #define SW3D_SCALE_OPERAND_Z 0xBFu          /* 8B 0D disp32   mov ecx,[g_menuScale] at +0xBD */
 
-/* g_menuScale and g_menuTextScale, the two the repointed numerator feeds, and the base size the
- * second is the first multiplied by.
+/* The engine cells the feature reads and writes. None is written down as an address: every one is
+ * read out of the operand of an instruction the patterns below already match, by
+ * menu_scale_resolve_cells, and the feature does not install without all of them.
+ *
+ * g_menuScale and g_menuTextScale are the two the repointed numerator feeds, and the base size is
+ * what the second is the first multiplied by.
  *
  * WRITTEN as well as read. Leaving them read-only is why a live resolution change used to leave
  * the menus in pieces. The engine derives both in exactly one block, which runs at startup and on
- * the mode-change message and nowhere else:
+ * the mode-change message and nowhere else, and it is the tail of the origin block:
  *
  *     D9 05 90 88 4A 00   fld  [numerator]     <- repointed at a cell of ours
  *     D8 35 40 A4 86 00   fdiv [g_screenW]
@@ -116,34 +121,41 @@
  * The base size is read, never written: swmenu_startup passes its address to a settings read, so
  * it is a live value rather than the 1.0 the image ships.
  *
+ * The screen size is the display the engine settled on, as floats, and the origin is what it
+ * derived from them. The size is read to check the canvas still fits, and the origin is WRITTEN
+ * when it does not; see menu_scale_stand_down.
+ *
  * The camera is whatever rdCamera_BuildProjection last produced, and +0x3C is the focal in pixels
- * it derived from the field of view. */
-#define ENGINE_MENU_SCALE_CELL      0x004B682CU
-#define ENGINE_MENU_TEXT_SCALE_CELL 0x004B6830U
-#define ENGINE_MENU_BASE_TEXT_CELL  0x004B683CU
+ * it derived from the field of view. The projection scale is THE number the projection actually
+ * multiplies by, `s = g_projScale / depth` in bapvrt_projectVertex. It is COPIED from
+ * rdCamera+0x3C once per frame, in render_prepareFrame, and that copy is the whole point of
+ * reading it instead of the camera: the field of view can be applied to the camera between the
+ * copy and the draw, and then the camera says one lens while the renderer is still using another.
+ * Reading the camera is what made the hero slide sideways while the field of view slider moved.
+ *
+ * g_swMac.pCurrMenu is null whenever no menu is open, which is the test for "this text belongs
+ * to a menu". See the note by hook_query_font for why that gate exists. */
+typedef struct menu_engine_cells {
+    volatile float         *screen_width;
+    volatile float         *screen_height;
+    volatile int32_t       *origin_x;
+    volatile int32_t       *origin_y;
+    volatile float         *menu_scale;
+    volatile float         *menu_text_scale;
+    const volatile float   *base_text;
+    void *const volatile   *current_menu;
+    const volatile float   *proj_scale;
+    const char *const volatile *current_camera;
+} menu_engine_cells_t;
 
-/* The display the engine settled on, as floats, and the menu origin it derived from them. Read to
- * check the canvas still fits, and the origin is WRITTEN when it does not. See
- * menu_scale_stand_down.
- */
-#define ENGINE_SCREEN_WIDTH_CELL  0x0086A440U
-#define ENGINE_SCREEN_HEIGHT_CELL 0x0086A438U
-#define ENGINE_MENU_ORIGIN_X_CELL 0x006CFD58U
-#define ENGINE_MENU_ORIGIN_Y_CELL 0x006CFD5CU
-#define ENGINE_CURRENT_CAMERA  0x006F83E4U
+extern menu_engine_cells_t menu_cells;
+
 #define CAMERA_FOCAL_PIXELS    0x3Cu
 
-/* THE number the projection actually multiplies by, `s = g_projScale / depth` in
- * bapvrt_projectVertex. It is COPIED from rdCamera+0x3C once per frame, in render_prepareFrame, and
- * that copy is the whole point of reading it here instead of reading the camera: the field of view
- * can be applied to the camera between the copy and the draw, and then the camera says one lens
- * while the renderer is still using another. Reading the camera is what made the hero slide
- * sideways while the field of view slider moved. */
-#define ENGINE_PROJ_SCALE_CELL 0x005BF9E8U
-
-/* g_swMac.pCurrMenu: null whenever no menu is open, which is the test for "this text belongs to a
- * menu". See the note by hook_query_font for why that gate exists. */
-#define ENGINE_CURRENT_MENU_CELL 0x0086D370U
+/* Fills menu_cells from the operands of the resolved sites: the two origin blocks (which have to
+ * agree with each other on every cell), swmenu_open and the projection copy. False, with the
+ * reason logged, when any of them is missing or names a cell outside the image. */
+bool menu_scale_resolve_cells(const uintptr_t *origin_sites, size_t origin_count);
 
 /* The widget record, from the engine's own layout. Stride and field offsets are byte proven. */
 #define WIDGET_STRIDE        0x38u
@@ -166,6 +178,7 @@
 enum {
     SITE_RLE_BLIT,
     SITE_MENU_OPEN,
+    SITE_PROJECTION_COPY,
     SITE_LISTBOX_DRAW,
     SITE_PIC_DRAW,
     SITE_DRAW_MENU,

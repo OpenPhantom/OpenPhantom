@@ -57,8 +57,8 @@ float menu_sw3d_model_scale = 1.0f;
 void __cdecl hook_sw3d_draw(void *widget)
 {
     sw3d_draw_fn_t original = (sw3d_draw_fn_t)scale_state.sw3d_draw_detour.original;
-    float          engine_scale = *(const float *)(uintptr_t)ENGINE_MENU_SCALE_CELL;
-    float          projection   = *(const float *)(uintptr_t)ENGINE_PROJ_SCALE_CELL;
+    float          engine_scale = *menu_cells.menu_scale;
+    float          projection   = *menu_cells.proj_scale;
 
     if (original == NULL) {
         return;
@@ -119,7 +119,6 @@ void __cdecl hook_sw3d_draw(void *widget)
 void __cdecl hook_sw3d_project(float *offset, const int32_t *rect)
 {
     sw3d_project_fn_t  original = (sw3d_project_fn_t)scale_state.sw3d_project_detour.original;
-    const char *const *camera_slot = (const char *const *)(uintptr_t)ENGINE_CURRENT_CAMERA;
     const char        *camera = NULL;
     float              focal;
     float              depth;
@@ -129,9 +128,9 @@ void __cdecl hook_sw3d_project(float *offset, const int32_t *rect)
     }
     /* g_projScale first, because it is what will be multiplied by. The camera is the fallback for
      * the first frame, before render_prepareFrame has copied anything into it. */
-    focal = *(const float *)(uintptr_t)ENGINE_PROJ_SCALE_CELL;
+    focal = *menu_cells.proj_scale;
     if (!(focal > 0.0f)) {
-        camera = *camera_slot;
+        camera = *menu_cells.current_camera;
         focal  = (camera != NULL) ? *(const float *)(camera + CAMERA_FOCAL_PIXELS) : 0.0f;
     }
 

@@ -1,4 +1,8 @@
-/* subtitle_scale.c: see subtitle_scale.h. */
+/* subtitle_scale.c: see subtitle_scale.h.
+ *
+ * SIZE NOTE: a little over the 600 line mark. Ten sites, each with its disassembly, the mapping
+ * argument that ties them together, and the journal that puts all ten back when one refuses.
+ * The writes and the checks in front of them belong beside the sites they are about. */
 #include "subtitle_scale.h"
 
 #include "common/detour.h"
@@ -10,6 +14,7 @@
 #include "common/signature.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #define RESOLUTION_SECTION "enhanced_resolution"
 #define SUBTITLE_SCALE_KEY "SubtitleScale"
@@ -19,10 +24,26 @@
 #define AUTHORED_WIDTH  640.0f
 #define AUTHORED_HEIGHT 480.0f
 
-/* The engine's live display size. These are the integers its own two getters return, and the floats
- * the layout divides by are converted from the same pair. */
-#define SCREEN_WIDTH_INT  0x006D6314u
-#define SCREEN_HEIGHT_INT 0x006D632Cu
+/* The engine's live display size is the pair of integers its own two getters return, and the
+ * floats the layout divides by are converted from the same pair. Each getter is one load and a
+ * return:
+ *
+ *   0046B7B0  55 8B EC              push ebp / mov ebp,esp
+ *   0046B7B3  A1 14 63 6D 00        mov eax,[screenWidth]         operand at +0x04
+ *   0046B7B8  5D C3                 pop ebp / ret
+ *
+ * and the height getter is the same ten bytes with its own cell. The two centring calls below
+ * reach them, so the cells are read out of the getters the calls go to, and a call that does not
+ * go to a function of exactly this shape is not redirected. */
+static const uint8_t SIG_SCREEN_GETTER[] = {
+    0x55, 0x8B, 0xEC, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x5D, 0xC3
+};
+static const uint8_t MSK_SCREEN_GETTER[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SCREEN_GETTER == sizeof MSK_SCREEN_GETTER,
+               "the screen getter pattern and its mask are different lengths");
+#define SCREEN_GETTER_CELL_OPERAND 0x04u
 
 /* --- the posScale pair inside DLG_DrawLine, at 0x00431545 -------------------------------------- *
  *   D9 05 D0 83 4A 00     fld  dword [1.0]
@@ -172,6 +193,10 @@ static struct {
     uintptr_t pos_site;
     uintptr_t glyph_site;
     uintptr_t bar_site;
+    uintptr_t width_getter;     /* where the two centring calls go, checked to be the getters */
+    uintptr_t height_getter;
+    const volatile int32_t *screen_w;   /* the cells those getters load, read out of them */
+    const volatile int32_t *screen_h;
     float   scale;              /* the player's multiplier, on top of fitting the height */
     int32_t told_w;             /* what the two replacement getters answer */
     int32_t told_h;
@@ -212,12 +237,11 @@ static void __cdecl hook_draw_bar(float x0, float y0, float x1, float y1, uint32
 
 static bool read_screen(int32_t *out_w, int32_t *out_h)
 {
-    if (!memory_is_readable_range(SCREEN_WIDTH_INT, sizeof(int32_t)) ||
-        !memory_is_readable_range(SCREEN_HEIGHT_INT, sizeof(int32_t))) {
+    if (state.screen_w == NULL || state.screen_h == NULL) {
         return false;
     }
-    *out_w = *(const int32_t *)(uintptr_t)SCREEN_WIDTH_INT;
-    *out_h = *(const int32_t *)(uintptr_t)SCREEN_HEIGHT_INT;
+    *out_w = *state.screen_w;
+    *out_h = *state.screen_h;
     return (*out_w > 0) && (*out_h > 0);
 }
 
@@ -360,23 +384,49 @@ static void undo_journal(void)
     }
 }
 
-static bool write_pointer_journaled(uintptr_t at, const void *pointer)
+/* An absolute operand is repointed only when it still holds what it was matched with. The pattern
+ * proved it once, at resolve; the writes happen later, once the display exists, and this is what
+ * makes them refuse a second run or a site something else has moved in the meantime. */
+static bool repoint_operand(uintptr_t at, uint32_t expected_old, const void *cell)
 {
-    uint32_t value = (uint32_t)(uintptr_t)pointer;
+    uint32_t current = 0;
+    uint32_t value   = (uint32_t)(uintptr_t)cell;
 
+    if (!memory_read_u32(at, &current) || current != expected_old) {
+        log_warning("the operand at %08X holds %08X where %08X was expected, so the subtitle box "
+                    "is left alone", (unsigned)at, (unsigned)current, (unsigned)expected_old);
+        return false;
+    }
     return write_journaled(at, &value, sizeof value);
 }
 
+/* The literal a pattern carries at an operand, which is the value that operand is expected to
+ * hold when it is written. */
+static uint32_t pattern_operand(const uint8_t *pattern, size_t offset)
+{
+    uint32_t value;
+
+    memcpy(&value, pattern + offset, sizeof value);
+    return value;
+}
+
+/* The wrap comparisons sit past the matched pattern, so the opcode in front of each is checked
+ * and the operand is required to name a float holding the authored 580 before it is moved. */
 static bool retarget_operand(uintptr_t operand_site, const void *cell)
 {
-    if (!memory_is_readable_range(operand_site - 2u, 6u) ||
-        *(const uint8_t *)(operand_site - 2u) != 0xD8u ||
-        *(const uint8_t *)(operand_site - 1u) != 0x1Du) {
+    static const uint8_t FCOMP_ABS[2] = { 0xD8, 0x1D };
+    uint32_t constant = 0;
+    float    value    = 0.0f;
+
+    if (!patch_validate_bytes(operand_site - 2u, FCOMP_ABS, sizeof FCOMP_ABS) ||
+        !memory_read_u32(operand_site, &constant) ||
+        !memory_is_inside_image(constant, sizeof(float)) ||
+        !memory_read(constant, &value, sizeof value) || value != AUTHORED_WRAP) {
         log_warning("the wrap comparison at %08X is not the one expected, so the subtitle box is "
                     "left alone", (unsigned)(operand_site - 2u));
         return false;
     }
-    return write_pointer_journaled(operand_site, cell);
+    return repoint_operand(operand_site, constant, cell);
 }
 
 /* Turns one `jge` into a `jmp`, having checked it is the conditional this expects. */
@@ -394,17 +444,61 @@ static bool unclamp(uintptr_t site)
     }
 }
 
-static bool retarget_call(uintptr_t site, const void *destination)
+/* A call is redirected only while it still goes to the getter it was resolved against. */
+static bool retarget_call(uintptr_t site, uintptr_t expected_getter, const void *destination)
 {
-    int32_t rel;
+    uintptr_t current = 0;
+    int32_t   rel;
 
-    if (!memory_is_readable_range(site, 5u) || *(const uint8_t *)site != 0xE8u) {
-        log_warning("the site at %08X is not a call, so the subtitle box is left alone",
-                    (unsigned)site);
+    if (!patch_read_call_target(site, &current) || current != expected_getter) {
+        log_warning("the call at %08X does not go to the getter at %08X any more, so the subtitle "
+                    "box is left alone", (unsigned)site, (unsigned)expected_getter);
         return false;
     }
     rel = (int32_t)((uintptr_t)destination - (site + 5u));
     return write_journaled(site + 1u, &rel, sizeof rel);
+}
+
+/* Whether the ten bytes at `at` are a getter, operand aside. */
+static bool is_screen_getter(uintptr_t at)
+{
+    uint8_t body[sizeof SIG_SCREEN_GETTER];
+    size_t  index;
+
+    if (!memory_read(at, body, sizeof body)) {
+        return false;
+    }
+    for (index = 0; index < sizeof body; ++index) {
+        if (MSK_SCREEN_GETTER[index] != 0 && body[index] != SIG_SCREEN_GETTER[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Follows one centring call to its getter, checks the getter is the ten byte load-and-return
+ * above, and reads the cell out of it. */
+static bool resolve_getter(uintptr_t call, const char *what, uintptr_t *out_getter,
+                           const volatile int32_t **out_cell)
+{
+    uintptr_t getter = 0;
+    uint32_t  cell   = 0;
+    uint8_t   body[sizeof SIG_SCREEN_GETTER] = { 0 };
+
+    if (!patch_read_call_target(call, &getter) || !is_screen_getter(getter) ||
+        !memory_read_u32(getter + SCREEN_GETTER_CELL_OPERAND, &cell) ||
+        !memory_is_inside_image(cell, sizeof(int32_t))) {
+        (void)memory_read(getter, body, sizeof body);
+        log_warning("the call at %08X goes to %08X, which is not the %s getter expected: it "
+                    "reads %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X, so the subtitle "
+                    "box keeps the engine's own size", (unsigned)call, (unsigned)getter, what,
+                    body[0], body[1], body[2], body[3], body[4], body[5], body[6], body[7],
+                    body[8], body[9]);
+        return false;
+    }
+    *out_getter = getter;
+    *out_cell   = (const volatile int32_t *)(uintptr_t)cell;
+    return true;
 }
 
 static bool install_patches(void)
@@ -413,14 +507,18 @@ static bool install_patches(void)
         return false;
     }
     journal_count = 0;
-    if (!write_pointer_journaled(state.pos_site + POS_SCALE_HEIGHT_OPERAND, &told_height) ||
-        !write_pointer_journaled(state.pos_site + POS_SCALE_WIDTH_OPERAND, &told_width) ||
-        !write_pointer_journaled(state.glyph_site + GLYPH_SCALE_WIDTH_OPERAND, &told_width) ||
+    if (!repoint_operand(state.pos_site + POS_SCALE_HEIGHT_OPERAND,
+                         pattern_operand(SIG_POS_SCALE, POS_SCALE_HEIGHT_OPERAND), &told_height) ||
+        !repoint_operand(state.pos_site + POS_SCALE_WIDTH_OPERAND,
+                         pattern_operand(SIG_POS_SCALE, POS_SCALE_WIDTH_OPERAND), &told_width) ||
+        !repoint_operand(state.glyph_site + GLYPH_SCALE_WIDTH_OPERAND,
+                         pattern_operand(SIG_GLYPH_SCALE, GLYPH_SCALE_WIDTH_OPERAND),
+                         &told_width) ||
         !retarget_operand(state.glyph_site + WRAP_FIRST_OPERAND_FROM_GLYPH, &told_wrap) ||
         !retarget_operand(state.glyph_site + WRAP_SECOND_OPERAND_FROM_GLYPH, &told_wrap) ||
-        !retarget_call(state.glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH,
+        !retarget_call(state.glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH, state.width_getter,
                        (const void *)told_screen_width) ||
-        !retarget_call(state.glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH,
+        !retarget_call(state.glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, state.height_getter,
                        (const void *)told_screen_height) ||
         !unclamp(state.glyph_site + CLAMP_X_FROM_GLYPH) ||
         !unclamp(state.glyph_site + CLAMP_Y_FROM_GLYPH) ||
@@ -465,7 +563,10 @@ void subtitle_scale_install(void)
 
     pos_site   = signature_find_unique(SIG_POS_SCALE, NULL, sizeof SIG_POS_SCALE);
     glyph_site = signature_find_unique(SIG_GLYPH_SCALE, NULL, sizeof SIG_GLYPH_SCALE);
-    bar_site   = signature_find_unique(SIG_DRAW_BAR, NULL, sizeof SIG_DRAW_BAR);
+    /* The bar is detoured, so it is searched for the way a detour target has to be: a DLL that
+     * hooked it first has replaced the nine bytes it opens with. */
+    bar_site   = signature_find_detour_target(SIG_DRAW_BAR, NULL, sizeof SIG_DRAW_BAR,
+                                              DRAW_BAR_PROLOGUE);
     if (pos_site == 0 || glyph_site == 0 || bar_site == 0) {
         log_warning("the subtitle layout was not found (%s, %s, %s), so it keeps the engine's own "
                     "size",
@@ -474,10 +575,20 @@ void subtitle_scale_install(void)
                     (bar_site != 0) ? "backdrop found" : "backdrop NOT found");
         return;
     }
+    if (!resolve_getter(glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH, "screen width",
+                        &state.width_getter, &state.screen_w) ||
+        !resolve_getter(glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, "screen height",
+                        &state.height_getter, &state.screen_h)) {
+        return;
+    }
     state.pos_site   = pos_site;
     state.glyph_site = glyph_site;
     state.bar_site   = bar_site;
     state.resolved   = true;
+    log_info("the subtitle layout is at %08X, its getters at %08X and %08X read the display from "
+             "%08X and %08X", (unsigned)glyph_site, (unsigned)state.width_getter,
+             (unsigned)state.height_getter, (unsigned)(uintptr_t)state.screen_w,
+             (unsigned)(uintptr_t)state.screen_h);
 
     /* NOTHING is written until the display is known, on the order the game starts in rather than
      * on caution. This runs from the loader, before any mode has been set, so the two size

@@ -154,8 +154,12 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("graphics_aspect_gate",   SIG_ASPECT_GATE),
-    SIGNATURE_ENTRY("graphics_enum_modes",    SIG_ENUM_MODES),
-    SIGNATURE_ENTRY("graphics_set_resolution",SIG_SET_RESOLUTION),
+    /* Both functions are detoured, mode_table.c's cap on the first and this file's hook on the
+     * second, so both are declared as detour targets: a plain pattern is searched for whole, and
+     * a DLL that detoured either first has replaced exactly the bytes it opens with. */
+    SIGNATURE_ENTRY_DETOUR("graphics_enum_modes", SIG_ENUM_MODES, ENUM_MODES_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY_DETOUR("graphics_set_resolution", SIG_SET_RESOLUTION,
+                           SET_RESOLUTION_PROLOGUE_SIZE),
     SIGNATURE_ENTRY("menu_gate_enter",        SIG_MENU_GATE_ENTER),
     SIGNATURE_ENTRY("menu_gate_usable",       SIG_MENU_GATE_USABLE)
 };

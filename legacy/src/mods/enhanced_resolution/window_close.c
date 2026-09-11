@@ -3,6 +3,7 @@
 #include "window_fit.h"
 
 #include "common/logging.h"
+#include "common/patch.h"
 #include "common/signature.h"
 
 #include <stdint.h>
@@ -56,10 +57,9 @@ static const uint8_t MASK_SYS_MAIN[] = {
 _Static_assert(sizeof SIG_SYS_MAIN == sizeof MASK_SYS_MAIN,
                "the sys_main pattern and its mask are different lengths");
 
-/* Where the shutdown call sits inside that pattern, and how long it is. Written as offsets into the
- * pattern so the two cannot drift apart. */
+/* Where the shutdown call sits inside that pattern. Written as an offset into the pattern so the
+ * two cannot drift apart. */
 #define SHUTDOWN_CALL_OFFSET 12u
-#define CALL_LENGTH          5u
 
 enum {
     SITE_SYS_MAIN,
@@ -171,7 +171,7 @@ bool window_close_install(void)
 {
     uintptr_t site;
     uintptr_t call_at;
-    int32_t   displacement;
+    uintptr_t shutdown = 0;
 
     signature_resolve_table(sites, SITE_COUNT);
     site = sites[SITE_SYS_MAIN].address;
@@ -181,9 +181,13 @@ bool window_close_install(void)
                     "it was.");
         return false;
     }
-    call_at      = site + SHUTDOWN_CALL_OFFSET;
-    displacement = *(const int32_t *)(call_at + 1u);
-    close_state.shutdown = (shutdown_fn)(call_at + CALL_LENGTH + (uintptr_t)displacement);
+    call_at = site + SHUTDOWN_CALL_OFFSET;
+    if (!patch_read_call_target(call_at, &shutdown)) {
+        log_warning("the call at %08X inside sys_main is not a call into the image, so the "
+                    "window's close box will do nothing", (unsigned)call_at);
+        return false;
+    }
+    close_state.shutdown = (shutdown_fn)shutdown;
 
     log_info("the engine's shutdown resolved at %08X; the close box is wrapped as soon as the "
              "engine has made its window, which is after this runs.",

@@ -169,8 +169,8 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
  * them. */
 bool canvas_still_fits(void)
 {
-    float screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
-    float screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
+    float screen_width  = *menu_cells.screen_width;
+    float screen_height = *menu_cells.screen_height;
 
     if (!(screen_width > 0.0f) || !(screen_height > 0.0f)) {
         return true;                  /* no mode yet: nothing has drawn, so nothing is at risk */
@@ -350,6 +350,11 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
     if (origin_hits != ORIGIN_SITE_COUNT) {
         log_warning("the menu origin block matched %u times rather than %u, so the menus are left "
                     "at their authored size", (unsigned)origin_hits, (unsigned)ORIGIN_SITE_COUNT);
+        return false;
+    }
+    /* Every engine cell the feature reads or writes, out of the operands of what was just
+     * matched. Before the first write, because the stand down and the refit read them. */
+    if (!menu_scale_resolve_cells(origin_sites, ORIGIN_SITE_COUNT)) {
         return false;
     }
 

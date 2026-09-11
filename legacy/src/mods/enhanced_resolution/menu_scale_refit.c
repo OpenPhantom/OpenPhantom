@@ -273,8 +273,8 @@ void menu_scale_apply_trimmings(bool verbose)
 
 bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y)
 {
-    float   screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
-    float   screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
+    float   screen_width  = *menu_cells.screen_width;
+    float   screen_height = *menu_cells.screen_height;
     int32_t origin_x;
     int32_t origin_y;
     float   scale;
@@ -299,16 +299,15 @@ bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y
      * the frame buffer. */
     if (origin_x < 0) { origin_x = 0; }
     if (origin_y < 0) { origin_y = 0; }
-    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_X_CELL = origin_x;
-    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_Y_CELL = origin_y;
+    *menu_cells.origin_x = origin_x;
+    *menu_cells.origin_y = origin_y;
 
     /* The same three instructions the engine's block ends with. The numerator is the cell its own
      * fld was repointed at, so this is its arithmetic on its own operands and not a second opinion
      * about what the scale should be. */
     scale = menu_text_scale_numerator / screen_width;
-    *(float *)(uintptr_t)ENGINE_MENU_SCALE_CELL = scale;
-    *(float *)(uintptr_t)ENGINE_MENU_TEXT_SCALE_CELL =
-        scale * *(const float *)(uintptr_t)ENGINE_MENU_BASE_TEXT_CELL;
+    *menu_cells.menu_scale      = scale;
+    *menu_cells.menu_text_scale = scale * *menu_cells.base_text;
 
     if (out_origin_x != NULL) { *out_origin_x = origin_x; }
     if (out_origin_y != NULL) { *out_origin_y = origin_y; }
@@ -336,7 +335,7 @@ static void reset_list_boxes(const void *menu, char *widgets, size_t count)
     send_widget_fn_t send = (send_widget_fn_t)menu_scale_sites[SITE_SEND_WIDGET].address;
     size_t           index;
 
-    if (send == NULL || menu != *(void *const *)(uintptr_t)ENGINE_CURRENT_MENU_CELL) {
+    if (send == NULL || menu != *menu_cells.current_menu) {
         return;
     }
     for (index = 0; index < count; ++index) {
@@ -464,8 +463,8 @@ void menu_scale_follow_display(void)
         return;
     }
 
-    screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
-    screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
+    screen_width  = *menu_cells.screen_width;
+    screen_height = *menu_cells.screen_height;
     if (!(screen_width >= (float)MENU_SCALE_CANVAS_WIDTH) ||
         !(screen_height >= (float)MENU_SCALE_CANVAS_HEIGHT) ||
         screen_width > (float)PLAUSIBLE_SCREEN_EXTENT ||

@@ -82,8 +82,9 @@ the mode table that the aspect gate anchors.
 | `swmenu_render`, the widget-pass bracket | `0x45DC6F`..`0x45DCB9` | **read, never patched**: address-free masked pattern over `inc g_tickCounter / mov [flag],1 / cmp [parent],1`; the flag cell is read out of the `C7 05` operand and cross-checked against the closing `mov [flag],0` at +0x41. The gate for the island clamp. In `obi.exe` it resolves at `0x45DC0F`, with the flag cell at `0x008BFB40` instead of `0x008BFBA0` |
 | `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
 | `swrle_blit`, the canvas clip | `0x004616CC` | two immediates at `+0x30` and `+0x37`, `640`/`480` -> `640N`/`480N`; the function reads the destination surface size and discards it |
-| the menu origin block | matched **twice** | `0x0045D69D` and `0x0045D7CB`; three operands each repointed at cells holding `640N` and `480N`, which also gives `g_menuScale` its multiplier without touching its non-popping `fst` |
-| `swmenu_open` | `0x0045D9F5` | detoured, 8 byte prologue; scales each menu's widget rectangles once, which the draw and the hit test both read |
+| the menu origin block | matched **twice** | `0x0045D69D` and `0x0045D7CB`; three operands each repointed at cells holding `640N` and `480N`, which also gives `g_menuScale` its multiplier without touching its non-popping `fst`. The pattern runs on through the scale derivation, and the seven engine cells the feature reads or writes (the screen size, the origin, `g_menuScale`, the base text size and `g_menuTextScale`) are read out of its operands, with both sites required to agree |
+| `swmenu_open` | `0x0045D9F5` | detoured, 8 byte prologue; scales each menu's widget rectangles once, which the draw and the hit test both read. `g_swMac.pCurrMenu` is read out of its first load |
+| `render_prepareFrame`, the focal copy | `0x0041996D` | **read, never patched**; the current camera cell and `g_projScale` come out of its two operands |
 | the ending's mode drop | `0x0043EF19` | the five byte `call graphics_setResolution(640,480)` replaced with `NOP`, **only** when `EndingKeepsResolution=1`. The two pushes and the `add esp,8` after them stay, so the stack balances either way. Address free: the pattern's two call displacements and its `"movie\scene8"` operand are masked, and the tail carries the distinction from the five other sites that push 640x480 |
 | `credits_screen` | `0x004470F8` | detoured, 8-byte prologue, **only** when `SkipCredits=1`. Detoured to BOUND the skip: being inside the function that runs the credits is the honest way to know they are running |
 | `credits_readLine` | `0x004476EB` | detoured, 9-byte prologue, **only** when `SkipCredits=1`. Answers end of file once Escape has been seen. Installed AFTER the screen detour, because the reader alone can never answer end of file and there is no `detour_remove` |
@@ -567,6 +568,12 @@ at `k = 1`. Only two calls reach that function and both are the subtitle's own b
 
 **Nothing else the font layer draws is affected.** The same layer draws every menu string and HUD
 readout; all ten writes are inside the dialogue's own drawing or reached only from it.
+
+The two centring calls are followed to the getters they reach, each of which has to be the ten byte
+load-and-return the engine wrote, and the two display size cells are read out of those getters
+rather than written down. Every operand and call is checked to hold what it was matched with
+before it is moved, so a second run, or a site something else moved first, is refused rather than
+written over.
 
 ## Known limitations
 

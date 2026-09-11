@@ -6,6 +6,11 @@
  * grown to more than twice what this project allows. The offsets and cells the rest of the
  * feature needs are in menu_scale_sites.h.
  *
+ * SIZE NOTE: over the 600 line mark. Fourteen sites, each with the disassembly that proves it,
+ * and the reads that turn their operands into the engine cells the feature uses; the code is a
+ * table and one resolver. Cutting the evidence from the patterns it proves is the one seam there
+ * is, and it is the wrong one.
+ *
  * ==============================================================================================
  * The sites, and how they are found
  *
@@ -39,20 +44,53 @@
  *   +0x2E  E8 .. .. .. ..      call __ftol         <- masked
  *   +0x33  A3 5C FD 6C 00      mov  [g_menuOriginY],eax
  *   +0x38  D9 05 90 88 4A 00   fld  [640.0f]      <- operand at +0x3A, the g_menuScale numerator
+ *   +0x3E  D8 35 40 A4 86 00   fdiv [g_screenW]
+ *   +0x44  D9 15 2C 68 4B 00   fst  [g_menuScale]
+ *   +0x4A  D8 0D 3C 68 4B 00   fmul [base text size]
+ *   +0x50  D9 1D 30 68 4B 00   fstp [g_menuTextScale]
  *
  * The three constants are shared cells the rest of the engine also reads, so the OPERANDS are
  * repointed and the cells are left alone. Writing 640*N into 0x004A8890 would move
- * every other reader of 640.0f in the image.
+ * every other reader of 640.0f in the image. They are matched literally: the constant is the
+ * evidence that this is the block, and a build with its pool elsewhere is declined.
+ *
+ * The seven cells the block reads and writes are the other way round: masked, and read out of
+ * the match. The screen size, the origin, g_menuScale, the base text size and g_menuTextScale
+ * are everything the feature reads or writes in the engine's data, and the two blocks are
+ * required to name the same seven, which is the check that a match is the block and not its
+ * shape.
  *
  * swmenu_open, retail 0x0045D9F5. Detoured on an 8 byte prologue, which is three whole
- * instructions: push ebp / mov ebp,esp / mov eax,[g_swMac.pCurrMenu].
+ * instructions: push ebp / mov ebp,esp / mov eax,[g_swMac.pCurrMenu]. The operand of the third is
+ * masked and read: it is the cell the "is a menu open" test reads. With that operand masked the
+ * old thirteen bytes also matched a dialogue function of the same shape, so the pattern runs on
+ * through the early return and the flag the real one sets.
+ *
+ * render_prepareFrame's copy of the focal, retail 0x0041996D. Never patched. It loads the current
+ * camera, copies two of its fields elsewhere and then its +0x3C into g_projScale, so one match
+ * names both cells the 3-D widget placement reads:
+ *
+ *   A1 <camera>          mov  eax,[g_currentCamera]     <- operand at +0x01
+ *   5E                   pop  esi
+ *   8B 48 04 8B 51 08    the camera's own +4, then that record's +8 and +0xC, copied out
+ *   89 15 ....
+ *   8B 48 04 8B 51 0C
+ *   33 C9                xor  ecx,ecx
+ *   89 15 ....
+ *   8B 40 3C             mov  eax,[eax+0x3C]            the focal in pixels
+ *   A3 <projScale>       mov  [g_projScale],eax         <- operand at +0x24
  */
 #include "menu_scale_sites.h"
 
+#include "common/logging.h"
+#include "common/memory.h"
 #include "common/signature.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+menu_engine_cells_t menu_cells;
 
 /* ---------------------------------------------------------------------------------------------
  * swrle_blit
@@ -71,33 +109,52 @@ static const uint8_t SIG_RLE_BLIT[] = {
  * The origin and scale block, matched twice
  */
 static const uint8_t SIG_MENU_ORIGIN[] = {
-    0xD9, 0x05, 0x40, 0xA4, 0x86, 0x00,
-    0xD8, 0x25, 0x90, 0x88, 0x4A, 0x00,
-    0xD8, 0x35, 0x94, 0x88, 0x4A, 0x00,
-    0xE8, 0x00, 0x00, 0x00, 0x00,
-    0xA3, 0x58, 0xFD, 0x6C, 0x00,
-    0xD9, 0x05, 0x38, 0xA4, 0x86, 0x00,
-    0xD8, 0x25, 0x98, 0x88, 0x4A, 0x00,
-    0xD8, 0x35, 0x94, 0x88, 0x4A, 0x00,
-    0xE8, 0x00, 0x00, 0x00, 0x00,
-    0xA3, 0x5C, 0xFD, 0x6C, 0x00,
-    0xD9, 0x05, 0x90, 0x88, 0x4A, 0x00
+    0xD9, 0x05, 0x00, 0x00, 0x00, 0x00,                      /* fld  [g_screenW]               */
+    0xD8, 0x25, 0x90, 0x88, 0x4A, 0x00,                      /* fsub [640.0f]                  */
+    0xD8, 0x35, 0x94, 0x88, 0x4A, 0x00,                      /* fdiv [2.0f]                    */
+    0xE8, 0x00, 0x00, 0x00, 0x00,                            /* call __ftol                    */
+    0xA3, 0x00, 0x00, 0x00, 0x00,                            /* mov  [g_menuOriginX],eax       */
+    0xD9, 0x05, 0x00, 0x00, 0x00, 0x00,                      /* fld  [g_screenH]               */
+    0xD8, 0x25, 0x98, 0x88, 0x4A, 0x00,                      /* fsub [480.0f]                  */
+    0xD8, 0x35, 0x94, 0x88, 0x4A, 0x00,                      /* fdiv [2.0f]                    */
+    0xE8, 0x00, 0x00, 0x00, 0x00,                            /* call __ftol                    */
+    0xA3, 0x00, 0x00, 0x00, 0x00,                            /* mov  [g_menuOriginY],eax       */
+    0xD9, 0x05, 0x90, 0x88, 0x4A, 0x00,                      /* fld  [640.0f]                  */
+    0xD8, 0x35, 0x00, 0x00, 0x00, 0x00,                      /* fdiv [g_screenW]               */
+    0xD9, 0x15, 0x00, 0x00, 0x00, 0x00,                      /* fst  [g_menuScale]             */
+    0xD8, 0x0D, 0x00, 0x00, 0x00, 0x00,                      /* fmul [base text size]          */
+    0xD9, 0x1D, 0x00, 0x00, 0x00, 0x00                       /* fstp [g_menuTextScale]         */
 };
 static const uint8_t MSK_MENU_ORIGIN[] = {
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0x00, 0x00, 0x00, 0x00,                            /* the __ftol displacement        */
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0x00, 0x00, 0x00, 0x00,                            /* and the second one             */
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
 _Static_assert(sizeof SIG_MENU_ORIGIN == sizeof MSK_MENU_ORIGIN,
                "the menu origin pattern and its mask are different lengths");
+
+/* The seven cells, as offsets of their operands from the match. The screen width is read twice
+ * in the block, and both reads have to agree, as do the two sites. */
+#define ORIGIN_SCREEN_WIDTH_OPERAND       0x02u
+#define ORIGIN_X_OPERAND                  0x18u
+#define ORIGIN_SCREEN_HEIGHT_OPERAND      0x1Eu
+#define ORIGIN_Y_OPERAND                  0x34u
+#define ORIGIN_SCREEN_WIDTH_AGAIN_OPERAND 0x40u
+#define ORIGIN_MENU_SCALE_OPERAND         0x46u
+#define ORIGIN_BASE_TEXT_OPERAND          0x4Cu
+#define ORIGIN_MENU_TEXT_SCALE_OPERAND    0x52u
 
 /* ---------------------------------------------------------------------------------------------
  * swlistbx_draw, for the two insets it holds its rows in by
@@ -124,10 +181,57 @@ static const uint8_t SIG_LISTBOX_DRAW[] = {
  */
 static const uint8_t SIG_MENU_OPEN[] = {
     0x55, 0x8B, 0xEC,                                        /* push ebp / mov ebp,esp         */
-    0xA1, 0x70, 0xD3, 0x86, 0x00,                            /* mov eax,[g_swMac.pCurrMenu]    */
+    0xA1, 0x00, 0x00, 0x00, 0x00,                            /* mov eax,[g_swMac.pCurrMenu]    */
     0x3B, 0x45, 0x08,                                        /* cmp eax,[ebp+8]                */
-    0x75, 0x0A                                               /* jne                            */
+    0x75, 0x0A,                                              /* jne                            */
+    0xB8, 0x01, 0x00, 0x00, 0x00,                            /* mov eax,1: already open        */
+    0xE9, 0xF5, 0x00, 0x00, 0x00,                            /* jmp out                        */
+    0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, /* mov [a flag],1              */
+    0x6A, 0x00, 0xE8                                         /* push 0 / call                  */
 };
+static const uint8_t MSK_MENU_OPEN[] = {
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_MENU_OPEN == sizeof MSK_MENU_OPEN,
+               "the swmenu_open pattern and its mask are different lengths");
+#define MENU_OPEN_CURRENT_MENU_OPERAND 0x04u
+
+/* ---------------------------------------------------------------------------------------------
+ * render_prepareFrame's copy of the focal
+ */
+static const uint8_t SIG_PROJECTION_COPY[] = {
+    0xA1, 0x00, 0x00, 0x00, 0x00,                            /* mov eax,[g_currentCamera]      */
+    0x5E,                                                    /* pop esi                        */
+    0x8B, 0x48, 0x04, 0x8B, 0x51, 0x08,                      /* two fields of the camera's +4  */
+    0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x48, 0x04, 0x8B, 0x51, 0x0C,
+    0x33, 0xC9,
+    0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x40, 0x3C,                                        /* mov eax,[eax+0x3C]             */
+    0xA3, 0x00, 0x00, 0x00, 0x00                             /* mov [g_projScale],eax          */
+};
+static const uint8_t MSK_PROJECTION_COPY[] = {
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00
+};
+_Static_assert(sizeof SIG_PROJECTION_COPY == sizeof MSK_PROJECTION_COPY,
+               "the projection copy pattern and its mask are different lengths");
+#define PROJECTION_COPY_CAMERA_OPERAND 0x01u
+#define PROJECTION_COPY_SCALE_OPERAND  0x24u
 
 /* ---------------------------------------------------------------------------------------------
  * swpic_draw, retail 0x0045F950. Detoured on a 7 byte prologue for the four animated previews
@@ -492,7 +596,9 @@ static const uint8_t SIG_SEND_WIDGET[] = {
 
 signature_t menu_scale_sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("swrle_blit", SIG_RLE_BLIT),
-    SIGNATURE_ENTRY_DETOUR("swmenu_open", SIG_MENU_OPEN, MENU_OPEN_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("swmenu_open", SIG_MENU_OPEN, MSK_MENU_OPEN, MENU_OPEN_PROLOGUE),
+    SIGNATURE_ENTRY_MASKED("render_prepareFrame focal copy", SIG_PROJECTION_COPY,
+                           MSK_PROJECTION_COPY),
     SIGNATURE_ENTRY("swlistbx_draw", SIG_LISTBOX_DRAW),
     SIGNATURE_ENTRY_DETOUR("swpic_draw", SIG_PIC_DRAW, PIC_DRAW_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR_MASKED("xswift_drawMenu", SIG_DRAW_MENU, MSK_DRAW_MENU,
@@ -513,4 +619,97 @@ size_t menu_scale_find_origin_sites(uintptr_t *addresses, size_t max_addresses)
 {
     return signature_count_matches(SIG_MENU_ORIGIN, MSK_MENU_ORIGIN, sizeof SIG_MENU_ORIGIN,
                                    addresses, max_addresses);
+}
+
+/* One operand, checked to name a cell inside the image, and checked against the value an earlier
+ * read of the same cell produced when there was one. */
+static bool read_cell(uintptr_t site, size_t operand, size_t size, uint32_t *cell,
+                      const char *what)
+{
+    uint32_t value = 0;
+
+    if (!memory_read_u32(site + operand, &value) || !memory_is_inside_image(value, size)) {
+        log_warning("the %s operand at %08X names %08X, which is not inside the image, so the "
+                    "menus are left at their authored size", what, (unsigned)(site + operand),
+                    (unsigned)value);
+        return false;
+    }
+    if (*cell != 0 && *cell != value) {
+        log_warning("the %s is %08X at one site and %08X at another, so this is not the block "
+                    "expected and the menus are left at their authored size", what,
+                    (unsigned)*cell, (unsigned)value);
+        return false;
+    }
+    *cell = value;
+    return true;
+}
+
+bool menu_scale_resolve_cells(const uintptr_t *origin_sites, size_t origin_count)
+{
+    uint32_t  screen_width = 0;
+    uint32_t  screen_height = 0;
+    uint32_t  origin_x = 0;
+    uint32_t  origin_y = 0;
+    uint32_t  menu_scale = 0;
+    uint32_t  base_text = 0;
+    uint32_t  menu_text_scale = 0;
+    uint32_t  current_menu = 0;
+    uint32_t  camera = 0;
+    uint32_t  proj_scale = 0;
+    uintptr_t open = menu_scale_sites[SITE_MENU_OPEN].address;
+    uintptr_t copy = menu_scale_sites[SITE_PROJECTION_COPY].address;
+    size_t    index;
+
+    for (index = 0; index < origin_count; ++index) {
+        uintptr_t site = origin_sites[index];
+
+        if (!read_cell(site, ORIGIN_SCREEN_WIDTH_OPERAND, sizeof(float), &screen_width,
+                       "screen width cell") ||
+            !read_cell(site, ORIGIN_SCREEN_WIDTH_AGAIN_OPERAND, sizeof(float), &screen_width,
+                       "screen width cell") ||
+            !read_cell(site, ORIGIN_SCREEN_HEIGHT_OPERAND, sizeof(float), &screen_height,
+                       "screen height cell") ||
+            !read_cell(site, ORIGIN_X_OPERAND, sizeof(int32_t), &origin_x, "menu origin X") ||
+            !read_cell(site, ORIGIN_Y_OPERAND, sizeof(int32_t), &origin_y, "menu origin Y") ||
+            !read_cell(site, ORIGIN_MENU_SCALE_OPERAND, sizeof(float), &menu_scale,
+                       "g_menuScale") ||
+            !read_cell(site, ORIGIN_BASE_TEXT_OPERAND, sizeof(float), &base_text,
+                       "base text size") ||
+            !read_cell(site, ORIGIN_MENU_TEXT_SCALE_OPERAND, sizeof(float), &menu_text_scale,
+                       "g_menuTextScale")) {
+            return false;
+        }
+    }
+    if (open == 0 || copy == 0) {
+        log_warning("%s did not resolve, so the menus are left at their authored size",
+                    (open == 0) ? "swmenu_open" : "render_prepareFrame's focal copy");
+        return false;
+    }
+    if (!read_cell(open, MENU_OPEN_CURRENT_MENU_OPERAND, sizeof(void *), &current_menu,
+                   "current menu cell") ||
+        !read_cell(copy, PROJECTION_COPY_CAMERA_OPERAND, sizeof(void *), &camera,
+                   "current camera cell") ||
+        !read_cell(copy, PROJECTION_COPY_SCALE_OPERAND, sizeof(float), &proj_scale,
+                   "projection scale cell")) {
+        return false;
+    }
+
+    menu_cells.screen_width    = (volatile float *)(uintptr_t)screen_width;
+    menu_cells.screen_height   = (volatile float *)(uintptr_t)screen_height;
+    menu_cells.origin_x        = (volatile int32_t *)(uintptr_t)origin_x;
+    menu_cells.origin_y        = (volatile int32_t *)(uintptr_t)origin_y;
+    menu_cells.menu_scale      = (volatile float *)(uintptr_t)menu_scale;
+    menu_cells.menu_text_scale = (volatile float *)(uintptr_t)menu_text_scale;
+    menu_cells.base_text       = (const volatile float *)(uintptr_t)base_text;
+    menu_cells.current_menu    = (void *const volatile *)(uintptr_t)current_menu;
+    menu_cells.proj_scale      = (const volatile float *)(uintptr_t)proj_scale;
+    menu_cells.current_camera  = (const char *const volatile *)(uintptr_t)camera;
+    log_info("engine cells: screen %08X x %08X, origin %08X,%08X, g_menuScale %08X, base text "
+             "%08X, g_menuTextScale %08X, current menu %08X, camera %08X, g_projScale %08X, all "
+             "read out of the matched code",
+             (unsigned)screen_width, (unsigned)screen_height, (unsigned)origin_x,
+             (unsigned)origin_y, (unsigned)menu_scale, (unsigned)base_text,
+             (unsigned)menu_text_scale, (unsigned)current_menu, (unsigned)camera,
+             (unsigned)proj_scale);
+    return true;
 }

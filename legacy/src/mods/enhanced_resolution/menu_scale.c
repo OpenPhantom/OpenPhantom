@@ -98,7 +98,7 @@ uint32_t __cdecl hook_query_font(void)
         return raw;
     }
 
-    if (*(void *const *)(uintptr_t)ENGINE_CURRENT_MENU_CELL == NULL) {
+    if (*menu_cells.current_menu == NULL) {
         /* Not a menu. Reported once, because it is the evidence that a caller exists which the
          * decompilation does not contain, and the next person to widen this needs to know. */
         if (!scale_state.warned_outside_menu) {

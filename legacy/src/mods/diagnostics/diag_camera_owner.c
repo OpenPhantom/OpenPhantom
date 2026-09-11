@@ -130,6 +130,7 @@ static struct {
     const int32_t  *choice_count;   /* what Dialog_Close tests before releasing   */
     int             lines;
     int             depth;          /* calls, NOT the flag: see the note on the census below */
+    bool            armed;          /* both halves of the pair are in, so reporting is honest */
 } owner;
 
 typedef void(__cdecl *override_on_fn_t)(int32_t group);
@@ -173,6 +174,13 @@ static void __cdecl hook_override_on(int32_t group)
     const char *what;
 
     ((override_on_fn_t)owner.on.original)(group);
+    /* Abandoned, so this hook does nothing but pass the call on. A detour cannot be lifted once
+     * it is placed, so a feature that gave up during its install has to say so here: the pair
+     * below is worth nothing as a single half, and half of it went on writing to the log with
+     * the census itself already reported as off. */
+    if (!owner.armed) {
+        return;
+    }
     owner.depth++;
     if (!may_report()) {
         return;
@@ -195,6 +203,9 @@ static void __cdecl hook_override_off(void)
     const char *what;
 
     ((override_off_fn_t)owner.off.original)();
+    if (!owner.armed) {      /* same reason as the take above */
+        return;
+    }
     owner.depth--;
     if (!may_report()) {
         return;
@@ -268,10 +279,15 @@ int diag_camera_owner_install(int level)
      * the take is worse, since the interesting event is the one with no partner. */
     if (!on_live || !off_live) {
         log_warning("the camera owner census needs both halves and got %s, so it reports nothing. "
-                    "A hand-over is only readable as a pair",
+                    "A hand-over is only readable as a pair. Whichever half was placed stays in "
+                    "the image, because a detour cannot be lifted, and passes its call straight "
+                    "through",
                     on_live ? "only the take" : (off_live ? "only the release" : "neither"));
         return 0;
     }
+
+    /* Last, so that neither hook can report anything until the pair is known to be whole. */
+    owner.armed = true;
 
     /* Not part of the both-or-neither pair: it explains a leak the pair has already found, so
      * losing it costs detail rather than the finding. */

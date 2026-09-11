@@ -17,6 +17,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 |---|---|---|
 | `Enabled` | `1` | |
 | `MatchDisplayRefresh` | `1` | the cap follows the display's reported refresh rate and `TargetFps` is ignored. A cap below the refresh rate makes the screen repeat frames on an irregular pattern, which judders however correct the interpolation is; `frame_cap.h` carries the measurements. On by default, including when the key is absent, so an installation carrying an older `engine_fixes.ini` still gets it. When the display will not report a rate the configured number stands and the log says so |
+| `RefreshDivisor` | `0` | with `MatchDisplayRefresh` on, which fraction of the screen's rate to cap at: 0 decides by itself, stepping down to a half, a third or a quarter when more than a tenth of a second's frames needed more work than the cap allowed, back up after five clear seconds in a row, and starting at the refresh again when a level opens; 1 to 4 pins one. Never below 30 a second. A second with fewer than twenty frames or a stall in it decides nothing. On a synchronised display only the refresh and its fractions are even; see **Produced frames against shown frames** |
 | `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
@@ -44,13 +45,22 @@ survives that recompile, so it does not share a gate with the rest of the camera
 
 Worth its own heading, because it caused a long hunt in this DLL for a fault that was never here.
 
-`TargetFps` decides how fast frames are produced. Nothing in the shipped stack decides how fast
-they are shown. The game presents through `IDirectDrawSurface4_Flip`, and a flip on a flipping
-chain in exclusive fullscreen is scheduled for the next vertical retrace unless `DDFLIP_NOVSYNC`
-is passed, which the game does not pass. The wrapper that now translates that flip builds its
-device with `PresentationInterval = 0x80000000`, IMMEDIATE, so the pacing the flip used to
-guarantee is gone. Neither of the wrapper's two vsync settings changes it on the DirectDraw
-translation path, and its own DirectDraw section has no vsync key at all.
+`TargetFps` decides how fast frames are produced, and the display shows them at its own rate. The
+game presents through `IDirectDrawSurface4_Flip`, and a flip on a flipping chain in exclusive
+fullscreen is scheduled for the next vertical retrace unless `DDFLIP_NOVSYNC` is passed, which the
+game does not pass. The wrapper that now translates that flip can keep that pacing or drop it, and
+the configuration we shipped up to 1.4.3 dropped it: `EnableVSync = 0` with `ForceVsyncMode = 1` is
+the wrapper's "force vertical sync off", and a frame appeared at whatever scanline the display had
+reached. An earlier version of this paragraph said the wrapper could not synchronise at all. That
+was read off its DirectDraw log line, which prints the device parameters before the wrapper's own
+D3D9 layer sets the interval on a copy of them, so it reads IMMEDIATE whatever the key says. With
+`EnableVSync = 1` the frame period at a cap of 72 on a 144 Hz screen locks to 13.888 ms, two
+retraces exactly, where the cap alone gave 13.885. The installer ships it on from 1.4.4.
+
+Smooth is then two things together and neither alone: a synchronised display, and a cap that is
+the refresh rate or an integer fraction of it. `MatchDisplayRefresh` provides the first cap;
+`RefreshDivisor` steps between the fractions when the machine cannot hold the one above, which a
+wide cutscene shot at 16:9 measured at 8.5 ms of work a frame against a 6.94 ms budget, or pins one.
 
 The engine's own `stdDisplay_waitVBlank` at `0x0048F1F3` would have paced it, and it is dead code:
 a whole-image search finds no reference to it.
@@ -481,7 +491,6 @@ error is not cancelled where there is nothing to agree with, which is the world 
 camera at alternating speed. `bapview_updateCam` builds its target as a proper shift register
 pair, once per substep, and every per-frame factor in it is compensated, so camera jitter seen
 while riding is this defect rather than a camera one.
-
 ### A correction to the census above
 
 The claim that `bapmap_tickMovers` is reached from one place is about the plural, and the

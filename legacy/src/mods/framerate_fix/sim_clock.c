@@ -106,6 +106,8 @@
  */
 #include "sim_clock.h"
 
+#include "frame_cap.h"
+
 #include "world_clock.h"
 
 #include "common/detour.h"
@@ -203,6 +205,7 @@ static void drop_offset_if_level_opened(void)
              (unsigned)sim_state.rebases, sim_state.offset);
     sim_state.offset    = 0.0;
     sim_state.last_seen = live;
+    frame_cap_level_opened();
 }
 
 /* The world must never see the rebase, so the offset goes back on before the engine writes its

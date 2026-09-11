@@ -173,7 +173,8 @@ add_unit_test(face_latch framerate_fix framerate_fix/face_latch.c
 # sim_clock.c comes with it: the window has to add back whatever the rebase took off the clock it
 # samples, so the two files are one measurement and linking only half of them does not build.
 add_unit_test(framerate_stats framerate_fix framerate_fix/framerate_stats.c
-              framerate_fix/sim_clock.c framerate_fix/world_clock.c)
+              framerate_fix/sim_clock.c framerate_fix/world_clock.c
+              framerate_fix/frame_cap.c)
 
 # What a moving door looks like between two simulation steps. Pure arithmetic, and every way it
 # can be wrong is silent in review and loud on screen: a destroyed scale flickers the model, a
@@ -199,6 +200,8 @@ add_unit_test(frame_cap framerate_fix framerate_fix/frame_cap.c)
 add_unit_test(sim_clock framerate_fix framerate_fix/sim_clock.c
     # the un-clamping shares this file's one detour, so it comes along with it
     framerate_fix/world_clock.c
+    # a level opening restarts the cap's fraction, and the clock going backwards is where it is read
+    framerate_fix/frame_cap.c
 )
 
 # Removing the substep loop's clamp of the world clock. The clamp put a mover's sample pair on

@@ -80,6 +80,7 @@
  * below are found by pattern.
  */
 #include "frame_delta.h"
+#include "frame_cap.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -192,6 +193,8 @@ static void __cdecl hook_wait_for_frame(void)
     double              seconds;
 
     original();
+    /* The cap's own measurement of a frame's work starts where this wait ends. */
+    frame_cap_wait_ends();
 
     if (!delta_state.active || delta_state.cell == NULL) {
         return;

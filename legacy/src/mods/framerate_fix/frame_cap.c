@@ -40,12 +40,38 @@ static const uint8_t EXPECTED_CAP_60_MOV[7] = { 0xC7, 0x45, 0xFC, 0x89, 0x88, 0x
 #define REFRESH_MINIMUM 20
 #define REFRESH_MAXIMUM 1000
 
+/* The step policy's numbers. A tenth of a second's frames overrunning is a tenth of the refreshes
+ * repeating a frame, which is the point at which it reads as judder rather than as a hiccup; the
+ * one or two long frames a second that any machine produces are well under it. Room at the next
+ * faster cap means the work fitting four fifths of that budget, so the step up does not land on a
+ * cap the very next second overruns, and a fiftieth of the frames may miss that without spoiling
+ * the second, which is the hiccup allowance again. */
+#define OVERRUN_DIVISOR       10u
+#define FASTER_MARGIN         0.8f
+#define CROWDED_DIVISOR       50u
+
+
 static uintptr_t cap_site;
 static uintptr_t cap_limiter_address;
 static bool      cap_usable;
 static int       cap_applied = -1;      /* -1 means nothing has been applied yet */
 
-int frame_cap_effective(int configured, bool match_refresh, int refresh_hz)
+/* What the settings asked for, kept so a second's verdict can be applied without the caller. */
+static int       cap_configured;
+static bool      cap_match_refresh;
+static int       cap_pinned_divisor;
+static int       cap_refresh_hz;
+static int       cap_divisor = 1;
+static unsigned  cap_clean_seconds;
+
+/* The second being counted. */
+static LARGE_INTEGER       clock_frequency;
+static LARGE_INTEGER       work_started;          /* end of the last wait */
+static LARGE_INTEGER       second_started;
+static bool                have_work_start;
+static frame_cap_second_t  second;
+
+int frame_cap_effective(int configured, bool match_refresh, int refresh_hz, int divisor)
 {
     if (configured < 0) {
         configured = 0;
@@ -62,7 +88,60 @@ int frame_cap_effective(int configured, bool match_refresh, int refresh_hz)
          * player already gave. */
         return configured;
     }
-    return refresh_hz;
+    if (divisor < 1) {
+        divisor = 1;
+    }
+    if (divisor > frame_cap_divisor_limit(refresh_hz)) {
+        divisor = frame_cap_divisor_limit(refresh_hz);
+    }
+    /* Rounded to the nearest whole frame a second: 144/4 is 36 exactly, 90/4 is 22.5 and is
+     * refused by the limit above, 75/2 is 37.5 and rounds to 38, half a percent off even. */
+    return (refresh_hz + divisor / 2) / divisor;
+}
+
+int frame_cap_divisor_limit(int refresh_hz)
+{
+    int divisor = FRAME_CAP_DIVISOR_MAX;
+
+    while (divisor > 1 && refresh_hz / divisor < FRAME_CAP_FLOOR_FPS) {
+        --divisor;
+    }
+    return divisor;
+}
+
+int frame_cap_step(int divisor, unsigned *clean_seconds, const frame_cap_second_t *second_counts,
+                   int refresh_hz)
+{
+    int limit = frame_cap_divisor_limit(refresh_hz);
+
+    if (divisor < 1) {
+        divisor = 1;
+    }
+    if (divisor > limit) {
+        divisor = limit;
+    }
+    if (second_counts == NULL || second_counts->frames < FRAME_CAP_JUDGE_FRAMES ||
+        second_counts->longest_work >= FRAME_CAP_STALL_SECONDS) {
+        /* Too few frames to be gameplay, or a stall inside it: a menu, a pause, a level coming
+         * up. The first auto run stepped down on a level load and on a second of eight frames,
+         * and neither was the machine failing to hold the cap. */
+        return divisor;
+    }
+
+    if (second_counts->over_budget > second_counts->frames / OVERRUN_DIVISOR) {
+        *clean_seconds = 0;
+        return (divisor < limit) ? divisor + 1 : divisor;
+    }
+
+    if (divisor > 1 && second_counts->over_faster <= second_counts->frames / CROWDED_DIVISOR) {
+        if (++*clean_seconds >= FRAME_CAP_CLEAN_SECONDS) {
+            *clean_seconds = 0;
+            return divisor - 1;
+        }
+    } else {
+        *clean_seconds = 0;
+    }
+    return divisor;
 }
 
 int frame_cap_refresh_hz(void)
@@ -115,13 +194,56 @@ bool frame_cap_install(uintptr_t wait_site)
         return false;
     }
 
+    if (!QueryPerformanceFrequency(&clock_frequency)) {
+        clock_frequency.QuadPart = 0;
+    }
     cap_site            = wait_site;
     cap_limiter_address = (uintptr_t)limiter_address;
     cap_usable          = true;
     return true;
 }
 
-void frame_cap_apply(int fps)
+static void frame_cap_apply(int fps);
+
+/* The cap that follows from the settings and the fraction in force, applied. */
+static void apply_current(void)
+{
+    frame_cap_apply(frame_cap_effective(cap_configured, cap_match_refresh, cap_refresh_hz,
+                                        cap_divisor));
+}
+
+void frame_cap_configure(int configured, bool match_refresh, int pinned_divisor)
+{
+    int refresh = frame_cap_refresh_hz();
+
+    if (pinned_divisor < 0) {
+        pinned_divisor = 0;
+    }
+    if (pinned_divisor > FRAME_CAP_DIVISOR_MAX) {
+        pinned_divisor = FRAME_CAP_DIVISOR_MAX;
+    }
+
+    if (pinned_divisor != cap_pinned_divisor || refresh != cap_refresh_hz ||
+        match_refresh != cap_match_refresh) {
+        /* A new screen, a new pin or a new mode starts the stepping afresh: what the last screen
+         * could hold says nothing about this one. */
+        cap_divisor       = (pinned_divisor > 0) ? pinned_divisor : 1;
+        cap_clean_seconds = 0;
+        have_work_start   = false;
+    }
+    cap_configured     = configured;
+    cap_match_refresh  = match_refresh;
+    cap_pinned_divisor = pinned_divisor;
+    cap_refresh_hz     = refresh;
+    apply_current();
+}
+
+/* Applies a cap, or clears the limiter for 0. Cheap when the value has not changed, which is the
+ * normal case. Both immediates are written, the authored 1/30 and the "60fps" cheat arm, because
+ * the cheat could otherwise undo the cap from inside the game. Going from uncapped back to capped
+ * also puts the limiter flag back, since clearing it is how uncapped is expressed and no other
+ * code restores it. */
+static void frame_cap_apply(int fps)
 {
     float cap;
 
@@ -150,4 +272,109 @@ void frame_cap_apply(int fps)
                  (unsigned)cap_limiter_address);
     }
     cap_applied = fps;
+}
+
+int frame_cap_applied(void)
+{
+    return (cap_applied > 0) ? cap_applied : 0;
+}
+
+void frame_cap_level_opened(void)
+{
+    if (cap_pinned_divisor != 0 || cap_divisor == 1) {
+        return;
+    }
+    cap_divisor       = 1;
+    cap_clean_seconds = 0;
+    memset(&second, 0, sizeof(second));
+    have_work_start = false;
+    log_info("a level has opened, so the cap starts at the refresh again, %d fps",
+             frame_cap_effective(cap_configured, true, cap_refresh_hz, 1));
+    apply_current();
+}
+
+/* Whether the fraction is this file's to move: matching a screen that answered, with no pin. */
+static bool stepping_is_live(void)
+{
+    return cap_usable && cap_match_refresh && cap_pinned_divisor == 0 &&
+           cap_refresh_hz >= REFRESH_MINIMUM && cap_refresh_hz <= REFRESH_MAXIMUM &&
+           clock_frequency.QuadPart > 0;
+}
+
+static void close_second(void)
+{
+    int      before = cap_divisor;
+    unsigned clean  = cap_clean_seconds;
+    int      after  = frame_cap_step(before, &clean, &second, cap_refresh_hz);
+
+    cap_clean_seconds = clean;
+    if (after != before) {
+        int   from = frame_cap_effective(cap_configured, true, cap_refresh_hz, before);
+        int   to   = frame_cap_effective(cap_configured, true, cap_refresh_hz, after);
+        float budget_ms = 1000.0f * (float)before / (float)cap_refresh_hz;
+
+        cap_divisor = after;
+        if (after > before) {
+            log_info("the cap steps down from %d to %d fps (%d Hz over %d): %u of the last "
+                     "second's %u frames needed more than the %.2f ms of work the cap allowed, "
+                     "the longest %.1f ms. On a synchronised display every frame is now shown "
+                     "%d times over rather than some twice and some once",
+                     from, to, cap_refresh_hz, after, second.over_budget, second.frames,
+                     (double)budget_ms, (double)(second.longest_work * 1000.0f), after);
+        } else {
+            log_info("the cap steps back up from %d to %d fps (%d Hz over %d) after %u seconds "
+                     "with room for it, the last second's longest frame %.1f ms of work",
+                     from, to, cap_refresh_hz, after, FRAME_CAP_CLEAN_SECONDS,
+                     (double)(second.longest_work * 1000.0f));
+        }
+        apply_current();
+    }
+    memset(&second, 0, sizeof(second));
+}
+
+void frame_cap_frame_drawn(void)
+{
+    LARGE_INTEGER now;
+    float         work;
+    float         budget;
+
+    if (!stepping_is_live() || !have_work_start || !QueryPerformanceCounter(&now)) {
+        return;
+    }
+    have_work_start = false;                /* one measurement per wait */
+    work = (float)((double)(now.QuadPart - work_started.QuadPart) /
+                   (double)clock_frequency.QuadPart);
+    if (!(work >= 0.0f)) {
+        return;
+    }
+
+    budget = (float)cap_divisor / (float)cap_refresh_hz;
+    ++second.frames;
+    if (work > budget) {
+        ++second.over_budget;
+    }
+    if (cap_divisor > 1 &&
+        work > FASTER_MARGIN * (float)(cap_divisor - 1) / (float)cap_refresh_hz) {
+        ++second.over_faster;
+    }
+    if (work > second.longest_work) {
+        second.longest_work = work;
+    }
+
+    if (second.frames == 1u) {
+        second_started = now;
+    } else if (now.QuadPart - second_started.QuadPart >= clock_frequency.QuadPart) {
+        close_second();
+    }
+}
+
+void frame_cap_wait_ends(void)
+{
+    if (!stepping_is_live()) {
+        have_work_start = false;
+        return;
+    }
+    if (QueryPerformanceCounter(&work_started)) {
+        have_work_start = true;
+    }
 }

@@ -15,6 +15,7 @@
 
 enum {
     FRAMERATE_ROW_MATCH = 0,
+    FRAMERATE_ROW_DIVISOR,
     FRAMERATE_ROW_LIMIT,
     FRAMERATE_ROW_NOTE,
     FRAMERATE_ROW_NOTE_MORE,
@@ -47,6 +48,37 @@ static bool match_enabled(void)
 static int configured_limit(void)
 {
     return ini_read_int(FRAMERATE_SECTION, "TargetFps", 0);
+}
+
+/* The same bounds framerate_fix keeps: four fractions at most, and none under 30 a second. */
+#define DIVISOR_MAXIMUM 4
+#define DIVISOR_FLOOR_FPS 30
+
+static int configured_divisor(void)
+{
+    int divisor = ini_read_int(FRAMERATE_SECTION, "RefreshDivisor", 0);
+
+    return (divisor < 0) ? 0 : (divisor > DIVISOR_MAXIMUM) ? DIVISOR_MAXIMUM : divisor;
+}
+
+/* The fraction row's chip: "auto", or the pinned fraction with the rate it makes on this screen.
+ * A fraction the screen cannot go down to (a quarter of 60 is 15) is named as refused, the same
+ * way framerate_fix refuses it, so the chip never promises a rate that will not be applied. */
+static void divisor_text(char *out, size_t size)
+{
+    int divisor = configured_divisor();
+    int refresh = display_refresh_hz();
+
+    if (divisor == 0) {
+        (void)_snprintf(out, size - 1u, "auto");
+    } else if (refresh > 0 && refresh / divisor < DIVISOR_FLOOR_FPS) {
+        (void)_snprintf(out, size - 1u, "1/%d too low", divisor);
+    } else if (refresh > 0) {
+        (void)_snprintf(out, size - 1u, "1/%d = %d", divisor, (refresh + divisor / 2) / divisor);
+    } else {
+        (void)_snprintf(out, size - 1u, "1/%d", divisor);
+    }
+    out[size - 1u] = '\0';
 }
 
 /* The limit as the row shows it. Private: nothing outside this file has a reason to format it. */
@@ -106,6 +138,18 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
         }
         break;
 
+    case FRAMERATE_ROW_DIVISOR:
+        /* An action with a chip rather than a typed value, because the only sensible answers are
+         * five and typing one of them is slower than pressing until it comes round. Greyed with
+         * the limit row while the screen is not being matched: a fraction of a rate nobody is
+         * following is not a setting. */
+        out->kind      = OVERLAY_ROW_ACTION;
+        out->available = match_enabled();
+        (void)_snprintf(out->label, sizeof out->label - 1u,
+                        "  Fraction of the screen's rate");
+        divisor_text(out->value, sizeof out->value);
+        break;
+
     case FRAMERATE_ROW_LIMIT:
         out->kind = OVERLAY_ROW_VALUE;
         /* Greyed rather than hidden while the screen decides the rate. A row that disappears
@@ -133,20 +177,20 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
     case FRAMERATE_ROW_NOTE:
         out->kind = OVERLAY_ROW_INFO;
         (void)_snprintf(out->label, sizeof out->label - 1u,
-                        "A limit that does not match the screen's Hz");
+                        "Only the screen's Hz or an even fraction of");
         break;
 
     case FRAMERATE_ROW_NOTE_MORE:
         out->kind = OVERLAY_ROW_INFO;
         (void)_snprintf(out->label, sizeof out->label - 1u,
-                        "  makes platforms and movement choppy, even");
+                        "  it is smooth; any other limit makes movement");
         break;
 
     case FRAMERATE_ROW_NOTE_LAST:
     default:
         out->kind = OVERLAY_ROW_INFO;
         (void)_snprintf(out->label, sizeof out->label - 1u,
-                        "  when the frame counter reads steady");
+                        "  choppy. Auto steps down when frames run long");
         break;
     }
 
@@ -156,6 +200,14 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
 
 bool overlay_framerate_toggle(uint32_t slot)
 {
+    if (slot == (uint32_t)FRAMERATE_ROW_DIVISOR) {
+        if (!match_enabled()) {
+            return false;
+        }
+        /* auto, 1, 2, 3, 4, auto: the whole ring is five presses, and it starts where it is. */
+        return ini_write_int(FRAMERATE_SECTION, "RefreshDivisor",
+                             (configured_divisor() + 1) % (DIVISOR_MAXIMUM + 1));
+    }
     if (slot != (uint32_t)FRAMERATE_ROW_MATCH) {
         return false;
     }

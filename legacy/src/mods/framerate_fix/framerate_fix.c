@@ -215,6 +215,7 @@ typedef struct framerate_config {
     bool  enabled;
     int   target_fps;            /* 0 = uncapped (clears g_frameLimiterOn) */
     bool  match_display_refresh; /* the cap follows the screen, TargetFps ignored */
+    int   refresh_divisor;       /* 0 steps by itself, 1..4 pins the fraction of the refresh */
     bool  compensate_camera;
     bool  compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
     bool  compensate_camera_in_cutscenes;
@@ -268,6 +269,7 @@ static void load_config(void)
      * whatever this DLL does about interpolation. */
     config->match_display_refresh  =
         ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
+    config->refresh_divisor        = ini_read_int (FRAMERATE_SECTION, "RefreshDivisor", 0);
     config->compensate_camera      = ini_read_bool(FRAMERATE_SECTION, "CompensateCamera", true);
     config->compensate_camera_anchor =
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraAnchor", true);
@@ -382,15 +384,32 @@ static void patch_render_cap(void)
                         "screen repeating frames on an irregular pattern",
                         framerate_state.config.target_fps);
         }
-        frame_cap_apply(frame_cap_effective(framerate_state.config.target_fps,
-                                            framerate_state.config.match_display_refresh,
-                                            refresh));
+        frame_cap_configure(framerate_state.config.target_fps,
+                            framerate_state.config.match_display_refresh,
+                            framerate_state.config.refresh_divisor);
         if (framerate_state.config.match_display_refresh && refresh > 0) {
             log_info("MatchDisplayRefresh=1, so the cap follows the display at %d Hz rather than "
                      "the configured TargetFps=%d. Nothing in the shipped stack ties produced "
                      "frames to shown ones, so a cap below the refresh judders however correct "
                      "the interpolation is",
                      refresh, framerate_state.config.target_fps);
+            if (framerate_state.config.refresh_divisor > 0) {
+                log_info("RefreshDivisor=%d pins the cap at that fraction of the refresh, %d fps, "
+                         "and it will not step by itself",
+                         framerate_state.config.refresh_divisor, frame_cap_applied());
+            } else if (!framerate_state.config.precise_frame_time) {
+                log_warning("RefreshDivisor=0 asks the cap to step down when the machine cannot "
+                            "hold the refresh, but the frame's work is measured in the wait hook "
+                            "that PreciseFrameTime=0 leaves out, so it stays at the refresh");
+            } else {
+                log_info("RefreshDivisor=0: when more than a tenth of a second's frames need more "
+                         "work than the cap allows it steps down to the next fraction of the "
+                         "refresh, %d, %d or %d fps, where every frame is shown the same number "
+                         "of times, and steps back after %u clear seconds. Each step is logged",
+                         frame_cap_effective(0, true, refresh, 2),
+                         frame_cap_effective(0, true, refresh, 3),
+                         frame_cap_effective(0, true, refresh, 4), FRAME_CAP_CLEAN_SECONDS);
+            }
         }
     }
 
@@ -528,9 +547,9 @@ static void patch_emitter_dormancy(void)
 #define SCALE_QUANTISATION 256.0f
 #define MAX_PLAUSIBLE_DELTA 0.25f
 
-/* The cap, re-read about once a second so the dev panel's own row takes effect while the game
- * runs rather than at the next launch. Only the two keys it needs are read, and the write inside
- * frame_cap_apply is skipped when the value has not moved, which is every second but the one
+/* The cap, re-read about once a second so the dev panel's own rows take effect while the game
+ * runs rather than at the next launch. Only the three keys it needs are read, and the write inside
+ * frame_cap_configure is skipped when the value has not moved, which is every second but the one
  * somebody changes something. */
 #define FRAME_CAP_POLL_SECONDS 1.0f
 
@@ -547,8 +566,9 @@ static void poll_frame_cap(void)
     {
         int  configured = ini_read_int(FRAMERATE_SECTION, "TargetFps", 0);
         bool match       = ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
+        int  divisor     = ini_read_int(FRAMERATE_SECTION, "RefreshDivisor", 0);
 
-        frame_cap_apply(frame_cap_effective(configured, match, frame_cap_refresh_hz()));
+        frame_cap_configure(configured, match, divisor);
     }
 }
 
@@ -748,6 +768,10 @@ void framerate_fix_install(void)
 
     framerate_state.installed = true;
 
+    if (!frame_hook_add_before(frame_cap_frame_drawn)) {
+        log_warning("the before-present frame hook is unavailable, so the cap cannot measure a "
+                    "frame's work and will not step by itself");
+    }
     if (!frame_hook_add(on_frame)) {
         log_warning("no per-frame hook, the camera compensation and the animation clock do NOT "
                     "run. The render cap, the pinned simulation rate, the emitter dormancy and "

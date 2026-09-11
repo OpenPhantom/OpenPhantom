@@ -1087,11 +1087,15 @@ to it because the game looks bad while the numbers look fine, and the last line 
 tells them they are in the right place.
 
 **Match the screen** writes `MatchDisplayRefresh`, and it is the row worth pressing. The frame limit
-decides how fast frames are produced. Nothing in the shipped stack ties that to how fast they are
-shown: the wrapper presents immediately, and the engine's own wait for the vertical blank has no
-callers left in the retail executable. So a limit that does not divide into the refresh rate leaves
-the display repeating some frames and not others, on a pattern that shifts. Platforms, the camera
-and everything else in motion go choppy while the frame counter reads perfectly steady.
+decides how fast frames are produced, and the display shows them at its own rate, so a limit that
+does not divide into the refresh rate leaves the display repeating some frames and not others, on
+a pattern that shifts. Platforms, the camera and everything else in motion go choppy while the
+frame counter reads perfectly steady.
+
+**Fraction of the screen's rate** writes `RefreshDivisor`. `auto` lets framerate_fix step the cap
+down to a half, a third or a quarter of the refresh when the machine cannot hold the rate above,
+and back when it can; a digit pins one. On a synchronised display, which the installer's wrapper
+configuration provides from 1.4.4, only the refresh and its fractions are even.
 
 Measured, because it cost the time to measure it: a limit of 100 on a 144 Hz screen leaves 44
 refreshes a second showing a repeat, and a limit of 60 on a 90 Hz Steam Deck OLED leaves 30. Both

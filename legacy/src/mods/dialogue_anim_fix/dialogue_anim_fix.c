@@ -1,6 +1,11 @@
 /* dialogue_anim_fix.c: stop Obi-Wan's leftover talk animation during the Mos Espa opening exchange
  * with Qui-Gon.
  *
+ * SIZE NOTE: over the 600 line mark, and most of it is the account below of what is actually
+ * broken and the two mistakes already made here, with the five patterns and their evidence. The
+ * code is three small hooks and one per-frame pass, and the reason each exists is not recoverable
+ * from the code alone.
+ *
  * ============================== What is actually broken =======================================
  *
  * Field report: right at the start of level 6, Mos Espa, in the opening in-engine cutscene, Obi-Wan
@@ -176,11 +181,75 @@ static const uint8_t SIG_ANIM_RECHECK[] = {
     0x7E, 0x19                             /* jle +0x19                     */
 };
 
+/* --- Dialog_SpeakSingle 0x00430D12, the owner of the two cells the per-frame pass reads ---------
+ * Resolved and never detoured by THIS DLL, and declared as a detour target all the same, because
+ * camera_handback_fix and diagnostics both detour it and both load first: by the time this looks,
+ * the six byte prologue is a jump, and a plain pattern found nothing. The two cells used to be
+ * written down as addresses; they are read out of this function's own operands now, since it is
+ * the one place both are written from:
+ *
+ *   +0x1C  8B 0D <speaker>       mov ecx,[g_dialogSpeaker]     is this actor already speaking
+ *   +0x3D  89 15 <speaker>       mov [g_dialogSpeaker],edx     no: they are now
+ *   +0x78  C7 05 <active> 01..   mov [g_dialogActive],1        and a line is in progress
+ *
+ * The speaker cell appears twice and the two operands have to agree, which is the check that the
+ * pattern matched the function and not merely its shape. Every displacement and every other
+ * absolute operand is masked; the 130 bytes are unique on what is left. */
+static const uint8_t SIG_SPEAK_SINGLE[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C,                  /* push ebp / mov ebp,esp / sub esp,0xC */
+    0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00, 0x00,            /* mov [ebp-8],0                        */
+    0x8B, 0x45, 0x10, 0x50,                              /* push [ebp+0x10]                      */
+    0xE8, 0x00, 0x00, 0x00, 0x00,                        /* call (the line's duration)           */
+    0x83, 0xC4, 0x04, 0xD9, 0x5D, 0xFC,                  /* add esp,4 / fstp [ebp-4]             */
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,                  /* mov ecx,[g_dialogSpeaker]            */
+    0x3B, 0x4D, 0x08, 0x75, 0x09,                        /* cmp ecx,[ebp+8] / jne                */
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x74, 0x59, /* cmp [a third cell],0 / je */
+    0x6A, 0x00, 0xE8, 0x00, 0x00, 0x00, 0x00,            /* push 0 / call (stop the last line)   */
+    0x83, 0xC4, 0x04, 0x8B, 0x55, 0x08,                  /* add esp,4 / mov edx,[ebp+8]          */
+    0x89, 0x15, 0x00, 0x00, 0x00, 0x00,                  /* mov [g_dialogSpeaker],edx            */
+    0x8B, 0x45, 0x14, 0x50, 0x6A, 0x00, 0x8B, 0x4D, 0x10, /* push [ebp+0x14] / push 0 / */
+    0x51, 0xE8, 0x00, 0x00, 0x00, 0x00,                  /* push [ebp+0x10] / call (play it)     */
+    0x83, 0xC4, 0x0C, 0x83, 0x7D, 0x0C, 0x00, 0x7C, 0x0C, /* add esp,0xC / cmp [ebp+0xC],0 / jl */
+    0x8B, 0x55, 0x0C, 0x52, 0xE8, 0x00, 0x00, 0x00, 0x00, /* push [ebp+0xC] / call (camera) */
+    0x83, 0xC4, 0x04, 0xA1, 0x00, 0x00, 0x00, 0x00,      /* add esp,4 / mov eax,[the clock]      */
+    0xD9, 0x40, 0x54, 0xD8, 0x45, 0xFC,                  /* fld [eax+0x54] / fadd [ebp-4]        */
+    0xD9, 0x1D, 0x00, 0x00, 0x00, 0x00,                  /* fstp [the line's end time]           */
+    0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00  /* mov [g_dialogActive],1        */
+};
+static const uint8_t MSK_SPEAK_SINGLE[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SPEAK_SINGLE == sizeof MSK_SPEAK_SINGLE,
+               "the Dialog_SpeakSingle pattern and its mask are different lengths");
+#define SPEAK_SINGLE_PROLOGUE              6u      /* push ebp / mov ebp,esp / sub esp,0xC */
+#define SPEAK_SINGLE_SPEAKER_READ_OPERAND  0x1Eu
+#define SPEAK_SINGLE_SPEAKER_WRITE_OPERAND 0x3Fu
+#define SPEAK_SINGLE_ACTIVE_OPERAND        0x7Au
+
 enum {
     SITE_LEVEL_LOAD,
     SITE_DIALOG_BOX_START,
     SITE_DIALOG_STATEMENT,
     SITE_ANIM_RECHECK,
+    SITE_SPEAK_SINGLE,
     SITE_COUNT
 };
 
@@ -189,7 +258,9 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR_MASKED("dialog_box_start", SIG_DIALOG_BOX_START, MSK_DIALOG_BOX_START,
                                   DIALOG_BOX_START_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR("dialog_statement", SIG_DIALOG_STATEMENT, DIALOG_STATEMENT_PROLOGUE),
-    SIGNATURE_ENTRY("anim_recheck",       SIG_ANIM_RECHECK)
+    SIGNATURE_ENTRY("anim_recheck",       SIG_ANIM_RECHECK),
+    SIGNATURE_ENTRY_DETOUR_MASKED("speak_single", SIG_SPEAK_SINGLE, MSK_SPEAK_SINGLE,
+                                  SPEAK_SINGLE_PROLOGUE)
 };
 
 #define ACTOR_OWN_BODY_OFFSET       0x34u    /* actor record -> its own body pointer */
@@ -198,8 +269,6 @@ static signature_t sites[SITE_COUNT] = {
 #define ANIM_ID_IDLE                    0
 #define ANIM_ID_NONE                   -1    /* never a real id, forces a clean retrigger on
                                               * sight */
-#define DIALOG_CURRENT_SPEAKER_ADDR 0x00882180u  /* Dialog_SpeakSingle's own single-slot cell */
-#define DIALOG_ACTIVE_FLAG_ADDR     0x00882184u  /* cleared between lines AND at the real end */
 #define BODY_THING_OFFSET           0x9Cu    /* body -> rdThing*, same offset dismemberment.c and
                                               * the earlier diagnostics build both already read */
 #define THING_MODEL3_OFFSET         0x04u    /* rdThing -> model3* */
@@ -223,6 +292,12 @@ typedef struct dialogue_anim_fix_state {
     detour_t dialog_statement;
 
     anim_recheck_fn_t anim_recheck;   /* resolved address, called directly, never detoured */
+
+    /* Dialog_SpeakSingle's own single-slot "who is speaking" cell, and the flag it raises for a
+     * line in progress and clears between lines and at the real end. Both read out of that
+     * function's operands at install. */
+    const volatile uint32_t *current_speaker;
+    const volatile uint32_t *dialogue_active;
 
     bool     armed;    /* only true while the current level is LEVEL_FILE_NAME */
 
@@ -270,7 +345,9 @@ static void release_all_tracked_actors(void)
 /* model3's own first bytes ARE a short name string, the same technique retail's own giant-model
  * special case in rdThing_Draw uses, and the same one the diagnostics build that first isolated
  * this bug already relied on. Returns false on any unreadable link in the chain, which reads as
- * "not a name we recognise" and leaves the actor untouched, the safe default. */
+ * "not a name we recognise" and leaves the actor untouched, the safe default. The reads are the
+ * faulting kind rather than the asking kind: this runs inside the engine's own dialogue opcodes,
+ * on pointers it handed over a moment ago. */
 static bool actor_name_starts_with(int32_t actor_record, const char *prefix)
 {
     void  *body = NULL;
@@ -279,19 +356,20 @@ static bool actor_name_starts_with(int32_t actor_record, const char *prefix)
     char   name[9] = {0};
     size_t prefix_len = strlen(prefix);
 
-    if (!memory_read((uintptr_t)actor_record + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
+    if (!memory_try_read((uintptr_t)actor_record + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
         body == NULL) {
         return false;
     }
-    if (!memory_read((uintptr_t)body + BODY_THING_OFFSET, &thing, sizeof(thing)) || thing == NULL) {
+    if (!memory_try_read((uintptr_t)body + BODY_THING_OFFSET, &thing, sizeof(thing)) ||
+        thing == NULL) {
         return false;
     }
-    if (!memory_read((uintptr_t)thing + THING_MODEL3_OFFSET, &model3, sizeof(model3)) ||
+    if (!memory_try_read((uintptr_t)thing + THING_MODEL3_OFFSET, &model3, sizeof(model3)) ||
         model3 == NULL) {
         return false;
     }
     if (prefix_len >= sizeof(name) ||
-        !memory_read((uintptr_t)model3, name, prefix_len)) {
+        !memory_try_read((uintptr_t)model3, name, prefix_len)) {
         return false;
     }
     return memcmp(name, prefix, prefix_len) == 0;
@@ -382,16 +460,16 @@ static void on_frame_correct_stale_speakers(void)
     if (!fix_state.armed || fix_state.anim_recheck == NULL || fix_state.tracked_count == 0) {
         return;
     }
-    memory_try_read_u32(DIALOG_CURRENT_SPEAKER_ADDR, &current_speaker);
-    memory_try_read_u32(DIALOG_ACTIVE_FLAG_ADDR, &dialogue_active);
+    current_speaker = *fix_state.current_speaker;
+    dialogue_active = *fix_state.dialogue_active;
 
     now = timeGetTime();
     if (current_speaker != 0 || dialogue_active != 0) {
         fix_state.last_dialogue_activity_tick = now;
     } else if (fix_state.last_dialogue_activity_tick != 0 &&
               (uint32_t)(now - fix_state.last_dialogue_activity_tick) > fix_state.hold_ms) {
-        log_info("dialogue_anim_fix: no dialogue activity for %.1f s, the exchange is over - "
-                 "disarming for the rest of this level",
+        log_info("dialogue_anim_fix: no dialogue activity for %.1f s, the exchange is over, so "
+                 "this disarms for the rest of this level",
                  (double)fix_state.hold_ms / 1000.0);
         fix_state.armed = false;
         release_all_tracked_actors();
@@ -462,6 +540,42 @@ static void on_frame_correct_stale_speakers(void)
     }
 }
 
+/* The two cells the per-frame pass reads, out of Dialog_SpeakSingle's own operands. The speaker
+ * cell is read from both of its operands and the two have to agree; a build in which they did not
+ * has matched something that is not this function, and the fix stays off rather than watch a
+ * cell that is not the speaker. */
+static bool resolve_dialogue_cells(void)
+{
+    uintptr_t site = sites[SITE_SPEAK_SINGLE].address;
+    uint32_t  speaker_read = 0;
+    uint32_t  speaker_write = 0;
+    uint32_t  active = 0;
+
+    if (site == 0) {
+        log_warning("Dialog_SpeakSingle did not resolve, so the speaker and the line-in-progress "
+                    "cells are unknown and this fix stays off");
+        return false;
+    }
+    if (!memory_read_u32(site + SPEAK_SINGLE_SPEAKER_READ_OPERAND, &speaker_read) ||
+        !memory_read_u32(site + SPEAK_SINGLE_SPEAKER_WRITE_OPERAND, &speaker_write) ||
+        !memory_read_u32(site + SPEAK_SINGLE_ACTIVE_OPERAND, &active) ||
+        speaker_read != speaker_write ||
+        !memory_is_inside_image(speaker_read, sizeof(uint32_t)) ||
+        !memory_is_inside_image(active, sizeof(uint32_t))) {
+        log_warning("Dialog_SpeakSingle at %08X reads the speaker from %08X and writes it at "
+                    "%08X, with the line flag at %08X, which is not the shape expected, so this "
+                    "fix stays off", (unsigned)site, (unsigned)speaker_read,
+                    (unsigned)speaker_write, (unsigned)active);
+        return false;
+    }
+    fix_state.current_speaker = (const volatile uint32_t *)(uintptr_t)speaker_read;
+    fix_state.dialogue_active = (const volatile uint32_t *)(uintptr_t)active;
+    log_info("the speaker cell is at %08X and the line-in-progress flag at %08X, both read out "
+             "of Dialog_SpeakSingle at %08X", (unsigned)speaker_read, (unsigned)active,
+             (unsigned)site);
+    return true;
+}
+
 void dialogue_anim_fix_install(void)
 {
     if (fix_state.installed) {
@@ -488,6 +602,9 @@ void dialogue_anim_fix_install(void)
         fix_state.anim_recheck = (anim_recheck_fn_t)sites[SITE_ANIM_RECHECK].address;
     } else {
         log_warning("the primary-animation trigger did not resolve, this fix stays off");
+        return;
+    }
+    if (!resolve_dialogue_cells()) {
         return;
     }
 

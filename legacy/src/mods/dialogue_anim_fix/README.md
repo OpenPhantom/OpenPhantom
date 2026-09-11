@@ -8,10 +8,10 @@ conversation, on purpose; see "Why this narrow" below.
 
 ## Supported executables
 
-Retail `WMAIN.EXE`. Every site resolves by pattern; if any of the four does not match, that piece
-stays off and the log says so. The animation trigger and `campaign_loadLevel` are required for the
-fix to do anything at all; either dialogue-trigger site alone is enough to catch this conversation,
-since it uses opcode `0x504` "Statement", not `0x500` "Dialog Box".
+Retail `WMAIN.EXE`. Every site resolves by pattern; if any of the five does not match, that piece
+stays off and the log says so. The animation trigger, `campaign_loadLevel` and `Dialog_SpeakSingle`
+are required for the fix to do anything at all; either dialogue-trigger site alone is enough to
+catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "Dialog Box".
 
 ## Configuration: `[dialogue_anim_fix]`
 
@@ -28,6 +28,7 @@ since it uses opcode `0x504` "Statement", not `0x500` "Dialog Box".
 | opcode `0x500` "Dialog Box" | `0x004358B0` | detoured; names an actor starting a line |
 | opcode `0x504` "Statement" | `0x00435A0A` | detoured; names an actor starting a line (the one this scene actually uses) |
 | `FUN_0042E3AD`, the primary-animation debounce/trigger | `0x0042E3AD` | resolved but never detoured, only called |
+| `Dialog_SpeakSingle` | `0x00430D12` | resolved, never detoured; the speaker cell and the line-in-progress flag are read out of its operands |
 
 ## What is actually broken
 

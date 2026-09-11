@@ -12,6 +12,7 @@
  * a port. Anything added here next should come out along that seam rather than onto it.
  */
 #include "framerate_stats.h"
+#include "frame_cap.h"
 
 #include "sim_clock.h"
 
@@ -175,6 +176,13 @@ static signature_t sites[SITE_COUNT] = {
  * nothing left to say about frame time, and the log must admit that rather than divide by it. */
 #define FRAME_DELTA_CLAMP_SECONDS 0.1f
 
+/* A long frame is one that overran the cap by this factor. Every such frame is a repeated refresh
+ * on a display the cap matches, so it is the frame a player sees as a dip, and the window says
+ * how many there were and whether the simulation stepped inside them. A dip that only ever lands
+ * on a step frame is the tick's; one that lands on frames the simulation left alone is the draw
+ * path's. */
+#define LONG_FRAME_FACTOR 1.5f
+
 typedef struct framerate_stats_state {
     int              frame_interval;
 
@@ -204,6 +212,15 @@ typedef struct framerate_stats_state {
     float            delta_sum;
     float            alpha_minimum;
     float            alpha_maximum;
+
+    /* The long frames of the window, split by whether the shared substep counter moved during
+     * them. The counter is sampled every frame so the split can be made per frame rather than
+     * per window. */
+    uint32_t         ticks_at_last_sample;
+    uint32_t         long_frames;
+    uint32_t         long_frames_on_step;
+    float            longest_on_step;
+    float            longest_off_step;
 
     /* The wall clock, which nothing in the engine can clamp. */
     LARGE_INTEGER    clock_frequency;
@@ -450,6 +467,28 @@ static void format_simulation_clause(char *text, size_t size, uint32_t ticks, do
     text[size - 1] = '\0';
 }
 
+/* The long frame clause, or nothing while the game is uncapped: without a cap there is no budget
+ * to overrun and a long frame is just a frame. */
+static void format_long_frame_clause(char *text, size_t size)
+{
+    text[0] = '\0';
+    if (frame_cap_applied() <= 0) {
+        return;
+    }
+    if (stats_state.long_frames == 0) {
+        _snprintf(text, size, " | no frame over %.1fx the cap", (double)LONG_FRAME_FACTOR);
+    } else {
+        _snprintf(text, size,
+                  " | %u frames over %.1fx the cap: %u on a step frame (longest %.1f ms), %u on a "
+                  "frame with no step (longest %.1f ms)",
+                  stats_state.long_frames, (double)LONG_FRAME_FACTOR,
+                  stats_state.long_frames_on_step, (double)(stats_state.longest_on_step * 1000.0f),
+                  stats_state.long_frames - stats_state.long_frames_on_step,
+                  (double)(stats_state.longest_off_step * 1000.0f));
+    }
+    text[size - 1] = '\0';
+}
+
 static void log_frame_window(void)
 {
     uint32_t ticks = (stats_state.tick_counter != NULL)
@@ -459,12 +498,14 @@ static void log_frame_window(void)
     double   rate  = (real > 0.0) ? (double)stats_state.frames_in_window / real : 0.0;
     float    simulated = stats_state.delta_sum;
     char     simulation_clause[256];
+    char     long_clause[160];
 
     format_simulation_clause(simulation_clause, sizeof(simulation_clause), ticks, real);
+    format_long_frame_clause(long_clause, sizeof(long_clause));
 
     log_info("%u frames in %.3f s REAL | fps %.1f | the engine believes %.3f s (%.2fx real time, "
              "so the game runs %s) | dt ms min %.3f avg %.3f max %.3f (jitter %.1fx)%s | "
-             "%s | alpha %.3f..%.3f",
+             "%s | alpha %.3f..%.3f%s",
              stats_state.frames_in_window, real, rate, (double)simulated,
              (real > 0.0) ? (double)simulated / real : 0.0,
              (real > 0.0 && (double)simulated < real * 0.95) ? "slower than real time"
@@ -480,7 +521,8 @@ static void log_frame_window(void)
              (stats_state.delta_minimum >= FRAME_DELTA_CLAMP_SECONDS)
                  ? "; every sample is on the clamp, dt carries no information here" : "",
              simulation_clause,
-             (double)stats_state.alpha_minimum, (double)stats_state.alpha_maximum);
+             (double)stats_state.alpha_minimum, (double)stats_state.alpha_maximum,
+             long_clause);
 
     /* The next window starts here, not on its first sample.
      *
@@ -508,6 +550,10 @@ static void sample_frame_window(float frame_delta)
         stats_state.delta_sum     = 0.0f;
         stats_state.alpha_minimum = 1.0f;
         stats_state.alpha_maximum = 0.0f;
+        stats_state.long_frames         = 0;
+        stats_state.long_frames_on_step = 0;
+        stats_state.longest_on_step     = 0.0f;
+        stats_state.longest_off_step    = 0.0f;
         /* The wall clock and the substep mark are stamped when the PREVIOUS window closed, so the
          * measured interval count matches the frame count. The very first window has no previous
          * one, and its marks were stamped at install. */
@@ -521,6 +567,25 @@ static void sample_frame_window(float frame_delta)
         float alpha = *stats_state.substep_alpha;
         if (alpha < stats_state.alpha_minimum) { stats_state.alpha_minimum = alpha; }
         if (alpha > stats_state.alpha_maximum) { stats_state.alpha_maximum = alpha; }
+    }
+
+    {
+        int      cap     = frame_cap_applied();
+        uint32_t ticks   = (stats_state.tick_counter != NULL) ? *stats_state.tick_counter : 0;
+        bool     stepped = ticks != stats_state.ticks_at_last_sample;
+
+        stats_state.ticks_at_last_sample = ticks;
+        if (cap > 0 && frame_delta > LONG_FRAME_FACTOR / (float)cap) {
+            ++stats_state.long_frames;
+            if (stepped) {
+                ++stats_state.long_frames_on_step;
+                if (frame_delta > stats_state.longest_on_step) {
+                    stats_state.longest_on_step = frame_delta;
+                }
+            } else if (frame_delta > stats_state.longest_off_step) {
+                stats_state.longest_off_step = frame_delta;
+            }
+        }
     }
 
     ++stats_state.frames_in_window;

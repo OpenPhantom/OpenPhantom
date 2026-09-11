@@ -39,7 +39,8 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `MoverTravelLimitPerStep` | `64.0` | world units a mover may cross in one simulation step before the blend refuses it and snaps instead. Guards against a teleport being smeared into a slide |
 | `InterpolateRiders` | `1` | keep each drawn object's previous position here rather than reading the engine's, which a platform's carry flattens. `2` and `3` are measurements rather than settings; see **A rider had nothing to be drawn between** |
 | `RiderTravelLimitPerStep` | `2.0` | the furthest a CHARACTER may travel in one simulation step before the blend refuses it and draws it where it landed. Not the mover's number: 64 here is what made the first attempt unusable |
-| `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames |
+| `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames, with the frames over 1.5x the cap split by whether the simulation stepped inside them |
+| `LogMoverEvenness` | `0` | 1: every 600 frames, how many drawn mover frames disagreed with their neighbours by more than five per cent, raw fallback frames included, and how many raw frames landed straight after a blended one |
 | `StatsPlayerFrames` | `0` | >0: dump the player's draw interpolation for N frames |
 
 ## Produced frames against shown frames

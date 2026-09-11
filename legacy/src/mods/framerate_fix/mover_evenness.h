@@ -38,6 +38,7 @@ typedef struct mover_evenness_state {
     bool     have_before;
     bool     have_middle;
     bool     seen;
+    bool     last_blended;
 } mover_evenness_state_t;
 
 /* Switches the whole thing on or off and forgets the window. */
@@ -48,8 +49,12 @@ bool mover_evenness_enabled(void);
  * counts rendered frames. Called twice per subnode per frame by the two redirected consumers, so
  * a repeat of the same stamp is ignored rather than treated as a break in the chain: doing the
  * latter reset the history on every second call and reported nothing judged at all. */
+/* One drawn frame of one subnode, blended or not. `blended` false means the raw pose was drawn
+ * for this frame, which is the frame a fallback produces, and it is judged like any other: a raw
+ * frame between two blended ones is exactly the step the eye sees, and an instrument that skipped
+ * it reported a jittering platform as even. */
 void mover_evenness_note(mover_evenness_state_t *state, const float *translation,
-                         uint32_t frame_stamp);
+                         uint32_t frame_stamp, bool blended);
 
 /* Writes the window to the log and starts a new one. Silent when nothing was judged. */
 void mover_evenness_report(void);

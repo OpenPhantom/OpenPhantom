@@ -341,6 +341,8 @@ static bool interpolated_world(float *out, const float *world)
          * and it was most of them. */
         ++mover_state.rejected;
         ++mover_state.held_after_reset;
+        mover_evenness_note(&slot->evenness, world + MOVER_TRANSLATION, mover_state.frame_stamp,
+                            false);
         return false;
     }
     if (!current_alpha(&alpha)) {
@@ -358,13 +360,15 @@ static bool interpolated_world(float *out, const float *world)
         if (reason >= 0 && reason < MOVER_BLEND_REASON_COUNT) {
             ++mover_state.refusals[reason];
         }
+        mover_evenness_note(&slot->evenness, world + MOVER_TRANSLATION, mover_state.frame_stamp,
+                            false);
         return false;
     }
     ++mover_state.blended;
 
     /* After the blend, with what is actually about to be drawn, and it costs nothing unless
      * LogMoverEvenness asked for it. */
-    mover_evenness_note(&slot->evenness, out + MOVER_TRANSLATION, mover_state.frame_stamp);
+    mover_evenness_note(&slot->evenness, out + MOVER_TRANSLATION, mover_state.frame_stamp, true);
     return true;
 }
 

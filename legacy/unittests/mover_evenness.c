@@ -36,7 +36,7 @@ int main(void)
     at[0] = 0.0f; at[1] = 0.0f; at[2] = 0.0f;
     for (frame = 1u; frame <= 10u; ++frame) {
         at[0] = (float)frame;
-        mover_evenness_note(&state, at, frame);
+        mover_evenness_note(&state, at, frame, true);
     }
     ut_check(!state.seen, "and nothing is recorded, so it costs nothing while it is off");
 
@@ -46,7 +46,7 @@ int main(void)
     memset(&state, 0, sizeof state);
     for (frame = 1u; frame <= 40u; ++frame) {
         at[0] = (float)frame * 0.05f;
-        mover_evenness_note(&state, at, frame);
+        mover_evenness_note(&state, at, frame, true);
     }
     ut_check(state.have_before && state.have_middle,
              "even motion builds a history and is judged");
@@ -59,8 +59,8 @@ int main(void)
     memset(&state, 0, sizeof state);
     for (frame = 1u; frame <= 40u; ++frame) {
         at[0] = (float)frame * 0.05f;
-        mover_evenness_note(&state, at, frame);
-        mover_evenness_note(&state, at, frame);
+        mover_evenness_note(&state, at, frame, true);
+        mover_evenness_note(&state, at, frame, true);
     }
     ut_check(state.have_before && state.have_middle,
              "two calls a frame still leave a usable history rather than resetting it");
@@ -70,9 +70,9 @@ int main(void)
     mover_evenness_enable(true);
     memset(&state, 0, sizeof state);
     at[0] = 0.0f;
-    mover_evenness_note(&state, at, 1u);
+    mover_evenness_note(&state, at, 1u, true);
     at[0] = 100.0f;
-    mover_evenness_note(&state, at, 40u);
+    mover_evenness_note(&state, at, 40u, true);
     ut_check(!state.have_before && !state.have_middle,
              "a subnode that went off screen and came back starts its history again");
 
@@ -85,7 +85,7 @@ int main(void)
     at[0] = 0.0f;
     for (i = 1; i <= 20; ++i) {
         at[0] += (i < 10) ? 0.05f : 0.0f;
-        mover_evenness_note(&state, at, (uint32_t)i);
+        mover_evenness_note(&state, at, (uint32_t)i, true);
     }
     ut_check(true, "a stopped subnode is accepted without the report being consulted");
 
@@ -95,8 +95,8 @@ int main(void)
     mover_evenness_report();
     ut_check(true, "an empty window reports nothing at all");
 
-    mover_evenness_note(NULL, at, 1u);
-    mover_evenness_note(&state, NULL, 1u);
+    mover_evenness_note(NULL, at, 1u, true);
+    mover_evenness_note(&state, NULL, 1u, true);
     ut_check(true, "and being handed nothing is survivable, which a diagnostic must be");
 
     return ut_summary("mover evenness");

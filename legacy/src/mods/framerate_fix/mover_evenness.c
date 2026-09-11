@@ -18,14 +18,16 @@
 static bool     evenness_on;
 static uint32_t evenness_judged;
 static uint32_t evenness_uneven;
+static uint32_t evenness_raw_between;   /* raw frames drawn the frame after a blended one */
 static float    evenness_worst;
 
 void mover_evenness_enable(bool enabled)
 {
     evenness_on     = enabled;
-    evenness_judged = 0;
-    evenness_uneven = 0;
-    evenness_worst  = 0.0f;
+    evenness_judged      = 0;
+    evenness_uneven      = 0;
+    evenness_raw_between = 0;
+    evenness_worst       = 0.0f;
 }
 
 bool mover_evenness_enabled(void)
@@ -34,7 +36,7 @@ bool mover_evenness_enabled(void)
 }
 
 void mover_evenness_note(mover_evenness_state_t *state, const float *translation,
-                         uint32_t frame_stamp)
+                         uint32_t frame_stamp, bool blended)
 {
     float dx;
     float dy;
@@ -51,6 +53,9 @@ void mover_evenness_note(mover_evenness_state_t *state, const float *translation
     }
 
     if (state->seen && state->stamp + 1u == frame_stamp) {
+        if (!blended && state->last_blended) {
+            ++evenness_raw_between;
+        }
         dx = translation[0] - state->last[0];
         dy = translation[1] - state->last[1];
         dz = translation[2] - state->last[2];
@@ -99,6 +104,7 @@ void mover_evenness_note(mover_evenness_state_t *state, const float *translation
     state->last[2] = translation[2];
     state->stamp   = frame_stamp;
     state->seen    = true;
+    state->last_blended = blended;
 }
 
 void mover_evenness_report(void)
@@ -107,12 +113,13 @@ void mover_evenness_report(void)
         return;
     }
     log_info("mover evenness: %u of %u judged frames disagreed with their neighbours by more than "
-             "5 per cent, worst %.1f per cent. Only meaningful at a steady frame rate: a drawn "
-             "object correctly moves further on a longer frame, so an uncapped run reads badly "
-             "with nothing wrong",
+             "5 per cent, worst %.1f per cent, and %u frames drew a raw pose straight after a "
+             "blended one. Only meaningful at a steady frame rate: a drawn object correctly moves "
+             "further on a longer frame, so an uncapped run reads badly with nothing wrong",
              (unsigned)evenness_uneven, (unsigned)evenness_judged,
-             (double)evenness_worst * 100.0);
-    evenness_judged = 0;
-    evenness_uneven = 0;
-    evenness_worst  = 0.0f;
+             (double)evenness_worst * 100.0, (unsigned)evenness_raw_between);
+    evenness_judged      = 0;
+    evenness_uneven      = 0;
+    evenness_raw_between = 0;
+    evenness_worst       = 0.0f;
 }

@@ -10,11 +10,31 @@
 
 /* --- 0x0046C139  render_frameEnd (function start) -------------------------------------------- *
  *   55 8B EC 81 EC F8 03 00 00      prologue, 9 bytes, clean instruction boundary
- *   A1 14 87 86 00                  mov eax,[g_frameDelta]   -> its address at +0x0A            */
+ *   A1 14 87 86 00                  mov eax,[g_frameDelta]   -> its address at +0x0A
+ *   50 6A 15 6A 00 E8 ..            push eax / push 0x15 / push 0 / call
+ *   83 C4 0C E8 .. D9 15            add esp,0xC / call / fst
+ *
+ * The operand is masked. Four features read g_frameDelta out of it, and a pattern that carried the
+ * address itself would have proved nothing: it would match only the build the address was copied
+ * from, and the read would hand back the number the pattern was written with. Masked, the pattern
+ * matches on the code around the cell and the read is a read.
+ *
+ * The pattern runs on past the call because of the detoured case: the search then drops the
+ * prologue and anchors on the tail, and the load-push-push-push-call opening is one the image
+ * has twice, at 0x004469AD as well. The add, the second call and the fst are what the other site
+ * does not have. */
 static const uint8_t SIG_RENDER_FRAME_END[] = {
     0x55, 0x8B, 0xEC, 0x81, 0xEC, 0xF8, 0x03, 0x00, 0x00,
-    0xA1, 0x14, 0x87, 0x86, 0x00, 0x50, 0x6A, 0x15, 0x6A, 0x00, 0xE8
+    0xA1, 0x00, 0x00, 0x00, 0x00, 0x50, 0x6A, 0x15, 0x6A, 0x00, 0xE8, 0x00, 0x00, 0x00, 0x00,
+    0x83, 0xC4, 0x0C, 0xE8, 0x00, 0x00, 0x00, 0x00, 0xD9, 0x15
 };
+static const uint8_t MSK_RENDER_FRAME_END[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_RENDER_FRAME_END == sizeof MSK_RENDER_FRAME_END,
+               "the render_frameEnd pattern and its mask are different lengths");
 #define RENDER_FRAME_END_PROLOGUE_SIZE 9u
 
 /* Every DLL links its own copy of this library, so this is a per DLL ceiling and each slot costs
@@ -64,7 +84,7 @@ static bool install_detour(void)
 
     /* Four DLLs want this one function, so the first installer's `jmp rel32` is the NORMAL
      * state by the time the others look. signature_find_detour_target handles that. */
-    frame_state.site = signature_find_detour_target(SIG_RENDER_FRAME_END, NULL,
+    frame_state.site = signature_find_detour_target(SIG_RENDER_FRAME_END, MSK_RENDER_FRAME_END,
                                                     sizeof(SIG_RENDER_FRAME_END),
                                                     RENDER_FRAME_END_PROLOGUE_SIZE);
     if (frame_state.site == 0) {

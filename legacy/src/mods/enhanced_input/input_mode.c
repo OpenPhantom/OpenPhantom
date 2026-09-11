@@ -13,13 +13,21 @@
  *   3B 45 08              cmp eax,[ebp+8]            already in that mode? then nothing to do
  *   75 02 EB 4A           jne +2 / jmp out
  *
- * Nine bytes are already unique and sixteen are taken. NOT detoured: the site is resolved only so
- * the cell can be read out of its own first instruction, so the address appears once here rather
- * than being written down as a constant. */
+ * NOT detoured: the site is resolved only so the cell can be read out of its own first
+ * instruction. The operand is masked for that reason. With the address in the pattern the read
+ * could only ever answer the number the pattern was written with, and a build that keeps the
+ * cell elsewhere would have matched nothing rather than been read. Unique on the twelve bytes
+ * that are left. */
 static const uint8_t SIG_INPUT_SET_MODE[] = {
-    0x55, 0x8B, 0xEC, 0x51, 0xA1, 0x5C, 0x5D, 0x6D, 0x00, 0x3B, 0x45, 0x08,
+    0x55, 0x8B, 0xEC, 0x51, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x3B, 0x45, 0x08,
     0x75, 0x02, 0xEB, 0x4A
 };
+static const uint8_t MSK_INPUT_SET_MODE[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_INPUT_SET_MODE == sizeof MSK_INPUT_SET_MODE,
+               "the input_setMode pattern and its mask are different lengths");
 #define INPUT_SET_MODE_CELL_OPERAND 0x05u
 
 static struct {
@@ -42,10 +50,11 @@ void input_mode_resolve(void)
     }
     mode_state.tried = true;
 
-    site = signature_find_unique(SIG_INPUT_SET_MODE, NULL, sizeof SIG_INPUT_SET_MODE);
+    site = signature_find_unique(SIG_INPUT_SET_MODE, MSK_INPUT_SET_MODE,
+                                 sizeof SIG_INPUT_SET_MODE);
     if (site == 0 ||
         !memory_read_u32(site + INPUT_SET_MODE_CELL_OPERAND, &address) || address == 0 ||
-        !memory_is_readable_range((uintptr_t)address, sizeof(int32_t))) {
+        !memory_is_inside_image((uintptr_t)address, sizeof(int32_t))) {
         log_warning("the engine's input mode could not be read, so the pad stick drives the player "
                     "whenever it is pushed, a dialogue choice menu included. That is the one place "
                     "it shows: the menu scrolls and the player walks at the same time");

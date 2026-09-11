@@ -118,6 +118,75 @@ static const uint8_t SIG_DEATH_GATE[] = {
 };
 #define DEATH_GATE_PROLOGUE_SIZE 6u
 
+/* --- 0x00414C99  bapobj_sendMessage: the out-of-line filler of the mailbox ------------------- *
+ *   55 8B EC              push ebp / mov ebp,esp
+ *   8B 45 08  A3 <self>   mov eax,[ebp+8]    / mov [g_msgSelf],eax      operand at +0x07
+ *   8B 4D 0C  89 0D <oth> mov ecx,[ebp+0xC]  / mov [g_msgOther],ecx     operand at +0x10
+ *   8B 55 10  89 15 <cod> mov edx,[ebp+0x10] / mov [g_msgCode],edx      operand at +0x19
+ *   8B 45 14  A3 <a>      mov eax,[ebp+0x14] / mov [g_msgA],eax         operand at +0x21
+ *   8B 4D 18  89 0D <b>   mov ecx,[ebp+0x18] / mov [g_msgB],ecx         operand at +0x2A
+ *   8B 55 08  8B 42 0C A3 the sender's own +0xC, into the impact slot this never reads
+ *
+ * Resolved, never detoured. Eleven other sites in the image post a message with an inline copy of
+ * these stores and every one names the same cells; the gates below read five of them, so the
+ * cells are read out of this function's operands rather than written down. The retail image keeps
+ * them contiguous from 0x869240, and that was an observation about one build, not a property of
+ * the engine. */
+static const uint8_t SIG_SEND_MESSAGE[] = {
+    0x55, 0x8B, 0xEC,
+    0x8B, 0x45, 0x08, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x4D, 0x0C, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x55, 0x10, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x45, 0x14, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x4D, 0x18, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x55, 0x08, 0x8B, 0x42, 0x0C, 0xA3
+};
+static const uint8_t MSK_SEND_MESSAGE[] = {
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SEND_MESSAGE == sizeof MSK_SEND_MESSAGE,
+               "the send message pattern and its mask are different lengths");
+#define SEND_MESSAGE_SELF_OPERAND  0x07u
+#define SEND_MESSAGE_OTHER_OPERAND 0x10u
+#define SEND_MESSAGE_CODE_OPERAND  0x19u
+#define SEND_MESSAGE_A_OPERAND     0x21u
+#define SEND_MESSAGE_B_OPERAND     0x2Au
+
+/* --- 0x004121CF and 0x0041216C  bapobj_collidePairs: the two NODE posts ---------------------- *
+ *   8B 55 FC              mov edx,[ebp-4]              the node the probe answered
+ *   89 15 <node>          mov [g_msgContactNode],edx   operand at +0x05
+ *   6A 00 6A 01           push 0 / push 1              b = 0, a = 1, the (1,0) shape of gate 1
+ *   ...                   the pair's own code, other, self, and the call to sendMessage
+ *
+ * The block runs twice, once for each direction of the pair with the registers the compiler
+ * chose for that copy, and the two operands have to name one cell. That agreement is the check
+ * that the pattern found the post and not another store to the same register. */
+static const uint8_t SIG_NODE_POST_FIRST[] = {
+    0x8B, 0x4D, 0xFC, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x6A, 0x00, 0x6A, 0x01,
+    0x8B, 0x55, 0xEC, 0x8B, 0x82, 0xAC, 0x00, 0x00, 0x00, 0x50,
+    0x8B, 0x4D, 0xE8, 0x51, 0x8B, 0x55, 0xEC, 0x52, 0xE8
+};
+static const uint8_t SIG_NODE_POST_SECOND[] = {
+    0x8B, 0x55, 0xFC, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00, 0x6A, 0x00, 0x6A, 0x01,
+    0x8B, 0x45, 0xE8, 0x8B, 0x88, 0xAC, 0x00, 0x00, 0x00, 0x51,
+    0x8B, 0x55, 0xEC, 0x52, 0x8B, 0x45, 0xE8, 0x50, 0xE8
+};
+static const uint8_t MSK_NODE_POST[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_NODE_POST_FIRST == sizeof MSK_NODE_POST &&
+               sizeof SIG_NODE_POST_SECOND == sizeof MSK_NODE_POST,
+               "the node post patterns and their mask are different lengths");
+#define NODE_POST_OPERAND 0x05u
+
 /* --- 0x00414436  bapobj_detachNode: THE TYPE ERROR ------------------------------------------- *
  *   8B 45 EC              mov  eax,[ebp-0x14]        ; keep = a NODE ordinal
  *   50                    push eax                   ; arg4
@@ -165,13 +234,21 @@ enum {
     SITE_SEVER_PROBE,
     SITE_DEATH_GATE,
     SITE_DETACH_HIDE_CALL,
+    SITE_SEND_MESSAGE,
+    SITE_NODE_POST_FIRST,
+    SITE_NODE_POST_SECOND,
     SITE_COUNT
 };
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("sever_probe",      SIG_SEVER_PROBE),
-    SIGNATURE_ENTRY("death_gate",       SIG_DEATH_GATE),
-    SIGNATURE_ENTRY("detach_hide_call", SIG_DETACH_HIDE_CALL)
+    /* A detour target, and declared as one: with a plain pattern the first DLL to detour the gate
+     * would have left this one searching for a prologue that is now a jump. */
+    SIGNATURE_ENTRY_DETOUR("death_gate", SIG_DEATH_GATE, DEATH_GATE_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY("detach_hide_call", SIG_DETACH_HIDE_CALL),
+    SIGNATURE_ENTRY_MASKED("send_message",     SIG_SEND_MESSAGE,     MSK_SEND_MESSAGE),
+    SIGNATURE_ENTRY_MASKED("node_post_first",  SIG_NODE_POST_FIRST,  MSK_NODE_POST),
+    SIGNATURE_ENTRY_MASKED("node_post_second", SIG_NODE_POST_SECOND, MSK_NODE_POST)
 };
 
 /* --- bapObj / rdThing / rdModel3 / character offsets ----------------------------------------- */
@@ -195,14 +272,6 @@ static signature_t sites[SITE_COUNT] = {
 #define MAX_PLAUSIBLE_KIDS  128u
 #define MAX_PLAUSIBLE_NODES 4096u
 
-/* The message mailbox, laid out contiguously from [0x869240]. */
-#define MAILBOX_BASE       0x869240u
-#define MAILBOX_SELF       0x00
-#define MAILBOX_OTHER      0x04
-#define MAILBOX_CODE       0x08
-#define MAILBOX_A          0x0C
-#define MAILBOX_B          0x10
-#define MAILBOX_NODE       0x18
 #define MESSAGE_CODE_SABER 0x25
 
 typedef int32_t (__cdecl *probe_fn_t)(void *victim_body, void *attacker);
@@ -593,28 +662,65 @@ static void __cdecl hook_hide_meshes(void *piece_thing, void *model3, uint8_t *n
 }
 
 /* ============================================================================================ */
+/* One mailbox cell out of an operand, checked to lie in the image. */
+static bool read_cell(uintptr_t site, uint32_t operand, volatile const int32_t **out)
+{
+    uint32_t address = 0;
+
+    if (!memory_read_u32(site + operand, &address) ||
+        !memory_is_inside_image(address, sizeof(int32_t))) {
+        return false;
+    }
+    *out = (volatile const int32_t *)(uintptr_t)address;
+    return true;
+}
+
+/* The six cells the gates read, out of the two functions that write them. Resolved before
+ * anything is patched, and the feature stays off without them: the gates are what make a sever
+ * land on the limb that was hit, and reading them from the wrong cells would be worse than not
+ * reading them at all. */
 static bool resolve_message_mailbox(void)
 {
-    /* The mailbox lies contiguously from [0x869240]: self=+0, other=+4, code=+8, a=+0xC, b=+0x10,
-     * impact=+0x14, node=+0x18. Every address is checked against the
-     * image. */
-    if (!memory_is_inside_image(MAILBOX_BASE, MAILBOX_NODE + sizeof(int32_t))) {
-        log_error("the message mailbox %08X is not inside the image, feature OFF",
-                  (unsigned)MAILBOX_BASE);
+    uintptr_t               send  = sites[SITE_SEND_MESSAGE].address;
+    uintptr_t               first = sites[SITE_NODE_POST_FIRST].address;
+    uintptr_t               second = sites[SITE_NODE_POST_SECOND].address;
+    volatile const int32_t *node_again = NULL;
+
+    if (send == 0 || first == 0 || second == 0) {
+        log_error("the message mailbox could not be located (%s, %s, %s), feature OFF",
+                  (send != 0) ? "sendMessage found" : "sendMessage NOT found",
+                  (first != 0) ? "first node post found" : "first node post NOT found",
+                  (second != 0) ? "second node post found" : "second node post NOT found");
+        return false;
+    }
+    if (!read_cell(send, SEND_MESSAGE_SELF_OPERAND,  &limb_state.message_self) ||
+        !read_cell(send, SEND_MESSAGE_OTHER_OPERAND, &limb_state.message_other) ||
+        !read_cell(send, SEND_MESSAGE_CODE_OPERAND,  &limb_state.message_code) ||
+        !read_cell(send, SEND_MESSAGE_A_OPERAND,     &limb_state.message_a) ||
+        !read_cell(send, SEND_MESSAGE_B_OPERAND,     &limb_state.message_b) ||
+        !read_cell(first, NODE_POST_OPERAND,         &limb_state.message_node) ||
+        !read_cell(second, NODE_POST_OPERAND,        &node_again)) {
+        log_error("a mailbox operand at %08X or %08X names a cell outside the image, feature OFF",
+                  (unsigned)send, (unsigned)first);
+        return false;
+    }
+    if (node_again != limb_state.message_node) {
+        log_error("the two node posts at %08X and %08X write different cells, %08X and %08X, so "
+                  "this is not the collidePairs expected, feature OFF",
+                  (unsigned)first, (unsigned)second, (unsigned)(uintptr_t)limb_state.message_node,
+                  (unsigned)(uintptr_t)node_again);
         return false;
     }
 
-    limb_state.message_self  = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_SELF);
-    limb_state.message_other = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_OTHER);
-    limb_state.message_code  = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_CODE);
-    limb_state.message_a     = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_A);
-    limb_state.message_b     = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_B);
-    limb_state.message_node  = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_NODE);
-
-    log_info("mailbox self=%08X other=%08X code=%08X a=%08X b=%08X node=%08X",
-             (unsigned)(MAILBOX_BASE + MAILBOX_SELF), (unsigned)(MAILBOX_BASE + MAILBOX_OTHER),
-             (unsigned)(MAILBOX_BASE + MAILBOX_CODE), (unsigned)(MAILBOX_BASE + MAILBOX_A),
-             (unsigned)(MAILBOX_BASE + MAILBOX_B), (unsigned)(MAILBOX_BASE + MAILBOX_NODE));
+    log_info("mailbox self=%08X other=%08X code=%08X a=%08X b=%08X node=%08X, read out of "
+             "sendMessage at %08X and the node posts at %08X and %08X",
+             (unsigned)(uintptr_t)limb_state.message_self,
+             (unsigned)(uintptr_t)limb_state.message_other,
+             (unsigned)(uintptr_t)limb_state.message_code,
+             (unsigned)(uintptr_t)limb_state.message_a,
+             (unsigned)(uintptr_t)limb_state.message_b,
+             (unsigned)(uintptr_t)limb_state.message_node,
+             (unsigned)send, (unsigned)first, (unsigned)second);
     return true;
 }
 
@@ -748,11 +854,10 @@ void dismemberment_install(void)
     }
 
     load_config();
+    signature_resolve_table(sites, SITE_COUNT);
     if (!resolve_message_mailbox()) {
         return;
     }
-
-    signature_resolve_table(sites, SITE_COUNT);
     limb_state.installed = true;
 
     /* Everything is installed whatever the setting says, and the setting is then obeyed at run

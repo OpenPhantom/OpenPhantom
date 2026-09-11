@@ -129,8 +129,11 @@ typedef struct flight_constant {
 } flight_constant_t;
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("stunt_tick",    SIG_STUNT_TICK),
-    SIGNATURE_ENTRY("stunt_contact", SIG_STUNT_CONTACT),
+    /* Both are detoured, so both are declared as detour targets: a plain pattern is searched for
+     * whole, and the first DLL to detour either function replaces exactly the bytes it starts
+     * with. */
+    SIGNATURE_ENTRY_DETOUR("stunt_tick",    SIG_STUNT_TICK,    STUNT_TICK_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY_DETOUR("stunt_contact", SIG_STUNT_CONTACT, STUNT_CONTACT_PROLOGUE_SIZE),
     SIGNATURE_ENTRY("stunt_spin",    SIG_STUNT_SPIN),
     SIGNATURE_ENTRY("stunt_gravity", SIG_STUNT_GRAVITY)
 };
@@ -400,7 +403,7 @@ static void sample_stunt(uint8_t *block, float life)
         return;
     }
 
-    if (!memory_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
+    if (!memory_try_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
         object == NULL) {
         return;
     }
@@ -457,7 +460,9 @@ static void maintain_previous_rotation(uint8_t *block)
     int      free_slot = -1;
     int      index;
 
-    if (!memory_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
+    /* The faulting read rather than the asking one: this runs once per substep per flying piece,
+     * and the block is the engine's own, handed over a call ago. */
+    if (!memory_try_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
         object == NULL) {
         return;
     }

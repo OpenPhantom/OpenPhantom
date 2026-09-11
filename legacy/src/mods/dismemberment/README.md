@@ -57,6 +57,8 @@ live switch is lost, and the log says so.
 | the `hideMeshesBelow` call | `0x41441D + 0x19` | redirected through a translating thunk |
 | `candy_stuntTick` | `0x42F64C` | detoured, 6-byte prologue |
 | `candy_stuntOnContact` | `0x42FB2D` | detoured, 6-byte prologue |
+| `bapobj_sendMessage` | `0x414C99` | resolved, not patched; the five mailbox cells the gates read come out of its store operands |
+| the two node posts in `bapobj_collidePairs` | `0x41216C`, `0x4121CF` | resolved, not patched; the contact node cell comes out of their store operand, and both have to name the same cell |
 | four tumble constants, gravity, the yaw kick | in `.data` | both the shipped and the tuned value are read once at install; every later write is one of those two absolutes. Readers only in the flight code |
 
 ## The two defects

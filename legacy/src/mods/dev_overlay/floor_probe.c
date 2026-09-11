@@ -34,7 +34,13 @@
 #include <string.h>
 
 /* Address free; measured ONE match. The prologue's own frame size and the [ebp+0xc] / +0x18 walk
- * of the second argument are what make it unique; there is no shorter distinctive run here. */
+ * of the second argument are what make it unique; there is no shorter distinctive run here.
+ *
+ * The same function is a detour target: diagnostics puts its own jump on the first seven bytes
+ * when its trace is on. Asked for these bytes exactly, the search then found nothing and both
+ * callers went back to the behaviour the floor probe exists to replace, in the one session
+ * somebody was instrumenting. The detour-aware search accepts the jump and the call goes through
+ * the chain like any other. */
 static const uint8_t SIG_PROBE_FLOOR[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x7C, 0x57,
     0xC7, 0x45, 0xC8, 0x00, 0x00, 0x00, 0x00,
@@ -42,6 +48,7 @@ static const uint8_t SIG_PROBE_FLOOR[] = {
     0x83, 0x7D, 0xA4, 0x00, 0x74, 0x1E
 };
 
+#define PROBE_FLOOR_PROLOGUE 7u     /* push ebp / mov ebp,esp / sub esp,0x7C / push edi */
 #define GROUND_CONTACT_SIZE 0x88u
 #define PROBE_NO_FLOOR      3.0e38f   /* the engine seeds dist to 3.4e38 for "nothing found" */
 
@@ -59,8 +66,8 @@ floor_probe_result_t floor_probe_below(const float *position, float *out_drop)
      * theirs is actually in use, so an executable that never opens the panel never pays for it. */
     if (!probe_floor_resolved) {
         probe_floor_resolved = true;
-        probe_floor = (probe_floor_fn_t)(uintptr_t)signature_find_unique(SIG_PROBE_FLOOR, NULL,
-                                                                         sizeof SIG_PROBE_FLOOR);
+        probe_floor = (probe_floor_fn_t)(uintptr_t)signature_find_detour_target(
+            SIG_PROBE_FLOOR, NULL, sizeof SIG_PROBE_FLOOR, PROBE_FLOOR_PROLOGUE);
         log_info("the floor probe %s", (probe_floor != NULL)
                      ? "resolved: falls and teleports can both be asked about"
                      : "did NOT resolve, so both callers keep their old behaviour");

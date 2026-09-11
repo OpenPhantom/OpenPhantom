@@ -232,11 +232,21 @@ static bool read_call_target(uint32_t offset, void **out)
     return true;
 }
 
+/* An address-bearing operand as far as 0x567 past the anchor, so the two bytes in front of it are
+ * checked before it is believed: a ModRM of mod 00, r/m 101, which is a disp32 with no register
+ * (the 0x05, 0x0D, 0x15 and 0x3D of the sites below all have that shape), behind one of the three
+ * opcodes the console function reaches its globals with, mov [mem],imm32 (C7), mov r32,[mem] (8B)
+ * and cmp [mem],imm8 (83). A build that matched the prologue and laid the body out differently is
+ * refused here rather than written through. */
 static bool read_data_pointer(uint32_t operand_offset, volatile int32_t **out)
 {
     uint32_t addr = 0;
+    uint8_t  head[2];
 
-    if (!memory_read_u32(st.anchor + operand_offset, &addr) ||
+    if (!memory_read(st.anchor + operand_offset - 2u, head, sizeof head) ||
+        (head[1] & 0xC7u) != 0x05u ||
+        (head[0] != 0xC7u && head[0] != 0x8Bu && head[0] != 0x83u) ||
+        !memory_read_u32(st.anchor + operand_offset, &addr) ||
         !memory_is_inside_image(addr, sizeof(int32_t))) {
         return false;
     }

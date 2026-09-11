@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* --- 0x0044EC80 and 0x0044EDF6: the two mode-entry functions that launch the player upward ------
  *
@@ -109,6 +110,33 @@ static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
     0xC7, 0x41, 0x60, 0x68, 0x53, 0x4B, 0x00           /* mov [ecx+0x60],0x004b5368 -> JediJump  */
 };
 #define JEDI_JUMP_ENTRY_PROLOGUE_SIZE 8u   /* same reasoning as JUMP_ENTRY_PROLOGUE_SIZE above */
+
+/* The descriptor each pattern ends on, read out of the pattern so the two stay one fact. */
+#define ENTRY_DESCRIPTOR_OFFSET 41u        /* the imm32 of `mov [ecx+0x60],<descriptor>` */
+#define PLAYER_MODE_OFFSET      0x60u
+static uint32_t pattern_descriptor(const uint8_t *pattern)
+{
+    uint32_t value;
+
+    memcpy(&value, pattern + ENTRY_DESCRIPTOR_OFFSET, sizeof value);
+    return value;
+}
+
+/* The original entered its mode, so it wrote the take-off velocity this cheat scales. On the
+ * guard exit at +0x1B it writes nothing and leaves the mode alone, and scaling then multiplied
+ * whatever +0xB4 last held. The descriptor the pattern ends on is the value the success path
+ * stores at +0x60, so the mode pointer reading it is the test. */
+static void scale_take_off(uint32_t descriptor)
+{
+    void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+
+    if (player_record != NULL &&
+        *(const uint32_t *)((const char *)player_record + PLAYER_MODE_OFFSET) == descriptor) {
+        float *vertical_velocity =
+            (float *)((char *)player_record + PLAYER_VERTICAL_VELOCITY_OFFSET);
+        *vertical_velocity *= own_state.jump_boost_scale;
+    }
+}
 
 /* Velocity, not height. Jump height scales with velocity SQUARED under the engine's own linear
  * gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A first guess for "noticeably
@@ -224,8 +252,8 @@ void cheats_openphantom_resume_jump_boost(void)
 
 /* Jump boost. Calling the original FIRST and unconditionally keeps this a boost rather than a
  * reimplementation: the jump still happens exactly as retail built it, guard check and all, and
- * only once it has already decided to jump and written its own velocity does this cheat touch
- * anything, scaling whatever value is now sitting at +0xB4, either the fallback constant or the
+ * only once it has entered its mode and written its own velocity does this cheat touch anything,
+ * scaling whatever value is now sitting at +0xB4, either the fallback constant or the
  * per-character table value, whichever path the original just took. See SIG_JUMP_ENTRY's own
  * comment for why this needs two hooks rather than one. */
 static void __cdecl hook_jump_entry(void)
@@ -233,13 +261,7 @@ static void __cdecl hook_jump_entry(void)
     own_state.jump_entry_original();
 
     if (own_state.cheats[CHEATS_OWN_JUMP_BOOST].on) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
-
-        if (player_record != NULL) {
-            float *vertical_velocity =
-                (float *)((char *)player_record + PLAYER_VERTICAL_VELOCITY_OFFSET);
-            *vertical_velocity *= own_state.jump_boost_scale;
-        }
+        scale_take_off(pattern_descriptor(SIG_JUMP_ENTRY));
     }
 }
 
@@ -248,13 +270,7 @@ static void __cdecl hook_jedi_jump_entry(void)
     own_state.jedi_jump_entry_original();
 
     if (own_state.cheats[CHEATS_OWN_JUMP_BOOST].on) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
-
-        if (player_record != NULL) {
-            float *vertical_velocity =
-                (float *)((char *)player_record + PLAYER_VERTICAL_VELOCITY_OFFSET);
-            *vertical_velocity *= own_state.jump_boost_scale;
-        }
+        scale_take_off(pattern_descriptor(SIG_JEDI_JUMP_ENTRY));
     }
 }
 

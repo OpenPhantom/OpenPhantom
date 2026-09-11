@@ -289,6 +289,34 @@ static bool quiesce_take(quiesce_t *held, uintptr_t low, uintptr_t high)
  * A `lock` prefix makes the increment atomic and costs one byte, so the whole repair fits inside
  * the function's own paragraph. See the essay above for why the write waits for the other
  * threads to be somewhere else. */
+/* Every write over ImLock's body goes through here, the one that adds the prefix and the one
+ * that takes it back, because both move the instruction boundary the essay above is about. */
+static bool write_lock_body(uintptr_t im_lock, const uint8_t *bytes, size_t size,
+                            const char *what)
+{
+    quiesce_t held;
+    unsigned  attempt;
+
+    for (attempt = 0; attempt < QUIESCE_ATTEMPTS; ++attempt) {
+        bool clear = quiesce_take(&held, im_lock, im_lock + size);
+        bool written = false;
+
+        if (clear) {
+            written = (patch_write_bytes(im_lock, bytes, size) == PATCH_RESULT_OK);
+        }
+        quiesce_release(&held);
+
+        if (clear) {
+            return written;            /* logged by the caller either way */
+        }
+        Sleep(2);                      /* outside the suspension, on purpose */
+    }
+
+    log_warning("ImLock at %08X had another thread standing on it every time this looked, so %s "
+                "is NOT written.", (unsigned)im_lock, what);
+    return false;
+}
+
 static bool make_lock_atomic(uintptr_t im_lock)
 {
     uint8_t  atomic_increment[8];
@@ -323,32 +351,8 @@ static bool make_lock_atomic(uintptr_t im_lock)
     memcpy(atomic_increment + 3, &gate_operand, sizeof(gate_operand));
     atomic_increment[7] = 0xC3;          /* ret                          */
 
-    {
-        quiesce_t held;
-        unsigned  attempt;
-
-        for (attempt = 0; attempt < QUIESCE_ATTEMPTS; ++attempt) {
-            bool clear = quiesce_take(&held, im_lock, im_lock + sizeof(atomic_increment));
-            bool written = false;
-
-            if (clear) {
-                written = (patch_write_bytes(im_lock, atomic_increment,
-                                             sizeof(atomic_increment)) == PATCH_RESULT_OK);
-            }
-            quiesce_release(&held);
-
-            if (clear) {
-                return written;            /* logged by the caller either way */
-            }
-            Sleep(2);                      /* outside the suspension, on purpose */
-        }
-
-        log_warning("ImLock at %08X had another thread standing on it every time this looked, so "
-                    "the atomic increment is NOT written. The music lock stays as the game "
-                    "shipped it, which is the state this fix improves on rather than depends on.",
-                    (unsigned)im_lock);
-        return false;
-    }
+    return write_lock_body(im_lock, atomic_increment, sizeof(atomic_increment),
+                           "the atomic increment");
 }
 
 bool imuse_guard_install(const imuse_sites_t *sites)
@@ -391,13 +395,22 @@ bool imuse_guard_install(const imuse_sites_t *sites)
             memcpy(plain + 2, &operand, sizeof(operand));
             plain[6] = 0xC3;                                   /* ret                  */
             plain[7] = 0x90;                                   /* the byte the prefix took */
-            (void)patch_write_bytes(sites->im_lock, plain, sizeof(plain));
 
-            guard.lock_made_atomic = false;
-            log_warning("ImUnlock at %08X could not be replaced, so the atomic increment at %08X "
-                        "was rolled back. An atomic raise against a racy lower is a different "
-                        "imbalance, not half a repair.",
-                        (unsigned)sites->im_unlock, (unsigned)sites->im_lock);
+            /* The rollback moves the boundary back the way the patch moved it forward, so it
+             * needs the same quiesce: a timer thread parked on the ret of the seven byte form
+             * would otherwise resume into the padding byte. */
+            if (write_lock_body(sites->im_lock, plain, sizeof(plain), "the rollback")) {
+                guard.lock_made_atomic = false;
+                log_warning("ImUnlock at %08X could not be replaced, so the atomic increment at "
+                            "%08X was rolled back. An atomic raise against a racy lower is a "
+                            "different imbalance, not half a repair.",
+                            (unsigned)sites->im_unlock, (unsigned)sites->im_lock);
+            } else {
+                log_error("ImUnlock at %08X could not be replaced and the atomic increment at "
+                          "%08X could not be rolled back either, so the lock is raised atomically "
+                          "and lowered as the game shipped it for this session",
+                          (unsigned)sites->im_unlock, (unsigned)sites->im_lock);
+            }
         }
     }
 

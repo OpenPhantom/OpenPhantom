@@ -104,6 +104,13 @@ typedef struct probe_state {
     int32_t gate_max;
 
     bool    stall_reported;
+    /* The heartbeat has been seen to run at least once since the probe started. Until then there
+     * is nothing to have stalled: the baseline is stamped at install, which is process start, and
+     * the first frame can arrive seconds later on a slow disk, before the music has attached. A
+     * detector without this printed a stall and a recovery on a healthy launch and the watchdog
+     * released a gate nothing had stuck. */
+    bool    heartbeat_seen;
+    bool    trace_retaken;      /* the commentary pointer was found replaced once, and said so */
     int32_t stalls_seen;
 
     DWORD    last_stress_ms;
@@ -348,12 +355,34 @@ static void drive_stress(DWORD now)
     state.stress_calls++;
 }
 
+/* The commentary pointer was taken at install, which is before the game has run a line, and
+ * nothing here knows whether iMUSE's own start-up writes that slot afterwards. Rather than
+ * assume either way, the slot is looked at every frame: a pointer that is no longer the thunk is
+ * whoever came later, and the thunk goes back in front of it. */
+static void retake_trace_slot(void)
+{
+    if (!config.trace || state.sites.trace_slot == NULL ||
+        *state.sites.trace_slot == trace_thunk) {
+        return;
+    }
+    state.original_trace = *state.sites.trace_slot;
+    *state.sites.trace_slot = trace_thunk;
+    if (!state.trace_retaken) {
+        state.trace_retaken = true;
+        log_info("iMUSE's commentary pointer was replaced after the capture was installed "
+                 "(new handler %08X), so the capture is put back in front of it. That answers "
+                 "whether the game writes this slot at start-up: it does",
+                 (unsigned)(uintptr_t)state.original_trace);
+    }
+}
+
 void music_probe_frame(void)
 {
     int32_t ticks;
     int32_t gate;
     DWORD   now;
 
+    retake_trace_slot();
     if (!state.active) {
         return;
     }
@@ -385,9 +414,10 @@ void music_probe_frame(void)
                 report_recovered(ticks, now - state.last_body_change_ms);
                 state.stall_reported = false;
             }
+            state.heartbeat_seen = true;
             state.last_body_stamp = body;
             state.last_body_change_ms = now;
-        } else {
+        } else if (state.heartbeat_seen) {
             DWORD stalled = now - state.last_body_change_ms;
 
             /* The report waits for the stall to be beyond argument. The REPAIR does not, and used
@@ -401,7 +431,9 @@ void music_probe_frame(void)
             }
             run_watchdog(gate, stalled);
         }
-    } else if (ticks == state.last_ticks &&
+    } else if (ticks != state.last_ticks && !state.heartbeat_seen) {
+        state.heartbeat_seen = true;
+    } else if (state.heartbeat_seen && ticks == state.last_ticks &&
                now - state.last_tick_change_ms > STALL_DECLARED_AFTER_MS) {
         if (!state.stall_reported) {
             state.stall_reported = true;

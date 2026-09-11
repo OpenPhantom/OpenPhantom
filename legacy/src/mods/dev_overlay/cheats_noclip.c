@@ -449,10 +449,7 @@ static bool probe_belongs_to_a_clipping_player(const void *from, uint32_t mask)
         return false;
     }
 
-    if (!memory_try_readable(PLAYER_RECORD_PTR_ADDR, sizeof(uintptr_t))) {
-        return false;
-    }
-    player = *(const uint8_t *const *)PLAYER_RECORD_PTR_ADDR;
+    player = (const uint8_t *)player_slot_current();
     if (player == NULL) {
         return false;
     }
@@ -579,10 +576,7 @@ void cheats_noclip_tick(void)
         return;
     }
 
-    if (!memory_try_readable(PLAYER_RECORD_PTR_ADDR, sizeof(uintptr_t))) {
-        return;
-    }
-    player = *(uint8_t *const *)PLAYER_RECORD_PTR_ADDR;
+    player = (uint8_t *)player_slot_current();
     if (player == NULL ||
         !memory_try_readable((uintptr_t)(player + PLAYER_DESIRED_POSITION_OFFSET),
                              sizeof(float) * 3u)) {
@@ -675,8 +669,8 @@ static int32_t __cdecl hook_actor_push(void *obj, const void *new_pos)
 {
     const uint8_t *player;
 
-    if (noclip_is_active() && memory_try_readable(PLAYER_RECORD_PTR_ADDR, sizeof(uintptr_t))) {
-        player = *(const uint8_t *const *)PLAYER_RECORD_PTR_ADDR;
+    if (noclip_is_active()) {
+        player = (const uint8_t *)player_slot_current();
         if (player != NULL &&
             new_pos == (const void *)(player + PLAYER_DESIRED_POSITION_OFFSET)) {
             return ACTOR_PUSH_MOVE_ALLOWED;

@@ -203,6 +203,8 @@ typedef int32_t (__cdecl *key_hook_fn_t)(uint32_t window, int32_t message,
 
 typedef struct overlay_input_state {
     bool              installed;
+    uintptr_t         site;              /* the message hook, once resolved */
+    uint32_t          modal;             /* the cell read out of it, as proof */
     bool              open;
     bool              saw_a_message;
     bool              search_focused;    /* whether a click has landed in the search field yet */
@@ -709,12 +711,12 @@ static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam
 
 /* ============================================================================================ */
 
-bool overlay_input_install(void)
+bool overlay_input_resolve(void)
 {
     uintptr_t site;
     uint32_t  modal = 0;
 
-    if (input_state.installed) {
+    if (input_state.site != 0) {
         return true;
     }
 
@@ -731,8 +733,23 @@ bool overlay_input_install(void)
                     (unsigned)(site + OFFSET_MODAL_CELL));
         return false;
     }
-    if (!detour_install(&input_state.detour, site, (const void *)&hook_key, KEY_HOOK_PROLOGUE)) {
-        log_warning("the window message hook at %08X could not be detoured", (unsigned)site);
+    input_state.site  = site;
+    input_state.modal = modal;
+    return true;
+}
+
+bool overlay_input_install(void)
+{
+    if (input_state.installed) {
+        return true;
+    }
+    if (!overlay_input_resolve()) {
+        return false;
+    }
+    if (!detour_install(&input_state.detour, input_state.site, (const void *)&hook_key,
+                        KEY_HOOK_PROLOGUE)) {
+        log_warning("the window message hook at %08X could not be detoured",
+                    (unsigned)input_state.site);
         return false;
     }
 
@@ -744,7 +761,7 @@ bool overlay_input_install(void)
              "combinations are handed back so the game can still be closed or switched away "
              "from. The modal cell at %08X is read as proof this is the right function and "
              "is deliberately not written.",
-             (unsigned)site, (unsigned)modal);
+             (unsigned)input_state.site, (unsigned)input_state.modal);
     return true;
 }
 

@@ -17,8 +17,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Places the detour and reads the modal cell out of the matched bytes. False when the site did not
- * resolve, and then nothing is patched and the overlay never opens. */
+/* Finds the window message hook and reads the modal cell out of the matched bytes, writing
+ * nothing. False when the site did not resolve, and then the overlay can never open, which the
+ * caller wants to know before it places anything else. */
+bool overlay_input_resolve(void);
+
+/* Places the detour on the site the resolve found, resolving first if nobody has. False when the
+ * site did not resolve or could not be detoured, and then the overlay never opens. */
 bool overlay_input_install(void);
 
 /* The virtual key that opens the panel. Zero, the default, accepts whichever key sits below Escape

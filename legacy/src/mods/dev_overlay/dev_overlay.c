@@ -5,9 +5,11 @@
  * a player would find. So input, which is the only thing that can open it, is installed last and
  * only if everything it would show has already answered for itself.
  *
- * The cheats are the exception in the other direction: they are installed first and a failure
- * there is not fatal. A panel with one working tab is worth having, and the log names which half
- * is missing.
+ * The panel's own three sites are found before anything is written, and the cheats go in
+ * between the finding and the writing. A cheat failure is not fatal: a panel with one working
+ * tab is worth having, and the log names which half is missing. A panel failure, on the other
+ * hand, is found before the cheats have placed a single detour, because a detour cannot be taken
+ * out again and a cheat nobody can switch on is a hook with no purpose.
  */
 #include "dev_overlay.h"
 
@@ -81,6 +83,7 @@ _Static_assert(sizeof(SIG_SCENE_END) == sizeof(MSK_SCENE_END),
 
 typedef void (__cdecl *scene_end_fn_t)(void);
 static scene_end_fn_t scene_end_original;
+static uintptr_t      scene_end_call;      /* the call that is redirected, once found */
 
 static void __cdecl hook_scene_end(void)
 {
@@ -103,7 +106,8 @@ static void __cdecl hook_scene_end(void)
     scene_end_original();
 }
 
-static bool redirect_scene_end(void)
+/* Finds the call and what it goes to, and writes nothing. */
+static bool resolve_scene_end(void)
 {
     uintptr_t site = signature_find_unique(SIG_SCENE_END, MSK_SCENE_END, sizeof SIG_SCENE_END);
     uintptr_t call;
@@ -120,12 +124,18 @@ static bool redirect_scene_end(void)
         return false;
     }
     scene_end_original = (scene_end_fn_t)original;
-    if (patch_redirect_call(call, (const void *)&hook_scene_end) != PATCH_RESULT_OK) {
-        log_warning("the call at %08X was not redirected", (unsigned)call);
+    scene_end_call     = call;
+    return true;
+}
+
+static bool redirect_scene_end(void)
+{
+    if (patch_redirect_call(scene_end_call, (const void *)&hook_scene_end) != PATCH_RESULT_OK) {
+        log_warning("the call at %08X was not redirected", (unsigned)scene_end_call);
         return false;
     }
     log_info("the panel is drawn just before the scene closes, at %08X, so it composites with the "
-             "finished picture instead of landing in the next one", (unsigned)call);
+             "finished picture instead of landing in the next one", (unsigned)scene_end_call);
     return true;
 }
 
@@ -171,6 +181,13 @@ void dev_overlay_install(void)
     }
     overlay_draw_set_align(ini_read_int(DEV_OVERLAY_SECTION, "TextAlign", 1));
 
+    /* The panel's three sites first, and only found: the drawing, the instant it is drawn at and
+     * the hook that opens it. A panel that cannot open has no use for a cheat, so this is settled
+     * before the cheats place anything. */
+    if (!overlay_draw_resolve() || !resolve_scene_end() || !overlay_input_resolve()) {
+        return;
+    }
+
     /* Either half is worth having on its own, so both are attempted and neither decides the
      * outcome. What decides it is whether anything at all can be offered. */
     cheats_ready = cheats_original_resolve();
@@ -182,9 +199,6 @@ void dev_overlay_install(void)
         return;
     }
 
-    if (!overlay_draw_resolve()) {
-        return;
-    }
     if (!redirect_scene_end()) {
         return;
     }

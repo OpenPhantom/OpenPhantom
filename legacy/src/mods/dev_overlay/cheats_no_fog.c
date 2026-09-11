@@ -106,7 +106,6 @@ _Static_assert(sizeof(SIG_LEVEL_POINTER) == sizeof(MSK_LEVEL_POINTER),
 #define WORLD_FOG_BIT            0x001u  /* bit 0 = this level authored fog at all */
 #define WORLD_FOG_START          0x218u  /* float, world units; never written past this level's */
 #define WORLD_FOG_END            0x21Cu  /* float, world units; own authored band without asking */
-#define WORLD_PROBE_SIZE         (WORLD_FOG_END + sizeof(float))
 
 /* Comfortably past the world walk's own draw-distance clamp of [2,64] world units, at
  * 0x00404F33. Nothing the renderer still has in view at these depths,
@@ -178,16 +177,16 @@ static void tick(void)
         cheats_openphantom_resume_jump_boost();
     }
 
-    if (level == NULL || !memory_is_readable_range((uintptr_t)level, WORLD_PROBE_SIZE)) {
-        forget_level();
-        return;
-    }
-    if (!memory_read_u32((uintptr_t)level + WORLD_RENDER_FLAGS, &flags) ||
+    /* The faulting reads rather than the asking ones. This runs every frame for the life of the
+     * process, cheat on or off, and the asking form was three VirtualQuery walks a frame on a
+     * pointer the engine itself dereferences a moment later. */
+    if (level == NULL ||
+        !memory_try_read_u32((uintptr_t)level + WORLD_RENDER_FLAGS, &flags) ||
         (flags & WORLD_FOG_BIT) == 0) {
         forget_level();                /* this level authored no fog: nothing to remember or push */
         return;
     }
-    if (!memory_read((uintptr_t)level + WORLD_FOG_START, band, sizeof band)) {
+    if (!memory_try_read((uintptr_t)level + WORLD_FOG_START, band, sizeof band)) {
         forget_level();
         return;
     }

@@ -13,6 +13,7 @@
 #define DEV_OVERLAY_CHEATS_INTERNAL_H
 
 #include "cheats_openphantom.h"
+#include "player_slot.h"
 
 #include "common/detour.h"
 
@@ -20,9 +21,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The player record pointer, read by the jump cheats and by the panel's own rows. */
-
-#define PLAYER_RECORD_PTR_ADDR 0x004B5220u
+/* The player record is read through player_slot_current(), the cell the engine itself loads it
+ * from, resolved once out of an operand. Every cheat below that reads the player is installed
+ * only after that resolve has succeeded. */
 
 /* The player's live position, three floats, byte-proven from 0x0044F891's own argument
  * (ECX = pPlayer+0x118). Shared by jump boost's fall handling and by free camera's exit

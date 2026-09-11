@@ -61,6 +61,7 @@ user interface library, for nothing the engine's own renderer does not already g
 | the cursor | `0x0045FD01` | the pointer's texture and the sprite drawer, both read out of it |
 | the scene closes | `0x0046C32D` | the call redirected to paint from |
 | window messages | `0x0043F603` | where the game's own console is opened, on backspace |
+| the player is suspended | `0x00450FD8` | the engine's own predicate; the cell it loads the player record from is read out of it, and every cheat that reads the player goes through that cell |
 
 The filled shape is not named in any reconstruction. What identifies it is its call graph: exactly
 six call sites reach it and five lie inside the fade and letterbox module, which draws exactly five
@@ -128,7 +129,14 @@ given in its own section. Split across two groups they read as unrelated.
 
 A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
 That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
-is not available on this executable.
+is not available on this executable. The five that read the player record (the two sizes, no clip,
+jump boost and the free camera) are not installed at all when the cell the engine reads the player
+from could not be found, and the jump boost's two sites are each required to load the player from
+that same cell before they are hooked.
+
+The panel's own three sites, the drawing, the instant it paints and the hook that opens it, are
+found before any cheat places a detour, so a build the panel cannot open on is left without a
+single hook in it.
 
 ### Unlimited ammunition and unlimited health
 
@@ -986,8 +994,8 @@ player plus the player's own height above their floor, and the probe is asked on
 where its cell lookup succeeds.
 
 Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4` in the shipped
-`WMAIN.EXE`. Note that the data addresses quoted throughout these comments come from j0nny's
-`obiold.exe` and do not map to the same places in the shipped executable; in `WMAIN.EXE` that
+`WMAIN.EXE`. The data addresses quoted throughout these comments come from a differently linked
+build of the executable and do not map to the same places in the shipped one; in `WMAIN.EXE` that
 range is inside `.rsrc`. They were read by finding the `FCOMP` instructions that reference them.
 
 Tested in game on Windows: a boosted jump onto ground (immune as before), jump boost off a ledge

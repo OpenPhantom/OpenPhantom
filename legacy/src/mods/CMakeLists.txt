@@ -350,6 +350,7 @@ add_engine_fix(dev_overlay
     overlay_layout.c
     overlay_input.c
     input_freeze.c
+    player_slot.c
     sim_pause.c
     cheats_original.c
     cheats_original_actions.c

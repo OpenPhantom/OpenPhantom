@@ -21,6 +21,8 @@
 
 #include "common/detour.h"
 #include "common/logging.h"
+#include "common/memory.h"
+#include "common/signature.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -81,35 +83,59 @@
 static const uint8_t SIG_JUMP_ENTRY[] = {
     0x55,                                              /* push ebp                              */
     0x8B, 0xEC,                                        /* mov ebp,esp                           */
-    0xA1, 0x20, 0x52, 0x4B, 0x00,                      /* mov eax,[0x004b5220]                  */
+    0xA1, 0x00, 0x00, 0x00, 0x00,                      /* mov eax,[the player record]           */
     0xD9, 0x80, 0x68, 0x01, 0x00, 0x00,                /* fld dword ptr [eax+0x168]             */
     0xD8, 0x1D, 0xA4, 0x86, 0x4A, 0x00,                /* fcomp dword ptr [0x004a86a4]          */
     0xDF, 0xE0,                                        /* fnstsw ax                             */
     0xF6, 0xC4, 0x41,                                  /* test ah,0x41                          */
     0x75, 0x05,                                        /* jnz +5                                */
     0xE9, 0xE0, 0x00, 0x00, 0x00,                      /* jmp 0x0044ed80                        */
-    0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00,                /* mov ecx,[0x004b5220]                  */
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,                /* mov ecx,[the player record]           */
     0xC7, 0x41, 0x60, 0x38, 0x53, 0x4B, 0x00           /* mov [ecx+0x60],0x004b5338 -> Jump      */
 };
 #define JUMP_ENTRY_PROLOGUE_SIZE 8u   /* first boundary at/past five bytes: push ebp; mov ebp,esp;
-                                        * mov eax,[0x004b5220], identical in both functions, but the
-                                        * SIGNATURE above reaches nineteen bytes past this to stay
-                                        * unique; only these first eight are ever relocated */
+                                        * mov eax,[the player record], identical in both
+                                        * functions, but the SIGNATURE above reaches nineteen bytes
+                                        * past this to stay unique; only these first eight are ever
+                                        * relocated */
 
 static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
     0x55,                                              /* push ebp                              */
     0x8B, 0xEC,                                        /* mov ebp,esp                           */
-    0xA1, 0x20, 0x52, 0x4B, 0x00,                      /* mov eax,[0x004b5220]                  */
+    0xA1, 0x00, 0x00, 0x00, 0x00,                      /* mov eax,[the player record]           */
     0xD9, 0x80, 0x68, 0x01, 0x00, 0x00,                /* fld dword ptr [eax+0x168]             */
     0xD8, 0x1D, 0xA4, 0x86, 0x4A, 0x00,                /* fcomp dword ptr [0x004a86a4]          */
     0xDF, 0xE0,                                        /* fnstsw ax                             */
     0xF6, 0xC4, 0x41,                                  /* test ah,0x41                          */
     0x75, 0x05,                                        /* jnz +5                                */
     0xE9, 0x10, 0x01, 0x00, 0x00,                      /* jmp 0x0044ef26                        */
-    0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00,                /* mov ecx,[0x004b5220]                  */
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,                /* mov ecx,[the player record]           */
     0xC7, 0x41, 0x60, 0x68, 0x53, 0x4B, 0x00           /* mov [ecx+0x60],0x004b5368 -> JediJump  */
 };
 #define JEDI_JUMP_ENTRY_PROLOGUE_SIZE 8u   /* same reasoning as JUMP_ENTRY_PROLOGUE_SIZE above */
+
+/* The two loads of the player record are masked, one mask for both patterns, and each site is
+ * then required to load the player from the cell player_slot found. The pattern still names the
+ * function by its guard, its jump and the descriptor it stores; the mask is what turns the two
+ * operands from a copy of an address into a check against one. */
+static const uint8_t MSK_JUMP_ENTRY[] = {
+    0xFF,
+    0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof MSK_JUMP_ENTRY == sizeof SIG_JUMP_ENTRY &&
+               sizeof MSK_JUMP_ENTRY == sizeof SIG_JEDI_JUMP_ENTRY,
+               "the jump entry patterns and their mask are different lengths");
+#define JUMP_ENTRY_PLAYER_OPERAND_FIRST  4u
+#define JUMP_ENTRY_PLAYER_OPERAND_SECOND 34u
 
 /* The descriptor each pattern ends on, read out of the pattern so the two stay one fact. */
 #define ENTRY_DESCRIPTOR_OFFSET 41u        /* the imm32 of `mov [ecx+0x60],<descriptor>` */
@@ -128,7 +154,7 @@ static uint32_t pattern_descriptor(const uint8_t *pattern)
  * stores at +0x60, so the mode pointer reading it is the test. */
 static void scale_take_off(uint32_t descriptor)
 {
-    void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+    void *player_record = player_slot_current();
 
     if (player_record != NULL &&
         *(const uint32_t *)((const char *)player_record + PLAYER_MODE_OFFSET) == descriptor) {
@@ -274,6 +300,37 @@ static void __cdecl hook_jedi_jump_entry(void)
     }
 }
 
+/* One mode entry: found, checked to load the player from the cell every other reader uses, and
+ * only then detoured. The check comes before the detour because a detour cannot be taken out. */
+static bool install_jump_entry(const uint8_t *pattern, size_t size, size_t prologue,
+                               const void *hook, detour_t *detour, const char *what)
+{
+    uintptr_t site = signature_find_detour_target(pattern, MSK_JUMP_ENTRY, size, prologue);
+    uint32_t  first = 0;
+    uint32_t  second = 0;
+
+    if (site == 0) {
+        log_warning("%s did not resolve, so that half of jump boost is not offered", what);
+        return false;
+    }
+    if (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_FIRST, &first) ||
+        !memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_SECOND, &second) ||
+        first != second || first != player_slot_address()) {
+        log_warning("%s at %08X loads the player from %08X and %08X where every other reader "
+                    "uses %08X, so that half of jump boost is not offered", what,
+                    (unsigned)site, (unsigned)first, (unsigned)second,
+                    (unsigned)player_slot_address());
+        return false;
+    }
+    if (!detour_install(detour, site, hook, prologue)) {
+        log_warning("%s at %08X could not be detoured, that half of jump boost is not offered",
+                    what, (unsigned)site);
+        return false;
+    }
+    log_info("%s hooked at %08X", what, (unsigned)site);
+    return true;
+}
+
 /* Jump boost needs at least one of its two sites; either alone still helps whichever characters
  * route through that function (see SIG_JUMP_ENTRY's own comment), so this does not require both
  * the way install_freecam in cheats_free_camera.c does; a partial resolve here is still a real,
@@ -286,17 +343,18 @@ void install_jump_boost(void)
      * sane the instant the panel can ask for it, not only after a resolve that might still fail. */
     own_state.jump_boost_scale = JUMP_BOOST_SCALE_DEFAULT;
 
-    jump_ok = cheats_install_one(SIG_JUMP_ENTRY, NULL, sizeof SIG_JUMP_ENTRY,
-                          (const void *)&hook_jump_entry, &own_state.jump_entry_detour,
-                          JUMP_ENTRY_PROLOGUE_SIZE, "the Jump mode entry");
+    jump_ok = install_jump_entry(SIG_JUMP_ENTRY, sizeof SIG_JUMP_ENTRY, JUMP_ENTRY_PROLOGUE_SIZE,
+                                 (const void *)&hook_jump_entry, &own_state.jump_entry_detour,
+                                 "the Jump mode entry");
     if (jump_ok) {
         own_state.jump_entry_original = (mode_enter_fn_t)own_state.jump_entry_detour.original;
     }
 
-    jedi_jump_ok = cheats_install_one(SIG_JEDI_JUMP_ENTRY, NULL, sizeof SIG_JEDI_JUMP_ENTRY,
-                               (const void *)&hook_jedi_jump_entry,
-                               &own_state.jedi_jump_entry_detour, JEDI_JUMP_ENTRY_PROLOGUE_SIZE,
-                               "the Jedi Jump mode entry");
+    jedi_jump_ok = install_jump_entry(SIG_JEDI_JUMP_ENTRY, sizeof SIG_JEDI_JUMP_ENTRY,
+                                      JEDI_JUMP_ENTRY_PROLOGUE_SIZE,
+                                      (const void *)&hook_jedi_jump_entry,
+                                      &own_state.jedi_jump_entry_detour,
+                                      "the Jedi Jump mode entry");
     if (jedi_jump_ok) {
         own_state.jedi_jump_entry_original =
             (mode_enter_fn_t)own_state.jedi_jump_entry_detour.original;

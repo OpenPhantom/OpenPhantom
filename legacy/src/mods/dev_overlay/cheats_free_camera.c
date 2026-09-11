@@ -291,8 +291,7 @@ static void __cdecl hook_camera_update(void)
              * this key is for, so a guard that removes it whenever the camera leaves the level's
              * own cells costs more than the fall it was guarding against. */
             if (freecam_teleport_pending) {
-                void **player_slot = (void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
-                uint8_t *player = (player_slot != NULL) ? (uint8_t *)*player_slot : NULL;
+                uint8_t *player = (uint8_t *)player_slot_current();
 
                 /* Too high to survive the arrival? Asked before anything is written, because
                  * refusing has to leave the player exactly where they were. A refusal then falls

@@ -38,9 +38,10 @@
  * ============================================================================================ */
 #include "input_freeze.h"
 
+#include "player_slot.h"
+
 #include "common/detour.h"
 #include "common/logging.h"
-#include "common/memory.h"
 #include "common/signature.h"
 
 #include <stdbool.h>
@@ -76,30 +77,10 @@
  * unless the player is standing, puts the sabre away and makes the resume read the position back
  * off the model. All three are right for a cutscene and wrong for a cheat panel somebody opened in
  * mid air.
+ *
+ * The predicate's pattern lives in player_slot.c, because the cell it loads the player from is
+ * the one every cheat reads as well; this file asks for the cell and tests the field at +4.
  * ============================================================================================ */
-static const uint8_t SIG_IS_SUSPENDED[] = {
-    0x55, 0x8B, 0xEC,
-    0xA1, 0x00, 0x00, 0x00, 0x00,                    /* mov eax,[the player block] */
-    0x83, 0x78, 0x04, 0x00,                          /* cmp [eax+4],0              */
-    0x75, 0x07,
-    0xB8, 0x01, 0x00, 0x00, 0x00,
-    0xEB, 0x02,
-    0x33, 0xC0,
-    0x5D, 0xC3
-};
-static const uint8_t MSK_IS_SUSPENDED[] = {
-    0xFF, 0xFF, 0xFF,
-    0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF,
-    0xFF, 0xFF,
-    0xFF, 0xFF
-};
-_Static_assert(sizeof(SIG_IS_SUSPENDED) == sizeof(MSK_IS_SUSPENDED),
-               "the is suspended pattern and its mask are different lengths");
-#define OFFSET_PLAYER_BLOCK 4u
 #define OFFSET_MODULE_STATE 4u
 
 /* --- 0x0048D38D, thirty bytes. The three cells are masked and read back by nobody: what makes the
@@ -216,24 +197,15 @@ bool input_freeze_install(void)
         return true;
     }
 
-    {
-        uintptr_t suspended = signature_find_unique(SIG_IS_SUSPENDED, MSK_IS_SUSPENDED,
-                                                    sizeof SIG_IS_SUSPENDED);
-        uint32_t  block = 0;
-
-        if (suspended != 0 && memory_read_u32(suspended + OFFSET_PLAYER_BLOCK, &block) &&
-            memory_is_inside_image(block, sizeof(void *))) {
-            freeze_state.player_block = (void *const volatile *)(uintptr_t)block;
-            log_info("while the panel is open the player's phases are stopped, as the engine "
-                     "does for a menu and a cutscene; that is the only thing that really holds "
-                     "this game still (player block at %08X)", (unsigned)block);
-        } else {
-            log_warning("the player's own suspend state did not resolve, so the player will keep "
-                        "moving while the panel is open");
-        }
+    if (player_slot_resolve()) {
+        freeze_state.player_block = player_slot();
+        log_info("while the panel is open the player's phases are stopped, as the engine "
+                 "does for a menu and a cutscene; that is the only thing that really holds "
+                 "this game still (player block at %08X)", (unsigned)player_slot_address());
+    } else {
+        log_warning("the player's own suspend state did not resolve, so the player will keep "
+                    "moving while the panel is open");
     }
-
-
 
     axis = install_one(SIG_READ_AXIS, MSK_READ_AXIS, sizeof SIG_READ_AXIS,
                        (const void *)&hook_read_axis, &freeze_state.axis_detour,

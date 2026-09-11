@@ -308,6 +308,9 @@ add_unit_test(overlay_model dev_overlay
     # so the module that owns it has to be linked beside them. It resolves nothing in a test
     # process either, and answers UNAVAILABLE, which is the case both callers must survive.
     dev_overlay/floor_probe.c
+    # The cell the player is read through. It resolves nothing in a test process, so every
+    # cheat that reads the player is left unavailable, which is the case the panel has to show.
+    dev_overlay/player_slot.c
     # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
     # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
     # resolved site every entry point returns immediately, which is exactly what a test process wants.

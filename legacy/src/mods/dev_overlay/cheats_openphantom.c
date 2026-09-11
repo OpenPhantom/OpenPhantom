@@ -1,5 +1,12 @@
 /* cheats_openphantom.c: unlimited ammunition, unlimited health, invincible NPCs, one-shot NPCs,
- * giant player, tiny player, jump boost and free camera. No fog was here too and is not: it never
+ * giant player, tiny player, jump boost and free camera.
+ *
+ * SIZE NOTE: just over the 600 line mark. The file is the install pass and the panel's interface
+ * to every cheat, and the byte evidence for the two sites it detours itself stands in the header
+ * below; the cheats themselves were already split out by responsibility, one file each, so the
+ * seam here has been taken and what is left is the part they share.
+ *
+ * No fog was here too and is not: it never
  * shared this file's shape, it lives in cheats_no_fog.c, and its row moved to the Utilities group
  * so that it sits with the other fog settings rather than away from them. Nothing here dispatches
  * to it any more. Free camera is documented next to its own two signatures below rather than up
@@ -273,7 +280,7 @@ void __cdecl hook_damage(int32_t amount)
 static int32_t __cdecl hook_thing_draw(void *thing, float *matrix)
 {
     if (own_state.scale_matrix_compose != NULL && thing != NULL) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+        void *player_record = player_slot_current();
 
         if (player_record != NULL) {
             void *player_actor = *(void **)((char *)player_record + PLAYER_ACTOR_OFFSET);
@@ -398,13 +405,19 @@ bool cheats_openphantom_install(void)
     }
 
     install_npc_damage();
-    install_player_scale();
-    install_jump_boost();
-    install_fall_punishment_immunity();
-    install_noclip();
 
-    if (install_freecam()) {
-        own_state.cheats[CHEATS_OWN_FREECAM].available = true;
+    /* The five below read the player through the engine's own cell. Without that cell none of
+     * them can do its job, so none is installed: a detour that reads the wrong player is worse
+     * than a row that says unavailable. */
+    if (player_slot_resolve()) {
+        install_player_scale();
+        install_jump_boost();
+        install_fall_punishment_immunity();
+        install_noclip();
+
+        if (install_freecam()) {
+            own_state.cheats[CHEATS_OWN_FREECAM].available = true;
+        }
     }
 
     /* A different shape, see cheats_no_fog.h, so it owns its own state and this only asks it. */
@@ -522,7 +535,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
  * DAT_00881368 is written to 3 from exactly one place in the whole binary: FUN_00429880, case
  * (param_2 == 1). FUN_00429880 has exactly one caller anywhere: the level script interpreter
  * (FUN_00433d0b, dialogue_anim_fix.c's own "opcode 0x202" function), script opcode 0x606,
- * sub-command 1 - `FUN_00429880(param_1, *local_c, local_c[1], local_c[2])` when `*local_c == 1`.
+ * sub-command 1, `FUN_00429880(param_1, *local_c, local_c[1], local_c[2])` when `*local_c == 1`.
  * That is almost certainly the literal command a level's own exit trigger/volume issues.
  *
  * This writes DAT_00881368 = 3 directly, the same value that one script command produces, rather

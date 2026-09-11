@@ -97,7 +97,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * player's own health global (0x0086D57C, the same one hook_damage above subtracts from) is
  * written only by a level-load/respawn reset and a weapon-swap function, confirmed by their own
  * xrefs; nothing in FUN_0044F162 ever reads it. Instead, the SAME ground-contact function calls a
- * dedicated "force the player into Death mode" function - 0x004500B0, decompiled directly and
+ * dedicated "force the player into Death mode" function, 0x004500B0, decompiled directly and
  * confirmed unconditional: `pPlayer->mode = &DeathDescriptor; pPlayer->0x364 = cause;` with no
  * health check anywhere in it, from two OTHER sites, both upstream of the fall-damage block
  * above and keyed off the exact same two fields jump boost already interacts with:
@@ -213,7 +213,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * cross-check against instead, decompiling each one directly and confirming its own body is the
  * strongest evidence actually available here. */
 #define CAMERA_LOCK_CALL_OFFSET   0xC3u   /* 0x0044F225 - 0x0044F162: push 0xd; call 0x0041840a */
-#define CAMERA_FREEZE_CALL_OFFSET 0xD9u   /* 0x0044F23B - 0x0044F162: push ecx; call 0x0044F891 -
+#define CAMERA_FREEZE_CALL_OFFSET 0xD9u   /* 0x0044F23B - 0x0044F162: push ecx; call 0x0044F891.
                                            * ONE byte of push, not two: this pushes a REGISTER
                                            * (0x51), not an immediate, so its own prologue is nine
                                            * bytes, not ten, verified separately from the shared
@@ -323,7 +323,7 @@ void cheats_openphantom_reset_fall_state(void)
 
 static bool floor_exists_under_player(void)
 {
-    void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+    void *player_record = player_slot_current();
 
     if (player_record == NULL) {
         return true;
@@ -519,7 +519,7 @@ static void __declspec(naked) hook_camera_lock(void)
 static void __cdecl on_camera_freeze(void)
 {
     if (!fall_consequences_suppressed() && own_state.camera_freeze_target != NULL) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+        void *player_record = player_slot_current();
 
         if (player_record != NULL) {
             own_state.camera_freeze_target(

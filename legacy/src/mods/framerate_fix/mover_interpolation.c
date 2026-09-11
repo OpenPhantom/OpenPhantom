@@ -262,6 +262,13 @@ static const size_t REDIRECT_PATTERN_SIZE[REDIRECT_COUNT] = {
  * answer. */
 #define SLOT_COUNT 512u
 
+/* A slot whose subnode has not ticked for this many rendered frames may be given to a newcomer.
+ * Ten seconds at 30 frames a second and two at 144, either of which is far longer than any mover
+ * pauses between moves, and a mover that really has stopped for longer is drawn where it stands
+ * anyway. Without this the table only ever filled: 512 slots for the whole session, and the third
+ * level of one was drawn stepped from its first frame because the first two still owned them. */
+#define SLOT_STALE_FRAMES 300u
+
 typedef struct mover_slot {
     const void *subnode;
     bool        usable;
@@ -292,6 +299,10 @@ typedef struct mover_interpolation_state {
     const float    *alpha_latch;
 
     mover_slot_t slots[SLOT_COUNT];
+    float        last_tick_now;     /* the world clock at the last tick, for the level test */
+    uint32_t     levels_opened;     /* how many times the table has been emptied. The engine
+                                     * zeroes the clock more than once while a level comes up,
+                                     * so this runs ahead of the level count and that is fine */
 
     /* Which guard turned a pose away, rather than only how many did. Always counted, not just in
      * the report mode: the total on its own has twice now looked reassuring while hiding the
@@ -347,20 +358,53 @@ static mover_slot_t *slot_find(const void *subnode)
     return NULL;
 }
 
+static bool slot_is_stale(const mover_slot_t *slot)
+{
+    return slot->subnode != NULL &&
+           (mover_state.frame_stamp - slot->tick_stamp) > SLOT_STALE_FRAMES;
+}
+
 static mover_slot_t *slot_reserve(const void *subnode)
 {
-    size_t index = slot_index_for(subnode);
-    size_t probe;
+    size_t        index = slot_index_for(subnode);
+    size_t        probe;
+    mover_slot_t *stale = NULL;
 
     for (probe = 0; probe < SLOT_COUNT; ++probe) {
         mover_slot_t *slot = &mover_state.slots[(index + probe) & (SLOT_COUNT - 1u)];
 
-        if (slot->subnode == subnode || slot->subnode == NULL) {
-            slot->subnode = subnode;
+        if (slot->subnode == subnode) {
             return slot;
         }
+        if (slot->subnode == NULL) {
+            break;
+        }
+        if (stale == NULL && slot_is_stale(slot)) {
+            /* Remembered but not taken: a slot further along may still hold this very subnode,
+             * and taking this one first would put it in the table twice. */
+            stale = slot;
+        }
     }
-    return NULL;                                    /* full: this subnode is simply not smoothed */
+    if (stale == NULL) {
+        if (probe == SLOT_COUNT) {
+            return NULL;                            /* full of live movers: not smoothed */
+        }
+        stale = &mover_state.slots[(index + probe) & (SLOT_COUNT - 1u)];
+    }
+    /* A newcomer starts clean. Whatever the previous owner left is a different mover's history,
+     * and one of these is exactly what a freed address reused by the next level would inherit. */
+    memset(stale, 0, sizeof *stale);
+    stale->subnode = subnode;
+    return stale;
+}
+
+/* Everything forgotten at once, for the moment a level opens. The engine zeroes the world clock
+ * then, so the tick hook sees time go backwards, which is the same event sim_clock reads. Every
+ * subnode address the old level had is free to be reused by the new one, and a slot that matched
+ * on address alone would hand the newcomer a stranger's previous pose. */
+static void slots_forget_level(void)
+{
+    memset(mover_state.slots, 0, sizeof mover_state.slots);
 }
 
 /* ============================================================================================ */
@@ -520,6 +564,15 @@ static void __cdecl hook_tick_mover(void *mover, float now)
     integrating = (record != NULL) &&
                   memory_try_readable((uintptr_t)record, MOVER_TIME_BASE + sizeof(float)) &&
                   (*(const float *)(record + MOVER_TIME_BASE) != now);
+
+    /* A world clock behind the last one seen is a level opening, the one event that empties the
+     * table. Compared against the last tick rather than the last frame, because the un-clamped
+     * substep clock can legitimately run a step ahead of the frame and back within it. */
+    if (now < mover_state.last_tick_now) {
+        slots_forget_level();
+        ++mover_state.levels_opened;
+    }
+    mover_state.last_tick_now = now;
 
     if (integrating) {
         /* The time base still holds the world time of the PREVIOUS move, because the original has
@@ -758,12 +811,14 @@ void mover_interpolation_sample(void)
                     (unsigned)mover_state.rejected);
     } else if (mover_state.blended != 0) {
         log_info("movers: %u poses blended, %u refused, %u unknown, %u track wraps over %u "
-                 "frames. Refusals by guard: %u weight out of range, %u exactly at a step "
-                 "boundary, %u basis row too short, %u rotation past the limit, %u translation "
-                 "past the limit, %u basis not recoverable",
+                 "frames, the table emptied %u time%s so far. Refusals by guard: %u weight "
+                 "out of range, %u exactly at a step boundary, %u basis row too short, %u "
+                 "rotation past the limit, %u translation past the limit, %u basis not "
+                 "recoverable",
                  (unsigned)mover_state.blended, (unsigned)mover_state.rejected,
                  (unsigned)mover_state.unknown, (unsigned)mover_state.wrapped,
-                 (unsigned)mover_state.frames,
+                 (unsigned)mover_state.frames, (unsigned)mover_state.levels_opened,
+                 (mover_state.levels_opened == 1u) ? "" : "s",
                  (unsigned)mover_state.refusals[MOVER_BLEND_WEIGHT_RANGE],
                  (unsigned)mover_state.refusals[MOVER_BLEND_IDENTITY],
                  (unsigned)mover_state.refusals[MOVER_BLEND_ROW_LENGTH],

@@ -503,6 +503,28 @@ Played at 144 frames a second on a 144 Hz screen with the cap matched, where the
 and a character stays put on it. The residual that was open through several sessions is closed and
 was never in this arithmetic.
 
+### The table filled up
+
+The tracker keeps one slot per mover subnode, keyed by its address, in a table of 512. Until the
+fix below, nothing ever gave a slot back: not a level ending, not a mover being destroyed. A fresh
+launch straight into a platform level was always smooth, so every platform test passed, and the
+third level of a session was drawn stepped from its first frame, because the first two still
+owned the table. The log had been saying so all along, in the `unknown` column: `0 unknown`
+through two levels and then `1470 poses blended, 0 refused, 13911 unknown` the moment the third
+opened. Nobody had ridden a platform three levels in.
+
+Two things now empty it. The tick hook already reads the world clock, and when the clock goes
+backwards the engine has zeroed it for a new level, so every slot is dropped; that also closes a
+hazard the old table had, a new level's mover allocated at an address the old level had used
+matching the old slot and inheriting a stranger's previous pose. And a slot whose mover has not
+ticked for 300 rendered frames can be taken by a newcomer, so a level that creates and destroys
+movers cannot fill it either. The window line reports how many times the table has been emptied
+so far, so a log shows the mechanism working rather than only its absence; the engine zeroes the
+clock more than once while a level comes up, so that count runs ahead of the level count.
+
+Played after the fix through several level loads and onto a platform: smooth, and the same window
+that read ninety per cent unknown reads none.
+
 ### Removing the cause instead: `MoverSubstepClock`
 
 Three attempts to compute a better weight in the draw failed, and the fourth option is not another

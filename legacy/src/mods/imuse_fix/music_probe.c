@@ -387,13 +387,19 @@ void music_probe_frame(void)
             }
             state.last_body_stamp = body;
             state.last_body_change_ms = now;
-        } else if (now - state.last_body_change_ms > STALL_DECLARED_AFTER_MS) {
-            if (!state.stall_reported) {
+        } else {
+            DWORD stalled = now - state.last_body_change_ms;
+
+            /* The report waits for the stall to be beyond argument. The REPAIR does not, and used
+             * to: it was called from inside the branch below, so its own threshold could never
+             * name a moment earlier than that one and every value under 1500 ms was dead, the
+             * shipped 400 and the documented floor of 200 among them. They answer two different
+             * questions and now have two different thresholds. */
+            if (stalled > STALL_DECLARED_AFTER_MS && !state.stall_reported) {
                 state.stall_reported = true;
-                report_stall(ticks, gate, reentry, timer_alive,
-                             now - state.last_body_change_ms);
+                report_stall(ticks, gate, reentry, timer_alive, stalled);
             }
-            run_watchdog(gate, now - state.last_body_change_ms);
+            run_watchdog(gate, stalled);
         }
     } else if (ticks == state.last_ticks &&
                now - state.last_tick_change_ms > STALL_DECLARED_AFTER_MS) {

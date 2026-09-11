@@ -77,6 +77,8 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 | `OrphanGraceFrames` | `120` | 12-6000 | consecutive frames the ownerless state must persist first |
 | `MusicLog` | `0` | | one line per **change** of the music state, capped at 400 a session |
 | `MusicVolumeAcrossProvider` | `1` | | keep the music volume across a 3-D provider change. See **The provider change discards a slider move** |
+| `MusicHeartbeatWatchdog` | `1` | | the net behind the lock repair, and it only ever releases: when no heartbeat body has run for the time below while the timer keeps firing and the lock is held, the lock is written back to zero |
+| `MusicHeartbeatWatchdogMs` | `400` | 200-10000 | how long the body has to be silent first. Its own threshold: it used to be reachable only from inside the 1500 ms stall report, so every value under 1500 was dead, the shipped 400 included |
 
 ## Engine locations
 

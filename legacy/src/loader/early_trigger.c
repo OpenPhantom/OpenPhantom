@@ -47,8 +47,30 @@ static void __cdecl restore_and_load(void)
     }
     trigger_state.fired = true;
 
-    write_raw(trigger_state.entry_point, trigger_state.original_bytes,
-              sizeof(trigger_state.original_bytes));
+    /* The stub jumps to the entry point afterwards, and the entry point holds the jump to the
+     * stub until these bytes are back. A restore that failed silently was therefore a process
+     * spinning between the two with nothing to say for itself. The page was writable a moment
+     * ago, when the arm wrote the same five bytes, so a refusal now is not expected; if it comes,
+     * the second route is tried, and if that fails too the game cannot start and says so rather
+     * than hanging. */
+    if (!write_raw(trigger_state.entry_point, trigger_state.original_bytes,
+                   sizeof(trigger_state.original_bytes))) {
+        SIZE_T written = 0;
+
+        if (!WriteProcessMemory(GetCurrentProcess(), (LPVOID)trigger_state.entry_point,
+                                trigger_state.original_bytes,
+                                sizeof(trigger_state.original_bytes), &written) ||
+            written != sizeof(trigger_state.original_bytes)) {
+            MessageBoxA(NULL,
+                        "OpenPhantom could not put the game's entry point back after loading, "
+                        "so the game cannot start. Removing dinput.dll from the game folder "
+                        "starts the game without the patch.",
+                        "OpenPhantom", MB_OK | MB_ICONERROR);
+            ExitProcess(1);
+        }
+        FlushInstructionCache(GetCurrentProcess(), (LPCVOID)trigger_state.entry_point,
+                              sizeof(trigger_state.original_bytes));
+    }
     mod_loader_run_once();
 }
 
@@ -91,6 +113,11 @@ static uintptr_t host_entry_point(void)
     }
 
     return (uintptr_t)module + nt_headers->OptionalHeader.AddressOfEntryPoint;
+}
+
+bool early_trigger_armed(void)
+{
+    return trigger_state.armed;
 }
 
 bool early_trigger_arm(void)

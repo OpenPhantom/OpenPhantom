@@ -3,7 +3,9 @@
 **Produces:** `dinput.dll`, goes **next to `WMAIN.EXE`**, not into `mods\`.
 
 The loader patches nothing. It is a jumping-off point: it loads every DLL in `mods\` and hands
-each one its entry point.
+each one its entry point. A file is a DLL when its name ends in `.dll`; renaming one to
+`feature.dll.disabled` takes it out of the set. The search pattern alone did not do that, because
+the file system matches it against the 8.3 short name as well, and `FEATUR~1.DLL` matched.
 
 ## Supported executables
 

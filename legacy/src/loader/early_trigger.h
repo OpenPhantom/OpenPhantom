@@ -57,4 +57,8 @@
  * fallback is the only trigger and the graphics-related patches will be too late. */
 bool early_trigger_arm(void);
 
+/* Whether the arm took. The fallback trigger asks, so that a session the entry point hook missed
+ * says so in the log instead of looking like an ordinary one with late patches. */
+bool early_trigger_armed(void);
+
 #endif /* DINPUT_LOADER_EARLY_TRIGGER_H */

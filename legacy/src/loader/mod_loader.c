@@ -1,4 +1,5 @@
 #include "mod_loader.h"
+#include "early_trigger.h"
 
 #include "common/host_image.h"
 #include "common/ini.h"
@@ -51,6 +52,13 @@ static void insert_sorted(mod_list_t *list, const char *name)
     ++list->count;
 }
 
+static bool name_ends_with_dll(const char *name)
+{
+    size_t length = strlen(name);
+
+    return length > 4u && _stricmp(name + length - 4u, ".dll") == 0;
+}
+
 static bool collect_mods(const char *directory, mod_list_t *list)
 {
     WIN32_FIND_DATAA entry;
@@ -67,6 +75,12 @@ static bool collect_mods(const char *directory, mod_list_t *list)
 
     do {
         if ((entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+            continue;
+        }
+        /* The pattern is matched against the 8.3 short name as well as the long one, so
+         * feature.dll.disabled, whose short name is FEATUR~1.DLL, comes back from it and was
+         * loaded like any other. The long name is the one that has to end in .dll. */
+        if (!name_ends_with_dll(entry.cFileName)) {
             continue;
         }
         insert_sorted(list, entry.cFileName);
@@ -177,6 +191,13 @@ void mod_loader_run_once(void)
 
     host_image_resolve();
     log_init("loader", true);
+
+    if (!early_trigger_armed()) {
+        log_warning("the entry point hook did not arm, so the mods are loaded from the "
+                    "DirectInputCreateA fallback instead, which is after the display mode list "
+                    "was built. Anything that has to be in place before graphics start is late "
+                    "this session");
+    }
 
     {
         char host_path[MAX_PATH];

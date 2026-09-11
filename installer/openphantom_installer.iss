@@ -374,8 +374,8 @@ english.ScalingLetterbox=Keep the original shape, with black bars at the sides (
 english.ScalingStretch=Fill the whole screen. Nothing is cut off, faces get a little wider
 english.FpsPageCaption=Frame rate
 english.FpsPageDescription=How many frames per second the game should draw
-english.FpsPageText=Without a limit this engine draws many hundreds of frames per second. Your screen cannot show them, and it costs you a fully loaded processor core and a loud fan.%n%nA limit a little above your screen refresh rate looks just as smooth.%n%nYou find it later in engine_fixes.ini under [framerate_fix] TargetFps.
-english.Fps100=100 frames per second (recommended)
+english.FpsPageText=Without a limit this engine draws many hundreds of frames per second. Your screen cannot show them, and it costs you a fully loaded processor core and a loud fan.%n%nThe first option asks the game to follow your screen instead, every time it starts. It is the one to pick. A limit that does not match your screen is worse than either extreme: the screen then repeats some frames and not others, so platforms, the camera and everything else in motion go choppy, even while the frame counter looks perfectly steady.%n%nYou can change this later in the game's own menu, or in engine_fixes.ini under [framerate_fix].
+english.FpsOptMatch=Follow my screen, whatever it refreshes at (recommended)
 english.FpsUnlimited=No limit, as fast as the machine manages
 english.FpsOwn=Own limit
 english.FpsBadValue=That is not a valid frame rate.%n%nEnter a whole number from 0 to 1000. 0 means no limit.
@@ -476,8 +476,8 @@ german.ScalingLetterbox=Ursprüngliche Form behalten, mit schwarzen Balken an de
 german.ScalingStretch=Den ganzen Bildschirm füllen. Es wird nichts abgeschnitten, Gesichter werden etwas breiter
 german.FpsPageCaption=Bildrate
 german.FpsPageDescription=Wie viele Bilder pro Sekunde das Spiel zeichnen soll
-german.FpsPageText=Ohne Begrenzung zeichnet diese Engine viele Hundert Bilder pro Sekunde. Ihr Bildschirm kann sie nicht zeigen, und es kostet Sie einen voll ausgelasteten Prozessorkern und einen lauten Lüfter.%n%nEine Grenze etwas über der Bildwiederholrate Ihres Bildschirms sieht genauso flüssig aus.%n%nSpäter finden Sie es in der engine_fixes.ini unter [framerate_fix] TargetFps.
-german.Fps100=100 Bilder pro Sekunde (empfohlen)
+german.FpsPageText=Ohne Begrenzung zeichnet diese Engine viele Hundert Bilder pro Sekunde. Ihr Bildschirm kann sie nicht zeigen, und es kostet Sie einen voll ausgelasteten Prozessorkern und einen lauten Lüfter.%n%nDie erste Option lässt das Spiel bei jedem Start Ihrem Bildschirm folgen. Diese sollten Sie wählen. Eine Grenze, die nicht zu Ihrem Bildschirm passt, ist schlechter als beide Extreme: Der Bildschirm wiederholt dann einige Bilder und andere nicht, sodass Plattformen, die Kamera und alles andere in Bewegung ruckeln, obwohl die Bildratenanzeige völlig gleichmäßig aussieht.%n%nSie können dies später im Menü des Spiels ändern oder in der engine_fixes.ini unter [framerate_fix].
+german.FpsOptMatch=Meinem Bildschirm folgen, mit welcher Rate er auch läuft (empfohlen)
 german.FpsUnlimited=Keine Begrenzung, so schnell der Rechner es schafft
 german.FpsOwn=Eigene Begrenzung
 german.FpsBadValue=Das ist keine gültige Bildrate.%n%nGeben Sie eine ganze Zahl von 0 bis 1000 ein. 0 bedeutet keine Begrenzung.
@@ -812,7 +812,12 @@ begin
     and a guessed height would put it between two of them. }
   FpsPage.CheckListBox.MinItemHeight := ScaleY(18);
 
-  FpsPage.Add(ExpandConstant('{cm:Fps100}'));
+  { The first row names no number, and reading one off the screen here was built and then
+    taken out again. A rate read at install time is written to a file and goes stale: the
+    machine gains a second screen, the game is moved to a television, the player changes the
+    mode. The patch reads the rate every time the game starts, so the row that asks it to is
+    worth more than the row that guesses once. }
+  FpsPage.Add(ExpandConstant('{cm:FpsOptMatch}'));
   FpsPage.Add(ExpandConstant('{cm:FpsUnlimited}'));
   FpsPage.Add(ExpandConstant('{cm:FpsOwn}'));
   FpsPage.SelectedValueIndex := 0;
@@ -1048,7 +1053,9 @@ var
   Typed: Integer;
 begin
   case FpsPage.SelectedValueIndex of
-    0: Result := '100';
+    { Following the screen is a key of its own, and the cap under it is left at no limit:
+      that is what the player falls back to if they ever turn the following off. }
+    0: Result := '0';
     1: Result := '0';   { no limit }
   else
     begin
@@ -1058,6 +1065,17 @@ begin
         Result := IntToStr(Typed);
     end;
   end;
+end;
+
+{ Whether the patch follows the screen rather than the number above. A function of its own
+  rather than the page read twice, so the two keys cannot come from different readings of the
+  same list. }
+function ChosenMatchRefresh: String;
+begin
+  if FpsPage.SelectedValueIndex = 0 then
+    Result := '1'
+  else
+    Result := '0';
 end;
 
 { Leaving the frame rate page. Only the typed answer can be wrong, and it is caught here rather than
@@ -1713,8 +1731,12 @@ begin
       AddName('[fmv_player] Scaling', Failed);
 
   if WizardIsComponentSelected('patch\framerate_fix') then
+  begin
     if not SetIniString('framerate_fix', 'TargetFps', ChosenTargetFps, Ini) then
       AddName('[framerate_fix] TargetFps', Failed);
+    if not SetIniString('framerate_fix', 'MatchDisplayRefresh', ChosenMatchRefresh, Ini) then
+      AddName('[framerate_fix] MatchDisplayRefresh', Failed);
+  end;
 
   if Failed <> '' then
     MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);

@@ -61,6 +61,7 @@ typedef void(__cdecl *snap_to_ground_fn_t)(uint8_t *actor, void *position);
 static struct {
     detour_t carry;
     detour_t snap;
+    bool     armed;          /* both halves are in; until then each hook passes straight through */
     creeping_mover_set_t creeping;
 } rider;
 
@@ -84,7 +85,8 @@ static void __cdecl hook_carry_rider(void *world, uint8_t *ground)
     float            before;
     float            fell;
 
-    if (ground == NULL || !is_crusher(*(const uint8_t *const *)(ground + GROUND_MOVER))) {
+    if (!rider.armed || ground == NULL ||
+        !is_crusher(*(const uint8_t *const *)(ground + GROUND_MOVER))) {
         original(world, ground);
         return;
     }
@@ -137,7 +139,7 @@ static void __cdecl hook_snap_to_ground(uint8_t *actor, void *position)
      * floor is BELOW the feet: a negative distance means the snap would pull the character down
      * onto the creeping surface, while a positive one would lift them; that is the engine putting
      * somebody back on top of something, and it is left alone. */
-    if (actor != NULL &&
+    if (rider.armed && actor != NULL &&
         is_crusher(*(const uint8_t *const *)(actor + CHARACTER_GROUND_MOVER)) &&
         is_known_creeper(*(const uint8_t *const *)(actor + CHARACTER_GROUND_MOVER)) &&
         *(const float *)(actor + CHARACTER_GROUND + GROUND_DISTANCE) < 0.0f) {
@@ -171,7 +173,9 @@ bool rider_floor_install(void)
 
     /* BOTH OR NEITHER. Either half on its own leaves the fault in place, the first because the snap
      * puts the character back onto the descending polygon and the second because the carry moves it
-     * there first, so a partial install would report success and change nothing. */
+     * there first, so a partial install would report success and change nothing. A detour cannot
+     * be taken out, so the half that did go in is left passing every call straight through: the
+     * hooks act only once `armed` says the pair is whole. */
     if (!detour_install(&rider.carry, carry, (const void *)hook_carry_rider,
                         CARRY_RIDER_PROLOGUE)) {
         log_warning("the rider carry at %08X could not be detoured, so a crusher still takes "
@@ -180,11 +184,12 @@ bool rider_floor_install(void)
     }
     if (!detour_install(&rider.snap, snap, (const void *)hook_snap_to_ground,
                         SNAP_TO_GROUND_PROLOGUE)) {
-        log_warning("the ground snap at %08X could not be detoured. The rider carry is already "
-                    "hooked and stays so, which on its own slows the fall rather than stopping it",
-                    (unsigned)snap);
+        log_warning("the ground snap at %08X could not be detoured. The rider carry is hooked and "
+                    "cannot be unhooked, so it passes every call through and a crusher still "
+                    "takes characters down with it", (unsigned)snap);
         return false;
     }
+    rider.armed = true;
 
     log_info("a crusher no longer takes characters down with it, guarded at both places it did: "
              "the rider carry at %08X and the ground snap at %08X. Measured in the final level's "

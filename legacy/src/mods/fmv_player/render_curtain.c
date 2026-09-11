@@ -4,15 +4,15 @@
  * second time rather than shared, the same way sfx_mute.c, spawn_census.c and diag_flow.c each
  * carry their own copy of Plr_RunPhases' signature:
  *
- *   - the call that closes the scene, identical to dev_overlay.c's own SIG_SCENE_END. Redirected
- *     the same way it is there: read whatever is CURRENTLY at this call site as `original` (the
- *     true engine function, or another DLL's own hook if it loaded first), point the call at this
- *     file's own hook instead. Both hooks run; whichever installed later becomes the outer one, and
- *     nothing here assumes it is the only DLL that wants this instant.
- *   - the engine's own filled-shape drawer (0x00419660), identical to
- *     dev_overlay/overlay_sites.c's own SIG_DRAW_QUAD, what the game draws its own letterbox bars
- *     and screen tint with, four screen coordinates plus a packed ARGB.
- *   - the screen size cells, identical to overlay_sites.c's own SIG_SCREEN_SIZE.
+ *   1. the call that closes the scene, identical to dev_overlay.c's own SIG_SCENE_END. Redirected
+ *      the same way it is there: read whatever is CURRENTLY at this call site as `original` (the
+ *      true engine function, or another DLL's own hook if it loaded first), point the call at this
+ *      file's own hook instead. Both hooks run; whichever installed later becomes the outer one,
+ *      and nothing here assumes it is the only DLL that wants this instant.
+ *   2. the engine's own filled-shape drawer (0x00419660), identical to
+ *      dev_overlay/overlay_sites.c's own SIG_DRAW_QUAD, what the game draws its own letterbox bars
+ *      and screen tint with, four screen coordinates plus a packed ARGB.
+ *   3. the screen size cells, identical to overlay_sites.c's own SIG_SCREEN_SIZE.
  *
  * Drawn every real frame while armed, right before the scene closes and the page is shown, so the
  * same instant dev_overlay's own panel paints into. A panel opened on top of this still shows on
@@ -222,10 +222,6 @@ void render_curtain_install(void)
     uint32_t  width_cell = 0;
     uint32_t  height_cell = 0;
 
-    /* sfx_mute.c has nothing of its own to be installed FOR outside of this curtain, so this is
-     * the one place that brings it up rather than making every caller remember both. */
-    sfx_mute_install();
-
     scene_end_site = signature_find_unique(SIG_SCENE_END, MSK_SCENE_END, sizeof SIG_SCENE_END);
     if (scene_end_site == 0) {
         log_warning("render_curtain: the end of the scene did not resolve, the post-movie curtain "
@@ -269,4 +265,15 @@ void render_curtain_install(void)
              "the scene closes at %08X, part of the real rendered frame, so any capture of the "
              "game shows it the same way the player's own screen does",
              (unsigned)quad_site, (unsigned)call);
+
+    /* sfx_mute.c has nothing of its own to be installed FOR outside of this curtain, so this is
+     * the one place that brings it up rather than making every caller remember both. Last, and
+     * only once the curtain is known to work and the setting asks for it: the mute is a detour,
+     * and a detour that nothing will ever switch on is a hook with no purpose. */
+    if (mute_enabled && hold_ms != 0) {
+        sfx_mute_install();
+    } else {
+        log_info("render_curtain: %s, so the sound suppression behind the curtain is not "
+                 "installed", mute_enabled ? "the hold is zero" : "MutePostMovieAudio=0");
+    }
 }

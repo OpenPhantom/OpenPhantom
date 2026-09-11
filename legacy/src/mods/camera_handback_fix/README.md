@@ -70,8 +70,9 @@ holding: a cutscene takes the lock to level 5, and it is still standing when a d
 inside it closes. Asking whether the lock is clear *now* also covers the second failure above,
 which deleting the count test on its own would have left in place.
 
-**Nothing else's camera is ever touched.** A take is credited to the dialogue by the address control
-returns to, derived from the resolved `Dialog_SpeakSingle` rather than written down. A take from the
+**Nothing else's camera is ever touched.** The setter is called from inside `Dialog_SpeakSingle`, so
+a take is credited to the dialogue by that function being on the stack when it happens. A take from
+the
 cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered as not ours.
 
 Installed all three detours or none. Without the setter nothing knows whose camera it is; without

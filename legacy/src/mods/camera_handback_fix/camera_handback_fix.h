@@ -51,10 +51,11 @@
  * when the lock is already zero, so that branch is unreachable for a bark. Asking whether the lock
  * is clear NOW covers both, where deleting the count test alone would have left the second.
  *
- * Nothing else's camera is ever touched. The take is attributed to the dialogue by the address
- * control returns to, derived from the resolved `Dialog_SpeakSingle` rather than written down, so
- * a take from the cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered
- * as not ours and left alone.
+ * Nothing else's camera is ever touched. The setter is called from inside `Dialog_SpeakSingle`,
+ * so the take is attributed to the dialogue by that function being on the stack at the time, and a
+ * take from the cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered as
+ * not ours and left alone. It was attributed by the return address once, which quietly stopped
+ * working whenever another DLL detoured the same function and chained in front.
  */
 #ifndef CAMERA_HANDBACK_FIX_H
 #define CAMERA_HANDBACK_FIX_H

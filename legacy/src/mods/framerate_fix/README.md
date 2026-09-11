@@ -299,6 +299,36 @@ account. Characters are smooth, and smooth while the platform under them is movi
 60.0 frames a second: the log's windows put the frame time between 16.66 and 16.79 ms throughout.
 That is the rate the change was expected to leave alone, and it did.
 
+### The blade drawn out of the hand
+
+With this feature on, a lightsaber blade was drawn standing out of the player's hand, pale, and at
+times many times its own length. It was found on Coruscant and reproduced on demand, and it took
+twenty runs to corner, so the shape of the search is worth recording alongside the answer.
+
+The bisect by setting landed on `InterpolateRiders` within four runs, cleanly and reproducibly:
+off, no beam; on, beam. What followed was slower, because every obvious mechanism was cleared by
+direct test. The values the patch writes were innocent: mode 2 draws the engine's own arithmetic
+through the same replacement and had the beam. The registers were innocent: the disassembly of the
+rest of `bapobj_drawAll` shows `edx` reloaded and `eax` and `ecx` written before use. The stack was
+innocent: 512 bytes scribbled below the stack pointer changed nothing. The x87 stack was empty at
+every one of forty thousand entries, counted from the tag word. The control word and MXCSR never
+moved across the call. A byte-for-byte transcription of the replaced region behind the same call
+drew no beam; the C behind the same call did.
+
+The difference that mattered was the CRT's float classifier. The hook and `object_track.c` tested
+finiteness with `isfinite`, which on this compiler is a copy of the value through the x87 unit and
+a call into the CRT, and with those replaced by an integer test on the bit pattern the beam is
+gone, with everything else unchanged. That is now the rule for this path: no CRT floating-point
+routine and no x87 instruction beyond the one that receives `object_track_weight`'s return, and
+the disassembly of the built object is what confirms it.
+
+The instruction-level cause is **not established**. Reproducing the same copies and the same
+classifier calls in assembly, in front of the transcription, did not show the beam, and the
+honest reading of that is a false negative: this artefact needs a trigger, and a single clean run
+is weaker evidence than it looks, which the search paid for more than once. Three mechanisms were
+proposed with confidence along the way and each was refuted by a measurement built for it. What
+is claimed here is what was measured; what is written in the code is the rule that follows.
+
 Played at 25 as well, which is below the simulation rate and is what the weight exists for. Nothing
 misbehaves there: no smearing, no snapping and nothing thrown across the level. It also does not
 look good, and cannot, because the simulation steps faster than the display can show the result and

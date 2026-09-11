@@ -29,9 +29,22 @@ static size_t slot_for(uintptr_t key)
     return (size_t)(mixed % OBJECT_TRACK_SLOTS);
 }
 
+/* Finite by the bit pattern, not through the CRT. An exponent field of all ones is an infinity
+ * or a NaN, and no finite value has one; the compiler turns this into two integer instructions,
+ * where the CRT's classifier is a copy through the x87 unit and a call. This runs on every drawn
+ * object on every frame, under the engine's own floating-point state, and it must not touch that
+ * state. */
+static bool finite_bits(float value)
+{
+    uint32_t bits;
+
+    memcpy(&bits, &value, sizeof bits);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
 static bool finite3(const float *v)
 {
-    return isfinite(v[0]) && isfinite(v[1]) && isfinite(v[2]);
+    return finite_bits(v[0]) && finite_bits(v[1]) && finite_bits(v[2]);
 }
 
 static bool entry_is_stale(const track_entry_t *entry)
@@ -123,7 +136,7 @@ float object_track_weight(float alpha, uint32_t gap)
     if (gap <= 1u) {
         return alpha;            /* the engine's own weight, and the case at every usable rate */
     }
-    if (!isfinite(alpha)) {
+    if (!finite_bits(alpha)) {
         /* The blend refuses this below and draws the object where it is. Inventing a number here
          * would hide that from the one place set up to catch it. */
         return alpha;
@@ -142,17 +155,29 @@ bool object_track_blend(const float *previous, const float *current, float weigh
         return false;
     }
 
-    /* The limit below is a distance test, and every comparison against a value that is not a
-     * number is false, so a NaN would sail through the guard that exists to catch a bad one and
-     * be drawn. The finiteness test therefore comes FIRST and is written as a NOT, so that the
-     * awkward values fail it rather than pass it.
+    /* An input that is not a number gets the engine's own arithmetic, with nothing substituted.
      *
-     * The answer is the current position, as the engine drew before any of this existed. A
- * current position that is itself not a number is passed through rather than
-     * replaced with something invented: this decides what to draw between two numbers the
-     * simulation produced, and it is not the place to paper over one of them being broken. */
-    if (!finite3(previous) || !finite3(current) || !isfinite(weight)) {
-        memcpy(out_position, current, 3u * sizeof(float));
+     * This used to answer with the current position, on the reasoning that the engine drew there
+     * before any of this existed. It did not. The engine computed previous plus the difference
+     * times the weight, and with a NaN anywhere in that the result is a NaN, and an object with a
+     * NaN transform draws nothing: every clip test against it fails, nothing rasterises, and the
+     * trail points taken from its vertices are NaN as well. Retail HIDES such an object. That is
+     * how an object whose previous position was never written, or was parked on purpose, stays
+     * out of the picture.
+     *
+     * Substituting a real position resurrected them. Field: a pale bar standing out of the
+     * player's hand, the length of a lightsaber blade or a great deal longer, drawn from a record
+     * whose position was fine and whose rotation and scale were whatever the pool left in it.
+     * Eight bisect runs, because it survived every mode of this patch and vanished only with the
+     * patch out, and every mode goes through this branch.
+     *
+     * So the comparison below is allowed to be false for a NaN, the blend goes ahead, and the
+     * answer is not a number exactly as the replaced bytes would have made it. The caller is told
+     * it was refused so it can count what it saw, but what it draws is retail's nothing. */
+    if (!finite3(previous) || !finite3(current) || !finite_bits(weight)) {
+        out_position[0] = previous[0] + (current[0] - previous[0]) * weight;
+        out_position[1] = previous[1] + (current[1] - previous[1]) * weight;
+        out_position[2] = previous[2] + (current[2] - previous[2]) * weight;
         return false;
     }
 

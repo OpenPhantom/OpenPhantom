@@ -9,11 +9,10 @@
 #include "common/signature.h"
 
 #include <math.h>
-#include <string.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 /* --- 0x0041125B  bapobj_drawAll, the position blend ------------------------------------------ *
  *   8B 55 F8 / 8B 45 F8        edx = eax = obj            (from [ebp-8])
@@ -35,13 +34,26 @@
  * The replacement is a call, in the shape draw_interpolation.c already uses for the euler a few
  * instructions further on. The contract, checked against the bytes:
  *
- *   * eax, ecx and edx are dead across the region. 0x4112D9, the instruction after it, is
- *     `mov edx,[ebp-8]`, which reloads obj rather than trusting a register;
- *   * the x87 stack is empty on both sides. The region's last operation is an fstp, and the next
- *     x87 op is the euler's own fld;
- *   * six locals are written and all six are filled by the replacement, the three deltas as well
- *     as the three blended values, because a later reader of a delta is not ruled out by anything
- *     visible here and leaving one stale would be a silent difference.
+ *   * eax, ecx and edx are dead across the region. Read off the disassembly of the rest of
+ *     bapobj_drawAll rather than assumed: 0x4112D9 reloads edx from [ebp-8], and eax and ecx are
+ *     both written before anything reads them;
+ *   * the x87 stack is empty on both sides. The region's last operation is an fstp, the next x87
+ *     op is the euler's own fld, and the tag word was sampled at entry across forty thousand calls
+ *     in play without once finding a register in use;
+ *   * six locals are written and all six are filled by the replacement. The three deltas are
+ *     never read again after the region, by the same disassembly, so they are filled with the
+ *     value the engine's own instructions put there and nothing of this file's.
+ *
+ * The C inside the call may not classify a float through the CRT, and it may not copy one
+ * through the x87 unit to get it there. With `isfinite` in this path a lightsaber
+ * blade was drawn out of the player's hand at many times its length, and it took twenty runs to
+ * corner because it did not depend on a single value this file computes: the same call with the
+ * engine's own arithmetic drawn had it, and the same call with those classifications done on the
+ * bit pattern did not. The instruction-level cause was not established; the assembly reproduction
+ * of the same operations did not show it, and single negatives on an artefact that needs a
+ * trigger are worth less than they look. What is established is the rule, so every finiteness
+ * test here and in object_track.c is two integer instructions, and the only x87 instruction the
+ * whole path executes is the one that receives object_track_weight's return.
  *
  * Uniqueness was measured in the retail image: one match at 126 bytes, and still one at 32. */
 static const uint8_t SIG_DRAW_POSITION[] = {
@@ -99,7 +111,7 @@ static int   object_mode;
  * WORST one, so the worst is kept and summarised every so often instead. */
 #define DISAGREEMENT_SUMMARY_FRAMES 200u
 static unsigned  disagreements_seen;
-static float     worst_apart;
+static float     worst_apart_squared;
 static uintptr_t worst_object;
 static float     worst_mine[3];
 static float     worst_engine[3];
@@ -108,10 +120,27 @@ static bool      worst_not_a_number;
 static unsigned  summary_countdown;
 static unsigned  limit_countdown;
 static bool      limit_reported;
+/* Objects handed a position that was not a number, which retail draws as nothing and so does
+ * this. Counted apart from the limit because they are a different thing: not a teleport but an
+ * object the engine has parked, and a session where the count is large is a session where the
+ * pool is handing out records with their previous position unwritten. */
+static uint32_t  not_a_number_seen;
+static bool      nan_reported;
+
+/* Finite by the bit pattern: an exponent field of all ones is an infinity or a NaN and nothing
+ * else is. Two integer instructions, no CRT, no x87. See the contract above for why that matters
+ * here of all places. */
+static bool finite_bits(float value)
+{
+    uint32_t bits;
+
+    memcpy(&bits, &value, sizeof bits);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
 
 static bool finite3(const float *v)
 {
-    return isfinite(v[0]) && isfinite(v[1]) && isfinite(v[2]);
+    return finite_bits(v[0]) && finite_bits(v[1]) && finite_bits(v[2]);
 }
 
 /* Reports where the remembered previous position differs from the engine's by enough to be
@@ -136,11 +165,11 @@ static void report_disagreement(const char *object, const float *mine, const flo
      * comparison, so a squared distance involving one is not a ranking at all. */
     if (!mine_finite) {
         worst_not_a_number = true;
-    } else if (!(apart_squared > worst_apart * worst_apart)) {
+    } else if (!(apart_squared > worst_apart_squared)) {
         return;
     }
 
-    worst_apart = (float)sqrt((double)apart_squared);
+    worst_apart_squared = apart_squared;
     worst_object = (uintptr_t)object;
     memcpy(worst_mine, mine, sizeof worst_mine);
     memcpy(worst_engine, engine, sizeof worst_engine);
@@ -185,10 +214,16 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
         previous[1] = engine[1];
         previous[2] = engine[2];
     } else if (object_mode != 1 ||
-               !object_track_sample((uintptr_t)object, step, current, previous, &gap)) {
+               !object_track_sample((uintptr_t)object, step, current, previous, &gap) ||
+               !finite3(previous)) {
+        /* The third test: a remembered previous that is not a number is one this file copied
+         * from a current position that was, and the engine's own may be perfectly good by now.
+         * Falling back keeps this from hiding an object retail shows; the blend below is what
+         * keeps it from showing one retail hides. */
         previous[0] = engine[0];
         previous[1] = engine[1];
         previous[2] = engine[2];
+        gap = 1u;
     }
 
     /* The limit is per step, so two samples several steps apart are allowed proportionally more
@@ -196,21 +231,31 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
      * walk as a teleport and stops smoothing exactly where the frame rate needs it most. */
     if (!object_track_blend(previous, current, object_track_weight(alpha, gap),
                             object_travel_limit * (float)gap, drawn)) {
-        float dx = current[0] - previous[0];
-        float dy = current[1] - previous[1];
-        float dz = current[2] - previous[2];
-        float travel_squared = dx * dx + dy * dy + dz * dz;
+        if (!finite3(previous) || !finite3(current) || !finite_bits(alpha)) {
+            /* Not a teleport: an object retail draws as nothing, and so does this. */
+            ++not_a_number_seen;
+        } else {
+            float dx = current[0] - previous[0];
+            float dy = current[1] - previous[1];
+            float dz = current[2] - previous[2];
+            float travel_squared = dx * dx + dy * dy + dz * dz;
 
-        ++refused_by_limit;
-        if (travel_squared > worst_travel_squared) {
-            worst_travel_squared = travel_squared;
+            ++refused_by_limit;
+            if (travel_squared > worst_travel_squared) {
+                worst_travel_squared = travel_squared;
+            }
         }
     }
     ++blends_seen;
 
-    *(float *)(frame_pointer - LOCAL_DELTA_X) = current[0] - previous[0];
-    *(float *)(frame_pointer - LOCAL_DELTA_Y) = current[1] - previous[1];
-    *(float *)(frame_pointer - LOCAL_DELTA_Z) = current[2] - previous[2];
+    /* The deltas are the ENGINE'S, against obj+0x54, exactly as the replaced bytes computed them.
+     * The disassembly of the rest of bapobj_drawAll shows nothing reading these three slots after
+     * the region, so they are scratch the original left behind; they are filled with the value
+     * the original left in them, because a slot this code cannot prove dead is filled with what
+     * retail put there rather than with something of ours. */
+    *(float *)(frame_pointer - LOCAL_DELTA_X) = current[0] - engine[0];
+    *(float *)(frame_pointer - LOCAL_DELTA_Y) = current[1] - engine[1];
+    *(float *)(frame_pointer - LOCAL_DELTA_Z) = current[2] - engine[2];
     *(float *)(frame_pointer - LOCAL_DRAWN_X) = drawn[0];
     *(float *)(frame_pointer - LOCAL_DRAWN_Y) = drawn[1];
     *(float *)(frame_pointer - LOCAL_DRAWN_Z) = drawn[2];
@@ -237,12 +282,21 @@ void object_interpolation_frame(void)
                         "once.",
                         (unsigned)refused_by_limit, (unsigned)blends_seen,
                         (unsigned)DISAGREEMENT_SUMMARY_FRAMES,
-                        sqrt((double)worst_travel_squared),
-                        (double)object_travel_limit);
+                        sqrt((double)worst_travel_squared), (double)object_travel_limit);
         }
-        refused_by_limit = 0;
-        blends_seen      = 0;
+        if (not_a_number_seen != 0 && !nan_reported) {
+            nan_reported = true;
+            log_info("rider: %u of %u blends over %u frames had a position that was not a "
+                     "number, and were drawn as retail draws them, which is not at all. That is "
+                     "an object whose previous position was never written or was parked on "
+                     "purpose; the engine hides it and so does this. Reported once.",
+                     (unsigned)not_a_number_seen, (unsigned)blends_seen,
+                     (unsigned)DISAGREEMENT_SUMMARY_FRAMES);
+        }
+        refused_by_limit     = 0;
+        blends_seen          = 0;
         worst_travel_squared = 0.0f;
+        not_a_number_seen    = 0;
     }
 
     if (object_mode != 3) {
@@ -260,13 +314,13 @@ void object_interpolation_frame(void)
     log_info("rider: %u disagreements over %u frames, worst %.2f at obj %08X%s: "
              "mine(%.3f %.3f %.3f) engine(%.3f %.3f %.3f) cur(%.3f %.3f %.3f)",
              disagreements_seen, (unsigned)DISAGREEMENT_SUMMARY_FRAMES,
-             (double)worst_apart, (unsigned)worst_object,
+             sqrt((double)worst_apart_squared), (unsigned)worst_object,
              worst_not_a_number ? " and something was NOT A NUMBER" : "",
              (double)worst_mine[0], (double)worst_mine[1], (double)worst_mine[2],
              (double)worst_engine[0], (double)worst_engine[1], (double)worst_engine[2],
              (double)worst_current[0], (double)worst_current[1], (double)worst_current[2]);
     disagreements_seen = 0;
-    worst_apart = 0.0f;
+    worst_apart_squared = 0.0f;
     worst_not_a_number = false;
 }
 
@@ -311,7 +365,11 @@ void object_interpolation_install(int mode, float travel_limit)
      *  50                push eax
      *  E8 <rel32>        call hook_draw_position    ; __cdecl(obj, ebp)
      *  83 C4 08          add  esp,8
-     *  90 ...            pad to the full region                                                 */
+     *  90 ...            pad to the full region
+     *
+     * The three registers the region leaves holding obj are not put back. They were, for a while,
+     * on the theory that the code after the region might read one; the disassembly of that code
+     * shows all three written before use, so the reloads bought nothing and are gone. */
     for (index = 0; index < POSITION_PATCH_LENGTH; ++index) {
         replacement[index] = 0x90;
     }

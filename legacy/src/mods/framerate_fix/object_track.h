@@ -128,8 +128,11 @@ float object_track_weight(float alpha, uint32_t gap);
  *
  * A position or a weight that is not finite answers with the current position. That case is
  * checked before the limit rather than after, because the limit is a distance comparison and
- * every comparison against a NaN is false, so the guard meant to catch a bad value would let
- * that one through and draw it.
+ * every comparison against a NaN is false, so the limit cannot rank one. It is not caught and
+ * replaced: a NaN goes through the arithmetic and comes out a NaN. The engine did the same, and
+ * that is what keeps an object with an unwritten previous position out of the picture.
+ * Substituting a real position for it draws things retail never showed; object_track.c says what
+ * that looked like.
  */
 /* False when the pair was refused and `out_position` holds the current position unblended. The
  * caller cannot tell otherwise, and the difference matters: the camera aims at the player's

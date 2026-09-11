@@ -260,34 +260,44 @@ int main(void)
 
     ut_section("values a distance test cannot rank");
 
-    /* The root rules ask for NaN and infinity wherever a float can carry them, and here they are
-     * not merely a boundary. The travel limit is a distance comparison, and every comparison
-     * against a NaN is false, so without an explicit test the guard meant to refuse a bad value
-     * would let exactly the worst one through and draw it. */
+    /* The root rules ask for NaN and infinity wherever a float can carry them, and here they were
+     * a field bug entire. An earlier version of this section pinned the OPPOSITE of what
+     * follows: it required a previous position that was not a number to draw the object where it
+     * is, on the argument that the engine drew there before this existed. The engine did not.
+     * It computed the blend, got a NaN, and drew nothing, and an object whose previous position
+     * was never written stayed invisible by exactly that. Drawing it where it is put a pale bar
+     * the length of a lightsaber out of the player's hand, and it took eight bisect runs to reach
+     * this function because every mode of the patch goes through it. So: the answer for a NaN is
+     * retail's, which is a NaN, and the blend says it refused so the caller can count it. */
     set(previous, 0.0f, 0.0f, 0.0f);
     set(pos, 1.0f, 2.0f, 3.0f);
 
     set(previous, (float)NAN, 0.0f, 0.0f);
-    object_track_blend(previous, pos, 0.5f, 2.0f, drawn);
-    ut_check(drawn[0] == 1.0f && drawn[1] == 2.0f && drawn[2] == 3.0f,
-             "a previous position that is not a number draws the object where it is");
+    ut_check(!object_track_blend(previous, pos, 0.5f, 2.0f, drawn),
+             "a previous position that is not a number is refused");
+    ut_check(isnan(drawn[0]),
+             "and the axis that was not a number stays that way, which draws nothing, as retail");
+    ut_check(drawn[1] == 1.0f && drawn[2] == 1.5f,
+             "while the other two axes carry the ordinary blend, as the replaced bytes did");
 
     set(previous, 0.0f, (float)INFINITY, 0.0f);
-    object_track_blend(previous, pos, 0.5f, 2.0f, drawn);
-    ut_check(drawn[0] == 1.0f && drawn[1] == 2.0f && drawn[2] == 3.0f,
-             "and so does an endless one, on any axis");
+    ut_check(!object_track_blend(previous, pos, 0.5f, 2.0f, drawn) && !isfinite(drawn[1]),
+             "an endless one on any axis is refused and stays endless");
 
-    /* Without the finiteness test this is the case that reaches the renderer: the limit is 2.0,
-     * the distance is a NaN, and NaN > 4.0 is false, so the blend would have gone ahead. */
     set(previous, (float)NAN, (float)NAN, (float)NAN);
-    object_track_blend(previous, pos, 0.5f, 2.0f, drawn);
-    ut_check(drawn[0] == 1.0f,
-             "the limit cannot rank a NaN, so it is refused before the limit is consulted");
+    ut_check(!object_track_blend(previous, pos, 0.5f, 2.0f, drawn) && isnan(drawn[0]) &&
+                 isnan(drawn[1]) && isnan(drawn[2]),
+             "a previous position that is nothing but NaN is nothing but NaN when drawn");
 
     set(previous, 0.0f, 0.0f, 0.0f);
-    object_track_blend(previous, pos, (float)NAN, 2.0f, drawn);
-    ut_check(drawn[0] == 1.0f && drawn[1] == 2.0f && drawn[2] == 3.0f,
-             "an alpha that is not a number draws the object where it is");
+    ut_check(!object_track_blend(previous, pos, (float)NAN, 2.0f, drawn) && isnan(drawn[0]),
+             "an alpha that is not a number takes every axis with it, as retail's multiply did");
+
+    set(previous, 0.0f, 0.0f, 0.0f);
+    set(pos, (float)NAN, 2.0f, 3.0f);
+    ut_check(!object_track_blend(previous, pos, 0.5f, 2.0f, drawn) && isnan(drawn[0]),
+             "and a current position that is not a number is not invented either");
+    set(pos, 1.0f, 2.0f, 3.0f);
 
     /* The limit has to clear sqrt(14), the diagonal from the origin to (1,2,3). An earlier
      * version of this check asked for 2.0 and got the current position back, because the blend

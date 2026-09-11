@@ -12,13 +12,14 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds three groups, split the same way and for the same reason the Original tab
+* **OpenPhantom** holds four groups, split the same way and for the same reason the Original tab
   is: **Cheats** are the things that change the game, **Utilities** are the settings that configure
-  this patch, and **Window mode** is the shape of the window. It began as one group with a settings
-  row appended, and the settings outgrew the cheats, so a reader had to scroll past invincibility to
-  reach the draw distance. Window mode came out of Utilities for the same reason plus one of its
-  own: its rows answer a single question a player arrives with, and half of them are unusable until
-  the game is restarted, which is worth saying in one place rather than eleven times.
+  this patch, **Window mode** is the shape of the window, and **Frame rate** is how many frames a
+  second go into it. It began as one group with a settings row appended, and the settings outgrew
+  the cheats, so a reader had to scroll past invincibility to reach the draw distance. Window mode
+  came out of Utilities for the same reason plus one of its own: its rows answer a single question a
+  player arrives with, and half of them are unusable until the game is restarted, which is worth
+  saying in one place rather than eleven times. Frame rate came out of it on the same argument.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
@@ -1074,3 +1075,41 @@ file.
 Sizes under 640x480 are dropped. That is not tidiness: below roughly that much client area the
 engine's warp to client (320,240) lands outside the window, the pointer is clamped short of it, the
 echo test never matches, and a constant delta accumulates for as long as the window stays small.
+## The Frame rate group
+
+Five rows: the switch, the number under it, and three lines saying what the pair of them is for.
+The note is three rows because the panel is about forty-five characters wide and a longer label is
+cut off rather than wrapped; the continuations are indented past the line they finish, the same
+shape the free camera's how-to-fly lines use.
+
+It names what goes wrong rather than only that something does. Somebody reading that row has come
+to it because the game looks bad while the numbers look fine, and the last line is the half that
+tells them they are in the right place.
+
+**Match the screen** writes `MatchDisplayRefresh`, and it is the row worth pressing. The frame limit
+decides how fast frames are produced. Nothing in the shipped stack ties that to how fast they are
+shown: the wrapper presents immediately, and the engine's own wait for the vertical blank has no
+callers left in the retail executable. So a limit that does not divide into the refresh rate leaves
+the display repeating some frames and not others, on a pattern that shifts. Platforms, the camera
+and everything else in motion go choppy while the frame counter reads perfectly steady.
+
+Measured, because it cost the time to measure it: a limit of 100 on a 144 Hz screen leaves 44
+refreshes a second showing a repeat, and a limit of 60 on a 90 Hz Steam Deck OLED leaves 30. Both
+looked exactly like a fault in the interpolation, and both were chased as one.
+
+**Frame rate limit** is `TargetFps`, typed. Zero means no limit at all, which reads as `none`. A
+number outside 0 to 1000 is refused rather than clamped: somebody typing 1440 for a 144 Hz screen
+has made a mistake, and quietly handing them 1000 hides it.
+
+While the row above is on, this one reads `n/a` and greys. The setting still holds the number and
+`framerate_fix` still keeps it as the fallback for a screen that will not report a rate, but
+nothing is using it, and a number somebody can change and watch do nothing is worse than a number
+they cannot reach. Greyed rather than hidden, because a row that disappears takes the answer to
+"where did I set that" with it.
+
+Both rows write the settings file, the same as every other row that reaches out of this DLL.
+`framerate_fix` owns the cap and re-reads both keys about once a second, so a change here takes
+hold within that second, in game, without a restart. Nothing here calls into that DLL, because
+feature DLLs in this tree do not depend on each other at run time; the refresh rate on the switch
+is asked of Windows directly.
+

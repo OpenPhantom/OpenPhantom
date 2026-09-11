@@ -172,12 +172,13 @@ int main(void)
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 3u,
-             "the OpenPhantom tab holds three groups now, cheats, utilities and window, and all "
+    ut_check(overlay_model_row_count() == 4u,
+             "the OpenPhantom tab holds four groups now, cheats, utilities, window and frame "
+             "rate, and all "
              "of them start folded");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 3u + (uint32_t)CHEATS_OWN_COUNT + 4u,
+    ut_check(overlay_model_row_count() == 4u + (uint32_t)CHEATS_OWN_COUNT + 4u,
              "unfolding the cheats shows its heading, this project's cheats, the jump-boost scale "
              "row, the free-camera teleport key row, the fly-controls note and the "
              "skip-to-next-level action, with the utilities heading still folded below them");
@@ -287,7 +288,7 @@ int main(void)
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 3u + (uint32_t)CHEATS_OWN_COUNT + 4u + OVERLAY_UTILITIES_ROW_COUNT,
+                 4u + (uint32_t)CHEATS_OWN_COUNT + 4u + OVERLAY_UTILITIES_ROW_COUNT,
              "both headings, the cheats group\'s own rows, and every utilities row under the "
              "second heading");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 5u, &row) &&
@@ -485,7 +486,7 @@ int main(void)
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 3u + (uint32_t)CHEATS_OWN_COUNT + 4u + 9u,
+                 4u + (uint32_t)CHEATS_OWN_COUNT + 4u + 9u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
              "the fold's own summary and its nine lines and the skip-to-next-level action are all "
              "on screen, with the utilities heading below them");
@@ -525,14 +526,14 @@ int main(void)
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 3u + (uint32_t)CHEATS_OWN_COUNT + 4u,
+    ut_check(overlay_model_row_count() == 4u + (uint32_t)CHEATS_OWN_COUNT + 4u,
              "its nine lines are gone again, back to costing one row like any other cheat");
 
     ut_section("a group folds back exactly as it was");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == 3u,
-             "folding it again leaves the three headings alone");
+    ut_check(overlay_model_row_count() == 4u,
+             "folding it again leaves the four headings alone");
 
     ut_section("the Original tab's second group: one-shot actions, not toggles");
     overlay_model_reset();
@@ -561,10 +562,10 @@ int main(void)
     ut_section("typing opens the group that has hits, and clearing puts it back");
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
-    ut_check(row_count_after("") == 3, "all three groups folded to start with");
-    ut_check(row_count_after("zzzz") == 3,
+    ut_check(row_count_after("") == 4, "all four groups folded to start with");
+    ut_check(row_count_after("zzzz") == 4,
              "a search nothing matches leaves them folded rather than opening any of them empty");
-    ut_check(row_count_after("") == 3,
+    ut_check(row_count_after("") == 4,
              "and clearing the box restores the folds you chose, not the ones the search "
              "forced");
 

@@ -259,6 +259,7 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 add_unit_test(overlay_model dev_overlay
     dev_overlay/overlay_model.c
     # the groups whose rows the model dispatches to, the same as the Utilities group below
+    dev_overlay/overlay_framerate.c
     dev_overlay/overlay_window.c
     dev_overlay/fog_band_row.c
     dev_overlay/view_range_live_row.c

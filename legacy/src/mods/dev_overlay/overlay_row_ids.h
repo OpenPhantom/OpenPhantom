@@ -117,4 +117,13 @@ _Static_assert(FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT <= UTILITIES_FIRS
                "the cheats group has grown into the utilities group's id space; raise "
                "UTILITIES_FIRST_ID");
 
+/* The frame rate group, above the Window block for the same reason that one sits above Utilities:
+ * a row added to either needs no arithmetic here, and the assert catches the day one grows into
+ * the other. Its rows include a typed value, which is one of the two kinds of panel state
+ * remembered by row id alone, so overlapping numbers would let a commit land in another group. */
+#define FRAMERATE_FIRST_ID 192u
+_Static_assert(WINDOW_FIRST_ID + OVERLAY_WINDOW_ROWS_MAX <= FRAMERATE_FIRST_ID,
+               "the Window rows have grown into the Frame rate group's ids: raise "
+               "FRAMERATE_FIRST_ID");
+
 #endif /* DEV_OVERLAY_OVERLAY_ROW_IDS_H */

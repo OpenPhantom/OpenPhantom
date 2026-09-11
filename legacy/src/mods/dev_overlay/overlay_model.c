@@ -40,6 +40,7 @@
 #include "overlay_key_name.h"
 #include "overlay_row_ids.h"
 #include "overlay_utilities.h"
+#include "overlay_framerate.h"
 #include "overlay_window.h"
 
 #include "cheats_openphantom.h"
@@ -68,7 +69,8 @@ static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
-    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_WINDOW    */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_WINDOW    */
+    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_FRAMERATE */
 };
 
 typedef struct overlay_model_state {
@@ -178,6 +180,7 @@ void overlay_model_reset(void)
     model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Utilities";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_WINDOW].title = "Window mode";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_FRAMERATE].title = "Frame rate";
     for (i = 0; i < (uint32_t)OVERLAY_GROUP_COUNT; ++i) {
         model.groups[i].expanded = false;      /* everything starts folded, as asked */
     }
@@ -316,6 +319,8 @@ static uint32_t source_count(overlay_group_t group)
         return OVERLAY_UTILITIES_ROW_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
         return overlay_window_row_count();
+    case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
+        return OVERLAY_FRAMERATE_ROW_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
         /* +4, one for each row this group holds that is not one of its own cheats: the jump-boost
@@ -404,6 +409,17 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             capturing = true;
         }
         overlay_utilities_row(id, editing, capturing, out);
+        return;
+    }
+    case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE: {
+        /* Same shape again: the id carries a base so no two groups' ids can be confused. */
+        const char *editing = NULL;
+
+        out->id = FRAMERATE_FIRST_ID + id;
+        if (model.editing_value && model.editing_value_row == out->id) {
+            editing = model.value_edit_buf;
+        }
+        overlay_framerate_row(id, editing, out);
         return;
     }
     case OVERLAY_GROUP_OPENPHANTOM_WINDOW: {
@@ -679,6 +695,8 @@ bool overlay_model_activate(uint32_t index)
         return overlay_utilities_toggle(row.id - UTILITIES_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
         return overlay_window_toggle(row.id - WINDOW_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
+        return overlay_framerate_toggle(row.id - FRAMERATE_FIRST_ID);
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
         return true;
@@ -785,6 +803,12 @@ void overlay_model_value_commit(void)
     }
 
     /* Highest base first, for the reason given at the matching test in the hotkey path. */
+    if (row >= FRAMERATE_FIRST_ID) {
+        /* A refused limit leaves the setting alone and the row shows it unchanged, which is the
+         * same contract every other typed row here has. */
+        (void)overlay_framerate_accept_value(row - FRAMERATE_FIRST_ID, model.value_edit_buf);
+        return;
+    }
     if (row >= WINDOW_FIRST_ID) {
         (void)overlay_window_commit(row - WINDOW_FIRST_ID, model.value_edit_buf);
         return;

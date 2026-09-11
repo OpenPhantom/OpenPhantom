@@ -177,7 +177,7 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
     state.stalls_seen++;
 
     if (!timer_alive) {
-        verdict = "THE WINDOWS TIMER ITSELF STOPPED - the callback is not being fired at all, "
+        verdict = "the Windows timer itself stopped: the callback is not being fired at all, "
                   "which is not an iMUSE fault and not something the gate can explain";
     } else if (gate != 0) {
         verdict = "THE GATE IS HELD BY NOBODY. This is the predicted failure: the counter that "
@@ -187,11 +187,11 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
                   "because that buffer is played LOOPING it circles its last fragment forever "
                   "instead of falling silent";
     } else if (reentry != 0) {
-        verdict = "THE GATE IS CLEAR BUT THE RE-ENTRANCY FLAG IS SET - the last heartbeat body "
+        verdict = "the gate is clear but the re-entrancy flag is set: the last heartbeat body "
                   "was entered and never returned. That is a DIFFERENT fault from a lost "
                   "decrement and it is not repaired by releasing the gate";
     } else {
-        verdict = "NEITHER THE GATE NOR THE RE-ENTRANCY FLAG EXPLAINS IT - both read zero while "
+        verdict = "neither the gate nor the re-entrancy flag explains it: both read zero while "
                   "the body still is not running. The remaining test is the 20 ms rate limit "
                   "against a clock, and this analysis does not cover that case";
     }
@@ -232,7 +232,7 @@ static void run_watchdog(int32_t gate, DWORD stalled_ms)
 static void report_recovered(int32_t ticks, DWORD stalled_ms)
 {
     log_warning("the music heartbeat is running again after %u ms (tick counter now %d). A stall "
-                "that ENDS by itself does not match a lost decrement, which can only get stuck - "
+                "that ENDS by itself does not match a lost decrement, which can only get stuck, "
                 "so this one was a long frame or a suspended thread, not the defect.",
                 (unsigned)stalled_ms, (int)ticks);
 }
@@ -519,7 +519,7 @@ bool music_probe_install(void)
     }
 
     if (config.stress_hz > 0) {
-        log_warning("MusicStressHz=%d - THE MUSIC IS BEING DELIBERATELY THRASHED to reproduce the "
+        log_warning("MusicStressHz=%d: the music is being deliberately thrashed to reproduce the "
                     "heartbeat stall. It will stutter and cut, and that is this setting working, "
                     "not a new fault. Set MusicStressHz=0 for normal play.",
                     (int)config.stress_hz);

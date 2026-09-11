@@ -661,7 +661,7 @@ static bool append_checkbox(size_t index)
     checkbox_slot_t       *slot = &menu_state.boxes[index];
 
     if (menu_patcher_has_widget_id(&menu_state.patch, spec->widget_id)) {
-        log_error("widget id %d is already taken on the controls screen - \"%s\" is not added",
+        log_error("widget id %d is already taken on the controls screen, so \"%s\" is not added",
                   spec->widget_id, slot->caption);
         return false;
     }

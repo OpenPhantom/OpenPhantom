@@ -591,7 +591,8 @@ int diag_fx_install(int fx_level)
                      ? 1 : 0;
         installed += diag_install_observer(sites, SITE_SELECT_CEL, &flow_state.select_cel,
                                            (const void *)hook_select_cel, SELECT_CEL_PROLOGUE,
-                                           "materials the decal drawer REFUSES (that call site only)")
+                                           "materials the decal drawer REFUSES (that call site "
+                                           "only)")
                      ? 1 : 0;
     }
     return installed;

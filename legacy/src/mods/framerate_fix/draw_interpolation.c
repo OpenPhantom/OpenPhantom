@@ -22,8 +22,8 @@
  * Only the yaw is interpolated. Position (0x41125B..0x4112D3) and yaw (0x4112F9..0x411321) track
  * the substep alpha at [ebp-0x420]; pitch and roll are taken straight from the current substep,
  * so they step at 32 Hz while everything around them moves at the render rate. On a
- * slope-following NPC that is visible judder above 30 fps: aiext.c rewrites actualPitch every
- * substep as new*0.25 + old*0.75.
+ * slope-following NPC that is visible judder above 30 fps: the NPC extension module rewrites
+ * actualPitch every substep as new*0.25 + old*0.75.
  *
  * The first 0x20 bytes are self-contained; they only fill the three euler locals out of
  * obj+0x3C, so they can be replaced wholesale by a call that fills the same three slots with

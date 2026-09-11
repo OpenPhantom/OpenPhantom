@@ -358,7 +358,7 @@ static const uint8_t *find_unique(const module_text_t *text, const uint8_t *patt
         if (j == size) {
             matches++;
             if (matches > 1) {
-                log_warning("the %s pattern matches more than once in iMUSE.DLL - refused, "
+                log_warning("the %s pattern matches more than once in iMUSE.DLL and is refused, "
                             "because a pattern that is not unique cannot identify anything",
                             what);
                 return NULL;
@@ -367,7 +367,7 @@ static const uint8_t *find_unique(const module_text_t *text, const uint8_t *patt
         }
     }
     if (hit == NULL) {
-        log_warning("the %s pattern does not occur in iMUSE.DLL - this is a different build of "
+        log_warning("the %s pattern does not occur in iMUSE.DLL, so this is a different build of "
                     "the music DLL than the one this was written against", what);
     }
     return hit;
@@ -410,7 +410,7 @@ static void resolve_heartbeat_cells(const module_text_t *text, uint32_t known_ga
         return;
     }
     if (gate_here != known_gate) {
-        log_warning("the heartbeat tests a different cell (%08X) than ImLock maintains (%08X) - "
+        log_warning("the heartbeat tests a different cell (%08X) than ImLock maintains (%08X); "
                     "one of the two patterns matched the wrong place, so neither is believed",
                     (unsigned)gate_here, (unsigned)known_gate);
         return;
@@ -458,7 +458,7 @@ static void resolve_trace_slot(HMODULE module, imuse_sites_t *out)
     }
     for (i = 0; i < sizeof(IMPRINTF_BODY); ++i) {
         if (IMPRINTF_MASK[i] != 0 && body[i] != IMPRINTF_BODY[i]) {
-            log_warning("ImPrintf is not the body this was measured against (byte %u differs) - "
+            log_warning("ImPrintf is not the body this was measured against (byte %u differs), so "
                         "the commentary pointer is NOT taken, because the offset to it would be "
                         "a guess", (unsigned)i);
             return;
@@ -469,7 +469,7 @@ static void resolve_trace_slot(HMODULE module, imuse_sites_t *out)
     }
     out->trace_slot = (void (__cdecl **)(const char *))(uintptr_t)slot;
     log_info("iMUSE's own commentary is routed through the pointer at %08X, which the game "
-             "installs at startup - 59 places in the DLL feed it", (unsigned)slot);
+             "installs at startup; 59 places in the DLL feed it", (unsigned)slot);
 }
 
 bool imuse_sites_resolve(imuse_sites_t *out)

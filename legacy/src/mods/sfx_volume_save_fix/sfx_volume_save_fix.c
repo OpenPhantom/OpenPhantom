@@ -260,7 +260,7 @@ static void on_frame(void)
     }
     original(fix_state.pending_volume);
 
-    log_info("startup SFX volume (%d) applied - bapsound_moduleInit calls bapsound_setMasterVolume "
+    log_info("startup SFX volume (%d) applied: bapsound_moduleInit calls bapsound_setMasterVolume "
              "BEFORE marking sound ready, so its own load-time apply is always dropped and "
              "the engine would otherwise start every session at full SFX volume regardless of "
              "obi.ini. Re-applied the moment the sound subsystem actually finished initialising.",
@@ -383,13 +383,13 @@ void sfx_volume_save_fix_install(void)
                       (unsigned)sites[SITE_MASTER_GET].address);
         }
     } else {
-        log_warning("bapsound_getMasterVolume did not resolve - obi.ini's SVOL will keep being "
+        log_warning("bapsound_getMasterVolume did not resolve, so obi.ini's SVOL will keep being "
                     "written from an unreliable AIL query");
     }
 
     if (sites[SITE_MASTER_SET].address == 0) {
-        log_warning("bapsound_setMasterVolume did not resolve - the SFX slider will keep starting "
-                    "at full every launch regardless of obi.ini's SVOL");
+        log_warning("bapsound_setMasterVolume did not resolve, so the SFX slider will keep "
+                    "starting at full every launch regardless of obi.ini's SVOL");
         return;
     }
     if (!detour_install(&fix_state.master_set, sites[SITE_MASTER_SET].address,
@@ -399,8 +399,8 @@ void sfx_volume_save_fix_install(void)
         return;
     }
     if (!frame_hook_add(on_frame)) {
-        log_warning("frame hook unavailable, the startup re-apply is skipped - the SFX slider will "
-                    "keep starting at full every launch regardless of obi.ini's SVOL");
+        log_warning("frame hook unavailable, the startup re-apply is skipped, so the SFX slider "
+                    "will keep starting at full every launch regardless of obi.ini's SVOL");
         return;
     }
 

@@ -402,7 +402,7 @@ bool music_sites_resolve(music_sites_t *out)
                   &sys_claim) &&
         agree(sys_test, sys_claim, "pause-menu latch")) {
         out->sys_pause_on = (volatile int32_t *)(uintptr_t)sys_test;
-        log_info("the pause menu's own latch is at %08X - while it is set, the music is paused by "
+        log_info("the pause menu's own latch is at %08X; while it is set, the music is paused by "
                  "the game and this feature keeps its hands off", (unsigned)sys_test);
     } else {
         log_warning("sys_pause did not resolve, the orphan guard stays OFF this session, because "

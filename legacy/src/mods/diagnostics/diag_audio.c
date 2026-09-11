@@ -1,3 +1,9 @@
+/* diag_audio.c: see diag_audio.h.
+ *
+ * SIZE NOTE: a few lines over the 600 mark. Ten sites and their evidence, ten observers, the
+ * channel census and the install that wires them by level; the observers are short and share
+ * the site table, so there is no half of them to lift out that would not carry the table with
+ * it. */
 #include "diag_audio.h"
 
 #include "diag_install.h"
@@ -526,7 +532,8 @@ int diag_audio_install(int audio_level, int census_milliseconds)
     resolve_sites_once();
 
     audio_state.channel_bank =
-        (uint8_t *)diag_derive_address(sites, SITE_SOUND_FREE_CHANNEL, OFFSET_CHANNEL_BANK, "channel bank");
+        (uint8_t *)diag_derive_address(sites, SITE_SOUND_FREE_CHANNEL, OFFSET_CHANNEL_BANK,
+                                       "channel bank");
     audio_state.census_milliseconds = census_milliseconds;
 
     installed += diag_install_observer(sites, SITE_SOUND_PLAY, &audio_state.play,
@@ -560,7 +567,8 @@ int diag_audio_install(int audio_level, int census_milliseconds)
         }
     }
     if (audio_level >= 2) {
-        installed += diag_install_observer(sites, SITE_SOUND_START_CHANNEL, &audio_state.start_channel,
+        installed += diag_install_observer(sites, SITE_SOUND_START_CHANNEL,
+                                      &audio_state.start_channel,
                                       (const void *)hook_sound_start_channel,
                                       SOUND_START_CHANNEL_PROLOGUE,
                                       "channel allocation and its rejections") ? 1 : 0;
@@ -579,11 +587,13 @@ int diag_music_install(int music_level)
     resolve_sites_once();
 
     audio_state.music_attached =
-        (int32_t *)diag_derive_address(sites, SITE_MUSIC_STATE, OFFSET_MUSIC_ATTACHED, "g_musicAttached");
+        (int32_t *)diag_derive_address(sites, SITE_MUSIC_STATE, OFFSET_MUSIC_ATTACHED,
+                                       "g_musicAttached");
     audio_state.state_latch =
         (int32_t *)diag_derive_address(sites, SITE_MUSIC_STATE, OFFSET_STATE_LATCH, "g_stateLatch");
     audio_state.sequence_latch =
-        (int32_t *)diag_derive_address(sites, SITE_MUSIC_SEQUENCE, OFFSET_SEQUENCE_LATCH, "g_seqLatch");
+        (int32_t *)diag_derive_address(sites, SITE_MUSIC_SEQUENCE, OFFSET_SEQUENCE_LATCH,
+                                       "g_seqLatch");
 
     installed += diag_install_observer(sites, SITE_MUSIC_STATE, &audio_state.music_state,
                                   (const void *)hook_music_state, MUSIC_STATE_PROLOGUE,

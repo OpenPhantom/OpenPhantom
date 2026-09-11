@@ -429,7 +429,7 @@ void imuse_fix_install(void)
     }
 
     if (!state.active && !state.probe_active) {
-        log_info("nothing in this DLL is switched on, or nothing it needs could be resolved - "
+        log_info("nothing in this DLL is switched on, or nothing it needs could be resolved, so "
                  "not one byte is touched this session");
         return;
     }

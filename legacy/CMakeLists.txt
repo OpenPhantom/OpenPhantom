@@ -104,7 +104,7 @@ file(REMOVE_RECURSE ${ENGINE_FIX_OUTPUT}/tools)
 #
 # The directory is removed before every copy, not only at configure time. copy_directory adds and
 # overwrites but never deletes, so a renamed script would otherwise leave its old name sitting
-# beside the new one in an incremental build and both would ship - the same class of accident the
+# beside the new one in an incremental build and both would ship, the same class of accident the
 # configure-time wipe above exists to prevent for mods\, and it needs solving in the same place the
 # copying happens rather than one step earlier.
 add_custom_target(tools ALL

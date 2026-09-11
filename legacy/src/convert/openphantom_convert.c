@@ -518,8 +518,8 @@ static int convert_menu(const char *game, const char *output, int screen_width, 
             note("  %s not present, skipped", archives[archive]);
             continue;
         }
-        count = read_lab_directory(loaded[archive].data, loaded[archive].size,
-                                   members + total, (int)(sizeof members / sizeof members[0]) - total);
+        count = read_lab_directory(loaded[archive].data, loaded[archive].size, members + total,
+                                   (int)(sizeof members / sizeof members[0]) - total);
         if (count < 0) {
             note("  %s is not a LABN archive, skipped", archives[archive]);
             free(loaded[archive].data);
@@ -570,7 +570,8 @@ static int convert_menu(const char *game, const char *output, int screen_width, 
             _snprintf(destination, sizeof destination - 1, "%s\\%s", output, member->name);
             destination[sizeof destination - 1] = '\0';
             file = fopen(destination, "wb");
-            if (file == NULL || fwrite(bigger, 1, (size_t)bigger_size, file) != (size_t)bigger_size) {
+            if (file == NULL ||
+                fwrite(bigger, 1, (size_t)bigger_size, file) != (size_t)bigger_size) {
                 if (file != NULL) { fclose(file); }
                 free(bigger);
                 ++skipped;

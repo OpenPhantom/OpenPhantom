@@ -119,8 +119,8 @@ static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wp
  *
  * The class is registered against this rather than against the executable because the window
  * procedure lives here: a class that names the executable while its procedure sits in a DLL is a
- * dangling pointer the moment that DLL goes away. Nothing unregisters it, and nothing needs to -
- * see dll_main.c for why this feature gives none of its process-global state back. */
+ * dangling pointer the moment that DLL goes away. Nothing unregisters it, and nothing needs to;
+ * dll_main.c has why this feature gives none of its process-global state back. */
 static HMODULE own_module(void)
 {
     if (overlay_state.module == NULL) {

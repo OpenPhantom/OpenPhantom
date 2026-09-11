@@ -118,13 +118,14 @@ static const uint8_t EXPECTED_CAP_60_MOV[] = {
  *
  * This is the one place the simulation rate is decided, and [0x882294] is the "60fps" CHEAT,
  * one flag, read in exactly two places in the whole image, that moves the render cap 30->60 AND
- * the substep 32->64 together. Doubling the substep doubles every PURE PER-SUBSTEP constant:
+ * the substep 32->64 together. Doubling the substep doubles every PURE PER-SUBSTEP constant, and
+ * the NPC extension module and the player module carry five of them:
  *
- *     NPC gravity          velocity.z -= 0.9 per substep         (aiext.c:3123)
- *     NPC turn ramp        3, 6, 9, 12 deg PER SUBSTEP           (aiext.c:2846)
- *     pathfinding throttle exactly ONE actor re-plans per substep (aiext.c:2714)
- *     pitch convergence    new*0.25 + old*0.75 per substep       (aiext.c:3239)
- *     shimmy               0.01 u per substep                    (player.c:1734)
+ *     NPC gravity          velocity.z -= 0.9 per substep
+ *     NPC turn ramp        3, 6, 9, 12 deg PER SUBSTEP
+ *     pathfinding throttle exactly ONE actor re-plans per substep
+ *     pitch convergence    new*0.25 + old*0.75 per substep
+ *     shimmy               0.01 u per substep
  *
  * Everything else in NPC movement IS dt-scaled and therefore immune, because inside the substep
  * loop g_frameDelta IS the substep. So: leave the substep alone and NPC speed, turning and

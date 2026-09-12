@@ -521,6 +521,8 @@ void controller_input_install(void)
         return;
     }
 
+    /* The thread runs for the life of the process and nothing stops it: feature DLLs are never
+     * unloaded, and the loop owns nothing that has to be released before the process ends. */
     ci_state.thread = CreateThread(NULL, 0, poll_thread_proc, NULL, 0, &thread_id);
     if (ci_state.thread == NULL) {
         log_error("the polling thread could not be created (error %lu), controller look and "

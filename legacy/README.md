@@ -86,16 +86,19 @@ you have converted something. Copy it to `<game>\tools\` and read that fix's own
 ## Configuration
 
 `engine_fixes.ini` sits beside `WMAIN.EXE`, one section per DLL, named after that DLL. The copy in
-`dist/` is meant to be playable as it stands: every fix on, every measurement off, and nothing that
-changes how the game plays beyond repairing what it was written to repair. Each key carries a short
-comment, so the file is also the reference.
+`dist/` is meant to be playable as it stands: every repair on, every measurement off. Each key
+carries a short comment, so the file is also the reference.
 
-The file is optional. Every setting has the same default in the code, so a missing ini behaves
-exactly like the shipped one.
+The file is optional. A missing ini behaves like the shipped one, with one class of exception.
 
-**Free look** (`[enhanced_input] FreeLook`) is the one deliberate exception: it is off, because it
-changes the control scheme rather than fixing a fault. There is a check box for it on the game's
-own controls screen.
+**Anything that changes how the game plays ships off**, because it is a different game rather
+than a repaired one: free look, sideways walking, the camera that follows your heading and the
+air steer (`[enhanced_input] FreeLook`, `Strafe`, `CameraFollow`, `AirControl`) and lightsaber
+dismemberment (`[dismemberment] Mode`). Each has a row in the developer menu, and the first two
+have a check box on the game's own controls screen when `MenuWidgets=1`. Mouse look is the one
+setting that changes play and ships on (`MouseLook=1`), because a fresh install is asking for a
+game that can be played with a mouse; its code default is off, so an ini that predates the key
+leaves the game as it shipped, and the comment above the key says so.
 
 **Almost nothing writes to disk while you play.** Every diagnostic channel is off. Each DLL logs a
 few lines to `engine_fixes.log` when it installs and then goes quiet, which is enough for a bug

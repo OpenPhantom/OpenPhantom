@@ -536,6 +536,8 @@ int diag_frame_install(int level, int hitch_percent)
     }
 
     frame_state.machine.gpu_percent = -1;
+    /* Runs for the life of the process, like the controller poll: the DLL is never unloaded and
+     * the sampler holds only a performance counter query, which the process end closes. */
     frame_state.sampler = CreateThread(NULL, 0, sampler_main, NULL, 0, NULL);
 
     frame_state.armed = true;

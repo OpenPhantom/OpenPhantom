@@ -62,9 +62,25 @@
  *
  * swmenu_open, retail 0x0045D9F5. Detoured on an 8 byte prologue, which is three whole
  * instructions: push ebp / mov ebp,esp / mov eax,[g_swMac.pCurrMenu]. The operand of the third is
- * masked and read: it is the cell the "is a menu open" test reads. With that operand masked the
- * old thirteen bytes also matched a dialogue function of the same shape, so the pattern runs on
- * through the early return and the flag the real one sets.
+ * masked; with it masked the old thirteen bytes also matched a dialogue function of the same
+ * shape, so the pattern runs on through the early return and the flag the real one sets. The
+ * cell is NOT read out of it: the operand sits inside the prologue, and the first DLL to detour
+ * the function replaces those bytes with a jump, which the menu art census does before this
+ * feature reads anything. The cell comes from the menu stack's pop instead:
+ *
+ * swmenu_pop, retail 0x0045DB7A, matched from 0x0045DBA2. The one function that clears the cell.
+ * Never patched by anything in this tree, and the match sits well past any prologue:
+ *
+ *   A3 <depth>            mov  [g_swMac.depth],eax       operand at +0x01
+ *   83 3D <depth> 01      cmp  [g_swMac.depth],1         operand at +0x07, must be the same cell
+ *   0F 8D ..              jge  past the clear
+ *   E8 ..                 call swmenu_leaveMenuMode
+ *   C7 05 <menu> 0        mov  [g_swMac.pCurrMenu],0     operand at +0x19
+ *   83 3D <flag> 01       cmp  [a flag],1
+ *   74 0F                 je
+ *
+ * The depth cell is written and then compared in the same breath, and the two operands have to
+ * agree; that agreement tells the pop from another store-and-clear.
  *
  * render_prepareFrame's copy of the focal, retail 0x0041996D. Never patched. It loads the current
  * camera, copies two of its fields elsewhere and then its +0x3C into g_projScale, so one match
@@ -201,7 +217,32 @@ static const uint8_t MSK_MENU_OPEN[] = {
 };
 _Static_assert(sizeof SIG_MENU_OPEN == sizeof MSK_MENU_OPEN,
                "the swmenu_open pattern and its mask are different lengths");
-#define MENU_OPEN_CURRENT_MENU_OPERAND 0x04u
+/* ---------------------------------------------------------------------------------------------
+ * swmenu_pop, for the current menu cell
+ */
+static const uint8_t SIG_MENU_POP[] = {
+    0xA3, 0x00, 0x00, 0x00, 0x00,                            /* mov [g_swMac.depth],eax        */
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x01,                /* cmp [g_swMac.depth],1          */
+    0x0F, 0x8D, 0x00, 0x00, 0x00, 0x00,                      /* jge                            */
+    0xE8, 0x00, 0x00, 0x00, 0x00,                            /* call                           */
+    0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* mov [g_swMac.pCurrMenu],0   */
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x01,                /* cmp [a flag],1                 */
+    0x74, 0x0F                                               /* je                             */
+};
+static const uint8_t MSK_MENU_POP[] = {
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_MENU_POP == sizeof MSK_MENU_POP,
+               "the swmenu_pop pattern and its mask are different lengths");
+#define MENU_POP_DEPTH_STORE_OPERAND   0x01u
+#define MENU_POP_DEPTH_COMPARE_OPERAND 0x07u
+#define MENU_POP_CURRENT_MENU_OPERAND  0x19u
 
 /* ---------------------------------------------------------------------------------------------
  * render_prepareFrame's copy of the focal
@@ -599,6 +640,7 @@ signature_t menu_scale_sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR_MASKED("swmenu_open", SIG_MENU_OPEN, MSK_MENU_OPEN, MENU_OPEN_PROLOGUE),
     SIGNATURE_ENTRY_MASKED("render_prepareFrame focal copy", SIG_PROJECTION_COPY,
                            MSK_PROJECTION_COPY),
+    SIGNATURE_ENTRY_MASKED("swmenu_pop", SIG_MENU_POP, MSK_MENU_POP),
     SIGNATURE_ENTRY("swlistbx_draw", SIG_LISTBOX_DRAW),
     SIGNATURE_ENTRY_DETOUR("swpic_draw", SIG_PIC_DRAW, PIC_DRAW_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR_MASKED("xswift_drawMenu", SIG_DRAW_MENU, MSK_DRAW_MENU,
@@ -654,9 +696,10 @@ bool menu_scale_resolve_cells(const uintptr_t *origin_sites, size_t origin_count
     uint32_t  base_text = 0;
     uint32_t  menu_text_scale = 0;
     uint32_t  current_menu = 0;
+    uint32_t  depth = 0;
     uint32_t  camera = 0;
     uint32_t  proj_scale = 0;
-    uintptr_t open = menu_scale_sites[SITE_MENU_OPEN].address;
+    uintptr_t pop  = menu_scale_sites[SITE_MENU_POP].address;
     uintptr_t copy = menu_scale_sites[SITE_PROJECTION_COPY].address;
     size_t    index;
 
@@ -680,12 +723,16 @@ bool menu_scale_resolve_cells(const uintptr_t *origin_sites, size_t origin_count
             return false;
         }
     }
-    if (open == 0 || copy == 0) {
+    if (pop == 0 || copy == 0) {
         log_warning("%s did not resolve, so the menus are left at their authored size",
-                    (open == 0) ? "swmenu_open" : "render_prepareFrame's focal copy");
+                    (pop == 0) ? "swmenu_pop" : "render_prepareFrame's focal copy");
         return false;
     }
-    if (!read_cell(open, MENU_OPEN_CURRENT_MENU_OPERAND, sizeof(void *), &current_menu,
+    if (!read_cell(pop, MENU_POP_DEPTH_STORE_OPERAND, sizeof(int32_t), &depth,
+                   "menu stack depth cell") ||
+        !read_cell(pop, MENU_POP_DEPTH_COMPARE_OPERAND, sizeof(int32_t), &depth,
+                   "menu stack depth cell") ||
+        !read_cell(pop, MENU_POP_CURRENT_MENU_OPERAND, sizeof(void *), &current_menu,
                    "current menu cell") ||
         !read_cell(copy, PROJECTION_COPY_CAMERA_OPERAND, sizeof(void *), &camera,
                    "current camera cell") ||

@@ -153,8 +153,9 @@ extern menu_engine_cells_t menu_cells;
 #define CAMERA_FOCAL_PIXELS    0x3Cu
 
 /* Fills menu_cells from the operands of the resolved sites: the two origin blocks (which have to
- * agree with each other on every cell), swmenu_open and the projection copy. False, with the
- * reason logged, when any of them is missing or names a cell outside the image. */
+ * agree with each other on every cell), the menu stack's pop and the projection copy. None of the
+ * operands read sits inside a prologue a detour could have replaced. False, with the reason
+ * logged, when any of them is missing or names a cell outside the image. */
 bool menu_scale_resolve_cells(const uintptr_t *origin_sites, size_t origin_count);
 
 /* The widget record, from the engine's own layout. Stride and field offsets are byte proven. */
@@ -179,6 +180,7 @@ enum {
     SITE_RLE_BLIT,
     SITE_MENU_OPEN,
     SITE_PROJECTION_COPY,
+    SITE_MENU_POP,
     SITE_LISTBOX_DRAW,
     SITE_PIC_DRAW,
     SITE_DRAW_MENU,

@@ -112,7 +112,6 @@ void diag_log_write(const char *format, ...)
         ++diag_state.repeat_count;
         return;
     }
-    flush_repeat();
 
     /* (b) the per-second token bucket. */
     if (diag_state.max_lines_per_second > 0) {
@@ -141,7 +140,11 @@ void diag_log_write(const char *format, ...)
     /* Only a line that reaches the file becomes the one repeats are counted against. This
      * used to be latched above the bucket, so a DROPPED line became "the previous line":
      * every later repeat of it was absorbed as a repeat of something that is not in the file
-     * at all, and the suppressed count was short by exactly that many. */
+     * at all, and the suppressed count was short by exactly that many. The repeat note is
+     * written here for the same reason: above the bucket it went out for a line the bucket then
+     * dropped, so the note sat under nothing and the repeats of the line before it, which was
+     * still the last one in the file, started their count again from one. */
+    flush_repeat();
     strncpy(diag_state.last_line, line, sizeof(diag_state.last_line) - 1);
     diag_state.last_line[sizeof(diag_state.last_line) - 1] = '\0';
 

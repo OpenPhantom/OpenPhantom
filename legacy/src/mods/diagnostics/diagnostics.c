@@ -11,6 +11,7 @@
 #include "diag_present.h"
 #include "diag_characters.h"
 #include "diag_camera_owner.h"
+#include "diag_dialogue_ops.h"
 #include "diag_footsteps.h"
 #include "diag_projectiles.h"
 #include "diag_world.h"
@@ -189,6 +190,7 @@ void diagnostics_install(void)
     observers += diag_level_install(diagnostics_state.level);
     observers += diag_player_install(diagnostics_state.player);
     observers += diag_dialogue_install(diagnostics_state.dialogue);
+    observers += diag_dialogue_ops_install(diagnostics_state.dialogue);
     observers += diag_fx_install(diagnostics_state.fx);
     observers += diag_frame_install(diagnostics_state.frame,
                                     diagnostics_state.frame_hitch_percent);

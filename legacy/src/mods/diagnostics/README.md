@@ -26,7 +26,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Fsm` | `0` | 1 AI mode changes, 2 plus **every executed opcode** |
 | `Level` | `0` | 1 level loading and the cutscene lock |
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |
-| `Dialogue` | `0` | 1 spoken lines and voice files |
+| `Dialogue` | `0` | 1 spoken lines and voice files, and the script side of them: every Statement opcode, each change of a Dialog Box opcode's actor, line or answer with a visit count, and each change of a Check For opcode's answer in its dialogue modes |
 | `Fx` | `0` | 1 emitters on/off/destroyed, 2 plus every decal **stamped**, 3 plus every decal **drawn** |
 | `Frame` | `0` | 1 one frame-time summary a second, 2 plus the frames around every hitch. A hitch is both a percentage past the median of the last 64 frames and at least two milliseconds past it; without that floor the instrument reports scheduler noise as hitches and, because each dump writes from inside the frame callback, stretches the frames it measures |
 | `FrameHitchPercent` | `0` | how far past the median counts as a hitch. 0 uses the built-in default |
@@ -55,7 +55,7 @@ area is switched on. The sources carry the disassembly beside each pattern; this
 | `Music` | `bapMusicSetState` `0x004105A3`, `bapMusicSetSequence` `0x0041060E`, `bapMusicSetVolume` `0x004106CC` |
 | `CameraOwner` | `bapview_overrideOn` `0x0041840A`, `bapview_overrideOff` `0x00418421`, `Dialog_Close` `0x00430E82` |
 | `Footsteps` | `footstep_tick` `0x00437AC0`, with the wall clock cell read out of the load at `0x00437BCC` |
-| `Dialogue` | `Dialog_SpeakSingle` `0x00430D12`, `Dialog_PlayVoice` `0x0043125A` |
+| `Dialogue` | `Dialog_SpeakSingle` `0x00430D12`, `Dialog_PlayVoice` `0x0043125A`, opcode `0x500` `ai_runMenu` `0x004358B0`, opcode `0x504` `say_line` `0x00435A0A`, opcode `0x605` `op_checkFor` `0x0042EB8D` |
 | `Fx` | `bapvrt_addDecal` `0x0041C4C0`, `bapvrt_drawPolyDecals` `0x0041C620`, `emitter_setPlacementActive` `0x0041FE24`, `emitter_destroy` `0x004214BF`, `rdMaterial_selectCel` `0x0047B9BD` |
 | `Fsm` | `ai_dispatch` `0x00433E51`, `ai_setMode` `0x004335A5`, `ai_returnMode` `0x00433634` |
 | `Level` | `campaign_loadLevel` `0x0043F70A`, `Dialog_EnterInputLock` `0x00430ED9`, `Dialog_LeaveInputLock` `0x00430F18` |

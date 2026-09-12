@@ -55,6 +55,8 @@ void scene_fade_install(float seconds)
         return;
     }
     if (!memory_try_read(site + OFFSET_DURATION, &held, sizeof(held))) {
+        log_warning("the fade duration at %08X could not be read, so the level keeps its four "
+                    "second fade", (unsigned)(site + OFFSET_DURATION));
         return;
     }
     if (held == wanted) {

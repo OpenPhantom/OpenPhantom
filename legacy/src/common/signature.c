@@ -155,7 +155,9 @@ uintptr_t signature_find_at(uintptr_t address, const uint8_t *bytes, const uint8
     if (address == 0 || prologue_size == 0 || prologue_size >= size) {
         return 0;
     }
-    if (address < host_image_text()) {
+    /* Both ends: a wrong gap must not read past the section, whichever way it is wrong. */
+    if (address < host_image_text() ||
+        address + size > host_image_text() + host_image_text_size()) {
         return 0;
     }
     /* The tail has to be exactly right: nothing has written there, whoever detoured this. */

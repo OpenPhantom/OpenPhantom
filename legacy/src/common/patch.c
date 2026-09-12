@@ -18,7 +18,6 @@ const char *patch_result_text(patch_result_t result)
     switch (result) {
     case PATCH_RESULT_OK:                return "ok";
     case PATCH_RESULT_INVALID_ARGUMENT:  return "invalid argument";
-    case PATCH_RESULT_UNSUPPORTED_BUILD: return "unsupported build";
     case PATCH_RESULT_UNEXPECTED_BYTES:  return "unexpected bytes";
     case PATCH_RESULT_PROTECTION_FAILED: return "page protection could not be changed";
     case PATCH_RESULT_WRITE_FAILED:      return "write failed";

@@ -26,6 +26,9 @@
  * is not in that module's table. That is a normal outcome rather than an error: the module may not
  * be loaded, or a different build of it may not import that function at all, and the caller is
  * expected to log and carry on without the feature. */
+/* The slot has to hold the address the exporting module answers for `function_name` today. A slot
+ * something else has already redirected, a wrapper hooking the same import, reads as absent and
+ * this answers false, so the feature declines rather than chaining onto a stranger's hook. */
 bool import_patch_replace(const char *module_name, const char *imported_dll,
                           const char *function_name, void *replacement, void **out_original);
 

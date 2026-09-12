@@ -1,6 +1,8 @@
 #include "ini.h"
 
 #include "host_image.h"
+#include "logging.h"
+#include "text.h"
 
 #include <windows.h>
 
@@ -19,8 +21,7 @@ static char ini_file_path[MAX_PATH];
 const char *ini_path(void)
 {
     if (ini_file_path[0] == '\0') {
-        _snprintf(ini_file_path, sizeof(ini_file_path), "%s%s", host_directory(), INI_FILE_NAME);
-        ini_file_path[sizeof(ini_file_path) - 1] = '\0';
+        text_format(ini_file_path, sizeof(ini_file_path), "%s%s", host_directory(), INI_FILE_NAME);
     }
     return ini_file_path;
 }
@@ -37,17 +38,28 @@ bool ini_read_bool(const char *section, const char *key, bool default_value)
 
 float ini_read_float(const char *section, const char *key, float default_value)
 {
-    char written_default[INI_VALUE_MAX];
-    char value[INI_VALUE_MAX];
+    char   written_default[INI_VALUE_MAX];
+    char   value[INI_VALUE_MAX];
+    char  *end;
+    double parsed;
 
-    _snprintf(written_default, sizeof(written_default), "%.6f", (double)default_value);
-    written_default[sizeof(written_default) - 1] = '\0';
+    text_format(written_default, sizeof(written_default), "%.6f", (double)default_value);
 
     GetPrivateProfileStringA(section, key, written_default, value, (DWORD)sizeof(value),
                              ini_path());
     value[sizeof(value) - 1] = '\0';
 
-    return (float)atof(value);
+    /* strtod and not atof, so a value that is not a number is told apart from a zero. Trailing
+     * text is allowed, as the integer reader allows it, so "1.5x" reads as 1.5; a value with no
+     * digits at all reads as the default and is named once, because a silent zero from a typo
+     * looks like a decision. */
+    parsed = strtod(value, &end);
+    if (end == value) {
+        log_warning("[%s] %s=%s is not a number, the default %.6g is in force",
+                    section, key, value, (double)default_value);
+        return default_value;
+    }
+    return (float)parsed;
 }
 
 bool ini_read_string(const char *section, const char *key, const char *default_value,
@@ -104,11 +116,9 @@ bool ini_write_float(const char *section, const char *key, float value, int deci
         decimal_places = 6;
     }
 
-    _snprintf(format, sizeof(format), "%%.%df", decimal_places);
-    format[sizeof(format) - 1] = '\0';
+    text_format(format, sizeof(format), "%%.%df", decimal_places);
 
-    _snprintf(text, sizeof(text), format, (double)value);
-    text[sizeof(text) - 1] = '\0';
+    text_format(text, sizeof(text), format, (double)value);
 
     return WritePrivateProfileStringA(section, key, text, ini_path()) != 0;
 }
@@ -117,8 +127,7 @@ bool ini_write_int(const char *section, const char *key, int32_t value)
 {
     char text[INI_VALUE_MAX];
 
-    _snprintf(text, sizeof(text), "%d", (int)value);
-    text[sizeof(text) - 1] = '\0';
+    text_format(text, sizeof(text), "%d", (int)value);
 
     return WritePrivateProfileStringA(section, key, text, ini_path()) != 0;
 }

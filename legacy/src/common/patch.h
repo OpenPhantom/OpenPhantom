@@ -29,7 +29,6 @@
 typedef enum patch_result {
     PATCH_RESULT_OK,
     PATCH_RESULT_INVALID_ARGUMENT,
-    PATCH_RESULT_UNSUPPORTED_BUILD,
     PATCH_RESULT_UNEXPECTED_BYTES,
     PATCH_RESULT_PROTECTION_FAILED,
     PATCH_RESULT_WRITE_FAILED
@@ -48,9 +47,9 @@ bool patch_validate_bytes(uintptr_t address, const uint8_t *expected_bytes, size
  * reads as a permissions problem. No VirtualQuery is spent asking: the protection change refuses
  * such a range itself, and this path is one the engine can drive.
  *
- * Answers PATCH_RESULT_WRITE_FAILED when the bytes do not read
- * back, restoring what was there first; a write longer than this keeps a copy of is still checked
- * but cannot be undone, and the log says which happened. */
+ * Answers PATCH_RESULT_WRITE_FAILED when the bytes do not read back, restoring what was there
+ * first; a write longer than this keeps a copy of is still checked but cannot be undone, and the
+ * log says which happened. */
 patch_result_t patch_write_bytes(uintptr_t address, const void *data, size_t size);
 patch_result_t patch_write_u8 (uintptr_t address, uint8_t  value);
 patch_result_t patch_write_u32(uintptr_t address, uint32_t value);

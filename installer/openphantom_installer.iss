@@ -374,8 +374,9 @@ english.ScalingLetterbox=Keep the original shape, with black bars at the sides (
 english.ScalingStretch=Fill the whole screen. Nothing is cut off, faces get a little wider
 english.FpsPageCaption=Frame rate
 english.FpsPageDescription=How many frames per second the game should draw
-english.FpsPageText=Without a limit this engine draws many hundreds of frames per second. Your screen cannot show them, and it costs you a fully loaded processor core and a loud fan.%n%nThe first option asks the game to follow your screen instead, every time it starts. It is the one to pick. A limit that does not match your screen is worse than either extreme: the screen then repeats some frames and not others, so platforms, the camera and everything else in motion go choppy, even while the frame counter looks perfectly steady.%n%nYou can change this later in the game's own menu, or in engine_fixes.ini under [framerate_fix].
-english.FpsOptMatch=Follow my screen, whatever it refreshes at (recommended)
+english.FpsPageText=Without a limit this engine draws many hundreds of frames per second. Your screen cannot show them, and it costs you a fully loaded processor core and a loud fan.%n%nYour screen shows frames at its own rate, so a limit that does not match it repeats some frames and not others, a slight judder on everything moving even while the frame counter reads steady. The first option caps the game at your screen's rate, read every time it starts, and in a scene the machine cannot hold at that rate it steps down to a half or a third of it, where every frame is still shown the same number of times, and back up when the scene clears. The second holds the screen's rate and never steps.%n%nYou can change this later in the game's own menu, or in engine_fixes.ini under [framerate_fix].
+english.FpsOptAuto=Automatic: my screen's rate, lower in a heavy scene (recommended)
+english.FpsOptMatch=My screen's rate exactly, whatever it refreshes at
 english.FpsUnlimited=No limit, as fast as the machine manages
 english.FpsOwn=Own limit
 english.FpsBadValue=That is not a valid frame rate.%n%nEnter a whole number from 0 to 1000. 0 means no limit.
@@ -476,8 +477,9 @@ german.ScalingLetterbox=Ursprüngliche Form behalten, mit schwarzen Balken an de
 german.ScalingStretch=Den ganzen Bildschirm füllen. Es wird nichts abgeschnitten, Gesichter werden etwas breiter
 german.FpsPageCaption=Bildrate
 german.FpsPageDescription=Wie viele Bilder pro Sekunde das Spiel zeichnen soll
-german.FpsPageText=Ohne Begrenzung zeichnet diese Engine viele Hundert Bilder pro Sekunde. Ihr Bildschirm kann sie nicht zeigen, und es kostet Sie einen voll ausgelasteten Prozessorkern und einen lauten Lüfter.%n%nDie erste Option lässt das Spiel bei jedem Start Ihrem Bildschirm folgen. Diese sollten Sie wählen. Eine Grenze, die nicht zu Ihrem Bildschirm passt, ist schlechter als beide Extreme: Der Bildschirm wiederholt dann einige Bilder und andere nicht, sodass Plattformen, die Kamera und alles andere in Bewegung ruckeln, obwohl die Bildratenanzeige völlig gleichmäßig aussieht.%n%nSie können dies später im Menü des Spiels ändern oder in der engine_fixes.ini unter [framerate_fix].
-german.FpsOptMatch=Meinem Bildschirm folgen, mit welcher Rate er auch läuft (empfohlen)
+german.FpsPageText=Ohne Begrenzung zeichnet diese Engine viele Hundert Bilder pro Sekunde. Ihr Bildschirm kann sie nicht zeigen, und es kostet Sie einen voll ausgelasteten Prozessorkern und einen lauten Lüfter.%n%nIhr Bildschirm zeigt Bilder in seiner eigenen Rate, daher wiederholt eine Grenze, die nicht dazu passt, einige Bilder und andere nicht: ein leichtes Ruckeln in allem, was sich bewegt, obwohl die Bildratenanzeige gleichmäßig aussieht. Die erste Option begrenzt das Spiel auf die Rate Ihres Bildschirms, bei jedem Start neu gelesen, und geht in einer Szene, die der Rechner bei dieser Rate nicht schafft, auf die Hälfte oder ein Drittel davon herunter, wo jedes Bild weiterhin gleich oft gezeigt wird, und wieder hinauf, sobald die Szene es zulässt. Die zweite hält die Rate des Bildschirms und ändert sie nie.%n%nSie können dies später im Menü des Spiels ändern oder in der engine_fixes.ini unter [framerate_fix].
+german.FpsOptAuto=Automatisch: Bildschirmrate, in schweren Szenen gesenkt (empfohlen)
+german.FpsOptMatch=Genau die Rate meines Bildschirms, was immer sie ist
 german.FpsUnlimited=Keine Begrenzung, so schnell der Rechner es schafft
 german.FpsOwn=Eigene Begrenzung
 german.FpsBadValue=Das ist keine gültige Bildrate.%n%nGeben Sie eine ganze Zahl von 0 bis 1000 ein. 0 bedeutet keine Begrenzung.
@@ -732,7 +734,7 @@ end;
   would be unreachable. This way the box always works. }
 procedure FpsEditChanged(Sender: TObject);
 begin
-  FpsPage.SelectedValueIndex := 2;
+  FpsPage.SelectedValueIndex := 3;
 end;
 
 { Typing in the box picks the row it sits on, so nobody fills it in and then wonders why their size
@@ -800,8 +802,9 @@ begin
   ScalingPage.Add(ExpandConstant('{cm:ScalingStretch}'));
   ScalingPage.SelectedValueIndex := 0;
 
-  { The frame rate cap. Four common answers and a box to type any other, because the useful values
-    are not a list: a player with a 165 Hz screen wants 165 and nobody can enumerate that. }
+  { The frame rate cap. Three answers that name no number and a box to type any other, because the
+    useful values are not a list: a player with a 165 Hz screen wants 165 and nobody can enumerate
+    that. }
   FpsPage := CreateInputOptionPage(
     ScalingPage.ID,
     ExpandConstant('{cm:FpsPageCaption}'),
@@ -813,25 +816,29 @@ begin
     and a guessed height would put it between two of them. }
   FpsPage.CheckListBox.MinItemHeight := ScaleY(18);
 
-  { The first row names no number, and reading one off the screen here was built and then
+  { The first two rows name no number, and reading one off the screen here was built and then
     taken out again. A rate read at install time is written to a file and goes stale: the
     machine gains a second screen, the game is moved to a television, the player changes the
-    mode. The patch reads the rate every time the game starts, so the row that asks it to is
-    worth more than the row that guesses once. }
+    mode. The patch reads the rate every time the game starts, so the rows that ask it to are
+    worth more than a row that guesses once. The two differ in one key: the first leaves the
+    fraction automatic, so a heavy scene steps the cap down to a half or a third of the refresh
+    and back; the second pins the fraction at the whole rate, for the player who wants the cap
+    to stop deciding. Both are one row in the game's own menu. }
+  FpsPage.Add(ExpandConstant('{cm:FpsOptAuto}'));
   FpsPage.Add(ExpandConstant('{cm:FpsOptMatch}'));
   FpsPage.Add(ExpandConstant('{cm:FpsUnlimited}'));
   FpsPage.Add(ExpandConstant('{cm:FpsOwn}'));
   FpsPage.SelectedValueIndex := 0;
 
-  FpsPage.CheckListBox.Height := ScaleY(58);
+  FpsPage.CheckListBox.Height := ScaleY(76);
 
-  { On the third row and to the right of its label, so it reads as part of that option rather than as
-    a separate question. The offset clears the longest label in either language with room to spare;
-    the two are not measured against each other, so leave a gap when changing the text. }
+  { On the fourth row and to the right of its label, so it reads as part of that option rather than
+    as a separate question. The offset clears the longest label in either language with room to
+    spare; the two are not measured against each other, so leave a gap when changing the text. }
   FpsEdit := TNewEdit.Create(FpsPage);
   FpsEdit.Parent := FpsPage.Surface;
   FpsEdit.Left := FpsPage.CheckListBox.Left + ScaleX(145);
-  FpsEdit.Top := FpsPage.CheckListBox.Top + ScaleY(18) * 2 - ScaleY(2);
+  FpsEdit.Top := FpsPage.CheckListBox.Top + ScaleY(18) * 3 - ScaleY(2);
   FpsEdit.Width := ScaleX(56);
   FpsEdit.Text := '120';
 
@@ -1057,7 +1064,8 @@ begin
     { Following the screen is a key of its own, and the cap under it is left at no limit:
       that is what the player falls back to if they ever turn the following off. }
     0: Result := '0';
-    1: Result := '0';   { no limit }
+    1: Result := '0';
+    2: Result := '0';   { no limit }
   else
     begin
       Result := '';
@@ -1069,11 +1077,23 @@ begin
 end;
 
 { Whether the patch follows the screen rather than the number above. A function of its own
-  rather than the page read twice, so the two keys cannot come from different readings of the
-  same list. }
+  rather than the page read twice, so the keys cannot come from different readings of the same
+  list. }
 function ChosenMatchRefresh: String;
 begin
-  if FpsPage.SelectedValueIndex = 0 then
+  if FpsPage.SelectedValueIndex <= 1 then
+    Result := '1'
+  else
+    Result := '0';
+end;
+
+{ Which fraction of the screen's rate the cap sits at while it follows the screen: 0 lets the patch
+  step down and back as a scene needs, 1 pins the whole rate. The other two rows do not follow the
+  screen, so the fraction is idle there and is written as automatic, the value that is right if
+  the player later turns the following on from the game's own menu. }
+function ChosenRefreshDivisor: String;
+begin
+  if FpsPage.SelectedValueIndex = 1 then
     Result := '1'
   else
     Result := '0';
@@ -1737,6 +1757,8 @@ begin
       AddName('[framerate_fix] TargetFps', Failed);
     if not SetIniString('framerate_fix', 'MatchDisplayRefresh', ChosenMatchRefresh, Ini) then
       AddName('[framerate_fix] MatchDisplayRefresh', Failed);
+    if not SetIniString('framerate_fix', 'RefreshDivisor', ChosenRefreshDivisor, Ini) then
+      AddName('[framerate_fix] RefreshDivisor', Failed);
   end;
 
   if Failed <> '' then

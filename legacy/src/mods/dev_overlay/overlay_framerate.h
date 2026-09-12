@@ -4,9 +4,8 @@
  * question somebody arrives with, and it is a question that has cost real time. The frame limit
  * decides how fast frames are PRODUCED, and nothing in the shipped stack ties that to how fast
  * they are SHOWN, so a limit that does not match the screen's refresh rate leaves the display
- * repeating frames on an irregular pattern. Platforms, the camera and everything else in motion
- * go choppy while the frame counter reads perfectly steady, and it looks exactly like a fault in
- * the interpolation.
+ * repeating frames on an irregular pattern. Everything in motion judders slightly while the
+ * frame counter reads perfectly steady, and it looks like a fault in the interpolation.
  *
  * Measured: a limit of 100 on a 144 Hz screen leaves 44 refreshes a second repeating a frame, and
  * a limit of 60 on a 90 Hz Steam Deck OLED leaves 30. Both were mistaken for a fault in the patch

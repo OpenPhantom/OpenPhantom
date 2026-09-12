@@ -2,6 +2,7 @@
 #include "overlay_framerate.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -77,14 +78,14 @@ static void divisor_text(char *out, size_t size)
         --applied;
     }
     if (divisor == 0) {
-        (void)_snprintf(out, size - 1u, "auto");
+        text_format(out, size, "auto");
     } else if (refresh > 0 && applied != divisor) {
-        (void)_snprintf(out, size - 1u, "1/%d as 1/%d = %d", divisor, applied,
+        text_format(out, size, "1/%d as 1/%d = %d", divisor, applied,
                         (refresh + applied / 2) / applied);
     } else if (refresh > 0) {
-        (void)_snprintf(out, size - 1u, "1/%d = %d", divisor, (refresh + divisor / 2) / divisor);
+        text_format(out, size, "1/%d = %d", divisor, (refresh + divisor / 2) / divisor);
     } else {
-        (void)_snprintf(out, size - 1u, "1/%d", divisor);
+        text_format(out, size, "1/%d", divisor);
     }
     out[size - 1u] = '\0';
 }
@@ -107,11 +108,11 @@ static void value_text(uint32_t slot, char *out, size_t size)
         /* The setting still holds this number and framerate_fix still keeps it as the fallback,
          * but nothing is using it while the row above is on, and showing it invites somebody to
          * change it and watch nothing happen. */
-        (void)_snprintf(out, size - 1u, "n/a");
+        text_format(out, size, "n/a");
     } else if (limit <= 0) {
-        (void)_snprintf(out, size - 1u, "none");
+        text_format(out, size, "none");
     } else {
-        (void)_snprintf(out, size - 1u, "%d", limit);
+        text_format(out, size, "%d", limit);
     }
     out[size - 1u] = '\0';
 }
@@ -136,12 +137,12 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
         out->on   = match_enabled();
         refresh   = display_refresh_hz();
         if (refresh > 0) {
-            (void)_snprintf(out->label, sizeof out->label - 1u,
+            text_format(out->label, sizeof out->label,
                             "Match the screen, %d a second (recommended)", refresh);
         } else {
             /* Named rather than hidden: the row still writes the setting, and framerate_fix falls
              * back to the typed limit and says so in the log. */
-            (void)_snprintf(out->label, sizeof out->label - 1u,
+            text_format(out->label, sizeof out->label,
                             "Match the screen (it will not report a rate)");
         }
         break;
@@ -153,7 +154,7 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
          * following is not a setting. */
         out->kind      = OVERLAY_ROW_ACTION;
         out->available = match_enabled();
-        (void)_snprintf(out->label, sizeof out->label - 1u,
+        text_format(out->label, sizeof out->label,
                         "  Fraction of the screen's rate");
         divisor_text(out->value, sizeof out->value);
         break;
@@ -166,10 +167,10 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
          * refuses to start an edit on it, so there is no way to type into a number nothing
          * reads. */
         out->available = !match_enabled();
-        (void)_snprintf(out->label, sizeof out->label - 1u, "Frame rate limit");
+        text_format(out->label, sizeof out->label, "Frame rate limit");
         if (editing_text != NULL) {
             /* The trailing underscore is the caret every other typed row in the panel shows. */
-            (void)_snprintf(out->value, sizeof out->value - 1u, "%s_", editing_text);
+            text_format(out->value, sizeof out->value, "%s_", editing_text);
         } else {
             value_text(slot, out->value, sizeof out->value);
         }
@@ -179,26 +180,26 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
      * and a longer label is cut off rather than wrapped. The continuations are indented past the
      * line they finish, the same shape the free camera's how-to-fly lines use.
      *
-     * It names what goes wrong rather than only that something does. Somebody reading this row
-     * has come here because the game looks bad while the numbers look fine, and the last line is
-     * the half that tells them they are in the right place. */
+     * It names what goes wrong rather than only that something does: a mismatched cap shows as
+     * frames repeated on an uneven pattern, a slight judder while the counter reads steady, and
+     * the last line is the half that tells a reader they are in the right place. */
     case FRAMERATE_ROW_NOTE:
         out->kind = OVERLAY_ROW_INFO;
-        (void)_snprintf(out->label, sizeof out->label - 1u,
+        text_format(out->label, sizeof out->label,
                         "Only the screen's Hz or an even fraction of");
         break;
 
     case FRAMERATE_ROW_NOTE_MORE:
         out->kind = OVERLAY_ROW_INFO;
-        (void)_snprintf(out->label, sizeof out->label - 1u,
-                        "  it is smooth; any other limit makes movement");
+        text_format(out->label, sizeof out->label,
+                        "  it is smooth; any other limit repeats frames");
         break;
 
     case FRAMERATE_ROW_NOTE_LAST:
     default:
         out->kind = OVERLAY_ROW_INFO;
-        (void)_snprintf(out->label, sizeof out->label - 1u,
-                        "  choppy. Auto steps down when frames run long");
+        text_format(out->label, sizeof out->label,
+                        "  unevenly. Auto steps down when frames run long");
         break;
     }
 

@@ -227,9 +227,12 @@ absent.
 
 ### Testing status
 
-Unit tested, `legacy/unittests/music_volume.c`, which drives the two-deep rule exactly as the
-screen does: a drag then a switch, chosen silence then a switch, two switches in one visit, an
-ordinary detach that must not override the file, and a detach before any volume was set.
+Unit tested, `legacy/unittests/music_volume.c`, against `music_volume_latch.c`, the file the
+three hooks feed and read. It drives the rule as the screen does: a drag then a switch, chosen
+silence then a switch, two switches in one visit, an ordinary detach that must not override the
+file, a detach before any volume was set, a first call of zero, a negative zero, and a value that
+is not a number. The hooks themselves are not linked, since each calls a trampoline that only
+exists in a patched process.
 
 **Not yet seen to fire in the game.** On the machine it was written on, the provider change never
 reaches `bapMusicDetach`, so the fault is real in the code and latent there. The restore writes one

@@ -1,5 +1,6 @@
 /* music_volume.c: see music_volume.h for the fault and the call sequence that causes it. */
 #include "music_volume.h"
+#include "music_volume_latch.h"
 
 #include "common/detour.h"
 #include "common/host_image.h"
@@ -119,25 +120,17 @@ static struct {
     detour_t detach;
     detour_t set_volume;
 
-    /* Two deep, and the depth is the whole mechanism. The screen's own silencing call arrives
-     * between the player's last drag and the detach, so the value the player chose is the one
-     * BEFORE the current one whenever the current one is a zero standing in front of a detach. */
-    float    current;
-    float    previous;
-    bool     seen_any;
-
-    bool     restore_valid;
-    float    restore_value;
-    bool     logged_restore;
+    /* Two deep, and the depth is the whole mechanism; the rule is in music_volume_latch.c, where
+     * the unit test can reach it. */
+    music_volume_latch_t latch;
+    bool                 logged_restore;
 } music;
 
 static void __cdecl hook_set_volume(float volume)
 {
     music_set_volume_fn_t original = (music_set_volume_fn_t)music.set_volume.original;
 
-    music.previous = music.seen_any ? music.current : volume;
-    music.current  = volume;
-    music.seen_any = true;
+    music_volume_latch_set(&music.latch, volume);
 
     if (original != NULL) {
         original(volume);
@@ -148,14 +141,7 @@ static void __cdecl hook_detach(void)
 {
     music_detach_fn_t original = (music_detach_fn_t)music.detach.original;
 
-    /* A zero standing immediately in front of a detach is the screen silencing the music for a
-     * provider change, never the player, because a player who drags to silence has already put
-     * their own zero into `previous` on the call before this one. Either way `previous` is what
-     * they asked for, so this needs no rule about what zero means. */
-    if (music.seen_any && music.current == 0.0f) {
-        music.restore_value = music.previous;
-        music.restore_valid = true;
-    }
+    music_volume_latch_detach(&music.latch);
 
     if (original != NULL) {
         original();
@@ -167,26 +153,23 @@ static uint32_t __cdecl hook_attach(void)
     music_attach_fn_t     original = (music_attach_fn_t)music.attach.original;
     music_set_volume_fn_t set      = (music_set_volume_fn_t)music.set_volume.original;
     uint32_t              result   = 1u;
+    float                 value    = 0.0f;
 
     if (original != NULL) {
         result = original();
     }
     /* AFTER the original, deliberately. It ends by reading MVOL out of obi.ini and applying it,
      * and that is the write being corrected; putting the value back first would simply be
-     * overwritten a few instructions later. */
-    if (music.restore_valid) {
-        music.restore_valid = false;
-        if (set != NULL) {
-            set(music.restore_value);
-            music.current  = music.restore_value;
-            music.previous = music.restore_value;
-            if (!music.logged_restore) {
-                music.logged_restore = true;
-                log_info("the music volume (%.2f) was put back after a provider change; the "
-                         "re-attach had reloaded MVOL from obi.ini, which still held the value "
-                         "from before the slider was moved. Reported once.",
-                         (double)music.restore_value);
-            }
+     * overwritten a few instructions later. The setter is the engine's own, reached below this
+     * file's hook, so the latch is told separately. */
+    if (music_volume_latch_take_restore(&music.latch, &value) && set != NULL) {
+        set(value);
+        music_volume_latch_restored(&music.latch, value);
+        if (!music.logged_restore) {
+            music.logged_restore = true;
+            log_info("the music volume (%.2f) was put back after a provider change; the "
+                     "re-attach had reloaded MVOL from obi.ini, which still held the value "
+                     "from before the slider was moved. Reported once.", (double)value);
         }
     }
     return result;

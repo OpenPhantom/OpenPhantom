@@ -182,6 +182,7 @@ add_engine_fix(imuse_fix
     music_sites.c
     music_probe.c
     music_volume.c
+    music_volume_latch.c
     imuse_sites.c
     imuse_guard.c
 )

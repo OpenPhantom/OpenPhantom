@@ -36,9 +36,9 @@ add_unit_test(fov_math   variable_fov      variable_fov/fov_math.c)
 # comes back as a speed.
 add_unit_test(stick "")
 
-# The music volume latch. The detours cannot be linked without a patched process, so this covers
-# the two-deep rule that decides what a provider change puts back.
-add_unit_test(music_volume imuse_fix)
+# The music volume latch: the two-deep rule that decides what a provider change puts back, in the
+# file the hooks feed. The hooks themselves need a patched process and are not linked.
+add_unit_test(music_volume imuse_fix imuse_fix/music_volume_latch.c)
 add_unit_test(sound_owner sound_lifetime_fix sound_lifetime_fix/sound_lifetime_fix.c)
 add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
 

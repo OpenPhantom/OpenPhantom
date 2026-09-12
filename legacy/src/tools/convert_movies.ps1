@@ -5,13 +5,13 @@
 .DESCRIPTION
     A tool, not content: this project ships no game assets, converted or otherwise. Run this
     against your own legally owned copy of the game, and it writes .mp4 files next to nothing you
-    did not already have a license to.
+    did not already have a licence to.
 
-    Lives in tools\ - every standalone script this project ships (not a mod DLL, not game content)
-    lives there, alongside WMAIN.EXE in an installed copy, so there is one place to look regardless
-    of which one you're after.
+    Lives in tools\, where every standalone script this project ships (not a mod DLL, not game
+    content) lives, alongside WMAIN.EXE in an installed copy, so there is one place to look
+    regardless of which one you're after.
 
-    Needs FFmpeg - its native Bink decoder (libavcodec/bink.c) is what makes reading .bik files
+    Needs FFmpeg: its native Bink decoder (libavcodec/bink.c) is what reads .bik files
     possible here without RAD's own SDK. Not a manual install: if no FFmpeg can be found at all,
     this downloads a pinned portable copy (see Resolve-FFmpegExecutable below) and caches it in
     %LOCALAPPDATA%\OpenPhantom\ffmpeg, so it only happens once.
@@ -27,22 +27,22 @@
 
 .PARAMETER GameDirectory
     The folder WMAIN.EXE lives in. Movies are read from <GameDirectory>\GAMEDATA\MOVIE\*.BIK. If
-    omitted, the script asks for it interactively - this is also what happens if you launch
+    omitted, the script asks for it interactively; this is also what happens if you launch
     "Convert Movies.bat" (next to this script) by double-clicking it, or by dragging your game
     folder onto it. Required with -Quiet, which never asks for anything.
 
 .PARAMETER Interactive
     Always passed by "Convert Movies.bat". Prompts for anything not already given on the command
-    line - the game folder (if -GameDirectory was not given) and the output video size (if
-    -TargetHeight was not given) - instead of silently falling back to defaults for both. Implied
+    line, the game folder (if -GameDirectory was not given) and the output video size (if
+    -TargetHeight was not given), instead of silently falling back to defaults for both. Implied
     automatically whenever -GameDirectory is omitted too, so this only needs to be passed
-    explicitly to get prompted while ALSO passing -GameDirectory (which is exactly what happens
+    explicitly to get prompted while ALSO passing -GameDirectory (which is what happens
     when a folder is dragged onto "Convert Movies.bat").
 
 .PARAMETER Quiet
     Non-interactive mode, for an installer or any other program driving this. It never prompts, for
     anything, under any circumstance, prints no banner, and writes one machine-readable line per
-    movie to stdout and nothing else there. It requires -GameDirectory, because the one thing it
+    movie to stdout, with nothing else there. It requires -GameDirectory, because the one thing it
     must not do is stop and wait for somebody. It cannot be combined with -Interactive: those two
     ask for opposite things, so passing both is an argument error rather than a guess about which
     one was meant.
@@ -51,12 +51,12 @@
     Where the converted files go. Defaults to <GameDirectory>\movies_hd, matching fmv_player's own
     default MovieDirectory. An install made before that name was corrected may still carry
     MovieDirectory=movies\_hd in its engine_fixes.ini, and it keeps working, because the DLL reads
-    the directory out of the ini rather than assuming this one - point -OutputDirectory at whatever
+    the directory out of the ini rather than assuming this one; point -OutputDirectory at whatever
     your ini actually says, or correct the ini.
 
 .PARAMETER TargetHeight
     Scale the picture to this many lines, with the width following the source's own shape by
-    itself. Defaults to 0, which keeps the source resolution, and that is the honest default: the
+    itself. Defaults to 0, which keeps the source resolution, the honest default: the
     source is 640x405, Lanczos cannot put back detail that was never encoded, and most of the extra
     bitrate goes into rendering 1999 compression artefacts larger and sharper. The overlay scales
     whatever it is handed to fill the window either way, so upscaling here mostly buys file size.
@@ -69,7 +69,7 @@
 .PARAMETER TargetFps
     Force this frame rate. Defaults to 0, which keeps the source's own rate. Worth being honest
     about what a higher number does and does not do: the source is ~15 fps, and re-encoding at 60
-    without motion interpolation does not invent motion - each source frame is simply repeated four
+    without motion interpolation does not invent motion; each source frame is repeated four
     times, the same picture shown more often rather than a smoother one. What it can buy is
     playback cadence on a display whose refresh rate is not a clean multiple of the source rate,
     and that is the only reason to set it.
@@ -106,7 +106,7 @@
       2  bad arguments, or an environment this cannot run in at all: no FFmpeg, no game folder, no
          GAMEDATA\MOVIE under it, or an output directory that cannot be written to
 
-    Under -Quiet, stdout carries one line per movie and then one summary line, and nothing else:
+    Under -Quiet, stdout carries one line per movie and then one summary line, nothing more:
       OK <source file>
       SKIP <source file>
       FAIL <source file> <code>   ffmpeg's exit code, or -1 when ffmpeg reported success but the
@@ -134,9 +134,9 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$GameDirectory = "",
 
-    # Always passed by "Convert Movies.bat", on both its double-click and drag-and-drop paths - a
+    # Always passed by "Convert Movies.bat", on both its double-click and drag-and-drop paths; a
     # dragged folder already answers the GameDirectory prompt below, but that alone must not skip
-    # the size prompt too, which is why this is its own separate switch rather than reusing
+    # the size prompt too, so this is its own separate switch rather than reusing
     # GameDirectory's blankness as the only interactive signal.
     [switch]$Interactive,
 
@@ -166,9 +166,9 @@ $ErrorActionPreference = "Stop"
 
 # The pinned FFmpeg build. A rolling "latest" URL cannot be hash checked, and it also means two
 # people running this a month apart are not running the same program, so "it failed for me" stops
-# being a reproducible statement. The pin is what makes a bug report reproducible: the FFmpeg
+# being a reproducible statement. The pin is what a bug report can be reproduced against: the FFmpeg
 # version, its bytes and this script are then all known quantities. A hash that does not match
-# refuses the archive - it is deleted, not extracted, because a download that is not the build we
+# refuses the archive; it is deleted, not extracted, because a download that is not the build we
 # asked for is either damaged or not ours, and neither is something to unpack and execute.
 # FFmpeg publishes no official Windows binaries, so this comes from gyan.dev, one of the two build
 # sources FFmpeg's own site names for Windows (https://ffmpeg.org/download.html#build-windows) -
@@ -211,7 +211,7 @@ function Write-Problem {
     }
 }
 
-# Fatal messages only - the caller does the exit, so the code is visible at the site that decided
+# Fatal messages only; the caller does the exit, so the code is visible at the site that decided
 # it. Write-Error is deliberately not used: $ErrorActionPreference = "Stop" makes it throw, which
 # terminates the script before the following line runs and shows the user a raw PowerShell error
 # record instead of the sentence written here.
@@ -234,7 +234,7 @@ function Write-Fatal {
 # second one is why a folder beside the script is not searched at all.
 #
 # The first is ordinary: this script sits in the game folder, which may need elevation to write to,
-# and a cache there fails AFTER the download rather than before it - the whole archive fetched,
+# and a cache there fails AFTER the download rather than before it: the whole archive fetched,
 # extraction refused, the download deleted, and the same thing again on every run.
 #
 # The second is that the game folder is deliberately made writable by ordinary users, because the
@@ -297,7 +297,7 @@ function Resolve-FFmpegExecutable {
     }
 
     Write-Note "FFmpeg was not found, so this will download a portable copy (about 106 MB, once"
-    Write-Note "only - it is cached in '$cacheRoot' for every run after this) from gyan.dev, one of"
+    Write-Note "only; it is cached in '$cacheRoot' for every run after this) from gyan.dev, one of"
     Write-Note "the Windows build sources FFmpeg's own site recommends."
     Write-Note ""
 
@@ -317,7 +317,7 @@ function Resolve-FFmpegExecutable {
     $originalProgressPreference = $ProgressPreference
     try {
         # The default progress bar makes Invoke-WebRequest dramatically slower on some connections
-        # in Windows PowerShell 5.1 - this is a well-known workaround, not a cosmetic choice.
+        # in Windows PowerShell 5.1; this is a well-known workaround, not a cosmetic choice.
         $ProgressPreference = "SilentlyContinue"
         Invoke-WebRequest -Uri $FFMPEG_URL -OutFile $zipPath -UseBasicParsing
     } catch {
@@ -332,7 +332,7 @@ function Resolve-FFmpegExecutable {
     try {
         $actualSize = (Get-Item -LiteralPath $zipPath).Length
         if ($actualSize -ne $FFMPEG_SIZE_BYTES) {
-            Write-Problem "The download is $actualSize bytes, expected $FFMPEG_SIZE_BYTES - it is"
+            Write-Problem "The download is $actualSize bytes, expected $FFMPEG_SIZE_BYTES, so it is"
             Write-Problem "incomplete or it is not the build this script pins. Not extracting it."
             return $null
         }
@@ -405,7 +405,7 @@ if ($interactive) {
             continue
         }
         if (-not (Test-Path -LiteralPath (Join-Path $candidate "WMAIN.EXE") -PathType Leaf)) {
-            Write-Problem "WMAIN.EXE was not found in '$candidate' - check the path and try again."
+            Write-Problem "WMAIN.EXE was not found in '$candidate'. Check the path and try again."
             continue
         }
         $GameDirectory = $candidate
@@ -420,7 +420,7 @@ if ($interactive) {
 if ($interactive -and -not $PSBoundParameters.ContainsKey('TargetHeight')) {
     Write-Note "Choose the output video size. The width follows the source's own shape in every"
     Write-Note "case, so nothing here distorts or crops the picture:"
-    Write-Note "  1) Keep the original size - recommended; this source has nowhere near 1080p of"
+    Write-Note "  1) Keep the original size (recommended; this source has nowhere near 1080p of"
     Write-Note "     real detail, so upscaling mostly enlarges its 1999 compression artefacts"
     Write-Note "  2) 1080 lines tall (1080p)"
     Write-Note "  3) 1440 lines tall (1440p)"
@@ -448,7 +448,7 @@ if ($interactive -and -not $PSBoundParameters.ContainsKey('TargetHeight')) {
         }
         default {
             $TargetHeight = 0
-            Write-Problem "'$sizeChoice' is not one of 1-5 - keeping the original size."
+            Write-Problem "'$sizeChoice' is not one of 1-5, so the original size is kept."
         }
     }
     Write-Note ""
@@ -459,7 +459,7 @@ if ($interactive -and -not $PSBoundParameters.ContainsKey('TargetHeight')) {
 # asked for, so it is fixed here rather than letting x264 reject every single file.
 if ($TargetHeight -gt 0 -and ($TargetHeight % 2) -ne 0) {
     $evenHeight = [Math]::Max(2, $TargetHeight - 1)
-    Write-Note "Height $TargetHeight is odd, which H.264 4:2:0 cannot encode - using $evenHeight."
+    Write-Note "Height $TargetHeight is odd, which H.264 4:2:0 cannot encode, so $evenHeight is used."
     $TargetHeight = $evenHeight
 }
 
@@ -470,7 +470,7 @@ if (-not (Test-Path -LiteralPath $GameDirectory -PathType Container)) {
 
 $movieSource = Join-Path $GameDirectory "GAMEDATA\MOVIE"
 if (-not (Test-Path -LiteralPath $movieSource -PathType Container)) {
-    Write-Fatal "No GAMEDATA\MOVIE folder under '$GameDirectory' - is this the game's own directory (the one WMAIN.EXE is in)?"
+    Write-Fatal "No GAMEDATA\MOVIE folder under '$GameDirectory'. Is this the game's own directory (the one WMAIN.EXE is in)?"
     exit 2
 }
 
@@ -490,7 +490,7 @@ try {
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 } catch {
     Write-Fatal "Could not create the output directory '$OutputDirectory': $($_.Exception.Message)"
-    Write-Fatal "This is usually a permissions problem - a game installed under Program Files needs"
+    Write-Fatal "This is usually a permissions problem: a game installed under Program Files needs"
     Write-Fatal "an elevated window, or pass -OutputDirectory pointing somewhere writable."
     exit 2
 }
@@ -543,15 +543,15 @@ if ($Quiet) {
 #
 # Ten of the eleven have an odd height, so at the source's own size x264 refuses ten of them and
 # only the logo comes through. Asking for any target height hid it, because scale=-2 makes both
-# sides even, which is exactly why this was reported as "conversion fails at the original size".
+# sides even, and that was reported as "conversion fails at the original size".
 #
 # crop rather than scale or pad: it drops at most one row and one column and leaves every remaining
 # pixel exactly as it was decoded, where scaling 405 lines to 404 would resample the whole frame,
 # and padding to 406 would bake in the black row this chain avoids everywhere else. The aspect
 # ratio moves by a quarter of a percent, which is under a pixel across the width of any window.
 # The expressions carry no comma on purpose, because the filters are joined with one.
-# ONE MOVIE IS A DIFFERENT SHAPE FROM THE OTHER TEN, and asking for a tall picture is what makes
-# that matter. Read out of the Bink headers of a retail pressing:
+# One movie is a different shape from the other ten, and asking for a tall picture is where that
+# matters. Read out of the Bink headers of a retail pressing:
 #
 #     LOGO.BIK   640x272   2.35:1     ARENA / SCENE1..8   640x405     BIGAPE   640x469
 #
@@ -562,7 +562,7 @@ if ($Quiet) {
 #
 # So the height is capped per movie, at whatever keeps the derived width inside the limit. Only the
 # logo is ever capped, and only when a large size was asked for. Capping the height rather than
-# adding a width term to the filter keeps the expressions comma-free, which is what lets them be
+# adding a width term to the filter keeps the expressions comma-free, so they can be
 # joined with a comma below.
 $MaxEncodedWidth = 3840
 
@@ -590,7 +590,7 @@ function Get-BinkFrameSize {
 }
 
 # The height to actually encode this one at: the height asked for, unless that would make it too
-# wide. A source whose header cannot be read keeps the requested height, which is what happened
+# wide. A source whose header cannot be read keeps the requested height, the behaviour
 # before this existed.
 function Get-EncodeHeight {
     param([string] $Path, [int] $Requested)
@@ -643,7 +643,7 @@ foreach ($bik in $bikFiles) {
 
     # Encoded under a working name and renamed only once ffmpeg has said it finished. A run stopped
     # with Ctrl-C part way through a file leaves a truncated mp4 behind, and +faststart guarantees
-    # such a file is unplayable because the index it moves to the front is written last - under the
+    # such a file is unplayable because the index it moves to the front is written last; under the
     # final name, the skip check above would then skip that unplayable file forever. The rename is
     # the only thing that ever produces the final name, so an interrupted run can leave rubbish but
     # never rubbish that looks finished.

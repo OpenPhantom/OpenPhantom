@@ -43,9 +43,9 @@ architecture/    How the original engine is put together, written down.
 installer/       Packaging and setup.
 ```
 
-`legacy/` and `installer/` have something in them. The rest are placeholders. Know that before
-you plan a large contribution: if you want to start one of them, open an issue first
-so the shape can be agreed before anybody writes a thousand lines.
+`legacy/` and `installer/` have something in them, and `architecture/` has one note. The rest are
+placeholders. Know that before you plan a large contribution: if you want to start one of them,
+open an issue first so the shape can be agreed before anybody writes a thousand lines.
 
 Both components that exist are laid out the same way: an entry point and the documents at the top,
 sources under `src/`, and an output directory that git keeps but never fills.

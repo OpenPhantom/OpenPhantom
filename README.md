@@ -13,7 +13,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 <img width="1920" height="400" alt="Star Wars Episode I: The Phantom Menace running at ultrawide resolution with OpenPhantom." src="https://github.com/user-attachments/assets/ad9cd6fb-8bcd-4b25-8d0a-65e221888bfc" />
 
-*Ultra-wide support with OpenPhantom.*
+*Ultrawide support with OpenPhantom.*
 
 <img width="1920" height="1080" alt="Star Wars Episode I: The Phantom Menace running in 4K with expanded draw distance using OpenPhantom" src="https://github.com/user-attachments/assets/8ffa0c2f-d9a4-439c-a880-6eb123f29090" />
 
@@ -21,7 +21,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 **Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
 
-## What's Included  
+## What's Included
 
 | | |
 |---|---|
@@ -29,7 +29,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 | [`legacy/`](legacy/) | **Working**  Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
-| `architecture/` | How the original engine is put together, written down. Not started |
+| `architecture/` | How the original engine is put together, written down. One note so far, on which toolchain built the retail executable and which engine family it belongs to |
 
 ## Version numbers
 
@@ -123,14 +123,11 @@ none of it.
 MIT. The source here is free to use, modify and distribute under those terms, provided the licence
 notice travels with it. See [LICENSE](LICENSE).
 
-The licence covers this source code only, and not the third-party binaries the installer carries
-in `installer/dist/`, which are each under their own terms and include GPL and proprietary
-components. See [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md), which also
-records what a release has to ship alongside the installer to satisfy them.
-
-It grants nothing regarding the original game, its
-assets, or anything else its rights holders own. Release archives may also contain third party
-components under their own licences, which are named in the release notes.
+The licence covers this source code only. It grants nothing regarding the original game, its
+assets, or anything else its rights holders own, and it does not cover the third-party binaries the
+installer carries in `installer/dist/`, which are each under their own terms and include GPL and
+proprietary components. [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md) names
+them and records what a release has to ship alongside the installer to satisfy them.
 
 ## Contact
 

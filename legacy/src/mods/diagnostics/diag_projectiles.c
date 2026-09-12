@@ -15,9 +15,10 @@
  * that spikes at the moment a droid dies on a lift platform, rather than at the moment it is
  * created or fought, points straight at whatever the death handler feeds into this same list.
  *
- * No detour, no signature: DAT_00872fb8 is a fixed global this build's own FUN_004524b9 reads as a
- * literal absolute operand, not a relocatable target, and this is a plain periodic read, nothing
- * hooked.
+ * No detour: this is a plain periodic read, nothing hooked. The head cell is not written down
+ * either; it is read out of the operand of the one function that tests the list head and then
+ * loads it, matched by the signature below, because the globals move between the three shipped
+ * builds and a literal would read a different cell on two of them.
  *
  * ============================== What this census established, and what it refuted ==============
  *

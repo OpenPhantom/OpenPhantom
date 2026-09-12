@@ -40,8 +40,9 @@
 #define CHARACTER_POOL_CAPACITY_MAX     4096u
 
 /* Anything slower than this in world units per simulation step reads as standing still. The engine
- * holds a character's previous position itself, so a stationary one gives exactly zero and this
- * only has to survive rounding rather than pick a threshold out of the air. */
+ * holds a character's previous position itself and copies it forward before writing the new one,
+ * so a stationary one gives exactly zero and this only has to survive rounding rather than pick a
+ * threshold out of the air. */
 #define CHARACTER_MOTION_EPSILON 0.001f
 
 typedef enum character_motion {
@@ -78,12 +79,14 @@ const char        *character_scan_motion_text(character_motion_t motion);
 
 /* Remembering a character's height between reports.
  *
- * The engine's own previous position field cannot answer "did this character move", because both
- * it and the current position are read at the same instant at frame end, by which point the
- * simulation has already copied one into the other. Measured in the game, that difference was
- * exactly zero on every line of a whole session, including a character that visibly descended
- * nearly a unit during it. The height has to be remembered here and differenced against the next
- * report instead.
+ * The engine's own previous position field answers "did this character move on the step just
+ * taken" and nothing wider: the simulation copies the current position into it before writing
+ * the new one, so the pair differs exactly on a step the character moved. A report every sixty
+ * frames against thirty two steps a second almost never lands on such a step, and a whole
+ * measured session had that difference at zero on every line while a character visibly descended
+ * nearly a unit. (An earlier version of this comment read that as the field being structurally
+ * always zero, which the disassembly disproved.) The height has to be remembered here and
+ * differenced against the next report instead.
  *
  * The table is keyed by the record's own address, which is stable while a character is alive
  * because the pool never moves a live slot. A record of 0 marks a free entry. */

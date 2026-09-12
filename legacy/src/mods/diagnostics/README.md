@@ -22,7 +22,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Enabled` | `0` | the master switch |
 | `Audio` | `0` | 1 play/stop/volume/zones, 2 plus the channel allocation |
 | `Music` | `0` | 1 state/sequence/volume, with the muscript symbol names |
-| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change, 3 plus the mover call-site census and any mover about to take an oversized step, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
+| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change and any mover about to take an oversized step, 3 plus the mover call-site census, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
 | `Fsm` | `0` | 1 AI mode changes, 2 plus **every executed opcode** |
 | `Level` | `0` | 1 level loading and the cutscene lock |
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |
@@ -67,12 +67,16 @@ irregular values with pauses in between mean something is displacing it, a smoot
 means it is falling.
 
 `step` sits beside it and is a different measurement: the engine's own current position against its
-own previous one. **Do not read `step` as whether a character is sinking.** It was the first thing
-this observer reported and it is always zero, because both values are read at frame end once the
-simulation has already copied one into the other. A whole measured session had `step` at zero on
-every line while a character descended nearly a unit through the floor during it. It is kept only
-because it separates a character the simulation is moving from one being written to from outside,
-and `since` is the column that answers the question.
+own previous one. **Do not read `step` as whether a character is sinking.** It is a genuine one
+step delta: the simulation copies the current position into the previous field and only then
+writes the new one, so the two differ exactly on a step the character moved. It reads zero almost
+always for a different reason: this reports once every sixty frames while the simulation runs
+thirty two steps a second, so a character that moves on one step in thirty is almost never caught
+mid step. A whole measured session had `step` at zero on every line while a character descended
+nearly a unit through the floor during it, and an earlier version of this paragraph took that to
+mean the field was structurally always zero, which the disassembly disproved. It is kept because
+it separates a character the simulation is moving from one being written to from outside, and
+`since` is the column that answers the question.
 
 The pool's slot array is walked directly rather than through the engine's own iterator. That
 iterator keeps its cursor inside the list header and advances it on every call, so an observer
@@ -166,7 +170,7 @@ brakes:
 
 ## Names instead of numbers
 
-86 music states and 82 music sequences (from IMUSE.DLL's muscript tables), 60 FSM opcodes (the
+86 music states and 80 music sequences (from IMUSE.DLL's muscript tables), 71 FSM opcodes (the
 editor's own names), the 14 player modes, the 16 enemy reaction states, the mover types and phases,
 and the `SNDF_*` bits. The **number is always printed alongside**, so a missing name can never be
 mistaken for a different value.
@@ -236,7 +240,7 @@ from that. The other areas are still offline only.
 
 ## A mover about to take an oversized step
 
-At `Trigger=3` and above, the integrator observer reports any mover whose next step exceeds a
+At `Trigger=2` and above, the integrator observer reports any mover whose next step exceeds a
 quarter of a second, naming the mover, its type, the step, the clock and the pose. An ordinary step
 is one frame.
 

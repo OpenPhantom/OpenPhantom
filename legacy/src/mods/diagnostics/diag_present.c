@@ -160,10 +160,12 @@ _Static_assert(sizeof SIG_DEVICE_BACKEND == sizeof MSK_DEVICE_BACKEND,
  * same cross build behaviour as the backend anchor and the reason the relative call operand is
  * decoded rather than ignored: a candidate whose call target falls outside the image is rejected.
  *
- * The call displacement is a wildcard, so this anchor survives the redirect installed further
- * down. The observer rewrites exactly those four bytes and the pattern does not depend on them,
- * so a second generation of this DLL in the same process still resolves the site instead of
- * switching itself off with a "did not resolve" warning. */
+ * The call displacement is a wildcard, so the pattern itself still matches after the redirect
+ * installed further down has rewritten those four bytes. Resolving is a different matter: the
+ * decoded call target is required to lie inside the image, and once redirected it points into
+ * this DLL, so a second generation of this DLL in the same process does NOT resolve the site and
+ * switches itself off with a "did not resolve" warning. That is the wanted outcome, since two
+ * observers on one call would each count the other's frames. */
 static const uint8_t SIG_FLIP_GATE[] = {
     0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,        /* cmp [stdDisplay_bWantBackBuffer], 0 */
     0x74, 0x07,                                      /* je  past the flip                   */

@@ -35,7 +35,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Projectiles` | `0` | 1 counts the engine's own ballistic-physics list every 30 frames, and past 10 live entries also names the first few by position, so a pileup reads as stacked or spread at a glance |
 | `CameraOwner` | `0` | 1 reports every take and release of the engine's scripted-camera flag with the caller that asked and a running depth. Seven places set that flag and six clear it, so a take with no release is possible, and it strands the camera on a forced region until the level reloads. This is the census that found the fault `camera_handback_fix` repairs. The callers are found by scanning the code section for direct calls to the two functions at install, and the retail names are attached only where the scan found a call at the address they were written for, so a different build still names every caller as found or not found. The two run together now: they share three functions and each declares them as detour targets, and the one of the three too short to anchor on once detoured is found behind its neighbour |
 | `Footsteps` | `0` | 1 reports where the wet footprints come from. The engine stamps a body as wet on every footstep tick whose floor polygon carries material 12, 13 or 14, and lays wet prints on any other material for eight seconds after the stamp; this reports each stamp with the polygon, its surface word and the position, once when it begins and once a second while it lasts, and the start of each print spell with the material and the age of the stamp. A wet print on ground that should be dry is then traceable to the polygon that stamped it, or to a floor pointer that was not a polygon for a tick |
-| `Characters` | `0` | 1 names the characters within `CharactersRadius` of the player every 60 frames, with position, state, AI mode and the height each gained or lost since the previous report; 2 reports every live character in the level and ignores the radius |
+| `Characters` | `0` | 1 names the characters within `CharactersRadius` of the player every 60 frames, with position, state, AI mode, the animation wanted and the one playing, the clip on each body layer, health, and the height each gained or lost since the previous report; 2 reports every live character in the level and ignores the radius |
 | `CharactersRadius` | `12` | world units around the player that `Characters=1` reports. Ignored at level 2, and a value below 1 falls back to the default |
 | `CharacterWatch` | empty | a character name from `Characters` above. Places a hardware write breakpoint on that character's height and logs the address of every instruction that writes it. Needs `Characters` on |
 | `CharacterWatchVelocity` | `0` | which field the watch is armed on: 0 the character's position height, 1 its velocity height. Position names what moved it, velocity names what decided it should move |
@@ -99,6 +99,15 @@ nearly a unit through the floor during it, and an earlier version of this paragr
 mean the field was structurally always zero, which the disassembly disproved. It is kept because
 it separates a character the simulation is moving from one being written to from outside, and
 `since` is the column that answers the question.
+
+`anim` is the pair the script interpreter keeps for the primary animation, the id its Animation
+node last asked for and the id it believes is playing, wanted first. A character stuck in a pose
+after their line reads as the same non-zero pair on every report while the mode column says the
+script has moved on; a new row in `dialogue_anim_fix` is written from that reading. `body` is the
+clip on each of the body's two layers, base then overlay, put there by
+whoever put it, which separates a clip the script asked for from one the engine played itself;
+`hp` is the health. The jail prisoner's death read `ai=4 anim=5/5 body=5 hp=-7` on one line,
+which is how a hold that stood him back up was caught.
 
 The pool's slot array is walked directly rather than through the engine's own iterator. That
 iterator keeps its cursor inside the list header and advances it on every call, so an observer

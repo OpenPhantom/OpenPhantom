@@ -1,6 +1,11 @@
 /* diag_characters.c: name the characters standing near the player, and say which way each one is
  * moving vertically.
  *
+ * SIZE NOTE: a few lines over the 600 mark. The census, the pool walk, the write watch it arms
+ * and the player phase hook that paces it all read one record layout, and the account of how
+ * that layout was confirmed and which earlier readings it refuted is most of the file; a half
+ * lifted out would carry the layout with it.
+ *
  * What this is for. A field report names what a character looked like, not what the engine calls
  * it, and the two are not easy to connect while playing. This walks the engine's own character
  * pool every so often and reports the ones within a radius of the player by name and position, so
@@ -37,6 +42,10 @@
  *   +0x20  state            local_8[8], set to 1, or to 0x10 for a record with flag 0x2000.
  *   +0x34  body             local_8[0xd], the object created by FUN_0041223e a few lines earlier.
  *   +0x7C  AI mode          local_8[0x1f], taken from the placement's own first dword.
+ *   +0x38  health           the spawn path's local_8[0xe], from the placement's own record
+ *   +0x1BC animation playing the id the script interpreter believes the primary animation is
+ *   +0x1C0 animation wanted  the id its Animation node last asked for; the pair dialogue_anim_fix
+ *                           acts on, reported so a stuck pose can be read off the census
  *
  * The body is the same structure the player's own +0x0C points at: both carry an rdThing at +0x9C,
  * the field that ties the two independent readings of this layout together.
@@ -44,6 +53,8 @@
  *   +0x18  position           float[3], world x/y/z
  *   +0x54  previous position  float[3], the same at the end of the previous simulation step
  *   +0xA0  owner              back to the character record, written by the spawn path
+ *   +0xE8  base clip          the clip last put on the body's base layer, by whoever put it
+ *   +0xF4  overlay clip       the same for the overlay layer, where hit reactions play
  *
  * That last field is not needed to report anything. It is read anyway and compared against the
  * record the walk arrived from, because it is a free check that the slot really is a character and
@@ -171,6 +182,9 @@ static signature_t sites[SITE_COUNT] = {
 #define CHARACTER_STATE_OFFSET   0x20u
 #define CHARACTER_BODY_OFFSET    0x34u
 #define CHARACTER_AI_MODE_OFFSET 0x7Cu
+#define CHARACTER_HEALTH_OFFSET  0x38u
+#define CHARACTER_ANIM_PLAYING_OFFSET 0x1BCu
+#define CHARACTER_ANIM_WANTED_OFFSET  0x1C0u
 /* The character's OWN position, and the authoritative one. FUN_004333e1 runs every simulation step
  * and copies it into the body at +0x18, so the body's position is a courier's copy that is always
  * one propagation behind whatever actually moved the character. A watch belongs here, not there. */
@@ -194,6 +208,8 @@ static signature_t sites[SITE_COUNT] = {
 #define OBJECT_POSITION_OFFSET          0x18u
 #define OBJECT_PREVIOUS_POSITION_OFFSET 0x54u
 #define OBJECT_OWNER_OFFSET             0xA0u
+#define OBJECT_BASE_CLIP_OFFSET         0xE8u
+#define OBJECT_OVERLAY_CLIP_OFFSET      0xF4u
 
 #define PLAYER_OBJECT_OFFSET 0x0Cu
 
@@ -274,6 +290,11 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     int32_t  state = 0;
     int32_t  ai_mode = 0;
     int32_t  move_mode = 0;
+    int32_t  anim_playing = 0;
+    int32_t  anim_wanted = 0;
+    int32_t  base_clip = 0;
+    int32_t  overlay_clip = 0;
+    int32_t  health = 0;
     float    position[3];
     float    previous[3];
     float    velocity[3] = { 0.0f, 0.0f, 0.0f };
@@ -327,6 +348,15 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     (void)memory_try_read(record + CHARACTER_MOVE_MODE_OFFSET, &move_mode, sizeof(move_mode));
     (void)memory_try_read((uintptr_t)body + OBJECT_OWNER_OFFSET, &owner, sizeof(owner));
     (void)memory_try_read(record + CHARACTER_VELOCITY_OFFSET, velocity, sizeof(velocity));
+    (void)memory_try_read(record + CHARACTER_ANIM_PLAYING_OFFSET, &anim_playing,
+                          sizeof(anim_playing));
+    (void)memory_try_read(record + CHARACTER_ANIM_WANTED_OFFSET, &anim_wanted,
+                          sizeof(anim_wanted));
+    (void)memory_try_read(record + CHARACTER_HEALTH_OFFSET, &health, sizeof(health));
+    (void)memory_try_read((uintptr_t)body + OBJECT_BASE_CLIP_OFFSET, &base_clip,
+                          sizeof(base_clip));
+    (void)memory_try_read((uintptr_t)body + OBJECT_OVERLAY_CLIP_OFFSET, &overlay_clip,
+                          sizeof(overlay_clip));
 
 
     /* `step` is a genuine one step delta, not a broken one. FUN_004333e1 copies the body's current
@@ -343,22 +373,28 @@ static bool report_character(uintptr_t record, const float player_position[3], b
 
     if (known) {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
-                       "since=%+.3f %s  v=(%.2f, %.2f, %.2f) mode=%d%s%s",
+                       "since=%+.3f %s  v=(%.2f, %.2f, %.2f) mode=%d anim=%d/%d body=%d/%d "
+                       "hp=%d%s%s",
                        name, (double)position[0], (double)position[1], (double)position[2],
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical, (double)since,
                        character_scan_motion_text(character_scan_classify(since)),
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
-                       (int)move_mode, (move_mode & 1) ? " not collision tested" : "",
+                       (int)move_mode, (int)anim_wanted, (int)anim_playing, (int)base_clip,
+                       (int)overlay_clip, (int)health,
+                       (move_mode & 1) ? " not collision tested" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     } else {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
-                       "first sighting  v=(%.2f, %.2f, %.2f) mode=%d%s%s",
+                       "first sighting  v=(%.2f, %.2f, %.2f) mode=%d anim=%d/%d body=%d/%d "
+                       "hp=%d%s%s",
                        name, (double)position[0], (double)position[1], (double)position[2],
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical,
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
-                       (int)move_mode, (move_mode & 1) ? " not collision tested" : "",
+                       (int)move_mode, (int)anim_wanted, (int)anim_playing, (int)base_clip,
+                       (int)overlay_clip, (int)health,
+                       (move_mode & 1) ? " not collision tested" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     }
     /* Arming on the Z rather than the whole position: the field this bug moves is the only one

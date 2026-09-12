@@ -124,10 +124,10 @@ outcome and so is talking somebody else out of one.
 
 * Reproduce an open issue and add what you find. A confirmed report with a log attached is worth
   more than it sounds.
-* Take one of the fixes in `legacy/` that is marked as not yet tested in the game and test it.
-  Each feature README says what to look for. This is the single most useful thing right now,
-  because almost everything there is verified offline and only three fixes have been confirmed in
-  actual play.
+* Take one of the fixes in `legacy/` whose README marks it as not yet tested in the game and test
+  it, or retest one that is marked accepted. Each feature README says what to look for. This is
+  the single most useful thing right now, because everything there is verified offline first, and
+  a README's in-game claim rests on the one or two machines it was played on.
 * Improve a test. Most of the arithmetic is covered; most of the failure paths are not.
 * Documentation. If something took you an hour to work out from the source, that hour is worth
   writing down for the next person.

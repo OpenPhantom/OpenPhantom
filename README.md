@@ -41,8 +41,8 @@ The patch and the installer carry **two numbers**, and they always did apart fro
 | the installer that carries it | `1.4.x` | `i1.4`, `i1.4.1`, ... |
 
 Both last digits move together on a release. The DLLs carry the **patch's** number, so a file's
-properties and the first line of `engine_fixes.log` read `0.4.2` while the installer that delivered
-them reads `1.4.2`. Two numbers on one machine is the cost of having two lines.
+properties and the first line of `engine_fixes.log` read `0.4.4` while the installer that delivered
+them reads `1.4.4`. Two numbers on one machine is the cost of having two lines.
 
 **One release was made with the two merged into a single number**, published as `v1.5.0` and
 `i1.5.0`. That has been undone and the two lines are separate again, so on GitHub that release is
@@ -85,8 +85,8 @@ having, and you do not need to know the engine to start.
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has how we work: how to report something usefully, what a
 pull request needs, and the ground rules for working against a binary you do not have the source
-to. Each component adds its own rules on top; `legacy/CONTRIBUTING.md` is the one that exists so
-far.
+to. Each component adds its own rules on top: `legacy/CONTRIBUTING.md` for the engine fixes and
+`installer/CONTRIBUTING.md` for the installer.
 
 The most useful thing right now is testing. Every fix here has been played with in a full
 installation, and several have been confirmed against the specific behaviour they change; each

@@ -44,6 +44,8 @@ included here or distributed with this project.
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
 | `dev_overlay` | A panel over the running game, opened with the key below Escape: the game's own eleven cheat codes, two this project adds, and the ground the developer tools will stand on |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
+| `sound_lifetime_fix` | Stops a pinned voice keeping the address of a local whose function has returned, which crashed a load made with blaster bolts in flight |
+| `camera_handback_fix` | Gives the camera back after a conversation that took it and never returned it |
 | `diagnostics` | Observation only, per subsystem, off by default |
 
 Each directory under `src/mods` has a `README.md` with its settings, the engine locations it
@@ -154,6 +156,10 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 | `logging` | One log file, one prefix per DLL |
 | `ini` | One ini file, one section per DLL |
 | `menu_patcher` | Append widgets to one of the game's own menu screens |
+| `platform` | Whether this is Wine, so a fix for a Wine defect applies there and nowhere else |
+| `import_patch` | Replace one entry in another module's import table |
+| `cinematic_gate` | Whether a script holds the camera right now |
+| `stick` | The gamepad's radial deadzone, shared so two DLLs cannot drift apart |
 | `engine_types.h` | Binary structures more than one fix needs |
 
 **`src/loader` builds `dinput.dll`**, which sits next to the executable and patches nothing itself.

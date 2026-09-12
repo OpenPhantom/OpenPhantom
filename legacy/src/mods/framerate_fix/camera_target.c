@@ -6,7 +6,6 @@
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
-#include "common/patch.h"
 #include "common/signature.h"
 
 #include <stdint.h>
@@ -20,18 +19,56 @@
  *   +0x19  8B 15 <cur.z>  89 15 <prev.z>                              z
  *   +0x25  8B 45 0C / 8B 08 / 89 0D <cur.x> ...                       the new anchor lands
  *   +0x41  8B 0D <head>   89 0D <headPrev>                            the heading pair rotates
+ *   +0x4D  8B 55 10 / 89 15 <head>                                    [ebp+0x10], the heading
+ *   +0x56  8B 45 14 / A3 <rate>                                       [ebp+0x14], the turn rate
+ *   +0x5E  8B 4D 08 / 89 0D <ground>                                  [ebp+8], the ground block
+ *   +0x67  8B 15 <calls> / 83 C2 01 / 89 15 <calls>                   the call counter
+ *   +0x76  5D C3                 pop ebp / ret
  *
- * The prologue is the first two instructions, eight bytes of whole instructions. The two operands
- * read below are the previous anchor's x (the three floats are contiguous) and the previous
- * heading, so this file carries no address of its own. */
+ * The whole function, every absolute operand masked, so the pattern is the shape and the operands
+ * are read out of the match rather than copied from it. Four arguments at [ebp+8] to [ebp+0x14]
+ * and a plain ret with no immediate: the caller cleans, which is the cdecl below. The prologue
+ * is the first two instructions, eight bytes of whole instructions.
+ *
+ * The previous anchor's three floats are read from their three operands and required to sit
+ * four bytes apart, which is the layout the code below writes them back through. */
 static const uint8_t SIG_SET_CAM_TARGET[] = {
-    0x55, 0x8B, 0xEC, 0xA1, 0xD8, 0xB4, 0x5B, 0x00, 0xA3, 0xC8, 0xB4, 0x5B, 0x00,
-    0x8B, 0x0D, 0xDC, 0xB4, 0x5B, 0x00, 0x89, 0x0D, 0xCC, 0xB4, 0x5B, 0x00
+    0x55, 0x8B, 0xEC,
+    0xA1, 0x00, 0x00, 0x00, 0x00, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x15, 0x00, 0x00, 0x00, 0x00, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x45, 0x0C, 0x8B, 0x08, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x50, 0x04, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x40, 0x08, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x55, 0x10, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x45, 0x14, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x4D, 0x08, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x15, 0x00, 0x00, 0x00, 0x00, 0x83, 0xC2, 0x01, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x5D, 0xC3
 };
-#define SET_CAM_TARGET_PROLOGUE   8u
-#define OFFSET_PREV_ANCHOR_OPERAND 0x09u
-#define OFFSET_PREV_HEADING_MOV    0x47u     /* 89 0D <headPrev> */
-#define OFFSET_PREV_HEADING_OPERAND (OFFSET_PREV_HEADING_MOV + 2u)
+static const uint8_t MSK_SET_CAM_TARGET[] = {
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SET_CAM_TARGET == sizeof MSK_SET_CAM_TARGET,
+               "the setCamTarget pattern and its mask are different lengths");
+#define SET_CAM_TARGET_PROLOGUE        8u
+#define OFFSET_PREV_ANCHOR_X_OPERAND   0x09u  /* A3 <prev.x>      */
+#define OFFSET_PREV_ANCHOR_Y_OPERAND   0x15u  /* 89 0D <prev.y>   */
+#define OFFSET_PREV_ANCHOR_Z_OPERAND   0x21u  /* 89 15 <prev.z>   */
+#define OFFSET_PREV_HEADING_OPERAND    0x49u  /* 89 0D <headPrev> */
 
 typedef void (__cdecl *set_cam_target_fn_t)(void *ground, const float *anchor, float heading,
                                             float turn_rate);
@@ -94,24 +131,20 @@ static void __cdecl hook_set_cam_target(void *ground, const float *anchor, float
     }
 }
 
-/* One absolute operand, believed only when the instruction in front of it is the one expected. */
-static bool read_operand(uintptr_t site, uintptr_t operand_offset, const uint8_t *opcode,
-                         size_t opcode_size, uint32_t *out)
+/* One absolute operand of the match, checked to name a cell inside the image. */
+static bool read_operand(uintptr_t site, uintptr_t operand_offset, uint32_t *out)
 {
-    if (!patch_validate_bytes(site + operand_offset - opcode_size, opcode, opcode_size)) {
-        return false;
-    }
     return memory_read_u32(site + operand_offset, out) &&
            memory_is_inside_image(*out, sizeof(float));
 }
 
 void camera_target_install(bool enabled)
 {
-    static const uint8_t MOV_EAX_TO_ABS[1] = { 0xA3 };
-    static const uint8_t MOV_ECX_TO_ABS[2] = { 0x89, 0x0D };
     uintptr_t site;
-    uint32_t  prev_anchor;
-    uint32_t  prev_heading;
+    uint32_t  prev_anchor   = 0;
+    uint32_t  prev_anchor_y = 0;
+    uint32_t  prev_anchor_z = 0;
+    uint32_t  prev_heading  = 0;
 
     if (!enabled) {
         log_info("CameraTargetPair=0, the camera's two samples collapse into one while the player "
@@ -124,19 +157,23 @@ void camera_target_install(bool enabled)
         return;
     }
 
-    site = signature_find_detour_target(SIG_SET_CAM_TARGET, NULL, sizeof SIG_SET_CAM_TARGET,
-                                        SET_CAM_TARGET_PROLOGUE);
+    site = signature_find_detour_target(SIG_SET_CAM_TARGET, MSK_SET_CAM_TARGET,
+                                        sizeof SIG_SET_CAM_TARGET, SET_CAM_TARGET_PROLOGUE);
     if (site == 0) {
         log_warning("bapview_setCamTarget did not resolve, so the camera's target pair is left "
                     "alone and a ride on a mover keeps its 32 Hz camera");
         return;
     }
-    if (!read_operand(site, OFFSET_PREV_ANCHOR_OPERAND, MOV_EAX_TO_ABS, sizeof MOV_EAX_TO_ABS,
-                      &prev_anchor) ||
-        !read_operand(site, OFFSET_PREV_HEADING_OPERAND, MOV_ECX_TO_ABS, sizeof MOV_ECX_TO_ABS,
-                      &prev_heading)) {
-        log_warning("bapview_setCamTarget at %08X does not carry its operands where the retail "
-                    "build has them, so the camera's target pair is left alone", (unsigned)site);
+    if (!read_operand(site, OFFSET_PREV_ANCHOR_X_OPERAND, &prev_anchor) ||
+        !read_operand(site, OFFSET_PREV_ANCHOR_Y_OPERAND, &prev_anchor_y) ||
+        !read_operand(site, OFFSET_PREV_ANCHOR_Z_OPERAND, &prev_anchor_z) ||
+        !read_operand(site, OFFSET_PREV_HEADING_OPERAND, &prev_heading) ||
+        prev_anchor_y != prev_anchor + sizeof(float) ||
+        prev_anchor_z != prev_anchor + 2u * sizeof(float)) {
+        log_warning("bapview_setCamTarget at %08X keeps the previous anchor at %08X, %08X and "
+                    "%08X, which is not three floats in a row, so the camera's target pair is "
+                    "left alone", (unsigned)site, (unsigned)prev_anchor, (unsigned)prev_anchor_y,
+                    (unsigned)prev_anchor_z);
         return;
     }
     target_state.previous_anchor  = (volatile float *)(uintptr_t)prev_anchor;

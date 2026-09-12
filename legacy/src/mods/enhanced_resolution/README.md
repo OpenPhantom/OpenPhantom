@@ -113,6 +113,7 @@ the mode table that the aspect gate anchors.
 | `DLG_DrawLine`, the glyph scale | `0x00431586` | the `fdiv [screenWidth]` operand repointed at the same told width |
 | the two wrap comparisons | `0x004315E3`, `0x00431630` | both `fcomp [580.0]` operands repointed at one cell holding the scaled wrap |
 | the line height call in `DLG_DrawLine` | `0x00431745` | **read, never patched**: the menu scale's `font3d_queryFont` hook recognises this caller by its return address and answers it unscaled, since the subtitle goes on drawing behind an open menu and its rows took the menu's line height |
+| the wrap loop's measure call | `0x0043161D` | redirected to a function that calls `font3d_measureChar` and adds `k-1` to its width, since the engine adds its pixel of glyph spacing after the scale while the draw scales it |
 | the two centring calls | `0x0043177A`, `0x0043179F` | `call screenWidth()` / `call screenHeight()` redirected at getters of ours that answer the told size. Each is followed to its getter first, and the getter at `0x0046B7B0` and its twin are required to be the ten byte load-and-return |
 | the two offset clamps | `0x00431793`, `0x004317B6` | `jge` to `jmp`, one byte each, so a box taller than the display may sit above its top edge |
 | `dialog_drawBar` | `0x00430AC2` | detoured, 9-byte prologue; the subtitle backdrop is scaled about the horizontal centre and the bottom edge to match the text |
@@ -573,16 +574,22 @@ box taller than the display and pushes the baseline off the bottom. By height th
 1.333xH wide, narrower than the screen, so it pillarboxes as the layout expects. At 640x480 with a
 scale of 1 every number is the one the engine already had.
 
-**Ten writes, all or nothing.** Three grow the box, two put it back where it belongs, two keep the
-line breaks with it, two let it hang off the top edge once it is taller than the screen, and one
-detour moves the backdrop quad to match. Each of those was found by a screenshot of what breaks
-without it:
+**Eleven writes, all or nothing.** Three grow the box, two put it back where it belongs, three
+keep the line breaks with it, two let it hang off the top edge once it is taller than the screen,
+and one detour moves the backdrop quad to match. Each of those was found by a screenshot of what
+breaks without it:
 
 * glyphs alone, and the rows stayed 18 pixels apart while the letters grew, so three lines landed on
   top of each other
 * the wrap left behind, and lines broke after two or three words inside a box four times wider than
   they were using, because `font3d_measureChar` hands the glyph scale to the measurement while the
   limit is a bare constant that does not move
+* the measure left as the engine wrote it, and rows ran out of the bar on the right: it answers
+  `glyph width x scale + 1`, the pixel of spacing added after the scale, while the draw scales the
+  spacing with the glyph, so at 4.5x every character measured 3.5 pixels narrower than it drew and a
+  long row came out some 200 pixels wider than the wrap had allowed. The wrap loop's one call to the
+  measure is redirected to a function that adds the missing `k-1`; every other caller keeps the
+  engine's arithmetic
 * the two offset clamps left in, and at any scale above the fit the box wants its top above the
   screen, the engine floors the offset at zero instead, and a 450 baseline lands in a 390 tall space
   below the bottom edge
@@ -595,7 +602,7 @@ horizontal centre and `y` about the bottom edge, where the text is anchored, and
 at `k = 1`. Only two calls reach that function and both are the subtitle's own bars.
 
 **Nothing else the font layer draws is affected.** The same layer draws every menu string and HUD
-readout; all ten writes are inside the dialogue's own drawing or reached only from it.
+readout; all eleven writes are inside the dialogue's own drawing or reached only from it.
 
 **With a menu open the rows used to drop out of the bar.** Each row's vertical position adds the
 font's line height from `font3d_queryFont`, which the menu scale detours to answer a menu's text

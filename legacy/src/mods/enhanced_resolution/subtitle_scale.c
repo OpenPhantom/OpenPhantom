@@ -78,6 +78,19 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 };
 #define GLYPH_SCALE_WIDTH_OPERAND 8u
 
+/* --- the measure call inside the wrap loop, at 0x0043161D ------------------------------------- *
+ *   E8 <rel>   call font3d_measureChar     one character, its width added to the row's total
+ *
+ * The engine's measure answers `glyph width x scale + 1`: the pixel of spacing between glyphs is
+ * added after the scale, in device pixels. The draw advances by the glyph's own advance times
+ * the scale, spacing included, so at the authored size the two agree and at any other they do
+ * not: every character measures `scale-1` pixels narrower than it draws, and a sixty character
+ * row at 4K measures some two hundred pixels short of what lands on the screen. The wrap then let
+ * rows through that ran out of the bar on the right, which was photographed. The call is
+ * redirected to a function that adds the missing `k-1` to the answer, so the wrap measures what
+ * will be drawn; every other caller of the measure keeps the engine's own arithmetic. */
+#define MEASURE_CALL_FROM_GLYPH 0x97u   /* 0x0043161D - 0x00431586 */
+
 /* --- the line height call, at 0x00431745 ----------------------------------------------------- *
  *   E8 <rel>   call font3d_queryFont    then row y = 450 + height + 1, 18 per row up, less 13 or 4
  *
@@ -199,7 +212,7 @@ static float told_wrap   = AUTHORED_WRAP;
 
 static struct {
     detour_t  bar;
-    bool      installed;        /* the ten writes are in place */
+    bool      installed;        /* the eleven writes are in place */
     bool      abandoned;        /* one of them was refused, the rest were put back, and it is not
                                  * tried again: a site that was wrong once is wrong every time */
     bool      resolved;         /* the sites are known, which happens long before the display is */
@@ -209,6 +222,7 @@ static struct {
     uintptr_t width_getter;     /* where the two centring calls go, checked to be the getters */
     uintptr_t height_getter;
     uintptr_t line_height_return;   /* what the line height call returns to, 0 until resolved */
+    uintptr_t measure_char;         /* the engine's own measure, where the wrap's call went */
     const volatile int32_t *screen_w;   /* the cells those getters load, read out of them */
     const volatile int32_t *screen_h;
     float   scale;              /* the player's multiplier, on top of fitting the height */
@@ -232,6 +246,22 @@ static int32_t __cdecl told_screen_height(void)
 }
 
 static float box_scale(int32_t height);
+
+/* The replacement for the wrap loop's measure, reached only from that one call: the engine's own
+ * answer with the spacing scaled like the glyph. Identity at k = 1. */
+typedef int32_t(__cdecl *measure_char_fn_t)(uint32_t character, float *out_width,
+                                            float *out_height);
+
+static int32_t __cdecl told_measure_char(uint32_t character, float *out_width, float *out_height)
+{
+    measure_char_fn_t original = (measure_char_fn_t)state.measure_char;
+    int32_t           answer   = original(character, out_width, out_height);
+
+    if (answer != 0 && out_width != NULL && state.seen_h > 0) {
+        *out_width += box_scale(state.seen_h) - 1.0f;
+    }
+    return answer;
+}
 
 /* The two backdrop quads, moved to match the box the text is now drawn in. */
 static void __cdecl hook_draw_bar(float x0, float y0, float x1, float y1, uint32_t argb)
@@ -304,11 +334,11 @@ static bool recompute(void)
     return true;
 }
 
-/* ALL TEN OR NONE. Three make the box bigger, two put it back where it belongs, two keep the line
- * breaks where the box is, two let it hang off the top edge once it is taller than the screen, and
- * the last moves the backdrop quad to match. Any subset is a box of the wrong size, in the wrong
- * place, wrapping at the wrong column, with its text under the bottom of the display, or with the
- * panel behind it still the old size, and every one of those has now been photographed. */
+/* ALL ELEVEN OR NONE. Three make the box bigger, two put it back where it belongs, three keep the
+ * line breaks where the box is, two let it hang off the top edge once it is taller than the
+ * screen, and the last moves the backdrop quad to match. Any subset is a box of the wrong size,
+ * in the wrong place, wrapping at the wrong column, with its text under the bottom of the display,
+ * or with the panel behind it still the old size, and every one of those has been photographed. */
 static bool install_patches(void);
 
 /* Once a second, which is far more often than anybody drags. It exists for two reasons: the
@@ -357,16 +387,16 @@ static void on_frame(void)
  * where it goes does, and only at this one site. */
 /* The two wrap comparisons, each checked for its opcode before it is touched: both are the same
  * six byte `fcomp dword [imm32]`, so the operand sits two bytes in. */
-/* The nine reversible writes are journaled as they go, so a refusal part way through puts the
+/* The ten reversible writes are journaled as they go, so a refusal part way through puts the
  * earlier ones back and the engine draws its own box, the way the header promises. The detour is
- * the tenth and last, because a detour cannot be taken out again. */
+ * the eleventh and last, because a detour cannot be taken out again. */
 typedef struct written_bytes {
     uintptr_t at;
     uint8_t   size;
     uint8_t   before[4];
 } written_bytes_t;
 
-static written_bytes_t journal[9];
+static written_bytes_t journal[10];
 static size_t          journal_count;
 
 static bool write_journaled(uintptr_t at, const void *bytes, size_t size)
@@ -534,13 +564,15 @@ static bool install_patches(void)
                        (const void *)told_screen_width) ||
         !retarget_call(state.glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, state.height_getter,
                        (const void *)told_screen_height) ||
+        !retarget_call(state.glyph_site + MEASURE_CALL_FROM_GLYPH, state.measure_char,
+                       (const void *)told_measure_char) ||
         !unclamp(state.glyph_site + CLAMP_X_FROM_GLYPH) ||
         !unclamp(state.glyph_site + CLAMP_Y_FROM_GLYPH) ||
         !detour_install(&state.bar, state.bar_site, (const void *)hook_draw_bar,
                         DRAW_BAR_PROLOGUE)) {
         undo_journal();
         state.abandoned = true;
-        log_warning("one of the subtitle box's ten sites was refused, so the ones already "
+        log_warning("one of the subtitle box's eleven sites was refused, so the ones already "
                     "written were put back and the engine draws its own box this session");
         return false;
     }
@@ -598,6 +630,14 @@ void subtitle_scale_install(void)
                         &state.width_getter, &state.screen_w) ||
         !resolve_getter(glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, "screen height",
                         &state.height_getter, &state.screen_h)) {
+        return;
+    }
+    /* The wrap's measure: the call must go into the image, and where it goes is remembered as
+     * the function the replacement calls. */
+    if (!patch_read_call_target(glyph_site + MEASURE_CALL_FROM_GLYPH, &state.measure_char)) {
+        log_warning("the site at %08X is not the measure call expected, so the subtitle box "
+                    "keeps the engine's own size",
+                    (unsigned)(glyph_site + MEASURE_CALL_FROM_GLYPH));
         return;
     }
     {

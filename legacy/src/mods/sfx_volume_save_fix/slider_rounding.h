@@ -9,7 +9,4 @@
  * enough. Covers the music slider as well as the SFX one; they share the code that drifts. */
 bool slider_rounding_install(void);
 
-/* True once both seeds were redirected. Neither is redirected unless both can be. */
-bool slider_rounding_is_active(void);
-
 #endif /* SFX_VOLUME_SAVE_FIX_SLIDER_ROUNDING_H */

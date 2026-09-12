@@ -297,10 +297,6 @@ float pad_stick_y(void)
     return pad_state.active ? pad_state.y : 0.0f;
 }
 
-float pad_stick_magnitude(void)
-{
-    return pad_state.active ? pad_state.magnitude : 0.0f;
-}
 
 bool pad_stick_wants_run(void)
 {

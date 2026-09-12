@@ -172,7 +172,3 @@ void log_error(const char *format, ...)
     va_end(arguments);
 }
 
-const char *log_path(void)
-{
-    return log_state.path;
-}

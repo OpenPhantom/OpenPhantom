@@ -431,11 +431,6 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
     }
 }
 
-bool overlay_window_row_is_value(uint32_t slot)
-{
-    (void)slot;
-    return false;              /* the size is chosen from a list now, not typed */
-}
 
 /* Takes a slot with the size list already taken out of it, the convention every other slot-taking
  * function in this file follows. Handing it a raw slot while the list is open asks about the wrong

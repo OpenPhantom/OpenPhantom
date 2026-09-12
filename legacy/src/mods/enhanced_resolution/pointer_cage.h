@@ -37,9 +37,6 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
  * the scale refuses to install into. */
 void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height);
 
-/* True when the clamp really was widened, for the caller's own log. */
-bool pointer_cage_is_active(void);
-
 
 /* ---- the arithmetic, exposed because it is the part that can be checked without a display -----
  *

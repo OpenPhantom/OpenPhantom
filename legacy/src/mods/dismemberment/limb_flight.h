@@ -35,7 +35,4 @@ void limb_flight_install(void);
  * same numbers. */
 void limb_flight_set_active(bool active);
 
-/* Whether the tuned values are the ones in the image now. */
-bool limb_flight_is_active(void);
-
 #endif /* LIMB_FLIGHT_H */

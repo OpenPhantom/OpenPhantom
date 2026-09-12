@@ -25,7 +25,4 @@
  * exit write takes an integer straight from the getter with no trip through the file. */
 bool music_volume_install(void);
 
-/* True once the three sites resolved and the detours took. */
-bool music_volume_is_active(void);
-
 #endif /* IMUSE_FIX_MUSIC_VOLUME_H */

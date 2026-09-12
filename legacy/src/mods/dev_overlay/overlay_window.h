@@ -45,10 +45,6 @@ void overlay_window_reset(void);
 void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
                         overlay_row_t *out);
 
-/* Always false: nothing in this group is typed into. Nothing calls it either, the same as the
- * matching test in the Utilities group. */
-bool overlay_window_row_is_value(uint32_t slot);
-
 /* True for the two binding rows. Takes a slot as this group numbers it. */
 bool overlay_window_row_is_key(uint32_t slot);
 

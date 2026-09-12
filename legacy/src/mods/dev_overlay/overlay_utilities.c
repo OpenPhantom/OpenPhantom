@@ -447,15 +447,6 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
     out->available = false;
 }
 
-bool overlay_utilities_row_is_value(uint32_t slot)
-{
-    return slot == (uint32_t)UTILITIES_VIEW_RANGE ||
-           slot == (uint32_t)UTILITIES_FOG_BAND ||
-           slot == (uint32_t)UTILITIES_FOV ||
-           slot == (uint32_t)UTILITIES_SENSITIVITY ||
-           slot == (uint32_t)UTILITIES_SUBTITLE_SIZE ||
-           slot == (uint32_t)UTILITIES_DEV_MENU_SIZE;
-}
 
 bool overlay_utilities_row_is_key(uint32_t slot)
 {

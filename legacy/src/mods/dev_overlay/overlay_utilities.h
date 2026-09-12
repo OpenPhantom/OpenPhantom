@@ -45,10 +45,6 @@
 void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
                            overlay_row_t *out);
 
-/* True when this slot is a typed value, so a press starts an edit rather than acting on the row.
- * Nothing calls this today: the model dispatches on the row kind it was handed instead. */
-bool overlay_utilities_row_is_value(uint32_t slot);
-
 /* True when this slot binds a key, the same question for the other kind of edit. */
 bool overlay_utilities_row_is_key(uint32_t slot);
 

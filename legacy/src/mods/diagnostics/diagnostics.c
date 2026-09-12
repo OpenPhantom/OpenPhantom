@@ -31,10 +31,6 @@
 static diagnostics_config_t diagnostics_state;
 static bool                 diagnostics_installed;
 
-const diagnostics_config_t *diagnostics_config(void)
-{
-    return &diagnostics_state;
-}
 
 /* The ceiling is per AREA and not a shared constant, because a clamp that silently truncates a
  * level the caller does understand is indistinguishable from a level nobody implemented. Fx has a

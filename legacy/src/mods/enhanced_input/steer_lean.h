@@ -65,12 +65,6 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
  * already taken the engine's own twist from the original, so there is nothing to hand back. */
 void steer_lean_release(void);
 
-/* Writes the chest to an explicit angle and reports whether it did. For the free-look aim, where
- * the number is not a turn rate at all but the angle between the shot and the body. Must be called
- * AFTER the original phase 2: Plr_Steer writes that node unconditionally every substep, with no
- * gate, so it is the last writer before the draw and anything written earlier is lost. */
-bool steer_lean_aim(const uint8_t *record, float degrees);
-
 /* For the log line, so it can name what is actually in force. */
 bool steer_lean_is_active(void);
 

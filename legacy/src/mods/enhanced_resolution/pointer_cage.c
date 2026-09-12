@@ -483,8 +483,4 @@ void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height)
              (int)(canvas_height - CURSOR_MARGIN), (int)canvas_width, (int)canvas_height);
 }
 
-bool pointer_cage_is_active(void)
-{
-    return cage_state.active;
-}
 

@@ -115,7 +115,6 @@ typedef void     (__cdecl *music_detach_fn_t)(void);
 typedef void     (__cdecl *music_set_volume_fn_t)(float volume);
 
 static struct {
-    bool     active;
     detour_t attach;
     detour_t detach;
     detour_t set_volume;
@@ -175,10 +174,6 @@ static uint32_t __cdecl hook_attach(void)
     return result;
 }
 
-bool music_volume_is_active(void)
-{
-    return music.active;
-}
 
 bool music_volume_install(void)
 {
@@ -222,7 +217,6 @@ bool music_volume_install(void)
         return false;
     }
 
-    music.active = true;
     log_info("the music volume now survives a 3-D provider change. The audio screen silences the "
              "music, detaches and re-attaches to switch provider, and the re-attach reloads MVOL "
              "from obi.ini, which the screen does not write until it closes. A slider moved before "

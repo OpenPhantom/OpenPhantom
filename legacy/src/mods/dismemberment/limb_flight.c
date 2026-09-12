@@ -352,10 +352,6 @@ void limb_flight_set_active(bool active)
     }
 }
 
-bool limb_flight_is_active(void)
-{
-    return flight_state.active;
-}
 
 /* ============================================================================================
  * The sampling, because two theories in a row without data were already two too many.

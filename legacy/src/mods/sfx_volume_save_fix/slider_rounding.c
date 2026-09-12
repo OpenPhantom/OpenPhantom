@@ -106,13 +106,6 @@ static __declspec(naked) void ftol_rounded(void)
     }
 }
 
-static bool slider_active;
-
-bool slider_rounding_is_active(void)
-{
-    return slider_active;
-}
-
 bool slider_rounding_install(void)
 {
     uintptr_t call_sites[SITE_COUNT];
@@ -162,7 +155,6 @@ bool slider_rounding_install(void)
         }
     }
 
-    slider_active = true;
     log_info("the audio sliders now round when the screen seeds them. Nineteen steps against a "
              "0..127 volume, and both the seed and the read back truncated, so every visit to that "
              "screen cost 7 and only full volume survived. Seeds at %08X and %08X, both falling "

@@ -134,9 +134,6 @@
  * game bug rather than a patch failure. */
 bool menu_scale_install(float configured_ratio, bool cursor_cage_widens);
 
-/* The ratio in force, or 1.0 when this is not installed. */
-float menu_scale_ratio(void);
-
 /* The canvas the menus are drawn on, in pixels: 640x480 when this is not installed. The cursor cage
  * is sized from this, because the canvas is exactly the region the menus can repaint. */
 void menu_scale_canvas(int32_t *out_width, int32_t *out_height);

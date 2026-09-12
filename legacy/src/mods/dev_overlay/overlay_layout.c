@@ -145,20 +145,8 @@ const layout_t *overlay_layout(void)
     return &built;
 }
 
-float overlay_draw_height(void)
-{
-    return built.height;
-}
 
-float overlay_draw_left(void)
-{
-    return built.left;
-}
 
-float overlay_draw_top(void)
-{
-    return built.top;
-}
 
 /* The pointer tests read the layout the last paint built rather than recomputing, so what was drawn
  * and what can be clicked can never be a frame apart. Both refuse a zero band instead of dividing

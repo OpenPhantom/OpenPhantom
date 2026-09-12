@@ -35,12 +35,6 @@ typedef uint32_t(__cdecl *query_font_fn_t)(void);
 /* The one record every part of the feature reads. See menu_scale_internal.h. */
 menu_scale_state_t scale_state;
 
-float menu_scale_ratio(void)
-{
-    /* The vertical one. Height is what the artwork is really scaled by; the horizontal ratio
-     * only differs when the display is not 4:3 and the artwork was stretched to fill it. */
-    return scale_state.installed ? scale_state.ratio_y : 1.0f;
-}
 
 void menu_scale_canvas(int32_t *out_width, int32_t *out_height)
 {

@@ -68,7 +68,4 @@ typedef struct diagnostics_config {
 
 void diagnostics_install(void);
 
-/* Read-only, for the subsystem modules. Valid after diagnostics_install(). */
-const diagnostics_config_t *diagnostics_config(void);
-
 #endif /* DIAGNOSTICS_H */

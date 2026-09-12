@@ -135,29 +135,6 @@ static float clamp_rate(float rate)
     return rate;
 }
 
-bool steer_lean_aim(const uint8_t *record, float degrees)
-{
-    void    *body;
-    uint32_t chest_node;
-
-    if (lean_state.set_node_yaw == NULL || record == NULL || !isfinite(degrees)) {
-        return false;
-    }
-    body       = *(void *const *)(record + PLAYER_ACTOR);
-    chest_node = *(const uint32_t *)(record + PLAYER_CHEST_NODE);
-    if (body == NULL || chest_node == 0u) {
-        return false;               /* index 0 is the finder's failure answer, not a valid node */
-    }
-
-    lean_state.set_node_yaw(body, chest_node, degrees);
-    last_report.status      = "aim";
-    last_report.chest_node  = chest_node;
-    last_report.raw_rate    = degrees;
-    last_report.applied_rate = degrees;
-    last_report.wrote_chest = true;
-    last_report.wrote_head  = false;
-    return true;
-}
 
 bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
                       bool keyboard_is_turning, float substep_seconds)

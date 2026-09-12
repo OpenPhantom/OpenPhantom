@@ -81,10 +81,6 @@ float pad_stick_x(void);
  * because there up has to become a downward mouse movement. */
 float pad_stick_y(void);
 
-/* 0 to 1, the deadzone already taken out and the remainder rescaled, so it starts at nearly zero
- * rather than at the deadzone's own value. */
-float pad_stick_magnitude(void);
-
 /* The pad's whole contribution to one steer substep, answered in one call so the phase 2 thunk
  * does not have to know how a stick becomes a sideways value and a forward one.
  *

@@ -68,8 +68,4 @@ bool overlay_draw_search_at(float x, float y);
  * before a display mode has been chosen, and then neither is written. */
 bool overlay_draw_screen(float *out_width, float *out_height);
 
-float overlay_draw_left(void);
-float overlay_draw_top(void);
-float overlay_draw_height(void);
-
 #endif /* OVERLAY_DRAW_H */

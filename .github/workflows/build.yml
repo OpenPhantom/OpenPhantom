@@ -10,16 +10,11 @@
 # Warnings-as-errors and a test suite only help if something runs them on a clean checkout rather
 # than in a working tree where the previous build is still lying around.
 #
-# WHAT IT DOES NOT CHECK YET. Two assertions are described elsewhere as things CI does: that
-# every shipped DLL carries a version resource, and that the extractor imports no C runtime.
-#
-# The first is now true of the code and is not asserted here. Every feature DLL and the loader
-# carry VERSIONINFO, so the check would pass and is worth adding.
-#
-# The second is still false. legacy/CMakeLists.txt selects the static CRT for the patch, but
-# installer/src/is3_extract does not, so the extractor links the dynamic one. Asserting it here
-# would fail every run from the first, and making it true means changing that build rather than
-# adding a check. Named rather than quietly skipped.
+# Two more claims are checked at the end. Every shipped binary carries a version resource, so a
+# log or a properties dialog can name its build; and the extractor imports nothing but kernel32,
+# because it runs on the player's machine while the installer does and Windows does not ship the
+# Visual C++ runtime. The dynamic build once shipped, and on a machine without the redistributable
+# the installer stopped at "Expanding" with an exit code and nothing to read.
 
 name: build
 
@@ -75,3 +70,33 @@ jobs:
           Write-Output "extractor: $extractor"
           Write-Output "feature DLLs built: $($mods.Count)"
           $mods | ForEach-Object { Write-Output ("  " + $_.Name) }
+
+      # Every file that ships names its build. A resource that compiles with its block name and
+      # translation disagreeing reads back empty, so the string is asked for rather than the
+      # resource's presence.
+      - name: Check every shipped binary carries a version resource
+        shell: pwsh
+        run: |
+          $shipped = @('legacy/build/dist/dinput.dll',
+                       'legacy/build/dist/tools/openphantom_convert.exe',
+                       'installer/src/is3_extract/build/Release/is3_extract.exe') +
+                     (Get-ChildItem 'legacy/build/dist/mods/*.dll' | ForEach-Object { $_.FullName })
+          foreach ($file in $shipped) {
+            $version = (Get-Item $file).VersionInfo.FileVersion
+            if ([string]::IsNullOrWhiteSpace($version)) { throw "no version resource: $file" }
+            Write-Output ("{0,-40} {1}" -f (Split-Path $file -Leaf), $version)
+          }
+
+      # The extractor runs on the player's machine, so it may depend on nothing Windows does not
+      # ship. dumpbin comes with the toolset the build above used.
+      - name: Check the extractor imports only kernel32
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x86\dumpbin.exe" | Select-Object -First 1
+          $imports = & $dumpbin.FullName /dependents installer/src/is3_extract/build/Release/is3_extract.exe
+          $dlls = $imports | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } | ForEach-Object { $_.Trim().ToUpperInvariant() }
+          Write-Output "imports: $($dlls -join ', ')"
+          $foreign = $dlls | Where-Object { $_ -ne 'KERNEL32.DLL' }
+          if ($foreign) { throw "the extractor depends on a runtime Windows does not ship: $($foreign -join ', ')" }

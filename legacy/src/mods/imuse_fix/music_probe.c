@@ -111,6 +111,7 @@ typedef struct probe_state {
      * released a gate nothing had stuck. */
     bool    heartbeat_seen;
     bool    trace_retaken;      /* the commentary pointer was found replaced once, and said so */
+    bool    trace_handing_on;   /* inside the hand-on to the game's handler, see trace_thunk */
     int32_t stalls_seen;
 
     DWORD    last_stress_ms;
@@ -308,9 +309,14 @@ static void __cdecl trace_thunk(const char *text)
         }
     }
 
-    /* Always hand it on: the game registered this pointer and may be doing something with it. */
-    if (state.original_trace != NULL) {
+    /* Always hand it on: the game registered this pointer and may be doing something with it.
+     * Except from inside itself: the slot is retaken every frame in front of whatever the game
+     * wrote there, and a writer that kept this thunk as its own previous and calls it would come
+     * straight back here, without end. A line already being handed on is not handed on again. */
+    if (state.original_trace != NULL && !state.trace_handing_on) {
+        state.trace_handing_on = true;
         state.original_trace(text);
+        state.trace_handing_on = false;
     }
 }
 

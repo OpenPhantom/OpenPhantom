@@ -1,6 +1,7 @@
 /* cheats_openphantom.h: the nine codes this project adds: unlimited ammunition, unlimited
- * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip,
- * jump boost, and free camera.
+ * health, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip, jump boost and
+ * free camera. No fog shares the panel but not this file's shape; it lives in cheats_no_fog.c
+ * and is described below only where it differs from these.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -14,8 +15,8 @@
  * No fog is a different shape, because there is nothing to decline: fog is not spent, it is a bit
  * in the loaded level's own record, read fresh every frame by the renderer rather than cached
  * anywhere this project could detour instead. See cheats_no_fog.c for why it is a per-frame force
- * rather than a single write, and why turning it back off does not try to restore what a level
- * authored.
+ * rather than a single write, and why turning it back off puts back the band the level was
+ * holding when the cheat first saw it.
  *
  * Invincible NPCs and one-shot NPCs are the enemy-side counterpart to unlimited health, and share
  * one site rather than getting one each: enemy_receiveDamage (0x00433803) is the single function
@@ -24,9 +25,9 @@
  * unlimited health. One-shot NPCs cannot decline the same way, because the point is to change the
  * outcome, not skip it, so it forces the write to zero instead, a value the death gate this
  * function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0) already
- * treats as lethal. See cheats_openphantom.c's own site comment for the byte evidence,
- * and for why both cheats can share one detour instead of needing their own like ammunition and
- * player health do.
+ * treats as lethal. See cheats_npc_damage.c's own site comment for the byte evidence, and for
+ * why both cheats can share one detour instead of needing their own like ammunition and player
+ * health do.
  *
  * Giant player and tiny player share one detour on rdThing_Draw, the function that renders any
  * object at all, the player included, called through exactly one of its two callers for ordinary
@@ -81,19 +82,22 @@
  * landing path ever expected a fall this big to be survived, never lets go afterward. All three
  * fire from the same "this fall just became significant" transition, all three are suppressed the
  * same way, and all three stop mattering the instant jump boost switches back off. See
- * cheats_openphantom.c's own site comment next to SIG_PLAYER_GROUND_CONTACT for the full
+ * cheats_fall_consequences.c's own site comment next to SIG_PLAYER_GROUND_CONTACT for the full
  * mechanism and every call site.
  *
  * Free camera is a different shape again, and does not move the player at all: it freezes the
  * whole simulation (one flag the engine's own fixed-timestep driver already checks every frame,
  * found rather than added) and drives the camera object directly through a chained detour on its
- * own per-frame update, the same site enhanced_input's free-look feature already detours. An
- * earlier attempt at this, noclip, letting the player walk through walls and fly, kept hitting
- * player-physics bugs (falling through unmodelled floors, a ledge pre-check, the mode-dispatch
- * that gates the collision hook, a pitch-redirect attempt that sank the player into ordinary
- * floors) that a camera untethered from the player's own state machine does not have, because the
- * player is not moving at all. Free camera replaced it outright rather than living alongside it.
- * See cheats_openphantom.c's own site comment for the byte evidence.
+ * own per-frame update, the same site enhanced_input's free-look feature already detours. The
+ * first attempt at this was a noclip that let the player walk through walls and fly, and it kept
+ * hitting player-physics bugs (falling through unmodelled floors, a ledge pre-check, the
+ * mode-dispatch that gates the collision hook, a pitch-redirect attempt that sank the player into
+ * ordinary floors) that a camera untethered from the player's own state machine does not have,
+ * because the player is not moving at all. Free camera replaced that version outright. No clip
+ * ships again, rebuilt in cheats_noclip.c on a different site, the wall raycast rather than a
+ * locomotion phase, and it no longer flies: walls and people stop being solid, the floor is left
+ * alone, a glide holds height where there is no floor, and flying is the free camera's job. See
+ * cheats_free_camera.c for the byte evidence.
  *
  * Free camera's own mouse look claims the cursor for as long as it is on, which locks the player
  * out of both the dev panel and the game's own pause menu at once; there is no cursor left to
@@ -107,7 +111,7 @@
  * it is bound, see cheats_openphantom_toggle()'s own gate, because turning it on without one is
  * a door with no handle on the inside.
  *
- * "Skip to next level" is not a toggle either, and not one of the eight cheats above: a debug-only
+ * "Skip to next level" is not a toggle either, and not one of the nine cheats above: a debug-only
  * action row, for iterating on a specific level without replaying everything before it. It writes
  * DAT_00881368 (cheats_original_actions.c's own OP_CREDITS_VAR, exposed read-only from there) to
  * the SAME value the level's own exit trigger writes, script opcode 0x606, sub-command 1, which

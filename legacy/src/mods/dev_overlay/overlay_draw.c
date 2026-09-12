@@ -145,8 +145,10 @@ bool overlay_draw_screen(float *out_width, float *out_height)
  * it there and the third ends it there. Rather than guess twice, it is a setting. */
 static int32_t align_mode = 1;
 
-/* Not validated here. The three modes are the whole range and the caller is this DLL's own ini
- * read, which has already decided what an out-of-range number means. */
+/* Not validated here, and not by the caller either: dev_overlay.c hands the TextAlign ini value
+ * through unchanged, so a number outside 0 to 2 reaches the font layer's own setter as it is. What
+ * that setter does with one has not been established; the three modes are the whole documented
+ * range. */
 void overlay_draw_set_align(int32_t mode)
 {
     align_mode = mode;

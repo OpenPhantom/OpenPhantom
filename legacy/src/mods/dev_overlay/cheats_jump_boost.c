@@ -164,87 +164,17 @@ static void scale_take_off(uint32_t descriptor)
     }
 }
 
-/* Velocity, not height. Jump height scales with velocity SQUARED under the engine's own linear
- * gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A first guess for "noticeably
- * higher, not silly" the same way TINY_PLAYER_SCALE above is; no retail precedent either direction.
- * Runtime-adjustable rather than fixed; the dev panel's own value row (see overlay_model.c) reads
- * and writes this through the getter/setter below, so this is only ever where a fresh install
- * starts, not the limit of what the cheat can be. Clamped on every write into a range wide enough
+/* JUMP_BOOST_SCALE_DEFAULT, 1.3 in cheats_internal.h, is what install_jump_boost() below seeds
+ * own_state.jump_boost_scale with. Velocity, not height. Jump height scales with velocity SQUARED
+ * under the engine's own linear gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A
+ * first guess for "noticeably higher, not silly" the same way cheats_openphantom.c's
+ * TINY_PLAYER_SCALE is; no retail precedent either direction. Runtime-adjustable rather than
+ * fixed; the dev panel's own value row (see overlay_model.c) reads and writes this through the
+ * getter and setter in cheats_openphantom.c, so this is only ever where a fresh install starts,
+ * not the limit of what the cheat can be. Clamped on every write into a range wide enough
  * to be useful in both directions (a player weaker than retail is exactly as legitimate an ask as
  * one much stronger) but short of anything that turns a launch into a projectile the level's own
  * collision was never built to catch at the far end, or a no-op at the near one. */
-
-/* Free camera, site one of two: the simulation pause flag.
- *
- * Every fly-mode attempt above fought the player's own state machine one function at a time
- * because the player kept simulating. FUN_0043e9f2, the per-frame pump, gates the entire
- * fixed-timestep substep driver on two cells, confirmed byte-for-byte against the running image:
- *
- *   0043ea13  83 3D 44134838 00     cmp [00881344],0        ; a movie/quit state, untouched
- *   0043ea1a  75 13                 jnz past the substep call
- *   0043ea1c  83 3D 00000000 00     cmp [SIM PAUSE FLAG],0  ; THE CELL THIS FEATURE USES
- *   0043ea23  75 0A                 jnz past the substep call
- *   0043ea25  6A 00                 push 0
- *   0043ea27  E8 00000000           call FUN_004756fc       ; the whole substep loop
- *   0043ea2c  83 C4 04              add esp,4
- *
- * FUN_004756fc is the fixed-timestep driver: it is where every registered per-tick callback runs,
- * including FUN_0047582a's table, which is where the player task installs FUN_00447d38 (Plr_
- * RunPhases, the whole player simulation). A non-zero pause flag skips the call to FUN_004756fc
- * entirely, so nothing registered on it runs at all, not just the player, the whole world. That
- * is confirmed as the SAME cell the retail ESC pause menu sets
- * (gameplay_open_pause_menu at 0x0043FAB5 writes it before its own blocking menu loop and clears it
- * after), so this is not a guessed side door, it is the mechanism the game already uses to pause
- * itself. This feature only ever writes the flag directly; it does not call the two
- * task_broadcast_cmd notifications retail's own pause menu also makes (audio ducking and similar),
- * a deliberate, smaller freeze: enough to stop the world moving under a free camera, not a
- * reproduction of the retail pause experience.
- *
- * THE PATTERN FOR THIS GATE IS NOT REPEATED HERE. sim_pause.c, in this same DLL, resolves this
- * exact site, reads the same operand and owns the cell. This feature asks it to hold the pause
- * rather than resolving the address a second time and writing the cell itself. Two resolvers of
- * one address is how the two of them came to fight, and the sequence it produced left the game
- * frozen with nothing holding it. */
-
-/* Free camera, site two of two: the camera object pointer, and its per-frame update.
- *
- * SIG_CAMERA_VIEW is copied verbatim from enhanced_input's camera_sites.c (0x00418EDD, inside
- * updateCam's follow blend: `mov eax,[gView]; fld [eax+0x38]`, the previous camera yaw, read
- * immediately before the offset that feature adds to it). Same retail image, same bytes either
- * way, and that mod's own extensive cross-checking already established what they are; this file
- * resolves its own copy rather than reaching into another mod's DLL, the same independence every
- * other site in this file already keeps.
- *
- * updateCam itself, 0x00418544, is THE proven multi-tenant detour target of this whole project;
- * signature.h's own docs name it as chained by two DLLs already, and the chaining exists
- * specifically so a second detour on the same prologue does not have to scan for bytes the first
- * detour already overwrote. SIG_CAMERA_UPDATE and CAMERA_UPDATE_PROLOGUE_SIZE are copied from
- * camera_sites.c unchanged for exactly that reason: matching bytes, not just a matching address.
- *
- * WHERE THE CAMERA'S OWN POSITION LIVES, DISASSEMBLED DIRECTLY RATHER THAN TAKEN ON TRUST:
- *
- *   0041872f  MOV EAX,[gView]
- *   00418734  ADD EAX,0x14
- *   00418737  MOV ECX,[EBP-0x38] / MOV [EAX],ECX        ; anchor X  = view+0x14
- *   0041873c  MOV EDX,[EBP-0x34] / MOV [EAX+4],EDX       ; anchor Y  = view+0x18
- *   00418742  MOV ECX,[EBP-0x30] / MOV [EAX+8],ECX       ; anchor Z  = view+0x1c
- *   00418748  MOV EDX,[gView] / ADD EDX,0x34
- *   00418751  MOV EAX,[EBP-0x10] / MOV [EDX],EAX         ; euler.x   = view+0x34  (pitch, degrees)
- *   00418756  MOV ECX,[EBP-0xc] / MOV [EDX+4],ECX        ; euler.y   = view+0x38  (yaw, degrees)
- *   0041875c  MOV EAX,[EBP-8] / MOV [EDX+8],EAX          ; euler.z   = view+0x3c  (roll, untouched)
- *
- * written unconditionally, before the state (follow/fixed/world-fixed) dispatch that starts at
- * 0x004187ce even begins, and camera_sites.c only ever traces the follow-state arm, so this is new.
- * The source, traced back further, is SetCamTarget (FUN_004184cc): the player's own per-tick
- * dispatch (FUN_00447d38 case 3) is one of its five call sites, feeding it the player's own
- * position. That is the actual coupling this feature breaks, not the state field, which changing
- * alone does nothing, since every state still re-derives a TARGET offset from the same anchor
- * every call. Freezing the simulation (the site above) stops SetCamTarget from ever being called
- * again, which stops the anchor's own feed cold; nothing then contends with a write made AFTER
- * calling the original updateCam, since this file's write runs strictly after the whole original
- * function, including its own second, later write to yaw alone at 0x00418fa1, part of the
- * follow-blend arm, has already finished. Roll (+0x3c) is left alone; a free camera has no use
- * for it and neither does anything reading euler.x/euler.y elsewhere. */
 
 /* Jump boost is switched OFF across a level change, and back on afterwards.
  *

@@ -1,9 +1,9 @@
 # dev_overlay
 
-A panel over the running game, opened with **the key below Escape**. It holds the cheats today. The
-name is what the thing is, not what is in it: the diagnostics and developer tools that come later
-are groups inside this same panel, and a shipped DLL cannot be renamed without breaking every
-`engine_fixes.ini` that mentions it.
+A panel over the running game, opened with **F6 or the key below Escape**. It holds the cheats
+today. The name is what the thing is, not what is in it: the diagnostics and developer tools that
+come later are groups inside this same panel, and a shipped DLL cannot be renamed without
+breaking every `engine_fixes.ini` that mentions it.
 
 ## What it looks like
 
@@ -416,13 +416,13 @@ nothing to confirm.
 ## The sixteen one-shot codes, in `cheats_original_actions.c`
 
 Kill self, full health, all-weapons-full-ammo, the four play-as-character swaps, two ways to lower
-the difficulty, one to raise it, a debug/fps toggle, a graphics detail level cycler, a red icon
-highlight toggle, and the "Tech Bonus!" message: fourteen of the sixteen codes the retail console
-understands that are not one of the eleven toggles above. Each is a row with a `RUN` chip rather
-than an `ON` / `OFF` one, because none of them are a state; typing `kill me now` does not leave
-anything switched on that a second look could find.
+the difficulty, one to raise it, a graphics detail level cycler, a red icon highlight toggle, and
+the "Tech Bonus!" message: thirteen of the sixteen codes the retail console understands that are
+not one of the eleven toggles above. Each is a row with a `RUN` chip rather than an `ON` / `OFF`
+one, because none of them are a state; typing `kill me now` does not leave anything switched on
+that a second look could find.
 
-**Two of the sixteen are held back as `n/a` on purpose, not because either failed to resolve:**
+**Three of the sixteen are held back as `n/a` on purpose, not because any failed to resolve:**
 
 * **Wavering graphics** (`drop a beat`) resolves cleanly, the flag and both apply calls all read as
   valid addresses, and runs without crashing, but confirmed against the running game rather than
@@ -436,9 +436,15 @@ anything switched on that a second look could find.
   rather than diagnosing on the spot. Retail's own path to this code is the console, which pumps its
   own frame loop with the player never suspended, not this panel's path, so whatever the credits
   sequence expects to be true when it starts may simply not be, here.
+* **Debug mode** (the game's own debug/fps toggle) resolves, flag and code text both, and runs.
+  It draws its frame rate readout through the same text layer this panel draws through, and
+  running it from here breaks the panel, field confirmed by switching it on and watching what
+  happened to the overlay afterwards. The row stays visible and greyed, with the code in its
+  label, so the cheat is still discoverable to anyone who wants to type it into the game's own
+  console, where it works.
 
-Both resolutions are left in `cheats_original_actions.c` rather than deleted, one line from being
-restored if either one is ever fully understood.
+All three resolutions are left in `cheats_original_actions.c` rather than deleted, one line from
+being restored if any of them is ever fully understood.
 
 **Most of these print the same on-screen confirmation retail's own console prints**, through the
 same message function tech bonus needs to do anything at all (`FUN_0043dc61`): kill self, full
@@ -777,9 +783,10 @@ neither of those. F6 is in the same place on every keyboard and the retail game 
 DirectInput scancodes and never sees the window messages this panel hooks, so a shared key would do
 both things at once rather than one of them.
 
-**Seven keys are refused**, all of which would lock a player out: Escape and Return and the four
-arrows, which drive the panel itself, and F4, so that Alt+F4 stays a way to quit. Keys the game uses
-are allowed, and both things then happen.
+**Eight keys are refused**, all of which would lock a player out: Escape and Return and the four
+arrows, which drive the panel itself, and Alt and F4 together, so that Alt+F4 stays a way to quit
+on a panel that does not read modifiers. Keys the game uses are allowed, and both things then
+happen.
 
 ## The subtitle size row
 
@@ -883,12 +890,12 @@ project's cheats are accepted in game, in the 1.5.0 build, which was played thro
 
 **Field-tested against the running game, several rounds:** kill self, full health,
 all-weapons-full-ammo (including the shared gate greying both out together once spent, and now the
-retail confirmation message on each), both difficulty codes (message confirmed), the debug/fps
-toggle, the graphics detail cycler (message and live chip number both confirmed), and the "Tech
-Bonus!" message all confirmed working. The four play-as codes are confirmed working through the
-queue. The red icon highlight resolves and runs but which icon it affects is still unconfirmed.
-Wavering graphics and view credits are both deliberately `n/a`, see above, the latter added after
-field testing found it misbehaved when triggered from this panel. **No fog has had two field
+retail confirmation message on each), both difficulty codes (message confirmed), the graphics
+detail cycler (message and live chip number both confirmed), and the "Tech Bonus!" message all
+confirmed working. The four play-as codes are confirmed working through the queue. The red icon
+highlight resolves and runs but which icon it affects is still unconfirmed. Wavering graphics,
+view credits and debug mode are deliberately `n/a`, see above; the last two were added after field
+testing found each misbehaved when triggered from this panel. **No fog has had two field
 rounds, and each found a real bug.** The first version cleared the level's fog flag directly,
 which broke the renderer (every moving actor drawn as a flat, unlit silhouette, not recoverable by
 toggling the cheat back off); rewritten to push the fog band out instead of touching the flag. The
@@ -993,10 +1000,11 @@ all. The player is always inside the world, so the measurement is the camera's h
 player plus the player's own height above their floor, and the probe is asked only at the player,
 where its cell lookup succeeds.
 
-Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4` in the shipped
-`WMAIN.EXE`. The data addresses quoted throughout these comments come from a differently linked
-build of the executable and do not map to the same places in the shipped one; in `WMAIN.EXE` that
-range is inside `.rsrc`. They were read by finding the `FCOMP` instructions that reference them.
+Those three constants live at `0x004a875c`, `0x004a86dc` and `0x004a86f4`, read off the `FCOMP`
+instructions that reference them. The addresses are the shipped executable's own: the neighbouring
+constant at `0x004a86a4` is embedded as literal bytes in both jump-entry patterns in
+`cheats_jump_boost.c`, and those patterns resolve on the `WMAIN.EXE` jump boost was field tested
+against.
 
 Tested in game on Windows: a boosted jump onto ground (immune as before), jump boost off a ledge
 into the void (dies promptly, death screen loads correctly, audio normal), and, after the

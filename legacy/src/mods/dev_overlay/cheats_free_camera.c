@@ -7,8 +7,9 @@
  * SIZE NOTE
  *
  * Over the 600 line mark, under the 900 hard limit, and the size is not really the file's.
- * One function, hook_camera_update, is most of it. The rest of the file is a pair of signatures,
- * the hotkey, the wheel source and the install pass, and none of that is large.
+ * One function, hook_camera_update, is most of it. The rest of the file is a pair of signatures
+ * with the byte evidence for the two sites they find, the hotkey, the wheel source and the install
+ * pass, and none of that is large.
  *
  * So the honest seam is not between two halves of this file, it is inside that function, which
  * is itself well past the 150 line mark where the rules say split. It reads input, decides a
@@ -21,10 +22,9 @@
  * hand rather than covered by a test. It is left whole here deliberately, and named so the next
  * person does not have to work out why the file is long.
  *
- * Unrelated to the size, and worth a separate pass: this file's own evidence for the two camera
- * sites is duplicated in cheats_jump_boost.c, left there when these were one file.
- *
- * Split out of cheats_openphantom.c; nothing changed in the move. */
+ * Split out of cheats_openphantom.c; nothing changed in the move. The evidence for the two
+ * sites was left behind in cheats_jump_boost.c when these were one file, and has since been
+ * brought here, above the signatures it is about. */
 #include "cheats_openphantom.h"
 #include "cheats_internal.h"
 #include "floor_probe.h"
@@ -43,6 +43,79 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+/* Free camera, site one of two: the simulation pause flag.
+ *
+ * Every earlier fly-mode attempt fought the player's own state machine one function at a time
+ * because the player kept simulating. FUN_0043e9f2, the per-frame pump, gates the entire
+ * fixed-timestep substep driver on two cells, confirmed byte-for-byte against the running image:
+ *
+ *   0043ea13  83 3D 44134838 00     cmp [00881344],0        ; a movie/quit state, untouched
+ *   0043ea1a  75 13                 jnz past the substep call
+ *   0043ea1c  83 3D 00000000 00     cmp [SIM PAUSE FLAG],0  ; THE CELL THIS FEATURE USES
+ *   0043ea23  75 0A                 jnz past the substep call
+ *   0043ea25  6A 00                 push 0
+ *   0043ea27  E8 00000000           call FUN_004756fc       ; the whole substep loop
+ *   0043ea2c  83 C4 04              add esp,4
+ *
+ * FUN_004756fc is the fixed-timestep driver: it is where every registered per-tick callback runs,
+ * including FUN_0047582a's table, which is where the player task installs FUN_00447d38 (Plr_
+ * RunPhases, the whole player simulation). A non-zero pause flag skips the call to FUN_004756fc
+ * entirely, so nothing registered on it runs at all, not just the player, the whole world. That
+ * is confirmed as the SAME cell the retail ESC pause menu sets
+ * (gameplay_open_pause_menu at 0x0043FAB5 writes it before its own blocking menu loop and clears it
+ * after), so this is not a guessed side door, it is the mechanism the game already uses to pause
+ * itself. This feature only ever writes the flag directly; it does not call the two
+ * task_broadcast_cmd notifications retail's own pause menu also makes (audio ducking and similar),
+ * a deliberate, smaller freeze: enough to stop the world moving under a free camera, not a
+ * reproduction of the retail pause experience.
+ *
+ * THE PATTERN FOR THIS GATE IS NOT REPEATED HERE. sim_pause.c, in this same DLL, resolves this
+ * exact site, reads the same operand and owns the cell. This feature asks it to hold the pause
+ * rather than resolving the address a second time and writing the cell itself. Two resolvers of
+ * one address is how the two of them came to fight, and the sequence it produced left the game
+ * frozen with nothing holding it. */
+
+/* Free camera, site two of two: the camera object pointer, and its per-frame update.
+ *
+ * SIG_CAMERA_VIEW is copied verbatim from enhanced_input's camera_sites.c (0x00418EDD, inside
+ * updateCam's follow blend: `mov eax,[gView]; fld [eax+0x38]`, the previous camera yaw, read
+ * immediately before the offset that feature adds to it). Same retail image, same bytes either
+ * way, and that mod's own extensive cross-checking already established what they are; this file
+ * resolves its own copy rather than reaching into another mod's DLL, the same independence every
+ * other site in this file already keeps.
+ *
+ * updateCam itself, 0x00418544, is a multi-tenant detour target: enhanced_input's
+ * free_look_camera.c detours it as well as this file, and common/detour.c chains specifically so
+ * a second detour on the same prologue does not have to scan for bytes the first detour already
+ * overwrote. SIG_CAMERA_UPDATE and CAMERA_UPDATE_PROLOGUE_SIZE are copied from camera_sites.c
+ * unchanged for exactly that reason: matching bytes, not just a matching address.
+ *
+ * WHERE THE CAMERA'S OWN POSITION LIVES, DISASSEMBLED DIRECTLY RATHER THAN TAKEN ON TRUST:
+ *
+ *   0041872f  MOV EAX,[gView]
+ *   00418734  ADD EAX,0x14
+ *   00418737  MOV ECX,[EBP-0x38] / MOV [EAX],ECX        ; anchor X  = view+0x14
+ *   0041873c  MOV EDX,[EBP-0x34] / MOV [EAX+4],EDX       ; anchor Y  = view+0x18
+ *   00418742  MOV ECX,[EBP-0x30] / MOV [EAX+8],ECX       ; anchor Z  = view+0x1c
+ *   00418748  MOV EDX,[gView] / ADD EDX,0x34
+ *   00418751  MOV EAX,[EBP-0x10] / MOV [EDX],EAX         ; euler.x   = view+0x34  (pitch, degrees)
+ *   00418756  MOV ECX,[EBP-0xc] / MOV [EDX+4],ECX        ; euler.y   = view+0x38  (yaw, degrees)
+ *   0041875c  MOV EAX,[EBP-8] / MOV [EDX+8],EAX      ; euler.z   = view+0x3c  (roll, untouched)
+ *
+ * written unconditionally, before the state (follow/fixed/world-fixed) dispatch that starts at
+ * 0x004187ce even begins, and camera_sites.c only ever traces the follow-state arm, so this is
+ * new.
+ * The source, traced back further, is SetCamTarget (FUN_004184cc): the player's own per-tick
+ * dispatch (FUN_00447d38 case 3) is one of its five call sites, feeding it the player's own
+ * position. That is the actual coupling this feature breaks, not the state field, which changing
+ * alone does nothing, since every state still re-derives a TARGET offset from the same anchor
+ * every call. Freezing the simulation (the site above) stops SetCamTarget from ever being called
+ * again, which stops the anchor's own feed cold; nothing then contends with a write made AFTER
+ * calling the original updateCam, since this file's write runs strictly after the whole original
+ * function, including its own second, later write to yaw alone at 0x00418fa1, part of the
+ * follow-blend arm, has already finished. Roll (+0x3c) is left alone; a free camera has no use
+ * for it and neither does anything reading euler.x/euler.y elsewhere. */
 
 static const uint8_t SIG_CAMERA_VIEW[] = {
     0xA1, 0x00, 0x00, 0x00, 0x00,                     /* mov eax,[gView]                    */
@@ -279,17 +352,18 @@ static void __cdecl hook_camera_update(void)
              * left, which is the point of the key. The follow camera needs nothing either way:
              * the very next updateCam recomputes it from the player, wherever the player now is.
              *
-             * Nothing is refused here, and that was a correction. A floor test was added and then
-             * taken back out. It asked the engine's own probe whether there was ground under the
-             * camera and declined the teleport when there was not, or when the drop was over
-             * eighty units. Both refusals fired constantly in ordinary use, because that probe is
-             * scoped to the CELL its point sits in: fly above the level and the point is in no
-             * cell, so no floor polygon is ever offered and the answer is "void" whatever is
-             * really underneath. A field session logged twelve refusals and not one was the height
-             * cap; every one was that false void, and every teleport that did go through was
-             * within a few units of standing height. Flying up and dropping the player in is what
-             * this key is for, so a guard that removes it whenever the camera leaves the level's
-             * own cells costs more than the fall it was guarding against. */
+             * One thing is refused: a drop past FREECAM_MAX_TELEPORT_DROP, measured from the
+             * player, below. The refusal this replaced is worth keeping on record. The first
+             * version asked the engine's own probe whether there was ground under the CAMERA and
+             * declined the teleport when there was not, or when the drop was over eighty units.
+             * The floor refusal fired constantly in ordinary use, because that probe is scoped to
+             * the cell its point sits in: fly above the level and the point is in no cell, so no
+             * floor polygon is ever offered and the answer is "void" whatever is really
+             * underneath. A field session logged twelve refusals and not one was the height cap;
+             * every one was that false void, and every teleport that did go through was within a
+             * few units of standing height. Flying up and dropping the player in is what this key
+             * is for, so the probe is never asked about the camera any more; the height cap
+             * stayed, measured from the one point the probe can be trusted at. */
             if (freecam_teleport_pending) {
                 uint8_t *player = (uint8_t *)player_slot_current();
 
@@ -299,8 +373,9 @@ static void __cdecl hook_camera_update(void)
                  * the player and the key reads as "not from here" rather than as a key that did
                  * nothing.
                  *
-                 * Height only. There is no floor probe here on purpose; see the note on
-                 * FREECAM_MAX_TELEPORT_DROP for the one that was tried and what it cost. */
+                 * Height only, and the floor probe is asked about the PLAYER, never about the
+                 * camera; see the note on FREECAM_MAX_TELEPORT_DROP for the probe under the
+                 * camera that was tried and what it cost. */
                 if (player != NULL) {
                     const float *standing = (const float *)(player + PLAYER_POSITION_OFFSET);
                     float        above    = freecam_z - standing[2];
@@ -343,8 +418,8 @@ static void __cdecl hook_camera_update(void)
                      *
                      * The camera's own Z, deliberately. Standing the player on the floor beneath
                      * the camera was tried and taken back out: dropping somebody in from height
-                     * is the thing people want this key for. Nothing bounds the drop either; see
-                     * the note above for the guard that was tried there and what it cost. */
+                     * is the thing people want this key for. The only bound on the drop is the
+                     * height cap already passed above. */
                     float *position = (float *)(player + PLAYER_POSITION_OFFSET);
                     float *desired  = (float *)(player + PLAYER_DESIRED_POSITION_OFFSET);
                     float *vertical = (float *)(player + PLAYER_VERTICAL_VELOCITY_OFFSET);

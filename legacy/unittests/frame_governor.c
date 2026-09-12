@@ -25,7 +25,7 @@
 #define RAISE_BELOW_MS 11.594f
 #define NEEDED         30u
 
-int main(void)
+static void test_slow_side(void)
 {
     ut_section("the slow side: one bad second is enough");
     ut_check(frame_governor_decide(15.0f, LOWER_ABOVE_MS, RAISE_BELOW_MS, 0u, NEEDED) ==
@@ -38,7 +38,10 @@ int main(void)
     ut_check(frame_governor_decide(13.4f, LOWER_ABOVE_MS, RAISE_BELOW_MS, 0u, NEEDED) ==
                  FRAME_GOVERNOR_LOWER,
              "just past the threshold is past it");
+}
 
+static void test_fast_side(void)
+{
     ut_section("the fast side: a raise has to be earned");
     ut_check(frame_governor_decide(10.0f, LOWER_ABOVE_MS, RAISE_BELOW_MS, NEEDED, NEEDED) ==
                  FRAME_GOVERNOR_RAISE,
@@ -49,7 +52,10 @@ int main(void)
     ut_check(frame_governor_decide(10.0f, LOWER_ABOVE_MS, RAISE_BELOW_MS, NEEDED + 100u, NEEDED) ==
                  FRAME_GOVERNOR_RAISE,
              "and more than enough is still a raise, not an error");
+}
 
+static void test_dead_zone(void)
+{
     ut_section("the dead zone, which stops it oscillating");
     /* Between the two thresholds the governor must do NOTHING, no matter how long it has been
        healthy. If this band ever closes, a scale that lands inside it is lowered, recovers,
@@ -67,7 +73,10 @@ int main(void)
                  FRAME_GOVERNOR_HOLD,
              "and exactly on the lower threshold is not past it either: both edges belong to the "
              "dead zone, so a frame time parked on one cannot toggle the scale");
+}
 
+static void test_implausible_measurement(void)
+{
     ut_section("a measurement it cannot believe moves nothing");
     ut_check(frame_governor_decide(0.0f, LOWER_ABOVE_MS, RAISE_BELOW_MS, NEEDED, NEEDED) ==
                  FRAME_GOVERNOR_HOLD,
@@ -82,7 +91,10 @@ int main(void)
                  FRAME_GOVERNOR_HOLD,
              "an unconfigured raise threshold disables the whole decision, not just the raise: a "
              "governor holding one threshold and not the other is worse than one holding neither");
+}
 
+static void test_not_a_number(void)
+{
     ut_section("a number that is not one");
     /* The median comes off a ring of measured frames and the thresholds are derived from a frame
        rate read out of the ini, where "nan" and "inf" parse. Every one of the four comparisons
@@ -111,7 +123,10 @@ int main(void)
     ut_check(frame_governor_step_size((float)INFINITY, 13.333f, 0.15f, 0.10f) <=
                  0.15f * 4.0f + 0.0001f,
              "an infinite median takes the clamped four steps, the same as any absurd one");
+}
 
+static void test_inverted_thresholds(void)
+{
     ut_section("thresholds the wrong way round are refused, not obeyed");
     /* Inverted thresholds have no dead zone at all, since every frame time is both too slow and
        fast enough, so this is the configuration that would oscillate hardest. It must be
@@ -122,7 +137,10 @@ int main(void)
     ut_check(frame_governor_decide(12.0f, LOWER_ABOVE_MS, LOWER_ABOVE_MS, NEEDED, NEEDED) ==
                  FRAME_GOVERNOR_HOLD,
              "and two equal thresholds are the same defect with the band closed to nothing");
+}
 
+static void test_step_size(void)
+{
     ut_section("how big a step, from how far off target");
     /* Sizing the step is what replaced an attribution test that could not work; see the header.
        The two ends are what matter: a near miss must not lurch, and a collapse must not crawl. */
@@ -146,7 +164,10 @@ int main(void)
     ut_check(frame_governor_step_size(13.4f, 13.333f, 0.15f, 0.10f) >= 0.15f / 3.0f - 0.0001f,
              "a miss too small to measure still moves by the minimum, so it cannot stall just "
              "outside the target");
+}
 
+static void test_field_runs_replayed(void)
+{
     ut_section("the two field runs, replayed against the step sizes");
     {
         /* Run one walked to 1.15 at a fixed step. Run two held at 52 fps for seven seconds. Both
@@ -202,6 +223,18 @@ int main(void)
                   "where nine seconds well past it ended at %.2f, which is the whole point of "
                   "sizing the step rather than fixing it", scale, run_one_end);
     }
+}
+
+int main(void)
+{
+    test_slow_side();
+    test_fast_side();
+    test_dead_zone();
+    test_implausible_measurement();
+    test_not_a_number();
+    test_inverted_thresholds();
+    test_step_size();
+    test_field_runs_replayed();
 
     return ut_summary("the view distance's frame-time governor");
 }

@@ -22,12 +22,13 @@ static int equals(const char *actual, const char *expected)
     return strcmp(actual, expected) == 0;
 }
 
-int main(void)
-{
-    char path[64];
-    char base[16];
+/* Shared by the sections below, which run in order and hand state on to each other the
+ * way one main used to. */
+static char path[64];
+static char base[16];
 
-    /* --- the basename, which is the part the engine's own naming decides ---------------------- */
+static void test_basename(void)
+{
     ut_section("the basename");
 
     ut_check(movie_path_basename("movie\\arena", base, sizeof base) && equals(base, "arena"),
@@ -53,6 +54,10 @@ int main(void)
              "one byte short is refused rather than truncated");
 
     /* --- the whole path ---------------------------------------------------------------------- */
+}
+
+static void test_whole_path(void)
+{
     ut_section("the whole path");
 
     ut_check(movie_path_build("C:\\Games\\TPM\\", "movies_hd", "movie\\arena", "mp4",
@@ -88,7 +93,10 @@ int main(void)
     ut_check(movie_path_build("C:\\g\\", "d", "n", "..x", path, sizeof path) &&
              equals(path, "C:\\g\\d\\n..x"),
              "a second dot is left alone, so a typo stays visible instead of being repaired");
+}
 
+static void test_refusals(void)
+{
     ut_section("refusals");
 
     ut_check(!movie_path_build(NULL, "d", "n", "x", path, sizeof path),
@@ -125,6 +133,10 @@ int main(void)
              "a movie name with no basename is refused");
 
     /* --- truncation, at the boundary and one past it ------------------------------------------ */
+}
+
+static void test_truncation(void)
+{
     ut_section("truncation");
 
     /* "" + "d" + "n" + "x" is "d\n.x", five characters, so six bytes is exactly enough. */
@@ -148,6 +160,10 @@ int main(void)
              "an over-long extension is refused");
 
     /* --- the folder, which decides whether this feature does anything at all ------------------ */
+}
+
+static void test_folder(void)
+{
     ut_section("the folder");
 
     /* No trailing separator: the caller hands this straight to the file system, and a trailing
@@ -197,6 +213,16 @@ int main(void)
                  strncmp(file, folder, strlen(folder)) == 0 && file[strlen(folder)] == '\\',
                  "the file always sits directly inside the folder the install check tested");
     }
+}
+
+int main(void)
+{
+    /* --- the basename, which is the part the engine's own naming decides ---------------------- */
+    test_basename();
+    test_whole_path();
+    test_refusals();
+    test_truncation();
+    test_folder();
 
     return ut_summary("movie path");
 }

@@ -34,17 +34,19 @@ static void set(float *v, float x, float y, float z)
     v[2] = z;
 }
 
-int main(void)
-{
-    float    pos[3];
-    float    previous[3];
-    float    drawn[3];
-    bool     answered;
-    bool     every_frame_agreed;
-    uint32_t step;
-    uint32_t gap = 0u;
-    int      i;
+/* Shared by the sections below, which run in order and hand state on to each other the
+ * way one main used to. */
+static float    pos[3];
+static float    previous[3];
+static float    drawn[3];
+static bool     answered;
+static bool     every_frame_agreed;
+static uint32_t step;
+static uint32_t gap = 0u;
+static int      i;
 
+static void test_unseen_object(void)
+{
     ut_section("an object nobody has seen before");
 
     object_track_reset();
@@ -54,7 +56,10 @@ int main(void)
 
     answered = object_track_sample(KEY_A, 1u, pos, previous, &gap);
     ut_check(!answered, "and neither does a second frame on that same step");
+}
 
+static void test_step_that_moved(void)
+{
     ut_section("a step that moved it");
 
     set(pos, 1.5f, 2.0f, 3.0f);
@@ -62,7 +67,10 @@ int main(void)
     ut_check(answered, "on the next step, where it was is known");
     ut_check(previous[0] == 1.0f && previous[1] == 2.0f && previous[2] == 3.0f,
              "and that is exactly the position it held on the step before");
+}
 
+static void test_frames_inside_a_step(void)
+{
     ut_section("the frames inside one step");
 
     /* bapobj_drawAll asks once per object per FRAME, so the same step arrives three or four times
@@ -77,7 +85,10 @@ int main(void)
         }
     }
     ut_check(every_frame_agreed, "every later frame on the same step gets the same answer back");
+}
 
+static void test_object_that_stops(void)
+{
     ut_section("an object that stops moving");
 
     /* The regression. It walks for a few steps, then stands still, and what matters is that its
@@ -104,7 +115,10 @@ int main(void)
     object_track_blend(previous, pos, 0.5f, 2.0f, drawn);
     ut_check(drawn[0] == 3.0f && drawn[1] == 0.0f && drawn[2] == 0.0f,
              "so a standing character is drawn where it stands, at any alpha");
+}
 
+static void test_two_objects_kept_apart(void)
+{
     ut_section("two objects do not collide");
 
     object_track_reset();
@@ -120,7 +134,10 @@ int main(void)
     set(pos, 51.0f, 0.0f, 0.0f);
     answered = object_track_sample(KEY_B, 2u, pos, previous, &gap);
     ut_check(answered && previous[0] == 50.0f, "and the other with its own, not the first's");
+}
 
+static void test_full_table(void)
+{
     ut_section("a table with no room left");
 
     object_track_reset();
@@ -139,7 +156,10 @@ int main(void)
     answered = object_track_sample(0xFEED0000u, 2u, pos, previous, &gap);
     ut_check(!answered,
              "and still none on the next step, so it was refused rather than merely new");
+}
 
+static void test_stale_slot(void)
+{
     ut_section("a slot nobody has claimed for a long time");
 
     object_track_reset();
@@ -159,7 +179,10 @@ int main(void)
     set(pos, 2.0f, 0.0f, 0.0f);
     answered = object_track_sample(KEY_A, 3u, pos, previous, &gap);
     ut_check(!answered, "a slot left by an object nobody has drawn for a long time is taken over");
+}
 
+static void test_step_gap(void)
+{
     ut_section("how many steps apart the two samples are");
 
     object_track_reset();
@@ -183,7 +206,10 @@ int main(void)
     gap = 0u;
     answered = object_track_sample(KEY_A, 14u, pos, previous, &gap);
     ut_check(answered && gap == 3u, "and reports it again for every later frame on that step");
+}
 
+static void test_weight(void)
+{
     ut_section("the weight the frame rate decides");
 
     ut_near(object_track_weight(0.0f, 1u), 0.0f, 0.0001,
@@ -208,7 +234,10 @@ int main(void)
 
     ut_check(!isfinite(object_track_weight((float)NAN, 4u)),
              "an alpha that is not a number is passed on rather than turned into one");
+}
 
+static void test_blend(void)
+{
     ut_section("the blend");
 
     set(previous, 0.0f, 0.0f, 0.0f);
@@ -226,7 +255,10 @@ int main(void)
     ut_near(drawn[0], 1.0f, 0.0001, "a quarter of the way along, on X");
     ut_near(drawn[1], 2.0f, 0.0001, "and on Y");
     ut_near(drawn[2], 3.0f, 0.0001, "and on Z");
+}
 
+static void test_teleport_refused(void)
+{
     ut_section("a jump too large to be a character's step");
 
     /* The other regression. A carried character moves 0.045 units in a step and a walking one
@@ -257,7 +289,10 @@ int main(void)
 
     object_track_blend(previous, pos, 0.5f, 0.0f, drawn);
     ut_near(drawn[0], 0.75f, 0.0001, "a limit of zero switches the test off");
+}
 
+static void test_non_finite_values(void)
+{
     ut_section("values a distance test cannot rank");
 
     /* The root rules ask for NaN and infinity wherever a float can carry them, and here they were
@@ -305,6 +340,22 @@ int main(void)
     object_track_blend(previous, pos, 0.5f, 8.0f, drawn);
     ut_near(drawn[0], 0.5f, 0.0001,
             "and an ordinary blend still works after all of that");
+}
+
+int main(void)
+{
+    test_unseen_object();
+    test_step_that_moved();
+    test_frames_inside_a_step();
+    test_object_that_stops();
+    test_two_objects_kept_apart();
+    test_full_table();
+    test_stale_slot();
+    test_step_gap();
+    test_weight();
+    test_blend();
+    test_teleport_refused();
+    test_non_finite_values();
 
     return ut_summary("object track");
 }

@@ -36,7 +36,7 @@ static frame_cap_second_t second_of(unsigned frames, unsigned over_budget, unsig
     return s;
 }
 
-int main(void)
+static void test_not_matching(void)
 {
     ut_section("not matching, so the setting stands");
 
@@ -46,7 +46,10 @@ int main(void)
              "and uncapped stays uncapped, which is a real choice rather than an absent one");
     ut_check(frame_cap_effective(100, false, 144, 3) == 100,
              "the divisor means nothing without matching");
+}
 
+static void test_matching_a_display(void)
+{
     ut_section("matching a display that answers");
 
     ut_check(frame_cap_effective(100, true, 144, 1) == 144,
@@ -55,7 +58,10 @@ int main(void)
              "and 90 replaces the 60 that made a Deck OLED judder");
     ut_check(frame_cap_effective(0, true, 144, 1) == 144,
              "matching beats uncapped as well, which is the point: smooth without a loaded core");
+}
 
+static void test_matching_a_silent_display(void)
+{
     ut_section("matching a display that will not say");
 
     /* VREFRESH answers 0 or 1 for a driver reporting a hardware default rather than a rate. The
@@ -69,7 +75,10 @@ int main(void)
              "with nothing configured either, uncapped is still what was asked for");
     ut_check(frame_cap_effective(100, true, 0, 2) == 100,
              "a divisor cannot divide a refresh nobody reported");
+}
 
+static void test_rates_that_are_not_rates(void)
+{
     ut_section("rates that are not rates");
 
     ut_check(frame_cap_effective(100, true, 19, 1) == 100,
@@ -79,7 +88,10 @@ int main(void)
              "a negative setting reads as uncapped rather than as a negative frame time");
     ut_check(frame_cap_effective(5000, false, 0, 1) == 1000,
              "and an absurd one is clamped to the range the setting documents");
+}
 
+static void test_fractions_of_the_refresh(void)
+{
     ut_section("fractions of the refresh");
 
     ut_check(frame_cap_effective(0, true, 144, 2) == 72, "half of 144 is 72");
@@ -91,7 +103,10 @@ int main(void)
     ut_check(frame_cap_effective(0, true, 144, 0) == 144, "a divisor of 0 reads as 1");
     ut_check(frame_cap_effective(0, true, 144, 9) == 36,
              "and one past the maximum is held at the maximum");
+}
 
+static void test_floor(void)
+{
     ut_section("the floor");
 
     ut_check(frame_cap_divisor_limit(144) == 4, "144 may go down to a quarter, 36");
@@ -100,7 +115,10 @@ int main(void)
     ut_check(frame_cap_divisor_limit(50) == 1, "50 cannot step at all: 25 is under the floor");
     ut_check(frame_cap_effective(0, true, 60, 4) == 30,
              "so asking 60 Hz for a quarter gets the half instead");
+}
 
+static void test_stepping_down(void)
+{
     ut_section("stepping down on an overrun second");
     {
         unsigned            clean = 0;
@@ -149,7 +167,10 @@ int main(void)
         ut_check(frame_cap_step(1, &clean, &s, 144) == 2,
                  "twenty frames of 45 ms is a machine that cannot hold the cap, and it steps");
     }
+}
 
+static void test_stepping_back_up(void)
+{
     ut_section("stepping back up needs several clear seconds");
     {
         unsigned            clean = 0;
@@ -203,7 +224,10 @@ int main(void)
         divisor = frame_cap_step(divisor, &clean, &s, 144);
         ut_check(divisor == 2, "a paused second is not the fifth clear one");
     }
+}
 
+static void test_directions_do_not_fight(void)
+{
     ut_section("the two directions do not fight");
     {
         unsigned            clean = 0;
@@ -216,6 +240,19 @@ int main(void)
         ut_check(frame_cap_step(2, &clean, &s, 144) == 3 && clean == 0,
                  "an overrun steps down and forgets the clear seconds before it");
     }
+}
+
+int main(void)
+{
+    test_not_matching();
+    test_matching_a_display();
+    test_matching_a_silent_display();
+    test_rates_that_are_not_rates();
+    test_fractions_of_the_refresh();
+    test_floor();
+    test_stepping_down();
+    test_stepping_back_up();
+    test_directions_do_not_fight();
 
     return ut_summary("frame cap");
 }

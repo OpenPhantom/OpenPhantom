@@ -136,10 +136,12 @@ static void check_every_row_fits(const char *what)
     }
 }
 
-int main(void)
-{
-    overlay_row_t row;
+/* Shared by the sections below, which run in order and hand state on to each other the
+ * way one main used to. */
+static overlay_row_t row;
 
+static void test_search(void)
+{
     ut_section("the search, which is pure and is where the quiet mistakes live");
     ut_check(overlay_model_matches("turntables", ""), "an empty search matches everything");
     ut_check(overlay_model_matches("turntables", NULL), "no search at all matches everything");
@@ -155,7 +157,10 @@ int main(void)
     ut_check(overlay_model_matches("", ""), "an empty label still matches an empty search");
     ut_check(!overlay_model_matches(NULL, "a"),
              "a missing label is refused rather than crashed on");
+}
 
+static void test_fresh_panel(void)
+{
     ut_section("what a freshly opened panel shows");
     overlay_model_reset();
     overlay_model_rebuild();
@@ -167,7 +172,10 @@ int main(void)
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_GROUP,
              "so is the second: two groups, not one, on the Original tab");
     ut_check(overlay_model_search()[0] == '\0', "with nothing typed");
+}
 
+static void test_folding(void)
+{
     ut_section("folding");
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
@@ -188,7 +196,10 @@ int main(void)
              "and with no engine behind it the row reports itself unavailable rather than ticking");
     ut_check(!overlay_model_activate(1),
              "switching an unavailable cheat is refused instead of quietly doing nothing");
+}
 
+static void test_jump_scale_row(void)
+{
     ut_section("the jump-boost scale row, right after jump boost's own toggle");
     /* Row 0 is the heading, rows 1..7 are the seven cheats ahead of jump boost in the enum, row 8
      * is jump boost's own toggle (id 7), and the scale row takes over free camera's OLD slot: id
@@ -206,7 +217,10 @@ int main(void)
     ut_check(strcmp(row.value, "2.50x") == 0,
              "shows the current scale even though the cheat itself never armed; the number is "
              "real regardless of whether anything is hooked to multiply by it yet");
+}
 
+static void test_jump_scale_clamps(void)
+{
     ut_section("the scale getter and setter clamp on their own, with no panel involved");
     cheats_openphantom_jump_boost_set_scale(0.1f);
     ut_check(cheats_openphantom_jump_boost_scale() > 0.49f &&
@@ -217,7 +231,10 @@ int main(void)
                  cheats_openphantom_jump_boost_scale() < 5.01f,
              "a value above the ceiling is clamped down to it the same way");
     cheats_openphantom_jump_boost_set_scale(1.3f);   /* restored for the sections below */
+}
 
+static void test_jump_scale_row_availability(void)
+{
     ut_section("the scale row is gated behind availability the same as the hotkey row");
     /* Exactly the shape overlay_model_capture_hotkey()'s own row already has, and for the same
      * reason: a row that looked clickable but could never mean anything (nothing is hooked up to
@@ -228,7 +245,10 @@ int main(void)
              "starting an edit on an unavailable row is refused the same as any other cheat");
     ut_check(!overlay_model_is_editing_value(),
              "and refusing it must not have left an edit armed with nothing behind it");
+}
 
+static void test_edit_outside_capture(void)
+{
     ut_section("the edit functions are harmless no-ops outside of a capture");
     /* Reachable directly without a resolved site. Unlike overlay_model_activate() above, none of
      * these four check availability, only whether a capture is actually running, so this is the
@@ -243,7 +263,10 @@ int main(void)
     ut_check(cheats_openphantom_jump_boost_scale() > 1.29f &&
                  cheats_openphantom_jump_boost_scale() < 1.31f,
              "and the stored scale never moved, since none of the four had a capture to act on");
+}
 
+static void test_freecam_hotkey_row(void)
+{
     ut_section("the free-camera exit hotkey row, now two slots after jump boost's toggle");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 1u, &row) &&
                  row.kind == OVERLAY_ROW_HOTKEY,
@@ -257,14 +280,20 @@ int main(void)
              "starting a capture on an unavailable row is refused the same as any other cheat");
     ut_check(!overlay_model_is_capturing_hotkey(),
              "and refusing it must not have left a capture armed with nothing behind it");
+}
 
+static void test_freecam_row(void)
+{
     ut_section("free camera's own row, one after its exit hotkey");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 2u, &row) &&
                  row.kind == OVERLAY_ROW_CHEAT,
              "free camera itself now sits one row after the hotkey that gates it");
     ut_check(!row.available,
              "and still unavailable with no exit hotkey bound, same as before the reorder");
+}
 
+static void test_freecam_note_row(void)
+{
     ut_section("the fly-controls note, one past free camera's own row");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  row.kind == OVERLAY_ROW_INFO,
@@ -273,7 +302,10 @@ int main(void)
                             "site");
     ut_check(strcmp(row.label, "+ How free camera flies") == 0,
              "closed by default, marked with a plus the same way a group would be");
+}
 
+static void test_end_level_row(void)
+{
     ut_section("skip to next level, the one action row in this group");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 4u, &row) &&
                  row.kind == OVERLAY_ROW_ACTION,
@@ -281,7 +313,10 @@ int main(void)
     ut_check(!row.available,
              "unavailable here, since the cell it writes is resolved by the original cheat table "
              "and nothing resolved in this test");
+}
 
+static void test_utilities_group(void)
+{
     ut_section("the utilities group, the settings half of the same tab");
     /* A group of its own since the settings outgrew the cheats they were appended to. Indexed from
        the utilities heading, which sits directly after the cheats group's last row. */
@@ -345,7 +380,11 @@ int main(void)
     ut_check(row.available,
              "always available. It writes a settings key and asks nothing of the game, so unlike "
              "the field of view row below there is no DLL whose absence could make it meaningless");
+}
 
+static void test_utilities_fog_rows(void)
+{
+    ut_section("the utilities group, the fog rows");
     ut_check(overlay_model_row(UTIL_ROW(7), &row) && row.kind == OVERLAY_ROW_VALUE,
              "then the fog thickness, a typed value since how near the fog sits is a number");
     ut_check(strcmp(row.label, "Fog thickness (0.25 to 1.0)") == 0,
@@ -379,7 +418,11 @@ int main(void)
     ut_check(!row.available,
              "and it is unavailable exactly when the row it drives is, so a handle is never "
              "offered for a value that cannot be shown");
+}
 
+static void test_utilities_input_and_display_rows(void)
+{
+    ut_section("the utilities group, the input and display rows");
     ut_check(overlay_model_row(UTIL_ROW(12), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Free look") == 0,
              "then free look, under the name the game\'s own controls screen gave it, so a reader "
@@ -438,7 +481,10 @@ int main(void)
     ut_check(strcmp(row.value, "F6 or ~") == 0,
              "an unbound key reads as the default rather than as blank or as one key, since the "
              "default accepts F6 and whatever sits below Escape");
+}
 
+static void test_draw_distance_switches_exclude(void)
+{
     ut_section("the two draw-distance switches cannot both be on");
     /* They contradict each other: strict mode declines the governor outright, so a frame-rate
        switch still reading ON would be describing something that is not happening. This writes the
@@ -461,7 +507,10 @@ int main(void)
         ut_check(false,
                  "the settings file could not be written, so the exclusion was never exercised");
     }
+}
 
+static void test_typed_rows_kept_apart(void)
+{
     ut_section("the two groups keep their own typed rows apart");
     /* Both groups hold a value row and a key row, and the panel remembers which row is being
        edited by its id alone. Overlapping ids would land a commit on the wrong group's row, which
@@ -480,7 +529,10 @@ int main(void)
 
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES);
     overlay_model_rebuild();
+}
 
+static void test_open_freecam_fold(void)
+{
     ut_section("opening the how-to-fly fold");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
@@ -522,19 +574,29 @@ int main(void)
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 14u, &row) &&
                  row.kind == OVERLAY_ROW_GROUP,
              "and the utilities heading after it, which is the whole tab accounted for");
+}
+
+static void test_close_freecam_fold(void)
+{
     ut_section("closing the how-to-fly fold again");
     ut_check(overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u),
              "the same summary row closes it back up");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == 4u + (uint32_t)CHEATS_OWN_COUNT + 4u,
              "its nine lines are gone again, back to costing one row like any other cheat");
+}
 
+static void test_group_folds_back(void)
+{
     ut_section("a group folds back exactly as it was");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == 4u,
              "folding it again leaves the four headings alone");
+}
 
+static void test_original_actions_group(void)
+{
     ut_section("the Original tab's second group: one-shot actions, not toggles");
     overlay_model_reset();
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_ORIGINAL_ACTIONS);
@@ -547,7 +609,10 @@ int main(void)
              "and with no engine behind it, unavailable rather than offered and inert");
     ut_check(!overlay_model_activate(2),
              "running an unavailable action is refused instead of quietly doing nothing");
+}
 
+static void test_queued_play_as_swap(void)
+{
     ut_section("a queued play-as swap, before anything has resolved");
     ut_check(!cheats_original_actions_is_pending(CHEATS_ACTION_PLAY_OBI),
              "nothing is pending on an executable nothing resolved against: character 0 (Obi-Wan) "
@@ -558,7 +623,10 @@ int main(void)
     ut_check(overlay_model_row(5, &row) && row.id == (uint32_t)CHEATS_ACTION_PLAY_OBI,
              "row 5 under the actions heading is Play as Obi-Wan, by index");
     ut_check(!row.pending, "and it does not show as queued either");
+}
 
+static void test_typing_opens_the_hit_group(void)
+{
     ut_section("typing opens the group that has hits, and clearing puts it back");
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
@@ -568,7 +636,10 @@ int main(void)
     ut_check(row_count_after("") == 4,
              "and clearing the box restores the folds you chose, not the ones the search "
              "forced");
+}
 
+static void test_search_box(void)
+{
     ut_section("the search box itself");
     overlay_model_reset();
     overlay_model_search_append('a');
@@ -583,7 +654,10 @@ int main(void)
     overlay_model_search_append((char)0x7F);
     ut_check(overlay_model_search()[0] == '\0',
              "a control character is refused, because the box could not show it");
+}
 
+static void test_search_box_overrun(void)
+{
     ut_section("the box cannot be overrun");
     {
         int i;
@@ -595,7 +669,10 @@ int main(void)
         ut_check(strlen(overlay_model_search()) == OVERLAY_SEARCH_MAX - 1u,
                  "typing past the end fills it and stops, leaving room for the terminator");
     }
+}
 
+static void test_missing_indices(void)
+{
     ut_section("indices that do not exist");
     overlay_model_reset();
     overlay_model_rebuild();
@@ -603,7 +680,10 @@ int main(void)
     ut_check(!overlay_model_activate(99u), "and so is acting on one");
     overlay_model_set_tab((overlay_tab_t)99);
     ut_check(overlay_model_tab() == OVERLAY_TAB_ORIGINAL, "a tab that does not exist is ignored");
+}
 
+static void test_labels_and_chips_fit(void)
+{
     ut_section("every label and every chip fits the room the panel leaves for it");
     /* Both tabs, both groups of each, everything unfolded, so the sweep sees every row this panel
        can put on screen rather than whichever ones happened to be open. */
@@ -630,6 +710,36 @@ int main(void)
     (void)overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u);
     overlay_model_rebuild();
     check_every_row_fits("the OpenPhantom tab with the fold open");
+}
+
+int main(void)
+{
+    test_search();
+    test_fresh_panel();
+    test_folding();
+    test_jump_scale_row();
+    test_jump_scale_clamps();
+    test_jump_scale_row_availability();
+    test_edit_outside_capture();
+    test_freecam_hotkey_row();
+    test_freecam_row();
+    test_freecam_note_row();
+    test_end_level_row();
+    test_utilities_group();
+    test_utilities_fog_rows();
+    test_utilities_input_and_display_rows();
+    test_draw_distance_switches_exclude();
+    test_typed_rows_kept_apart();
+    test_open_freecam_fold();
+    test_close_freecam_fold();
+    test_group_folds_back();
+    test_original_actions_group();
+    test_queued_play_as_swap();
+    test_typing_opens_the_hit_group();
+    test_search_box();
+    test_search_box_overrun();
+    test_missing_indices();
+    test_labels_and_chips_fit();
 
     return ut_summary("the overlay's model");
 }

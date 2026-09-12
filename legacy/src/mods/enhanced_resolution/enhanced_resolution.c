@@ -208,6 +208,7 @@ typedef struct resolution_state {
 } resolution_state_t;
 
 static resolution_state_t resolution_state;
+static patch_journal_t bolt_journal;
 
 /* The cell both menu bolts are repointed at. 0x7FFFFFFF makes the comparison never true. */
 static uint32_t menu_width_cell = 0x7FFFFFFFu;
@@ -428,9 +429,15 @@ static void install_menu_resolution_gate(void)
         return;
     }
 
-    if (patch_repoint_operand(enter_operand, enter_cell, our_cell) != PATCH_RESULT_OK ||
-        patch_repoint_operand(usable_operand, enter_cell, our_cell) != PATCH_RESULT_OK) {
-        log_error("repointing the menu bolts failed, unchanged");
+    /* Both operands or neither: with one repointed the entry test and the usable-width test
+     * would disagree about the ceiling, which is a state the engine never had. */
+    patch_journal_reset(&bolt_journal);
+    if (patch_journal_repoint_operand(&bolt_journal, enter_operand, enter_cell, our_cell)
+            != PATCH_RESULT_OK ||
+        patch_journal_repoint_operand(&bolt_journal, usable_operand, enter_cell, our_cell)
+            != PATCH_RESULT_OK) {
+        patch_journal_undo(&bolt_journal);
+        log_error("repointing the menu bolts failed, both operands are as they were");
         return;
     }
 

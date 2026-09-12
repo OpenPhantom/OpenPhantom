@@ -71,4 +71,42 @@ bool patch_read_call_target(uintptr_t call_address, uintptr_t *out_target);
  * whenever the callee has other callers that must stay untouched. */
 patch_result_t patch_redirect_call(uintptr_t call_address, const void *new_target);
 
+/* A journal for a feature that writes several places and has to put them all back when one of
+ * them refuses. Each write below reads what is there, writes through the checked path above, and
+ * records the before-bytes; patch_journal_undo() writes them back in reverse order. A feature that
+ * installs its writes through this can promise all of them or none, the promise the C rules ask
+ * of a failure after earlier writes. Detours are not journaled: a detour cannot be taken out,
+ * so it is placed last, after every reversible write has landed.
+ *
+ * A journal holds sixteen entries of up to four bytes. A write that does not fit is refused
+ * before anything is touched, so a full journal is a compile-time sizing mistake, not a half
+ * applied patch. */
+#define PATCH_JOURNAL_MAX 16u
+
+typedef struct patch_journal_entry {
+    uintptr_t at;
+    uint8_t   size;
+    uint8_t   before[4];
+} patch_journal_entry_t;
+
+typedef struct patch_journal {
+    patch_journal_entry_t entries[PATCH_JOURNAL_MAX];
+    size_t                count;
+} patch_journal_t;
+
+/* Empties the journal without writing anything: the writes it recorded are being kept. */
+void patch_journal_reset(patch_journal_t *journal);
+
+/* The three write forms above, each recording what it replaced. `size` is 1 to 4. */
+patch_result_t patch_journal_write_bytes(patch_journal_t *journal, uintptr_t address,
+                                         const void *data, size_t size);
+patch_result_t patch_journal_write_u32(patch_journal_t *journal, uintptr_t address,
+                                       uint32_t value);
+patch_result_t patch_journal_repoint_operand(patch_journal_t *journal, uintptr_t operand_address,
+                                             uint32_t expected_old, uint32_t new_value);
+
+/* Puts every recorded write back, last first, and empties the journal. A restore that does not
+ * land is logged and the rest are still attempted. */
+void patch_journal_undo(patch_journal_t *journal);
+
 #endif /* COMMON_PATCH_H */

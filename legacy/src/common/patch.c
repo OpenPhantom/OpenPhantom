@@ -194,6 +194,87 @@ bool patch_read_call_target(uintptr_t call_address, uintptr_t *out_target)
     return true;
 }
 
+void patch_journal_reset(patch_journal_t *journal)
+{
+    if (journal != NULL) {
+        journal->count = 0;
+    }
+}
+
+patch_result_t patch_journal_write_bytes(patch_journal_t *journal, uintptr_t address,
+                                         const void *data, size_t size)
+{
+    patch_journal_entry_t *entry;
+    patch_result_t         result;
+
+    if (journal == NULL || data == NULL || size == 0 || size > sizeof entry->before) {
+        return PATCH_RESULT_INVALID_ARGUMENT;
+    }
+    if (journal->count >= PATCH_JOURNAL_MAX) {
+        log_error("a patch journal is full at %u entries, so the write at %08X is refused before "
+                  "anything is touched", (unsigned)PATCH_JOURNAL_MAX, (unsigned)address);
+        return PATCH_RESULT_INVALID_ARGUMENT;
+    }
+
+    /* The before-bytes come from the checked read, so an unreadable range is refused here with
+     * nothing written, the same answer the write itself would give. */
+    entry = &journal->entries[journal->count];
+    if (!memory_read(address, entry->before, size)) {
+        return PATCH_RESULT_INVALID_ARGUMENT;
+    }
+
+    result = patch_write_bytes(address, data, size);
+    if (result != PATCH_RESULT_OK) {
+        return result;
+    }
+    entry->at   = address;
+    entry->size = (uint8_t)size;
+    ++journal->count;
+    return PATCH_RESULT_OK;
+}
+
+patch_result_t patch_journal_write_u32(patch_journal_t *journal, uintptr_t address,
+                                       uint32_t value)
+{
+    return patch_journal_write_bytes(journal, address, &value, sizeof value);
+}
+
+patch_result_t patch_journal_repoint_operand(patch_journal_t *journal, uintptr_t operand_address,
+                                             uint32_t expected_old, uint32_t new_value)
+{
+    uint32_t current;
+
+    if (journal == NULL || operand_address == 0) {
+        return PATCH_RESULT_INVALID_ARGUMENT;
+    }
+    if (!memory_read_u32(operand_address, &current)) {
+        log_warning("operand at %08X is not readable, refused", (unsigned)operand_address);
+        return PATCH_RESULT_UNEXPECTED_BYTES;
+    }
+    if (current != expected_old) {
+        log_warning("operand at %08X holds %08X, expected %08X, refused",
+                    (unsigned)operand_address, (unsigned)current, (unsigned)expected_old);
+        return PATCH_RESULT_UNEXPECTED_BYTES;
+    }
+    return patch_journal_write_u32(journal, operand_address, new_value);
+}
+
+void patch_journal_undo(patch_journal_t *journal)
+{
+    if (journal == NULL) {
+        return;
+    }
+    while (journal->count > 0) {
+        const patch_journal_entry_t *entry = &journal->entries[--journal->count];
+
+        if (patch_write_bytes(entry->at, entry->before, entry->size) != PATCH_RESULT_OK) {
+            log_error("the %u byte(s) at %08X could not be put back while undoing a patch, so "
+                      "that site keeps the new value", (unsigned)entry->size,
+                      (unsigned)entry->at);
+        }
+    }
+}
+
 patch_result_t patch_redirect_call(uintptr_t call_address, const void *new_target)
 {
     uint8_t  opcode;

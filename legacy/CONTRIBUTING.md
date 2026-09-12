@@ -97,8 +97,10 @@ and refuse if it is not what you expected. That single habit is also what makes 
 idempotent: a second run finds the new value rather than the expected old one and declines.
 
 **An unknown build must fail safely.** Never patch optimistically. A partially installed feature
-must stay inactive, and a failure after earlier writes should roll those writes back where the
-patch system supports it.
+must stay inactive, and a failure after earlier writes rolls those writes back: `patch_journal_t`
+in `common/patch.h` records each write and puts them back in reverse order, so a feature that
+writes several places promises all of them or none. Detours are not journaled, because a detour
+cannot be taken out, so a detour is placed last.
 
 **Log the branch, not only the result.** A silent exit is a blind spot. If a plausibility limit
 rejects something, it must say so rather than skip quietly.

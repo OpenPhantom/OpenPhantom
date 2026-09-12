@@ -443,59 +443,10 @@ static void on_frame(void)
              (int)state.told_w, (int)state.told_h, (int)w, (int)h, (double)box_scale(h));
 }
 
-/* The eleven reversible writes are journaled as they go, so a refusal part way through puts the
- * earlier ones back and the engine draws its own box, the way the header promises. The detour is
- * the twelfth and last, because a detour cannot be taken out again.
- *
- * Every write goes through the patch layer, which checks the range, writes and reads back. The
- * journal records what was there before each write, and it can, because every writer here knows
- * that in advance: patch_repoint_operand writes only when the operand still holds the value it was
- * given as expected, so the before-value is that expected value; a redirected call still holds
- * the displacement to the getter it was checked against; a byte is read before it is changed. */
-typedef struct written_bytes {
-    uintptr_t at;
-    uint8_t   size;
-    uint8_t   before[4];
-} written_bytes_t;
-
-static written_bytes_t journal[11];
-static size_t          journal_count;
-
-static bool journal_add(uintptr_t at, const void *before, size_t size)
-{
-    written_bytes_t *entry;
-
-    if (journal_count >= sizeof journal / sizeof journal[0] || size > sizeof entry->before) {
-        return false;
-    }
-    entry       = &journal[journal_count++];
-    entry->at   = at;
-    entry->size = (uint8_t)size;
-    memcpy(entry->before, before, size);
-    return true;
-}
-
-static bool write_journaled(uintptr_t at, const void *bytes, size_t size)
-{
-    uint8_t before[4];
-
-    if (size > sizeof before || !memory_read(at, before, size)) {
-        return false;
-    }
-    if (patch_write_bytes(at, bytes, size) != PATCH_RESULT_OK) {
-        return false;
-    }
-    return journal_add(at, before, size);
-}
-
-static void undo_journal(void)
-{
-    while (journal_count > 0u) {
-        const written_bytes_t *entry = &journal[--journal_count];
-
-        (void)patch_write_bytes(entry->at, entry->before, entry->size);
-    }
-}
+/* The eleven reversible writes go through the patch layer's journal, so a refusal part way
+ * through puts the earlier ones back and the engine draws its own box, the way the header
+ * promises. The detour is the twelfth and last, because a detour cannot be taken out again. */
+static patch_journal_t journal;
 
 /* An absolute operand is repointed only when it still holds what it was matched with. The pattern
  * proved it once, at resolve; the writes happen later, once the display exists, and this is what
@@ -503,12 +454,13 @@ static void undo_journal(void)
  * layer does the compare and the write; a refusal is logged there. */
 static bool repoint_operand(uintptr_t at, uint32_t expected_old, const void *cell)
 {
-    if (patch_repoint_operand(at, expected_old, (uint32_t)(uintptr_t)cell) != PATCH_RESULT_OK) {
+    if (patch_journal_repoint_operand(&journal, at, expected_old, (uint32_t)(uintptr_t)cell)
+            != PATCH_RESULT_OK) {
         log_warning("the operand at %08X was not repointed, so the subtitle box is left alone",
                     (unsigned)at);
         return false;
     }
-    return journal_add(at, &expected_old, sizeof expected_old);
+    return true;
 }
 
 /* The literal a pattern carries at an operand, which is the value that operand is expected to
@@ -552,7 +504,7 @@ static bool unclamp(uintptr_t site)
                     "left alone", (unsigned)site);
         return false;
     }
-    return write_journaled(site, &jmp, sizeof jmp);
+    return patch_journal_write_bytes(&journal, site, &jmp, sizeof jmp) == PATCH_RESULT_OK;
 }
 
 /* A call is redirected only while it still goes to the function it was resolved against. The
@@ -561,18 +513,15 @@ static bool unclamp(uintptr_t site)
 static bool retarget_call(uintptr_t site, uintptr_t expected_target, const void *destination)
 {
     uintptr_t current = 0;
-    uint32_t  before;
+    uint32_t  displacement;
 
     if (!patch_read_call_target(site, &current) || current != expected_target) {
         log_warning("the call at %08X does not go to %08X any more, so the subtitle box is left "
                     "alone", (unsigned)site, (unsigned)expected_target);
         return false;
     }
-    before = (uint32_t)(expected_target - (site + CALL_LENGTH));
-    if (patch_redirect_call(site, destination) != PATCH_RESULT_OK) {
-        return false;
-    }
-    return journal_add(site + 1u, &before, sizeof before);
+    displacement = (uint32_t)((uintptr_t)destination - (site + CALL_LENGTH));
+    return patch_journal_write_u32(&journal, site + 1u, displacement) == PATCH_RESULT_OK;
 }
 
 /* Whether the ten bytes at `at` are a getter, operand aside. */
@@ -634,7 +583,7 @@ static bool install_patches(void)
                     (unsigned)state.line_height_target, (unsigned)menu_scale_query_font_site());
         return false;
     }
-    journal_count = 0;
+    patch_journal_reset(&journal);
     if (!repoint_operand(state.pos_site + POS_SCALE_HEIGHT_OPERAND,
                          pattern_operand(SIG_POS_SCALE, POS_SCALE_HEIGHT_OPERAND), &told_height) ||
         !repoint_operand(state.pos_site + POS_SCALE_WIDTH_OPERAND,
@@ -656,7 +605,7 @@ static bool install_patches(void)
         !unclamp(state.glyph_site + CLAMP_Y_FROM_GLYPH) ||
         !detour_install(&state.bar, state.bar_site, (const void *)hook_draw_bar,
                         DRAW_BAR_PROLOGUE)) {
-        undo_journal();
+        patch_journal_undo(&journal);
         state.abandoned = true;
         log_warning("one of the subtitle box's twelve sites was refused, so the ones already "
                     "written were put back and the engine draws its own box this session");

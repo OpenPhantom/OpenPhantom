@@ -150,17 +150,18 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 | `host_image` | Where the game is: base address, code section, its directory |
 | `signature` | Find engine code by what it looks like, never by where it used to be |
 | `memory` | Range checks and page protection |
-| `patch` | Every write into engine memory goes through here |
+| `patch` | Every write into engine memory goes through here, with a journal for a feature that writes several places and has to put them all back |
 | `detour` | Inline hooks that several DLLs may place on one function |
 | `frame_hook` | Call me once per rendered frame |
 | `logging` | One log file, one prefix per DLL |
 | `ini` | One ini file, one section per DLL |
 | `menu_patcher` | Append widgets to one of the game's own menu screens |
-| `platform` | Whether this is Wine, so a fix for a Wine defect applies there and nowhere else |
+| `platform` | Whether this is Wine, so a fix for a Wine defect applies there and nowhere else, and whose window is in front |
 | `import_patch` | Replace one entry in another module's import table |
 | `cinematic_gate` | Whether a script holds the camera right now |
 | `stick` | The gamepad's radial deadzone, shared so two DLLs cannot drift apart |
 | `text` | One bounded formatter that always terminates, for every label, path and log line |
+| `numeric.h` | The float clamp and the finite test, inline because two of their callers are on the draw path |
 | `engine_types.h` | Binary structures more than one fix needs |
 
 **`src/loader` builds `dinput.dll`**, which sits next to the executable and patches nothing itself.

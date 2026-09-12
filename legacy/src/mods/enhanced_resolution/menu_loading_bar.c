@@ -178,26 +178,32 @@ static bool write_geometry(int32_t canvas_width, int32_t canvas_height)
         uintptr_t bar  = sites[SITE_PROGRESS_GEOMETRY].address;
         uintptr_t text = sites[SITE_TEXT_ORIGIN].address;
 
-        if (patch_write_u32(bar + BAR_Y_OFFSET,      (uint32_t)scaled(400,   ratio_y))
-                == PATCH_RESULT_OK &&
-            patch_write_u32(bar + BAR_X_OFFSET,      (uint32_t)scaled(0x1be, ratio_x))
-                == PATCH_RESULT_OK &&
-            patch_write_u32(bar + BACKDROP_X_OFFSET, (uint32_t)scaled(0x186, ratio_x))
-                == PATCH_RESULT_OK &&
-            patch_write_u32(bar + BACKDROP_Y_OFFSET, (uint32_t)scaled(0x15e, ratio_y))
-                == PATCH_RESULT_OK &&
-            patch_write_u32(bar + BACKDROP_WIDTH,    (uint32_t)scaled(0xf0,  ratio_x))
-                == PATCH_RESULT_OK &&
-            patch_write_u32(bar + BACKDROP_HEIGHT,   (uint32_t)scaled(0x54,  ratio_y))
-                == PATCH_RESULT_OK &&
-            patch_write_pointer32(bar + BAR_WIDTH_OPERAND,  &loading_bar_width)
-                == PATCH_RESULT_OK &&
-            patch_write_pointer32(bar + BAR_HEIGHT_OPERAND, &loading_bar_height)
-                == PATCH_RESULT_OK &&
-            patch_write_u32(text + TEXT_X_OFFSET,    (uint32_t)scaled(0x1fe, ratio_x))
-                == PATCH_RESULT_OK &&
-            patch_write_u32(text + TEXT_Y_OFFSET,    (uint32_t)scaled(0x17c, ratio_y))
-                == PATCH_RESULT_OK) {
+        static patch_journal_t journal;
+
+        /* Ten immediates, all of them or none. A refusal part way through puts the earlier ones
+         * back, so the loading screen is either scaled as a whole or drawn as it shipped, never
+         * a bar at one size on a backdrop at another. */
+        patch_journal_reset(&journal);
+        if (patch_journal_write_u32(&journal, bar + BAR_Y_OFFSET,
+                                    (uint32_t)scaled(400,   ratio_y)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BAR_X_OFFSET,
+                                    (uint32_t)scaled(0x1be, ratio_x)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BACKDROP_X_OFFSET,
+                                    (uint32_t)scaled(0x186, ratio_x)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BACKDROP_Y_OFFSET,
+                                    (uint32_t)scaled(0x15e, ratio_y)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BACKDROP_WIDTH,
+                                    (uint32_t)scaled(0xf0,  ratio_x)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BACKDROP_HEIGHT,
+                                    (uint32_t)scaled(0x54,  ratio_y)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BAR_WIDTH_OPERAND,
+                                    (uint32_t)(uintptr_t)&loading_bar_width) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, bar + BAR_HEIGHT_OPERAND,
+                                    (uint32_t)(uintptr_t)&loading_bar_height) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, text + TEXT_X_OFFSET,
+                                    (uint32_t)scaled(0x1fe, ratio_x)) == PATCH_RESULT_OK &&
+            patch_journal_write_u32(&journal, text + TEXT_Y_OFFSET,
+                                    (uint32_t)scaled(0x17c, ratio_y)) == PATCH_RESULT_OK) {
             applied_width  = canvas_width;
             applied_height = canvas_height;
             log_info("loading bar scaled with the canvas: %dx%d at %d,%d on a %dx%d backdrop, "
@@ -208,10 +214,11 @@ static bool write_geometry(int32_t canvas_width, int32_t canvas_height)
                      (int)scaled(0x1fe, ratio_x), (int)scaled(0x17c, ratio_y));
             return true;
         }
+        patch_journal_undo(&journal);
     }
 
-    log_warning("the loading bar's geometry could not be written, so it may be part scaled on the "
-                "loading screen. Nothing else is affected");
+    log_warning("the loading bar's geometry could not be written, so the loading screen keeps "
+                "the layout it had. Nothing else is affected");
     return false;
 }
 

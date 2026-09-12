@@ -122,5 +122,36 @@ int main(void)
                  "even though its first bytes are the expected ones");
     }
 
+    ut_section("a journal puts a half applied patch back");
+    {
+        static unsigned char   pair[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+        static patch_journal_t journal;
+        const unsigned char    first[4]  = { 9, 9, 9, 9 };
+        const unsigned char    second[4] = { 8, 8, 8, 8 };
+
+        patch_journal_reset(&journal);
+        ut_check(patch_journal_write_bytes(&journal, (uintptr_t)pair, first, 4) == PATCH_RESULT_OK
+                     && journal.count == 1 && pair[0] == 9,
+                 "the first write lands and is remembered");
+        ut_check(patch_journal_repoint_operand(&journal, (uintptr_t)(pair + 4), 0x08070605u,
+                                               0x08080808u) == PATCH_RESULT_OK
+                     && journal.count == 2 && memcmp(pair + 4, second, 4) == 0,
+                 "an operand that holds what was expected is repointed and remembered");
+        ut_check(patch_journal_repoint_operand(&journal, (uintptr_t)(pair + 4), 0x08070605u, 1u)
+                     == PATCH_RESULT_UNEXPECTED_BYTES && journal.count == 2,
+                 "an operand that no longer holds the expected value is refused and not recorded");
+        if (null_page_is_free()) {
+            ut_check(patch_journal_write_bytes(&journal, (uintptr_t)0x10, first, 4)
+                         != PATCH_RESULT_OK && journal.count == 2,
+                     "a write that cannot land records nothing");
+        }
+        patch_journal_undo(&journal);
+        ut_check(journal.count == 0 && pair[0] == 1 && pair[3] == 4 && pair[4] == 5 && pair[7] == 8,
+                 "undoing puts every recorded byte back and empties the journal");
+        ut_check(patch_journal_write_bytes(&journal, (uintptr_t)pair, first, 5)
+                     == PATCH_RESULT_INVALID_ARGUMENT && pair[0] == 1,
+                 "a write wider than an entry is refused before anything is touched");
+    }
+
     return ut_summary("patch");
 }

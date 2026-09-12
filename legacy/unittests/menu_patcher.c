@@ -10,6 +10,7 @@
 #include "common/engine_types.h"
 #include "common/host_image.h"
 #include "common/menu_patcher.h"
+#include "controls_layout.h"
 
 #include <string.h>
 
@@ -209,15 +210,6 @@ static void test_append_and_commit(void)
  * the rectangle bounded nothing. The layout checks below are therefore written against the DRAWN
  * footprints, the gauge bitmap's 250x50, the check box's 34x34 plus a caption forced to 200
  * wide, and against the region of the background art that is actually empty. */
-#define CONTROLS_FREE_X       281
-#define CONTROLS_FREE_Y        86
-#define CONTROLS_FREE_RIGHT   639
-#define CONTROLS_FREE_BOTTOM  398
-#define GAUGE_W               250
-#define GAUGE_H                50
-#define BOX_SIZE               34
-#define BOX_LABEL_GAP           4
-#define BOX_LABEL_W           200
 
 static void test_append_controls_group(void)
 {
@@ -246,10 +238,11 @@ static void test_append_controls_group(void)
     ut_check(!menu_patcher_has_widget_id(&context, 0x71),
           "widget id 0x71 is free on the shipped controls screen");
 
-    ut_check(menu_patcher_append_checkbox(&context, 0x70, 0x7655, 330, 192, 255, 50, 2, 4, 0,
-                                       &strafe_index),
+    ut_check(menu_patcher_append_checkbox(&context, 0x70, 0x7655, GROUP_X, CHECKBOX_Y_STRAFE,
+                                       CHECKBOX_WIDTH, CHECKBOX_HEIGHT, 2, 4, 0, &strafe_index),
           "the first check box is appended");
-    ut_check(menu_patcher_append_checkbox(&context, 0x71, 0x7656, 330, 246, 255, 50, 2, 4, 1,
+    ut_check(menu_patcher_append_checkbox(&context, 0x71, 0x7656, GROUP_X, CHECKBOX_Y_FREE_LOOK,
+                                       CHECKBOX_WIDTH, CHECKBOX_HEIGHT, 2, 4, 1,
                                        &free_look_index),
           "the second check box is appended behind it");
     ut_check(strafe_index == 8 && free_look_index == 9,
@@ -278,10 +271,11 @@ static void test_append_controls_group(void)
     /* The slider and its caption, which the controls screen ships neither of. The two bitmap
      * indices are the ones the shared table [0x4AEE10] carries: 2 = slgauge.bmp,
      * 3 = slslide.bmp. */
-    ut_check(menu_patcher_append_slider(&context, 0x72, 100, 330, 96, 255, 50, 3, 2, &slider_index),
+    ut_check(menu_patcher_append_slider(&context, 0x72, 100, SLIDER_X, SLIDER_Y, SLIDER_WIDTH,
+                                     SLIDER_HEIGHT, 3, 2, &slider_index),
           "the mouse speed slider is appended");
-    ut_check(menu_patcher_append_label(&context, 0x73, 330, 148, 250, 40, 1, slider_caption,
-                                    &label_index),
+    ut_check(menu_patcher_append_label(&context, 0x73, SLIDER_X, SLIDER_LABEL_Y, GAUGE_WIDTH,
+                                    SLIDER_LABEL_HEIGHT, 1, slider_caption, &label_index),
           "its caption is appended behind it");
     ut_check(slider_index == 10 && label_index == 11,
           "each widget gets its own index, in append order, behind the authored ones");
@@ -291,22 +285,22 @@ static void test_append_controls_group(void)
           "the caption's text pointer is ours, and the engine reads it every frame");
 
     /* THE LAYOUT, checked against what the engine really draws rather than against the rectangles
-     * it discards. The region, the footprints and the positions are this file's own copies of
-     * the numbers input_menu.c ships, which keeps them private and asserts the same relations at
-     * compile time. Nothing ties the two sets together: a number changed there is not caught
-     * here until it is copied across, and what these checks add is that the patcher lays the
-     * widgets out where it was told to, against the shipped table and not against prose. */
-    ut_check(target[10].rect.x >= CONTROLS_FREE_X &&
-          target[10].rect.x + GAUGE_W - 1 <= CONTROLS_FREE_RIGHT,
+     * it discards. The region, the footprints and the positions are the ones input_menu.c lays
+     * the group out from, through controls_layout.h, so a number changed there is checked here
+     * on the next run. What these checks add to that header's own assertions is that the patcher
+     * lays the widgets out where it was told to, against the shipped table and not against
+     * prose. */
+    ut_check(target[10].rect.x >= FREE_REGION_X &&
+          target[10].rect.x + GAUGE_WIDTH - 1 <= FREE_REGION_RIGHT,
           "the slider's 250-wide gauge stays inside the empty region");
-    ut_check(target[8].rect.x + BOX_SIZE + BOX_LABEL_GAP + BOX_LABEL_W - 1 <= CONTROLS_FREE_RIGHT,
+    ut_check(target[8].rect.x + CHECKBOX_DRAWN_WIDTH - 1 <= FREE_REGION_RIGHT,
           "a check box plus its 200-wide forced caption stays inside the empty region");
-    ut_check(target[10].rect.y >= CONTROLS_FREE_Y &&
-          target[9].rect.y + BOX_SIZE - 1 <= CONTROLS_FREE_BOTTOM,
+    ut_check(target[10].rect.y >= FREE_REGION_Y &&
+          target[9].rect.y + CHECKBOX_BOX_SIZE - 1 <= FREE_REGION_BOTTOM,
           "the group stays inside the empty region vertically");
-    ut_check(target[11].rect.y >= target[10].rect.y + GAUGE_H,
+    ut_check(target[11].rect.y >= target[10].rect.y + GAUGE_HEIGHT,
           "the caption begins at or below where the drawn gauge ends");
-    ut_check(target[9].rect.y >= target[8].rect.y + BOX_SIZE,
+    ut_check(target[9].rect.y >= target[8].rect.y + CHECKBOX_BOX_SIZE,
           "the two boxes do not overlap each other");
     ut_check(target[8].rect.x >= controls_source[3].rect.x + controls_source[3].rect.width,
           "the group is a column of its own, clear of the authored buttons");

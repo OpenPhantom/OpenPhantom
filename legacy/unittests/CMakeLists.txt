@@ -239,7 +239,9 @@ add_unit_test(imuse_guard imuse_fix imuse_fix/imuse_guard.c)
 # are silent, and one of them asks the file system about a file the player never named.
 add_unit_test(movie_path fmv_player fmv_player/movie_path.c)
 
-add_unit_test(menu_patcher "")
+# The patcher is common code; enhanced_input is named so the test reads controls_layout.h, the
+# one set of numbers the controls screen's group is laid out from and checked against.
+add_unit_test(menu_patcher enhanced_input)
 
 # The chained detours actually get installed and called through here, on a page of machine code the
 # test writes itself. The property that matters cannot be seen in the struct fields: a second

@@ -338,7 +338,7 @@ static bool make_lock_atomic(uintptr_t im_lock)
     /* Refuse unless it is exactly the body this was measured against: `FF 05 <abs32>` then `C3`.
      * Resolving the site is not the same as knowing what is at it. */
     if (existing[0] != 0xFF || existing[1] != 0x05 || existing[6] != 0xC3) {
-        log_warning("ImLock at %08X is not `inc [mem] / ret` - the atomic increment is NOT written",
+        log_warning("ImLock at %08X is not `inc [mem] / ret`, the atomic increment is NOT written",
                     (unsigned)im_lock);
         return false;
     }

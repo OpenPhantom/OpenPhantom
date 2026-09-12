@@ -91,7 +91,7 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 | `MusicVolumeAcrossProvider` | `1` | | keep the music volume across a 3-D provider change. See **The provider change discards a slider move** |
 | `MusicHeartbeatWatchdog` | `1` shipped, `0` for a file without the key | | the net behind the lock repair, and it only ever releases: when no heartbeat body has run for the time below while the timer keeps firing and the lock is held, the lock is written back to zero. Neither it nor the stall report judges anything until the heartbeat has been seen to run once, because the baseline is stamped at process start and the first frame can arrive seconds later, before the music has attached |
 | `MusicHeartbeatWatchdogMs` | `400` | 200-10000 | how long the body has to be silent first. Its own threshold: it used to be reachable only from inside the 1500 ms stall report, so every value under 1500 was dead, the shipped 400 included |
-| `MusicLockFix` | `1` | | the repair itself: both sides of the heartbeat lock made atomic, and the five parameter ranges whose refusal inside the DLL keeps the lock forever refused before they reach it. Two writes into the mapped DLL; if either half cannot be installed both are rolled back |
+| `MusicLockFix` | `1` | | the repair itself: both sides of the heartbeat lock made atomic, and the five parameter ranges whose refusal inside the DLL keeps the lock forever refused before they reach it. Three writes into the mapped DLL: the `lock` prefix over `ImLock`, a detour replacing `ImUnlock`, and a detour in front of `ImSetParam`. The first two are a pair: if the second refuses the first is rolled back. The third stands alone: if it refuses the atomic pair stays installed and the parameter leak stays open, with the watchdog as the only net for it |
 | `MusicProbe` | `0` | | measurement: reads the heartbeat count and the lock once a frame and writes nothing, so a stall shows as two numbers |
 | `MusicProbeSeconds` | `10` | | seconds between the probe's routine lines; 0 says nothing unless the heartbeat stalls |
 | `MusicTrace` | `0` | | measurement: copies the DLL's own running commentary into the log, each line stamped with the heartbeat count and the lock. Makes the log large |
@@ -175,8 +175,9 @@ every pattern resolves with the expected match count on both retail builds.
 `host_image_resolve()`, `common/` is a static library, so each DLL owns that state and the loader
 resolving it does not carry over. The scanner searched an empty range. The refusal itself was
 correct and the game was left untouched, which is precisely why it was not obvious. Fixed; **the
-corrected build has still not been observed doing anything**, and no claim is made that it repairs
-the looping-music defect, see the warning above.
+corrected build has still not been observed doing anything**. The account of the looping defect
+under **The "one second on a loop" defect** rests on the bytes of `IMUSE.DLL`, not on a session in
+which `MusicLockFix` was seen to stop it.
 
 ## The provider change discards a slider move
 

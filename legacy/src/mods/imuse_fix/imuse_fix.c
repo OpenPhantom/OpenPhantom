@@ -371,8 +371,8 @@ static void imuse_fix_frame(void)
 static void describe_installation(void)
 {
     log_info("music service watch is live: pause on focus loss %s, orphan guard %s (grace %d "
-             "frames), transition log %s. The engine itself never pauses music on a focus change "
-             "- its WM_ACTIVATEAPP handler only captures and releases the mouse pointer.",
+             "frames), transition log %s. The engine itself never pauses music on a focus change: "
+             "its WM_ACTIVATEAPP handler only captures and releases the mouse pointer.",
              config.pause_on_focus_loss ? "ON" : "off",
              config.resume_orphaned_pause && state.sites.sys_pause_on != NULL ? "ON" : "off",
              (int)config.orphan_grace_frames,

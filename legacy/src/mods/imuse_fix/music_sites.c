@@ -286,8 +286,8 @@ static bool read_cell(uintptr_t site, uint32_t offset, const char *what, uint32_
      * is not the function it was cut from, and believing it would write into a stranger. */
     if (!memory_is_inside_image(cell, sizeof(uint32_t)) ||
         !memory_is_readable_range(cell, sizeof(uint32_t))) {
-        log_warning("the %s would be at %08X, which is not a readable address inside the image "
-                    "- refused", what, (unsigned)cell);
+        log_warning("the %s would be at %08X, which is not a readable address inside the image, "
+                    "refused", what, (unsigned)cell);
         return false;
     }
     *out = cell;

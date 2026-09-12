@@ -1,8 +1,8 @@
 /* pointer_cage.c: the arithmetic behind the drawn menu cursor's clamp, without a display.
  *
- * The whole feature is four immediates and two operands, and only one thing in it is a
- * calculation: what the clamp should be for a given display mode. Two properties matter and
- * neither is obvious from the expression:
+ * The whole feature is four immediates, and only one thing in it is a calculation: what the
+ * clamp should be for a given canvas. Two properties matter and neither is obvious from the
+ * expression:
  *
  *   1. at 640x480 the computed clamp must equal the constants the engine SHIPS with. That is what
  *      makes this safe to default on, on the mode the engine was written for, the patch is the
@@ -11,11 +11,11 @@
  *      zero or negative extent. The size accessor reports zeroes before a mode is configured and
  *      leaves the globals negative on shutdown, so this is a real input, not a hypothetical one.
  *
- * Nothing here touches the game. The install order, the opcode checks and the rollback are not
- * testable without a live image and are NOT covered by this file. Neither is the resize: that
- * the clamp is rewritten absolutely from the new canvas, not adjusted from the old one, is
- * a property of the write into the resolved site, and the arithmetic below has no state to
- * accumulate, so calling it twice proves nothing about the write.
+ * Nothing here touches the game. The opcode checks, the read-back of the two origin operands and
+ * the one write step are not testable without a live image and are NOT covered by this file.
+ * Neither is the resize: that the clamp is rewritten absolutely from the new canvas, not adjusted
+ * from the old one, is a property of the write into the resolved site, and the arithmetic below
+ * has no state to accumulate, so calling it twice proves nothing about the write.
  */
 #include "unittest.h"
 

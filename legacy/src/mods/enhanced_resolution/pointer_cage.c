@@ -242,12 +242,6 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("cursor_cage", SIG_CURSOR_CAGE, MSK_CURSOR_CAGE)
 };
 
-/* The two cells the earlier, screen-relative version repointed the origin operands at, which
- * made the clamp [0, W-33] x [0, H-33] over the whole display mode: the erase fault described in
- * the header. Nothing references them now; the operands are read and left alone. */
-static const int32_t cage_origin_zero_x = 0;
-static const int32_t cage_origin_zero_y = 0;
-
 typedef struct pointer_cage_state {
     bool installed;
     bool active;
@@ -361,8 +355,8 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
 
     if (!memory_read_u32(site + OFFSET_ORIGIN_X_OPERAND, &shipped_origin_x) ||
         !memory_read_u32(site + OFFSET_ORIGIN_Y_OPERAND, &shipped_origin_y)) {
-        log_error("the menu cursor clamp's two origin operands could not be read back, so there "
-                  "would be nothing to roll back to, nothing is patched");
+        log_error("the menu cursor clamp's two origin operands could not be read back, so the "
+                  "block is not trusted and nothing is patched");
         return false;
     }
 
@@ -374,8 +368,8 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
         return false;
     }
 
-    /* The operands were read as a check and are not written; see the file header for what used
-     * to happen here and why it stopped. */
+    /* The operands were read as a check and are not written, so there is nothing of theirs to
+     * put back; see the file header for what used to happen here and why it stopped. */
     (void)shipped_origin_x;
     (void)shipped_origin_y;
 

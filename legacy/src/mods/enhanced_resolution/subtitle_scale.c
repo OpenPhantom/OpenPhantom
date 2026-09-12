@@ -383,13 +383,15 @@ static void on_frame(void)
              (int)state.told_w, (int)state.told_h, (int)w, (int)h, (double)box_scale(h));
 }
 
-/* Rewrites one call's target. The instruction stays a call and its length does not change; only
- * where it goes does, and only at this one site. */
-/* The two wrap comparisons, each checked for its opcode before it is touched: both are the same
- * six byte `fcomp dword [imm32]`, so the operand sits two bytes in. */
 /* The ten reversible writes are journaled as they go, so a refusal part way through puts the
  * earlier ones back and the engine draws its own box, the way the header promises. The detour is
- * the eleventh and last, because a detour cannot be taken out again. */
+ * the eleventh and last, because a detour cannot be taken out again.
+ *
+ * The journal is why the three writers below do their own check and then call write_journaled,
+ * where patch_repoint_operand and patch_redirect_call would do check and write in one call: those
+ * two write without handing back what they found, and the before-bytes have to be in the journal
+ * before the write lands or there is nothing to put back. The checks themselves go through the
+ * patch layer where it has the function. */
 typedef struct written_bytes {
     uintptr_t at;
     uint8_t   size;
@@ -430,7 +432,10 @@ static void undo_journal(void)
 
 /* An absolute operand is repointed only when it still holds what it was matched with. The pattern
  * proved it once, at resolve; the writes happen later, once the display exists, and this is what
- * makes them refuse a second run or a site something else has moved in the meantime. */
+ * makes them refuse a second run or a site something else has moved in the meantime.
+ *
+ * The compare is patch_repoint_operand's, written out here because that function goes on to
+ * write and does not hand back the value it found, and the journal needs it before the write. */
 static bool repoint_operand(uintptr_t at, uint32_t expected_old, const void *cell)
 {
     uint32_t current = 0;
@@ -455,7 +460,8 @@ static uint32_t pattern_operand(const uint8_t *pattern, size_t offset)
 }
 
 /* The wrap comparisons sit past the matched pattern, so the opcode in front of each is checked
- * and the operand is required to name a float holding the authored 580 before it is moved. */
+ * and the operand is required to name a float holding the authored 580 before it is moved. Both
+ * are the same six byte `fcomp dword [imm32]`, so the operand sits two bytes in. */
 static bool retarget_operand(uintptr_t operand_site, const void *cell)
 {
     static const uint8_t FCOMP_ABS[2] = { 0xD8, 0x1D };
@@ -476,30 +482,33 @@ static bool retarget_operand(uintptr_t operand_site, const void *cell)
 /* Turns one `jge` into a `jmp`, having checked it is the conditional this expects. */
 static bool unclamp(uintptr_t site)
 {
-    if (!memory_is_readable_range(site, 2u) || *(const uint8_t *)site != JGE_REL8) {
+    static const uint8_t JGE[1] = { JGE_REL8 };
+    uint8_t              jmp    = JMP_REL8;
+
+    if (!patch_validate_bytes(site, JGE, sizeof JGE)) {
         log_warning("the offset clamp at %08X is not the branch expected, so the subtitle box is "
                     "left alone", (unsigned)site);
         return false;
     }
-    {
-        uint8_t jmp = JMP_REL8;
-
-        return write_journaled(site, &jmp, sizeof jmp);
-    }
+    return write_journaled(site, &jmp, sizeof jmp);
 }
 
-/* A call is redirected only while it still goes to the getter it was resolved against. */
+/* A call is redirected only while it still goes to the getter it was resolved against. The
+ * instruction stays a call and its length does not change; only where it goes does, and only at
+ * this one site. The displacement is the one patch_redirect_call would write, computed here
+ * because that function writes it unjournaled and the patch layer has no form that only
+ * computes it. */
 static bool retarget_call(uintptr_t site, uintptr_t expected_getter, const void *destination)
 {
     uintptr_t current = 0;
-    int32_t   rel;
+    uint32_t  rel;
 
     if (!patch_read_call_target(site, &current) || current != expected_getter) {
         log_warning("the call at %08X does not go to the getter at %08X any more, so the subtitle "
                     "box is left alone", (unsigned)site, (unsigned)expected_getter);
         return false;
     }
-    rel = (int32_t)((uintptr_t)destination - (site + 5u));
+    rel = (uint32_t)((uintptr_t)destination - (site + CALL_LENGTH));
     return write_journaled(site + 1u, &rel, sizeof rel);
 }
 

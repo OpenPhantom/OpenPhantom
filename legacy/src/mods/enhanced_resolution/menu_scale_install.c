@@ -246,14 +246,17 @@ static bool ratio_from_artwork(float *out_x, float *out_y)
 }
 
 /* The three scale operands are 0xAC and more past the matched prologue, so before any of them is
- * repointed the instruction in front of each is checked and the three are checked to read one
- * global. A build that matched the prologue and laid the body out differently would otherwise be
- * handed a pointer into an arbitrary instruction. */
+ * repointed the instruction in front of each is checked and the three are checked to read
+ * g_menuScale itself, the cell menu_scale_resolve_cells already read out of the origin block.
+ * Agreeing with each other proves only that they read one global; agreeing with that cell proves
+ * they are the reads the listing says they are. A build that matched the prologue and laid the
+ * body out differently would otherwise be handed a pointer into an arbitrary instruction. */
 static bool sw3d_scale_operands_are_expected(uintptr_t site)
 {
     static const uint8_t MOV_EDX_ABS[2] = { 0x8B, 0x15 };
     static const uint8_t MOV_EAX_ABS[1] = { 0xA1 };
     static const uint8_t MOV_ECX_ABS[2] = { 0x8B, 0x0D };
+    uint32_t engine = (uint32_t)(uintptr_t)menu_cells.menu_scale;
     uint32_t x;
     uint32_t y;
     uint32_t z;
@@ -263,14 +266,56 @@ static bool sw3d_scale_operands_are_expected(uintptr_t site)
         !patch_validate_bytes(site + SW3D_SCALE_OPERAND_Z - 2u, MOV_ECX_ABS, sizeof MOV_ECX_ABS) ||
         !memory_read_u32(site + SW3D_SCALE_OPERAND_X, &x) ||
         !memory_read_u32(site + SW3D_SCALE_OPERAND_Y, &y) ||
-        !memory_read_u32(site + SW3D_SCALE_OPERAND_Z, &z) || x != y || y != z ||
-        !memory_is_inside_image(x, sizeof(float))) {
-        log_warning("sw3d_draw at %08X does not carry the three reads of g_menuScale where the "
-                    "retail build has them, so the 3-D widget models keep following the lens",
-                    (unsigned)site);
+        !memory_read_u32(site + SW3D_SCALE_OPERAND_Z, &z) || x != y || y != z || x != engine) {
+        log_warning("sw3d_draw at %08X does not carry the three reads of g_menuScale (%08X) where "
+                    "the retail build has them, so the 3-D widget models keep following the lens",
+                    (unsigned)site, (unsigned)engine);
         return false;
     }
     return true;
+}
+
+/* The three operands first, then the detour, in that order because an operand can be put back and
+ * a detour cannot. Written the other way round, a refusal on the second or third operand left
+ * the first reading our cell and the other two the engine's, with the hook already live. Now a
+ * refusal anywhere puts every operand written so far back to g_menuScale and the image is as it
+ * was. The cell is seeded with the engine's own scale before the first write, so the instructions
+ * between an operand moving and the hook arriving read the number they would have read anyway. */
+static bool install_sw3d_scale(void)
+{
+    static const uint32_t OPERANDS[3] = {
+        SW3D_SCALE_OPERAND_X, SW3D_SCALE_OPERAND_Y, SW3D_SCALE_OPERAND_Z
+    };
+    uintptr_t site    = menu_scale_sites[SITE_SW3D_DRAW].address;
+    uint32_t  engine  = (uint32_t)(uintptr_t)menu_cells.menu_scale;
+    uint32_t  ours    = (uint32_t)(uintptr_t)&menu_sw3d_model_scale;
+    size_t    written = 0;
+    size_t    index;
+
+    if (site == 0 || !sw3d_scale_operands_are_expected(site)) {
+        return false;
+    }
+
+    menu_sw3d_model_scale = *menu_cells.menu_scale;
+    while (written < 3 &&
+           patch_repoint_operand(site + OPERANDS[written], engine, ours) == PATCH_RESULT_OK) {
+        ++written;
+    }
+    if (written == 3 &&
+        detour_install(&scale_state.sw3d_draw_detour, site, (const void *)hook_sw3d_draw,
+                       SW3D_DRAW_PROLOGUE)) {
+        return true;
+    }
+
+    for (index = 0; index < written; ++index) {
+        if (patch_repoint_operand(site + OPERANDS[index], ours, engine) != PATCH_RESULT_OK) {
+            log_error("the sw3d_draw operand at %08X could not be put back to g_menuScale, so "
+                      "that read of the 3-D widget scale is left on a cell of ours that nothing "
+                      "updates",
+                      (unsigned)(site + OPERANDS[index]));
+        }
+    }
+    return false;
 }
 
 bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
@@ -440,16 +485,7 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
                     "authored 160x120 inside a scaled frame. Nothing else is affected");
     }
 
-    if (menu_scale_sites[SITE_SW3D_DRAW].address != 0 &&
-        sw3d_scale_operands_are_expected(menu_scale_sites[SITE_SW3D_DRAW].address) &&
-        detour_install(&scale_state.sw3d_draw_detour, menu_scale_sites[SITE_SW3D_DRAW].address,
-                       (const void *)hook_sw3d_draw, SW3D_DRAW_PROLOGUE) &&
-        patch_write_pointer32(menu_scale_sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_X,
-                              &menu_sw3d_model_scale) == PATCH_RESULT_OK &&
-        patch_write_pointer32(menu_scale_sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_Y,
-                              &menu_sw3d_model_scale) == PATCH_RESULT_OK &&
-        patch_write_pointer32(menu_scale_sites[SITE_SW3D_DRAW].address + SW3D_SCALE_OPERAND_Z,
-                              &menu_sw3d_model_scale) == PATCH_RESULT_OK) {
+    if (install_sw3d_scale()) {
         log_info("3-D widget models are held at the size they have at the authored field of view, "
                  "so changing the field of view no longer grows or shrinks the hero and the "
                  "inventory");

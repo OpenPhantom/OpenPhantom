@@ -96,8 +96,8 @@
 #define SW3D_SCALE_OPERAND_Z 0xBFu          /* 8B 0D disp32   mov ecx,[g_menuScale] at +0xBD */
 
 /* The engine cells the feature reads and writes. None is written down as an address: every one is
- * read out of the operand of an instruction the patterns below already match, by
- * menu_scale_resolve_cells, and the feature does not install without all of them.
+ * read out of the operand of an instruction one of the patterns in menu_scale_sites.c already
+ * matches, by menu_scale_resolve_cells, and the feature does not install without all of them.
  *
  * g_menuScale and g_menuTextScale are the two the repointed numerator feeds, and the base size is
  * what the second is the first multiplied by.

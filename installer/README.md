@@ -33,31 +33,44 @@ installation is reproducible years from now rather than dependent on somebody el
 ## Components
 
 Three tiers. Part of the patch and not unpickable: the graphics wrapper, the two crash repairs, the
-crash reporter and the two audio repairs. Recommended, so a full installation takes them: resolution,
-frame rate, field of view, HUD scaling, decals, view distance and the ground clip repair. Offered but not ticked: large
+crash reporter and the three audio repairs. Recommended, so a full installation takes them:
+resolution, frame rate, field of view, HUD scaling, decals, view distance, the ground clip repair,
+the conversation animation repair and the camera handback repair. Offered but not ticked: large
 textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics, a
-set of finished saved games, and a starting controller layout and display mode.
+set of finished saved games, and a starting controller layout and display mode. The tiers are the
+`Types:` column of each row in `src/openphantom_patch.iss`, which is the list to trust over this
+paragraph.
 
 What each fix does is in [`legacy/README.md`](../legacy/README.md), and each has a `README.md` beside
 its own source. This directory does not repeat those.
+
+The wizard asks three questions of its own and writes the answers into the settings files: how the
+cutscenes are scaled (`[fmv_player] Scaling`), the frame rate cap (`[framerate_fix] TargetFps`,
+`MatchDisplayRefresh` and `RefreshDivisor`, where the default answer is the screen's own rate with
+the fraction left automatic), and the starting resolution, one key in the game's own `obi.ini`,
+whenever the resolution patch is installed.
 
 ## Version numbers
 
 This installer is numbered `1.4.x` and the patch it carries is numbered `0.4.x`. They are two
 different numbers on purpose, and both are set by hand:
 
-| where | what it holds | now |
-|---|---|---|
-| `AppVer` in `openphantom_installer.iss` | the installer's own number | `1.4.2` |
-| `PatchVersion` in `src/openphantom_patch.iss` | which patch release `dist/patch` was taken from | `0.4.2` |
-| `OPENPHANTOM_VERSION` in `legacy/CMakeLists.txt` | the patch's number: every DLL's version resource, and the log header | `0.4.2` |
+| where | what it holds |
+|---|---|
+| `AppVer` in `openphantom_installer.iss` | the installer's own number |
+| `src/is3_extract/version.rc` | the same number, stamped into the extractor's version resource |
+| `PatchVersion` in `src/openphantom_patch.iss` | which patch release `dist/patch` was taken from |
+| `OPENPHANTOM_VERSION` in `legacy/CMakeLists.txt` | the patch's number: every DLL's version resource, and the log header |
+
+The values are in those files rather than repeated here, where a copy went stale twice.
 
 **The last digit of the installer counts installer builds.** Build a new one, add one. It is not a
 judgement about how much changed. An earlier rule here tried to be that.
 
 **The binaries carry the patch's number.** The DLLs are the patch, so their version resources and
-the first line of `engine_fixes.log` both read `0.4.2`, while the installer that delivered them
-reads `1.4.2`. Two numbers on one machine is the cost of two lines, so both are written down here.
+the first line of `engine_fixes.log` read the patch's number, while the installer that delivered
+them reads its own. Two numbers on one machine is the cost of two lines, so both are written down
+here.
 
 **One release was published with the two merged**, as `v1.5.0` and `i1.5.0`. The lines are separate
 again, so that release is renamed on GitHub to `v0.4.1` and `i1.4.1`, which puts it where it belongs
@@ -118,7 +131,7 @@ archive under `source/` where the licence asks for it.
 `dist/patch/` is refreshed wholesale from a build of `legacy/`, so anything else kept in that folder
 is destroyed on the next refresh; that is why dxwrapper has a folder of its own.
 
-Two things do not survive a refresh on their own and have to be re-applied: the six settings in
+Two things do not survive a refresh on their own and have to be re-applied: the settings in
 `dxwrapper.ini` that differ from the file upstream ships, listed in `THIRD-PARTY-NOTICES.md`, and
 any component whose destination folders are derived rather than written out, currently the libVLC
 plugins. Diff the shipped ini against the one inside the release archive rather than working from
@@ -127,75 +140,36 @@ if the file is rebuilt from theirs.
 
 ## Testing status
 
-Checked without installing anything: the script compiles with no warnings under Inno Setup 6.6.0,
+Checked without installing anything: the script compiles with no warnings under Inno Setup 6.6,
 every component named by a file row is declared, every file row has a file and every file in
 `dist/patch/mods` has a row, and both languages carry every message. The extractor is verified
 against a retail pressing, where `BIG.Z` produces a `big.lab` of 120,859,357 bytes, byte identical
-to a known good copy.
+to a known good copy, and it imports nothing but `KERNEL32.dll`, so it runs on a machine that has
+no Visual C++ runtime installed.
 
-**Installed from, in this offline form.** A full installation has been run and the folder it left
-behind was read back rather than taken on trust: all 21 patch files hash equal to the build they
-were carried from, `mods\` holds exactly the twenty DLLs that build produces, and `engine_fixes.ini`
-carries no section for a component this project no longer ships. FFmpeg is beside libVLC in
-`mods\fmv`, which is the part that used to be fetched the first time the cutscene converter ran, so
-the one download that outlived installation is gone as well. This installer no longer offers a
-controller component at all, so there is nothing left to say about controller support here.
+**Installed from and played.** The build that carries patch 0.4.4 was installed in full into a
+fresh folder and the game played from it: the log shows every DLL loading and arming, the
+subtitles resolving all twelve of their sites, the music heartbeat never stalling, and the panel
+opening. Earlier builds of this same script were also installed with the network disconnected, on
+a different target folder, and completed without pausing for anything; that is the claim the
+offline form exists to support and nothing in the script has since touched a network.
 
-**Verified with the network disconnected**, which is the claim this version exists to support and
-the only way to make it properly. A second full installation was run with no network at all, on a
-different target folder, and completed without pausing for anything. Its folder was read back the
-same way: twenty DLLs, all twenty-one patch files hash equal to the build, no section for a removed
-component, and libVLC, FFmpeg, DSOAL, dxwrapper and the tools all in place. The game was started
-from it afterwards and its own log shows all twenty DLLs loading and arming. One site does not
-resolve, `view_distance_fix`'s `thing_draw`, a pre-existing fault of the patch on every install
-rather than anything the installer did.
-
-**The starting settings component has been installed with, on a fresh installation.** The folder was
-read back afterwards: all fifty-nine bindings are byte for byte the layout they were taken from,
-`JOYENABLE` is on, and the game started at 1920x1080 rather than the engine's own 640x480.
-
-The backup beside it is the part worth recording, because it shows the merge rather than merely the
-result. `obi.ini.previous` came out at 79 bytes holding two lines, `[options]` and the sound driver
-key. That was the state of the file at that moment: the sound provider had created it a step
-earlier, and this component then backed that up and merged sixty more keys into it. On a fresh
-installation there is no player file to preserve yet, and this is what preserving it looks like
-anyway.
-
-The resolution is a starting value and not a limit, which the same run demonstrated by accident: the
+**The starting settings component**, installed onto a fresh installation: every binding byte for
+byte the layout it was taken from, `JOYENABLE` on, and the game starting at the chosen size rather
+than the engine's own 640x480. The backup beside it, `obi.ini.previous`, held the two lines the
+sound provider had just written; that is preserving a player's file when there is not yet a
+player's file to preserve. The resolution is a starting value and not a limit; the
 player changed it in the game's own video options afterwards and the new mode stuck.
-
-**The DLL counts recorded above are of the build tested at the time, and are left as they were
-observed rather than raised.** The patch now carries twenty three fixes: `ground_clip_fix` and
-`sound_lifetime_fix` were added after those installations were run, and `camera_handback_fix`
-is newer still. `dist/patch/` has since been refreshed from a build that includes all three, all
-twenty three file rows have a file and all twenty three staged files have a row, and every row
-names a component that exists. The script compiles clean apart from one hint, that `FileCopy`
-has been renamed to `CopyFile`, which is Inno's own deprecation notice and not a fault here.
-
-**No installation has been run from this bundle.** The two
-runs recorded above installed the twenty DLL build and nothing has been installed since, so those
-paragraphs describe a bundle that is no longer the one in the tree.
 
 **The bundled saved games never overwrite a slot the player already has.** They used to: the copy
 went through the same helper the carry-over restore uses, which overwrites because that is what
-restoring somebody's own files back needs. Combined with the component sitting in the default
-install type and a rerun returning to that default, a returning player updating a patch lost slots
-1 to 11, while the error text on that very copy promised their saved games were not touched. The
-component is still offered by default, because with collisions skipped a fresh installation still
-gets all eleven and a rerun keeps what the player has used.
-
-**Installed from twice, and the saved games were verified rather than assumed.** A second run over
-a folder that already held all eleven slots reported `complete_saves: 11 carried, 0 written, 11
-slots left alone because the player already had a save there`. Zero written is the whole claim: the
-same run before the skip was added would have replaced every one of them. Confirmed in the game
-afterwards as well, which is the check the log cannot make: the saves loaded were the player's own
-progress from before the installation, not the bundled chapter starts. The carry-over is visible
-in the same log putting the player's saves, obi.ini and converted cutscenes back around the
-installation.
-
-That log exists because of this. `SetupLogging` was off, so the first installation to exercise the
-skip produced nothing to read the decision in, and a save handling change is not something to take
-on trust.
+restoring somebody's own files back needs, and a returning player updating a patch lost slots 1 to
+11 while the error text on that very copy promised their saved games were not touched. A second
+run over a folder that already held all eleven slots now reports `complete_saves: 11 carried, 0
+written, 11 slots left alone because the player already had a save there`, and the saves loaded
+in the game afterwards were the player's own progress, not the bundled chapter starts.
+`SetupLogging` is on because of this: the first installation to exercise the skip produced nothing
+to read the decision in.
 
 **Still not watched.** A run that succeeds does not exercise a branch it never reached, and these
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation

@@ -19,6 +19,7 @@ match, the DLL changes nothing and says so.
 | `DepthBias` | `0.0` | 0-0.01 | how far a decal is pulled towards the camera, in device depth. Ships at 0, meaning off: pulling the vertex was measured and changed nothing, and `NeutraliseZBias` above is what does the work |
 | `StateClear` | `0` | | bits to clear from the decal's render state word `0x0010AE40` before it reaches the engine. An instrument, not a feature |
 | `StateSet` | `0` | | bits to set in the same word. Both ship at 0, so the word reaches the engine exactly as it left `bapvrt_drawPolyDecals`. They exist to settle which removed state costs the decal in single runs instead of one rebuild per suspect: that word asks for at least two things Direct3D 9 removed, ZBIAS (bit `0x00100000`, state 47) and `TEXTUREMAPBLEND=DECALALPHA` (bit `0x00000400`, state 21), and a translation layer may honour, drop or mistranslate either |
+| `DryAtStart` | `1` | | a freshly spawned or restored body starts dry. The game lays wet footprints for eight seconds after a footstep in water, timed on a clock that starts with the process, and a new body's last-wet time is written as zero, so for the first eight seconds after launch every character that has never touched water leaves wet prints on dry ground. The two stores of that zero write a time long past instead. A repair: nothing differs once eight seconds have passed |
 
 `DepthBias=0` is not the same as `Enabled=0`. It is an amount rather than a switch, and it ships at
 0, so that row documents a lever rather than something the patch is doing for you. `Enabled=0` also
@@ -32,6 +33,8 @@ turns off `NeutraliseZBias`, which is the byte that brings the decals back.
 | the ZBIAS branch | `0x00488270` | one byte, `je` (`74`) -> `jmp` (`EB`), **only** when `NeutraliseZBias=1`. Validated as the expected `je` before it is written, so a second install declines |
 | the depth compare selector | `0x00487672` | **read, never patched**, and only for the mask cell operand at `+23`. Read per call rather than latched at install: at the host entry point the graphics are not up and the cell is still zero |
 | `bapvrt_drawPolyDecals` | `0x0041C87D` | the one and only caller, read during the RE, not patched |
+| the wet stamp in `bapobj_init` | `0x0041235F` | the immediate of `mov [thing+0x108],0` at `0x00412359`, repointed from 0 to a time long past, **only** when `DryAtStart=1`; found by an address-free pattern over the five stores around it |
+| the wet stamp in `bapobj_restoreObject` | `0x00410FFA` | the same store at `0x00410FF4`, the one field the restore clears after copying the saved record back; both immediates are written or neither |
 
 ## Why a decal needs help at all
 
@@ -126,6 +129,27 @@ Raise it if decals still flicker or vanish at a distance. Lower it if a decal sh
 piece of geometry standing on its polygon. The ceiling is `0.01`, and a value above it is clamped
 with a warning rather than honoured.
 
+## The wet prints that appear with no water
+
+`footstep_tick` at `0x00437AC0` stamps `thing+0x108` with the wall clock whenever the polygon under
+the foot carries floor material 12, 13 or 14 (shallow water, swamp, the water surface plane), and
+the print pass at `0x004385B0` lays a wet print on any other material while `clock - stamp < 8`.
+The clock is the Time module's, zeroed once at startup, and a new body's stamp is written as zero
+in `bapobj_init` and again in `bapobj_restoreObject`. So for the first eight seconds of the
+process a body that has never been wet passes the test on every step.
+
+Nobody saw it in 1999 because no machine reached a level inside eight seconds. A modern machine
+loading a save from the menu does, and the report was "wet footprints on dry ground, at random":
+random because it depended on how fast the save was loaded after launch. It was caught in the act
+with `[diagnostics] Footsteps=1`: `wet prints begin ... the stamp is 7.28 s old (clock 7.28, stamp
+0.00)`, on metal, seven seconds after launch.
+
+`DryAtStart` writes a time a thousand million seconds in the past in both stores, so a fresh body
+fails the test for the life of the process, and the first real footstep in water overwrites the
+stamp with the clock exactly as before. The restore's clear is kept in the same spirit: a stamp
+from a previous process was on a different clock and must not come back, and now it comes back
+as "long ago" rather than as "now".
+
 ## What this does NOT fix
 
 * **A decal that is never stamped.** This DLL sits after the pool; if `bapvrt_addDecal` never
@@ -134,10 +158,17 @@ with a warning rather than honoured.
 * **`fx_rampFog`.** The cutscene tint walks the *device's* fog start and is inert under
   `view_distance_fix`'s vertex-fog regime. Unrelated to decals and unchanged here.
 
-## Testing status: accepted in game (2026-08-07)
+## Testing status: accepted in game (2026-08-07, the dry start 2026-09-12)
 
 Ground shadows, scorch marks and footprints are back under `dxwrapper` with `Dd7to9=1`, with
 `NeutraliseZBias=1` and `DepthBias=0.0`. The single byte at `0x00488270` is the whole fix.
+
+**The dry start is accepted in game.** The defect was reproduced first, a save loaded seven
+seconds after launch leaving wet prints on a metal floor with the footstep observer recording the
+zero stamp, then the repair was installed and the same load left none. Loading into water, loading
+out of water and standing in water were then played with the observer on, and every print spell in
+that log begins 0.03 s after a stamp on a real water or swamp polygon, which is the rule doing what
+it was written to do.
 
 **What did NOT work, so nobody repeats it:** biasing the vertex `z` (any magnitude, either sign) and
 swapping `TEXTUREMAPBLEND` for `MODULATEALPHA`. Both were measured, both changed nothing. The

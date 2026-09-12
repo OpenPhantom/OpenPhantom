@@ -52,6 +52,8 @@
  */
 #include "decal_fix.h"
 
+#include "dry_at_start.h"
+
 #include "common/detour.h"
 #include "common/host_image.h"
 #include "common/ini.h"
@@ -183,6 +185,7 @@ typedef int32_t (__cdecl *decal_submit_fn_t)(void *stage, uint32_t render_state,
 typedef struct decal_fix_state {
     bool            installed;
     bool            enabled;
+    bool            dry_at_start;      /* the two wet stamp stores write long ago, not zero */
     bool            neutralise_zbias;
     bool            zbias_neutralised;
     float           depth_bias;
@@ -203,6 +206,7 @@ static void neutralise_zbias(void);
 static void load_config(void)
 {
     decal_state.enabled    = ini_read_bool(DECAL_FIX_SECTION, "Enabled", true);
+    decal_state.dry_at_start = ini_read_bool(DECAL_FIX_SECTION, "DryAtStart", true);
     decal_state.neutralise_zbias =
         ini_read_bool(DECAL_FIX_SECTION, "NeutraliseZBias", true);
     /* DEFAULT 0. The geometric nudge was this DLL's first theory and it is NOT the fix: the engine
@@ -424,6 +428,15 @@ void decal_fix_install(void)
     if (!decal_state.enabled) {
         log_info("disabled");
         return;
+    }
+
+    /* Its own two sites, and its own answer: the wet print repair stands whether or not the
+     * submit below resolves, since a wrong print is a defect on any device. */
+    if (decal_state.dry_at_start) {
+        (void)dry_at_start_install();
+    } else {
+        log_info("DryAtStart=0, a body spawned or restored in the first eight seconds of the "
+                 "process leaves wet prints on dry ground, as the engine shipped");
     }
 
     signature_resolve_table(sites, SITE_COUNT);

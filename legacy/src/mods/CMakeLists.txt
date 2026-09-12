@@ -200,6 +200,7 @@ add_engine_fix(crt_copy_fix
 add_engine_fix(decal_fix
     dll_main.c
     decal_fix.c
+    dry_at_start.c
 )
 
 # Two independent bugs behind "the SFX slider resets to full on reload": the value saved came from

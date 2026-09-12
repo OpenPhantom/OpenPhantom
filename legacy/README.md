@@ -33,7 +33,7 @@ included here or distributed with this project.
 | `dismemberment` | Lightsaber dismemberment: the limb the blade actually hit, and only on the killing blow |
 | `imuse_fix` | Pauses the music when the game loses focus, and stops the music thread locking itself up |
 | `sfx_volume_save_fix` | Keeps the SFX volume you set, which the original wrote back wrongly and then never applied on load |
-| `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops |
+| `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops, and stops the wet footprints a body left for the first eight seconds after launch |
 | `controller_input` | Right stick looks around, Start pauses, the triggers roll, reading the pad directly with no wrapper DLL of any kind |
 | `fmv_player` | Plays the pre-rendered movies through a modern decoder in a window over the game, for any movie you have converted yourself |
 | `dialogue_anim_fix` | Stops a talking NPC's leftover head animation once the other speaker's line takes over, scoped to the one confirmed conversation |

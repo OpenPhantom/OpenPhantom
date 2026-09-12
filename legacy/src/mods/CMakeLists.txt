@@ -319,6 +319,15 @@ add_engine_fix(dialogue_anim_fix
 )
 target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 
+# A branching conversation stays open only while its script node is visited every step, and a
+# script that gates the node on the actor's own voice never visits it while the voice plays; the
+# text-timed pacing stamp runs out first, the box closes, and the line starts again from the top.
+add_engine_fix(dialogue_menu_fix
+    dll_main.c
+    dialogue_menu_fix.c
+)
+target_link_libraries(dialogue_menu_fix PRIVATE winmm)
+
 # A spoken line that names a camera group takes the camera and the dialogue only gives it back
 # when a choice MENU was open, which an ordinary line never has. The camera then stays on that
 # shot until the level is reloaded. Found in Otoh Gunga, present in every level that talks.

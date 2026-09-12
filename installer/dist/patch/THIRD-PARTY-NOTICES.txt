@@ -24,6 +24,7 @@ archive: DxWrapper's licence requires its notice to travel with it.
              mods\dev_overlay.dll
              mods\diagnostics.dll
              mods\dialogue_anim_fix.dll
+             mods\dialogue_menu_fix.dll
              mods\dismemberment.dll
              mods\effect_clock.dll
              mods\enhanced_input.dll

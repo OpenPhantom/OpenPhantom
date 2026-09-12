@@ -54,7 +54,10 @@ static const uint8_t EXPECTED_CAP_60_MOV[7] = { 0xC7, 0x45, 0xFC, 0x89, 0x88, 0x
 static uintptr_t cap_site;
 static uintptr_t cap_limiter_address;
 static bool      cap_usable;
-static int       cap_applied = -1;      /* -1 means nothing has been applied yet */
+static int       cap_applied = -1;      /* -1 means nothing has been applied yet, or the last
+                                         * write did not take and the next change tries again */
+static bool      cap_write_failed;      /* said once, until a write takes */
+static int       cap_divisor_warned = -1;   /* the last out-of-range RefreshDivisor named */
 
 /* What the settings asked for, kept so a second's verdict can be applied without the caller. */
 static int       cap_configured;
@@ -216,11 +219,16 @@ void frame_cap_configure(int configured, bool match_refresh, int pinned_divisor)
 {
     int refresh = frame_cap_refresh_hz();
 
-    if (pinned_divisor < 0) {
-        pinned_divisor = 0;
-    }
-    if (pinned_divisor > FRAME_CAP_DIVISOR_MAX) {
-        pinned_divisor = FRAME_CAP_DIVISOR_MAX;
+    if (pinned_divisor < 0 || pinned_divisor > FRAME_CAP_DIVISOR_MAX) {
+        int clamped = (pinned_divisor < 0) ? 0 : FRAME_CAP_DIVISOR_MAX;
+
+        /* Once per value, since the poll hands the same number over every second. */
+        if (pinned_divisor != cap_divisor_warned) {
+            cap_divisor_warned = pinned_divisor;
+            log_warning("RefreshDivisor=%d is out of range (0 to %d), using %d",
+                        pinned_divisor, FRAME_CAP_DIVISOR_MAX, clamped);
+        }
+        pinned_divisor = clamped;
     }
 
     if (pinned_divisor != cap_pinned_divisor || refresh != cap_refresh_hz ||
@@ -245,7 +253,8 @@ void frame_cap_configure(int configured, bool match_refresh, int pinned_divisor)
  * code restores it. */
 static void frame_cap_apply(int fps)
 {
-    float cap;
+    float          cap = 0.0f;
+    patch_result_t result;
 
     if (!cap_usable || fps == cap_applied) {
         return;
@@ -254,18 +263,41 @@ static void frame_cap_apply(int fps)
         fps = 0;
     }
 
+    /* Each write is checked, and a failure leaves cap_applied unset so the next change tries
+     * again: a cap recorded as applied after a write that did not take is the failure that
+     * reads most like success, and a second immediate left at the old value would be a cap
+     * that the "60fps" cheat could undo from inside the game. */
     if (fps > 0) {
-        cap = 1.0f / (float)fps;
-        patch_write_f32(cap_site + OFFSET_CAP_30_IMMEDIATE, cap);
-        patch_write_f32(cap_site + OFFSET_CAP_60_IMMEDIATE, cap);
-        patch_write_u32(cap_limiter_address, LIMITER_ON);
+        cap    = 1.0f / (float)fps;
+        result = patch_write_f32(cap_site + OFFSET_CAP_30_IMMEDIATE, cap);
+        if (result == PATCH_RESULT_OK) {
+            result = patch_write_f32(cap_site + OFFSET_CAP_60_IMMEDIATE, cap);
+        }
+        if (result == PATCH_RESULT_OK) {
+            result = patch_write_u32(cap_limiter_address, LIMITER_ON);
+        }
+    } else {
+        result = patch_write_u32(cap_limiter_address, LIMITER_OFF);
+    }
+    if (result != PATCH_RESULT_OK) {
+        if (!cap_write_failed) {
+            log_warning("the render cap of %d fps could not be written (%s), so the cap in force "
+                        "is whatever the last successful write left; the next change tries again",
+                        fps, patch_result_text(result));
+        }
+        cap_write_failed = true;
+        cap_applied      = -1;
+        return;
+    }
+    cap_write_failed = false;
+
+    if (fps > 0) {
         log_info("render cap %d fps (%.8f s) at %08X and %08X, limiter [%08X] on",
                  fps, (double)cap,
                  (unsigned)(cap_site + OFFSET_CAP_30_IMMEDIATE),
                  (unsigned)(cap_site + OFFSET_CAP_60_IMMEDIATE),
                  (unsigned)cap_limiter_address);
     } else {
-        patch_write_u32(cap_limiter_address, LIMITER_OFF);
         log_info("render cap removed, g_frameLimiterOn [%08X] cleared. The game will draw as fast "
                  "as the machine manages, which is smooth because the display always has a recent "
                  "frame rather than because anything is paced, and it loads one core fully",

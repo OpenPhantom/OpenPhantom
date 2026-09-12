@@ -119,8 +119,9 @@ void frame_cap_configure(int configured, bool match_refresh, int pinned_divisor)
  * applied. The statistics window measures long frames against it. */
 int frame_cap_applied(void);
 
-/* A level has opened: the fraction starts at the refresh again. Called by sim_clock, which is
- * where the clock going backwards is read. */
+/* A level has opened: the fraction starts at the refresh again. Called by sim_clock from the
+ * world clock detour, which is where the clock going backwards is read; that detour is placed by
+ * RebaseSimClock or MoverSubstepClock, so with both off nothing calls this. */
 void frame_cap_level_opened(void);
 
 /* The two ends of a frame's work. The wait hook says when the wait has ended, which is where the

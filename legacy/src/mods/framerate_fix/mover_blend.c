@@ -142,8 +142,7 @@ bool mover_blend_world(float *out,
          * reaches exactly one on every frame at 32 frames a second. Running it through the lerp
          * instead would be correct to within rounding and would stop being the identity at the
          * rate the game was authored for, because `from + (to - from) * 1.0` rounds twice and the
-         * rotation rows are renormalised on the way. Mode 2 wants the newer sample here too, so
-         * nothing is lost. */
+         * rotation rows are renormalised on the way. */
         reason = MOVER_BLEND_IDENTITY;
         goto refused;
     }

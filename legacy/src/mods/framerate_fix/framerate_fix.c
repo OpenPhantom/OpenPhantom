@@ -306,6 +306,18 @@ static void load_config(void)
         ini_read_bool(FRAMERATE_SECTION, "MoverSubstepClock", true);
     config->log_mover_evenness     =
         ini_read_bool(FRAMERATE_SECTION, "LogMoverEvenness", false);
+    /* The migration, said once. A negative default is impossible for the old key, so this
+     * detects presence and not merely a value, the way the mouse keys do. */
+    {
+        int legacy = ini_read_int(FRAMERATE_SECTION, "MoverBlendMode", -1);
+
+        if (legacy >= 0) {
+            log_warning("MoverBlendMode=%d is no longer read. The modes it chose between were "
+                        "removed: the jitter they chased was the render cap not matching the "
+                        "display, and the blend now applies the substep alpha, as mode 0 "
+                        "did. Delete the old key to silence this.", legacy);
+        }
+    }
     config->interpolate_riders     = ini_read_int(FRAMERATE_SECTION, "InterpolateRiders", 1);
     if (config->interpolate_riders < 0 || config->interpolate_riders > 3) {
         log_warning("InterpolateRiders=%d is out of range (0 to 3), using 0",

@@ -622,17 +622,19 @@ static void dump_animation_clock(const uint8_t *object)
     const uint8_t *puppet;
     const uint8_t *track;
 
-    if (!memory_read((uintptr_t)(object + OBJECT_THING), &thing, sizeof(thing)) ||
+    /* The catching forms: this runs every frame while the dump is armed, and the asking forms
+     * are a system call each. */
+    if (!memory_try_read((uintptr_t)(object + OBJECT_THING), &thing, sizeof(thing)) ||
         thing == NULL) {
         return;
     }
-    if (!memory_read((uintptr_t)(thing + THING_PUPPET), &puppet, sizeof(puppet)) ||
+    if (!memory_try_read((uintptr_t)(thing + THING_PUPPET), &puppet, sizeof(puppet)) ||
         puppet == NULL) {
         return;
     }
 
     track = puppet + PUPPET_FIRST_TRACK;
-    if (!memory_is_readable_range((uintptr_t)track, 4 * TRACK_STRIDE)) {
+    if (!memory_try_readable((uintptr_t)track, 4 * TRACK_STRIDE)) {
         return;
     }
 
@@ -676,8 +678,10 @@ static void dump_player_draw(void)
      * spend it before the game starts. Staying silent about them is what made this instrument
      * report nothing at all for a whole session and look installed. */
     record = *stats_state.player_pointer;
+    /* memory_try_read, not memory_read: every frame spent waiting for a record comes through
+     * here as well, and the asking form is a system call per frame. */
     if (record == NULL ||
-        !memory_read((uintptr_t)(record + PLAYER_ACTOR_HANDLE), &object, sizeof(object)) ||
+        !memory_try_read((uintptr_t)(record + PLAYER_ACTOR_HANDLE), &object, sizeof(object)) ||
         object == NULL) {
         ++stats_state.frames_waited_for_player;
         if (!stats_state.player_dump_wait_reported &&

@@ -45,18 +45,22 @@ typedef struct mover_evenness_state {
 void mover_evenness_enable(bool enabled);
 bool mover_evenness_enabled(void);
 
-/* One drawn pose. `translation` is what is about to be handed to the engine, and `frame_stamp`
- * counts rendered frames. Called twice per subnode per frame by the two redirected consumers, so
- * a repeat of the same stamp is ignored rather than treated as a break in the chain: doing the
- * latter reset the history on every second call and reported nothing judged at all. */
-/* One drawn frame of one subnode, blended or not. `blended` false means the raw pose was drawn
- * for this frame, which is the frame a fallback produces, and it is judged like any other: a raw
- * frame between two blended ones is exactly the step the eye sees, and an instrument that skipped
- * it reported a jittering platform as even. */
+/* One drawn frame of one subnode. `translation` is what is about to be handed to the engine and
+ * `frame_stamp` counts rendered frames. Called twice per subnode per frame by the two redirected
+ * consumers, so a repeat of the same stamp is ignored rather than treated as a break in the
+ * chain: doing the latter reset the history on every second call and reported nothing judged at
+ * all. `blended` false means the raw pose was drawn for this frame, which is the frame a fallback
+ * produces, and it is judged like any other: a raw frame between two blended ones is exactly the
+ * step the eye sees, and an instrument that skipped it reported a jittering platform as even. */
 void mover_evenness_note(mover_evenness_state_t *state, const float *translation,
                          uint32_t frame_stamp, bool blended);
 
 /* Writes the window to the log and starts a new one. Silent when nothing was judged. */
 void mover_evenness_report(void);
+
+/* The window so far: frames judged, and of those the frames that disagreed with their
+ * neighbours. Either pointer may be NULL. This is how the test reads the verdict, since it cannot
+ * read the log; the report zeroes both. */
+void mover_evenness_counts(uint32_t *out_judged, uint32_t *out_uneven);
 
 #endif /* MOVER_EVENNESS_H */

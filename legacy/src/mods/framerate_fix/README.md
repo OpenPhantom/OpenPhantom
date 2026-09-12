@@ -17,7 +17,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 |---|---|---|
 | `Enabled` | `1` | |
 | `MatchDisplayRefresh` | `1` | the cap follows the display's reported refresh rate and `TargetFps` is ignored. A cap below the refresh rate makes the screen repeat frames on an irregular pattern, which judders however correct the interpolation is; `frame_cap.h` carries the measurements. On by default, including when the key is absent, so an installation carrying an older `engine_fixes.ini` still gets it. When the display will not report a rate the configured number stands and the log says so |
-| `RefreshDivisor` | `0` | with `MatchDisplayRefresh` on, which fraction of the screen's rate to cap at: 0 decides by itself, stepping down to a half, a third or a quarter when more than a tenth of a second's frames needed more work than the cap allowed, back up after five clear seconds in a row, and starting at the refresh again when a level opens; 1 to 4 pins one. Never below 30 a second. A second with fewer than twenty frames or a stall in it decides nothing. On a synchronised display only the refresh and its fractions are even; see **Produced frames against shown frames** |
+| `RefreshDivisor` | `0` | with `MatchDisplayRefresh` on, which fraction of the screen's rate to cap at: 0 decides by itself, stepping down to a half, a third or a quarter when more than a tenth of a second's frames needed more work than the cap allowed, back up after five clear seconds in a row, and starting at the refresh again when a level opens (read on the world clock detour, so with both `RebaseSimClock` and `MoverSubstepClock` off the fraction is kept across levels); 1 to 4 pins one. Never below 30 a second. A second with fewer than twenty frames or a stall in it decides nothing. On a synchronised display only the refresh and its fractions are even; see **Produced frames against shown frames** |
 | `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
@@ -100,7 +100,7 @@ with nothing wrong at all.
 | `bapmap_setWorldClock` | `0x41F0C9` | detoured, and shared. `RebaseSimClock` adds the offset back so the world keeps its absolute time, and `MoverSubstepClock` removes the substep loop's clamp of that clock to the frame target. The second changes a value the simulation reads |
 | `bapmap_tickMover` | `0x409170` | detoured, to capture the pose before the engine integrates it. Nine callers, and the draw itself is one of them: `bapvrt_transformWorld` ticks a mover at `0x419B2C` immediately before transforming it, so every drawn mover is already at the current world clock |
 | the four mover pose consumers | `0x419B6A` and after | call displacements repointed, three into `bapmap_matMul3` and one into `mat34_invertRigid`. The `E8` is kept and only its displacement rewritten |
-| substep counter increment | `0x4757DB` | operand read, address-free pattern. Nothing is written here; `substep_counter.c` owns the one resolution of it and both the facing latch and the rider blend read the cell it names. The cell has a second incrementer at `0x45DC47`, `swmenu_render`, which advances it once per frame while a Swift menu is on screen, so it counts substeps exactly during play and not otherwise |
+| substep counter increment | `0x4757DB` | operand read, address-free pattern. Nothing is written here; `substep_counter.c` owns the one resolution of it; the facing latch, the rider blend and the camera target pair read the cell it names. The cell has a second incrementer at `0x45DC47`, `swmenu_render`, which advances it once per frame while a Swift menu is on screen, so it counts substeps exactly during play and not otherwise |
 
 ## Why each correction exists
 
@@ -425,13 +425,25 @@ say which of the guards refused.
 The platform was still a touch jittery after it stopped stepping, and the reason is not the blend
 but the moment being asked for.
 
-`bapmap_tickMovers`, the plural, is reached from one place in the retail image, the frame
-broadcast, so every door, lift and platform is swept once per rendered frame. The singular
-`bapmap_tickMover` is a different matter and has nine callers; the correction below has the ones
-that affect this. It integrates against
-the world clock, and that clock is only written inside the substep loop, which sets it to the end
-of each substep clamped to the frame's own target time. So the last substep of a frame leaves the
-world clock standing exactly at the moment that frame is meant to represent, and two things follow:
+An earlier version of this section said that every door, lift and platform is swept once per
+rendered frame, because `bapmap_tickMovers`, the plural, is reached from one place in the retail
+image, the frame broadcast. That is true of the plural and the conclusion did not follow. The
+singular `bapmap_tickMover` has nine callers in the named tree, and three of them matter here.
+`bapmap_carryRider` ticks the mover a character stands on, and the carried-mover arm ticks a
+carrier before reading it; both run on the substep path, which is where the thousands of calls per
+frame the stall census measured were coming from. The draw itself is the third:
+`bapvrt_transformWorld` ticks a mover at `0x419B2C` immediately before transforming it. Whichever
+caller reaches a mover first after the world clock moved does the integration, and every later
+call at the same clock value short-circuits on the mover's own time base, so a mover is at the
+current world clock by the time it is drawn whatever ticked it, and the hook on the tick captures
+its previous pose wherever that first call came from. A ridden mover is therefore snapshotted
+mid-frame with that substep's alpha, which was a real defect in the measurement modes 1 to 3
+rested on and is separate from the guard.
+
+What every caller integrates against is the world clock, and that clock is only written inside
+the substep loop, which sets it to the end of each substep clamped to the frame's own target time.
+So the last substep of a frame leaves the world clock standing exactly at the moment that frame is
+meant to represent, and two things follow:
 
 * a frame that ran at least one substep leaves the mover exactly where the frame wants it, so there
   is nothing to interpolate and the alpha should not be applied at all;
@@ -473,9 +485,12 @@ instrument built to settle the question could not have settled it: it counted ev
 bucket without recording which guard fired, so it would have reported a healthy-looking
 measurement beside a mover that was never blended.
 
-The range is now explicit at `MOVER_BLEND_WEIGHT_MAX`. Zero is a real weight, meaning draw the
-earlier sample, and up to one whole interval past the newer sample is allowed, as an
-extrapolating mode needs. The one case that stays a refusal is a weight of exactly 1.0: the caller
+The range is explicit at `MOVER_BLEND_WEIGHT_MAX`. Zero is a real weight, meaning draw the
+earlier sample, and up to one whole interval past the newer sample is allowed, the range the
+extrapolating mode asked for. Both modes and their `MoverBlendMode` key were removed once the
+jitter they chased was traced to the render cap; the shipped blend applies the substep alpha,
+which never leaves `[0, 1]`, and the bound stays where the test can still walk the range the old
+guard refused. The one case that stays a refusal is a weight of exactly 1.0: the caller
 then draws the newer pose byte for byte, and the alpha reaches exactly one on every frame at 32
 frames a second, so that is what keeps the feature the identity at the rate the game was authored
 for. Running it through the lerp would be right to within rounding and would quietly stop being
@@ -483,7 +498,8 @@ byte-identical, because the arithmetic rounds twice and the rotation rows are re
 
 ### What the lattice mismatch actually costs
 
-Worth writing down, because it is the size of the defect mode 0 still has. A mover integrates from
+Written down because it is the size of the defect the shipped blend had until `MoverSubstepClock`
+removed the cause. A mover integrates from
 one frame time to the next, so its sample pair spans an interval between substep frames, which at
 60 fps is 33.3 ms seven times in eight and 16.7 ms once, from 8 substeps every 15 frames. The
 blend then applies the substep alpha, a phase within a 31.25 ms step. The drawn advance per frame
@@ -539,27 +555,12 @@ substep is told from the next by the engine's own step counter. Played after the
 read 0.0462 units apart, one substep, on every frame of the ride, and the platform was smooth at
 72. This is every lift and platform in the game, not that one.
 
-### A correction to the census above
-
-The claim that `bapmap_tickMovers` is reached from one place is about the plural, and the
-conclusion drawn from it, that a mover integrates once per frame, does not follow. The singular
-`bapmap_tickMover` has nine callers in the named tree, and three of them matter here.
-`bapmap_carryRider` ticks the mover a character stands on, and the carried-mover arm ticks a
-carrier before reading it; both run on the substep path, which is where the thousands of calls per
-frame the stall census measured were coming from. The draw itself is the third:
-`bapvrt_transformWorld` ticks a mover at `0x419B2C` immediately before transforming it. Whichever
-caller reaches a mover first after the world clock moved does the integration, and every later
-call at the same clock value short-circuits on the mover's own time base, so a mover is at the
-current world clock by the time it is drawn whatever ticked it, and the hook on the tick captures
-its previous pose wherever that first call came from. A ridden mover is therefore snapshotted
-mid-frame with that substep's alpha, which was a real defect in the measurement modes 1 to 3
-rested on and is separate from the guard.
-
 ### Testing status
 
-Built, and `mover_blend` covers the whole weight range including the extrapolating half the old
-guard silently refused. The blend applies the substep alpha, as shipped, and the measurements above show that
-to be correct once the render cap matches the display.
+Built, and `mover_blend` covers the whole weight range, including the half above one that the old
+guard silently refused and that only the removed modes ever asked for. The blend applies the
+substep alpha, and the measurements above show that to be correct once the render cap matches the
+display.
 
 Played at 144 frames a second on a 144 Hz screen with the cap matched, where the platform is smooth
 and a character stays put on it. The residual that was open through several sessions is closed and

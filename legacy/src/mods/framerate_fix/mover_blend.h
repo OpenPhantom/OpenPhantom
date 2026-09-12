@@ -30,17 +30,18 @@
  *
  * The guard used to be the open interval (0, 1), which is right for a weight that is the substep
  * alpha and wrong for anything else. It cost two whole play sessions. Two modes were added that
- * compute a weight from the mover's own clock instead, one producing [0, 1] and one [1, 2], and
+ * computed a weight from the mover's own clock instead, one producing [0, 1] and one [1, 2], and
  * this guard refused every pose either of them ever produced: the caller draws the newest pose on
  * a refusal, so both modes came out as the stepped behaviour they were meant to replace, one of
- * them alternating with a blended frame. The arithmetic they rest on was never executed once, and
- * it was written up as a fault in that arithmetic on the strength of how the game looked.
+ * them alternating with a blended frame. The arithmetic they rested on was never executed once,
+ * and it was written up as a fault in that arithmetic on the strength of how the game looked.
  *
- * So the range is now explicit. Zero is a legitimate weight, meaning draw the earlier sample
- * exactly, and a weight above one is an extrapolation past the newer one, as a mover
- * needs because its newest pose is never at the moment the frame wants. Two is one whole interval
- * past that sample and is as far as any caller here asks; beyond it a mover has stopped being
- * ticked and there is nothing to extrapolate from. */
+ * So the range is explicit. Zero is a legitimate weight, meaning draw the earlier sample exactly,
+ * and a weight above one extrapolates past the newer one. Those modes and their MoverBlendMode
+ * key are gone, since the jitter they chased was the render cap not matching the display, and
+ * the one caller left passes the substep alpha, which never leaves [0, 1]. The bound stays at
+ * two, one whole interval past the newer sample and the furthest any caller ever asked for, so
+ * the test still walks the range a guard once refused without a word. */
 #define MOVER_BLEND_WEIGHT_MAX 2.0f
 
 /* WHY A REFUSAL HAS A NAME NOW.

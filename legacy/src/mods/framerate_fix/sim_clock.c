@@ -205,7 +205,6 @@ static void drop_offset_if_level_opened(void)
              (unsigned)sim_state.rebases, sim_state.offset);
     sim_state.offset    = 0.0;
     sim_state.last_seen = live;
-    frame_cap_level_opened();
 }
 
 /* The world must never see the rebase, so the offset goes back on before the engine writes its
@@ -223,6 +222,18 @@ static void __cdecl hook_set_world_clock(void *world, float time)
         adjusted = (double)time + sim_state.offset;
     } else {
         adjusted = (double)time;
+    }
+
+    /* The cap's restart at the refresh is signalled from here and not from the rebase's test
+     * above, because that test reads the simulation clock pair, which is resolved only with
+     * RebaseSimClock on, and the restart was promised without that condition. This detour is
+     * placed by either feature. Within a level the value handed over never goes backwards: the
+     * loop passes whole steps and one clamped value per frame, each at or past the last, and
+     * the un-clamped answer below is a whole step past its predecessor, which the next request
+     * never falls behind (world_clock.c makes the same comparison for the same reason). With
+     * both features off nothing runs here and the cap keeps the fraction it had. */
+    if (sim_state.have_world_clock && (float)adjusted < sim_state.last_world_clock) {
+        frame_cap_level_opened();
     }
 
     /* MoverSubstepClock. The loop clamps the last substep of every frame to the frame's own

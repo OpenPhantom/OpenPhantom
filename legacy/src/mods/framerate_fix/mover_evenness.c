@@ -4,6 +4,8 @@
 #include "common/logging.h"
 
 #include <math.h>
+#include <stdint.h>
+#include <string.h>
 
 /* Below this a subnode is not really moving and the comparison is noise. A carried character moves
  * 0.045 units in a simulation step and a platform rather more, so a thousandth of a unit in a
@@ -20,6 +22,18 @@ static uint32_t evenness_judged;
 static uint32_t evenness_uneven;
 static uint32_t evenness_raw_between;   /* raw frames drawn the frame after a blended one */
 static float    evenness_worst;
+
+/* Finite by the bit pattern, the same two integer instructions object_track.c uses: this runs on
+ * the mover draw path, where the CRT's classifier is a copy through the x87 unit and a call, and
+ * object_interpolation.c carries what that cost on the object draw path. The square root above it
+ * is a CRT call as well, one reason the whole instrument is off unless asked for. */
+static bool finite_bits(float value)
+{
+    uint32_t bits;
+
+    memcpy(&bits, &value, sizeof bits);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
 
 void mover_evenness_enable(bool enabled)
 {
@@ -61,7 +75,7 @@ void mover_evenness_note(mover_evenness_state_t *state, const float *translation
         dz = translation[2] - state->last[2];
         step = (float)sqrt((double)(dx * dx + dy * dy + dz * dz));
 
-        if (isfinite(step)) {
+        if (finite_bits(step)) {
             /* The middle of the three is the one judged, against the mean of its neighbours.
              * All three must be real motion, so a mover coming to rest is not condemned for
              * having stopped. */
@@ -105,6 +119,16 @@ void mover_evenness_note(mover_evenness_state_t *state, const float *translation
     state->stamp   = frame_stamp;
     state->seen    = true;
     state->last_blended = blended;
+}
+
+void mover_evenness_counts(uint32_t *out_judged, uint32_t *out_uneven)
+{
+    if (out_judged != NULL) {
+        *out_judged = evenness_judged;
+    }
+    if (out_uneven != NULL) {
+        *out_uneven = evenness_uneven;
+    }
 }
 
 void mover_evenness_report(void)

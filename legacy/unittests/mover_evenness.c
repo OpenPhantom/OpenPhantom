@@ -26,6 +26,8 @@ int main(void)
     mover_evenness_state_t state;
     float                  at[3];
     uint32_t               frame;
+    uint32_t               judged;
+    uint32_t               uneven;
     int                    i;
 
     ut_section("switched off, which is how it ships");
@@ -50,6 +52,28 @@ int main(void)
     }
     ut_check(state.have_before && state.have_middle,
              "even motion builds a history and is judged");
+    mover_evenness_counts(&judged, &uneven);
+    ut_checkf(judged == 37u && uneven == 0u,
+              "forty even frames read %u judged and %u uneven, expecting 37 and 0: the first "
+              "step has no step before it and the last has none after",
+              (unsigned)judged, (unsigned)uneven);
+
+    ut_section("stepped motion, the thing the instrument exists to see");
+
+    /* A mover creeping for two frames and then taking a whole step at once: every jump disagrees
+     * with the creeps either side of it and every creep with the jumps. The creep is above the
+     * floor on purpose, since a frame that does not move at all is not judged. */
+    mover_evenness_enable(true);
+    memset(&state, 0, sizeof state);
+    at[0] = 0.0f;
+    for (frame = 1u; frame <= 40u; ++frame) {
+        at[0] += ((frame % 3u) == 0u) ? 0.15f : 0.01f;
+        mover_evenness_note(&state, at, frame, true);
+    }
+    mover_evenness_counts(&judged, &uneven);
+    ut_checkf(judged > 0u && uneven == judged,
+              "a mover stepping every third frame is uneven on every judged frame, %u of %u",
+              (unsigned)uneven, (unsigned)judged);
 
     ut_section("drawn twice a frame, as the engine really does it");
 
@@ -64,6 +88,10 @@ int main(void)
     }
     ut_check(state.have_before && state.have_middle,
              "two calls a frame still leave a usable history rather than resetting it");
+    mover_evenness_counts(&judged, &uneven);
+    ut_checkf(judged == 37u && uneven == 0u,
+              "and the second call neither judges again nor breaks the chain: %u judged and %u "
+              "uneven, expecting 37 and 0", (unsigned)judged, (unsigned)uneven);
 
     ut_section("a gap is not a step");
 
@@ -87,17 +115,31 @@ int main(void)
         at[0] += (i < 10) ? 0.05f : 0.0f;
         mover_evenness_note(&state, at, (uint32_t)i, true);
     }
-    ut_check(true, "a stopped subnode is accepted without the report being consulted");
+    mover_evenness_counts(&judged, &uneven);
+    ut_checkf(judged == 6u && uneven == 0u,
+              "eight moving steps are judged on the six with a moving neighbour either side, and "
+              "stopping is not uneven: %u judged and %u uneven, expecting 6 and 0",
+              (unsigned)judged, (unsigned)uneven);
 
-    /* The report is the only thing that writes to the log, and it must say nothing when nothing
-     * was judged rather than printing an empty window. */
+    /* The report writes the window to the log and starts a new one, so the counts it leaves
+     * behind are the observable half of that. */
+    mover_evenness_report();
+    mover_evenness_counts(&judged, &uneven);
+    ut_check(judged == 0u && uneven == 0u, "the report starts a new window");
+
+    /* An empty window must be silent rather than printed empty, and the counts are the condition
+     * that decides it. */
     mover_evenness_enable(true);
     mover_evenness_report();
-    ut_check(true, "an empty window reports nothing at all");
+    mover_evenness_counts(&judged, &uneven);
+    ut_check(judged == 0u, "an empty window reports nothing and stays empty");
 
     mover_evenness_note(NULL, at, 1u, true);
     mover_evenness_note(&state, NULL, 1u, true);
-    ut_check(true, "and being handed nothing is survivable, which a diagnostic must be");
+    mover_evenness_counts(&judged, &uneven);
+    ut_check(judged == 0u && state.stamp == 20u,
+             "being handed nothing judges nothing and touches no history, which a diagnostic "
+             "must manage");
 
     return ut_summary("mover evenness");
 }

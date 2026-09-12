@@ -6,11 +6,13 @@
  * steps. Any feature that remembers something per step needs to know which step it is looking at,
  * and the engine keeps that count itself at the tail of the substep loop.
  *
- * Two features in this DLL need it, and neither should infer it. The facing latch withholds a
- * completion on one step in N. The rider blend remembers where each object was a step ago, and
+ * Three features in this DLL need it, and none of them should infer it. The facing latch withholds
+ * a completion on one step in N. The rider blend remembers where each object was a step ago, and
  * its first version counted steps by watching the substep alpha drop, which is wrong in both
  * directions: a frame spanning two steps advances the count once, and at exactly 32 frames a
- * second the alpha barely moves, so the drop that marks the boundary may not arrive at all.
+ * second the alpha barely moves, so the drop that marks the boundary may not arrive at all. The
+ * camera target pair lets the engine's two samples rotate once per step, however many times the
+ * setter is called within it.
  *
  * So the count is read rather than reconstructed, and this file owns the one resolution of it.
  *
@@ -18,10 +20,10 @@
  * loop advances it once per substep, and swmenu_render at 0x45DC47 advances it again once per
  * frame for as long as a Swift menu is on screen; it is also seeded to 1000 rather than to zero.
  * So it is a monotonic token that happens to count substeps exactly while the game is being
- * played, which is where both callers use it. Only differences are ever taken, so the seed does
- * not matter, and a caller must be able to survive a difference that is larger than the number of
- * steps that really ran: the statistics window has measured 320 advances over 600 frames with the
- * simulation not moving at all.
+ * played, which is where all three callers use it. Only differences are ever taken, so the seed
+ * does not matter, and a caller must be able to survive a difference that is larger than the
+ * number of steps that really ran: the statistics window has measured 320 advances over 600
+ * frames with the simulation not moving at all.
  */
 #ifndef SUBSTEP_COUNTER_H
 #define SUBSTEP_COUNTER_H

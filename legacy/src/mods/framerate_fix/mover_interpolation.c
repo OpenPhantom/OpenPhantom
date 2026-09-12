@@ -350,11 +350,9 @@ static bool interpolated_world(float *out, const float *world)
         return false;
     }
 
-    /* The substep alpha is the phase of this frame's target between the last two simulation
-     * steps, and the simulation only ever moves in whole steps, so the render time since the
-     * frame this mover last moved on is the step period times how far the alpha has travelled.
-     * That is the whole measurement; no absolute clock is read and nothing decays with level
-     * time. */
+    /* The weight is the substep alpha as read through the engine's latch, nothing derived from
+     * it. With MoverSubstepClock on the pair spans exactly one simulation step and the alpha is
+     * the phase within it; the guards that can refuse the pair are named in mover_blend.h. */
     if (!mover_blend_world(out, slot->previous, world, alpha,
                            mover_state.translation_limit, &reason)) {
         ++mover_state.rejected;
@@ -443,7 +441,7 @@ static int32_t readable_subnode_count(const uint8_t *mover)
     return count;
 }
 
-static void snapshot_subnodes(const uint8_t *mover, float interval, float tick_alpha)
+static void snapshot_subnodes(const uint8_t *mover)
 {
     int32_t count = readable_subnode_count(mover);
     int32_t index;
@@ -465,8 +463,6 @@ static void snapshot_subnodes(const uint8_t *mover, float interval, float tick_a
             slot->have_ordinary = true;
         }
         memcpy(slot->previous, subnode + SUBNODE_WORLD, sizeof(slot->previous));
-        slot->interval   = interval;
-        slot->tick_alpha = tick_alpha;
         slot->tick_stamp = mover_state.frame_stamp;
         slot->usable     = true;
     }
@@ -527,18 +523,11 @@ static void __cdecl hook_tick_mover(void *mover, float now)
     mover_state.last_tick_now = now;
 
     if (integrating) {
-        /* The time base still holds the world time of the PREVIOUS move, because the original has
-         * not run yet, so the difference is exactly how much world time the move about to happen
-         * will cover. Read here or nowhere: a moment later it is gone. */
-        float previous_base = *(const float *)(record + MOVER_TIME_BASE);
-        float tick_alpha    = 0.0f;
-
-        (void)current_alpha(&tick_alpha);
+        /* The pose about to be replaced, taken before the original runs. Whichever caller this
+         * is, the draw or the rider carry, the snapshot is the same: the mover's pose at its own
+         * time base, which is where the previous sample of the pair belongs. */
         pose_before = *(const float *)(record + MOVER_POSE);
-        /* `now` IS this pose's world time, which is the whole point: it does not matter where in
-         * the frame this tick happened. */
-        snapshot_subnodes(record, now - previous_base, tick_alpha);
-
+        snapshot_subnodes(record);
     }
 
     original(mover, now);

@@ -32,11 +32,6 @@ typedef struct mover_slot {
     const void *subnode;
     bool        usable;
     float       previous[MOVER_WORLD_FLOATS];
-    /* How much world time the move that produced the current pose covered, and the substep alpha
-     * at the frame it happened on. Together they say how far into that move the frame being drawn
-     * now stands, without either an absolute clock or an assumption about the frame rate. */
-    float       interval;
-    float       tick_alpha;
     uint32_t    tick_stamp;
     /* LogMoverEvenness only: this subnode's own drawn history. */
     mover_evenness_state_t evenness;

@@ -314,6 +314,7 @@ add_engine_fix(large_textures
 add_engine_fix(dialogue_anim_fix
     dll_main.c
     dialogue_anim_fix.c
+    idle_clip.c
 )
 target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 

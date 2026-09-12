@@ -1,10 +1,15 @@
 # dialogue_anim_fix
 
-**Produces:** `dialogue_anim_fix.dll` -> `mods\`
+**Produces:** `dialogue_anim_fix.dll` -> `mods\`, from `dialogue_anim_fix.c` (the hold) and
+`idle_clip.c` (the generated idle the jail row rests on).
 
-Level 6, Mos Espa, the opening in-engine cutscene: Obi-Wan and Qui-Gon talk, and Obi-Wan's head
-keeps moving as if he were still talking during Qui-Gon's own line. Scoped to exactly that one
-conversation, on purpose; see "Why this narrow" below.
+A character whose script parks on its talking animation and never leaves it. Two scenes are
+known and this acts in exactly those two, on purpose; see "Why this narrow" below.
+
+* Level 6, Mos Espa, the opening in-engine cutscene: Obi-Wan and Qui-Gon talk, and Obi-Wan's head
+  keeps moving as if he were still talking during Qui-Gon's own line.
+* The Theed jail in `queen.b3d`: a prisoner spoken to keeps the talking animation after the
+  conversation is over, for the rest of the level (issue 26).
 
 ## Supported executables
 
@@ -18,13 +23,13 @@ catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `HoldSeconds` | `3.0` | 0.5-30.0 | how long with neither actor speaking before the fix disarms itself for the rest of the level |
+| `HoldSeconds` | `3.0` | 0.5-30.0 | how long with nobody speaking before the fix disarms itself for the rest of the level, in a scene whose exchange ends (Mos Espa; the jail row never disarms, since the parked node lasts the level) |
 
 ## Engine locations
 
 | Site | Retail VA | What |
 |---|---|---|
-| `campaign_loadLevel` | `0x0043F70A` | detoured; arms only when the loaded path contains `espa.b3d` |
+| `campaign_loadLevel` | `0x0043F70A` | detoured; arms only when the loaded path contains a level from the scope table, `espa.b3d` or `queen.b3d` |
 | opcode `0x500` "Dialog Box" | `0x004358B0` | detoured; names an actor starting a line |
 | opcode `0x504` "Statement" | `0x00435A0A` | detoured; names an actor starting a line (the one this scene actually uses) |
 | `FUN_0042E3AD`, the primary-animation debounce/trigger | `0x0042E3AD` | resolved but never detoured, only called |
@@ -62,33 +67,69 @@ still-running node.
 
 ## What this does
 
-A per-frame correction while it is armed, and it is only ever armed for this one conversation:
+A per-frame correction while it is armed, and it is only ever armed in the scenes of the scope
+table, which for each one names the level file, the model names of the actors reported, the clip
+the actor is put in after their line, and whether the exchange ends:
 
-1. `campaign_loadLevel` names the level file being loaded. Arming requires the path to contain
-   `espa.b3d`. Any other level disarms and forgets everything that was being watched.
+1. `campaign_loadLevel` names the level file being loaded. Arming requires the path to contain a
+   level in the scope table, `espa.b3d` or `queen.b3d`. Any other level disarms and forgets
+   everything that was being watched.
 2. Even while armed, an actor is only ever watched if their own body resolves (through the same
    body -> `rdThing` -> `model3` name-string chain the diagnostics build used to first isolate this)
-   to a name starting `obinpc` or `pquigon`. No other actor in Mos Espa, dialogue or not, is ever
-   touched.
-3. Once armed and watching, an actor who is not the current global speaker and whose own
-   talk-animation target is still non-idle is switched to idle through `FUN_0042E3AD`, exactly
-   what a correctly authored "Animation: idle" node would do, but only **once** per stale streak,
-   not every frame. `actor+0x1BC` is then kept in sync with whatever `actor+0x1C0` the superseded
-   actor's own script node keeps rewriting every frame, without calling the trigger again, so their
-   own next visit to that node sees no change and does not retrigger anything itself either. The
-   idle animation switched to on the first frame is left alone after that, free to keep playing and
-   looping normally. This runs late enough in the frame (the shared `render_frameEnd` hook every
-   other fix in this project's DLL set already uses) to land after that frame's own FSM tick, so
-   the idle pose it forces is the one that actually gets drawn.
-4. The moment nobody has actually been speaking for `HoldSeconds` (the same single speaker cell and
-   the dialogue-active flag `Dialog_SpeakSingle`'s own timeout handler already clears between
-   lines, so no extra bookkeeping is needed), this disarms itself completely: not just released
-   until the next line, but off for the rest of this level, until the next `campaign_loadLevel`
-   re-arms it. Those two globals blink to "nobody" for a moment between every line of the same
-   exchange too, not only at its end, so this needs an actual hold timer rather than reacting to
-   the first gap it sees.
+   to a name starting with one of that scene's prefixes: `obinpc` or `pquigon` in Mos Espa,
+   `nabcit2` in the jail, and, where the row names one, their placement label matches too:
+   `enemy031` in the jail, so the other citizens there, some on the same model family, are never
+   watched. No other actor in the level, dialogue or not, is ever touched.
+3. While a watched actor is the current global speaker, the id their own script keeps asking for
+   in `actor+0x1C0` is remembered: that is the clip their line was played with, and the only
+   clip ever held off. The frame their line ends, if the script is still asking for that same id
+   and the actor is alive (a death cry goes through the same say path, with the die clip asked
+   for throughout), they are switched to the scene's rest clip through `FUN_0042E3AD`, exactly
+   what a correctly authored "Animation: idle" node would do, **once**. `actor+0x1BC` is then
+   kept at the remembered id every frame, without calling the trigger again, so their own next
+   visit to the parked node sees no change and does not retrigger anything itself either. This
+   runs late enough in the frame (the shared `render_frameEnd` hook every other fix in this
+   project's DLL set already uses) to land after that frame's own FSM tick, so the rest pose it
+   forces is the one that actually gets drawn.
+4. The rest clip is started again each time its track reports complete; the engine's own idle
+   mode replays a clip the same way. The stand and talk clips on these models are authored
+   as one pass of a few seconds; `FUN_0042E3AD` itself returns 1 on that same flag so a script can
+   move on, and a script parked on a talk node never does. Without the replay, clips 0, 3 and 7
+   on the prisoner each played once and froze.
+5. The hold ends the moment the script asks for anything else, or the engine puts a clip on the
+   body by a path of its own (the base clip at `body+0xE8` is checked every frame). `actor+0x1BC`
+   still names the held id, so a new request reads as a change to `FUN_0042E3AD` and plays for
+   real: a walk, a gesture, or the actor's next line all go through untouched.
+6. In a scene whose exchange ends, the moment nobody has actually been speaking for `HoldSeconds`
+   (the same single speaker cell and the dialogue-active flag `Dialog_SpeakSingle`'s own timeout
+   handler already clears between lines, so no extra bookkeeping is needed), this disarms itself
+   completely: not just released until the next line, but off for the rest of this level, until
+   the next `campaign_loadLevel` re-arms it. Those two globals blink to "nobody" for a moment
+   between every line of the same exchange too, not only at its end, so this needs an actual hold
+   timer rather than reacting to the first gap it sees. The jail row stays armed, because the
+   parked node keeps asking for as long as the level lasts.
 
-## Two mistakes already made here, so nobody repeats them
+## The generated idle
+
+The jail row rests the prisoner on clip 0, his model's own stand, and `idle_clip.c` writes a
+different animation over that clip in memory before he is put in it. A `.baf` model's clips are
+keyframe blocks loaded as they are: a header, a node table and per-node entry arrays (frame,
+flags, position, rotation and the per-frame deltas) that the puppet interpolates between. The
+block is a plain heap image, so a clip is given new entries by pointing its nodes at arrays of
+this DLL's own, with the node positions copied out of the clip being replaced and the rotations
+authored as slow sums of sines over an eight second loop that closes on itself: weight shifting
+between the legs, breathing in the chest, the head looking about, the arms drifting, and no roll
+on the trunk, since a first pass swayed him side to side. The clip is flagged the way the model's
+own stand is, so it loops. Nothing on disk changes; the model's other clips, its geometry and its
+rig are untouched; and the write is idempotent per load. It happens only once he is being held,
+so a run in which he is never spoken to changes nothing, and it is the model's clip that changes,
+so another character on `nabcit2` idling on clip 0 in that level after that point would show it
+too; the shipped stand is a held pose, so nothing visible is lost on them.
+
+Why: every clip he was shipped with either freezes or reads as talking once the stuck talk clip
+is taken away, and a man waiting in a cell should look like one.
+
+## Four mistakes already made here, so nobody repeats them
 
 **Correcting every frame by calling the real trigger every frame.** The obvious-looking fix,
 forcing the previous speaker's target to idle and calling the real trigger the instant a different
@@ -107,20 +148,46 @@ correcting them for the rest of the session whenever they were not the current s
 true of them forever after their one line. Opcode `0x202` "Animation" is not dialogue-specific,
 since a level's own script reaches for it for ordinary gameplay animation too, and that unscoped
 rule was overwriting *that* the instant it landed on `actor+0x1C0`. The symptom was other, unrelated
-characters going completely static well after this cutscene had ended. Arming only for `espa.b3d`
-and watching only two specific names, both described above, is the fix: this cannot act on
+characters going completely static well after this cutscene had ended. Arming only for the
+scenes in the table and watching only the names each one lists is the fix: this cannot act on
 anything this bug was never about.
+
+**Holding off every non-idle id.** The first jail build kept the Mos Espa rule, any tracked actor
+who is not the current speaker and whose target is not idle gets idled, and idled the prisoner's
+run between his two lines, which was "when he's running he has no animation". A script asks for
+ordinary clips between lines too. Only the id seen during the actor's own line is held, and only
+while the script keeps asking for exactly that, described in steps 3 and 5 above. The same build
+also disarmed three seconds after the second line, while the parked node was the thing that
+needed holding. A row now says whether its exchange ends.
+
+**Holding a dead man.** The prisoner's death cry goes through the same say path as a line, with
+the die clip asked for throughout, so the first hold with the idle in place saw "a line by this
+actor, played with clip 5, still asked for after it ended" and stood him back up out of his own
+death. The census caught it: `ai=4 anim=5/5 body=5 hp=-7`. A hold never begins on an actor whose
+health is below 1.
 
 ## What this does NOT fix
 
-Nothing outside this one conversation. It never arms outside `espa.b3d`, and even there it never
-touches an actor whose name does not start `obinpc` or `pquigon`. Any other actor whose talk
-animation lingers past their own line, in any other scene, is a different report and would need its
-own name (and, if it is in a different level, its own level file) added, or a deliberately more
-general version of this fix written and re-scoped with the same care given to this one.
+Nothing outside the two scenes in the scope table. It never arms in any other level, and even in
+those two it never touches an actor whose model name is not one the scene names. Any other actor
+whose talk animation lingers past their own line, in any other scene, is a different report: play it
+with `[diagnostics] Dialogue=1` and `Characters=1`, which give the level file and the speaker, and
+add a row to the table with the model name. The jail row was added exactly that way.
 
-## Testing status: accepted in game (2026-08-22)
+## Testing status: accepted in game (2026-08-22; the jail 2026-09-12)
 
 Confirmed live against the Mos Espa opening cutscene: Obi-Wan's head stops the moment Qui-Gon's
 line starts and stays stopped, without freezing him solid, and every other actor in the level keeps
 animating normally both during and after the exchange.
+
+The jail was traced before it was added: the prisoner's placement is `enemy031`, his model
+`nabcit2.3do`, his script mode goes to 7 on his second bark and stays there for the rest of the
+level, which is the parked talk node, and his two lines come through the Statement opcode this
+already hooks. The census with its `anim` column read him at clip 6 before he is spoken to, 8
+(`nc2talk3`) through both lines, 2 (`nc2run1`) between them, and 8 for good afterwards. His model
+carries ten clips, read out of `nabcit2.baf` in `big.lab`: 0 `stnd1`, 1 `walk1`, 2 `run1`,
+3 `talk1`, 4 `hit1`, 5 `die1`, 6 `lmout`, 7 `talk2`, 8 `talk3`, 9 `butn1`. Clips 0, 3, 6 and 7
+were each tried in the cell and none reads as a man waiting, so the generated idle was written.
+Confirmed live: he runs normally between his lines, after the second he settles into the
+generated idle and stays in it, he dies properly when struck, and everyone else in the jail is
+untouched.

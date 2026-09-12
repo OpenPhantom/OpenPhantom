@@ -73,6 +73,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -370,15 +371,13 @@ static bool report_character(uintptr_t record, const float player_position[3], b
         field = character_census.watch_velocity
                     ? record + CHARACTER_VELOCITY_OFFSET + (2u * sizeof(float))
                     : record + CHARACTER_POSITION_OFFSET + (2u * sizeof(float));
-        (void)_snprintf(label, sizeof(label) - 1u, "%s %s", name,
+        text_format(label, sizeof(label), "%s %s", name,
                         character_census.watch_velocity ? "velocity Z" : "position Z");
-        label[sizeof(label) - 1u] = '\0';
         if (diag_write_watch_arm(field, label)) {
             character_census.watched_record = record;
             character_census.watched_seen   = true;
-            (void)_snprintf(character_census.watched_name,
-                            sizeof(character_census.watched_name) - 1u, "%s", name);
-            character_census.watched_name[sizeof(character_census.watched_name) - 1u] = '\0';
+            text_format(character_census.watched_name, sizeof(character_census.watched_name),
+                        "%s", name);
         }
     }
 

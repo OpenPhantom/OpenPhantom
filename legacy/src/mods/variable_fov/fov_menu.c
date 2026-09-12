@@ -58,6 +58,7 @@
 #include "common/memory.h"
 #include "common/menu_patcher.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -298,15 +299,15 @@ static void update_caption(void)
     float vertical   = variable_fov_vertical_degrees();
 
     if (horizontal >= FOV_MIN_DEGREES && vertical >= 1.0f) {
-        _snprintf(menu_state.caption, sizeof(menu_state.caption),
-                  fov_string(FOV_STRING_HORIZONTAL_AND_VERTICAL),
-                  (double)horizontal, (double)vertical);
+        text_format(menu_state.caption, sizeof(menu_state.caption),
+                    fov_string(FOV_STRING_HORIZONTAL_AND_VERTICAL),
+                    (double)horizontal, (double)vertical);
     } else if (horizontal >= FOV_MIN_DEGREES) {
-        _snprintf(menu_state.caption, sizeof(menu_state.caption),
-                  fov_string(FOV_STRING_HORIZONTAL_ONLY), (double)horizontal);
+        text_format(menu_state.caption, sizeof(menu_state.caption),
+                    fov_string(FOV_STRING_HORIZONTAL_ONLY), (double)horizontal);
     } else {
-        _snprintf(menu_state.caption, sizeof(menu_state.caption),
-                  "%s", fov_string(FOV_STRING_NO_PROJECTION));
+        text_format(menu_state.caption, sizeof(menu_state.caption),
+                    "%s", fov_string(FOV_STRING_NO_PROJECTION));
     }
     menu_state.caption[sizeof(menu_state.caption) - 1] = '\0';
 }

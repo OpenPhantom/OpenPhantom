@@ -4,6 +4,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 
@@ -40,8 +41,7 @@ void subtitle_size_row_format(float scale, char *out, size_t size)
     if (out == NULL || size == 0u) {
         return;
     }
-    (void)_snprintf(out, size - 1u, "%.2fx", (double)scale);
-    out[size - 1u] = '\0';
+    text_format(out, size, "%.2fx", (double)scale);
 }
 
 float subtitle_size_row_get(void)

@@ -36,6 +36,10 @@ add_unit_test(fov_math   variable_fov      variable_fov/fov_math.c)
 # comes back as a speed.
 add_unit_test(stick "")
 
+# The bounded formatter. Truncation is the whole test: the toolchain's own call neither terminates
+# nor says when it has cut.
+add_unit_test(text "")
+
 # The music volume latch: the two-deep rule that decides what a provider change puts back, in the
 # file the hooks feed. The hooks themselves need a patched process and are not linked.
 add_unit_test(music_volume imuse_fix imuse_fix/music_volume_latch.c)

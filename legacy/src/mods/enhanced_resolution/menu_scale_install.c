@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -209,9 +210,8 @@ static bool ratio_from_artwork(float *out_x, float *out_y)
      * much as the older arrangement: before the folder existed this was proven by dropping the
      * converted files loose beside WMAIN.EXE, and an install still set up that way keeps working
      * rather than silently losing its scale. */
-    _snprintf(path, sizeof path - 1, "%s\\%s", menu_art_source_directory(),
-              MENU_SCALE_WITNESS_BITMAP);
-    path[sizeof path - 1] = '\0';
+    text_format(path, sizeof path, "%s\\%s", menu_art_source_directory(),
+                MENU_SCALE_WITNESS_BITMAP);
 
     file = fopen(path, "rb");
     if (file == NULL) {

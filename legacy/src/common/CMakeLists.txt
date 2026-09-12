@@ -20,6 +20,7 @@ add_library(engine_fixes_common STATIC
     menu_patcher.c
     cinematic_gate.c
     stick.c
+    text.c
 )
 
 target_include_directories(engine_fixes_common PUBLIC

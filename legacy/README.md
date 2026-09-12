@@ -160,6 +160,7 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 | `import_patch` | Replace one entry in another module's import table |
 | `cinematic_gate` | Whether a script holds the camera right now |
 | `stick` | The gamepad's radial deadzone, shared so two DLLs cannot drift apart |
+| `text` | One bounded formatter that always terminates, for every label, path and log line |
 | `engine_types.h` | Binary structures more than one fix needs |
 
 **`src/loader` builds `dinput.dll`**, which sits next to the executable and patches nothing itself.

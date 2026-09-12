@@ -3,6 +3,7 @@
 #include "overlay_key_name.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -246,8 +247,8 @@ static bool size_entry_row(uint32_t slot, overlay_row_t *out)
 
     out->on = size_list[entry - 1u].width == chosen_width &&
               size_list[entry - 1u].height == chosen_height;
-    _snprintf(out->label, sizeof out->label, "    %dx%d",
-              (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
+    text_format(out->label, sizeof out->label, "    %dx%d",
+                (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
     out->label[sizeof out->label - 1] = 0;
     return true;
 }
@@ -350,7 +351,7 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
         out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
         copy_label(out->label, size_list_open ? "  Window size (pick one)" : "  Window size");
         if (width > 0 && height > 0) {
-            _snprintf(out->value, sizeof out->value, "%dx%d", (int)width, (int)height);
+            text_format(out->value, sizeof out->value, "%dx%d", (int)width, (int)height);
             out->value[sizeof out->value - 1] = 0;
         } else {
             copy_label(out->value, "auto");

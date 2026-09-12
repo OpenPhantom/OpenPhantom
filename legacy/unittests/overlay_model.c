@@ -22,6 +22,8 @@
  */
 #include "unittest.h"
 
+#include "common/text.h"
+
 #include "cheats_openphantom.h"
 #include "cheats_original_actions.h"
 #include "overlay_model.h"
@@ -121,16 +123,16 @@ static void check_every_row_fits(const char *what)
         if (!overlay_model_row(i, &row)) {
             continue;
         }
-        _snprintf(note, sizeof note, "%s: row %u \"%s\" plus its chip \"%s\" is %u "
-                  "characters, and the panel has room for %u", what, (unsigned)i, row.label,
-                  row.value, (unsigned)(strlen(row.label) + strlen(row.value)),
-                  (unsigned)ROW_BUDGET);
+        text_format(note, sizeof note, "%s: row %u \"%s\" plus its chip \"%s\" is %u "
+                    "characters, and the panel has room for %u", what, (unsigned)i, row.label,
+                    row.value, (unsigned)(strlen(row.label) + strlen(row.value)),
+                    (unsigned)ROW_BUDGET);
         note[sizeof note - 1] = '\0';
         ut_check(strlen(row.label) + strlen(row.value) <= ROW_BUDGET, note);
 
-        _snprintf(note, sizeof note, "%s: row %u chip \"%s\" is %u characters, and the buffer "
-                  "holds %u", what, (unsigned)i, row.value, (unsigned)strlen(row.value),
-                  (unsigned)CHIP_BUDGET);
+        text_format(note, sizeof note, "%s: row %u chip \"%s\" is %u characters, and the buffer "
+                    "holds %u", what, (unsigned)i, row.value, (unsigned)strlen(row.value),
+                    (unsigned)CHIP_BUDGET);
         note[sizeof note - 1] = '\0';
         ut_check(strlen(row.value) <= CHIP_BUDGET, note);
     }

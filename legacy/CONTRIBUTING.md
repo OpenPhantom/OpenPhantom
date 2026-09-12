@@ -215,8 +215,9 @@ _Static_assert(offsetof(sw_widget_t, rect) == 0x20, "Unexpected rect offset");
 If the engine stores a boolean as a 32 bit integer, use `int32_t`. Binary compatibility beats
 modernisation; never reorder a binary structure for readability.
 
-No `sprintf`, `strcpy`, `strcat` or `gets`. Use the bounded forms and guarantee termination
-yourself, because the truncating ones do not.
+No `sprintf`, `strcpy`, `strcat` or `gets`. Format into a buffer with `text_format` from
+`common/text.h`, which always terminates and answers what it stored; `_snprintf` does neither on
+this toolchain, and the tree once carried three idioms for working around that.
 
 Warnings are errors here (`/W4 /WX`). Integer and pointer truncation, signed and unsigned
 conversions and incompatible function pointers are exactly the mistakes that stay invisible until

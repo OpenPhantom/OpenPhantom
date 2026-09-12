@@ -5,6 +5,7 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -102,8 +103,7 @@ static bool try_load_chain(const char *path, const char *how)
 
 static void build_game_relative(const char *name, char *buffer, size_t buffer_size)
 {
-    _snprintf(buffer, buffer_size, "%s%s", host_directory(), name);
-    buffer[buffer_size - 1] = '\0';
+    text_format(buffer, buffer_size, "%s%s", host_directory(), name);
 }
 
 void dinput_proxy_open_chain(void)
@@ -145,7 +145,7 @@ void dinput_proxy_open_chain(void)
         log_error("chain: the system directory could not be determined, dinput calls will fail");
         return;
     }
-    _snprintf(candidate + length, MAX_PATH - length, "\\%s", CHAIN_SYSTEM_NAME);
+    text_format(candidate + length, MAX_PATH - length, "\\%s", CHAIN_SYSTEM_NAME);
     candidate[MAX_PATH - 1] = '\0';
     if (try_load_chain(candidate, "system")) {
         return;

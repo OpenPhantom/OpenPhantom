@@ -29,6 +29,7 @@
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/text.h"
 
 #include <windows.h>
 #include <intrin.h>
@@ -116,22 +117,19 @@ static void describe_module(uintptr_t address, char *out, size_t size)
     if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCSTR)address, &module) || module == NULL) {
-        _snprintf(out, size, "(no module)");
-        out[size - 1] = '\0';
+        text_format(out, size, "(no module)");
         return;
     }
 
     if (GetModuleFileNameA(module, path, MAX_PATH) == 0) {
-        _snprintf(out, size, "(unnamed) +%X", (unsigned)(address - (uintptr_t)module));
-        out[size - 1] = '\0';
+        text_format(out, size, "(unnamed) +%X", (unsigned)(address - (uintptr_t)module));
         return;
     }
     path[MAX_PATH - 1] = '\0';
 
     file_name = strrchr(path, '\\');
-    _snprintf(out, size, "%s+%X", (file_name != NULL) ? file_name + 1 : path,
-              (unsigned)(address - (uintptr_t)module));
-    out[size - 1] = '\0';
+    text_format(out, size, "%s+%X", (file_name != NULL) ? file_name + 1 : path,
+                (unsigned)(address - (uintptr_t)module));
 }
 
 static void report_faulting_bytes(uintptr_t instruction_pointer)
@@ -151,20 +149,13 @@ static void report_faulting_bytes(uintptr_t instruction_pointer)
 
     bytes = (const uint8_t *)(instruction_pointer - BYTES_BEFORE_EIP);
     for (index = 0; index < BYTES_AROUND_EIP && written < (int)sizeof(line) - 4; ++index) {
-        /* _snprintf returns NEGATIVE on truncation rather than the length it wanted. Adding
-         * that to `written` walks the next write off the FRONT of the buffer, and the loop
-         * guard does not catch it, because a negative is still below the limit. It cannot
-         * happen at the constants above, where 32 bytes need 98 of 160, so it would go
-         * unnoticed by whoever widens BYTES_AROUND_EIP later, inside the one function here
+        /* The formatter answers what it stored, so a full buffer stops the loop through the
+         * guard above rather than walking the next write off the front. It cannot fill at the
+         * constants above, where 32 bytes need 98 of 160, and this is the one function here
          * that only ever runs when something has already gone wrong. */
-        int chunk = _snprintf(line + written, sizeof(line) - (size_t)written, "%02X%s",
-                              bytes[index], (index == BYTES_BEFORE_EIP - 1) ? " | " : " ");
-        if (chunk < 0) {
-            break;
-        }
-        written += chunk;
+        written += (int)text_format(line + written, sizeof(line) - (size_t)written, "%02X%s",
+                                    bytes[index], (index == BYTES_BEFORE_EIP - 1) ? " | " : " ");
     }
-    line[sizeof(line) - 1] = '\0';
 
     log_info("bytes eip-%u..+%u: %s", BYTES_BEFORE_EIP, BYTES_AROUND_EIP - BYTES_BEFORE_EIP - 1,
              line);

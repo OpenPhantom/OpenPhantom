@@ -133,6 +133,7 @@
 #include "common/memory.h"
 #include "common/menu_patcher.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -382,8 +383,7 @@ static void resolve_captions(void)
         char  *caption = menu_state.boxes[index].caption;
         size_t size    = sizeof(menu_state.boxes[index].caption);
 
-        _snprintf(caption, size, "%s", CHECKBOX_SPEC[index].caption());
-        caption[size - 1] = '\0';
+        text_format(caption, size, "%s", CHECKBOX_SPEC[index].caption());
     }
 
     input_slider_set_caption_format(menu_captions_mouse_speed_format());

@@ -11,6 +11,7 @@
 
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 
@@ -183,9 +184,9 @@ void dev_menu_size_row_format(float scale, char *out, size_t size)
     if (is_automatic(scale)) {
         /* The word AND the size it currently works out to. The number alone would look like a
            setting the player had chosen, and the word alone would not answer "how big is it". */
-        (void)_snprintf(out, size - 1u, "auto %.2fx", (double)automatic_scale());
+        text_format(out, size, "auto %.2fx", (double)automatic_scale());
     } else {
-        (void)_snprintf(out, size - 1u, "%.2fx", (double)scale);
+        text_format(out, size, "%.2fx", (double)scale);
     }
     out[size - 1u] = '\0';
 }

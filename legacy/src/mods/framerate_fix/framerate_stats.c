@@ -20,6 +20,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -434,35 +435,35 @@ static void format_simulation_clause(char *text, size_t size, uint32_t ticks, do
 
     switch (verdict) {
     case WINDOW_VERDICT_CLEAN:
-        _snprintf(text, size,
-                  "sim advanced %.3f s | substeps %u (%.1f Hz, %.2f frames/substep)",
-                  (double)advance, ticks, (real > 0.0) ? (double)ticks / real : 0.0,
-                  (double)((float)stats_state.frames_in_window / (float)ticks));
+        text_format(text, size,
+                    "sim advanced %.3f s | substeps %u (%.1f Hz, %.2f frames/substep)",
+                    (double)advance, ticks, (real > 0.0) ? (double)ticks / real : 0.0,
+                    (double)((float)stats_state.frames_in_window / (float)ticks));
         break;
     case WINDOW_VERDICT_IDLE:
-        _snprintf(text, size,
-                  "the simulation did not advance at all and the shared counter still moved %u "
-                  "times, so this window is a menu or a load and says nothing about gameplay",
-                  ticks);
+        text_format(text, size,
+                    "the simulation did not advance at all and the shared counter still moved %u "
+                    "times, so this window is a menu or a load and says nothing about gameplay",
+                    ticks);
         break;
     case WINDOW_VERDICT_MIXED:
-        _snprintf(text, size,
-                  "sim advanced %.3f s but the shared counter moved %u times, which is not a whole "
-                  "number of substeps: this window straddles gameplay and a menu, so the substep "
-                  "rate is not reported",
-                  (double)advance, ticks);
+        text_format(text, size,
+                    "sim advanced %.3f s but the shared counter moved %u times, which is not a "
+                    "whole number of substeps: this window straddles gameplay and a menu, so the "
+                    "substep rate is not reported",
+                    (double)advance, ticks);
         break;
     case WINDOW_VERDICT_RESET:
-        _snprintf(text, size,
-                  "the simulation clock went backwards by %.3f s, so a level was loaded inside "
-                  "this window and its figures are not comparable",
-                  (double)(-advance));
+        text_format(text, size,
+                    "the simulation clock went backwards by %.3f s, so a level was loaded inside "
+                    "this window and its figures are not comparable",
+                    (double)(-advance));
         break;
     case WINDOW_VERDICT_UNAVAILABLE:
     default:
-        _snprintf(text, size,
-                  "substeps %u (unverified: the simulation clock did not resolve, and a menu frame "
-                  "ticks this counter too)", ticks);
+        text_format(text, size,
+                    "substeps %u (unverified: the simulation clock did not resolve, and a menu "
+                    "frame ticks this counter too)", ticks);
         break;
     }
     text[size - 1] = '\0';
@@ -477,15 +478,16 @@ static void format_long_frame_clause(char *text, size_t size)
         return;
     }
     if (stats_state.long_frames == 0) {
-        _snprintf(text, size, " | no frame over %.1fx the cap", (double)LONG_FRAME_FACTOR);
+        text_format(text, size, " | no frame over %.1fx the cap", (double)LONG_FRAME_FACTOR);
     } else {
-        _snprintf(text, size,
-                  " | %u frames over %.1fx the cap: %u on a step frame (longest %.1f ms), %u on a "
-                  "frame with no step (longest %.1f ms)",
-                  stats_state.long_frames, (double)LONG_FRAME_FACTOR,
-                  stats_state.long_frames_on_step, (double)(stats_state.longest_on_step * 1000.0f),
-                  stats_state.long_frames - stats_state.long_frames_on_step,
-                  (double)(stats_state.longest_off_step * 1000.0f));
+        text_format(text, size,
+                    " | %u frames over %.1fx the cap: %u on a step frame (longest %.1f ms), %u on "
+                    "a frame with no step (longest %.1f ms)",
+                    stats_state.long_frames, (double)LONG_FRAME_FACTOR,
+                    stats_state.long_frames_on_step,
+                    (double)(stats_state.longest_on_step * 1000.0f),
+                    stats_state.long_frames - stats_state.long_frames_on_step,
+                    (double)(stats_state.longest_off_step * 1000.0f));
     }
     text[size - 1] = '\0';
 }

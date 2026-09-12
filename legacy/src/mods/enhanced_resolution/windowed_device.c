@@ -6,6 +6,7 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -162,10 +163,9 @@ void windowed_device_align_wrapper(bool windowed_present)
     if (directory == NULL) {
         return;
     }
-    if (_snprintf(path, sizeof path, "%s\\%s", directory, WRAPPER_INI_NAME) < 0) {
-        return;
+    if (text_format(path, sizeof path, "%s\\%s", directory, WRAPPER_INI_NAME) >= sizeof path - 1) {
+        return;                          /* a path that did not fit is not a path */
     }
-    path[sizeof path - 1] = 0;
 
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
         return;              /* no wrapper installed, so there is nothing of its to keep in step */

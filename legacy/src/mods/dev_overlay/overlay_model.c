@@ -22,11 +22,10 @@
  * every function that reads it stayed here. The fold's own text is the exception, because it is a
  * definition rather than a declaration and belongs in one translation unit.
  *
- * An earlier seam was taken as well, and it was not the one this note used to name. Splitting
- * the OpenPhantom tab
- * into Cheats and Utilities moved the settings rows into overlay_utilities.c, which is a
- * better cut than the editing state machine this note previously proposed: those rows share none
- * of this file's navigation, search, folding or typing state, so what moved is a whole
+ * An earlier seam was taken as well, and it was not the one this note used to name. Splitting the
+ * OpenPhantom tab into Cheats and Utilities moved the settings rows into overlay_utilities.c,
+ * which is a better cut than the editing state machine this note previously proposed: those rows
+ * share none of this file's navigation, search, folding or typing state, so what moved is a whole
  * responsibility and what stayed is the part that has to know which row is being typed into.
  *
  * The seam, if it grows again, is that editing state machine after all: the typed value and hotkey
@@ -37,6 +36,7 @@
 #include "overlay_model.h"
 
 #include "common/logging.h"
+#include "common/text.h"
 
 #include "overlay_key_name.h"
 #include "overlay_row_ids.h"
@@ -380,9 +380,9 @@ static void openphantom_row(uint32_t id, overlay_row_t *out)
          * would multiply by right now if switched on, formatted the same "1.30x" way its own
          * chip is meant to be typed back in. */
         if (model.editing_value && model.editing_value_row == JUMP_SCALE_ROW_ID) {
-            _snprintf(out->value, sizeof out->value, "%s_", model.value_edit_buf);
+            text_format(out->value, sizeof out->value, "%s_", model.value_edit_buf);
         } else {
-            _snprintf(out->value, sizeof out->value, "%.2fx",
+            text_format(out->value, sizeof out->value, "%.2fx",
                      (double)cheats_openphantom_jump_boost_scale());
         }
         out->value[sizeof out->value - 1] = '\0';
@@ -396,13 +396,13 @@ static void openphantom_row(uint32_t id, overlay_row_t *out)
         /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
          * guess at; "RUN" and "OFF" are both wrong for a key binding. */
         if (model.capturing_hotkey) {
-            _snprintf(out->value, sizeof out->value, "...");
+            text_format(out->value, sizeof out->value, "...");
         } else {
             int32_t vk = cheats_openphantom_freecam_hotkey();
             if (vk != 0) {
                 overlay_key_name(vk, out->value, sizeof out->value);
             } else {
-                _snprintf(out->value, sizeof out->value, "Set");
+                text_format(out->value, sizeof out->value, "Set");
             }
         }
         out->value[sizeof out->value - 1] = '\0';
@@ -456,9 +456,8 @@ static void openphantom_row(uint32_t id, overlay_row_t *out)
         char line[OVERLAY_LABEL_MAX];
 
         out->kind = OVERLAY_ROW_INFO;
-        _snprintf(line, sizeof line, "    %s",
-                  FREECAM_INFO_LINES[id - FREECAM_LINE_FIRST_ID]);
-        line[sizeof line - 1] = '\0';
+        text_format(line, sizeof line, "    %s",
+                    FREECAM_INFO_LINES[id - FREECAM_LINE_FIRST_ID]);
         copy_label(out->label, line);
         out->on = false;
         out->available = true;   /* a nested line, not a gate; never clicked either way */
@@ -504,8 +503,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             int32_t level = cheats_original_actions_graphics_level();
 
             if (level > 0) {
-                _snprintf(out->value, sizeof out->value, "%d", (int)level);
-                out->value[sizeof out->value - 1] = '\0';
+                text_format(out->value, sizeof out->value, "%d", (int)level);
             }
         }
         return;

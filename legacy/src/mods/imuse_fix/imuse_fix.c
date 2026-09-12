@@ -52,6 +52,7 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -167,9 +168,8 @@ static void describe_cues(char *buffer, size_t size)
         buffer[0] = '\0';
         return;
     }
-    _snprintf(buffer, size, ", cue state=%d sequence=%d",
-              (int)*state.sites.state_latch, (int)*state.sites.sequence_latch);
-    buffer[size - 1] = '\0';
+    text_format(buffer, size, ", cue state=%d sequence=%d",
+                (int)*state.sites.state_latch, (int)*state.sites.sequence_latch);
 }
 
 static void log_transition(int32_t attached, int32_t paused, int32_t sys_pause, bool foreground,

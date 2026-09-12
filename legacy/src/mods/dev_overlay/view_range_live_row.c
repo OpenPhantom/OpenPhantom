@@ -4,6 +4,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 
@@ -28,7 +29,6 @@ bool view_range_live_row_get(char *out, size_t size)
     if (!view_range_row_parse(buffer, &value) || !(value > 0.0f)) {
         return false;
     }
-    (void)_snprintf(out, size - 1u, "%.2fx", (double)value);
-    out[size - 1u] = '\0';
+    text_format(out, size, "%.2fx", (double)value);
     return true;
 }

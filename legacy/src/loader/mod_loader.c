@@ -5,6 +5,7 @@
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/mod_entry.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -65,8 +66,7 @@ static bool collect_mods(const char *directory, mod_list_t *list)
     HANDLE           search;
     char             pattern[MAX_PATH];
 
-    _snprintf(pattern, sizeof(pattern), "%s\\*.dll", directory);
-    pattern[sizeof(pattern) - 1] = '\0';
+    text_format(pattern, sizeof(pattern), "%s\\*.dll", directory);
 
     search = FindFirstFileA(pattern, &entry);
     if (search == INVALID_HANDLE_VALUE) {
@@ -116,7 +116,8 @@ static void describe_build(HMODULE module, char *out, size_t size)
     const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)module;
     const IMAGE_NT_HEADERS *nt;
     ULONGLONG               hundred_ns;
-    FILETIME                utc, local;
+    FILETIME                utc;
+    FILETIME                local;
     SYSTEMTIME              when;
     DWORD                   stamp;
 
@@ -138,11 +139,11 @@ static void describe_build(HMODULE module, char *out, size_t size)
 
     if (stamp > 0x40000000u && stamp < 0x80000000u &&
         FileTimeToLocalFileTime(&utc, &local) && FileTimeToSystemTime(&local, &when)) {
-        _snprintf(out, size, ", built %04u-%02u-%02u %02u:%02u (%08X)",
-                  when.wYear, when.wMonth, when.wDay, when.wHour, when.wMinute,
-                  (unsigned)stamp);
+        text_format(out, size, ", built %04u-%02u-%02u %02u:%02u (%08X)",
+                    when.wYear, when.wMonth, when.wDay, when.wHour, when.wMinute,
+                    (unsigned)stamp);
     } else {
-        _snprintf(out, size, ", build id %08X", (unsigned)stamp);
+        text_format(out, size, ", build id %08X", (unsigned)stamp);
     }
     out[size - 1] = '\0';
 }
@@ -154,8 +155,7 @@ static void load_one(const char *directory, const char *name)
     HMODULE                 module;
     engine_fix_install_fn_t install;
 
-    _snprintf(path, sizeof(path), "%s\\%s", directory, name);
-    path[sizeof(path) - 1] = '\0';
+    text_format(path, sizeof(path), "%s\\%s", directory, name);
 
     module = LoadLibraryA(path);
     if (module == NULL) {
@@ -233,8 +233,7 @@ void mod_loader_run_once(void)
 
     ini_read_string(LOADER_SECTION, "ModDirectory", DEFAULT_MOD_DIRECTORY,
                     configured, sizeof(configured));
-    _snprintf(directory, sizeof(directory), "%s%s", host_directory(), configured);
-    directory[sizeof(directory) - 1] = '\0';
+    text_format(directory, sizeof(directory), "%s%s", host_directory(), configured);
 
     memset(&list, 0, sizeof(list));
     if (!collect_mods(directory, &list)) {

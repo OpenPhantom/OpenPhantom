@@ -21,6 +21,8 @@
 #include "view_range_live_row.h"
 #include "view_range_row.h"
 
+#include "common/text.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -77,7 +79,7 @@ static void fill_typed(overlay_row_t *out, const char *editing_text,
                        void (*format)(float, char *, size_t), float value)
 {
     if (editing_text != NULL) {
-        _snprintf(out->value, sizeof out->value, "%s_", editing_text);
+        text_format(out->value, sizeof out->value, "%s_", editing_text);
     } else {
         format(value, out->value, sizeof out->value);
     }
@@ -135,7 +137,7 @@ static bool draw_distance_row(uint32_t slot, const char *editing_text, bool capt
 
         out->kind = OVERLAY_ROW_INFO;
         if (view_range_live_row_get(text, sizeof text)) {
-            _snprintf(out->label, sizeof out->label, "  in force: %s", text);
+            text_format(out->label, sizeof out->label, "  in force: %s", text);
         } else {
             copy_label(out->label, "  in force: not reported");
         }
@@ -239,9 +241,8 @@ static bool field_of_view_row(uint32_t slot, const char *editing_text, bool capt
         char  range[40];
 
         out->kind = OVERLAY_ROW_VALUE;
-        _snprintf(range, sizeof range, "Field of view (%.0f to %.0f)",
-                  (double)fov_row_min(), (double)fov_row_max());
-        range[sizeof range - 1] = '\0';
+        text_format(range, sizeof range, "Field of view (%.0f to %.0f)",
+                    (double)fov_row_min(), (double)fov_row_max());
         copy_label(out->label, range);
         if (fov_row_get(&degrees)) {
             fill_typed(out, editing_text, fov_row_format, degrees);
@@ -391,7 +392,7 @@ static bool presentation_row(uint32_t slot, const char *editing_text, bool captu
         out->kind = OVERLAY_ROW_HOTKEY;
         copy_label(out->label, "Key that opens this menu");
         if (capturing) {
-            _snprintf(out->value, sizeof out->value, "...");
+            text_format(out->value, sizeof out->value, "...");
         } else {
             int32_t vk = open_key_row_get();
 
@@ -401,7 +402,7 @@ static bool presentation_row(uint32_t slot, const char *editing_text, bool captu
                 /* The default accepts three keys, so naming one would be a lie about the other
                    two. F6 is the one every keyboard has in the same place, so it is the one worth
                    telling a player about. */
-                _snprintf(out->value, sizeof out->value, "F6 or ~");
+                text_format(out->value, sizeof out->value, "F6 or ~");
             }
         }
         out->value[sizeof out->value - 1] = '\0';

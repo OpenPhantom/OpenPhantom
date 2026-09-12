@@ -30,6 +30,7 @@
 
 #include "common/detour.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <intrin.h>
 
@@ -461,14 +462,14 @@ static const char *actor_tag(const void *actor)
     buffer = buffers[turn];
 
     if (record == NULL) {
-        _snprintf(buffer, sizeof(buffers[0]), "%s", "(null)");
+        text_format(buffer, sizeof(buffers[0]), "%s", "(null)");
         buffer[sizeof(buffers[0]) - 1] = '\0';
         return buffer;
     }
-    _snprintf(buffer, sizeof(buffers[0]), "#%d \"%s\" [%s]",
-              (int)*(const int32_t *)(record + CHARACTER_ENMY_INDEX),
-              diag_safe_string((const char *)(record + CHARACTER_NAME), 12),
-              diag_numbered_name(diag_enemy_states,
+    text_format(buffer, sizeof(buffers[0]), "#%d \"%s\" [%s]",
+                (int)*(const int32_t *)(record + CHARACTER_ENMY_INDEX),
+                diag_safe_string((const char *)(record + CHARACTER_NAME), 12),
+                diag_numbered_name(diag_enemy_states,
                                  *(const int32_t *)(record + CHARACTER_STATE)));
     buffer[sizeof(buffers[0]) - 1] = '\0';
     return buffer;

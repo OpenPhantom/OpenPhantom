@@ -8,6 +8,7 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -219,10 +220,9 @@ bool menu_art_load_display_ratio(float *out_ratio_x, float *out_ratio_y)
     if (out_ratio_x == NULL || out_ratio_y == NULL || directory == NULL) {
         return false;
     }
-    if (_snprintf(path, sizeof path, "%s\\obi.ini", directory) < 0) {
-        return false;
+    if (text_format(path, sizeof path, "%s\\obi.ini", directory) >= sizeof path - 1) {
+        return false;                          /* a path that did not fit is not a path */
     }
-    path[sizeof path - 1] = 0;
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
         return false;
     }

@@ -104,6 +104,7 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -444,8 +445,7 @@ static void resolve_debug_mode(void)
     }
     /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
     if (read_code_text(OP_DEBUG_CODE_TEXT, text, sizeof text)) {
-        _snprintf(label, sizeof label, "Debug mode (%s)", text);
-        label[sizeof label - 1] = '\0';
+        text_format(label, sizeof label, "Debug mode (%s)", text);
         set_label(CHEATS_ACTION_DEBUG_MODE, label);
     } else {
         set_label(CHEATS_ACTION_DEBUG_MODE, "Debug mode");
@@ -474,8 +474,7 @@ static void resolve_graphics_detail(void)
     }
     st.slots[CHEATS_ACTION_GRAPHICS_DETAIL].available = true;
     if (read_code_text(OP_GRAPHICS_DETAIL_CODE_TEXT, text, sizeof text)) {
-        _snprintf(label, sizeof label, "Cycle graphics detail level, 1-4 (%s)", text);
-        label[sizeof label - 1] = '\0';
+        text_format(label, sizeof label, "Cycle graphics detail level, 1-4 (%s)", text);
         set_label(CHEATS_ACTION_GRAPHICS_DETAIL, label);
     } else {
         set_label(CHEATS_ACTION_GRAPHICS_DETAIL, "Cycle graphics detail level, 1-4");
@@ -495,8 +494,7 @@ static void resolve_red_highlight(void)
     st.toggle_red_highlight = (call0_fn_t)target;
     st.slots[CHEATS_ACTION_RED_HIGHLIGHT].available = true;
     if (read_code_text(OP_RED_HIGHLIGHT_CODE_TEXT, text, sizeof text)) {
-        _snprintf(label, sizeof label, "Toggle a red icon highlight (%s)", text);
-        label[sizeof label - 1] = '\0';
+        text_format(label, sizeof label, "Toggle a red icon highlight (%s)", text);
         set_label(CHEATS_ACTION_RED_HIGHLIGHT, label);
     } else {
         set_label(CHEATS_ACTION_RED_HIGHLIGHT, "Toggle a red icon highlight");

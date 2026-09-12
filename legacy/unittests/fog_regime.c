@@ -11,6 +11,8 @@
  */
 #include "unittest.h"
 
+#include "common/text.h"
+
 #include <stdint.h>
 
 /* fog_regime asks view_distance_fix where the cut edge lands, because that DLL owns the scale and
@@ -98,9 +100,9 @@ static void test_identity_at_the_authored_field_of_view(void)
 
         fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
 
-        _snprintf(label, sizeof label,
-                  "%s keeps its authored band %.1f..%.1f bit-exactly at 60 degrees",
-                  level->name, (double)authored.start, (double)authored.end);
+        text_format(label, sizeof label,
+                    "%s keeps its authored band %.1f..%.1f bit-exactly at 60 degrees",
+                    level->name, (double)authored.start, (double)authored.end);
         label[sizeof label - 1] = '\0';
         ut_check(out.start == authored.start && out.end == authored.end, label);
     }
@@ -191,8 +193,8 @@ static void test_every_level_moves_when_the_picture_widens(void)
         fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &narrow);
         fog_regime_target_band(&config, &authored, WIDE_FOV, cut, cut, &wide);
 
-        _snprintf(label, sizeof label, "%s: %.1f at 60 degrees -> %.1f at 87",
-                  level->name, (double)narrow.end, (double)wide.end);
+        text_format(label, sizeof label, "%s: %.1f at 60 degrees -> %.1f at 87",
+                    level->name, (double)narrow.end, (double)wide.end);
         label[sizeof label - 1] = '\0';
         ut_check(wide.end < narrow.end && wide.start < narrow.start, label);
     }

@@ -12,6 +12,7 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/text.h"
 
 
 #include <stdio.h>
@@ -97,10 +98,9 @@ static void align_render_size(int32_t mode, int32_t wanted_width, int32_t wanted
         }
         return;
     }
-    if (_snprintf(path, sizeof path, "%s\\%s", directory, ENGINE_INI_NAME) < 0) {
-        return;
+    if (text_format(path, sizeof path, "%s\\%s", directory, ENGINE_INI_NAME) >= sizeof path - 1) {
+        return;                          /* a path that did not fit is not a path */
     }
-    path[sizeof path - 1] = 0;
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
         return;
     }
@@ -109,10 +109,10 @@ static void align_render_size(int32_t mode, int32_t wanted_width, int32_t wanted
         return;
     }
 
-    _snprintf(text, sizeof text, "%d", (int)width);
+    text_format(text, sizeof text, "%d", (int)width);
     text[sizeof text - 1] = 0;
     (void)WritePrivateProfileStringA(ENGINE_SECTION, "screen_width", text, path);
-    _snprintf(text, sizeof text, "%d", (int)height);
+    text_format(text, sizeof text, "%d", (int)height);
     text[sizeof text - 1] = 0;
     (void)WritePrivateProfileStringA(ENGINE_SECTION, "screen_height", text, path);
 

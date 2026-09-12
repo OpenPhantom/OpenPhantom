@@ -2,6 +2,7 @@
 
 #include "common/host_image.h"
 #include "common/logging.h"
+#include "common/text.h"
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -54,8 +55,7 @@ static void flush_repeat(void)
     if (diag_state.repeat_count <= 0) {
         return;
     }
-    _snprintf(note, sizeof(note), "     (previous line x%d)", diag_state.repeat_count + 1);
-    note[sizeof(note) - 1] = '\0';
+    text_format(note, sizeof(note), "     (previous line x%d)", diag_state.repeat_count + 1);
     diag_state.repeat_count = 0;
     write_raw(note);
 }
@@ -69,8 +69,7 @@ bool diag_log_open(int max_lines_per_second, bool also_to_main_log)
     diag_state.also_to_main_log     = also_to_main_log;
     diag_state.started_at           = timeGetTime();
 
-    _snprintf(path, sizeof(path), "%s%s", host_directory(), DIAG_LOG_FILE_NAME);
-    path[sizeof(path) - 1] = '\0';
+    text_format(path, sizeof(path), "%s%s", host_directory(), DIAG_LOG_FILE_NAME);
 
     diag_state.file = fopen(path, "w");
     if (diag_state.file == NULL) {
@@ -102,9 +101,8 @@ void diag_log_write(const char *format, ...)
     }
 
     va_start(arguments, format);
-    _vsnprintf(line, sizeof(line), format, arguments);
+    text_vformat(line, sizeof(line), format, arguments);
     va_end(arguments);
-    line[sizeof(line) - 1] = '\0';
 
     /* (a) collapse identical lines, the most effective brake, and it loses nothing but the
      *     repetition itself, whose count it hands in. */
@@ -122,10 +120,9 @@ void diag_log_write(const char *format, ...)
 
             if (diag_state.dropped != 0) {
                 char note[96];
-                _snprintf(note, sizeof(note),
-                          "     ... %d lines suppressed (MaxLinesPerSecond=%d)",
-                          diag_state.dropped, diag_state.max_lines_per_second);
-                note[sizeof(note) - 1] = '\0';
+                text_format(note, sizeof(note),
+                            "     ... %d lines suppressed (MaxLinesPerSecond=%d)",
+                            diag_state.dropped, diag_state.max_lines_per_second);
                 diag_state.dropped = 0;
                 write_raw(note);
             }

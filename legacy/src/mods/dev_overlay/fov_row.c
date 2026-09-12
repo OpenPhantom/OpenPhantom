@@ -4,6 +4,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -97,8 +98,7 @@ void fov_row_format(float degrees, char *out, size_t size)
     if (out == NULL || size == 0u) {
         return;
     }
-    (void)_snprintf(out, size - 1u, "%.0f deg", (double)degrees);
-    out[size - 1u] = '\0';
+    text_format(out, size, "%.0f deg", (double)degrees);
 }
 
 bool fov_row_get(float *degrees)

@@ -25,6 +25,7 @@
 
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -113,12 +114,12 @@ void free_look_log_transition(bool armed, free_look_release_t reason, const char
     }
 
     if (wanted_valid && view_read) {
-        _snprintf(wanted, sizeof(wanted), "%.1f (%+.1f from what is on screen)",
-                  (double)wanted_yaw, (double)free_look_wrap180(wanted_yaw - shown_yaw));
+        text_format(wanted, sizeof(wanted), "%.1f (%+.1f from what is on screen)",
+                    (double)wanted_yaw, (double)free_look_wrap180(wanted_yaw - shown_yaw));
     } else if (wanted_valid) {
-        _snprintf(wanted, sizeof(wanted), "%.1f", (double)wanted_yaw);
+        text_format(wanted, sizeof(wanted), "%.1f", (double)wanted_yaw);
     } else {
-        _snprintf(wanted, sizeof(wanted), "nothing, the wanted yaw is dropped");
+        text_format(wanted, sizeof(wanted), "nothing, the wanted yaw is dropped");
     }
     wanted[sizeof(wanted) - 1] = '\0';
 

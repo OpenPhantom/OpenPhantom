@@ -449,7 +449,7 @@ static void __cdecl hook_camera_update(void)
 
                     log_info("the free camera teleport key dropped the player at %.1f %.1f %.1f",
                              (double)freecam_x, (double)freecam_y, (double)freecam_z);
-                } else if (player_slot == NULL || *player_slot == NULL) {
+                } else if (player_slot_current() == NULL) {
                     log_warning("the teleport key asked to drop the player at the camera, but "
                                 "there is no player record to move; the camera returned instead");
                 }

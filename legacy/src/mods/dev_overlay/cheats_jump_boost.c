@@ -238,14 +238,20 @@ static bool install_jump_entry(const uint8_t *pattern, size_t size, size_t prolo
     uintptr_t site = signature_find_detour_target(pattern, MSK_JUMP_ENTRY, size, prologue);
     uint32_t  first = 0;
     uint32_t  second = 0;
+    uint8_t   head = 0;
 
     if (site == 0) {
         log_warning("%s did not resolve, so that half of jump boost is not offered", what);
         return false;
     }
-    if (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_FIRST, &first) ||
-        !memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_SECOND, &second) ||
-        first != second || first != player_slot_address()) {
+    /* The second load sits past the prologue and is always checked. The first sits inside the
+     * eight bytes another DLL's detour replaces, so it is checked only while the head is still
+     * the authored push ebp; behind a jump it holds that jump's displacement. */
+    if (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_SECOND, &second) ||
+        second != player_slot_address() ||
+        (memory_read_u8(site, &head) && head == 0x55u &&
+         (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_FIRST, &first) ||
+          first != second))) {
         log_warning("%s at %08X loads the player from %08X and %08X where every other reader "
                     "uses %08X, so that half of jump boost is not offered", what,
                     (unsigned)site, (unsigned)first, (unsigned)second,

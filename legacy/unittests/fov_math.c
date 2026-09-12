@@ -12,7 +12,6 @@
 #include "fov_math.h"
 
 #include <math.h>
-#include <stdlib.h>
 
 static void test_clamp(void)
 {
@@ -22,14 +21,17 @@ static void test_clamp(void)
     ut_near(fov_clamp_float(0.0f, 0.0f, 10.0f), 0.0f, 0.0f, "clamp accepts the minimum");
     ut_near(fov_clamp_float(10.0f, 0.0f, 10.0f), 10.0f, 0.0f, "clamp accepts the maximum");
 
-    /* NaN must land on the minimum rather than propagate into the projection. */
+    /* NaN must land on the minimum rather than propagate into the projection. The two specials
+     * are the C library's own macros, deliberately: an earlier version parsed them out of "nan"
+     * and "inf" with atof, which only the Microsoft runtime reads, so under any other runtime
+     * both came back as zero and the two infinity checks failed. */
     {
-        float not_a_number = (float)atof("nan");
+        float not_a_number = (float)NAN;
         ut_near(fov_clamp_float(not_a_number, 1.0f, 2.0f), 1.0f, 0.0f,
                     "clamp turns NaN into the minimum");
     }
     {
-        float infinity = (float)atof("inf");
+        float infinity = (float)INFINITY;
         ut_near(fov_clamp_float(infinity, 1.0f, 2.0f), 2.0f, 0.0f,
                     "clamp turns +inf into the maximum");
         ut_near(fov_clamp_float(-infinity, 1.0f, 2.0f), 1.0f, 0.0f,
@@ -125,7 +127,7 @@ static void test_notches(void)
     ut_check(fov_notch_from_degrees(-5.0f, step, count) == 0, "a negative angle clamps to notch 0");
     ut_check(fov_notch_from_degrees(999.0f, step, count) == count - 1,
           "an absurd angle clamps to the last notch");
-    ut_check(fov_notch_from_degrees((float)atof("nan"), step, count) == 0,
+    ut_check(fov_notch_from_degrees((float)NAN, step, count) == 0,
           "NaN clamps to notch 0");
 
     ut_near(fov_degrees_from_notch(0, step, count), 0.0f, 0.0f, "notch 0 is 0 degrees");

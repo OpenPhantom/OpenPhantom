@@ -18,6 +18,13 @@ function(add_unit_test name module_dir)
         target_include_directories(${name}_test PRIVATE ${MODS}/${module_dir})
     endif()
     target_link_libraries(${name}_test PRIVATE engine_fixes_common)
+    # Each test binary gets a directory of its own. The settings file is read and written beside
+    # the host executable, so every test that goes through ini.c, directly or through a module
+    # that persists a row, shared one engine_fixes.ini while they all sat in one directory, and a
+    # parallel ctest run had them rewriting it under each other. The multi-config generators add
+    # their configuration name below this.
+    set_target_properties(${name}_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${name})
     add_test(NAME ${name} COMMAND ${name}_test)
 endfunction()
 

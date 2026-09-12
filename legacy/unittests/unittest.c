@@ -67,6 +67,12 @@ int ut_summary(const char *suite)
     const char *name = (suite != NULL) ? suite : "";
 
     printf("\n");
+    /* A run that checked nothing is not a pass. A fixture that failed to arm, or a loop whose
+     * every case was skipped, would otherwise walk out green on the strength of an empty tally. */
+    if (checks_run == 0) {
+        printf("%s: no checks ran, so this is a FAILURE\n", name);
+        return 1;
+    }
     if (checks_failed == 0) {
         printf("%s: all %u checks passed\n", name, (unsigned)checks_run);
         return 0;

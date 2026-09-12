@@ -25,30 +25,40 @@ static void test_the_map_covers_every_source_pixel(void)
             int32_t dest_extent   = DEST[d];
             char    seen[640];
             int32_t i;
-            bool    all_seen = true;
+            int32_t outside = 0;
+            int32_t missed  = 0;
 
             if (dest_extent < source_extent) {
                 continue;
             }
+            /* Every pixel is checked and the tally is reported once per pair of extents: two
+             * lines a pair, not one a pixel. */
             memset(seen, 0, sizeof seen);
             for (i = 0; i < dest_extent; ++i) {
                 int32_t at = menu_art_resample_source_index(i, dest_extent, source_extent);
 
-                ut_check(at >= 0 && at < source_extent,
-                      "every destination pixel maps inside the source, so the "
-                      "replication is a copy rather than a read off the end of the picture");
+                if (at < 0 || at >= source_extent) {
+                    ++outside;
+                    continue;
+                }
                 seen[at] = 1;
             }
             for (i = 0; i < source_extent; ++i) {
                 if (!seen[i]) {
-                    all_seen = false;
+                    ++missed;
                 }
             }
-            ut_check(all_seen,
-                  "and every source pixel is reached at least once when the picture grows, so "
-                  "nothing in the artwork is dropped on the way up. menu_preview.c's own map fails "
-                  "this: its step is truncated, so the last ten source columns of a six times "
-                  "upscale are never sampled and the right edge is cropped");
+            ut_checkf(outside == 0,
+                      "%d into %d: every destination pixel maps inside the source, so the "
+                      "replication is a copy rather than a read off the end of the picture "
+                      "(%d outside)", (int)source_extent, (int)dest_extent, (int)outside);
+            ut_checkf(missed == 0,
+                      "%d into %d: and every source pixel is reached at least once when the "
+                      "picture grows, so nothing in the artwork is dropped on the way up (%d "
+                      "missed). menu_preview.c's own map fails this: its step is truncated, so "
+                      "the last ten source columns of a six times upscale are never sampled and "
+                      "the right edge is cropped", (int)source_extent, (int)dest_extent,
+                      (int)missed);
         }
     }
 }
@@ -56,15 +66,20 @@ static void test_the_map_covers_every_source_pixel(void)
 static void test_the_map_is_monotonic(void)
 {
     int32_t previous = -1;
+    int32_t backwards = 0;
     int32_t i;
 
     for (i = 0; i < 2160; ++i) {
         int32_t at = menu_art_resample_source_index(i, 2160, 480);
 
-        ut_check(at >= previous, "the map never goes backwards, so a replicated picture cannot "
-                                 "come out with its rows out of order");
+        if (at < previous) {
+            ++backwards;
+        }
         previous = at;
     }
+    ut_checkf(backwards == 0,
+              "the map never goes backwards across 480 rows into 2160, so a replicated picture "
+              "cannot come out with its rows out of order (%d steps back)", (int)backwards);
 }
 
 static void test_a_whole_ratio_is_exact_replication(void)
@@ -129,6 +144,7 @@ static void test_the_replication(void)
     static const uint16_t SOURCE[4] = { 0x0000, 0x1234, 0x5678, 0xFFFF };
     uint16_t              dest[16];
     size_t                i;
+    size_t                unwritten = 0;
 
     memset(dest, 0xAA, sizeof dest);
     ut_check(menu_art_resample_16(SOURCE, 2, 2, 2, dest, 4, 4, 4),
@@ -144,9 +160,13 @@ static void test_the_replication(void)
           "the third row has moved on to source row 1");
 
     for (i = 0; i < 16; ++i) {
-        ut_check(dest[i] != 0xAAAA, "every destination pixel was written, so nothing is left "
-                                    "holding whatever the allocator handed over");
+        if (dest[i] == 0xAAAA) {
+            ++unwritten;
+        }
     }
+    ut_checkf(unwritten == 0,
+              "every destination pixel was written, so nothing is left holding whatever the "
+              "allocator handed over (%u untouched)", (unsigned)unwritten);
 }
 
 static void test_transparency_survives(void)
@@ -154,6 +174,7 @@ static void test_transparency_survives(void)
     static const uint16_t SOURCE[4] = { 0x0000, 0x0001, 0x0800, 0x0000 };
     uint16_t              dest[36];
     size_t                zeros = 0;
+    size_t                invented = 0;
     size_t                i;
 
     ut_check(menu_art_resample_16(SOURCE, 2, 2, 2, dest, 6, 6, 6),
@@ -162,16 +183,19 @@ static void test_transparency_survives(void)
         bool matches_a_source = dest[i] == 0x0000 || dest[i] == 0x0001 ||
                                 dest[i] == 0x0800;
 
-        ut_check(matches_a_source,
-              "every destination pixel is a value that was already in the source. This is the "
-              "whole transparency rule: an exactly zero pixel is a SKIP to this engine, so a "
-              "filter that invented a value between 0x0001 and 0x0000 would turn a dark opaque "
-              "pixel transparent, and one that invented a value between 0x0000 and 0x0800 would "
-              "put an opaque halo around a transparent edge");
+        if (!matches_a_source) {
+            ++invented;
+        }
         if (dest[i] == 0x0000) {
             zeros++;
         }
     }
+    ut_checkf(invented == 0,
+              "every destination pixel is a value that was already in the source (%u were not). "
+              "This is the whole transparency rule: an exactly zero pixel is a SKIP to this "
+              "engine, so a filter that invented a value between 0x0001 and 0x0000 would turn a "
+              "dark opaque pixel transparent, and one that invented a value between 0x0000 and "
+              "0x0800 would put an opaque halo around a transparent edge", (unsigned)invented);
     ut_check(zeros == 18,
           "and exactly the two transparent source pixels' worth of area is still transparent, "
           "nine destination pixels each");

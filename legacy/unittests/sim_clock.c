@@ -96,17 +96,26 @@ static void the_difference_survives_bit_for_bit(void)
     /* This is the check the whole feature rests on. The two clocks are within one simulation step
      * of each other and alpha is built from their difference, so that difference has to come out of
      * the subtraction unchanged, exactly, at every clock value a long level reaches. The comparison
-     * below is an equality on purpose: near enough is exactly what is not being claimed. */
+     * below is an equality on purpose: near enough is exactly what is not being claimed.
+     *
+     * The intermediates are volatile so that each one is a float32 in memory, as the engine's
+     * cells are. A compiler keeping them in a wider register would be testing arithmetic the
+     * engine never does, and on an x87 build that is exactly what happened: the same source
+     * passed with SSE math and failed without it. */
     for (live = 2.5f; live < 20000.0f; live *= 1.19f) {
-        double step   = sim_clock_rebase_step(live);
-        float  target = live + 0.03125f * 0.4f;          /* somewhere inside a substep */
-        float  before = target - live;
-        float  after;
+        double         step   = sim_clock_rebase_step(live);
+        volatile float target = live + 0.03125f * 0.4f;  /* somewhere inside a substep */
+        volatile float before = target - live;
+        volatile float target_rebased;
+        volatile float live_rebased;
+        volatile float after;
 
         if (step == 0.0) {
             continue;
         }
-        after = (float)((double)target - step) - (float)((double)live - step);
+        target_rebased = (float)((double)target - step);
+        live_rebased   = (float)((double)live - step);
+        after          = target_rebased - live_rebased;
         ut_checkf(after == before,
                   "the difference at %.1f s changed: %.9f became %.9f", (double)live,
                   (double)before, (double)after);
@@ -115,11 +124,13 @@ static void the_difference_survives_bit_for_bit(void)
 
 static void rebasing_actually_restores_the_resolution(void)
 {
-    float  live = 900.0f;                         /* fifteen minutes into a level */
-    double step = sim_clock_rebase_step(live);
-    float  after;
-    float  coarse_before;
-    float  coarse_after;
+    volatile float live = 900.0f;                 /* fifteen minutes into a level */
+    double         step = sim_clock_rebase_step(live);
+    volatile float after;
+    volatile float live_plus_frame;
+    volatile float after_plus_frame;
+    volatile float coarse_before;
+    volatile float coarse_after;
 
     /* The point of the exercise. The engine adds a frame delta to this clock every frame, and the
      * defect is that the addition rounds by more and more as the clock grows. Adding one frame at
@@ -127,8 +138,10 @@ static void rebasing_actually_restores_the_resolution(void)
     ut_check(step > 0.0, "a clock at fifteen minutes rebases");
     after = (float)((double)live - step);
 
-    coarse_before = (float)((double)live + 0.00625) - live;
-    coarse_after  = (float)((double)after + 0.00625) - after;
+    live_plus_frame  = (float)((double)live + 0.00625);
+    after_plus_frame = (float)((double)after + 0.00625);
+    coarse_before    = live_plus_frame - live;
+    coarse_after     = after_plus_frame - after;
 
     ut_checkf(coarse_after > coarse_before,
               "a frame must register better after rebasing: %.9f before, %.9f after",
@@ -145,10 +158,13 @@ static void a_clock_that_keeps_running_stays_bounded(void)
      * The offset is accumulated in double here because that is how the module carries it. A float32
      * running total would reintroduce the very rounding this removes, one level deep instead of
      * one frame deep. */
-    double offset = 0.0;
-    float  live   = 2.5f;
-    int    frame;
+    double         offset = 0.0;
+    volatile float live   = 2.5f;
+    int            frame;
+    int            left_the_band_at = -1;
 
+    /* Every frame is checked and the first excursion is what gets reported: one line for the
+     * property, not two hundred thousand copies of "still inside". */
     for (frame = 0; frame < 200000; ++frame) {
         double step;
 
@@ -158,11 +174,16 @@ static void a_clock_that_keeps_running_stays_bounded(void)
             live    = (float)((double)live - step);
             offset += step;
         }
-        ut_checkf(live >= 0.0f && live <= 8.0f,
-                  "the live clock left its band at frame %d: %.4f", frame, (double)live);
         if (live < 0.0f || live > 8.0f) {
+            left_the_band_at = frame;
             break;
         }
+    }
+    if (left_the_band_at < 0) {
+        ut_check(1, "the live clock stays inside 0..8 s across 200000 frames");
+    } else {
+        ut_checkf(0, "the live clock left its band at frame %d: %.4f", left_the_band_at,
+                  (double)live);
     }
     ut_check(offset > 1000.0, "and the offset carried the elapsed time away in double");
 }

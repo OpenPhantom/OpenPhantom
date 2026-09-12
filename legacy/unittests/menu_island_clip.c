@@ -16,7 +16,7 @@
 
 #include "menu_island_clip.h"
 
-#include <stdlib.h>
+#include <math.h>
 
 /* The island origin the engine computes at 3840x2160: ((3840-640)/2, (2160-480)/2). */
 /* The island is the menu canvas, which is the authored size unless menu_scale widened it.
@@ -140,7 +140,7 @@ static void test_not_ours_to_judge(void)
     ut_near(right, 200.0, 0.0, "and the right bound untouched");
 
     {
-        float not_a_number = (float)atof("nan");
+        float not_a_number = (float)NAN;
         left = not_a_number; right = 100.0f; top = 10.0f; bottom = 40.0f;
         ut_check(menu_island_clip_rect(&left, &right, &top, &bottom, 0.0f, 0.0f,
                                    ISLAND_W, ISLAND_H),

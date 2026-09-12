@@ -39,7 +39,7 @@
  *
  * Nothing a limit holds back may be deleted. What is not delivered this drain stays banked and goes
  * out on the next one, so the total is conserved exactly. A guard that deletes evidence hides the
- * fault it guards against, and this file has paid for that twice.
+ * fault it guards against; two earlier versions of this file did, and both are described below.
  *
  * And the cut runs before the bank, not after it. Holding motion back rather than deleting
  * it is right for input and wrong for a FAULT: once clipped motion started being paid out instead
@@ -88,7 +88,7 @@
  * The second was delivery cadence. The simulation step is pinned at 1/32 s while the render runs
  * far faster, so a drain carries however many rendered frames fell between two substeps, two or
  * three at 90 frames per second, while a key delivers a rate times the fixed step. All of that is
- * byte-true, a pacer was built for it, and it shipped. It was then killed on four counts:
+ * byte-true, a pacer was built for it, and it shipped. It was removed on four counts:
  *
  *   - the field test meant to confirm it, a 64 fps cap making the grouping exactly two frames per
  *     substep, came back unchanged. That run's own log reads dt in ms minimum 15.625, average
@@ -107,7 +107,7 @@
  * be driven by a NOISE model and must assert that the paced spread is no worse than the unpaced one
  * at 64, 91.5 and 144 frames per second. The shipped version fails that at 64.
  *
- * And the test-design lesson, which cost the whole feature. Its unit test reported a step spread of
+ * The test that let it ship reported a step spread of
  * 0.00 per cent and it was not lying: the model fed it a perfectly steady hand, so the only
  * variation present was the sampling, which is the one thing the pacer cancels in closed form. A
  * model that feeds a filter a clean signal measures what the filter does to the sampling and never
@@ -728,34 +728,23 @@ void mouse_look_install(input_axis_fn_t reader)
         menu_cursor_install(mouse_config()->menu_cursor_raw);
     }
 
+    /* The facts a log reader needs: which reader, and the numbers in force. The reasoning is in
+     * the header of this file and of raw_mouse.c, where it can be read once. */
     if (mouse_state.raw_source) {
-        log_info("the mouse is read as RAW INPUT, straight from the device. The engine's own reader "
-                 "answers a SUM: it hands over everything accumulated since the previous call, so "
-                 "nothing downstream can tell three device reports in a step from four. The "
-                 "simulation consumes at a fixed 32 Hz, so a mouse reporting at 125 Hz delivers "
-                 "three or four whole reports into each consumed step whatever the frame rate does, "
-                 "which is a wobble no frame rate cap can remove. This keeps that structure instead "
-                 "of summing it away. The engine's own reader stays available and is switched back "
-                 "to if raw input ever goes quiet. MouseRawInput=0 refuses it from the start.");
+        log_info("the mouse is read as raw input, with the engine's own reader as the fallback "
+                 "if it goes quiet");
     } else if (mouse_config()->raw_requested) {
         log_warning("raw input is not available, so the mouse is read through the engine's own "
-                    "device, which answers the counts since the last call as a single sum. The "
-                    "device's own report timing is then not recoverable, so the boundary "
-                    "correction is off and only the smoothing is left. Nothing else is affected.");
+                    "device; the report timing is then unknown, so the boundary correction is "
+                    "off and only the smoothing is left");
     } else {
         log_info("MouseRawInput=0, the mouse is read through the engine's own DirectInput device");
     }
 
-    log_info("the view turn is RECONSTRUCTED from the device's own report timing rather than summed "
-             "over the interval it lands in, which costs no delay and removes the error that made "
-             "a steady hand shimmer: a device reporting at R per second puts R/32 reports into each "
-             "simulation step, and when that is not a whole number the sum alternates between three "
-             "and four of them. What is left is the report clock's own jitter, and the filter for "
-             "that takes its length from the DEVICE, six of its report intervals, never past %.0f "
-             "ms (MouseSmoothMaxMs). %.3f degrees per count, spikes held back past %.0f deg/s and "
-             "paid out rather than deleted, never more than %.0f degrees in one step.",
-             (double)(mouse_config()->smooth_ceiling_seconds * MILLISECONDS_PER_SECOND),
+    log_info("%.3f degrees per count, smoothing up to %.0f ms (MouseSmoothMaxMs), spikes held "
+             "back past %.0f deg/s and paid out later, never more than %.0f degrees in one step",
              (double)mouse_config()->degrees_per_count,
+             (double)(mouse_config()->smooth_ceiling_seconds * MILLISECONDS_PER_SECOND),
              (double)mouse_config()->max_turn_rate, (double)MOUSE_MAX_STEP_DEGREES);
 }
 

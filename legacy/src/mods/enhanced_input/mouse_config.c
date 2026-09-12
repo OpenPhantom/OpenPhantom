@@ -173,12 +173,10 @@ void mouse_config_load(void)
      * three old keys, so each of these detects presence and not merely a value. */
     legacy = ini_read_float(INPUT_SECTION, LEGACY_SENSITIVITY_KEY, -1.0f);
     if (legacy >= 0.0f) {
-        log_warning("%s=%.2f is no longer read. It is replaced by MouseDegreesPerCount, which is "
-                    "measured in degrees of view turn per MOUSE COUNT rather than per axis unit, "
-                    "and the mouse is no longer sampled once per substep; nothing is discarded "
-                    "any more, so the same feel needs a much smaller number. Your old value is "
-                    "%.3f in the new key and the usual band is 0.023 to 0.045. "
-                    "MouseDegreesPerCount=%.3f is in force. Delete the old key to silence this.",
+        log_warning("%s=%.2f is no longer read; MouseDegreesPerCount replaces it, in degrees per "
+                    "mouse count, and your old value is %.3f in that unit (the usual band is "
+                    "0.023 to 0.045). MouseDegreesPerCount=%.3f is in force. Delete the old key "
+                    "to silence this.",
                     LEGACY_SENSITIVITY_KEY, (double)legacy,
                     (double)(legacy * ENGINE_AXIS_SCALE),
                     (double)config.degrees_per_count);
@@ -186,26 +184,18 @@ void mouse_config_load(void)
 
     legacy = ini_read_float(INPUT_SECTION, "MouseSmoothingMs", -1.0f);
     if (legacy >= 0.0f) {
-        log_warning("MouseSmoothingMs=%.0f is no longer read. It set a FIXED time constant, and a "
-                    "fixed one cannot be right at two different report rates: what is barely "
-                    "enough for a mouse reporting a hundred times a second is a quarter of a "
-                    "second of "
-                    "mush for one reporting a thousand times. The filter now measures the device's "
-                    "own report interval and sizes itself from that, and the new key "
-                    "MouseSmoothMaxMs is the CEILING on how much delay it may spend, default %.0f. "
-                    "Delete the old key to silence this.",
+        log_warning("MouseSmoothingMs=%.0f is no longer read. The filter now sizes itself from "
+                    "the device's own report interval, and MouseSmoothMaxMs is the ceiling on the "
+                    "delay it may spend, default %.0f. Delete the old key to silence this.",
                     (double)legacy, (double)DEFAULT_SMOOTH_CEILING_MS);
     }
 
     legacy = ini_read_float(INPUT_SECTION, LEGACY_TURN_RATE_KEY, -1.0f);
     if (legacy >= 0.0f) {
         log_warning("%s=%.0f is no longer read; the key is now %s and the default is %.0f. The old "
-                    "value was a SPEED LIMIT: it was measured against a single frame's own "
-                    "duration and it deleted what it cut, so a flick faster than it was truncated "
-                    "and the frame clock's own jitter was cut straight into the aim. What the new "
-                    "limit holds back is delivered on the next drain instead, so it bounds a "
-                    "broken device rather than your hand. %s=%.0f is in force. Delete the old key "
-                    "to silence this.",
+                    "limit deleted what it cut; the new one holds it back and delivers it on the "
+                    "next drain, so it bounds a broken device rather than your hand. %s=%.0f is in "
+                    "force. Delete the old key to silence this.",
                     LEGACY_TURN_RATE_KEY, (double)legacy, SPIKE_LIMIT_KEY,
                     (double)DEFAULT_MAX_TURN_RATE, SPIKE_LIMIT_KEY,
                     (double)config.max_turn_rate);

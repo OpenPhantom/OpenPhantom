@@ -31,9 +31,11 @@
  * and is therefore never reset until the level is reloaded. That is the cause of the stretched
  * triangles seen after raising the view distance: the damage is permanent, not transient.
  *
- * Unlike the cell table the vertex cache aborts CLEANLY (all three gates branch to a return
- * before every write), so the draw function returns normally and a measurement at frame end SEES
- * it. That was not true for the cell table, where the draw function dies first.
+ * Unlike the cell table the vertex cache aborts CLEANLY: gates 2 and 3 branch to a return before
+ * their loops, and gate 1 checks the counter it has just incremented, so the slot it wrote was
+ * the last valid one and the next call is refused by the other two. The draw function returns
+ * normally and a measurement at frame end SEES it. That was not true for the cell table, where
+ * the draw function dies first.
  */
 #ifndef CELL_WATCHDOG_H
 #define CELL_WATCHDOG_H

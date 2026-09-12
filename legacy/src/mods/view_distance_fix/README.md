@@ -58,7 +58,7 @@ order of thing from a per-object syscall.
 | `PolyDepthBias` | `1` | | `1` is the engine's own behaviour and patches nothing. `0` zeroes the per-polygon depth bias scale at the operand behind `0x00419DBB`. A DIAGNOSTIC: the fog alpha is baked into a shared vertex from whichever polygon reached it first, so two polygons with different bias bytes give that vertex two different fogs depending on gather order. Zeroing the scale also removes the depth sorting the bias exists for, so coplanar surfaces may fight |
 | `TranslucentFog` | `0` | | `1` turns the fog-enable clear in the deferred face submit into a no-op, so an alpha-blended face keeps the fog every other face gets. A DIAGNOSTIC: the level-of-detail cross-fade makes geometry translucent while it crosses, so a surface loses its fog for the length of the transition |
 | `LogFogBand` | `0` | | capture what the band was computed from, one sample a frame after a level load, and write the whole run out once when the band settles or the array fills. It captures rather than logging as it goes, because a file write per frame would stall the easing under suspicion. Nothing is captured at `0` |
-| `LogPlayerPosition` | `0` | | log the player's position, and the camera yaw and pitch where that site resolves, every ten frames, with a dump of the level placements within 15 units every fifth sample. Written to identify a specific placement live rather than by name, because a placement name is a reused archetype label |
+| `LogPlayerPosition` | `0` | | log the player's position, and the camera yaw and pitch where that site resolves, every ten frames, with a dump of the level placements within 15 units every fifth sample. Written to identify a specific placement live rather than by name, because a placement name is a reused archetype label. A measurement switch; it ships off |
 
 One more switch lives in the `[diagnostics]` section rather than this one, because that is where
 every measurement in the shipped ini lives:
@@ -82,7 +82,7 @@ every measurement in the shipped ini lives:
 | actor destroy (`FUN_00437850`) | `0x437850` | detoured over a 6-byte prologue, **only** when `[diagnostics] Spawns=1`; observation only, the original runs and nothing is refused |
 | `Plr_RunPhases` | `0x448297` | read only, **only** when `LogPlayerPosition=1`; `&pPlayer` taken from the operand at `+0x27` and never detoured |
 | the camera object pointer | address read from the operand | read only, **only** when `LogPlayerPosition=1`; euler pitch `+0x34` and yaw `+0x38`, nothing written. The pattern is the one `enhanced_input/camera_sites.c` resolves for its own free look |
-| the world pointer | `0x406BE3 + 0x07` | read only, **only** when `[diagnostics] Spawns=1`; the placement dump reads the cell to reach `world+0x50` and writes nothing. The pattern is twenty bytes with the operand masked and the opcodes in front of it checked, so a build that moved the global leaves the dump switched off instead of reading a cell it guessed at |
+| the world pointer | `0x406BE3 + 0x07` | read only, resolved whenever the DLL installs and used **only** when `LogPlayerPosition=1`; the placement dump reads the cell to reach the placement table and writes nothing. The pattern is twenty bytes with the operand masked and the opcodes in front of it checked, so a build that moved the global leaves the dump switched off instead of reading a cell it guessed at |
 | `rdMesh_draw` cull word | `0x40F3F7 - 4` | address read from the operand |
 | `rdThing_Draw` | `0x40FE70` | detoured; the cull word is always restored |
 | `rdCamera_BuildProjection` | `0x475FFA` | observed only, for the radius cap and the fog |
@@ -393,7 +393,9 @@ seconds at 100 fps, and lagged the scene by over a second. Between that and step
 gentler cost curve than this setting actually has, it took **fourteen seconds** to walk 2.50 down
 to 1.00 in a cutscene that is about thirteen seconds long: it arrived after the thing it was
 reacting to had finished. A field run reported that as "better but still drops". The
-window is now emptied after each decision and a decision is every half second.
+window is now emptied after each decision and a decision is every half second, once the window
+holds at least eight frames: a level load that was the only frame in its window used to be its
+own median and cost a step at every load.
 
 **An attribution test was tried here and removed.** The first run walked 2.50 down to 1.15 in nine
 consecutive seconds, and its log shows the first three steps made the frame time *worse*:
@@ -607,11 +609,11 @@ declined.
 ### `RelocateVertexCache`, added later
 
 Built and linked, `/W4 /WX` clean, full solution and the whole unit test suite still passes.
-**Not yet run in game.** The twelve address operands and the three gate immediates were confirmed
-byte-for-byte against the running retail image rather than assumed from a disassembly view's
-mnemonics (the `ADD EAX,imm32` short-form encoding in particular would have been guessed wrong),
-but whether the relocation actually resolves and activates on a live launch can only be established
-by running the game. The line to look for:
+The twelve address operands and the three gate immediates were confirmed byte-for-byte against
+the running retail image rather than assumed from a disassembly view's mnemonics (the
+`ADD EAX,imm32` short-form encoding in particular would have been guessed wrong). It has run in
+the game since: the `ViewRangeScale` 2.5 field test above was made on a build carrying it and saw
+no torn geometry. The line to look for:
 
 ```
 [view_distance_fix] vertex table relocated to ........ (32768 slots of 64 B = 2097152 B), guard page ........ (PAGE_NOACCESS), gates 16384 -> 32768, 15/15 operands written.

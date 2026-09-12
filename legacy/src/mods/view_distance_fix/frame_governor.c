@@ -23,10 +23,10 @@
  * is still recognised. */
 #define GOVERNOR_RECOVERY_MARGIN 1.15f
 
-/* Impatient about pain, slow about recovery: one bad second is enough to take a step, and it takes
- * thirty good ones in a row to give the FIRST one back. Thirty consecutive good seconds is a much
- * stronger claim than one, and it distinguishes "the heavy scene is over" from a lull in the
- * middle of it.
+/* Impatient about pain, slow about recovery: one bad window is enough to take a step, and it takes
+ * thirty good seconds in a row to give the FIRST one back. Thirty consecutive good seconds is a
+ * much stronger claim than one window, and it distinguishes "the heavy scene is over" from a lull
+ * in the middle of it.
  *
  * Once that first step back has been earned, the rest come every ten seconds. The expensive claim
  * is the first one; after it has been made, holding the remaining steps at half a minute each only
@@ -291,8 +291,8 @@ static void decide_on_window(float median, float configured_scale)
 
     case FRAME_GOVERNOR_HOLD:
     default:
-        /* Healthy seconds only accumulate while there is something to give back. Counting
-         * them at the configured scale would mean the first slow second after a long quiet
+        /* Healthy windows only accumulate while there is something to give back. Counting
+         * them at the configured scale would mean the first slow window after a long quiet
          * stretch was answered by an immediate raise. */
         if (median < governor.raise_below_ms && governor.ceiling < configured_scale) {
             governor.healthy_seconds++;
@@ -378,9 +378,9 @@ void frame_governor_configure(bool enabled, float backoff_fps, float configured_
 
     log_info("frame governor active: the view distance backs off below %.0f fps (%.1f ms a frame) "
              "and is given a step back after %u s above %.0f fps (%.1f ms), then every %u s. Steps "
-             "of about %.2f, sized by how far off target the second was, never below %.2f and "
-             "never above the configured %.2f. It measures the MEDIAN frame of each second, so a "
-             "level load cannot move it.",
+             "of about %.2f, sized by how far off target the window was, never below %.2f and "
+             "never above the configured %.2f. It decides every half second on the MEDIAN frame "
+             "of a window of at least eight frames, so a level load cannot move it.",
              (double)target_fps, (double)governor.lower_above_ms,
              GOVERNOR_HEALTHY_SECONDS, (double)(target_fps * GOVERNOR_RECOVERY_MARGIN),
              (double)governor.raise_below_ms, GOVERNOR_HEALTHY_SECONDS_AGAIN,

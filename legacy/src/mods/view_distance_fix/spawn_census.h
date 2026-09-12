@@ -40,8 +40,9 @@ bool spawn_census_install(uintptr_t activation_scan, bool enabled);
  * hook_actor_destroy for the mechanism, the four suppression attempts and the measurements. */
 bool spawn_census_install_destroy_observer(bool enabled);
 
-/* TEMPORARY: logs the player's own current position and camera yaw/pitch roughly once a second,
- * plus every active placement within a short radius of it. Built after two guesses at which
+/* LogPlayerPosition, a measurement switch that ships off: logs the player's own current position
+ * and camera yaw/pitch every ten frames, plus every active placement within a short radius of it
+ * on every fifth sample. Built after two guesses at which
  * placement was one of the field report's droids, by loose position matching against a list of
  * everything that happened to fire a "created" log, were both wrong; actors already active before
  * the capture window started never emit one. This says directly where the player is and what is

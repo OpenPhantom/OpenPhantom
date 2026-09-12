@@ -28,10 +28,14 @@
  * deferred array and its vertices into the pool and then never inserts it into the queue.
  *
  * Every one of these is resolved out of an OPERAND, not written down as an address. Each pattern
- * is a run of instructions that touches the counter, with the counter's own address wildcarded and
- * read back at install, and with every other image address inside the window wildcarded as well so
- * the pattern survives forced ASLR rather than matching only at the preferred base. All thirteen
- * match exactly once. */
+ * is a sixteen or twenty byte window around the instruction that touches the counter, with the
+ * counter's own address wildcarded and read back at install. Nothing else in the window is
+ * masked: the windows were cut by size and not on instruction boundaries, so eight of them
+ * (deferred, face_recs, cells, region_mask, crossfade, both device fog cells and vertex_fog_on)
+ * carry unmasked bytes of a neighbouring absolute operand, and vert_pool carries a relative call
+ * displacement. They therefore match only at the image's preferred base, like every unmasked
+ * pattern in this tree, and a build that moved those neighbours declines instead of misreading.
+ * All thirteen match exactly once in the retail image. */
 typedef struct counter_site {
     const char    *name;
     const uint8_t *pattern;

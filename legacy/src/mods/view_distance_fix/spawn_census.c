@@ -76,9 +76,8 @@
  * `param_1 + 0x2e`, but param_1 decompiles as `int *`, so that expression is already scaled by 4:
  * the real byte offset is 0x2e * 4 = 0xB8. (First attempt at this offset, left unscaled, printed
  * floating-point bit patterns instead of names, which is the tell that gave the x4 away.)
- * Temporary: logs
- * every SUCCESSFUL spawn by name, not just refusals, so a specific encounter's placements can be
- * identified live rather than guessed at. */
+ * With Spawns on, every SUCCESSFUL spawn is logged by name as well, not just refusals, so a
+ * specific encounter's placements can be identified live rather than guessed at. */
 #define PLACEMENT_NAME_OFFSET 0xB8u
 #define PLACEMENT_NAME_MAX    32u
 
@@ -92,11 +91,12 @@
  * else this hook also sees. */
 #define PLACEMENT_POSITION_OFFSET 0xACu
 
-/* TEMPORARY: two guesses at which placement is one of the field report's three lift droids, by
- * loose position matching against a list of everything the activation scan happened to create,
- * both wrong (enemy091 and enemy092 turned out not to be visible in that lift at all). Guessing
- * off a list is out; this logs the PLAYER's own position periodically instead, so the next capture
- * says directly where the lift actually is and what is actually near it, rather than inferring it.
+/* The player position log, behind LogPlayerPosition, which ships off. It exists because two
+ * guesses at which placement was one of the field report's three lift droids, by loose position
+ * matching against a list of everything the activation scan happened to create, were both wrong
+ * (enemy091 and enemy092 turned out not to be visible in that lift at all). Guessing off a list
+ * is out; this logs the PLAYER's own position periodically instead, so a capture says directly
+ * where the lift actually is and what is actually near it, rather than inferring it.
  *
  * --- Plr_RunPhases 0x00448297, used only to derive the player pointer slot; never detoured. Byte-
  * identical to diag_flow.c's, video_overlay.c's and sfx_mute.c's own reasoning for this site.
@@ -206,16 +206,15 @@ static uint32_t *resolve_camera_view_pointer_slot(void)
     return (uint32_t *)(uintptr_t)address;
 }
 
-/* TEMPORARY: dumps every LEVEL PLACEMENT within range of the player, not just ones that happened
- * to fire a "created" log during this capture. Matching by "recently created nearby" turned out to
- * miss the actual droids twice in a row: they can be actors that were already active before this
- * session's own capture window started, which never emit a fresh "created" line at all. This walks
- * the SAME placement table FUN_00437161 (the activation scan) itself iterates: world = *(0x8A0060),
- * count = *(world+0x204), array = *(world+0x20C), each entry the same placement record everything
- * else in this file already reads by the same offsets. 0x008A0060 is used directly rather than
- * resolved by signature: it is a fixed global read as a literal absolute operand at several
- * already-confirmed sites this session (FUN_0040be00, FUN_0040c2be among them), not a relocatable
- * target, and this is a one-off diagnostic rather than something meant to ship. */
+/* The placement dump, the second half of LogPlayerPosition: every LEVEL PLACEMENT within range
+ * of the player, not just ones that happened to fire a "created" log during this capture.
+ * Matching by "recently created nearby" turned out to miss the actual droids twice in a row: they
+ * can be actors that were already active before this session's own capture window started, which
+ * never emit a fresh "created" line at all. This walks the SAME placement table FUN_00437161 (the
+ * activation scan) itself iterates: world = *(g_world), count = *(world+0x204),
+ * array = *(world+0x20C), each entry the same placement record everything else in this file
+ * already reads by the same offsets. The world pointer cell is read out of the operand of the
+ * pattern below, not written down. */
 /* --- 0x00406BE3, a function that opens by loading the world pointer ---------------------------
  *   55 8B EC              push ebp / mov ebp,esp
  *   83 EC 24              sub  esp, 0x24

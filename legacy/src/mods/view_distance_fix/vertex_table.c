@@ -9,9 +9,10 @@
  *
  * The cache is not a table of pointers or structs Ghidra ever named as one; it is addressed by
  * three DIFFERENT literal forms, all baked directly into instruction operands rather than read
- * from a pointer variable: `SHL reg,6` then `ADD reg,0x5bf9f0` (five call sites, two encodings
- * of ADD depending on which register: `81 /0 id` for EDX/ESI, the EAX-only short form `05 id` for
- * EAX), one direct `MOV byte ptr [reg+0x5bf9f1],1` (the per-slot "touched" flag, offset +1), and
+ * from a pointer variable: `SHL reg,6` then `ADD reg,0x5bf9f0` (ten sites, one on EDX, five on
+ * ESI and four on EAX, in two encodings of ADD depending on the register: `81 /0 id` for EDX and
+ * ESI, the EAX-only short form `05 id` for EAX), one direct `MOV byte ptr [reg+0x5bf9f1],1` (the
+ * per-slot "touched" flag, offset +1), and
  * one seed pointer `MOV ECX,0x5bf9f2` walked with `ADD ECX,0x40` per iteration (offset +2, the
  * per-frame touched-flag RESET loop). Twelve address-bearing sites in total, found by exhaustive
  * xref census across the three functions that read or write the cache
@@ -49,11 +50,14 @@
  *           torn/stretched geometry that does not self-correct until the level reloads.
  *   gate 3  0x0041C0D5  FUN_0041BAF0: the same shape as gate 2, in the second (mover) entry point.
  *
- * All three are genuine pre-checks, not entry-only checks with unchecked appends after (the cell
- * table's own failure mode). That is why this file needs NO reserve the way draw_table.c's 8192
- * entries do: the retail code itself never writes past whatever limit these three gates enforce.
- * Raise all three together and the buffer's true capacity is exactly what gets used: a straight
- * multiplication, not an overshoot allowance.
+ * Gates 2 and 3 check before their loops; gate 1 checks after its write, and what keeps that
+ * write inside the buffer is the two in front of it: once gate 1 has tripped the counter is left
+ * at exactly 0x4000, and gates 2 and 3 reject the very next call before its first face. None of
+ * the three is an entry-only check with unchecked appends after it (the cell table's own failure
+ * mode). That is why this file needs NO reserve the way draw_table.c's 8192 entries do: the
+ * retail code itself never writes past whatever limit these three gates enforce. Raise all three
+ * together and the buffer's true capacity is exactly what gets used: a straight multiplication,
+ * not an overshoot allowance.
  *
  * ==============================================================================================
  * 2. THE SIZES

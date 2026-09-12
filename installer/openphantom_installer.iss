@@ -12,7 +12,7 @@
 ; no [Run] section at all. Microsoft's Visual C++ redistributable used to be carried and is not:
 ; every binary this project builds links the static runtime, so there is nothing to install.
 ;
-; The disc is copied with Flags: external rather than by a helper process, which is what lets Inno
+; The disc is copied with Flags: external rather than by a helper process; that lets Inno
 ; record every file it wrote. The uninstaller then removes exactly those and leaves the rest, so it
 ; never has to delete the whole directory with the saved games in it.
 
@@ -44,14 +44,14 @@
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
 ;
-; THE INSTALLER'S OWN NUMBER, and the last digit counts installer builds. Build a new one, add one:
+; The installer's own number, and the last digit counts installer builds. Build a new one, add one:
 ; 1.4.1, 1.4.2, and so on. It is not a judgement about how much changed.
 ;
 ; The patch has a number of its own again, 0.4.x, at j0nny's asking. The two were merged into one at
 ; 1.5.0 on the reasoning that they had never been released apart; that is being undone rather than
 ; argued with, and PatchVersion in src\openphantom_patch.iss carries the patch's line again.
 ;
-; THE ONE MERGED RELEASE IS BEING RE-RELEASED INTO THIS LINE. Only i1.5.0 ever shipped under the
+; The one merged release is being re-released into this line. Only i1.5.0 ever shipped under the
 ; merged number, and it becomes i1.4.1, so the sequence reads i1.4, i1.4.1, i1.4.2 with no gap and
 ; nothing moving backwards. That matters because Inno writes AppVersion into Add/Remove Programs;
 ; without the renumbering a 1.4.x installer would have sat below something people already held.
@@ -116,7 +116,7 @@ PrivilegesRequired=admin
 ; That is the safer behaviour in general and it is being given up deliberately: this installer is
 ; how the patch is updated, so the same person runs it again after components have been added, and
 ; a restored selection silently leaves every new one unticked. Starting from "everything" each time
-; is what makes an update install the whole patch.
+; is how an update installs the whole patch.
 ;
 ; The cost is that somebody who deliberately took less than everything is offered everything again,
 ; including the cutscene player and its converter. They are still on the
@@ -277,14 +277,14 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\TPM.EXE
 ; WMAIN.EXE is what runs, and TPM.EXE is what the icon comes from. Those have to be two different
 ; files here. A shortcut with no IconFilename takes its icon from whatever it points at, and
 ; WMAIN.EXE has no resource directory at all: no icon, no version information, nothing. Windows then
-; falls back to the blank page it shows for a file type it does not know, which is what the desktop
+; falls back to the blank page it shows for a file type it does not know, the page the desktop
 ; shortcut looked like before this line existed.
 ;
 ; Of the six executables the disc carries, WMAIN.EXE is the only one with no icon. TPM.EXE is the
 ; one to borrow from: it is the original launcher, it is copied unconditionally above, and it is the
 ; file the disc check looks for, so it cannot be absent while the game is installed. Its icon is the
 ; LucasArts logo, one 32x32 image at 16 colours, which is the era it comes from. It will look coarse
-; at the sizes a modern desktop draws, and that is a deliberate trade against inventing artwork.
+; at the sizes a modern desktop draws, a deliberate trade against inventing artwork.
 [Icons]
 Name: "{group}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
     IconFilename: "{app}\TPM.EXE"
@@ -294,7 +294,7 @@ Name: "{commondesktop}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir
 
 ; There is deliberately no [UninstallDelete] section. Inno removes the files it installed; saved
 ; games, settings and anything a player added afterwards are not ours to delete. The folder stays
-; behind with those in it, and that is the intended outcome.
+; behind with those in it, the intended outcome.
 
 ; Nothing is downloaded during installation, so there is no download hash to check. Everything the
 ; installer places is compiled into it out of dist and is covered by Setup's own integrity check.
@@ -588,7 +588,7 @@ end;
   installed game has the expanded big.lab and no BIG.Z, so this is what tells a disc from somebody
   else's installation.
 
-  INSTALL is a folder, which is why that row is not AddIfMissing. }
+  INSTALL is a folder, so that row is not AddIfMissing. }
 function MissingDiscParts(const Root: String): String;
 var
   Base: String;
@@ -726,7 +726,7 @@ end;
 { Typing in the box ticks the option it belongs to. Without this a player types a number, leaves the
   option alone, and is quietly given the preselected 100 instead of what they typed.
 
-  The other direction is not wired, and that is on purpose: it would depend on the list raising an
+  The other direction is not wired, on purpose: it would depend on the list raising an
   event for a radio selection, and if it did not the box would sit disabled and the whole option
   would be unreachable. This way the box always works. }
 procedure FpsEditChanged(Sender: TObject);
@@ -787,7 +787,7 @@ begin
 
   { Letterbox first and preselected, because it is the answer that shows the movie the shape it was
     made in. Stretch is offered rather than hidden: on a wide screen some people would rather have no
-    bars than correct faces, and that is a taste rather than a mistake. }
+    bars than correct faces, a taste rather than a mistake. }
   ScalingPage := CreateInputOptionPage(
     MoviePage.ID,
     ExpandConstant('{cm:ScalingPageCaption}'),
@@ -1094,7 +1094,7 @@ end;
   Cancelling the browser leaves the page up rather than falling through to one of the other two: the
   player asked to install somewhere else and has not said where yet.
 
-  A folder that also holds a game puts the same question again about that folder, which is why the
+  A folder that also holds a game puts the same question again about that folder, so the
   page is left up and the caption refreshed. Otherwise the choice is reset to the recommended one,
   so a later pass over this page does not start on an option that has already been acted on. }
 function ChooseDifferentFolder: Boolean;
@@ -1393,7 +1393,7 @@ begin
 end;
 
 { The height the player chose, or -1 for "not now". 0 is a real answer and means the source's own
-  resolution, which is why this cannot report "nothing to do" as zero. }
+  resolution, so this cannot report "nothing to do" as zero. }
 function ChosenMovieHeight: Integer;
 begin
   Result := -1;
@@ -1429,7 +1429,7 @@ begin
 end;
 
 { Called once per line the converter writes. Its --quiet mode prints one machine-readable line per
-  movie, which is what makes a progress bar possible without guessing how long anything takes.
+  movie, and a progress bar is possible from that without guessing how long anything takes.
 
   Machine lines go to stdout and anything written for a human to stderr, so Error tells them apart. }
 procedure ConvertOnLog(const S: String; const Error, FirstLine: Boolean);
@@ -1606,7 +1606,7 @@ begin
     converting anything, which is its own answer. }
   if (ResultCode = 0) and (MovieResult <> '') then begin
     { A successful run can still have encoded nothing, in two different ways, and the difference is
-      the whole of what the player needs to know. The converter reports success for all of them, so
+      everything the player needs to know. The converter reports success for all of them, so
       testing the exit code alone said "the cutscenes were converted" whether it did eleven films
       or none.
 
@@ -1636,7 +1636,7 @@ end;
   when the converter looks and it skips them instead of producing them again. }
 { Copies the bundled saves into Save\.
 
-  After the carry-over, which is why this is not a file row: rows are written first and the restore
+  After the carry-over, so this is not a file row: rows are written first and the restore
   would copy the player's own folder straight over them.
 
   Collisions are overwritten and everything else is left alone. The game numbers its slots with two
@@ -1781,7 +1781,7 @@ end;
   anywhere in this project, so they are carried as the numbers they are. JOYENABLE is among them
   because a layout with the pad switched off is the state this component exists to save people from.
 
-  1920x1080 replaces the engine's own 640x480, which is what a fresh obi.ini carries. It is a
+  1920x1080 replaces the engine's own 640x480, the value a fresh obi.ini carries. It is a
   starting value and not a limit: enhanced_resolution offers the full mode list, and the video
   options screen still writes whatever the player picks.
 
@@ -1936,7 +1936,7 @@ end;
   menus at that size and stops them following a resolution change at all. Between 210 MB and 840 MB
   of it, depending on what it was made for.
 
-  The MANIFEST is the test, not the folder, and that is the whole safety of this step. Artwork
+  The MANIFEST is the test, not the folder; the whole safety of this step rests on that. Artwork
   somebody drew themselves is still supported and still mounts from a folder of that name, and a
   folder like that must never be offered up for deletion. Only this project's own converter writes
   openphantom_menu_art.txt, and that file's own first lines already say to delete the folder to undo

@@ -5,7 +5,7 @@
  * the code length in the low nibble. That is the format's own compact notation, kept rather than
  * expanded so the tables stay checkable against the specification by eye.
  *
- * The one thing worth knowing before reading the decoder: codes are stored INVERTED, most
+ * The one thing to know before reading the decoder: codes are stored INVERTED, most
  * significant bit first, while everything else in the stream is least significant bit first. That
  * is why decode() complements each bit it takes.
  */
@@ -167,7 +167,7 @@ static void emit_byte(blast_state_t *s, uint8_t byte)
     if (s->window_used == WINDOW_SIZE) {
         /* The window is handed over whole, but the last WINDOW_SIZE bytes have to stay readable
          * for the next back-reference, so the buffer is not cleared. window_used going to zero
-         * is what makes the old contents unreachable as output while keeping them as history. */
+         * makes the old contents unreachable as output while keeping them as history. */
         if (!s->write_failed && !s->write(s->user, s->window, WINDOW_SIZE)) {
             s->write_failed = true;
         }

@@ -32,7 +32,7 @@
 
 ; FFmpeg, for the cutscene converter. It is the only thing in this installer that used to be fetched
 ; after installation rather than during it: convert_movies.ps1 downloads a pinned 106 MB build on
-; first use and caches it. Carrying it is what makes the whole thing work with no network at all.
+; first use and caches it. Carrying it lets the whole thing work with no network at all.
 ;
 ; This is the exact build the script pins, so it is what would have been downloaded anyway:
 ; ffmpeg-9.0-essentials_build.zip, sha256 e6b54767a6065919048f1a098eb27211ca4e12b4348a05d88777a5855d0b6e71
@@ -126,7 +126,7 @@ Source: "{#PatchSrc}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
 ; The file above came out of the patch archive and is accurate about that archive: the patch and
-; DxWrapper, and nothing else. It says of libVLC and FFmpeg that neither "is redistributed here",
+; DxWrapper alone. It says of libVLC and FFmpeg that neither "is redistributed here",
 ; which was true while the installer downloaded them and is not any more.
 ;
 ; Rather than edit it, which would make it wrong about the archive it describes and would be undone
@@ -154,7 +154,7 @@ Source: "{#DxWrapperSrc}\dxwrapper.ini"; DestDir: "{app}"; \
     Components: patch\wrapper; Flags: ignoreversion
 
 ; One row per DLL, and the component name matches the file name so a rename is reviewable. The fixes
-; are independent of each other, which is why there is no dependency between the rows.
+; are independent of each other, so there is no dependency between the rows.
 Source: "{#PatchSrc}\mods\crt_copy_fix.dll";        DestDir: "{app}\mods"; \
     Components: patch\crt_copy_fix;        Flags: ignoreversion
 Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
@@ -299,7 +299,7 @@ Source: "{#VlcSrc}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-Licen
 #emit VlcPlugin("packetizer", "libpacketizer_mpeg4audio_plugin.dll")
 #emit VlcPlugin("packetizer", "libpacketizer_copy_plugin.dll")
 
-; drawable is the module that accepts a window handle from outside libVLC, which is what
+; drawable is the module that accepts a window handle from outside libVLC, the handle that
 ; libvlc_media_player_set_hwnd hands over. Without it the handle reaches nothing and libVLC opens a
 ; window of its own instead: the movie plays, in a bordered window in the middle of the screen,
 ; rather than in the borderless monitor-sized overlay. It fails silently because a machine with VLC

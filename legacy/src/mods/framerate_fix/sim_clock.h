@@ -39,17 +39,6 @@ double sim_clock_rebase_step(float live);
  * comparing two samples of that clock has to add back whatever was taken between them. */
 double sim_clock_rebase_offset(void);
 
-/* The world time the engine is currently at, as this file's detour last set it, rebase included.
- * False before the first substep of a level.
- *
- * Here because this detour is the only place in the DLL that sees that value, and the mover blend
- * needs it: a mover's newest pose belongs to the world time it was last ticked at, and comparing
- * the two says how stale the pose is WITHOUT depending on whether the mover was ticked before the
- * draw or after it. That ordering differs between the mover a character stands on, which the
- * carry ticks inside the substep loop, and every other mover, which the frame sweep ticks after
- * it, and getting it wrong drew one of them a whole step out. */
-bool sim_clock_world_time(float *out_time);
-
 /* Called once per rendered frame, from outside the substep loop. */
 void sim_clock_sample(void);
 

@@ -56,6 +56,8 @@
  */
 #include "particle_clock.h"
 
+#include "world_clock.h"
+
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
@@ -171,21 +173,16 @@ static const uint8_t SIG_EMITTER_POOL[] = {
  * 0x004216A9.                                                                                    */
 #define EMITTER_NEWEST_BIRTH 0x10C
 
-/* The substep period, and the one constant in this file with no anchor in the image.
- *
- * The rate selector inside sys_runSubsteps chooses between 1/32 and 1/64 on the "60fps" cheat flag
- * [0x00882294]. A four byte scan of the whole image for that flag returns exactly two references,
- * both of them the `83 3D` compare form, one in sys_runSubsteps and one in sys_waitForFrame. There
- * is no write, no push of the address and no table entry, and the cell sits past the end of the
- * raw data image, so it is zero initialised and the 1/64 arm cannot be selected from inside the
- * shipped image. PinSimulationRate holds that arm at 1/32 as well.
+/* The substep period, and the one constant in this file with no anchor in the image. It is
+ * world_clock.h's definition, which carries the census of the "60fps" cheat cell [0x00882294]
+ * that would select 1/64: two references in the whole image, both compares, and no writer.
  *
  * If the period were ever really 1/64, the retardation computed here would be doubled and the
- * clamp above would fire on essentially every newly emitted particle: particles would still move
+ * clamp above would fire on nearly every newly emitted particle: particles would still move
  * smoothly, would sit up to 15.6 ms of world time behind their emitter, and nothing would be
  * written into the simulation. The invariant at risk is ours rather than the engine's, so it is
  * named here instead of being left to be found.                                                  */
-#define SUBSTEP_SECONDS 0.03125f
+#define SUBSTEP_SECONDS WORLD_CLOCK_SUBSTEP_SECONDS
 
 /* --- 0x00411063  the substep alpha, and the engine's guard against a frozen simulation ------- *
  *   A1 1C878600           mov eax, [0x0086871C]      the alpha, its operand at +0x01

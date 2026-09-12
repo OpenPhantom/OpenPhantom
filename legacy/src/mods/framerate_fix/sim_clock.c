@@ -236,10 +236,9 @@ static void __cdecl hook_set_world_clock(void *world, float time)
                                                     WORLD_CLOCK_SUBSTEP_SECONDS);
     }
 
-    /* Remembered whether or not the un-clamping is on, because the mover blend needs to know what
-     * world time the engine is currently at and this is the only place in the DLL that sees it.
-     * The value stored is the one the engine will actually hold, rebase included, which is the
-     * same frame of reference a mover's own time base is in. */
+    /* Remembered for the next call's un-clamping, which measures a whole step from it. The value
+     * stored is the one the engine will actually hold, rebase included, so the step is taken from
+     * where the engine really is. */
     sim_state.last_world_clock = (float)adjusted;
     sim_state.have_world_clock = true;
 
@@ -308,15 +307,6 @@ void sim_clock_sample(void)
         log_info("first rebase at %.3f s of level time, %.0f s taken off both clocks and added "
                  "back to the world clock", (double)live, step);
     }
-}
-
-bool sim_clock_world_time(float *out_time)
-{
-    if (out_time == NULL || !sim_state.have_world_clock) {
-        return false;
-    }
-    *out_time = sim_state.last_world_clock;
-    return true;
 }
 
 void sim_clock_install(bool enabled, bool substep_clock)

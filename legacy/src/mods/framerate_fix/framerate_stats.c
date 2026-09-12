@@ -15,6 +15,7 @@
 #include "frame_cap.h"
 
 #include "sim_clock.h"
+#include "world_clock.h"
 
 #include "common/logging.h"
 #include "common/memory.h"
@@ -123,7 +124,7 @@ static const uint8_t SIG_SUBSTEP_TAIL[] = {
  * simulation rate pin actually succeeded, which is another module's answer, and the window would
  * have to be long enough in real time to hold that much simulation, which at the shipped window
  * length and a high frame rate it is not. */
-#define SUBSTEP_PERIOD_32_HZ    0.031250f
+#define SUBSTEP_PERIOD_32_HZ    WORLD_CLOCK_SUBSTEP_SECONDS
 #define SUBSTEP_PERIOD_64_HZ    0.015625f
 #define SUBSTEP_PERIOD_TOLERANCE 0.10f
 

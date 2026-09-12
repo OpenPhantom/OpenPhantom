@@ -32,10 +32,11 @@
  *   (3) the pose throttle and the drawn euler -> draw_interpolation.c
  *   (4) the emitter dormancy counter       -> here
  *
- * What is not a compensation but a choice, each behind its own switch and each off unless the ini
- * says otherwise: measuring the frame period more precisely (frame_delta.c), drawing particles at
- * the instant the frame shows (particle_clock.c), rebasing the world clock so the drawn instant
- * and the simulation agree (sim_clock.c), and interpolating movers (mover_interpolation.c).
+ * What is not a compensation but a choice, each behind its own switch and each on by default,
+ * with the measurement behind the default in its own file: measuring the frame period more
+ * precisely (frame_delta.c), drawing particles at the instant the frame shows
+ * (particle_clock.c), rebasing the simulation clock pair so the interpolation phase stops
+ * precessing (sim_clock.c), and interpolating movers (mover_interpolation.c).
  *
  * What is proven not to need compensation: the LOD cross-fade (a real seconds delta), the input
  * latch and the pause gate. Movers were on that list and are not any more: they derive their dt
@@ -117,8 +118,10 @@ static const uint8_t EXPECTED_CAP_60_MOV[] = {
  *   C7 05 14878600 0000803C          g_frameDelta = 1/64     <- imm at +0x1B
  *
  * This is the one place the simulation rate is decided, and [0x882294] is the "60fps" CHEAT,
- * one flag, read in exactly two places in the whole image, that moves the render cap 30->60 AND
- * the substep 32->64 together. Doubling the substep doubles every PURE PER-SUBSTEP constant, and
+ * one flag, read in exactly two places in the whole image and written in none (world_clock.h has
+ * the census), that moves the render cap 30->60 AND the substep 32->64 together. From the
+ * shipped image the flag stays zero, so the pin below guards against a writer outside it, a
+ * trainer say. Doubling the substep doubles every PURE PER-SUBSTEP constant, and
  * the NPC extension module and the player module carry five of them:
  *
  *     NPC gravity          velocity.z -= 0.9 per substep
@@ -443,9 +446,10 @@ static void pin_simulation_rate(void)
     uint32_t  immediate_64;
 
     if (!framerate_state.config.pin_simulation_rate) {
-        log_warning("PinSimulationRate=0, the '60fps' cheat can still move the SIMULATION to "
-                    "64 Hz, which doubles NPC gravity, the turn ramp and the pathfinding re-plan "
-                    "rate");
+        log_warning("PinSimulationRate=0, the 1/64 arm of the substep selector stays live. "
+                    "Nothing in the shipped image writes the '60fps' cell that selects it, so "
+                    "this matters only if something outside the image does; taken, it doubles "
+                    "NPC gravity, the turn ramp and the pathfinding re-plan rate");
         return;
     }
     if (site == 0) {
@@ -778,9 +782,11 @@ void framerate_fix_install(void)
                     "frame's work and will not step by itself");
     }
     if (!frame_hook_add(on_frame)) {
-        log_warning("no per-frame hook, the camera compensation and the animation clock do NOT "
-                    "run. The render cap, the pinned simulation rate, the emitter dormancy and "
-                    "both draw patches are already in place and stay in place.");
+        log_warning("no per-frame hook, so nothing driven from frame end runs: the camera "
+                    "compensation, the animation clock, the clock rebase, the mover and rider "
+                    "frame counts with their window lines, the cap's re-read of the ini and the "
+                    "statistics. The render cap, the pinned simulation rate, the emitter dormancy "
+                    "and the draw patches are already in place and stay in place.");
         return;
     }
 

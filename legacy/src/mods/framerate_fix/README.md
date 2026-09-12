@@ -21,7 +21,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
-| `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. The only patch here that rewrites *instructions* rather than an operand, so it has its own switch |
+| `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. One of the four patches here that rewrite *instructions* rather than an operand, and the one with a switch of its own; see **Known limitations** |
 | `CameraTargetPair` | `1` | the camera's two position samples stay two substeps apart while the player rides a mover. The player tick feeds the camera twice a substep on a mover and collapsed the pair, so the camera stepped at 32 Hz through every ride; see **The camera on a ride** |
 | `CompensateCameraInCutscenes` | `0` | at `0` a scripted camera gets an anchor weight of zero, so a placed shot holds its gather origin instead of easing toward it. The five lag cells stay compensated either way, because they damp the rig and the euler rather than the origin. `1` compensates the anchor during a scripted camera as well |
 | `CompensateAnimation` | `1` | the animation clock and the emitter dormancy counter |
@@ -124,13 +124,15 @@ with nothing wrong at all.
 
 ## Known limitations
 
-* **Two sites rewrite instructions rather than an operand, and both fail closed.** The other is
-  the position blend in `bapobj_drawAll`, 126 bytes at `0x41125B`, larger than this one. It
-  declines as a whole when the pattern does not match, and `patch_write_bytes` reads the region
-  back and rolls it back if the write did not take. Both also mean this DLL must never be
-  unloaded: the anchor for the reason below, and the position blend because the call it writes
-  names a function inside this module.
-* **The anchor is the second, and it fails closed.** A mean
+* **Four sites rewrite instructions rather than an operand, and all four fail closed.** The
+  anchor mean, 63 bytes at `0x418623`; the position blend in `bapobj_drawAll`, 126 bytes at
+  `0x41125B`, the largest; the euler blend after it, 0x20 bytes at `0x4112D9`; and the pose gate
+  in `rdThing_Draw`, two bytes at `0x410019`. Each is written only on an exact match of the whole
+  region, through `patch_write_bytes`, which reads the region back and rolls it back if the write
+  did not take. Three of them also mean this DLL must never be unloaded: the anchor for the reason
+  below, and the position and euler blends because the call each writes names a function inside
+  this module.
+* **The anchor is the one that cannot be done as an operand, and it fails closed.** A mean
   cannot be rate-corrected by any single factor, substituting `k` gives weights summing to `2k`,
   and at a high frame rate the anchor roughly doubles every frame until the eye leaves the world.
   That shipped once. So the arithmetic is replaced instead: `(anchor - target)*k + target`, whose
@@ -173,16 +175,21 @@ with nothing wrong at all.
 
 ## Fallback behaviour
 
-If the per-frame hook cannot be installed, the camera compensation and the animation clock do not
-run and the log says so explicitly. The render cap, the pinned simulation rate, the emitter
-dormancy and both draw patches are already in place by then and stay in place.
+If the per-frame hook cannot be installed, nothing driven from frame end runs, and the log says
+so: the camera compensation, the animation clock, the clock rebase (its detour stays and adds an
+offset of zero), the mover and rider frame counts and the window lines and slot aging that hang
+off them, the cap's re-read of the ini, and the statistics, which are never installed. The render
+cap, the pinned simulation rate, the emitter dormancy and the draw patches are already in place
+by then and stay in place.
 
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes on the executables
-checked: EN, DE, the Fix Pack, and both install copies. One unit test, `camera_anchor`, on the
-anchor encoder: it is the only isolated pure logic in this DLL, and the only place where a wrong
-byte produces no crash and no log line.
+checked: EN, DE, the Fix Pack, and both install copies. One unit test per module with no engine
+in it, each named in `unittests/CMakeLists.txt`: `camera_anchor`, `face_latch`, `frame_cap`,
+`framerate_stats`, `sim_clock`, `world_clock`, `mover_blend`, `mover_wraps`, `mover_slots`,
+`mover_evenness`, `object_track` and `rate_independence`. Each covers arithmetic alone and none
+is a claim about the game.
 
 `FaceLatchYield` was tested in the game. At an uncapped rate of about 90 fps the swamp opening
 released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the scene plays at
@@ -288,7 +295,7 @@ is a teleport and not motion.
 
 ### Testing status
 
-Built, and unit tested at 39 checks covering the sequence properties a game run cannot show: the
+Built, and unit tested for the sequence properties a game run cannot show: the
 same answer for every frame inside a step, moving on exactly once when the step does, how many
 steps separate the two samples and the weight that follows from it, two objects not reading each
 other's history, a full table refusing rather than guessing, a stale slot being reclaimed, and the
@@ -353,7 +360,7 @@ from a counter instead of inferred.
 One thing was added afterwards on a rules audit rather than from play. The travel limit is a
 distance comparison, and every comparison against a value that is not a number is false, so a
 non-finite previous position would have passed the guard meant to refuse a bad one and been
-drawn. The finiteness test now runs before the limit, and five checks cover it.
+drawn. The finiteness test now runs before the limit, and the test covers it.
 
 **It took two failed play sessions to get there, and both are worth recording.**
 
@@ -420,7 +427,7 @@ but the moment being asked for.
 
 `bapmap_tickMovers`, the plural, is reached from one place in the retail image, the frame
 broadcast, so every door, lift and platform is swept once per rendered frame. The singular
-`bapmap_tickMover` is a different matter and has nine callers; the correction below has the two
+`bapmap_tickMover` is a different matter and has nine callers; the correction below has the ones
 that affect this. It integrates against
 the world clock, and that clock is only written inside the substep loop, which sets it to the end
 of each substep clamped to the frame's own target time. So the last substep of a frame leaves the
@@ -536,12 +543,17 @@ read 0.0462 units apart, one substep, on every frame of the ride, and the platfo
 
 The claim that `bapmap_tickMovers` is reached from one place is about the plural, and the
 conclusion drawn from it, that a mover integrates once per frame, does not follow. The singular
-`bapmap_tickMover` has nine callers in the named tree, and two of them matter here:
+`bapmap_tickMover` has nine callers in the named tree, and three of them matter here.
 `bapmap_carryRider` ticks the mover a character stands on, and the carried-mover arm ticks a
-carrier before reading it. Both run on the substep path, which is where the thousands of calls per
-frame the stall census measured were coming from. So a ridden mover is snapshotted mid-frame with
-that substep's alpha, which is a real defect in the measurement modes 1 to 3 rest on and is
-separate from the guard.
+carrier before reading it; both run on the substep path, which is where the thousands of calls per
+frame the stall census measured were coming from. The draw itself is the third:
+`bapvrt_transformWorld` ticks a mover at `0x419B2C` immediately before transforming it. Whichever
+caller reaches a mover first after the world clock moved does the integration, and every later
+call at the same clock value short-circuits on the mover's own time base, so a mover is at the
+current world clock by the time it is drawn whatever ticked it, and the hook on the tick captures
+its previous pose wherever that first call came from. A ridden mover is therefore snapshotted
+mid-frame with that substep's alpha, which was a real defect in the measurement modes 1 to 3
+rested on and is separate from the guard.
 
 ### Testing status
 

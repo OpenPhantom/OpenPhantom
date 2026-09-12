@@ -22,14 +22,15 @@
  * one step, and the alpha the draw already applies is exactly right for it, for the rider, and at
  * any frame rate. No new weight, no extrapolation.
  *
- * What it costs, and the reason it ships off. The world clock is a value the simulation reads,
- * so this is a change to how movers move rather than to how they are drawn. Un-clamped, it runs
- * up to one substep ahead of the frame's own time, which is where the object simulation already
- * is. The average rate is untouched: the loop runs the same number of substeps and each now
- * advances the clock by exactly one step, so total world time still tracks real time to within a
- * step. What shifts is phase, by less than 31 ms, for every other reader of that clock: the timer
- * and dwell opcodes, the sound scheduler, the light ramps, the surface animation and the save
- * counter.
+ * What it costs. The world clock is a value the simulation reads, so this is a change to how
+ * movers move rather than to how they are drawn, and defaulting it on took a measurement, not a
+ * preference: the README carries it, and the ini and the log both say it ships on.
+ * Un-clamped, the clock runs up to one substep ahead of the frame's own time, which is where the
+ * object simulation already is. The average rate is untouched: the loop runs the same number of
+ * substeps and each now advances the clock by exactly one step, so total world time still tracks
+ * real time to within a step. What shifts is phase, by less than 31 ms, for every other reader
+ * of that clock: the timer and dwell opcodes, the sound scheduler, the light ramps, the surface
+ * animation and the save counter.
  *
  * A constant offset also remains, and is deliberately left. The first value after a level opens
  * has no predecessor to measure from and is passed through as it arrives, so the whole lattice
@@ -51,12 +52,18 @@
 
 #include <stdbool.h>
 
-/* The substep period. The rate selector in the substep loop chooses between 1/32 and 1/64 on the
- * "60fps" cheat cell, and that cell has no writer anywhere in the image: a four byte scan finds
- * two references, both of them compares, and it sits past the end of the raw data, so it is zero
- * and the 1/64 arm cannot be selected from the shipped image. Were it ever really 1/64 this would
- * advance the clock twice as fast as the loop intended, so the value is named here with
- * its evidence rather than passed in from a caller that would have to guess it too. */
+/* The substep period, defined once for the DLL: particle_clock.c and framerate_stats.c take the
+ * name from here instead of carrying a second copy of the number and its evidence.
+ *
+ * The rate selector in the substep loop chooses between 1/32 and 1/64 on the "60fps" cheat cell
+ * [0x00882294], and that cell has no writer anywhere in the image: a four byte scan finds exactly
+ * two references, both of them the `83 3D` compare form, one in sys_runSubsteps and one in
+ * sys_waitForFrame. There is no write, no push of the address and no table entry, and the cell
+ * sits past the end of the raw data image, so it is zero initialised and the 1/64 arm cannot be
+ * selected from inside the shipped image. A writer outside the image, a trainer say, is the case
+ * PinSimulationRate covers: it writes 1/32 over the 1/64 arm as well. Were the period ever really
+ * 1/64 this would advance the clock twice as fast as the loop intended, so the value is named
+ * here with its evidence rather than passed in from a caller that would have to guess it too. */
 #define WORLD_CLOCK_SUBSTEP_SECONDS 0.03125f
 
 /* The world clock time to hand the engine for a substep.

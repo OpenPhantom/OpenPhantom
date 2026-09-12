@@ -87,6 +87,18 @@ without the setter and the clearer it would think the dialogue still holds one t
 gave back; and the close is the only moment it acts at. Any three of them is not a smaller version
 of this fix; it is a wrong one.
 
+## Engine locations
+
+| Site | Retail VA | What |
+|---|---|---|
+| `Dialog_SpeakSingle` | `0x00430D12` | detoured; counts how deep inside a spoken line the thread is, so a take can be credited to the dialogue |
+| `bapview_overrideOn` | `0x0041840A` | detoured; a take made with a spoken line on the stack is remembered as the dialogue's |
+| `bapview_overrideOff` | `0x00418421` | detoured; the engine giving the camera back clears the memory |
+| `Dialog_Close` | `0x00430E82` | detoured; the one moment this acts, handing a held camera back |
+| `Dialog_LeaveInputLock` | `0x00430F18` | read for the lock level; the camera is only handed back when nobody above the dialogue holds the lock |
+
+All four detours or none, and the fifth site read with them.
+
 ## Configuration: `[camera_handback_fix]`
 
 | Key | Default | Meaning |

@@ -4,6 +4,12 @@
 
 Stops a character being pushed down through the floor it is standing on.
 
+## Supported executables
+
+Retail `WMAIN.EXE`. The contact handler resolves through a masked pattern, because its operand is
+an absolute address, and the two crusher sites by plain pattern; a site that does not match
+switches off the part that needed it and the log says which.
+
 ## The symptom
 
 A character sitting on a box can be walked down through it and under the level by bumping into

@@ -4,6 +4,17 @@
 
 Stops a pinned voice keeping the address of a local belonging to a function that has returned.
 
+## Supported executables
+
+Retail `WMAIN.EXE`. The one site resolves by pattern; if it does not match, the DLL changes
+nothing and says so.
+
+## Engine locations
+
+| Site | Retail VA | What |
+|---|---|---|
+| `bapsound_pinChannel` | `0x00417826` | detoured; after the original has copied the position, an owner handle that points into the calling thread's stack is cleared, so the channel never writes into a frame that has returned |
+
 ## The symptom
 
 Save while enemy droids have blaster bolts in flight, then load that save, and the game crashes at

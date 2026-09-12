@@ -5,6 +5,12 @@ today. The name is what the thing is, not what is in it: the diagnostics and dev
 come later are groups inside this same panel, and a shipped DLL cannot be renamed without
 breaking every `engine_fixes.ini` that mentions it.
 
+## Supported executables
+
+Retail `WMAIN.EXE`. Every cheat and every row resolves its own sites by pattern, and a row whose
+site did not match is drawn greyed rather than hidden, so the panel says what is unavailable on
+the executable in front of it. The addresses are beside each cheat below.
+
 ## What it looks like
 
 Two tabs under a heading that reads `Cheatmenu`.

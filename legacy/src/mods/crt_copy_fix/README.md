@@ -16,6 +16,15 @@ and version-agnostic. If the pattern is absent, nothing is changed and the log s
 |---|---|---|
 | `Enabled` | `1` | `0` installs nothing and the log says so. |
 
+## Engine locations
+
+| Site | Retail VA | What |
+|---|---|---|
+| the inlined copy loop | `0x00492206` and 39 more | a 44 byte window, the same bytes at every one of the 40; 25 bytes of each are rewritten with a loop that reads nothing before its source |
+
+The window carries no address and no `rel32`, so the 40 are found by counting matches rather than
+by a unique pattern, and every one is read back and compared before it is written.
+
 ## The defect
 
 MSVC inlined a hand-written, backwards-running copy loop that **loads before it checks the bound**:

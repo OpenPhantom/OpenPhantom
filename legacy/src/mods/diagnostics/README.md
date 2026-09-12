@@ -43,6 +43,26 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `MaxLinesPerSecond` | `60` | 0 = unlimited |
 | `AlsoToMainLog` | `0` | mirror into `engine_fixes.log` as well |
 
+## Engine locations
+
+Every observer is a detour that calls the original and changes nothing, installed only when its
+area is switched on. The sources carry the disassembly beside each pattern; this is the map.
+
+| Area | Sites, retail VA |
+|---|---|
+| `Audio` | `bapsound_play` `0x0041681F`, `bapsound_startChannel` `0x004169BD`, `bapsound_freeChannel` `0x00417567`, `bapsound_periodic` `0x00415D1D`, `bapsound_setMasterVolume` `0x00417379`, `bapsound_activatePlace` `0x00417711`, `bapsound_deactivatePlace` `0x0041778C` |
+| `Music` | `bapMusicSetState` `0x004105A3`, `bapMusicSetSequence` `0x0041060E`, `bapMusicSetVolume` `0x004106CC` |
+| `CameraOwner` | `bapview_overrideOn` `0x0041840A`, `bapview_overrideOff` `0x00418421`, `Dialog_Close` `0x00430E82` |
+| `Dialogue` | `Dialog_SpeakSingle` `0x00430D12`, `Dialog_PlayVoice` `0x0043125A` |
+| `Fx` | `bapvrt_addDecal` `0x0041C4C0`, `bapvrt_drawPolyDecals` `0x0041C620`, `emitter_setPlacementActive` `0x0041FE24`, `emitter_destroy` `0x004214BF`, `rdMaterial_selectCel` `0x0047B9BD` |
+| `Fsm` | `ai_dispatch` `0x00433E51`, `ai_setMode` `0x004335A5`, `ai_returnMode` `0x00433634` |
+| `Level` | `campaign_loadLevel` `0x0043F70A`, `Dialog_EnterInputLock` `0x00430ED9`, `Dialog_LeaveInputLock` `0x00430F18` |
+| `Player` | `Plr_RunPhases` `0x00448297`, the mode pointer table `player_save` pushes at `0x004479F8` (a data site) |
+| `Characters` | the character pool teardown `0x00431FF3` (a data site, never hooked) and `Plr_RunPhases` again |
+| `Present` | `stdDisplay_present` `0x0048F052`, the flip flag derivation `0x00487640` |
+| `Trigger` | `bapmap_openMover` `0x00408B50`, `bapmap_closeMover` `0x00408DF5`, `bapmap_tickMover` `0x00409170`, `bapmap_polyToWorld` `0x00419490`, `bapvrt_transformWorld` `0x004199B0`, and the two traces `0x0040BE00` and `0x0040C2BE` at the higher levels |
+| the projectile census | the list head test at `0x0045243E` |
+
 ## The log
 
 `engine_fixes_diag.log`, next to the game, deliberately **not** the install log. A diagnostic

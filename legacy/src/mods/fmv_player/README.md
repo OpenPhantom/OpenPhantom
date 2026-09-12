@@ -121,6 +121,12 @@ into the wrong variables there. `menu_cursor_cells.c` carries the bytes and the 
 A movie with no converted file falls straight through to the original Bink playback, unchanged, and
 so does one that arrives before libVLC has finished loading.
 
+## Supported executables
+
+Retail `WMAIN.EXE`. The movie player entry, the two sound sites and the four cells the curtain and
+the menu cursor read resolve by pattern; the addresses are under "Byte basis" below. A site that
+does not match switches off the part that needed it and the log says which.
+
 ## Configuration: `[fmv_player]`
 
 | Key | Default | Meaning |

@@ -7,6 +7,12 @@ touched. Built to replace Xidi, a third-party WinMM-joystick wrapper, after a fi
 traced a reproducible, large single-frame stall (measured up to 419ms) to Xidi being actively
 polled.
 
+## Supported executables
+
+Any. This DLL patches no engine code and resolves no pattern: it reads the pad through XInput on
+a thread of its own and hands the game what it already understands, mouse motion and key presses,
+through `SendInput`. The addresses below are where the game was read to prove those reach it.
+
 ## Why this exists
 
 The game's entire controller surface is three WinMM calls, `joyGetNumDevs`, `joyGetPosEx` and

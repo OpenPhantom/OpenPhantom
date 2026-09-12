@@ -11,20 +11,21 @@
  * the other side is the phase thunks, the installation and the order things have to come up in.
  *
  * The values are handed out as a read-only struct because they are read on the per-substep path and
- * because two dozen one-line getters is not an interface. The one field that changes while the game
- * runs, and it changes from a check box on the controls screen, has a setter of its own.
+ * because two dozen one-line getters is not an interface. The three fields that change while the
+ * game runs, from the controls screen, the developer menu or an edit to the file, have setters of
+ * their own.
  */
 
 typedef struct input_config {
     bool  mouse_look;
     bool  strafe;
     bool  strafe_invert;
-    bool  strafe_turns_body;
+    bool  strafe_turns_body;         /* whether the model is turned to face the way it travels */
     bool  steer_lean;
     bool  steer_lean_from_hand;      /* the pose follows the hand, not the engine's sawtooth cell */
     bool  restore_turn_rate;
     int   steer_log;
-    float steer_lean_test_degrees;   /* whether the model is turned to face the way it travels */
+    float steer_lean_test_degrees;   /* != 0: force this twist on chest and head, a diagnostic */
     float strafe_settle_seconds;
     float strafe_turn_rate;    /* degrees per second, the damper's hard rate cap */
 

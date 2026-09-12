@@ -331,11 +331,13 @@ static float update_camera_yaw(void)
      * need it whether or not free look is switched on, so the gate is asked with `enabled` forced
      * true rather than being read off the switch.
      *
-     * It costs eight cell reads a frame. Avoiding them was right when free look was the only
-     * consumer and the switch already answered for it; it is not right now that something else
-     * is asking a different question of the same cells. The second call below, inside the log
-     * branch, is still made only on the frame the switch changes and only when the log is
-     * asked for. */
+     * It costs eight cell reads a frame, and it is not the only build: each of the two live paths
+     * below, the rigid mouse look camera and free look itself, builds the gate again with the
+     * switch read as it is, so a frame that drives the camera builds it twice. Avoiding the
+     * reads here was right when free look was the only consumer and the switch already answered
+     * for it; it is not right now that something else is asking a different question of the
+     * same cells. The build inside the log branch is the only one that is not per frame: it is
+     * made on the frame the switch changes and only when the log is asked for. */
     build_gate(&gate, &record, &region);
     gate.enabled           = true;
     free_state->world_gate = free_look_gate_refusal(&gate);

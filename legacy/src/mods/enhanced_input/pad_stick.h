@@ -76,8 +76,9 @@ bool pad_stick_is_active(void);
 /* Sideways, positive RIGHT. */
 float pad_stick_x(void);
 
-/* Forward, positive FORWARD. XInput reports Y positive up and this is already flipped to match the
- * engine's sense, so a caller never has to remember which convention it is holding. */
+/* Forward, positive FORWARD. XInput reports Y positive up, and up is forward, so the value passes
+ * through with no sign change; the right stick in controller_input.dll is the one that flips it,
+ * because there up has to become a downward mouse movement. */
 float pad_stick_y(void);
 
 /* 0 to 1, the deadzone already taken out and the remainder rescaled, so it starts at nearly zero

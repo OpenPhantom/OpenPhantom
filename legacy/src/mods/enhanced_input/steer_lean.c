@@ -85,7 +85,7 @@ static bool report(const char *status)
  * miss, so if the body does not visibly twist, the node path is the defect and everything built on
  * top of it is moot.
  *
- * It is a diagnostic, not a feature: it ignores the turn, the damper and the clamp. */
+ * It is a diagnostic, not a feature: it ignores the turn, the hand rate and the clamp. */
 void steer_lean_set_test_degrees(float degrees)
 {
     lean_state.test_degrees = degrees;
@@ -211,8 +211,8 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
         return report("no-nodes");
     }
 
-    /* The forced angle short-circuits the whole computation, including the damper, so what lands in
-     * the node is exactly the number in the ini and nothing else can account for it. */
+    /* The forced angle short-circuits the whole computation, the rate choice and the clamp, so
+     * what lands in the node is exactly the number in the ini. */
     if (lean_state.test_degrees != 0.0f) {
         last_report.status      = "FORCED";
         last_report.raw_rate    = lean_state.test_degrees;

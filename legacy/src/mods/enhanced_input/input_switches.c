@@ -1,8 +1,9 @@
-/* input_switches.c: the live half of this DLL's configuration, Strafe and FreeLook.
+/* input_switches.c: the live half of this DLL's configuration: Strafe, FreeLook, CameraFollow and
+ * AirControl.
  *
  * The seam taken here is the one enhanced_input.c had already measured and named: the block of
  * setters and availability queries the controls screen calls, plus the once-a-second re-read that
- * drives the same two setters from the file. Not one line of it patches a byte, reads a player
+ * drives all four setters from the file. Not one line of it patches a byte, reads a player
  * record or runs on a substep, so it is a different responsibility from the phase thunks it used
  * to sit beside. The thunks were rejected as the seam for the opposite reason: they
  * read eleven fields of the install state between them.
@@ -222,17 +223,18 @@ void enhanced_input_set_free_look(bool enabled)
     }
 }
 
-/* --- Strafe and FreeLook, re-read while the game runs -------------------------------------------
+/* --- The four switches, re-read while the game runs --------------------------------------------
  *
  * The controls screen pushes outward: it applies each switch and then writes it. Nothing read the
  * file back, so a value written by anything else, the developer overlay's own rows being the reason
  * this exists, did nothing until the next launch.
  *
  * The comparison is against the last value seen in the file, not against the setting in force, and
- * that is the whole care in this function. Both setters can refuse: strafe needs the keyboard axis
- * and mouse look, free look needs a follow camera this build recognises. Comparing against the
- * live setting would then find a difference the setter had just declined to close, retry it a
- * second later, and write a warning to the log every second for the rest of the session.
+ * that is the whole care in this function. Two of the setters can refuse: strafe needs the
+ * keyboard axis and mouse look, free look needs a follow camera this build recognises; the
+ * passive camera and the air steer never refuse. Comparing against the live setting would then
+ * find a difference the setter had just declined to close, retry it a second later, and write a
+ * warning to the log every second for the rest of the session.
  *
  * The care has a second half, which cost a released build. A setter can switch ANOTHER of these off
  * as a dependency of its own: free look going off takes the passive camera and the air steer with

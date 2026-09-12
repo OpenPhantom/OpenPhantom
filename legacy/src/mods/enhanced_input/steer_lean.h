@@ -61,7 +61,7 @@ void steer_lean_bind(set_node_yaw_fn_t set_node_yaw, bool enabled, bool prefer_h
 bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
                       bool keyboard_is_turning, float substep_seconds);
 
-/* Forgets the damper state. No node is written: whichever substep stops calling apply() has
+/* Resets the last report. No node is written: whichever substep stops calling apply() has
  * already taken the engine's own twist from the original, so there is nothing to hand back. */
 void steer_lean_release(void);
 
@@ -95,7 +95,7 @@ typedef struct steer_lean_report {
 
 void steer_lean_last_report(steer_lean_report_t *out);
 
-/* Diagnostic: force a fixed twist on both nodes every substep, ignoring turn, damper and clamp.
+/* Diagnostic: force a fixed twist on both nodes every substep, ignoring turn, hand rate and clamp.
  * 0 disables. It answers one question only, does a yaw on these nodes reach the screen. */
 void steer_lean_set_test_degrees(float degrees);
 

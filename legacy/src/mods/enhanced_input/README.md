@@ -130,7 +130,8 @@ is harmless and is reported once in the log.
 ## Engine locations
 
 The player half is a **pure data patch**: two pointers in `.data`, no byte in the camera path, the
-integrator or the collision code. The menu half adds two detours and one repointed `push` operand.
+integrator or the collision code. Around it sit the detours listed below, every one of them placed
+by `common/detour.c` and chained, and the menu half adds one repointed `push` operand.
 
 | Site | Retail VA | What |
 |---|---|---|
@@ -141,18 +142,27 @@ integrator or the collision code. The menu half adds two detours and one repoint
 | the absolute axis reader | `0x44A089 + 0x08` | resolved, not patched |
 | `pPlayer` | `0x449F94 - 4` | read from the operand, opcode checked first |
 | the mode descriptor table | `0x4479D2 + 48` | read from `player_save`'s own operand |
-| the fire action handler | `0x44BA3A` | detoured. It spawns the bolt as `heading + [pPlr+0x178]` from a heading read LIVE at that instant, substeps after `Plr_AutoAim` ran. A heading swapped across `Plr_AutoAim` therefore aims the search cone only |
+| `Plr_StartFire` | `0x44B788` | **detoured** (chained), 8-byte prologue, **optional**. The one function every weapon's attack passes through; six of the thirteen shipped weapon slots never call `Plr_AutoAim`, so without this the aim snap never armed for them |
+| the fire action handler | `0x44BA3A` | **detoured** (chained), 6-byte prologue, **optional**. It spawns the bolt as `heading + [pPlr+0x178]` from a heading read LIVE at that instant, substeps after `Plr_AutoAim` ran. A heading swapped across `Plr_AutoAim` therefore aims the search cone only |
 | `bapobj_setNodeYaw` | `0x41481B` | resolved and **called**, not patched. An ABSOLUTE store, so the steering lean can re-issue the two writes the original already made |
-| `render_frameEnd` | `0x46C139` | **detoured** (chained), for the mouse bank and the live check box |
+| `bapobj_drawAll` | `0x411028` | **detoured** (chained), 9-byte prologue, **optional**. Entered once per rendered frame before any pose is composed, so the strafe body angle interpolated here lands in the same frame; the interpolation weight and its two gate cells are read from the operands at `+0x3C`, `+0x48` and `+0x51` |
+| the pose clock inside `rdThing_Draw` | `0x410019` | resolved, not patched. The substep counter is read from the operand at `+0x02`, and the two bytes at `+0x15` are read live to tell whether `framerate_fix` has removed the pose throttle. Without this the draw hook above is not placed |
+| `control_isHeld` | `0x4653CE` | **detoured** (chained), 6-byte prologue, only under `PadStick=1`. Answers "held" for Run when the left stick is pushed past the run threshold, and only ever turns a no into a yes |
+| `input_setMode` | `0x4658C1` | resolved, not patched, only under `PadStick=1`; the input mode cell is read from the operand so the stick moves the player in gameplay only |
+| `stdControl_readAxis` | `0x48D38D` | **detoured** (chained), 6-byte prologue, unless `PadEngineRightStick=1`. The right stick's vertical axis reads neutral, so the engine's own pad path cannot walk the player with it |
+| `render_frameEnd` | `0x46C139` | **detoured** (chained), for the mouse bank, the live check box and the once-a-second switch poll |
 | `g_frameDelta` | `0x46C139 + 0x0A` | read from the operand |
+| the menu idle callback | `0x460A54` | **detoured** (chained), 6-byte prologue, under `MenuCursorRawInput=1`; the menu pointer is moved from raw input instead of being warped to the centre |
 | `options_controls` | `0x442A98` | **detoured**; its `push imm32` at `+23` is repointed at our widget copy |
 | `swmenu_getString` | `0x45EB7B` | **detoured**, to answer one invented string id |
 
-Free look adds seven sites of its own, six of them inside the camera update and all resolved by
-address-free masked patterns. Five cells appear in two patterns each and are cross-checked against
-each other before they are believed; the yaw offset appears in **three** independent ones. **They
-are resolved and detoured whenever `MouseLook=1`, whether `FreeLook` reads `0` or `1`**, so the
-control mode is a live setting. While it is off the hooks write nothing at all.
+Free look adds nine sites of its own, six of them inside the camera update and three in the
+player's attack path (`Plr_AutoAim` below, `Plr_StartFire` and the fire action handler above), all
+resolved by address-free masked patterns. Five cells appear in two patterns each and are
+cross-checked against each other before they are believed; the yaw offset appears in **three**
+independent ones. **They are resolved and detoured whenever `MouseLook=1`, whether `FreeLook`
+reads `0` or `1`**, so the control mode is a live setting. While it is off the hooks write nothing
+at all.
 
 | Site | Retail VA | What |
 |---|---|---|
@@ -457,40 +467,50 @@ four options screens, and all three are control-scheme settings.
 
 | widget | id | string id | rect | drives |
 |---|---|---|---|---|
-| backdrop plate | `0x74` | | `0, 0, 640, 480` | `volume.bmp`, appended **first** |
-| mouse speed slider | `0x72` | | `365, 20, 255, 50` | `[enhanced_input] MouseDegreesPerCount` |
-| its caption | `0x73` | | `368, 74, 255, 50` | shows the setting multiplied by 1000, so `0.030` is `30` |
-| sideways walking | `0x70` | `0x7655` | `368, 124, 255, 50` | `[enhanced_input] Strafe` |
-| free look | `0x71` | `0x7656` | `368, 174, 255, 50` | `[enhanced_input] FreeLook` |
+| mouse speed slider | `0x72` | | `330, 96, 255, 50` | `[enhanced_input] MouseDegreesPerCount` |
+| its caption | `0x73` | | `330, 148, 255, 40` | shows the setting multiplied by 1000, so `0.030` is `30` |
+| sideways walking | `0x70` | `0x7655` | `330, 192, 255, 50` | `[enhanced_input] Strafe` |
+| free look | `0x71` | `0x7656` | `330, 246, 255, 50` | `[enhanced_input] FreeLook` |
 
-The authored widget ids on that screen are 50, 0, 1, 2, 3, 4, 5 and 6, so all five are free, and
+The authored widget ids on that screen are 50, 0, 1, 2, 3, 4, 5 and 6, so all four are free, and
 the patcher is asked again at run time rather than trusting that list.
 
-**The plate is not decoration.** The right-hand column is empty because the background art leaves it
-empty, and what is behind it is the live 3-D scene, white caption text over which is barely
-readable. Every authored block of text on these screens sits on a plate for that reason.
+**There is no plate, and that was the correction.** Three versions of this group were built on the
+belief that a widget's rectangle crops or scales its bitmap. It does not: the blit every widget in
+this toolkit ends in takes canvas, bitmap, x and y, with no width and no height, and clips only
+against a hard-coded 640x480. The plate the last of them drew was `volume.bmp`, the audio screen's
+full-screen background, asked for as a 286x232 window onto the panel that screen carries on its
+right. Since the rectangle does nothing, what was actually drawn was the whole bitmap from x = 350,
+its left 290 columns, the audio screen's own furniture over this screen's title and buttons, with
+the panel it was reaching for clipped off the right edge entirely. `popup.bmp`, this screen's own
+300x200 message plate, was tried instead; it fits the empty region, but its usable dark recess is
+only 267x91, so the second check box lands on a light metal bar and its white caption is
+unreadable. Both were settled by rendering over the real extracted background and looking, not by
+arithmetic on rectangles.
 
-The first plate was `popup.bmp`, this screen's own 300x200 message plate. It fixed the readability
-and still looked wrong, and the reason is worth keeping: **a message plate is drawn to be an
-interruption**, so borrowing it for settings puts them in the box the game uses to ask "are you
-sure". The **audio** screen has already solved this exact problem; two sliders with their labels
-stacked in a panel drawn for them, and every options screen shares one bitmap table, so its
-background `volume.bmp` (index 9) is already loaded here. The group therefore draws that background
-and lands on that screen's grid, row for row:
+The group is drawn with no plate at all, acceptable on this screen for a reason specific to it:
+what lies behind the empty region is not the live 3-D scene. `controls.bmp` is 73 % transparent,
+opaque only over columns 1..280 and 382..616, and what shows through is `splashol.bmp`, the brown
+machinery backdrop, static, dark and low-contrast enough that white captions read cleanly on it.
 
-| audio screen | this group |
-|---|---|
-| `SLIDER 365, 20,255,50` music | `SLIDER 365, 20,255,50` mouse speed |
-| `CHKBOX 368, 74,255,50` | `TEXT   368, 74,255,50` its caption |
-| `SLIDER 365,120,255,50` sound | `CHKBOX 368,124,255,50` sideways walking |
-| `CHKBOX 368,174,255,50` | `CHKBOX 368,174,255,50` free look |
+**Where the space is.** The authored rectangles are the title at `382,19,235,67`, the two buttons
+at `7,175,199,53` and `7,277,199,53`, BACK at `484,400,106,67`, and a hidden pair at
+`170,140,300,200` (PIC 5 and TEXT 6, both `visible = 0`). `controls.bmp` is opaque over rows
+19..85, 116..374 and 399..465 within its two column bands, so the one genuinely empty region,
+verified transparent over the whole rectangle, is x 281..639, y 86..398. The group is a single
+column at x = 330 inside it: the slider, its caption, then the two boxes. The only thing it
+overlaps is the hidden pair, which is the screen's own message plate; the two buttons here open
+sub-screens and never raise it, and if some build does raise it, it draws over these widgets
+for as long as it is up and nothing is damaged.
 
-The numbers are copied rather than approximated, because the panel behind them has its recesses
-drawn at exactly those places, and the plate's rectangle is the full canvas because its panel is
-part of the bitmap rather than a rectangle. It is a **whole screen background**, so it brings the
-audio screen's other artwork with it; that is the trade, taken deliberately. Three
-`_Static_assert`s fail the build if a row leaves the plate or reaches BACK's row, and the plate is
-appended **first**, because the engine draws a screen in table order.
+**What each widget occupies is not what its rectangle says**, and the earlier compile-time
+checks were worthless for that reason. A slider is exactly `slgauge.bmp`, 250x50, from its own x and
+y, rewritten from that bitmap on every screen open, so the width in the table is a declaration of
+intent. A check box is a 34x34 square at its x and y plus a caption at x + 38 that is always 200
+wide, so its right edge is x + 238 and only the square is clickable. A text widget uses its
+rectangle as given. The `_Static_assert`s in `input_menu.c` reason only about those drawn
+footprints: the slider and the boxes must stay inside the empty region, the rows must not overlap
+each other, and the last box must not reach BACK's row at y = 400.
 
 **The slider is only possible because the two screens share a bitmap table.** A slider names its
 track and knob as indices into the screen's own bitmap-name table, and the controls screen ships
@@ -501,11 +521,8 @@ was written, because the failure mode is a control that installs, logs success a
 **The group is a right-hand column, and the first attempt was not.** The boxes were at `7,350` and
 `7,400`, which collided with no authored rectangle and still looked wrong: the screen's background
 is a single full-screen bitmap whose panel plate reaches *below* the last button's rectangle, so the
-first box sat half on the plate. No rectangle in the table says so. The group now uses the video
-screen's own grid, the slider and caption have that screen's gamma-slider rectangles shifted down
-as a pair, so the two screens read as one design. It clears the title (ends y = 86) and BACK
-(starts y = 400 at x >= 484), and it overlaps only the screen's hidden message plate at
-`170,140,300,200`, which ships `visible = 0`.
+first box sat half on the plate. No rectangle in the table says so; the empty region above was
+measured from the artwork to answer exactly that.
 
 They are **check boxes** and not selectable labels because `swchkbox_activate` ends in `or eax,-1`:
 every screen loop runs `while (result < 0)`, so a check box is the one widget class that cannot
@@ -513,13 +530,13 @@ close a screen. Each state is written by the engine straight into our own array,
 needs no engine call, and each box records its own index so the two can never read each other's
 setting.
 
-`swmenu_getString` indexes the localised table with **no bounds check** and the highest authored id
-is 414 across every widget on every screen, so an invented label id would be an unchecked read
-rather than a blank label. The getter is therefore detoured **first**, and no widget is appended
-until that detour stands; it answers either reserved id whether or not the matching box was
-appended, so an id this DLL has claimed cannot reach the table by any route. The captions follow the
-Windows UI language, ASCII only because the menu bitmap fonts' coverage above `0x7F` has not been
-read out of the assets:
+`swmenu_getString` indexes the localised table with **no bounds check**. The table covers ids
+0..423 (the highest id any authored widget references is 414, a fact about the widgets, not
+the bound), so an invented label id would be an unchecked read rather than a blank label. The
+getter is therefore detoured **first**, and no widget is appended until that detour stands; it
+answers either reserved id whether or not the matching box was appended, so an id this DLL has
+claimed cannot reach the table by any route. The captions follow the Windows UI language, ASCII
+only because the menu bitmap fonts' coverage above `0x7F` has not been read out of the assets:
 
 | | en | de | fr | it | es |
 |---|---|---|---|---|---|

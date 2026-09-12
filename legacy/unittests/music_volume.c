@@ -9,7 +9,8 @@
  * patched process, and the game running and the log line the attach writes are what prove them.
  * What they do between the trampoline calls is one call each into the file under test, and
  * `attach` below repeats the attach hook's sequence: the original attach applies the file's value
- * through the setter, which the set-volume hook sees, and the restore is then taken and applied. */
+ * through the setter, which the set-volume hook sees, and the restore is then taken and
+ * applied. */
 #include "music_volume_latch.h"
 #include "unittest.h"
 

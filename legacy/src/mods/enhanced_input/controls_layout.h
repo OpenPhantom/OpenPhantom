@@ -9,7 +9,8 @@
  *     title    382, 19,235, 67   buttons  7,175,199,53 and 7,277,199,53
  *     BACK     484,400,106, 67   hidden 170,140,300,200  (PIC 5 and TEXT 6, both visible = 0)
  *
- * and `controls.bmp` is opaque over rows 19..85, 116..374 and 399..465 within its two column bands.
+ * and `controls.bmp` is opaque over rows 19..85, 116..374 and 399..465 within its two column
+ * bands.
  * The one genuinely empty region, verified transparent over the whole rectangle, is
  * x 281..639, y 86..398, which is 359x313.
  *
@@ -27,7 +28,7 @@
  *   CHECKBOX  a 34x34 box at (x,y), chkbxoff.bmp, plus a caption at x + 34 + 4 that is ALWAYS
  *             200 wide. So a box's right edge is x + 238, and ONLY the 34x34 square is clickable:
  *             the words beside it are not a hit target however wide the rectangle claims.
- *   TEXT      the rectangle is used as given.                                                    */
+ *   TEXT      the rectangle is used as given. */
 #ifndef ENHANCED_INPUT_CONTROLS_LAYOUT_H
 #define ENHANCED_INPUT_CONTROLS_LAYOUT_H
 

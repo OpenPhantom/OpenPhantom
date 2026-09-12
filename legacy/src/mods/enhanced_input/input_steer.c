@@ -429,13 +429,14 @@ void __cdecl enhanced_input_steer_thunk(void)
     }
     /* One consumer, one cadence, and which one it is depends on the control mode.
      *
-     * With the per-frame path live the bank belongs to the camera update, and this phase takes only
-     * what the rendered frames have already banked. Asking the bank for a substep's worth here as
-     * well was measurably wrong once the delivery filter was switched on: the two consumers cover
-     * different intervals, 31.25 ms against about 11, so the filter hands them different shares of
-     * the same movement, and the frames that run a substep are then drawn by a different rule from
-     * the frames that do not. In the field that showed up as the substep frames measuring half as
-     * rough again as the others, which is the very asymmetry the per-frame path exists to remove.
+     * With the per-frame path live the bank belongs to the camera update, and this phase takes
+     * only what the rendered frames have already banked. Asking the bank for a substep's worth
+     * here as well was measurably wrong once the delivery filter was switched on: the two
+     * consumers cover different intervals, 31.25 ms against about 11, so the filter hands them
+     * different shares of the same movement, and the frames that run a substep are then drawn by
+     * a different rule from the frames that do not. In the field that showed up as the substep
+     * frames measuring half as rough again as the others, which is the very asymmetry the
+     * per-frame path exists to remove.
      *
      * Without the per-frame path this is unchanged: the substep is the only consumer, and taking
      * is also how the collector is told somebody is consuming.
@@ -443,11 +444,11 @@ void __cdecl enhanced_input_steer_thunk(void)
      * The handover is called either way, because it marks a substep for the measurement,
      * and it answers zero while the feature is off. The view lead is PASSED the step that has just
      * been taken, and for two reasons of which only the first is obvious. The body owes the sum,
-     * because the bank can be drained on both clocks and each drain removes what it hands over. And
-     * the camera has to be TOLD the sum, because what it must stop drawing is the whole mouse turn
-     * this substep applies, not only the part that came through the per-frame path; leaving the
-     * engine's own per-step drain out of that total leaves its share to be drawn twice, which is
-     * the same double count the lead exists to remove, in miniature. */
+     * because the bank can be drained on both clocks and each drain removes what it hands over.
+     * And the camera has to be TOLD the sum, because what it must stop drawing is the whole
+     * mouse turn this substep applies, not only the part that came through the per-frame path;
+     * leaving the engine's own per-step drain out of that total leaves its share to be drawn
+     * twice, which is the same double count the lead exists to remove, in miniature. */
     if (!view_lead_is_active()) {
         s.mouse_step = mouse_look_take_substep_degrees(s.substep_seconds);
     }

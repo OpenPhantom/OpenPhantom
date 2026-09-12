@@ -612,7 +612,7 @@ static void apply_mouse_look(void)
         long dx = cursor_now.x - freecam_cursor_anchor.x;
         long dy = cursor_now.y - freecam_cursor_anchor.y;
 
-        /* THIS CHEAT IS NOT THE ONLY THING THAT MOVES THE POINTER, and every unrecoverable
+        /* This cheat is not the only thing that moves the pointer, and every unrecoverable
          * dive reported against this camera has come from assuming it is.
          *
          * Three others write it. focus_guard.c confines it with ClipCursor, so a warp to a
@@ -719,7 +719,7 @@ static void apply_flight_keys(float dt)
      * E/Q add a world-vertical on top, independent of pitch, for straight up/down without
      * needing to look at the sky or the floor first.
      *
-     * FIELD-TESTED, WRONG, THEN FIXED FROM THE ENGINE'S OWN CODE RATHER THAN A SECOND GUESS.
+     * Field-tested, wrong, then fixed from the engine's own code rather than a second guess.
      * The first build of this used fwd_x=+sin(yaw)*cos(pitch) and right_y=-sin(yaw), a self-
      * consistent guess with no independent evidence behind it. Field test: "W doesn't always
      * go forward". Correct near yaw=0, where sin(0)=0 hides the error, and increasingly wrong

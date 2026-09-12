@@ -325,7 +325,7 @@ static bool choose_ratio(float configured_ratio, float *ratio_x, float *ratio_y,
 {
     *follows_display = false;
     if (configured_ratio > 0.0f) {
-        *ratio_x = *ratio_y = configured_ratio;  /* an explicit setting, which exists for testing */
+        *ratio_x = *ratio_y = configured_ratio;  /* an explicit setting, for testing */
     } else if (!ratio_from_artwork(ratio_x, ratio_y)) {
         /* No converted set, so the display decides instead and the artwork is replicated to meet
          * it as it loads. That inverts this file's older doctrine, which was that the artwork is
@@ -372,8 +372,8 @@ static void install_optional_hooks(float ratio_y)
     if (menu_scale_sites[SITE_DRAW_MENU].address != 0 &&
         detour_install(&scale_state.draw_menu_detour, menu_scale_sites[SITE_DRAW_MENU].address,
                        (const void *)hook_draw_menu, DRAW_MENU_PROLOGUE)) {
-        log_info("the screens that rewrite their own rectangles, the pause family and the credits, "
-                 "are corrected once per frame at xswift_drawMenu");
+        log_info("the screens that rewrite their own rectangles, the pause family and the "
+                 "credits, are corrected once per frame at xswift_drawMenu");
     } else {
         log_warning("xswift_drawMenu could not be hooked, so the pause screens and the credits "
                     "slide back to their authored places, and the 3-D widgets are left alone. "
@@ -411,8 +411,8 @@ static void install_optional_hooks(float ratio_y)
                  "so changing the field of view no longer grows or shrinks the hero and the "
                  "inventory");
     } else {
-        log_warning("sw3d_draw could not be hooked, so the 3-D models on the pause screens grow as "
-                    "the field of view narrows and shrink as it widens. Their positions are "
+        log_warning("sw3d_draw could not be hooked, so the 3-D models on the pause screens grow "
+                    "as the field of view narrows and shrink as it widens. Their positions are "
                     "unaffected");
     }
 
@@ -424,9 +424,9 @@ static void install_optional_hooks(float ratio_y)
                  "length, so the hero and the inventory models follow the canvas and hold still "
                  "while the field of view changes");
     } else {
-        log_warning("sw3d_rectToViewOffset could not be hooked, so the 27 3-D widgets on the pause "
-                    "screens keep projecting about the authored 320,240 and land in the wrong "
-                    "place. Nothing else is affected");
+        log_warning("sw3d_rectToViewOffset could not be hooked, so the 27 3-D widgets on the "
+                    "pause screens keep projecting about the authored 320,240 and land in the "
+                    "wrong place. Nothing else is affected");
     }
 
     if (menu_scale_sites[SITE_PIC_DRAW].address != 0 &&

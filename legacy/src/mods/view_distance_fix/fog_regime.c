@@ -396,6 +396,87 @@ void __cdecl hook_apply_fog(void *level)
 /* report_device_fog_caps and consider_pixel_fog are defined in fog_regime_install.c and declared
  * in fog_regime_internal.h. The tick below is where they are first called. */
 
+/* Somebody else is holding the band, and they are entitled to. The no-fog cheat pushes it past
+ * everything the renderer still has in view, every frame, and the tick stands aside for exactly
+ * that.
+ *
+ * On the per-vertex path standing aside was enough, because the engine re-read these two fields
+ * every frame and whatever was in them took effect. The device path does not: the band only
+ * reaches FOGSTART and FOGEND through applyLevelFog. So a writer who is not us would be writing
+ * into a record nobody reads, and their fog would never change. Pushing their value, not ours,
+ * keeps that promise. */
+static void stand_aside_for_the_other_writer(void)
+{
+    const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+
+    fog_trace_aside('f', live[0], live[1]);
+
+    if (fog_state.pixel_fog_active &&
+        (live[0] != fog_state.device_band.start || live[1] != fog_state.device_band.end)) {
+        apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
+
+        if (original != NULL) {
+            original(fog_state.level);
+            fog_state.device_band.start = live[0];
+            fog_state.device_band.end   = live[1];
+        }
+    }
+}
+
+/* The opening window; see FOG_OPEN_HIDDEN_START. True while the window owns the frame, so the
+ * caller does no easing; false once it is over, the frame it ends on included, since that frame
+ * writes the band the fade starts from and there is nothing to ease yet. */
+static bool run_opening_window(float seconds)
+{
+    fog_regime_band_t open_band;
+
+    if (!(fog_state.open_left > 0.0f)) {
+        return false;
+    }
+    /* A loading hitch must not spend the whole window in one frame, which is the same reason
+     * the easing clamps its own delta. A window measured in seconds and a frame that claims to
+     * have taken one are not compatible claims. */
+    if (seconds > 0.0f) {
+        fog_state.open_left -= (seconds > FOG_MAX_TRUSTED_SECONDS)
+                             ? FOG_MAX_TRUSTED_SECONDS : seconds;
+    }
+    if (fog_state.open_left > 0.0f) {
+        if (fog_state.config.open_fog_end > fog_state.config.open_fog_start) {
+            /* Our own band, at the distances asked for, derived from nothing. The draw distance
+             * is raised for this window and the engine culls whole cells at that edge, so a cell
+             * arriving there takes its near end with it and no band placed at the edge can cover
+             * it. A band laid well inside the raised cut can, and laying it absolutely stops it
+             * moving while the window runs. */
+            open_band.start = fog_state.config.open_fog_start;
+            open_band.end   = fog_state.config.open_fog_end;
+        } else {
+            open_band.start = FOG_OPEN_HIDDEN_START;
+            open_band.end   = FOG_OPEN_HIDDEN_END;
+        }
+        if (open_band.start != fog_state.written.start ||
+            open_band.end != fog_state.written.end) {
+            fog_state.current = open_band;
+            write_band(&open_band);
+        }
+        /* 'o' for the opening window. The caller samples nothing while this runs, so without
+         * this the capture has a hole exactly where the window runs. */
+        fog_trace_aside('o', fog_state.written.start, fog_state.written.end);
+        return true;
+    }
+    /* See FOG_OPEN_FADE_FROM_AUTHORED. The cut is marked unobserved so the first report at the
+     * restored scale is snapped to rather than eased towards: the settled cut spent the window
+     * climbing to the raised value, and easing back down from it would be the same slow slide
+     * this window exists to prevent. */
+    fog_state.open_left     = 0.0f;
+    fog_state.cut_observed  = false;
+    fog_state.current.start = fog_state.authored.start * FOG_OPEN_FADE_FROM_AUTHORED;
+    fog_state.current.end   = fog_state.authored.end * FOG_OPEN_FADE_FROM_AUTHORED;
+    write_band(&fog_state.current);
+    log_info("the opening window is over, fog fades in from %.1f..%.1f towards this level's",
+             (double)fog_state.current.start, (double)fog_state.current.end);
+    return true;
+}
+
 void fog_regime_on_frame(void)
 {
     fog_regime_band_t target;
@@ -418,34 +499,7 @@ void fog_regime_on_frame(void)
      * future patch might, gets to keep its value instead of being overwritten sixty times a
      * second by ours. */
     if (!the_band_is_still_ours(fog_state.level)) {
-        {
-            const float *seen = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
-
-            fog_trace_aside('f', seen[0], seen[1]);
-        }
-        /* Somebody else is holding the band, and they are entitled to. The no-fog cheat pushes it
-         * past everything the renderer still has in view, every frame, and this tick stands aside
-         * for exactly that.
-         *
-         * On the per-vertex path standing aside was enough, because the engine re-read these two
-         * fields every frame and whatever was in them took effect. The device path does not: the
-         * band only reaches FOGSTART and FOGEND through applyLevelFog. So a writer who is not us
-         * would be writing into a record nobody reads, and their fog would never change. Pushing
-         * their value, not ours, keeps that promise. */
-        if (fog_state.pixel_fog_active) {
-            const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
-
-            if (live[0] != fog_state.device_band.start ||
-                live[1] != fog_state.device_band.end) {
-                apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
-
-                if (original != NULL) {
-                    original(fog_state.level);
-                    fog_state.device_band.start = live[0];
-                    fog_state.device_band.end   = live[1];
-                }
-            }
-        }
+        stand_aside_for_the_other_writer();
         return;
     }
 
@@ -453,52 +507,7 @@ void fog_regime_on_frame(void)
     consider_pixel_fog(fog_state.device_caps);
 
     seconds = (fog_state.frame_delta != NULL) ? *fog_state.frame_delta : 0.0f;
-
-    /* The opening window. See FOG_OPEN_HIDDEN_START. */
-    if (fog_state.open_left > 0.0f) {
-        /* A loading hitch must not spend the whole window in one frame, which is the same reason
-         * the easing clamps its own delta. A window measured in seconds and a frame that claims to
-         * have taken one are not compatible claims. */
-        if (seconds > 0.0f) {
-            fog_state.open_left -= (seconds > FOG_MAX_TRUSTED_SECONDS)
-                                 ? FOG_MAX_TRUSTED_SECONDS : seconds;
-        }
-        if (fog_state.open_left > 0.0f) {
-            fog_regime_band_t open_band;
-
-            if (fog_state.config.open_fog_end > fog_state.config.open_fog_start) {
-                /* Our own band, at the distances asked for, derived from nothing. The draw
-                 * distance is raised for this window and the engine culls whole cells at that
-                 * edge, so a cell arriving there takes its near end with it and no band placed at
-                 * the edge can cover it. A band laid well inside the raised cut can, and laying it
-                 * absolutely stops it moving while the window runs. */
-                open_band.start = fog_state.config.open_fog_start;
-                open_band.end   = fog_state.config.open_fog_end;
-            } else {
-                open_band.start = FOG_OPEN_HIDDEN_START;
-                open_band.end   = FOG_OPEN_HIDDEN_END;
-            }
-            if (open_band.start != fog_state.written.start ||
-                open_band.end != fog_state.written.end) {
-                fog_state.current = open_band;
-                write_band(&open_band);
-            }
-            /* 'o' for the opening window. This branch returns before the sample at the bottom, so
-               without this the capture has a hole exactly where the window runs. */
-            fog_trace_aside('o', fog_state.written.start, fog_state.written.end);
-            return;
-        }
-        /* See FOG_OPEN_FADE_FROM_AUTHORED. The cut is marked unobserved so the first report at
-         * the restored scale is snapped to rather than eased towards: the settled cut spent the
-         * window climbing to the raised value, and easing back down from it would be the same slow
-         * slide this window exists to prevent. */
-        fog_state.open_left     = 0.0f;
-        fog_state.cut_observed  = false;
-        fog_state.current.start = fog_state.authored.start * FOG_OPEN_FADE_FROM_AUTHORED;
-        fog_state.current.end   = fog_state.authored.end * FOG_OPEN_FADE_FROM_AUTHORED;
-        write_band(&fog_state.current);
-        log_info("the opening window is over, fog fades in from %.1f..%.1f towards this level's",
-                 (double)fog_state.current.start, (double)fog_state.current.end);
+    if (run_opening_window(seconds)) {
         return;
     }
 

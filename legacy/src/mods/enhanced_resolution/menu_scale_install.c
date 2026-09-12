@@ -318,6 +318,129 @@ static bool install_sw3d_scale(void)
     return false;
 }
 
+/* Where the ratio comes from, clamped to what the run length encoder allows. False when the
+ * menus are to stay at their authored 640x480 canvas, which is not a failure. */
+static bool choose_ratio(float configured_ratio, float *ratio_x, float *ratio_y,
+                         bool *follows_display)
+{
+    *follows_display = false;
+    if (configured_ratio > 0.0f) {
+        *ratio_x = *ratio_y = configured_ratio;  /* an explicit setting, which exists for testing */
+    } else if (!ratio_from_artwork(ratio_x, ratio_y)) {
+        /* No converted set, so the display decides instead and the artwork is replicated to meet
+         * it as it loads. That inverts this file's older doctrine, which was that the artwork is
+         * the one source of truth because a number read from the pictures cannot disagree with the
+         * pictures. It could not survive contact with a resolution that changes: the artwork
+         * cannot follow one and the display always can.
+         *
+         * This is also the only arrangement in which the canvas may be refitted later, and it is
+         * recorded as such rather than worked out again: a converted set is a fixed size on disk,
+         * so a canvas read from it can only be checked against the display and abandoned. */
+        *follows_display = true;
+        if (!menu_art_load_display_ratio(ratio_x, ratio_y)) {
+            /* 640x480, or a settings file that could not be read. The authored canvas is the right
+             * answer for both, and the scale is installed at it rather than declined, so that a
+             * reader who then makes the window larger gets a canvas that grows with it. Every
+             * write below is absolute, so at ratio 1 all of them write the shipped numbers. */
+            *ratio_x = *ratio_y = 1.0f;
+        }
+    }
+
+    if (*ratio_x < MENU_SCALE_MIN_RATIO) { *ratio_x = MENU_SCALE_MIN_RATIO; }
+    if (*ratio_y < MENU_SCALE_MIN_RATIO) { *ratio_y = MENU_SCALE_MIN_RATIO; }
+    if (*ratio_x > MENU_SCALE_MAX_RATIO) {
+        log_info("a menu width scale of %.3f is past the %.3f the run length encoder allows, "
+                 "using %.3f", (double)*ratio_x, (double)MENU_SCALE_MAX_RATIO,
+                 (double)MENU_SCALE_MAX_RATIO);
+        *ratio_x = MENU_SCALE_MAX_RATIO;
+    }
+    if (*ratio_y > MENU_SCALE_MAX_RATIO) { *ratio_y = MENU_SCALE_MAX_RATIO; }
+
+    if (*ratio_x <= 1.0f && *ratio_y <= 1.0f && !*follows_display) {
+        log_info("the menu scale is 1, so the menus stay at their authored 640x480 canvas");
+        return false;
+    }
+    return true;
+}
+
+/* Everything the scale does not depend on, after everything that can still fail, so none of it
+ * can cost the scale itself. Each piece reports for itself.
+ *
+ * The per-frame corrector goes first because the 3-D repoint below is gated on it. */
+static void install_optional_hooks(float ratio_y)
+{
+    if (menu_scale_sites[SITE_DRAW_MENU].address != 0 &&
+        detour_install(&scale_state.draw_menu_detour, menu_scale_sites[SITE_DRAW_MENU].address,
+                       (const void *)hook_draw_menu, DRAW_MENU_PROLOGUE)) {
+        log_info("the screens that rewrite their own rectangles, the pause family and the credits, "
+                 "are corrected once per frame at xswift_drawMenu");
+    } else {
+        log_warning("xswift_drawMenu could not be hooked, so the pause screens and the credits "
+                    "slide back to their authored places, and the 3-D widgets are left alone. "
+                    "Every screen that lays itself out once is unaffected");
+    }
+
+    if (menu_scale_sites[SITE_QUERY_FONT].address != 0 &&
+        detour_install(&scale_state.query_font_detour, menu_scale_sites[SITE_QUERY_FONT].address,
+                       (const void *)hook_query_font, QUERY_FONT_PROLOGUE)) {
+        log_info("font3d_queryFont now answers in drawn units, so centred menu text sits in the "
+                 "middle of its box and list boxes derive their own row height");
+    } else {
+        log_warning("font3d_queryFont could not be hooked, so centred menu text sits high in its "
+                    "box by about %d pixels and list box rows will be cramped",
+                    (int)((ratio_y - 1.0f) * 8.0f + 0.5f));
+    }
+
+    /* The row height floor, the drawn cursor's size and the list box text insets. All three are
+     * written from the ratio in force and are rewritten from it on every refit, so they live
+     * together in menu_scale_refit.c rather than one block each here. */
+    menu_scale_apply_trimmings(true);
+
+    if (menu_scale_sites[SITE_SET_WIDGET_IMAGE].address != 0 &&
+        patch_write_u8(menu_scale_sites[SITE_SET_WIDGET_IMAGE].address + SET_WIDGET_IMAGE_COMPRESS,
+                       COMPRESS_NEVER) == PATCH_RESULT_OK) {
+        log_info("save game thumbnails are left uncompressed, which puts them on the surface copy "
+                 "path and lets them scale with the canvas like the main menu previews");
+    } else {
+        log_warning("save game thumbnails could not be left uncompressed, so they stay at their "
+                    "authored 160x120 inside a scaled frame. Nothing else is affected");
+    }
+
+    if (install_sw3d_scale()) {
+        log_info("3-D widget models are held at the size they have at the authored field of view, "
+                 "so changing the field of view no longer grows or shrinks the hero and the "
+                 "inventory");
+    } else {
+        log_warning("sw3d_draw could not be hooked, so the 3-D models on the pause screens grow as "
+                    "the field of view narrows and shrink as it widens. Their positions are "
+                    "unaffected");
+    }
+
+    if (menu_scale_sites[SITE_SW3D_PROJECT].address != 0 &&
+        detour_install(&scale_state.sw3d_project_detour,
+                       menu_scale_sites[SITE_SW3D_PROJECT].address,
+                       (const void *)hook_sw3d_project, SW3D_PROJECT_PROLOGUE)) {
+        log_info("the 3-D widgets on the pause screens are placed from the camera's live focal "
+                 "length, so the hero and the inventory models follow the canvas and hold still "
+                 "while the field of view changes");
+    } else {
+        log_warning("sw3d_rectToViewOffset could not be hooked, so the 27 3-D widgets on the pause "
+                    "screens keep projecting about the authored 320,240 and land in the wrong "
+                    "place. Nothing else is affected");
+    }
+
+    if (menu_scale_sites[SITE_PIC_DRAW].address != 0 &&
+        detour_install(&scale_state.pic_draw_detour, menu_scale_sites[SITE_PIC_DRAW].address,
+                       (const void *)hook_pic_draw, PIC_DRAW_PROLOGUE)) {
+        log_info("the four animated main menu previews are upscaled at draw time from their "
+                 "authored 232x100; the engine's own surfaces are left untouched");
+    } else {
+        log_warning("swpic_draw could not be hooked, so the four animated buttons on the main "
+                    "menu stay at their authored 232x100 inside their scaled places. Everything "
+                    "else is scaled and they are still clickable, on the small picture");
+    }
+}
+
 bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
 {
     uintptr_t origin_sites[ORIGIN_SITE_COUNT];
@@ -330,44 +453,12 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
         return true;
     }
 
-    /* Before the artwork test below, and deliberately: the census exists to measure whether that
-     * artwork could stop being needed, so it has to run on an installation that has none. */
+    /* Before the artwork test inside choose_ratio, and deliberately: the census exists to measure
+     * whether that artwork could stop being needed, so it has to run on an installation that has
+     * none. */
     (void)menu_art_census_install();
 
-    if (configured_ratio > 0.0f) {
-        ratio_x = ratio_y = configured_ratio;  /* an explicit setting, which exists for testing */
-    } else if (!ratio_from_artwork(&ratio_x, &ratio_y)) {
-        /* No converted set, so the display decides instead and the artwork is replicated to meet
-         * it as it loads. That inverts this file's older doctrine, which was that the artwork is
-         * the one source of truth because a number read from the pictures cannot disagree with the
-         * pictures. It could not survive contact with a resolution that changes: the artwork
-         * cannot follow one and the display always can.
-         *
-         * This is also the only arrangement in which the canvas may be refitted later, and it is
-         * recorded as such rather than worked out again: a converted set is a fixed size on disk,
-         * so a canvas read from it can only be checked against the display and abandoned. */
-        follows_display = true;
-        if (!menu_art_load_display_ratio(&ratio_x, &ratio_y)) {
-            /* 640x480, or a settings file that could not be read. The authored canvas is the right
-             * answer for both, and the scale is installed at it rather than declined, so that a
-             * reader who then makes the window larger gets a canvas that grows with it. Every
-             * write below is absolute, so at ratio 1 all of them write the shipped numbers. */
-            ratio_x = ratio_y = 1.0f;
-        }
-    }
-
-    if (ratio_x < MENU_SCALE_MIN_RATIO) { ratio_x = MENU_SCALE_MIN_RATIO; }
-    if (ratio_y < MENU_SCALE_MIN_RATIO) { ratio_y = MENU_SCALE_MIN_RATIO; }
-    if (ratio_x > MENU_SCALE_MAX_RATIO) {
-        log_info("a menu width scale of %.3f is past the %.3f the run length encoder allows, "
-                 "using %.3f", (double)ratio_x, (double)MENU_SCALE_MAX_RATIO,
-                 (double)MENU_SCALE_MAX_RATIO);
-        ratio_x = MENU_SCALE_MAX_RATIO;
-    }
-    if (ratio_y > MENU_SCALE_MAX_RATIO) { ratio_y = MENU_SCALE_MAX_RATIO; }
-
-    if (ratio_x <= 1.0f && ratio_y <= 1.0f && !follows_display) {
-        log_info("the menu scale is 1, so the menus stay at their authored 640x480 canvas");
+    if (!choose_ratio(configured_ratio, &ratio_x, &ratio_y, &follows_display)) {
         return true;
     }
 
@@ -444,80 +535,7 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens)
      * replicated. */
     (void)menu_art_load_install(scale_state.ratio_x, scale_state.ratio_y);
 
-    /* Everything below is optional, and comes after everything that can still fail, so none of it
-     * can cost the scale itself.
-     *
-     * The per-frame corrector goes first because the 3-D repoint below is gated on it. */
-    if (menu_scale_sites[SITE_DRAW_MENU].address != 0 &&
-        detour_install(&scale_state.draw_menu_detour, menu_scale_sites[SITE_DRAW_MENU].address,
-                       (const void *)hook_draw_menu, DRAW_MENU_PROLOGUE)) {
-        log_info("the screens that rewrite their own rectangles, the pause family and the credits, "
-                 "are corrected once per frame at xswift_drawMenu");
-    } else {
-        log_warning("xswift_drawMenu could not be hooked, so the pause screens and the credits "
-                    "slide back to their authored places, and the 3-D widgets are left alone. "
-                    "Every screen that lays itself out once is unaffected");
-    }
-
-    if (menu_scale_sites[SITE_QUERY_FONT].address != 0 &&
-        detour_install(&scale_state.query_font_detour, menu_scale_sites[SITE_QUERY_FONT].address,
-                       (const void *)hook_query_font, QUERY_FONT_PROLOGUE)) {
-        log_info("font3d_queryFont now answers in drawn units, so centred menu text sits in the "
-                 "middle of its box and list boxes derive their own row height");
-    } else {
-        log_warning("font3d_queryFont could not be hooked, so centred menu text sits high in its "
-                    "box by about %d pixels and list box rows will be cramped",
-                    (int)((ratio_y - 1.0f) * 8.0f + 0.5f));
-    }
-
-    /* The row height floor, the drawn cursor's size and the list box text insets. All three are
-     * written from the ratio in force and are rewritten from it on every refit, so they live
-     * together in menu_scale_refit.c rather than one block each here. */
-    menu_scale_apply_trimmings(true);
-
-    if (menu_scale_sites[SITE_SET_WIDGET_IMAGE].address != 0 &&
-        patch_write_u8(menu_scale_sites[SITE_SET_WIDGET_IMAGE].address + SET_WIDGET_IMAGE_COMPRESS,
-                       COMPRESS_NEVER) == PATCH_RESULT_OK) {
-        log_info("save game thumbnails are left uncompressed, which puts them on the surface copy "
-                 "path and lets them scale with the canvas like the main menu previews");
-    } else {
-        log_warning("save game thumbnails could not be left uncompressed, so they stay at their "
-                    "authored 160x120 inside a scaled frame. Nothing else is affected");
-    }
-
-    if (install_sw3d_scale()) {
-        log_info("3-D widget models are held at the size they have at the authored field of view, "
-                 "so changing the field of view no longer grows or shrinks the hero and the "
-                 "inventory");
-    } else {
-        log_warning("sw3d_draw could not be hooked, so the 3-D models on the pause screens grow as "
-                    "the field of view narrows and shrink as it widens. Their positions are "
-                    "unaffected");
-    }
-
-    if (menu_scale_sites[SITE_SW3D_PROJECT].address != 0 &&
-        detour_install(&scale_state.sw3d_project_detour,
-                       menu_scale_sites[SITE_SW3D_PROJECT].address,
-                       (const void *)hook_sw3d_project, SW3D_PROJECT_PROLOGUE)) {
-        log_info("the 3-D widgets on the pause screens are placed from the camera's live focal "
-                 "length, so the hero and the inventory models follow the canvas and hold still "
-                 "while the field of view changes");
-    } else {
-        log_warning("sw3d_rectToViewOffset could not be hooked, so the 27 3-D widgets on the pause "
-                    "screens keep projecting about the authored 320,240 and land in the wrong "
-                    "place. Nothing else is affected");
-    }
-
-    if (menu_scale_sites[SITE_PIC_DRAW].address != 0 &&
-        detour_install(&scale_state.pic_draw_detour, menu_scale_sites[SITE_PIC_DRAW].address,
-                       (const void *)hook_pic_draw, PIC_DRAW_PROLOGUE)) {
-        log_info("the four animated main menu previews are upscaled at draw time from their "
-                 "authored 232x100; the engine's own surfaces are left untouched");
-    } else {
-        log_warning("swpic_draw could not be hooked, so the four animated buttons on the main "
-                    "menu stay at their authored 232x100 inside their scaled places. Everything "
-                    "else is scaled and they are still clickable, on the small picture");
-    }
+    install_optional_hooks(ratio_y);
 
     scale_state.installed = true;
     log_info("menus scaled %.3f wide by %.3f high (%s): canvas %dx%d, origin and g_menuScale "

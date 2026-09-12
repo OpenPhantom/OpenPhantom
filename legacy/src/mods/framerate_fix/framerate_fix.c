@@ -270,9 +270,11 @@ static void load_config(void)
 
     config->enabled                = ini_read_bool(FRAMERATE_SECTION, "Enabled", true);
     config->target_fps             = ini_read_int (FRAMERATE_SECTION, "TargetFps", 0);
-    /* Recommended rather than default, because it changes the frame rate a player
-     * chose. frame_cap.h has the measurements: a cap below the refresh rate judders
-     * whatever this DLL does about interpolation. */
+    /* On even for a file that predates the key, decided rather than overlooked: a cap
+     * below the refresh rate judders whatever this DLL does about
+     * interpolation, frame_cap.h has the measurements, and an installation carrying an older
+     * ini was judged better off with the cap on the refresh than held to a number it never
+     * chose for that reason. The README says so beside the key. */
     config->match_display_refresh  =
         ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
     config->refresh_divisor        = ini_read_int (FRAMERATE_SECTION, "RefreshDivisor", 0);

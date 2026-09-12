@@ -204,7 +204,8 @@ compress:
 
 /* The authored canvas every menu is laid out on, and the size the artwork on disk is authored at.
  * Named here rather than taken from menu_scale.h so this file does not depend on the scale it
- * serves; the two are checked against each other by the static assert below. */
+ * serves. Nothing checks the two against each other; both are the 640x480 the engine hard codes
+ * in its own toolkit, so neither can move without the other. */
 #define AUTHORED_WIDTH  640
 #define AUTHORED_HEIGHT 480
 

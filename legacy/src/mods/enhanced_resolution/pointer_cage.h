@@ -25,7 +25,6 @@
  * authored canvas this writes the values that shipped. */
 void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height);
 
-/* True when the clamp really was widened, for the caller's own log. */
 /* The canvas has changed size under an open menu, so the clamp follows it.
  *
  * Does nothing unless the cage is installed and active, and nothing when the canvas has not
@@ -38,6 +37,7 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
  * the scale refuses to install into. */
 void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height);
 
+/* True when the clamp really was widened, for the caller's own log. */
 bool pointer_cage_is_active(void);
 
 

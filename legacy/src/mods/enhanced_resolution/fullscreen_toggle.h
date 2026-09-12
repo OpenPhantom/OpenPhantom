@@ -37,7 +37,7 @@
 /* Reads its own key from the settings file rather than being handed one, which is the same thing
  * window_poll.c does and for the same reason: enhanced_resolution.c is at its size limit, and a
  * setting that is only ever read by one file does not need to travel through the file that reads
- * every other setting. Re-read on the same interval, so the key can be rebound while playing. */
+ * every other setting. Read once, at install: rebinding the key takes a restart. */
 bool fullscreen_toggle_install(void);
 
 /* Polled by window_poll alongside everything else, so this file needs no timer of its own. */

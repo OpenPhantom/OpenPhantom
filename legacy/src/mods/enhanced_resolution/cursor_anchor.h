@@ -8,14 +8,17 @@
  * re-centres the mouse pointer, which compares CLIENT coordinates against the SCREEN coordinates
  * it then warps to, is accidentally correct.
  *
- * window_fit.c is the only code in this tree that moves that window. The moment it puts the window
- * on a monitor whose origin is not (0,0), the engine warps the pointer to a screen point that is
- * not inside its own client area, and on a second monitor at -1920,0 that point is on the OTHER
+ * Three things in this DLL move that window: window_fit.c, which puts it at the corner of the
+ * monitor it is on; window_mode.c, which centres a framed window or puts a borderless one at the
+ * monitor's origin, and which Alt+Enter reapplies while playing; and the player, who can drag a
+ * framed window (WindowMode 2 or 3) anywhere at all. The moment any of them puts the client area
+ * somewhere other than screen (0,0), the engine warps the pointer to a screen point that is not
+ * inside its own client area, and on a second monitor at -1920,0 that point is on the OTHER
  * display: the pointer leaves the game window and stays there.
  *
  * The DLL that breaks the assumption is the one that has to repair it, and it must repair it in
  * the same session and without a runtime dependency on any other feature DLL. That is why this
- * file sits next to window_fit.c.
+ * file sits next to window_fit.c and window_mode.c.
  *
  * What it is not: this is not the confinement. The engine's own confinement is "warp the pointer
  * back to the middle of the client area on every mouse message"; this file repairs only the

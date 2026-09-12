@@ -294,15 +294,15 @@ _Static_assert(sizeof SIG_DRAW_MENU == sizeof MSK_DRAW_MENU,
  * the live camera on every menu frame instead, which also means it follows the FOV slider while
  * the options screen is open.
  *
- * This takes an operand variable_fov ALSO wants. That mod repoints the same fdiv for the same
- * reason, from the other side: it knows the focal and assumes the canvas is 640 wide. This file
- * loads first, so this repoint wins, and variable_fov then reports `menu_3d_focal NOT RESOLVED,
- * this patch is DISABLED` because the bytes it scans for are the ones this changed. That warning is
- * expected and is not a fault: the two are doing the same job and only one of them can know both
- * halves of the answer, and this is the one that does, because it reads the focal live.
+ * None of the engine's constants is repointed for this; the function is detoured and the hook
+ * computes the placement itself, reading the focal at the instant of the call. An earlier
+ * version repointed the 554.256 operand and refreshed the cell once per menu frame, which sampled
+ * a lens that had not changed yet, so the hero slid sideways while the field of view slider
+ * moved. variable_fov repoints that same operand for its own reason, and with nothing here
+ * reading it any more that repoint is harmless and is left to it.
  *
- * The 5.0f is the inset that stands a model up off the bottom edge of its box, so it scales with
- * the box. The 2.0f is a halving and stays 2.0f.
+ * The 5.0f inset that stands a model up off the bottom edge of its box scales with the box; the
+ * hook applies it in canvas units. The halving stays a halving.
  */
 static const uint8_t SIG_SW3D_PROJECT[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18,        /* push ebp / mov ebp,esp / sub esp,0x18 */

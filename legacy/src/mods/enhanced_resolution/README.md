@@ -83,11 +83,38 @@ the mode table that the aspect gate anchors.
 | `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
 | `swrle_blit`, the canvas clip | `0x004616CC` | two immediates at `+0x30` and `+0x37`, `640`/`480` -> `640N`/`480N`; the function reads the destination surface size and discards it |
 | the menu origin block | matched **twice** | `0x0045D69D` and `0x0045D7CB`; three operands each repointed at cells holding `640N` and `480N`, which also gives `g_menuScale` its multiplier without touching its non-popping `fst`. The pattern runs on through the scale derivation, and the seven engine cells the feature reads or writes (the screen size, the origin, `g_menuScale`, the base text size and `g_menuTextScale`) are read out of its operands, with both sites required to agree |
-| `swmenu_open` | `0x0045D9F5` | detoured, 8 byte prologue; scales each menu's widget rectangles once, which the draw and the hit test both read. `g_swMac.pCurrMenu` is read out of its first load |
+| `swmenu_open` | `0x0045D9F5` | detoured, 8 byte prologue; scales each menu's widget rectangles once, which the draw and the hit test both read. `g_swMac.pCurrMenu` is read out of its first load. Detoured a second time, **only** when `LogMenuArt=1`, so the census can count screens |
 | `render_prepareFrame`, the focal copy | `0x0041996D` | **read, never patched**; the current camera cell and `g_projScale` come out of its two operands |
 | the ending's mode drop | `0x0043EF19` | the five byte `call graphics_setResolution(640,480)` replaced with `NOP`, **only** when `EndingKeepsResolution=1`. The two pushes and the `add esp,8` after them stay, so the stack balances either way. Address free: the pattern's two call displacements and its `"movie\scene8"` operand are masked, and the tail carries the distinction from the five other sites that push 640x480 |
 | `credits_screen` | `0x004470F8` | detoured, 8-byte prologue, **only** when `SkipCredits=1`. Detoured to BOUND the skip: being inside the function that runs the credits is the honest way to know they are running |
 | `credits_readLine` | `0x004476EB` | detoured, 9-byte prologue, **only** when `SkipCredits=1`. Answers end of file once Escape has been seen. Installed AFTER the screen detour, because the reader alone can never answer end of file and there is no `detour_remove` |
+| `swlistbx_draw`, the two text insets | `0x0045CD2B` / `0x0045CD3A` | two `imm8`, `add ecx,6` and `add eax,3`, scaled with the canvas and rewritten on every refit; each opcode is checked first because both sit past the matched pattern. Optional |
+| `swpic_draw` | `0x0045F950` | detoured, 7-byte prologue: the four animated main menu previews are upscaled at draw time. Optional. Detoured a second time, **only** when `LogMenuArt=1`, for the census |
+| `xswift_drawMenu` | `0x00462E51` | detoured, 8-byte prologue; corrects once per frame the screens that rewrite their own rectangles, the pause family and the credits. Optional, and the 3-D size hold below is gated on it |
+| `sw3d_rectToViewOffset` | `0x0045C3D8`, matched from `0x0045C3DE` | detoured, 6-byte prologue; places the 3-D widgets from the scaled canvas centre and the camera's live focal, and hands the `[0x4A8888]` operand back to `variable_fov`. Optional |
+| `font3d_queryFont` | `0x0046B780` | detoured, 10-byte prologue; answers the line height in drawn units, and only while a menu is open. Optional |
+| `swlistbx_input`, the row height floor | `0x0045C9A7` | the `imm8` of `cmp eax,16` and the `imm32` of `mov ...,16`, both scaled with the canvas. Optional |
+| `swpic_setWidgetImage` | `0x0045FC5E` | one byte, the `bCompress == 1` immediate becomes `0x7F`, so save game thumbnails stay uncompressed and scale on the surface copy path. Optional |
+| `swpic_drawCursor` | `0x0045FD01` | two `imm8`, the `+ 0x20` cursor extents, scaled by the vertical ratio and capped at 127 by the instruction. Optional |
+| `sw3d_draw` | `0x0045C23B` | detoured, 6-byte prologue, and its three `mov reg,[g_menuScale]` operands at `+0xAE`, `+0xB6` and `+0xBF` repointed at one cell of ours, so the models hold their size across the field of view. Optional |
+| `swmenu_freeBitmaps` | `0x0045DF05` | **called, never patched**: the refit drops an open screen's bitmap cache so it reloads at the new canvas |
+| `swmenu_sendWidget` | `0x00462773` | **called, never patched**: the refit sends `SWMSG_RESET` to each list box so it derives its rows again. The handler table its operand names is where the list box type came from |
+| the BBMP load arm's `call swrle_compressVBuffer` | `0x0045F8FB + 9` | the call is redirected to a resampler that replicates each menu bitmap to the canvas as it loads, then calls the compressor. The other caller of the compressor, the save thumbnail, is untouched. Armed whenever `MenuScale` installs |
+| `mem_alloc`, `mem_free` | `0x00495290`, `0x00495452` | **called, never patched**: the replicated pixels come from the engine's own allocator, because the compressor frees what it is handed and the allocator carries a header in front of every block |
+| `res_addSource`, `res_promoteSource` | `0x004719E0`, `0x00471BBB` | **called, never patched**, to mount `MenuArtDirectory` ahead of the archives. **Only** when that key is not empty |
+| `swmenu_startup` | `0x0045D77C` | detoured, 6-byte prologue, **only** when `MenuArtDirectory` is not empty: the moment the mount happens |
+| `menu_progressStep`, the loading bar geometry | `0x00446A4B`, matched from `0x00446A54` | six integer immediates (bar x, y, backdrop x, y, width, height) rewritten from the canvas, and the `32.0f` and `128.0f` operands repointed at cells of ours. Resolved on the first refit that needs it, so only when the canvas is larger than 640x480 |
+| `ui_progress`, the percentage text origin | `0x004467B9`, matched from `0x0044688F` | two immediates, `0x1fe` and `0x17c`, rewritten from the canvas alongside the bar |
+| `graphics_buildModeList` depth gate | `0x0046C663` | one byte, `cmp [ecx+0x20],0x10` to `0x20`, **only** when `ModeBitDepth=32`. All three depth sites or none, with rollback |
+| `graphics_findMode` depth gate | `0x0046BC28` | the same byte, the same shape |
+| `graphics_setResolution` fallback template | `0x0046BF0F` | one byte, the `bpp = 16` immediate of the descriptor built on the stack when `findMode` fails |
+| `swrle_compressVBuffer`, `swrle_blit` | `0x004612D0`, `0x004616CC` | first byte to `ret`, **only** when `ModeBitDepth=32` opened all three gates. A diagnostic that removes all 2-D art; see `sw_blit_guard.h` |
+| `DLG_DrawLine`, the position scale pair | `0x00431545` | the two `fdiv [screenHeight]` / `fdiv [screenWidth]` operands repointed at cells holding the size the layout is told, **only** when `SubtitleScale` is not `0`. All ten subtitle sites or none, journaled and put back on refusal |
+| `DLG_DrawLine`, the glyph scale | `0x00431586` | the `fdiv [screenWidth]` operand repointed at the same told width |
+| the two wrap comparisons | `0x004315E3`, `0x00431630` | both `fcomp [580.0]` operands repointed at one cell holding the scaled wrap |
+| the two centring calls | `0x0043177A`, `0x0043179F` | `call screenWidth()` / `call screenHeight()` redirected at getters of ours that answer the told size. Each is followed to its getter first, and the getter at `0x0046B7B0` and its twin are required to be the ten byte load-and-return |
+| the two offset clamps | `0x00431793`, `0x004317B6` | `jge` to `jmp`, one byte each, so a box taller than the display may sit above its top edge |
+| `dialog_drawBar` | `0x00430AC2` | detoured, 9-byte prologue; the subtitle backdrop is scaled about the horizontal centre and the bottom edge to match the text |
 
 ## Why the gate alone is not enough
 
@@ -678,8 +705,10 @@ have never been run against real DirectDraw.
 wrapper reporting zero device recreates and staying windowed throughout, and roughly 100 fps against
 45 for the exclusive device. Movies play inside the window with `MovieSurface=child`.
 
-**`WindowMode=2` does not work with `WindowedPresent=1` and is refused**, for the structural reason
-given in the section above. That refusal is new and has not itself been observed in a log.
+**`WindowMode=2` with `WindowedPresent=1` is no longer refused.** The install logs a line saying that
+whether the picture fills the window depends on where the client area lands against the rectangle
+the engine renders, and `WindowedFill=1` corrects that. It was one of the four shapes played on
+2026-09-08.
 
 **`WindowMode=1` with `WindowedPresent=0` has not been played.** It applies the engine's own style
 word and changes only the geometry, so the risk is low, but it is the combination a player gets by
@@ -715,7 +744,7 @@ uniquely in **all three** builds including the recompiled `obi.exe` (`0x46BC25` 
 so does `SIG_MODE_SIZE_ACCESSOR` (`0x4937FA` there), its two absolute `.data` operands are
 wildcarded for exactly that reason. `obi.exe` still reports its expected 35 problems, unchanged.
 
-## The menu cursor cage, and why the order of two writes matters
+## The menu cursor cage, and why it is one write
 
 The engine already centres its menus. `g_menuOriginX [0x6CFD58] = (W-640)/2` and
 `g_menuOriginY [0x6CFD5C] = (H-480)/2` are written at startup and on every mode change, and both
@@ -749,10 +778,13 @@ at install and the site is never re-resolved. If an earlier generation of this D
 process and has already widened the cage, the resolve fails, and the log says *that*, rather than
 claiming the engine was not recognised.
 
-The refresh on a resolution change is a once-per-frame poll of the mode size, **not** a detour on
-the engine's mode-change broadcast: the loading screen calls `swmenu_setSuppressModeSwitch`, and
-`enterMenuMode` then returns *before* that broadcast. The clamp is recomputed absolutely from the
-current width and height, never by adding a delta, so repeating it cannot drift.
+The cage follows the canvas, not the display mode. When `MenuScale` refits the canvas to a new
+display, from its own once-per-frame watch on the engine's screen cells, it calls
+`pointer_cage_resize` with the new size, and it calls it with 640x480 when the scale stands down.
+That is a poll and **not** a detour on the engine's mode-change broadcast: the loading screen calls
+`swmenu_setSuppressModeSwitch`, and `enterMenuMode` then returns *before* that broadcast. The clamp
+is recomputed absolutely from the canvas width and height, never by adding a delta, so repeating it
+cannot drift.
 
 At 640x480 the computed clamp is bit-identical to the constants the engine ships with. That is
 asserted by a unit test and is the reason this may default to on.

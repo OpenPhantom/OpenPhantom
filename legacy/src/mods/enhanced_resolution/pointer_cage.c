@@ -94,12 +94,19 @@
  * silently treated as a failure to find the engine.
  *
  * ==============================================================================================
- * There is nothing to refresh
+ * What refreshes it, and what does not
  *
- * The canvas does not change while the game runs; the display mode does. Sizing the cage from
- * the canvas is therefore a single write at install time, with no per-frame poll, no mode change
- * detour and nothing to resolve out of the graphics layer. An earlier version needed all three,
- * and needed them because it was sizing the cage from the wrong thing.
+ * The display mode changing does not move the cage: the clamp is anchored at the menu origin the
+ * engine recomputes itself, and the canvas extent is unchanged by a mode switch. So this file has
+ * no poll of the display mode, no mode change detour and nothing to resolve out of the graphics
+ * layer. An earlier version needed all three, and needed them because it was sizing the cage
+ * from the wrong thing.
+ *
+ * The canvas itself does change size when MenuScale refits it to a new display, and
+ * pointer_cage_resize() below follows that: menu_scale_refit.c calls it with the new canvas from
+ * its own per-frame watch on the engine's screen cells, and menu_scale_install.c calls it with
+ * the authored 640x480 when the scale stands down. It is the same absolute write the install
+ * made, skipped when the size has not moved.
  */
 #include "pointer_cage.h"
 
@@ -209,7 +216,8 @@ _Static_assert(sizeof(SIG_CURSOR_CAGE) == sizeof(MSK_CURSOR_CAGE),
 _Static_assert(sizeof(SIG_CURSOR_CAGE) == 121,
                "the cursor-cage pattern is not the 121-byte block it was measured from");
 
-/* The two origin operands, repointed at cells of our own holding zero. */
+/* The two origin operands. They are read back as the last proof of the block before any
+ * immediate is written, and are never written themselves. */
 #define OFFSET_ORIGIN_X_OPERAND 0x01u
 #define OFFSET_ORIGIN_Y_OPERAND 0x3Fu
 
@@ -234,9 +242,9 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("cursor_cage", SIG_CURSOR_CAGE, MSK_CURSOR_CAGE)
 };
 
-/* The two cells the origin operands are repointed at. They are read by the engine on every mouse
- * message and never written by anything, so a plain zero is all of it: the clamp becomes
- * [0, W-33] x [0, H-33] in absolute screen coordinates, the whole display mode. */
+/* The two cells the earlier, screen-relative version repointed the origin operands at, which
+ * made the clamp [0, W-33] x [0, H-33] over the whole display mode: the erase fault described in
+ * the header. Nothing references them now; the operands are read and left alone. */
 static const int32_t cage_origin_zero_x = 0;
 static const int32_t cage_origin_zero_y = 0;
 

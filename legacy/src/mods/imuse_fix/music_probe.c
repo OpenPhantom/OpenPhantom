@@ -87,7 +87,9 @@ typedef struct probe_state {
 
     DWORD   last_report_ms;
     DWORD   last_tick_change_ms;
-    int32_t last_ticks;
+    int32_t last_ticks;         /* the tick counter as last sampled, whatever is switched on */
+    int32_t report_ticks;       /* the tick counter at the last routine line */
+    bool    timer_ticked;       /* the counter moved between the previous frame and this one */
 
     /* The stamp iMUSE writes when a heartbeat BODY runs, and when we last saw it move. The tick
      * counter above only says the Windows timer fired; this says work was done. */
@@ -111,7 +113,7 @@ typedef struct probe_state {
      * released a gate nothing had stuck. */
     bool    heartbeat_seen;
     bool    trace_retaken;      /* the commentary pointer was found replaced once, and said so */
-    bool    trace_handing_on;   /* inside the hand-on to the game's handler, see trace_thunk */
+    DWORD   trace_tls;          /* per-thread "inside the hand-on" flag, see trace_thunk */
     int32_t stalls_seen;
 
     DWORD    last_stress_ms;
@@ -211,10 +213,10 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
  * could, the blocking file read, deliberately drops it around the read. And the underflow that
  * would normally worry you cannot happen, because the release side tests for zero before it
  * decrements: a holder that unlocks after us finds 0 and leaves it at 0. */
-static void run_watchdog(int32_t gate, DWORD stalled_ms)
+static void run_watchdog(int32_t gate, DWORD stalled_ms, bool timer_alive)
 {
-    if (!config.watchdog || gate == 0) {
-        return;
+    if (!config.watchdog || gate == 0 || !timer_alive) {
+        return;         /* a dead timer is not a held lock, and releasing one would not start it */
     }
     if (stalled_ms < (DWORD)config.watchdog_ms) {
         return;
@@ -240,7 +242,7 @@ static void report_recovered(int32_t ticks, DWORD stalled_ms)
 
 static void report_routine(int32_t ticks, int32_t gate, DWORD elapsed_ms)
 {
-    int32_t  delta = ticks - state.last_ticks;
+    int32_t  delta = ticks - state.report_ticks;
     uint32_t stress_delta = state.stress_calls - state.stress_calls_reported;
     unsigned rate = 0;
     unsigned stress_rate = 0;
@@ -288,6 +290,15 @@ static void report_routine(int32_t ticks, int32_t gate, DWORD elapsed_ms)
  * was doing and what the gate stood at while it did it. */
 static void __cdecl trace_thunk(const char *text)
 {
+    /* A line this thread is already handing on has come back through a writer that kept the
+     * thunk as its own previous and calls it: the slot is retaken every frame in front of
+     * whatever the game wrote there. It was logged on the way in, and handing it on again would
+     * not end, so it is dropped here. The flag is per thread because the game thread and the
+     * timer thread both reach this, and one global word would have the other thread's line
+     * skipped while this one was inside the handler. */
+    if (state.trace_tls != TLS_OUT_OF_INDEXES && TlsGetValue(state.trace_tls) != NULL) {
+        return;
+    }
     if (text != NULL && !state.trace_capped) {
         if (state.trace_lines >= TRACE_LINE_LIMIT) {
             state.trace_capped = true;
@@ -309,14 +320,15 @@ static void __cdecl trace_thunk(const char *text)
         }
     }
 
-    /* Always hand it on: the game registered this pointer and may be doing something with it.
-     * Except from inside itself: the slot is retaken every frame in front of whatever the game
-     * wrote there, and a writer that kept this thunk as its own previous and calls it would come
-     * straight back here, without end. A line already being handed on is not handed on again. */
-    if (state.original_trace != NULL && !state.trace_handing_on) {
-        state.trace_handing_on = true;
+    /* Always hand it on: the game registered this pointer and may be doing something with it. */
+    if (state.original_trace != NULL) {
+        if (state.trace_tls != TLS_OUT_OF_INDEXES) {
+            TlsSetValue(state.trace_tls, (LPVOID)1);
+        }
         state.original_trace(text);
-        state.trace_handing_on = false;
+        if (state.trace_tls != TLS_OUT_OF_INDEXES) {
+            TlsSetValue(state.trace_tls, NULL);
+        }
     }
 }
 
@@ -328,6 +340,13 @@ static void install_trace(void)
     if (state.sites.trace_slot == NULL) {
         log_warning("MusicTrace=1 but iMUSE's commentary pointer did not resolve, no capture");
         return;
+    }
+    /* Never freed: there is no uninstall, and the slot is a few bytes for the life of the
+     * process. Without one the capture still works and a chaining writer is no longer caught. */
+    state.trace_tls = TlsAlloc();
+    if (state.trace_tls == TLS_OUT_OF_INDEXES) {
+        log_warning("no thread-local slot for the commentary capture, so a handler that chains "
+                    "back into it would recurse; the capture is installed without that guard");
     }
     state.original_trace = *state.sites.trace_slot;
     *state.sites.trace_slot = trace_thunk;
@@ -401,8 +420,16 @@ void music_probe_frame(void)
         state.gate_max = gate;
     }
 
+    /* Whether the Windows timer fired since the last frame is read here and nowhere else, so
+     * the "timer still firing" half of a stall verdict is a measurement whatever else is on. An
+     * earlier version moved last_ticks only when a routine line was due, so with the probe off
+     * the counter compared unequal on every frame and the timer could never be found dead. */
     if (ticks != state.last_ticks) {
         state.last_tick_change_ms = now;
+        state.last_ticks          = ticks;
+        state.timer_ticked        = true;
+    } else {
+        state.timer_ticked = false;
     }
 
     /* The signal is the body, not the callback. The timer can keep firing perfectly while the
@@ -435,17 +462,17 @@ void music_probe_frame(void)
                 state.stall_reported = true;
                 report_stall(ticks, gate, reentry, timer_alive, stalled);
             }
-            run_watchdog(gate, stalled);
+            run_watchdog(gate, stalled, timer_alive);
         }
-    } else if (ticks != state.last_ticks && !state.heartbeat_seen) {
+    } else if (state.timer_ticked && !state.heartbeat_seen) {
         state.heartbeat_seen = true;
-    } else if (state.heartbeat_seen && ticks == state.last_ticks &&
+    } else if (state.heartbeat_seen && !state.timer_ticked &&
                now - state.last_tick_change_ms > STALL_DECLARED_AFTER_MS) {
         if (!state.stall_reported) {
             state.stall_reported = true;
             report_stall(ticks, gate, 0, false, now - state.last_tick_change_ms);
         }
-    } else if (ticks != state.last_ticks && state.stall_reported) {
+    } else if (state.timer_ticked && state.stall_reported) {
         report_recovered(ticks, now - state.last_tick_change_ms);
         state.stall_reported = false;
     }
@@ -456,9 +483,7 @@ void music_probe_frame(void)
         now - state.last_report_ms >= (DWORD)config.report_seconds * 1000u) {
         report_routine(ticks, gate, now - state.last_report_ms);
         state.last_report_ms = now;
-        state.last_ticks = ticks;
-    } else if (ticks != state.last_ticks && config.report_seconds == 0) {
-        state.last_ticks = ticks;
+        state.report_ticks   = ticks;
     }
 
     drive_stress(now);
@@ -493,6 +518,8 @@ bool music_probe_install(void)
     }
 
     state.last_ticks = *state.sites.heartbeat_ticks;
+    state.report_ticks = state.last_ticks;
+    state.trace_tls = TLS_OUT_OF_INDEXES;
     state.last_tick_change_ms = GetTickCount();
     state.last_report_ms = state.last_tick_change_ms;
     state.last_stress_ms = state.last_tick_change_ms;
@@ -505,8 +532,8 @@ bool music_probe_install(void)
     state.stress_cue = 1;
 
     /* The per-frame tick carries the stall detection, the watchdog that acts on it, and the
-     * stress driver. The lock fix and the trace need none of it, so a session that only wants
-     * those two does not pay for a tick. */
+     * stress driver. The lock fix needs none of it, and the trace uses it only to retake its
+     * slot, one compare a frame, which runs before the test on this flag. */
     state.active = config.probe || config.watchdog || config.stress_hz > 0;
 
     /* After state.active, so a line that arrives during installation already finds the two cells

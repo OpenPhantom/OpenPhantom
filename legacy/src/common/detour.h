@@ -59,7 +59,9 @@ typedef struct detour {
 } detour_t;
 
 /* `prologue_size` must be 5..16 and land on an instruction boundary.
- * Returns false and leaves the target untouched on any failure. */
+ * Returns false and leaves the target untouched on any failure. The trampoline lives on a page
+ * this DLL owns, executable and read only once written; see detour.c for why it is not a page of
+ * its own. */
 bool detour_install(detour_t *detour, uintptr_t target, const void *hook, size_t prologue_size);
 
 #endif /* COMMON_DETOUR_H */

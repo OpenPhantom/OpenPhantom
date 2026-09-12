@@ -1,6 +1,6 @@
 /* patch.h: every write into engine code or engine data goes through here.
  *
- * The three habits this module makes cheap, because they were expensive to learn:
+ * The four habits this module makes cheap, because they were expensive to learn:
  *
  *   1. VALIDATE BEFORE WRITING. patch_repoint_operand() reads the current value and refuses when
  *      it is not what the caller expected. That single check is also what makes a patch

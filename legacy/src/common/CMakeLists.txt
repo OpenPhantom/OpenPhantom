@@ -1,8 +1,10 @@
 # The shared layer. A STATIC library on purpose: each feature DLL links its own copy, so nothing
 # at run time depends on anything else being loaded.
 #
-# The include directory is src/ rather than src/common/, which is why every file in the tree
-# writes `#include "common/logging.h"` and no file counts dots to find a header.
+# The include directory is src/ rather than src/common/, so the loader, every feature and every
+# test write `#include "common/logging.h"` and no file counts dots to find a header. Inside this
+# directory most sources include their neighbours by bare name, which the compiler finds beside
+# the including file; three of them use the `common/` form as well.
 
 add_library(engine_fixes_common STATIC
     host_image.c

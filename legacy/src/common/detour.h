@@ -33,9 +33,12 @@
  *     at us, and nothing here does. Feature DLLs are loaded once by the mod loader and are never
  *     freed, so the pointers stay valid for the life of the process.
  *   * NO INSTRUCTION DECODING. `prologue_size` must be an exact instruction boundary and the
- *     copied bytes must contain no rip- or rel-relative operand. Every target used in this
- *     project is a plain MSVC `push ebp; mov ebp,esp; sub esp,imm` prologue whose exact byte
- *     sequence is part of the signature that found it, so the boundary is checked, not assumed.
+ *     copied bytes must contain no rip- or rel-relative operand. Most targets in this project
+ *     open with the plain MSVC `push ebp; mov ebp,esp; sub esp,imm`, but not all: the cinematic
+ *     lock and render_guard's caps compare push ecx and zero a local, eleven bytes, and the
+ *     deferred face submit has no frame pointer at all, so its first boundary past five bytes is
+ *     eight. In every case the exact byte sequence is part of the signature that found the
+ *     target, so the boundary is checked by the pattern, not assumed here.
  *   * it chains onto foreign hooks too. If a graphics wrapper detoured the function before us,
  *     the 0xE9 branch treats that wrapper's hook as `original`, which is the correct behaviour.
  */

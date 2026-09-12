@@ -94,8 +94,8 @@ patch_result_t patch_write_bytes(uintptr_t address, const void *data, size_t siz
 
     memcpy((void *)address, data, size);
 
-    /* READ BACK what was written. Every other write in this file is checked against what the
-     * find; this one was not checked against what it left. A write that does not land is not a
+    /* READ BACK what was written. Every write in this file ends here, so this is the one place
+     * that checks what a write LEFT, not only what it found. A write that does not land is not a
      * theory: a page mapped from a file the loader still owns, a second DLL writing the same
      * bytes in the same instant, or a protection change that reported success and did not take,
      * all end with the caller believing a patch is live when it is not, and a feature that reports

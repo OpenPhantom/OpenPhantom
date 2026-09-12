@@ -80,7 +80,6 @@ typedef struct signature {
 #define SIGNATURE_ENTRY_DETOUR_MASKED(name_text, array, mask_array, prologue) \
     { (name_text), (array), (mask_array), sizeof(array), (prologue), 0 }
 
-/* The standalone form of the same two-stage rule, for a site that is not part of a table. */
 /* A detour target too short to be found on its own once something has detoured it.
  *
  * The search above drops the prologue and anchors on what is left, so a function whose whole body
@@ -96,20 +95,14 @@ typedef struct signature {
 #define SIGNATURE_ENTRY_DETOUR_AFTER(name_text, array, prologue, previous, gap) \
     { (name_text), (array), NULL, sizeof(array), (prologue), 0, (previous), (gap) }
 
+/* The standalone form of the two-stage rule, for a site that is not part of a table. */
 uintptr_t signature_find_detour_target(const uint8_t *bytes, const uint8_t *mask, size_t size,
                                        size_t prologue_size);
 
-/* Confirm a pattern at an address already worked out some other way, rather than searching for it.
- *
- * For a function too short to be found once somebody has detoured it. The search above drops the
- * prologue and anchors on what is left, so a function whose whole body is barely longer than its
- * own prologue has a tail of two or three bytes, which matches everywhere and anchors nothing.
- * bapview_overrideOff is fifteen bytes with a thirteen byte prologue and is exactly that case.
- *
- * Such a function is reached from its neighbour instead: resolve the one in front of it, add its
- * length, and hand the result here. The checks are the same two the search applies, the tail
- * matching exactly and the head being either the authored prologue or a branch, so a build that
- * laid the two functions out differently is refused rather than guessed at.
+/* The standalone form of SIGNATURE_ENTRY_DETOUR_AFTER: confirm a pattern at an address already
+ * worked out some other way, rather than searching for it. Resolve the neighbour in front, add its
+ * length, and hand the result here. The checks are the same two the table applies, the tail
+ * matching exactly and the head being either the authored prologue or a branch.
  *
  * Returns `address` when it holds this pattern, and 0 when it does not. */
 uintptr_t signature_find_at(uintptr_t address, const uint8_t *bytes, const uint8_t *mask,

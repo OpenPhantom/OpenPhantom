@@ -11,9 +11,10 @@
 
 #define UNREADABLE_PROTECTION (PAGE_NOACCESS | PAGE_GUARD)
 
-/* The four protection constants that carry execute rights. PAGE_GUARD and PAGE_NOACCESS are
- * separate bits that can accompany them, so the executable set is matched after masking those off
- * rather than by a bit test. PAGE_EXECUTE_READ is 0x20, not a flag combination. */
+/* The four protection constants that carry execute rights. They are distinct values, not flags
+ * (PAGE_EXECUTE_READ is 0x20, not a combination), but they occupy 0x10 through 0x80 and no
+ * non-executable value touches those bits, so once PAGE_GUARD and PAGE_NOACCESS are masked off a
+ * bit test against their union is exact. That is the test the executable walk below makes. */
 #define EXECUTABLE_PROTECTION_MASK (PAGE_EXECUTE | PAGE_EXECUTE_READ \
                                     | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)
 

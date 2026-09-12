@@ -5,11 +5,14 @@
  * a player would find. So input, which is the only thing that can open it, is installed last and
  * only if everything it would show has already answered for itself.
  *
- * The panel's own three sites are found before anything is written, and the cheats go in
- * between the finding and the writing. A cheat failure is not fatal: a panel with one working
- * tab is worth having, and the log names which half is missing. A panel failure, on the other
- * hand, is found before the cheats have placed a single detour, because a detour cannot be taken
- * out again and a cheat nobody can switch on is a hook with no purpose.
+ * The panel's own three sites are found, and its two writes made, before the cheats place
+ * anything. A cheat failure is not fatal: a panel with one working tab is worth having, and the
+ * log names which half is missing. A panel whose cheats all failed is still installed and opens
+ * with every cheat row unavailable, because the settings rows ask nothing of the game and still
+ * work. A panel failure, on the other hand, is settled before the cheats have placed a single
+ * detour, because a detour cannot be taken out again and a cheat nobody can switch on is a hook
+ * with no purpose. The cheats used to go in between the finding and the writing, which left every
+ * detour they had placed live behind a panel whose own write had refused.
  */
 #include "dev_overlay.h"
 
@@ -187,21 +190,26 @@ void dev_overlay_install(void)
     if (!overlay_draw_resolve() || !resolve_scene_end() || !overlay_input_resolve()) {
         return;
     }
+    /* Then the panel's two writes, still before any cheat has placed a detour. A refusal here
+     * used to leave every cheat detour that had already gone in standing behind a panel that
+     * never opened. A redirected scene end with no message hook behind it is harmless on its
+     * own: the paint asks whether the panel is open, and nothing can open it. */
+    if (!redirect_scene_end() || !overlay_input_install()) {
+        return;
+    }
 
     /* Either half is worth having on its own, so both are attempted and neither decides the
-     * outcome. What decides it is whether anything at all can be offered. */
+     * outcome. The panel is installed either way: with nothing resolved its cheat rows all
+     * read unavailable and the settings rows still work. */
     cheats_ready = cheats_original_resolve();
     cheats_ready = cheats_original_actions_resolve() || cheats_ready;
     cheats_ready = cheats_openphantom_install() || cheats_ready;
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "
-                    "there is nothing for the overlay to show and it is not installed");
-        return;
+                    "every cheat row in the panel is unavailable. The panel still opens, and its "
+                    "settings rows ask nothing of the game");
     }
 
-    if (!redirect_scene_end()) {
-        return;
-    }
     /* The freeze is not a condition of the panel. If it does not arm, the panel still opens and
      * still switches cheats; the player simply keeps moving behind it, as happened before this
      * existed. The log says which of the two the session got. */
@@ -209,10 +217,6 @@ void dev_overlay_install(void)
     /* Neither is a condition of the panel, and they fail independently: one stops the player being
        given orders, the other stops the simulation stepping at all. */
     (void)sim_pause_install();
-
-    if (!overlay_input_install()) {
-        return;
-    }
 
     /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
      * window messages, which are overlay_input.c's own domain. Wired here, after both installs
@@ -222,7 +226,7 @@ void dev_overlay_install(void)
      * subsystem just to satisfy one symbol it never exercises. */
     cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);
 
-    log_info("The key below Escape opens the Cheatmenu. The panel is drawn into the "
+    log_info("F6 or the key below Escape opens the Cheatmenu. The panel is drawn into the "
              "game's own frame, so it needs "
              "no window and cannot take the focus. %s",
              input_freeze_is_available()

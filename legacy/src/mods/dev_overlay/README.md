@@ -1093,7 +1093,8 @@ engine's warp to client (320,240) lands outside the window, the pointer is clamp
 echo test never matches, and a constant delta accumulates for as long as the window stays small.
 ## The Frame rate group
 
-Five rows: the switch, the number under it, and three lines saying what the pair of them is for.
+Six rows: the switch, the fraction and the number under it, and three lines saying what the
+three of them are for.
 The note is three rows because the panel is about forty-five characters wide and a longer label is
 cut off rather than wrapped; the continuations are indented past the line they finish, the same
 shape the free camera's how-to-fly lines use.
@@ -1110,7 +1111,10 @@ frame counter reads perfectly steady.
 
 **Fraction of the screen's rate** writes `RefreshDivisor`. `auto` lets framerate_fix step the cap
 down to a half, a third or a quarter of the refresh when the machine cannot hold the rate above,
-and back when it can; a digit pins one. On a synchronised display, which the installer's wrapper
+and back when it can; a digit pins one. The chip shows the fraction and the rate it makes on this
+screen. A fraction the screen cannot go down to is not refused: `framerate_fix` steps it back up
+until the rate clears 30 a second and applies that, so on a 60 Hz screen `1/4` runs at a half, and
+the chip reads `1/4 as 1/2 = 30`. On a synchronised display, which the installer's wrapper
 configuration provides from 1.4.4, only the refresh and its fractions are even.
 
 Measured, because it cost the time to measure it: a limit of 100 on a 144 Hz screen leaves 44
@@ -1127,8 +1131,8 @@ nothing is using it, and a number somebody can change and watch do nothing is wo
 they cannot reach. Greyed rather than hidden, because a row that disappears takes the answer to
 "where did I set that" with it.
 
-Both rows write the settings file, the same as every other row that reaches out of this DLL.
-`framerate_fix` owns the cap and re-reads both keys about once a second, so a change here takes
+All three rows write the settings file, the same as every other row that reaches out of this DLL.
+`framerate_fix` owns the cap and re-reads all three keys about once a second, so a change here takes
 hold within that second, in game, without a restart. Nothing here calls into that DLL, because
 feature DLLs in this tree do not depend on each other at run time; the refresh rate on the switch
 is asked of Windows directly.

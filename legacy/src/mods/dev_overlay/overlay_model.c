@@ -1,8 +1,9 @@
 /* overlay_model.c: the panel's state and the list of rows that follows from it.
  *
- * Each tab holds two groups today and the structure carries more, on purpose: the diagnostics and
- * the developer tools that will hang off this panel are groups beside the cheats, not a second
- * panel, and a shape that already folds and searches them costs nothing now.
+ * The Original tab holds two groups and the OpenPhantom tab four, and the structure carries more,
+ * on purpose: the diagnostics and the developer tools that will hang off this panel are groups
+ * beside the cheats, not a second panel, and a shape that already folds and searches them costs
+ * nothing now.
  *
  * SIZE NOTE. This file is over the six hundred line mark. It was already over before the draw
  * distance row was added to it, and adding that row is what turned an inherited overage into one
@@ -10,10 +11,10 @@
  *
  * What was long is the row numbering and the reasoning attached to it. The OpenPhantom group's ids
  * are not a plain list: the jump-boost scale is inserted after its own toggle, the teleport key and
- * free camera swap places, a fold adds six more ids only while it is open, and each of those has a
- * static assert and a paragraph explaining what it is pinned to and what breaks if the enum behind
- * it is reordered. Deleting that reasoning to get under a limit would leave arithmetic nobody can
- * check, which the guidance here explicitly refuses.
+ * free camera swap places, a fold adds nine more ids only while it is open, and each of those has
+ * a static assert and a paragraph explaining what it is pinned to and what breaks if the enum
+ * behind it is reordered. Deleting that reasoning to get under a limit would leave arithmetic
+ * nobody can check, which the guidance here explicitly refuses.
  *
  * SO IT MOVED INSTEAD, to overlay_row_ids.h, when a bounds fix to the row array pushed this file
  * past the hard limit. That header is the numbering, its reasoning and its asserts, plus the one
@@ -306,7 +307,7 @@ static void append_row(const overlay_row_t *row)
     }
 }
 
-/* How many rows a group's source holds, and what one of them looks like. The three sources differ
+/* How many rows a group's source holds, and what one of them looks like. The six sources differ
  * in everything except this shape, so the rest of the file does not care which group is open. */
 static uint32_t source_count(overlay_group_t group)
 {
@@ -539,10 +540,11 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
             out->available = true;   /* a nested line, not a gate; never clicked either way */
             return;
         }
-        /* Everything left is one of the other cheats (ammunition, health, no fog, invincible NPCs,
-         * one-shot NPCs, giant player, tiny player, jump boost's own toggle), whose ids still line
-         * up 1:1 with cheats_own_id_t; only free camera's own slot was repurposed above, and jump
-         * boost's toggle keeps its own plain id even though the row right after it does not. */
+        /* Everything left is one of the other cheats (ammunition, health, invincible NPCs,
+         * one-shot NPCs, giant player, tiny player, no clip, jump boost's own toggle), whose ids
+         * still line up 1:1 with cheats_own_id_t; only free camera's own slot was repurposed
+         * above, and jump boost's toggle keeps its own plain id even though the row right after
+         * it does not. */
         out->kind = OVERLAY_ROW_CHEAT;
         copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
         out->on = cheats_openphantom_is_on((cheats_own_id_t)id);

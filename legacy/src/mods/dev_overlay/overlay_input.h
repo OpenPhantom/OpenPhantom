@@ -26,8 +26,9 @@ bool overlay_input_resolve(void);
  * site did not resolve or could not be detoured, and then the overlay never opens. */
 bool overlay_input_install(void);
 
-/* The virtual key that opens the panel. Zero, the default, accepts whichever key sits below Escape
- * on this keyboard, which is the caret on a German layout and the backtick on a British one. */
+/* The virtual key that opens the panel. Zero, the default, accepts F6 and whichever key sits
+ * below Escape on this keyboard, which is the caret on a German layout and the backtick on a
+ * British one. */
 void overlay_input_set_key(int32_t virtual_key);
 
 /* Whether the panel is open right now. The frame hook asks this to decide whether to paint. */

@@ -756,7 +756,7 @@ bool overlay_input_install(void)
     input_state.original = (key_hook_fn_t)input_state.detour.original;
     input_state.installed = true;
 
-    log_info("the key below Escape opens the overlay, hooked at %08X. While it is open "
+    log_info("F6 or the key below Escape opens the overlay, hooked at %08X. While it is open "
              "every message is answered here instead of being passed on, and Alt "
              "combinations are handed back so the game can still be closed or switched away "
              "from. The modal cell at %08X is read as proof this is the right function and "

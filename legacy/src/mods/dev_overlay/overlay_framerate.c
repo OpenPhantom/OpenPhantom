@@ -62,17 +62,25 @@ static int configured_divisor(void)
 }
 
 /* The fraction row's chip: "auto", or the pinned fraction with the rate it makes on this screen.
- * A fraction the screen cannot go down to (a quarter of 60 is 15) is named as refused, the same
- * way framerate_fix refuses it, so the chip never promises a rate that will not be applied. */
+ * A fraction the screen cannot go down to (a quarter of 60 is 15) is not refused: framerate_fix
+ * steps the divisor back up until the rate clears the floor and applies that, so on a 60 Hz
+ * screen 1/4 runs at 1/2, and the chip says so. It used to say "too low" for that case, which
+ * named a refusal that never happened while the game ran at a rate the chip did not show. */
 static void divisor_text(char *out, size_t size)
 {
     int divisor = configured_divisor();
     int refresh = display_refresh_hz();
+    int applied = divisor;
 
+    /* The same walk framerate_fix takes, so the chip and the cap agree on which fraction runs. */
+    while (applied > 1 && refresh > 0 && refresh / applied < DIVISOR_FLOOR_FPS) {
+        --applied;
+    }
     if (divisor == 0) {
         (void)_snprintf(out, size - 1u, "auto");
-    } else if (refresh > 0 && refresh / divisor < DIVISOR_FLOOR_FPS) {
-        (void)_snprintf(out, size - 1u, "1/%d too low", divisor);
+    } else if (refresh > 0 && applied != divisor) {
+        (void)_snprintf(out, size - 1u, "1/%d as 1/%d = %d", divisor, applied,
+                        (refresh + applied / 2) / applied);
     } else if (refresh > 0) {
         (void)_snprintf(out, size - 1u, "1/%d = %d", divisor, (refresh + divisor / 2) / divisor);
     } else {

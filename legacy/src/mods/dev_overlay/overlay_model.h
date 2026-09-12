@@ -24,11 +24,11 @@
 #define OVERLAY_LABEL_MAX    48u
 
 /* Every group on the open tab is built at once, headings included, and the OpenPhantom tab holds
- * three of them. With all three open, the "how to fly" fold open and a display offering a full size
- * list, that tab reaches 91 rows. This was 64, so 27 of them were built and then dropped by a
- * bounds test with no log and no way to scroll to what went missing. overlay_model.c asserts this
- * against the parts it is made of, so a group that grows past it stops the build rather than
- * quietly losing its last rows. */
+ * four of them. With all four open, the "how to fly" fold open and a display offering a full size
+ * list, that tab reaches 98 rows. This was 64, so 27 of the 91 the tab then had were built and
+ * dropped by a bounds test with no log and no way to scroll to what went missing.
+ * overlay_row_ids.h asserts this against the parts it is made of, so a group that grows past it
+ * stops the build rather than quietly losing its last rows. */
 #define OVERLAY_ROWS_MAX     128u
 
 typedef enum overlay_tab {

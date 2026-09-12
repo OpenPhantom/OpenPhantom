@@ -11,6 +11,7 @@
 #ifndef DEV_OVERLAY_OVERLAY_ROW_IDS_H
 #define DEV_OVERLAY_OVERLAY_ROW_IDS_H
 
+#include "overlay_framerate.h"
 #include "overlay_model.h"
 #include "overlay_utilities.h"
 #include "overlay_window.h"
@@ -75,12 +76,16 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
  * written as a 4 in source_count() because the ceiling below counts it too. */
 #define OPENPHANTOM_EXTRA_ROWS 4u
 
-/* The three groups on the OpenPhantom tab, every one of them open, the fold open and a full size
- * list. This is the number OVERLAY_ROWS_MAX has to cover, and the Original tab is far smaller. */
+/* The four groups on the OpenPhantom tab, every one of them open, the fold open and a full size
+ * list: four headings, the cheats with their four extra rows and the fold's lines, the utilities,
+ * the window group and the frame rate group. This is the number OVERLAY_ROWS_MAX has to cover,
+ * and the Original tab is far smaller. It counted three groups and left the frame rate group out
+ * for a while, seven rows short of what overlay_model_rebuild() builds; the array still held
+ * them, so nothing was lost, but the assert was guarding a smaller number than the real one. */
 enum {
-    OPENPHANTOM_TAB_ROWS_MAX = 3u + (uint32_t)CHEATS_OWN_COUNT + OPENPHANTOM_EXTRA_ROWS +
+    OPENPHANTOM_TAB_ROWS_MAX = 4u + (uint32_t)CHEATS_OWN_COUNT + OPENPHANTOM_EXTRA_ROWS +
                                FREECAM_INFO_LINE_COUNT + OVERLAY_UTILITIES_ROW_COUNT +
-                               OVERLAY_WINDOW_ROWS_MAX
+                               OVERLAY_WINDOW_ROWS_MAX + OVERLAY_FRAMERATE_ROW_COUNT
 };
 
 _Static_assert(OVERLAY_ROWS_MAX >= OPENPHANTOM_TAB_ROWS_MAX,

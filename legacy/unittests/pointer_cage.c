@@ -12,7 +12,10 @@
  *      leaves the globals negative on shutdown, so this is a real input, not a hypothetical one.
  *
  * Nothing here touches the game. The install order, the opcode checks and the rollback are not
- * testable without a live image and are NOT covered by this file.
+ * testable without a live image and are NOT covered by this file. Neither is the resize: that
+ * the clamp is rewritten absolutely from the new canvas, not adjusted from the old one, is
+ * a property of the write into the resolved site, and the arithmetic below has no state to
+ * accumulate, so calling it twice proves nothing about the write.
  */
 #include "unittest.h"
 
@@ -94,34 +97,12 @@ static void test_the_boundary(void)
                  "one pixel shorter is refused");
 }
 
-/* The refresh recomputes absolutely rather than adding a delta, so running it repeatedly must land
- * on the same answer. This is what stops a session's worth of mode changes from accumulating. */
-static void test_recomputation_is_absolute(void)
-{
-    int first_width = 0;
-    int first_height = 0;
-    int again_width = 0;
-    int again_height = 0;
-    int i;
-
-    ut_check(pointer_cage_extent(1920, 1080, &first_width, &first_height),
-             "the first pass succeeds");
-    for (i = 0; i < 8; ++i) {
-        check_extent(1920, 1080, 1, first_width, first_height,
-                     "recomputing the same mode gives the same clamp, never a drifting one");
-    }
-    ut_check(pointer_cage_extent(1920, 1080, &again_width, &again_height) &&
-          again_width == first_width && again_height == first_height,
-          "and it is still the same after a detour through other modes");
-}
-
 int main(void)
 {
     test_identity_at_the_shipped_mode();
     test_common_modes();
     test_refusals();
     test_the_boundary();
-    test_recomputation_is_absolute();
 
     return ut_summary("pointer_cage");
 }

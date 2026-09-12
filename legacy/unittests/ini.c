@@ -13,6 +13,8 @@
 
 #include "common/ini.h"
 
+#include <windows.h>
+
 #include <stdio.h>
 #include <string.h>
 
@@ -75,10 +77,17 @@ int main(void)
     ut_section("the generation counter");
     before = ini_generation();
     ut_check(before != 0u, "a file that exists has a generation");
+    ut_check(ini_generation() == before,
+             "and it stands still while nothing writes, so a poll that sees it move can believe "
+             "the move");
+    /* The number is the file's last write time, and that moves with the system clock, which ticks
+     * in whole milliseconds at best. A write landing in the same tick as the reading above would
+     * carry the same stamp, so the tick is waited out first: the claim is that a write moves the
+     * number, not that two writes inside one tick can be told apart. */
+    Sleep(20);
     (void)ini_write_int(A, "count", 4321);
     after = ini_generation();
-    ut_check(after != before || after != 0u,
-             "and it is readable again after a write, the comparison a poll makes");
+    ut_check(after != before, "and a write moves it, which is the comparison a poll makes");
 
     ut_check(ini_path() != NULL && ini_path()[0] != '\0', "the path is never empty");
 

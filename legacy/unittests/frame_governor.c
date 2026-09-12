@@ -14,6 +14,7 @@
  */
 #include "unittest.h"
 
+#include <math.h>
 #include <stddef.h>
 
 #include "frame_governor.h"
@@ -81,6 +82,35 @@ int main(void)
                  FRAME_GOVERNOR_HOLD,
              "an unconfigured raise threshold disables the whole decision, not just the raise: a "
              "governor holding one threshold and not the other is worse than one holding neither");
+
+    ut_section("a number that is not one");
+    /* The median comes off a ring of measured frames and the thresholds are derived from a frame
+       rate read out of the ini, where "nan" and "inf" parse. Every one of the four comparisons
+       above is written so that a NaN falls on the refusing side. */
+    ut_check(frame_governor_decide((float)NAN, LOWER_ABOVE_MS, RAISE_BELOW_MS, NEEDED, NEEDED) ==
+                 FRAME_GOVERNOR_HOLD,
+             "a NaN median is a measurement it cannot believe, so it holds");
+    ut_check(frame_governor_decide(15.0f, (float)NAN, RAISE_BELOW_MS, 0u, NEEDED) ==
+                 FRAME_GOVERNOR_HOLD,
+             "a NaN lower threshold disables the decision instead of lowering on every frame");
+    ut_check(frame_governor_decide(10.0f, LOWER_ABOVE_MS, (float)NAN, NEEDED, NEEDED) ==
+                 FRAME_GOVERNOR_HOLD,
+             "and so does a NaN raise threshold, which leaves no dead zone to stand in");
+    ut_check(frame_governor_decide((float)INFINITY, LOWER_ABOVE_MS, RAISE_BELOW_MS, NEEDED,
+                                   NEEDED) == FRAME_GOVERNOR_LOWER,
+             "an infinite median is past any threshold, so a stall reads as slow, not as "
+             "unmeasured");
+    ut_check(frame_governor_decide(10.0f, (float)INFINITY, (float)INFINITY, NEEDED, NEEDED) ==
+                 FRAME_GOVERNOR_HOLD,
+             "two infinite thresholds, which a vanishing BackoffFps divides into, are no dead "
+             "zone and are refused");
+    ut_check(frame_governor_step_size((float)NAN, 13.333f, 0.15f, 0.10f) == 0.0f,
+             "a NaN median asks for no step");
+    ut_check(frame_governor_step_size(15.0f, (float)NAN, 0.15f, 0.10f) == 0.0f,
+             "and neither does a NaN threshold, so a bad setting cannot walk the scale down");
+    ut_check(frame_governor_step_size((float)INFINITY, 13.333f, 0.15f, 0.10f) <=
+                 0.15f * 4.0f + 0.0001f,
+             "an infinite median takes the clamped four steps, the same as any absurd one");
 
     ut_section("thresholds the wrong way round are refused, not obeyed");
     /* Inverted thresholds have no dead zone at all, since every frame time is both too slow and

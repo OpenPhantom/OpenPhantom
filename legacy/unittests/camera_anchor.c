@@ -8,7 +8,8 @@
  *
  * So every byte is asserted individually against the encoding that was verified by disassembly,
  * rather than against a golden blob, a blob would pass just as happily if both the encoder and
- * the expectation were wrong in the same way.
+ * the expectation were wrong in the same way. The run is then executed on a frame this test lays
+ * out, so the slots are also proved by what the code reads and writes.
  *
  *   per axis, 18 bytes:   D9 45 <a>  fld  [ebp-<a>]      anchor[i]
  *                         D8 65 <t>  fsub [ebp-<t>]      - target[i]
@@ -22,6 +23,8 @@
 #include "unittest.h"
 
 #include "camera_compensation.h"
+
+#include <windows.h>
 
 #include <stdint.h>
 #include <string.h>
@@ -132,27 +135,118 @@ static void test_refuses_wrong_size(void)
     }
 }
 
-/* The identity that makes this patch safe to ship: at 30 fps the blend must reproduce the mean the
- * engine shipped, so nothing changes for anyone running at the authored frame rate. */
-static void test_blend_matches_the_mean_at_30fps(void)
+/* The encoder's output, RUN. The bytes are wrapped in a prologue that points ebp at a frame this
+ * test lays out and an epilogue that returns, and the whole thing is called on a page marked
+ * executable. That is the only way to prove the slots are the right ones: the byte checks above
+ * say each ModRM is what the disassembly said, this says the code they make reads the anchor
+ * and the target from where the engine keeps them and writes the anchor back.
+ *
+ * The frame is 0x40 bytes with ebp at its top, so [ebp-0x38] is frame+0x08 and [ebp-0x1C] is
+ * frame+0x24, the retail slots. The wrapper is
+ *
+ *     55             push ebp
+ *     8B 6C 24 08    mov  ebp, [esp+8]     the frame pointer this test passes
+ *     <63 bytes>
+ *     5D             pop  ebp
+ *     C3             ret
+ */
+#define FRAME_BYTES     0x40u
+#define ANCHOR_OFFSET   (FRAME_BYTES - 0x38u)
+#define TARGET_OFFSET   (FRAME_BYTES - 0x1Cu)
+
+typedef void (__cdecl *anchor_blend_fn_t)(void *frame_top);
+
+static anchor_blend_fn_t assemble(uint8_t *page, const float *k)
 {
-    const float anchor = 12.5f;
-    const float target = 40.25f;
-    const float k = 0.5f;
+    static const uint8_t PROLOGUE[] = { 0x55, 0x8B, 0x6C, 0x24, 0x08 };
+    static const uint8_t EPILOGUE[] = { 0x5D, 0xC3 };
 
-    float mean  = (anchor + target) * 0.5f;
-    float blend = (anchor - target) * k + target;
+    memcpy(page, PROLOGUE, sizeof PROLOGUE);
+    if (!camera_compensation_build_anchor_blend(page + sizeof PROLOGUE, CAMERA_ANCHOR_RUN_BYTES,
+                                                k)) {
+        return NULL;
+    }
+    memcpy(page + sizeof PROLOGUE + CAMERA_ANCHOR_RUN_BYTES, EPILOGUE, sizeof EPILOGUE);
+    return (anchor_blend_fn_t)(void *)page;
+}
 
-    ut_check(mean == blend, "at k = 0.5 the blend is the engine's arithmetic mean");
+static void run_blend(anchor_blend_fn_t blend, float *anchor, const float *target)
+{
+    uint8_t frame[FRAME_BYTES];
+
+    memset(frame, 0xCD, sizeof frame);
+    memcpy(frame + ANCHOR_OFFSET, anchor, 3u * sizeof(float));
+    memcpy(frame + TARGET_OFFSET, target, 3u * sizeof(float));
+    blend(frame + FRAME_BYTES);
+    memcpy(anchor, frame + ANCHOR_OFFSET, 3u * sizeof(float));
+}
+
+/* The identity that makes this patch safe to ship: at 30 fps the emitted code must reproduce
+ * the mean the engine shipped, so nothing changes for anyone running at the authored frame rate.
+ * The expectations are the engine's own arithmetic in float32, and the x87 sequence rounds to
+ * float32 on every store. */
+static void test_the_emitted_code_blends_the_anchor(void)
+{
+    uint8_t          *page = (uint8_t *)VirtualAlloc(NULL, 0x1000, MEM_COMMIT | MEM_RESERVE,
+                                                     PAGE_EXECUTE_READWRITE);
+    volatile float    k;
+    anchor_blend_fn_t blend;
+    const float       target[3] = { 40.25f, -8.0f, 1000.125f };
+    float             anchor[3];
+
+    if (page == NULL) {
+        ut_check(0, "an executable page was allocated (prerequisite)");
+        return;
+    }
+    k = 0.5f;
+    blend = assemble(page, (const float *)&k);
+    ut_check(blend != NULL, "the encoder fills the run inside the wrapper");
+    if (blend == NULL) {
+        return;
+    }
+
+    anchor[0] = 12.5f;
+    anchor[1] = 3.0f;
+    anchor[2] = -20.0f;
+    run_blend(blend, anchor, target);
+    ut_check(anchor[0] == (12.5f + 40.25f) * 0.5f && anchor[1] == (3.0f + -8.0f) * 0.5f &&
+             anchor[2] == (-20.0f + 1000.125f) * 0.5f,
+             "run at k = 0.5, the emitted code leaves each anchor slot at the engine's own "
+             "arithmetic mean of anchor and target, so 30 fps is unchanged");
 
     /* And the property the mean does NOT have: the weights sum to 1 for every k, so the result is
      * always between the two inputs. Substituting k into the mean gives weights summing to 2k,
-     * and that made an earlier build lose the world at a high frame rate. */
-    blend = (anchor - target) * 0.999f + target;
-    ut_check(blend >= anchor && blend <= target,
-             "k near 1 keeps the blend between the anchor and the target");
-    blend = (anchor - target) * 0.001f + target;
-    ut_check(blend >= anchor && blend <= target, "k near 0 snaps the anchor onto the target");
+     * and that made an earlier build lose the world at a high frame rate. The weight is read
+     * through the cell each frame, so changing it here is what the live module does. */
+    k = 0.999f;
+    anchor[0] = 12.5f;
+    anchor[1] = 3.0f;
+    anchor[2] = -20.0f;
+    run_blend(blend, anchor, target);
+    ut_check(anchor[0] >= 12.5f && anchor[0] <= 40.25f && anchor[1] >= -8.0f &&
+             anchor[1] <= 3.0f && anchor[2] >= -20.0f && anchor[2] <= 1000.125f,
+             "k near 1 keeps every axis between its anchor and its target");
+    ut_check(anchor[0] < 12.6f && anchor[1] > 2.9f && anchor[2] < -18.9f,
+             "and within a thousandth of the way to the target, since k is the share of the "
+             "anchor that is kept");
+
+    k = 0.001f;
+    anchor[0] = 12.5f;
+    anchor[1] = 3.0f;
+    anchor[2] = -20.0f;
+    run_blend(blend, anchor, target);
+    ut_check(anchor[0] > 40.0f && anchor[1] < -7.9f && anchor[2] > 999.0f,
+             "k near 0 snaps the anchor onto the target");
+
+    k = 0.0f;
+    anchor[0] = 12.5f;
+    anchor[1] = 3.0f;
+    anchor[2] = -20.0f;
+    run_blend(blend, anchor, target);
+    ut_check(anchor[0] == 40.25f && anchor[1] == -8.0f && anchor[2] == 1000.125f,
+             "k = 0, the placed camera's weight, puts the anchor exactly on the target");
+
+    VirtualFree(page, 0, MEM_RELEASE);
 }
 
 int main(void)
@@ -161,7 +255,7 @@ int main(void)
     test_fill_and_length();
     test_axes_are_distinct();
     test_refuses_wrong_size();
-    test_blend_matches_the_mean_at_30fps();
+    test_the_emitted_code_blends_the_anchor();
 
     return ut_summary("camera_anchor");
 }

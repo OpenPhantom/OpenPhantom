@@ -26,6 +26,7 @@ int32_t view_distance_fix_cut_for(int32_t engine_range)
 #include <string.h>
 
 #include "fog_regime.h"
+#include "fog_band.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -480,6 +481,79 @@ static void test_the_band_scale(void)
              "clamping one end past the other paints the world in the fog colour");
 }
 
+/* Floats that are not numbers. The band comes out of a level file's header and the terms come
+ * out of the ini, where "nan" and "inf" parse, and every refusal below is a comparison written so
+ * that NaN lands on the refusing side. */
+static void test_numbers_that_are_not(void)
+{
+    fog_regime_config_t config = default_config();
+    fog_regime_band_t   authored;
+    fog_regime_band_t   out;
+    float               cut = 22.0f;
+
+    ut_section("a level whose band is not a number");
+    authored.start = 10.0f;
+    authored.end   = (float)NAN;
+    out.start = 1.0f;
+    out.end   = 2.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(isnan(out.end) && out.start == 10.0f,
+             "a band whose end is NaN is handed back untouched, as a band without fog is: the "
+             "level keeps whatever it had and gains no band made from NaN");
+    authored.start = (float)NAN;
+    authored.end   = 32.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(isnan(out.start) && out.end == 32.0f,
+             "and so is a band whose start is NaN, since no span can be measured against it");
+    authored.start = 10.0f;
+    authored.end   = (float)INFINITY;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(isfinite(out.end) && out.end == fog_regime_edge_limit(AUTHORED_FOV, cut) &&
+             out.start == 0.0f,
+             "an infinite end under the pop-in cap is brought to the cap, and the start with it, "
+             "so the band the engine is handed is finite");
+
+    ut_section("terms from the ini that are not numbers");
+    authored.start = 10.0f;
+    authored.end   = 32.0f;
+    config.inside_cut = FOG_END_UNBOUNDED;
+    config.fog_scale  = (float)NAN;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(out.start == 10.0f && out.end == 32.0f,
+             "a NaN FogScale is not above 1, so it is not applied, and the band is as authored");
+    config.fog_scale        = 1.0f;
+    config.min_end_fraction = (float)NAN;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(out.start == 10.0f && out.end == 32.0f,
+             "a NaN floor fraction is not above 0, so there is no floor");
+    config.min_end_fraction = 0.0f;
+    config.band_scale       = (float)NAN;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(out.start == 10.0f && out.end == 32.0f,
+             "a NaN band scale is ignored, as a zero one is");
+
+    ut_section("a field of view or a cut that is not a number");
+    ut_check(fog_regime_edge_limit((float)NAN, cut) == fog_regime_edge_limit(AUTHORED_FOV, cut),
+             "a NaN field of view is read as the authored picture, bit for bit");
+    ut_check(fog_regime_edge_limit((float)INFINITY, cut) ==
+                 fog_regime_edge_limit(2.0f * FOG_MAX_HALF_ANGLE, cut),
+             "an infinite one is clamped to the widest half angle the limit admits");
+    ut_check(fog_regime_edge_limit(AUTHORED_FOV, (float)NAN) == 0.0f,
+             "a NaN cut has no reach, and no reach is no limit");
+    ut_check(fog_regime_follow_factor((float)NAN, cut, cut) == 1.0f,
+             "a NaN field of view leaves the authored band alone");
+    ut_check(fog_regime_follow_factor(WIDE_FOV, cut, (float)NAN) == 1.0f,
+             "and so does a NaN live cut, since there is nowhere to follow it to");
+
+    ut_section("an easing time that is not a number");
+    ut_check(fog_regime_ease(10.0f, 20.0f, 1.0f / 60.0f, (float)NAN) == 20.0f,
+             "a NaN settle time steps immediately, as zero does");
+    ut_check(fog_regime_ease(10.0f, 20.0f, (float)NAN, 1.5f) == 10.0f,
+             "a NaN frame delta moves nothing, as a negative one does");
+    ut_check(fog_regime_ease(10.0f, 20.0f, 1.0f / 60.0f, (float)INFINITY) == 10.0f,
+             "an infinite settle time never arrives, which is the limit of a long one");
+}
+
 int main(void)
 {
     test_identity_at_the_authored_field_of_view();
@@ -497,6 +571,7 @@ int main(void)
     test_the_fog_follows_a_shortened_cut_edge();
     test_the_floor();
     test_the_band_scale();
+    test_numbers_that_are_not();
 
     return ut_summary("fog_regime");
 }

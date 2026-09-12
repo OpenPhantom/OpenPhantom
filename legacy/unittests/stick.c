@@ -11,8 +11,8 @@
 
 #include "common/stick.h"
 
+#include <limits.h>
 #include <math.h>
-#include <stdlib.h>
 
 #define DEADZONE 0.24f
 
@@ -84,6 +84,36 @@ static void test_speed(void)
     ut_near((double)length(x, y), 1.0, 0.0005, "and is the same speed");
     ut_check(x < 0.0f && y < 0.0f, "with both signs carried through");
 
+    /* The one raw value with no positive twin. A short runs to -32768 and XInput reports it, so
+     * a stick held hard left arrives one count past what 32767 divides to and comes out 1.00003
+     * long before the cap. It must not come out longer than a push to the right. */
+    ut_check(stick_apply_radial_deadzone(SHRT_MIN, 0, DEADZONE, &x, &y),
+             "a full push left, the raw -32768, is live");
+    ut_near((double)x, -1.0, 0.00001,
+            "and is exactly full speed leftwards, not a count past it");
+    ut_near((double)y, 0.0, 0.0005, "with nothing on the other axis");
+    ut_check(stick_apply_radial_deadzone(SHRT_MIN, SHRT_MIN, DEADZONE, &x, &y),
+             "the corner both axes reach at -32768 is live");
+    ut_near((double)length(x, y), 1.0, 0.0005,
+            "and is full speed and no faster, the same cap the positive corner gets");
+    ut_near((double)x, (double)y, 0.0005, "and still on the diagonal");
+
+    /* Exactly on the boundary. The deadzone is built from the same division the module does, so
+     * the magnitude it computes for this raw value is the deadzone bit for bit, and which side
+     * of the comparison equality lands on is the claim: the live side, at no speed at all. */
+    {
+        const short raw   = (short)8192;
+        const float exact = stick_magnitude((float)raw / 32767.0f, 0.0f);
+
+        ut_check(stick_apply_radial_deadzone(raw, 0, exact, &x, &y),
+                 "a magnitude exactly at the deadzone is on the live side of it");
+        ut_near((double)length(x, y), 0.0, 0.0f,
+                "and comes out at exactly no speed, so the boundary is where motion begins, "
+                "not a step onto it");
+        ut_check(!stick_apply_radial_deadzone((short)(raw - 1), 0, exact, &x, &y),
+                 "one raw count inside it is refused");
+    }
+
     /* Just outside the boundary. Without the rescale the first live sample would be the deadzone's
      * own value, so the character would leave a standstill at a quarter speed. */
     ut_check(stick_apply_radial_deadzone((short)((int)(DEADZONE * FULL) + 100), 0,
@@ -117,7 +147,7 @@ static void test_nonsense_deadzone(void)
 {
     float x = 0.0f;
     float y = 0.0f;
-    float not_a_number = (float)atof("nan");
+    float not_a_number = (float)NAN;
 
     ut_section("a deadzone the ini should never have held");
 

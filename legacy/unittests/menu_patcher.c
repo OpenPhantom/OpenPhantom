@@ -291,8 +291,11 @@ static void test_append_controls_group(void)
           "the caption's text pointer is ours, and the engine reads it every frame");
 
     /* THE LAYOUT, checked against what the engine really draws rather than against the rectangles
-     * it discards. These are the invariants input_menu.c asserts at compile time; repeating them
-     * here catches a change made to that file's numbers without its assertions. */
+     * it discards. The region, the footprints and the positions are this file's own copies of
+     * the numbers input_menu.c ships, which keeps them private and asserts the same relations at
+     * compile time. Nothing ties the two sets together: a number changed there is not caught
+     * here until it is copied across, and what these checks add is that the patcher lays the
+     * widgets out where it was told to, against the shipped table and not against prose. */
     ut_check(target[10].rect.x >= CONTROLS_FREE_X &&
           target[10].rect.x + GAUGE_W - 1 <= CONTROLS_FREE_RIGHT,
           "the slider's 250-wide gauge stays inside the empty region");

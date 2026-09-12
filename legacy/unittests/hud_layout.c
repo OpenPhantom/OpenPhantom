@@ -171,6 +171,26 @@ static void test_classification_refusals(void)
     ut_check(hud_classify(&r, 0.0f, 0.0f) == HUD_BLOCK_NONE, "a zero screen is refused");
     ut_check(hud_classify(&r, -1.0f, -1.0f) == HUD_BLOCK_NONE,
           "a negative screen size is refused; the engine leaves one behind on shutdown");
+
+    /* Every edge test is written as a distance inside a tolerance, and NaN is inside nothing. */
+    ut_check(hud_classify(&r, (float)NAN, (float)NAN) == HUD_BLOCK_NONE,
+          "a NaN screen size is refused, the same as a zero one");
+    ut_check(hud_classify(&r, (float)INFINITY, (float)INFINITY) == HUD_BLOCK_NONE,
+          "an infinite screen size matches no formula, so nothing is transformed against it");
+    r = health_bar(1920.0f, 1080.0f);
+    r.bottom = (float)NAN;
+    ut_check(hud_classify(&r, 1920.0f, 1080.0f) == HUD_BLOCK_NONE,
+          "a rectangle with a NaN bottom edge is not a HUD block, so it is forwarded untouched "
+          "and not transformed into more NaN");
+    r = health_bar(1920.0f, 1080.0f);
+    r.left = (float)NAN;
+    ut_check(hud_classify(&r, 1920.0f, 1080.0f) == HUD_BLOCK_NONE,
+          "and the same for a NaN left edge, the one test written as a bound and not as a "
+          "distance");
+    r = weapon_icon(1920.0f, 1080.0f);
+    r.right = (float)INFINITY;
+    ut_check(hud_classify(&r, 1920.0f, 1080.0f) == HUD_BLOCK_NONE,
+          "an infinite width is not the icon's width");
 }
 
 static void test_number_split(void)
@@ -485,6 +505,28 @@ static void test_hud_glyph_rule(void)
     hud_glyph_scale(&sx, &sy, 0.0f, 0.0f, 1.0f, true);
     ut_near(sx, 0.8f, 0.0f, "an unusable screen size leaves the HUD glyph pair alone");
     ut_near(sy, 0.8f, 0.0f, "an unusable screen size leaves the HUD glyph vertical alone");
+
+    sx = 0.8f;
+    sy = 0.8f;
+    hud_glyph_scale(&sx, &sy, (float)NAN, (float)NAN, 1.0f, true);
+    ut_near(sx, 0.8f, 0.0f, "a NaN screen size is unusable too, and the horizontal stands");
+    ut_near(sy, 0.8f, 0.0f, "as does the vertical");
+}
+
+/* The number split and the multipliers, handed a screen that is not a number. */
+static void test_screen_specials(void)
+{
+    hud_multipliers_t m;
+
+    ut_check(hud_block_for_number(100.0f, (float)NAN) == HUD_BLOCK_NONE,
+          "a HUD number on a NaN screen belongs to no block, so it is drawn where it was asked");
+    ut_check(hud_block_for_number(100.0f, (float)INFINITY) == HUD_BLOCK_HEALTH,
+          "on an infinite screen every x is left of the bar's end, which is the health side");
+
+    m = hud_multipliers((float)NAN, (float)NAN, 1.5f, true);
+    ut_near(m.horizontal, 1.5f, 0.0f,
+                "a NaN screen skips the width correction and applies the scale only");
+    ut_near(m.vertical, 1.5f, 0.0f, "and the vertical is the scale, as it always is");
 }
 
 static void test_square_text_rule(void)
@@ -518,6 +560,7 @@ int main(void)
     test_point_refusals();
     test_hud_glyph_rule();
     test_square_text_rule();
+    test_screen_specials();
 
     return ut_summary("hud_layout");
 }

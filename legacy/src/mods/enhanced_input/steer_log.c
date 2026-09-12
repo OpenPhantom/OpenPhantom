@@ -95,7 +95,7 @@ void steer_log_substep(const uint8_t *record, steer_branch_t branch, float subst
     steer_lean_last_report(&lean);
 
     if (record == NULL) {
-        log_info("steer #%d %s sub=%.5f yaw=%+.3f travel=%+.1f, NO PLAYER RECORD",
+        log_info("steer #%d %s sub=%.5f yaw=%+.3f travel=%+.1f, no player record",
                  log_state.substep, branch_name(branch), (double)substep_seconds,
                  (double)yaw_degrees, (double)travel_degrees);
         return;

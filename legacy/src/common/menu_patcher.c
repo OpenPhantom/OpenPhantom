@@ -236,7 +236,7 @@ bool menu_patcher_append_slider(menu_patch_context_t *context,
 
     slot->type       = SW_TYPE_SLIDER;
     /* NOT decoration and NOT merely "select": the hit test and the focus walk both refuse any
-     * widget whose action IS SW_ACTION_STATIC (-29), and both additionally require visible == 1
+     * widget whose action IS SW_ACTION_STATIC (-29), and both also require visible == 1
      * compared against that literal. Any non-static action would do; SELECT is the authored one. */
     slot->action     = SW_ACTION_SELECT;
     slot->visible    = 1;                  /* 1, not "non-zero": see above */
@@ -246,7 +246,7 @@ bool menu_patcher_append_slider(menu_patch_context_t *context,
     slot->parameter  = gauge_bitmap;
     slot->rect.x     = x;
     slot->rect.y     = y;
-    /* DECLARED INTENT ONLY. Every screen open broadcasts a RESET, and the slider answers it by
+    /* Declared intent only. Every screen open broadcasts a RESET, and the slider answers it by
      * overwriting both of these from the gauge bitmap, 250x50 in the retail data. What the
      * layout really controls is x and y. */
     slot->rect.width  = width;

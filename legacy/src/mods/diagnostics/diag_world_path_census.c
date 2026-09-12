@@ -1,6 +1,6 @@
 /* diag_world_path_census.c: the censuses of the draw path and of the traces underneath it.
  *
- * THE SEAM. The same cut as the mover census next door, taken a second time. These four censuses
+ * The seam. The same cut as the mover census next door, taken a second time. These four censuses
  * count and report and patch nothing; the hooks that feed them stay in diag_world.c with the
  * detours and the byte evidence they belong to, and what crosses the boundary is a record call
  * per hook and an install call per trigger level. Together with the mover census that is what

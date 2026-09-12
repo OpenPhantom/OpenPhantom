@@ -69,7 +69,7 @@ void translucent_fog_install(bool keep_fog_on_translucent)
     log_info("TranslucentFog=1: the fog-enable clear at %08X is a no-op, so an alpha-blended face "
              "keeps the fog every other face gets. This is a DIAGNOSTIC. The engine drops fog on "
              "translucent faces, and the level-of-detail cross-fade makes geometry translucent "
-             "WHILE IT CROSSES, so a surface loses its fog for the length of the transition and "
+             "while it crosses, so a surface loses its fog for the length of the transition and "
              "reads at full brightness against a background already saturated to the fog colour. "
              "That is a band at a fixed distance from the camera, moving with it, invisible when "
              "the band saturates beyond the draw cut, and steady when the camera is still.",

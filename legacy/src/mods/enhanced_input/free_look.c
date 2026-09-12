@@ -7,7 +7,7 @@
  * The arithmetic is free_look_math.c and is tested without the game.
  *
  * ==============================================================================================
- * THE BODY HALF
+ * The body half
  *
  * Movement is made camera-relative rather than the body being turned toward its travel: with the
  * camera decoupled, "forward" has to mean "away from the camera" or holding one key never turns
@@ -353,7 +353,7 @@ bool free_look_set_enabled(bool enabled)
  *
  * The bolt's direction is built inside the fire handler as `heading + [pPlayer+0x178]`, from a
  * heading read LIVE at that instant, several substeps after Plr_AutoAim ran. So the heading
- * swapped across Plr_AutoAim aims its search cone and nothing else; what decides where the shot
+ * swapped across Plr_AutoAim aims its search cone alone; what decides where the shot
  * goes is the body's facing right now, plus this cell.
  *
  * `lock` is what Plr_AutoAim put in the cell ONCE, captured when it ran, a target bearing relative
@@ -451,7 +451,7 @@ static void __cdecl hook_fire_shot(void)
  * always, so the aim snap now arms on the attack itself rather than on an assist the weapon may not
  * have asked for.
  *
- * The original is called unconditionally and nothing else is touched. Arming is one float. */
+ * The original is called unconditionally and no other state is touched. Arming is one float. */
 static void __cdecl hook_start_fire(void)
 {
     start_fire_fn_t original = (start_fire_fn_t)free_state.start_fire_detour.original;

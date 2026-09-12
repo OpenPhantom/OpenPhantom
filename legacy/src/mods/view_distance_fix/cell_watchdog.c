@@ -282,7 +282,7 @@ static void watch_vertex_cache(float *effective_view_scale)
 
     if (used >= limit && !watchdog_state.vertex_warned) {
         watchdog_state.vertex_warned = true;
-        log_error("VERTEX CACHE FULL (%u of %u). From here the geometry is torn, and it stays "
+        log_error("vertex cache full (%u of %u). From here the geometry is torn, and it stays "
                   "torn until the level reloads, gate 2 jumps behind the `touched` reset loop. "
                   "The view scale goes to 1.00 immediately.",
                   (unsigned)used, (unsigned)limit);
@@ -330,7 +330,7 @@ void cell_watchdog_on_frame(float *effective_view_scale)
     if (used > watchdog_state.cell_limit) {
         if (!watchdog_state.overflow_reported) {
             watchdog_state.overflow_reported = true;
-            log_error("CELL COUNTER %u IS ABOVE THE LIMIT %u. The table has already overflowed; "
+            log_error("cell counter %u is above the limit %u. The table has already overflowed; "
                       "gatherCellMovers and emitFace hang on unchecked. From here the bucket list "
                       "heads are destroyed.", (unsigned)used, (unsigned)watchdog_state.cell_limit);
         }

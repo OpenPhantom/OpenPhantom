@@ -5,7 +5,7 @@
 
 bool creeping_mover_is_creep(float fell)
 {
-    /* FINITE FIRST, and that order is the point: a comparison against a bound is false for a value
+    /* Finite first, and that order is the point: a comparison against a bound is false for a value
      * that is not a number, so testing the bound alone would answer "not a creep" for a NaN and
      * hand it to the caller as an ordinary carry. */
     if (!isfinite(fell)) {

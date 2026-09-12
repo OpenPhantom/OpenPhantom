@@ -85,7 +85,7 @@ static int first_row_is_group(void)
    would otherwise repeat the same arithmetic and one of them would eventually get it wrong. */
 #define UTIL_ROW(n) ((uint32_t)CHEATS_OWN_COUNT + 6u + (uint32_t)(n))
 
-/* Every label and every chip HAS TO FIT, and this is the check that keeps it true.
+/* Every label and every chip has to fit, and this is the check that keeps it true.
  *
  * The panel is one bitmap font at one size, so a label too long for the room is drawn clipped with
  * an ellipsis in place of its end. Four rows were shipped that way and it was found in a

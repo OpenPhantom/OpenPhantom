@@ -14,10 +14,10 @@
  *
  * It has two defects. This file repairs the first and goes around the second.
  *
- * DEFECT 1. THE WRONG NODE.
+ * Defect 1. The wrong node.
  *   0x433879 asks bapobj_hitNodeSpheresVsCylinder(victim->pBody, attacker). The probe uses
  *   attacker->pos (+0x18) = the player's FEET and attacker->cylinderRadius (+0xB8) = the whole
- *   body cylinder. It therefore picks the node nearest the ATTACKER'S BODY AXIS, not the one the
+ *   body cylinder. It therefore picks the node nearest the attacker's body axis, not the one the
  *   blade touched. On a head strike the leg flies off.
  *   The right value is already in g_msgContactNode [0x869258] at that moment, written at
  *   0x41216F from the blade sphere (node `sabreblad01`, r = 0.15..0.25 u), nine bytes before the
@@ -47,16 +47,16 @@
  *     computes `imul n,0xB4` and reads node+0x48 unchecked; 0x4144BE writes unchecked into
  *     pNodeHidden[n]. The garbage index also lands in partIo, and `if (partIo & 8) health = 0`,
  *     an out-of-range index has roughly a 50 % chance of instant death.
- *  4. NOT ALREADY OFF  pNodeHidden[n] == 0. detachNode does not check this and would sever the
+ *  4. Not already off  pNodeHidden[n] == 0. DetachNode does not check this and would sever the
  *     same node twice: two flying objects, the second showing a hidden mesh.
  *  5. BODY-PART MASK  node+0x48 & 0x6E rather than the constant `part > 4`. The constant is tuned
  *     to baronsec-shaped skeletons (0..4 = dummy01/hips/waistdum/waist/chest); on tc14.baf the
  *     chest is node 8 and would be released. The mask is the AUTHORED statement:
  *     0x2 lArm, 0x4 rArm, 0x8 head, 0x20 lLeg, 0x40 rLeg; 0x1 = generic, 0x10 = hips.
  *     But only TEN of 265 rigs carry a mask at all, so there is a documented fallback below.
- *  6. THE DROID CASE  a node with no mesh anywhere in its subtree cannot be severed at all.
+ *  6. The droid case  a node with no mesh anywhere in its subtree cannot be severed at all.
  *
- * INDEX SPACE: settled. A census over 265 unique actor .baf files says node+0x44 (matrix slot) ==
+ * Index space: settled. A census over 265 unique actor .baf files says node+0x44 (matrix slot) ==
  * the ordinal in 3251/3251 nodes. g_msgContactNode and the return value of 0x412E22 live in the
  * SAME space (both are pNode->+0x44), so the substitution is type-safe.
  *
@@ -187,7 +187,7 @@ _Static_assert(sizeof SIG_NODE_POST_FIRST == sizeof MSK_NODE_POST &&
                "the node post patterns and their mask are different lengths");
 #define NODE_POST_OPERAND 0x05u
 
-/* --- 0x00414436  bapobj_detachNode: THE TYPE ERROR ------------------------------------------- *
+/* --- 0x00414436  bapobj_detachNode: the type error ------------------------------------------- *
  *   8B 45 EC              mov  eax,[ebp-0x14]        ; keep = a NODE ordinal
  *   50                    push eax                   ; arg4
  *   8B 4D F8 8B 51 58     mov  edx,[model3+0x58]     ; the node list
@@ -360,7 +360,7 @@ static bool node_pointer_is_plausible(const void *pointer)
 /* 30 shipped nodes carry NO mesh (tusken/tathum1/handmaid rthigh+lthigh, nimoid rlegdum, tank
  * waist, ...). For those there is no `keep` that hideMeshesBelow could match, and with no mesh
  * there is nothing to show either. Rather than passing the raw node index through (the old, wrong
- * behaviour), we look for the FIRST mesh IN THE SUBTREE of that node: the topmost visible piece
+ * Behaviour), we look for the first mesh in the subtree of that node: the topmost visible piece
  * of exactly this limb. If there is none, the node is unusable and is rejected. */
 int32_t limb_first_mesh_in_subtree(const uint8_t *node, int depth)
 {

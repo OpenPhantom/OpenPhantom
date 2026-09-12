@@ -7,7 +7,7 @@
  * Ten separate conditions produce that identical symptom.
  *
  * So each line carries the condition BY NAME, the camera region under the player and its flags, the
- * yaw on screen against the yaw free look wants, and the camera's PITCH and EYE HEIGHT.
+ * yaw on screen against the yaw free look wants, and the camera's pitch and eye height.
  *
  * The last two are there to be WATCHED rather than because this feature can move them. It writes
  * neither: the pitch is built by a different lerp with a rate pushed as an immediate, and the eye

@@ -124,7 +124,7 @@ void overlay_model_rebuild(void);
 
 uint32_t overlay_model_row_count(void);
 
-/* WHICH ROW IS DRAWN FIRST, so a list taller than the screen can still be reached.
+/* Which row is drawn first, so a list taller than the screen can still be reached.
  *
  * `visible` is what the layout worked out fits. The answer is clamped against it on every ask
  * rather than corrected when the list changes: the row count moves with every keystroke in the

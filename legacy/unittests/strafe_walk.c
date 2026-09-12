@@ -3,7 +3,7 @@
  * Three things live here, and each of them exists because getting it wrong is invisible until the
  * game is running:
  *
- *   * THE TRAVEL ANGLE. The integrator multiplies the facing by a SIGNED speed, so walking
+ *   * the travel angle. The integrator multiplies the facing by a signed speed, so walking
  *     backward is a negative speed along an unchanged facing. An angle built as "where do I want to
  *     go, relative to forward" double-counts that reversal, and holding only the back key would
  *     send the player FORWARD while the backward clip played. The backward rows are the reason this
@@ -121,7 +121,7 @@ static void test_damper(void)
 
     ut_section("the damper");
 
-    /* FRAMERATE INDEPENDENCE, with the rate cap lifted out of the way so the exponential alone is
+    /* Framerate independence, with the rate cap lifted out of the way so the exponential alone is
      * under test. Equal wall time must give equal angle whatever the substep. */
     at_32 = damp_for(0.0f, 90.0f, SUBSTEP_32, 0.25f, SETTLE, 1.0e9f);
     at_64 = damp_for(0.0f, 90.0f, SUBSTEP_64, 0.25f, SETTLE, 1.0e9f);
@@ -132,28 +132,28 @@ static void test_damper(void)
     ut_near(damp_for(0.0f, 90.0f, SUBSTEP_32, 0.50f, SETTLE, 1.0e9f), 89.1f, 0.05f,
                 "two settle times close 99 %");
 
-    /* THE SAME, with the shipped cap in force. While the cap is what limits the step the two
+    /* The same, with the shipped cap in force. While the cap is what limits the step the two
      * substeps advance at the same rate, so they must still agree. */
     at_32 = damp_for(0.0f, 90.0f, SUBSTEP_32, 0.25f, SETTLE, RATE);
     at_64 = damp_for(0.0f, 90.0f, SUBSTEP_64, 0.25f, SETTLE, RATE);
     ut_near(at_32, at_64, 0.01f, "1/32 and 1/64 agree with the shipped rate cap");
     ut_near(at_32, RATE * 0.25f, 0.01f, "a 90-degree gap is rate-limited, not eased");
 
-    /* THE RATE CAP itself: one step can never travel further than the rate allows, and the cap is
+    /* The rate cap itself: one step can never travel further than the rate allows, and the cap is
      * a RATE, so it halves with the substep. */
     ut_near(strafe_walk_damp_step(0.0f, 90.0f, SUBSTEP_32, SETTLE, RATE),
                 RATE * SUBSTEP_32, 0.001f, "the first step at 1/32 is the rate cap");
     ut_near(strafe_walk_damp_step(0.0f, 90.0f, SUBSTEP_64, SETTLE, RATE),
                 RATE * SUBSTEP_64, 0.001f, "the first step at 1/64 is half of it");
 
-    /* IT SETTLES, exactly, and in finite time, so the body latch can be given up. */
+    /* It settles, exactly, and in finite time, so the body latch can be given up. */
     current = 0.0f;
     for (steps = 0; steps < 1000 && current != 90.0f; ++steps) {
         current = strafe_walk_damp_step(current, 90.0f, SUBSTEP_32, SETTLE, RATE);
     }
     ut_check(current == 90.0f && steps < 1000, "the angle lands exactly on its target");
 
-    /* THE DECAY that clears the latch when Stand is left. It must reach exactly zero, or the model
+    /* The decay that clears the latch when Stand is left. It must reach exactly zero, or the model
      * root would be left holding a residue for good. */
     current = 90.0f;
     for (steps = 0; steps < 1000 && current != 0.0f; ++steps) {
@@ -274,7 +274,7 @@ static void test_free_look_offset(void)
     ut_near(free_look_interpolated_heading(100.0f, 140.0f, 1.0f), 140.0f, 0.001f,
                 "alpha 1 is the current substep exactly");
 
-    /* THE ROUND TRIP, which is the whole feature in one line: the engine adds our offset to its
+    /* The round trip, which is the whole feature in one line: the engine adds our offset to its
      * interpolated heading, so that sum has to be the camera yaw we asked for. */
     interpolated = free_look_interpolated_heading(350.0f, 10.0f, 0.5f);
     offset       = free_look_offset(75.0f, interpolated);

@@ -226,7 +226,7 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
      * instead of five carry a sixth more counts across a span that did not grow by a sixth.
      *
      * The reason is the arithmetic alone. This comment used to justify it by claiming
-     * that raw input arrives in one burst when the game pumps its queue once a frame, and that is
+     * that raw input arrives in one burst when the game pumps its queue once a frame, which is
      * false: the packets are received on a thread of their own, whose window has its own blocking
      * pump, so they are drained as they arrive and the game's frame pacing never touches them. The
      * conclusion survived the correction, but the false reason is worth naming, because "the

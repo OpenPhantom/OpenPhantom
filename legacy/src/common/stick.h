@@ -1,14 +1,14 @@
 /* stick.h: the one piece of gamepad arithmetic two DLLs both need, in one place so they cannot
  * drift apart.
  *
- * WHY IT IS RADIAL. A per-axis deadzone leaves a SQUARE dead region, and the corner of that square
+ * Why it is radial. A per-axis deadzone leaves a square dead region, and the corner of that square
  * is 1.41 times its edge. A stick pushed to a true diagonal is therefore still dead on both axes at
  * a deflection that would already be live on either axis alone, and the boundary the player feels
  * changes with the direction they push. Taking the deadzone out of the MAGNITUDE instead gives one
  * circular boundary that is the same in every direction, the form Microsoft's own XInput
  * documentation recommends.
  *
- * WHY IT RESCALES. Cutting the deadzone out without rescaling means the first live sample is
+ * Why it rescales. Cutting the deadzone out without rescaling means the first live sample is
  * already at the deadzone's own value: the output jumps from 0.0 straight to 0.24 the instant the
  * boundary is crossed. Rescaling the remaining range back onto 0..1 makes the first live sample
  * nearly zero, so the stick starts moving the player from a standstill rather than from a lurch.

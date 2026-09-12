@@ -94,7 +94,7 @@ add_unit_test(cursor_anchor enhanced_resolution enhanced_resolution/cursor_ancho
                                                 enhanced_resolution/pointer_release.c)
 add_unit_test(window_fit    enhanced_resolution enhanced_resolution/window_fit.c)
 
-# The whole of the window mode's policy: what shape is asked for, given a monitor and the size
+# All of the window mode's policy: what shape is asked for, given a monitor and the size
 # the engine is rendering. window_fit.c comes along because window_mode.c asks it for that
 # size, and the rule here is to link the real module rather than a stub.
 add_unit_test(window_mode   enhanced_resolution enhanced_resolution/window_mode.c
@@ -124,7 +124,7 @@ add_unit_test(pointer_cage enhanced_resolution
 # display mode.
 add_unit_test(menu_art_resample enhanced_resolution enhanced_resolution/menu_art_resample.c)
 
-# Whether the canvas a screen was authored for can be recovered by dividing, which is what decides
+# Whether the canvas a screen was authored for can be recovered by dividing, the test that decides
 # whether the rectangle shadow has to keep it. The rest of the refit is engine writes and is not
 # testable here; the rounding is, and the rounding is where the answer turned out to be no.
 add_unit_test(menu_refit enhanced_resolution
@@ -325,13 +325,13 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/player_slot.c
     # cheats_openphantom.c calls sim_pause_hold() rather than writing the engine's pause cell itself,
     # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
-    # resolved site every entry point returns immediately, which is exactly what a test process wants.
+    # resolved site every entry point returns immediately, as a test process wants.
     dev_overlay/sim_pause.c
 )
 
 # The character census reads a live process, so what can be tested without the game is the
 # arithmetic underneath it: the pool slot walk, the radius test, the vertical classification and
-# the fixed width name field. character_scan.c holds exactly that and nothing else.
+# the fixed width name field. character_scan.c holds exactly that and no more.
 add_unit_test(character_scan diagnostics diagnostics/character_scan.c)
 
 # The debug register bit packing. Getting a condition or a length wrong does not fail loudly, it

@@ -203,7 +203,7 @@ static void a_scaled_subnode_keeps_its_scale(void)
      *
      * One thing here is an assumption and not evidence: that the scale multiplies the rows. If it
      * multiplies the columns instead, the blend is still continuous and still exact at both
-     * endpoints, but the intermediate is a mix rather than the exact answer. Worth knowing before
+     * endpoints, but the intermediate is a mix rather than the exact answer. To know before
      * anyone reads a wobble here as a mistake in the lerp. */
     make_world(previous, 0.0, 2.0f, 0.0f, 0.0f, 0.0f);
     make_world(current, 20.0, 2.0f, 0.0f, 0.0f, 0.0f);

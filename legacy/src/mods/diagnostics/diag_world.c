@@ -66,7 +66,7 @@ static const uint8_t SIG_MOVER_CLOSE[] = {
  *
  * It is NOT called once per frame from one place. It has nine call sites, one of which is reached
  * from inside the world draw, so which one reaches a given mover first decides where that mover
- * actually integrates. Measured, it is the per-frame one that does essentially all of it. That is
+ * actually integrates. Measured, it is the per-frame one that does nearly all of it. That is
  * the question level 3 exists to answer, and it is why the pattern's gate cell matters: the opening
  * run of the function, read as bytes on retail WMAIN.EXE, contains two independent early returns.
  *
@@ -125,7 +125,7 @@ static const uint8_t SIG_AI_RETURN_MODE[] = {
  * The only site in the whole DLL that does not sit on a function entry. The opcode dispatcher was
  * inlined by MSVC INTO ai_run (0x433D0B); it has no symbol and no frame of its own. There is
  * therefore no way to observe "which opcode is running" with an ordinary detour. What follows is a
- * detour INTO THE MIDDLE of a function, deliberately tied to three conditions:
+ * Detour into the middle of a function, deliberately tied to three conditions:
  *
  *   (1) the pattern is the proof. The two stolen instructions
  *         0F BF 4D E4          movsx ecx, word ptr [ebp-0x1C]   ; the resolved opcode

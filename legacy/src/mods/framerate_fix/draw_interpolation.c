@@ -74,7 +74,7 @@ static const uint8_t SIG_OBJECT_DRAW_EULER[] = {
  * poseStamp is shared: the draw path builds the pose from the INTERPOLATED transform, the
  * simulation's node queries (hit spheres, muzzle and auto-aim via rdThing_GetNodeMatrix) build it
  * from the RAW substep transform, and whoever runs first stamps it. At 30 fps the draw rebuilt
- * essentially always, so the simulation always inherited the draw's pose. Uncapped, that
+ * nearly always, so the simulation always inherited the draw's pose. Uncapped, that
  * inheritance is intermittent; NOPing the branch makes it constant again. */
 static const uint8_t SIG_POSE_THROTTLE[] = {
     0x8B, 0x3D, 0x60, 0x88, 0x4B, 0x00, 0x8D, 0x4C, 0xCA, 0x24,

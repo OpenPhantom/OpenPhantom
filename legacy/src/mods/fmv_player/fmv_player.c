@@ -2,7 +2,7 @@
  * exists, falling back to the original retail path unchanged when it does not.
  *
  * ==============================================================================================
- * WHY THIS EXISTS, AND WHAT IT REPLACES
+ * Why this exists, and what it replaces
  *
  * The DLL this one replaces tried three designs to make movies fill a chosen display resolution
  * without the retail engine's own per-frame surface access costing whole seconds of it at 4K: a
@@ -23,7 +23,7 @@
  * game plays exactly as it always did until you convert something.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * All four movie call sites (intro/logo, in-level cutscenes, the arena replay, credits) funnel
  * through one function, confirmed by an xref sweep of its four UNCONDITIONAL_CALL callers inside

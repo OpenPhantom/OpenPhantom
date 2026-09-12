@@ -2,13 +2,13 @@
  *
  * The same setting the video options screen offers, reachable without leaving the game to find it.
  *
- * IT SHOWS DEGREES AND WRITES AN OFFSET, the only awkward thing here. variable_fov
+ * It shows degrees and writes an offset, the only awkward thing here. variable_fov
  * stores ExtraDegrees, a signed offset from a base that depends on the canvas, the aspect mode and
  * the engine's own projection. None of those exist in this DLL, so an offset is a number this row
  * could show and nobody could read. variable_fov therefore publishes BaseFov, and the width of the
  * picture is BaseFov plus ExtraDegrees, both of them in the file.
  *
- * THE BASE IS PUBLISHED RATHER THAN THE WIDTH, and the first version of this got that wrong. The
+ * The base is published rather than the width, and the first version of this got that wrong. The
  * width moves every time the offset does, which is every frame of a drag, so working the base out
  * as "width minus offset" pairs a width written a moment ago with an offset written just now. The
  * base then drifts by exactly the amount of the last drag step, every step is measured from a

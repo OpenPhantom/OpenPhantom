@@ -7,7 +7,7 @@
  *     setNodeYaw(hActor, headNode,  turnWheel / 10.0)
  *
  * How big that really is, and the trap that cost two rounds: the keyboard ramp has a ceiling of
- * 40 deg/s, and that is the ceiling of the INCREMENT, not of the cell. `turnWheel += ramp * axis`
+ * 40 deg/s, the ceiling of the INCREMENT, not of the cell. `turnWheel += ramp * axis`
  * ACCUMULATES, so a held key climbs 12, 26, 42, 60, 80, 102, 120 and saturates the +-120 clamp in
  * seven substeps, about a fifth of a second. Chest 1.0 -> 10.0 deg, head 1.2 -> 12.0 deg.
  *

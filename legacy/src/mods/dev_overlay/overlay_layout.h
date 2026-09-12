@@ -4,7 +4,7 @@
  * drawn and what can be clicked must never be a frame apart. Nothing here draws.
  *
  * ==============================================================================================
- * EVERYTHING IS A MULTIPLE OF H
+ * Everything is a multiple of H
  *
  * H is the height of a capital in the font the engine actually has. The engine keeps that at about
  * sixteen pixels whatever the display does, so a panel sized in H is sized in pixels, correctly:
@@ -15,16 +15,16 @@
  * measured height, not thirty constants.
  *
  * ==============================================================================================
- * TWO RULES THAT ARE NOT TASTE
+ * Two rules that are not taste
  *
- * SEPARATION IS CONTRAST, NOT DISTANCE. There are no gaps between bands. A few pixels between two
+ * Separation is contrast, not distance. There are no gaps between bands. A few pixels between two
  * regions of the same colour is invisible and costs height for nothing, while a one pixel rule in a
  * distinctly lighter colour reads at once. So every separator is the last pixel row OF the band
  * above it, which also keeps the band arithmetic exact.
  *
- * EVERY ROW IS THE SAME HEIGHT, HEADINGS INCLUDED. The hit test finds a row with one division, so a
- * taller heading would put the paint and the pointer a row apart. A heading takes its weight from a
- * fill and an accent bar instead.
+ * Every row is the same height, headings included. The hit test finds a row with one division, so
+ * a taller heading would put the paint and the pointer a row apart. A heading takes its weight
+ * from a fill and an accent bar instead.
  */
 #ifndef OVERLAY_LAYOUT_H
 #define OVERLAY_LAYOUT_H
@@ -54,7 +54,7 @@ typedef struct layout {
     float rows_top;
     float row_h;
 
-    /* HOW MANY ROWS ARE ACTUALLY DRAWN, which is not how many the tab has. Enough rows, a large
+    /* How many rows are actually drawn, which is not how many the tab has. Enough rows, a large
      * DevMenuSize or a short screen and the list is taller than the display; the panel used to be
      * pushed up until its top hit zero and then simply ran off the bottom, with no clipping and
      * nothing to say the rows were there. This is the number that fits, and everything past it is

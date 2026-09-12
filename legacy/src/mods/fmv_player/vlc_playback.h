@@ -21,7 +21,7 @@
 
 /* Starts locating a 32-bit libVLC, loading libvlccore.dll and libvlc.dll out of it, resolving the
  * handful of exports this file calls, pointing VLC_PLUGIN_PATH at that install's plugins folder,
- * and creating one shared instance for the life of the process, ALL OF IT on a background thread,
+ * And creating one shared instance for the life of the process, all of it on a background thread,
  * started once and never joined.
  *
  * Call as early as possible, at install time, so it has the most time to finish before the first
@@ -45,7 +45,7 @@ void vlc_playback_init_async(void);
  * A libVLC without the export it needs stays on letterbox and says so once. */
 void vlc_playback_set_stretch(bool stretch);
 
-/* WHICH VIDEO OUTPUT LIBVLC USES. An empty name, which is the default, leaves libVLC to choose, so
+/* Which video output libvlc uses. An empty name, which is the default, leaves libVLC to choose, so
  * an installation that says nothing behaves exactly as it always has.
  *
  * This exists for the same Wine defect video_overlay.h describes: the cutscenes play and the menu

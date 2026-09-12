@@ -245,8 +245,8 @@ static unsigned char *scale_bitmap(const unsigned char *data, long size,
     write_u32(out + 34, (unsigned)(target_stride * target_height));   /* biSizeImage */
     write_u32(out + 2,  (unsigned)total);                            /* bfSize      */
 
-    /* How many destination pixels each source pixel owns. Sampling from pixel CENTRES, which is what
-     * keeps the picture from drifting half a source pixel up and to the left. */
+    /* How many destination pixels each source pixel owns. Sampling from pixel CENTRES keeps the
+     * picture from drifting half a source pixel up and to the left. */
     for (x = 0; x < target_width; ++x) {
         int source_x = (int)(((double)x + 0.5) / ratio_x);
         if (source_x >= width)  { source_x = width - 1; }
@@ -381,7 +381,7 @@ static int read_lab_directory(const unsigned char *data, long size,
 
 /* obi.ini's screen size, set to what was just converted for.
  *
- * NOT A CONVENIENCE. The engine's menu blitter clips against the canvas rather than against the
+ * Not a convenience. The engine's menu blitter clips against the canvas rather than against the
  * screen buffer it draws into, so running the game SMALLER than the artwork writes past the end of
  * that buffer. Matching the two is what avoids it.
  *
@@ -637,7 +637,7 @@ static int bink_frame_size(const char *path, int *out_width, int *out_height)
 }
 
 /* The height to actually encode this film at: the one asked for, unless it would make it too wide.
- * A film whose header cannot be read keeps the requested height, which is what happened before the
+ * A film whose header cannot be read keeps the requested height, as happened before the
  * cap existed. */
 static int encode_height(const char *path, int requested)
 {

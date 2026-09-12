@@ -76,7 +76,7 @@ static fog_regime_config_t default_config(void)
 }
 
 /* ============================================================================================
- * THE ACCEPTANCE CRITERION
+ * The acceptance criterion
  * ============================================================================================ */
 static void test_identity_at_the_authored_field_of_view(void)
 {
@@ -133,7 +133,7 @@ static void test_the_follow_factor_is_exactly_one(void)
 }
 
 /* ============================================================================================
- * THE GEOMETRY
+ * The geometry
  * ============================================================================================ */
 static void test_the_edge_limit_is_the_screen_corner(void)
 {
@@ -199,7 +199,7 @@ static void test_every_level_moves_when_the_picture_widens(void)
 }
 
 /* ============================================================================================
- * THE TRAP: a band whose end falls below the level's own start disarms the engine's ramp, and a
+ * The trap: a band whose end falls below the level's own start disarms the engine's ramp, and a
  * disarmed ramp paints the world in the fog colour. BIGCITY (start 20, draw distance 20) and
  * FEDSHIP (start 16, draw distance 18) are the two shipped levels that reach it.
  * ============================================================================================ */
@@ -306,7 +306,7 @@ static void test_repeating_the_call_changes_nothing(void)
 }
 
 /* ============================================================================================
- * THE EASING
+ * The easing
  * ============================================================================================ */
 static void test_easing_is_frame_rate_independent(void)
 {

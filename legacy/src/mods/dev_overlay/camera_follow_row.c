@@ -18,7 +18,7 @@ bool camera_follow_row_get(void)
 
 bool camera_follow_row_set(bool enabled)
 {
-    /* FREE LOOK GOES ON WITH IT, and the write is done here rather than asked of enhanced_input.
+    /* Free look goes on with it, and the write is done here rather than asked of enhanced_input.
      *
      * The passive camera aims at the body's heading, and that only follows the player because free
      * look turns the body to face where it travels; without it there is nothing to follow. The

@@ -15,7 +15,7 @@
  * giant/tiny player next to SIG_THING_DRAW.
  *
  * ==============================================================================================
- * THE TWO SITES, READ OUT OF THE RETAIL EXECUTABLE
+ * The two sites, read out of the retail executable
  *
  * Ammunition is spent in one place. 0x00459FD4, and the whole function is this:
  *
@@ -66,7 +66,7 @@
  * for damage. The record pointer inside them is masked and never depended on.
  *
  * ==============================================================================================
- * WHY A DETOUR THAT DECLINES, RATHER THAN A TOPPED UP COUNTER
+ * Why a detour that declines, rather than a topped up counter
  *
  * The obvious implementation of unlimited ammunition writes the magazine full once a frame. That
  * fights the pickup code, makes the weapon bar flash on frames nothing happened, and writes a value
@@ -116,7 +116,7 @@ static const uint8_t SIG_USE_AMMO[] = {
     0x8B, 0x54, 0x81, 0x10,                          /* mov edx,[ecx+eax*4+0x10]     */
     0x2B, 0x55, 0x0C                                 /* sub edx,[ebp+0x0C]           */
 };
-/* THE LAST THREE BYTES ARE THE WHOLE POINT. The function that GIVES ammunition sits twenty nine
+/* The last three bytes are the whole point. The function that gives ammunition sits twenty nine
  * bytes earlier and is identical up to here:
  *
  *   00459FA6  8B 54 81 10 03 55 0C     mov edx,[ecx+eax*4+0x10]; ADD edx,[ebp+0x0C]
@@ -160,7 +160,7 @@ static const uint8_t MSK_DAMAGE[] = {
 _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
                "the damage pattern and its mask are different lengths");
 
-/* TEN, AND NOT FIVE, AND THE DIFFERENCE IS A CRASH.
+/* Ten, and not five, and the difference is a crash.
  *
  * The trampoline copies these bytes verbatim and appends a jump past them; there is no length
  * disassembler anywhere in the shared code. So the size has to land on a real instruction boundary.
@@ -190,7 +190,7 @@ _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
  * without needing two patches; the particle path is untouched regardless, since this hook only
  * ever acts when the incoming thing is the player's own (see hook_thing_draw below).
  *
- * THE SCALE TRICK IS ALREADY IN THE RETAIL GAME. A few instructions past this prologue, gated
+ * The scale trick is already in the retail game. A few instructions past this prologue, gated
  * behind a specific cheat-flag slot and a hardcoded four-character model-name match, neither of
  * which this feature depends on, touches, or needs to fully identify, retail applies a flat 3.0x
  * scale to this exact incoming matrix, via a small, self-contained "compose a diagonal scale into
@@ -563,7 +563,7 @@ bool cheats_openphantom_end_level_invoke(void)
         return false;
     }
 
-    /* THE PANEL CLOSES ITSELF, and this is a repair rather than tidiness.
+    /* The panel closes itself, and this is a repair rather than tidiness.
      *
      * The panel is toggled from the game's own key handler at 0043F603, which is on the GAMEPLAY
      * path. Skipping the LAST level does not load another one: the campaign driver runs the closing

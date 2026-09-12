@@ -1,7 +1,7 @@
 /* import_patch.h: replace one entry in another module's import address table.
  *
  * Everything else in this tree patches the GAME. This patches a library the game loads: it changes
- * which function one named module calls for one named import, and nothing else in the process is
+ * which function one named module calls for one named import, while the rest of the process is
  * affected. Our own calls to the same function are untouched, because they resolve through our own
  * import table.
  *

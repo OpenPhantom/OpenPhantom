@@ -2,7 +2,7 @@
  *
  * The seam is between finding engine code and deciding what to write into it. The byte patterns
  * and the disassembly that proves each one are in menu_scale_sites.c; what is here is what the
- * rest of the feature needs in order to name a site, reach a field, or read an engine global.
+ * rest of the feature needs to name a site, reach a field, or read an engine global.
  * Every number here is the engine's own, so none of it is adjustable and none of it is derived.
  *
  * Internal to the menu scale files. Nothing else includes it: the SITE_ names below have the same

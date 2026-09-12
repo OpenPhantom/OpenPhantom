@@ -44,7 +44,7 @@
  * the test still walks the range a guard once refused without a word. */
 #define MOVER_BLEND_WEIGHT_MAX 2.0f
 
-/* WHY A REFUSAL HAS A NAME NOW.
+/* Why a refusal has a name now.
  *
  * Every rejection below draws the newest pose instead, which is a one-frame forward jump for that
  * mover, and they were all counted in one bucket. That bucket read 35 to 84 poses per 600 frames

@@ -16,7 +16,7 @@
  *   83 78 1C 01     cmp [eax+0x1C], 1        the mode kind
  *   74 02 / EB D4   jz +2 / jmp (reject)
  *   8B 4D FC        mov ecx,[ebp-4]
- *   83 79 20 10     cmp [ecx+0x20], 0x10     THE BIT COUNT
+ *   83 79 20 10     cmp [ecx+0x20], 0x10     the bit count
  *   74 02 / EB C9   jz +2 / jmp (reject)
  *
  * The bare compare matches five times in the image, so the pattern carries the kind test in front

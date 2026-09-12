@@ -2,7 +2,7 @@
  * actually sees every mode change.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * --- 0x0046BC85  graphics_setMode(rawModeIndex) -----------------------------------------------
  *   0046BC85  55 8B EC 83 EC 10      push ebp / mov ebp,esp / sub esp,0x10   (6-byte prologue)
@@ -218,7 +218,7 @@ HWND window_fit_game_window(void)
 }
 
 /* ============================================================================================
- * THE MONITOR CHOICE
+ * The monitor choice
  *
  * Pure, so that the rule can be checked without a second physical display. The order of the three
  * arms is the whole content of the decision:

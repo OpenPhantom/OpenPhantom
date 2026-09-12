@@ -12,7 +12,7 @@
  * with _AIL_set_digital_master_volume.
  *
  * That getter has exactly two callers in the whole image, and both are inside options_audio: an
- * E8 sweep of the entire .text finds call sites at 0x004420C1 and 0x004428C2 and nothing else,
+ * E8 sweep of the entire .text finds call sites at 0x004420C1 and 0x004428C2 and no others,
  * and the next function entry after 0x00441FA4 is 0x00442A98, so both lie inside that one screen.
  * They are the two things the screen does with the number: seed the slider widget when it opens,
  * and build the value written to obi.ini's SVOL key when it closes.
@@ -406,7 +406,7 @@ void sfx_volume_save_fix_install(void)
 
     log_info("bapsound_setMasterVolume tapped at %08X, g_soundReady at %08X: bapsound_moduleInit's "
              "own load-time volume apply happens before it marks sound ready and was always a "
-             "silent no-op, which is why the SFX slider reset to full on every reload regardless "
+             "silent no-op, so the SFX slider reset to full on every reload regardless "
              "of what obi.ini said. The dropped value is now re-applied the moment sound actually "
              "finishes initialising.",
              (unsigned)sites[SITE_MASTER_SET].address, (unsigned)(uintptr_t)fix_state.sound_ready);

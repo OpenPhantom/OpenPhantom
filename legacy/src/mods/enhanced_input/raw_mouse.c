@@ -347,7 +347,7 @@ static bool register_one(DWORD flags, HWND target, const char *what)
             if (direct(&device, 1, (UINT)sizeof(device))) {
                 log_info("raw input registered: %s, through the unshimmed function. Windows ships "
                          "an application compatibility fix for this executable which intercepts "
-                         "RegisterRawInputDevices and fails it, and that is where the refusal "
+                         "RegisterRawInputDevices and fails it, which is where the refusal "
                          "above came from. The real function was resolved out of user32's export "
                          "table and accepted the same parameters.", what);
                 return true;

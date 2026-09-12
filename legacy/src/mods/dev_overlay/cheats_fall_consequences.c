@@ -90,7 +90,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
 #define FALL_DAMAGE_CALL_OFFSET   0x46Au   /* 0x0044F5CC - 0x0044F162, measured directly off both
                                             * addresses in the disassembly above */
 
-/* FALL DEATH IS A SEPARATE MECHANISM FROM FALL DAMAGE, NOT THE SAME ONE ESCALATING.
+/* Fall death is a separate mechanism from fall damage, not the same one escalating.
  *
  * Field reported: jumping very high with jump boost triggers a death screen and a level reload,
  * not just the 10-point hit above. Player health never comes into it anywhere in this path; the
@@ -159,7 +159,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * pointer for the two death triggers. */
 #define GROUND_CONTACT_CALL_PROLOGUE_SIZE 10u
 
-/* A THIRD SIDE EFFECT OF THE SAME "SIGNIFICANT FALL" TRANSITION: THE CAMERA DETACHES AND STICKS.
+/* A third side effect of the same "significant fall" transition: the camera detaches and sticks.
  *
  * Field reported: with damage and death both suppressed, a high boosted jump still pitches the
  * camera down to look at the player from above partway through the fall, and it never lets go; it
@@ -193,7 +193,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  *                                            ; down at a fixed spot" half of what gets reported.
  *   0044f241  ADD ESP,0x4
  *
- * WHY IT NEVER LETS GO. The only function anywhere in the binary that clears DAT_005bb4e8 back to
+ * Why it never lets go. The only function anywhere in the binary that clears DAT_005bb4e8 back to
  * 0 is 0x00418421, and none of ITS callers (the pause menu, a dialogue camera, two other UI/
  * cutscene sites) have anything to do with landing or the player's own fall state, confirmed via
  * get_xrefs_to on 0x00418421 directly. Nothing in this function's own landing/cleanup paths
@@ -206,7 +206,7 @@ static const uint8_t SIG_PLAYER_GROUND_CONTACT[] = {
  * get_xrefs_to on 0x0044F891 finds exactly ONE caller anywhere in the binary, this site, so
  * suppressing it here can never affect anything else. 0x0041840A has several OTHER callers (a
  * dialogue camera, cutscene-adjacent code) that are left completely untouched: this hooks the
- * CALL INSTRUCTION inside FUN_0044F162, not the function itself, so every other caller's own
+ * Call instruction inside FUN_0044F162, not the function itself, so every other caller's own
  * behaviour is unaffected either way. Both call targets are verified against the LITERAL addresses
  * confirmed above by direct decompilation, the same rigor as the cross-checks elsewhere in this
  * section, there being no earlier independent resolution of either address in this project to

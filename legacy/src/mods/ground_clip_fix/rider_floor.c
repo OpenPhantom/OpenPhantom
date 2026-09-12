@@ -75,7 +75,7 @@ static bool is_crusher(const uint8_t *mover)
     return mover != NULL && *(const uint32_t *)(mover + MOVER_TYPE) == MOVER_CRUSHER;
 }
 
-/* HALF ONE: a crusher carries nobody.
+/* Half one: a crusher carries nobody.
  *
  * The engine's own body still runs, so every field it maintains is written exactly as before, the
  * deltas included. Only the position it hands back is refused. */
@@ -117,7 +117,7 @@ static void __cdecl hook_carry_rider(void *world, uint8_t *ground)
     }
 }
 
-/* HALF TWO, and without it the first half achieves nothing.
+/* Half two, and without it the first half achieves nothing.
  *
  * Refusing the carry only stops one of the two ways a crusher takes a character down with it. The
  * ground snap is the other: it pulls an actor onto any floor within 0.35 units below their feet,
@@ -171,11 +171,11 @@ bool rider_floor_install(void)
         return false;
     }
 
-    /* BOTH OR NEITHER. Either half on its own leaves the fault in place, the first because the snap
-     * puts the character back onto the descending polygon and the second because the carry moves it
-     * there first, so a partial install would report success and change nothing. A detour cannot
-     * be taken out, so the half that did go in is left passing every call straight through: the
-     * hooks act only once `armed` says the pair is whole. */
+    /* Both or neither. Either half on its own leaves the fault in place, the first because the
+     * snap puts the character back onto the descending polygon and the second because the carry
+     * moves it there first, so a partial install would report success and change nothing. A detour
+     * cannot be taken out, so the half that did go in is left passing every call straight through:
+     * the hooks act only once `armed` says the pair is whole. */
     if (!detour_install(&rider.carry, carry, (const void *)hook_carry_rider,
                         CARRY_RIDER_PROLOGUE)) {
         log_warning("the rider carry at %08X could not be detoured, so a crusher still takes "

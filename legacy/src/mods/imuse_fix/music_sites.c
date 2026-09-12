@@ -1,7 +1,7 @@
 /* music_sites.c: find the music latch pair and the three cells that say what it means.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * The music module is small enough to quote whole. Two functions carry the pause, and they are
  * byte-for-byte identical except for the import they call and the value they latch:

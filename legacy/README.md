@@ -166,7 +166,7 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 Its only job is to load the fixes at the right moment and get out of the way.
 
 **`src/mods` holds the fixes**, one directory per DLL. They never call each other. A fix can be
-deleted from `mods\` and nothing else notices. That is also how you bisect a problem.
+deleted from `mods\` without anything else noticing. That is also how you bisect a problem.
 
 ### Inside a fix
 

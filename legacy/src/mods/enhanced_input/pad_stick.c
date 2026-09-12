@@ -273,7 +273,7 @@ bool pad_stick_take_handback(uint8_t *record, bool stand_mode, float *out_turn,
         forward = 0.0f;
     }
 
-    /* No sideways component, so the move bits say walk or back-pedal and nothing else. The
+    /* No sideways component, so the move bits say walk or back-pedal and no more. The
      * sideways deflection leaves here as a turn instead. */
     strafe_walk_apply_stick_move(record, forward, 0.0f);
 

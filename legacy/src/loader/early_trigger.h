@@ -1,7 +1,7 @@
 /* early_trigger.h: load the mods BEFORE the game has initialised anything.
  *
  * ==============================================================================================
- * WHY THIS EXISTS, a measured failure, not a precaution
+ * Why this exists, a measured failure, not a precaution
  *
  * The loader originally did all its work on the game's call to DirectInputCreateA. That call is
  * outside the loader lock, so LoadLibrary is legal there, and it looked like the ideal trigger.
@@ -23,7 +23,7 @@
  * DirectDraw layer reports. The patch was applied, logged as successful, and had no effect.
  *
  * ==============================================================================================
- * THE TRIGGER: the host's own entry point, patched from DllMain
+ * The trigger: the host's own entry point, patched from DllMain
  *
  * dinput.dll is a static import of WMAIN.EXE, so its DllMain runs during process initialisation,
  * before a single instruction of the game. Loading the mods THERE is what must not happen,

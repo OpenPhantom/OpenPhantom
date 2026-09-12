@@ -1,7 +1,7 @@
 /* variable_fov.c: the camera hook. One number, written just before the engine derives everything.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  *   rdCamera  +0x00 projType   +0x04 pCanvas
  *             +0x38 fovDeg     (HORIZONTAL; rdCamera_init clamps it to [5,179])
@@ -43,12 +43,12 @@
  *     (factor < 1) or let the clipper pass polygons that land beside the canvas anyway
  *     (factor > 1). That is why there is no vertical slider.
  *
- * THE HONEST CONSEQUENCE: the vertical field of view falls out of the horizontal one and the
+ * The honest consequence: the vertical field of view falls out of the horizontal one and the
  * canvas height, vFOV = 2*atan((halfHeight/halfWidth) * tan(hFOV/2)), and is not a free
  * parameter. Instead of a second slider, the caption shows both numbers.
  *
  * ==============================================================================================
- * THE ONE COUPLING is the 3-D front-end menu: FUN_0045C3D8 places menu objects with a hard-coded
+ * The one coupling is the 3-D front-end menu: FUN_0045C3D8 places menu objects with a hard-coded
  * focal length of 554.256 at [0x4A8888], which has exactly ONE reader in the whole image
  * (0x45C431). Change the field of view or the resolution and the menu box moves. We repoint that
  * one operand at our own cell and keep it consistent, we do NOT edit the constant, because an
@@ -262,7 +262,7 @@ static void apply_fov(int32_t *camera)
         horizontal = *(float *)&camera[CAMERA_FOV_DEGREES_INDEX];
     }
 
-    /* The vertical is computed with THE ENGINE'S OWN half extents, i.e. (x1-x0)/2 and (y1-y0)/2
+    /* The vertical is computed with the engine's own half extents, i.e. (x1-x0)/2 and (y1-y0)/2
      * WITHOUT the +1 above. 0x476113 and 0x47612E form exactly those two numbers, and only that
      * way does the caption name the angle that is really on screen. */
     half_width  = (float)(canvas[CANVAS_X1_INDEX] - canvas[CANVAS_X0_INDEX]) * 0.5f;
@@ -393,7 +393,7 @@ void variable_fov_set_extra_degrees(float degrees)
  * the file back, so a value written by anything else, the developer overlay's own row being the
  * reason this exists, did nothing until the next launch.
  *
- * EVERY FRAME, and reading the file every frame is exactly what it does not do. Parsing a ninety
+ * Every frame, and reading the file every frame is exactly what it does not do. Parsing a ninety
  * kilobyte ini sixty times a second to answer "has anything changed" would cost more than the
  * feature is worth, so ini_generation() is asked first: one attribute query, no parse, and the
  * read below only happens on a frame where the file has actually been written.

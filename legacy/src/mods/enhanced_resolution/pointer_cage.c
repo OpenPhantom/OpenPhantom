@@ -26,7 +26,7 @@
  * 640x480 island simply hits nothing, which is already true today for everything outside it.
  *
  * ==============================================================================================
- * WHY THE CAGE IS THE CANVAS AND NOT THE SCREEN. The engine's clamp is load-bearing.
+ * Why the cage is the canvas and not the screen. The engine's clamp is load-bearing.
  *
  * The paragraph above is true and it is incomplete, and the missing half is the ERASE.
  * The pause screens do not repaint every pixel every frame; they repair themselves through the
@@ -431,8 +431,8 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
 
     site = sites[SITE_CURSOR_CAGE].address;
     if (site == 0) {
-        log_warning("the menu cursor clamp did not resolve, so it is left as it shipped. NOTE that "
-                    "this pattern contains the two clamp values it patches, so an ALREADY WIDENED "
+        log_warning("the menu cursor clamp did not resolve, so it is left as it shipped. This "
+                    "pattern contains the two clamp values it patches, so an ALREADY WIDENED "
                     "clamp, an earlier generation of this DLL still in the process, also fails "
                     "to resolve here. In that case the cursor already reaches the whole canvas and "
                     "nothing is wrong.");

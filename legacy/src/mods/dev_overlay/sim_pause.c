@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* --- 0x0043EA13  the simulation gate inside sys_frame. A DATA SITE ONLY, never hooked --------- *
+/* --- 0x0043EA13  the simulation gate inside sys_frame. A data site only, never hooked --------- *
  * Both compared addresses are wildcarded and the second is read out of its operand rather than
  * written down. The pattern runs on through the jump and the push so it is anchored to this gate
  * rather than to any pair of compares: counted against the retail executable, 829,952 bytes, MD5

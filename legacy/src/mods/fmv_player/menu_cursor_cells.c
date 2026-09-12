@@ -1,7 +1,7 @@
 /* menu_cursor_cells.c: the drawn menu cursor's position, found by pattern and written directly.
  *
  * ==============================================================================================
- * THE DEFECT THIS SERVES
+ * The defect this serves
  *
  * The message pump in vlc_playback.c is scoped to the overlay's own window, so the game window's
  * WM_MOUSEMOVE messages are no longer eaten while a movie plays; they queue up, unprocessed, for
@@ -17,7 +17,7 @@
  * both times, so a resolution mismatch was not the cause either.
  *
  * ==============================================================================================
- * WHY: THE POSITION IS AN ACCUMULATOR
+ * Why: the position is an accumulator
  *
  * The window procedure's WM_MOUSEMOVE case, reached only after the engine's own recentring call
  * at 0x0046A115 has confirmed the message is real movement rather than the echo of its own warp:
@@ -45,7 +45,7 @@
  * all four addresses from a second, independently written direction.
  *
  * ==============================================================================================
- * WHY THIS IS A PATTERN AND NOT FOUR CONSTANTS
+ * Why this is a pattern and not four constants
  *
  * Because the constants are wrong on a build that ships with the game. Measured over every image
  * to hand: the block above sits at 0x00460BCC in all five retail executables, including the German

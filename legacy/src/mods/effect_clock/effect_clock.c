@@ -25,17 +25,17 @@
  * Three things on the drawing path draw a fresh random number every time they are drawn, and the
  * drawing path runs at whatever rate the display does.
  *
- *   THE LIGHTNING ARCS have no geometry state at all. Every time the pool is drawn, every bolt is
+ *   The lightning arcs have no geometry state at all. Every time the pool is drawn, every bolt is
  *   rebuilt from scratch by recursive midpoint displacement, and every displacement is a fresh
  *   draw. At the 30 frames a second this was authored for that is the intended crackle; at 240 it
  *   is eight times too fast and the eye reads it as static rather than as lightning.
  *
- *   THE FLICKER FLAG. An object carrying flag bit 0x40 draws a number each time it is drawn, and
+ *   The flicker flag. An object carrying flag bit 0x40 draws a number each time it is drawn, and
  *   when the number lands under 0.2 the whole object is skipped: no draw, no animation advance, no
  *   reflection, no shadow. Authored, that is dark six times a second. At 240 frames a second it is
  *   dark forty eight times a second.
  *
- *   THE HALO BRIGHTNESS takes a random addition of up to 0.4 and is then clamped into 0 to 1, once
+ *   The halo brightness takes a random addition of up to 0.4 and is then clamped into 0 to 1, once
  *   per object per drawn frame. At the authored rate that is a twinkle. Four or eight times faster
  *   the additions average out and it settles into a steady blur.
  *
@@ -85,7 +85,7 @@
  *     0x0043ABF0  reached from the enemy code through aiext    simulation
  *     0x0043A229  reached from the SW_TEXT widget              user interface
  *
- * THE BODY SPHERE is the entry worth recording. It lives in the same module as the arcs, three of
+ * The body sphere is the entry worth recording. It lives in the same module as the arcs, three of
  * the eighteen sites are in it across its two functions, and from the outside it looks exactly
  * like the arcs: a random shape rebuilt around a body. It sits on message 0x0E, the substep
  * broadcast, so it is already clocked correctly and pacing it would have made it worse. Reading
@@ -116,7 +116,7 @@
  * instead, to a replacement that answers in the same 0 to 32767 range the generator does, which
  * leaves the engine's own comparison and scaling untouched.
  *
- * ONE DELIBERATE DEVIATION, written down rather than buried. Those two replacements do not call
+ * One deliberate deviation, written down rather than buried. Those two replacements do not call
  * the engine's generator at all, so the drawing path stops advancing it. The simulation's random
  * sequence therefore stops depending on how many frames were drawn. The original behaviour was
  * already frame rate dependent at exactly that point, so there is no single authentic behaviour
@@ -275,7 +275,7 @@ _Static_assert(sizeof SIG_ARC_CALL_SITE == sizeof MSK_ARC_CALL_SITE,
  *   00411455  DF E0                 fnstsw ax
  *   00411457  F6 C4 01              test ah,1
  *   0041145A  74 05                 je   carry on
- *   0041145C  E9 B5 FC FF FF        jmp  0x00411116          SKIP THE WHOLE OBJECT
+ *   0041145C  E9 B5 fc ff ff        jmp  0x00411116          skip the whole object
  *
  * The jump at the end goes back to the loop head, so a flickering object loses its draw, its four
  * animation track updates, its reflections and its shadow for that frame. The threshold 0.2 at

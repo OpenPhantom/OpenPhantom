@@ -1,7 +1,7 @@
 /* crt_copy_fix.c: the backwards copy that reads four bytes before its source.
  *
  * ==============================================================================================
- * THE DEFECT
+ * The defect
  *
  * MSVC inlined a hand-written, backwards-running copy loop 40 times into this image. It LOADS
  * before it checks the bound:
@@ -30,7 +30,7 @@
  * state as well; this repairs a picture, not only a crash.
  *
  * ==============================================================================================
- * THE REPLACEMENT
+ * The replacement
  *
  * Not an insertion, the whole loop is replaced. 25 bytes are available (0x492219..0x492231),
  * 11 are needed:

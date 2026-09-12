@@ -46,7 +46,7 @@ static const uint8_t SIG_SOUND_START_CHANNEL[] = {
  * The other half of the life cycle, and the more interesting one: this is where a voice dies,
  * distance cull (LOOPs only), voice stealing, an animation change (bapobj_playClip frees the
  * channel) or a level change. Everything that "restarts by itself" restarts because of this.
- *   +0x15 : `05 <imm32>` = add eax, &g_channel[0] -> THE CHANNEL BANK ([0x5BAEA0], 12 x 0x80).
+ *   +0x15 : `05 <imm32>` = add eax, &g_channel[0] -> the channel bank ([0x5BAEA0], 12 x 0x80).
  *           The operand is at +0x16 and is checked against the image before use. */
 static const uint8_t SIG_SOUND_FREE_CHANNEL[] = {
     0x55, 0x8B, 0xEC, 0x51, 0x83, 0x7D, 0x08, 0x0C, 0x72, 0x05, 0xE9, 0xDF,

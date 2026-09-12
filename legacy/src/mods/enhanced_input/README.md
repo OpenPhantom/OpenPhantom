@@ -1140,7 +1140,7 @@ prologue, and answers a flat zero for that one axis. Every other axis, the butto
 the keyboard reach the game exactly as before.
 Nothing is unbound and no engine input cell is written: the binding is still in `obi.ini` and the
 reading is answered rather than altered. So the promise in `pad_stick.h` still holds where it was
-made, and a build where the signature does not resolve loses this and nothing else.
+made, and a build where the signature does not resolve loses only this.
 
 **What it costs.** Two things. Somebody who bound the right stick's vertical on purpose loses what
 they bound it to, and there is no way from here to tell a deliberate binding from the shipped one.
@@ -1219,7 +1219,7 @@ stick may drive at all, with the unresolved binding set as its main case. The si
   past it, measured across the 0/360 seam rather than the long way round, and switched off by a
   limit of zero, a negative one or one that is not a number.
 
-`unittests/menu_patcher.c` additionally appends **two** check boxes to a copy of the shipped
+`unittests/menu_patcher.c` also appends **two** check boxes to a copy of the shipped
 controls table, the eight authored widgets with their real ids and rects, and checks that both
 ids are free on it, that each box gets its own index in append order, that every field of the
 byte-proven check-box record lands where it belongs, that a duplicate or shadowing id is refused,

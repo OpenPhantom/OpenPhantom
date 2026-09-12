@@ -25,7 +25,7 @@
  */
 
 /* push ebp / mov ebp,esp / sub esp,0x88; nine bytes, one instruction boundary, no relative
- * operand, all of which the trampoline needs in order to copy it. */
+ * operand, all of which the trampoline needs to copy it. */
 #define CAMERA_UPDATE_PROLOGUE_SIZE 9u
 
 /* push ebp / mov ebp,esp / sub esp,0x44; six bytes, same reasoning. */

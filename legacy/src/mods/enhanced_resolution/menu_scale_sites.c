@@ -411,7 +411,7 @@ static const uint8_t SIG_QUERY_FONT[] = {
  * actually decides every list box in the game. It is 16 AUTHORED pixels, so at a scaled canvas it
  * has to be 16 times the ratio, and both immediates move together: the comparison and the value.
  *
- * WHY NOT CORRECT THIS AFTERWARDS. An earlier version of this file multiplied the row height after
+ * Why not correct this afterwards. An earlier version of this file multiplied the row height after
  * the reset had run, which produced the right spacing but left the engine's own snap,
  * `rect.height = numLines * lineHeight + 6`, computed from the SMALLER height. Reset runs on
  * every open, so the box lost a row every time it was opened. Moving the floor instead means the
@@ -460,13 +460,13 @@ _Static_assert(sizeof SIG_LISTBOX_FLOOR == sizeof MSK_LISTBOX_FLOOR,
  * preview upscaler above then handles the thumbnail exactly as it handles the four Bink buttons,
  * because that path is the one it already gates on.
  *
- * WHAT THIS COSTS. Two things, both small and both deliberate. The thumbnail stays uncompressed,
+ * What this costs. Two things, both small and both deliberate. The thumbnail stays uncompressed,
  * which is 38400 bytes for a 160x120 16-bit surface. And an exactly black pixel is a SKIP in the
  * run length format but an ordinary black pixel in a surface copy, so a thumbnail that happened to
  * contain pure black no longer shows the panel through it. For a captured screenshot that is the
  * more faithful of the two.
  *
- * WHAT IT DOES NOT AFFECT. The other caller of this function is swmenu_setWidgetImage, which the
+ * What it does not affect. The other caller of this function is swmenu_setWidgetImage, which the
  * game only ever calls with bCompress already 0, for the four main menu previews. Those take the
  * else arm today and are unchanged.
  */
@@ -506,7 +506,7 @@ _Static_assert(sizeof SIG_SET_WIDGET_IMAGE == sizeof MSK_SET_WIDGET_IMAGE,
  * in the first place; it goes through texture_drawSprite, which takes the destination extents as
  * arguments. So the two `+ 0x20` immediates are all of it.
  *
- * ONE RATIO, NOT TWO. Scaling width and height separately would stretch the pointer on a display
+ * One ratio, not two. Scaling width and height separately would stretch the pointer on a display
  * that is not 4:3, and a stretched arrow reads as a rendering fault rather than as a design. The
  * vertical ratio is used for both, which is the one the text already follows.
  *

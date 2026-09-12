@@ -14,7 +14,7 @@
  *
  * ASCII only, and not out of laziness: the menu fonts are bitmap fonts and their coverage above
  * 0x7F has never been read out of the assets. SEITWAERTS rather than the umlaut, PAS CHASSE and
- * CAMERA LIBRE rather than the accents.
+ * Camera libre rather than the accents.
  *
  * Neither German caption may be the English word. "Strafe" is German for punishment, and it is the
  * one word in this feature that machine-translates into nonsense. FREIE KAMERA rather than FREIER

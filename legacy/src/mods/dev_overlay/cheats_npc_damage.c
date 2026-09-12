@@ -106,7 +106,7 @@ static bool   npc_damage_skip;
 #define NPC_SHOOTER_CLASS_OFFSET 0x08u
 #define SHOOTER_CLASS_PLAYER        1
 
-/* WHOSE SIDE IS THE VICTIM ON. The engine has no faction table; the one word it has is the body's
+/* Whose side is the victim on. The engine has no faction table; the one word it has is the body's
  * own class at +0x04, the same word the collision layers filter on and the one this file zeroes
  * to switch collision off. A census of every actor placement in the eleven shipped levels says
  * how the game uses the low band:
@@ -138,7 +138,7 @@ static bool victim_is_on_the_players_side(const void *victim)
            body_class == BODY_CLASS_ESCORT;
 }
 
-/* WHOSE SHOT WAS THAT. Without this the cheat is not "the player one shots NPCs", it is "every
+/* Whose shot was that. Without this the cheat is not "the player one shots NPCs", it is "every
  * source of damage in the game is lethal": a droid firing at another droid kills it outright, and
  * so does a stray bolt that happens to catch Qui-Gon or Jar Jar, which can end an escort without
  * anything appearing to have gone wrong. The victim is the only thing the hook used to read, and
@@ -173,9 +173,9 @@ static void __cdecl on_npc_damage(char *frame_pointer)
     if (own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].on &&
         damage_came_from_the_player(frame_pointer) && !victim_is_on_the_players_side(victim)) {
         /* <=0 is what the death gate this function feeds (0x00437070, see dismemberment.c's own
-         * DEATH GATE comment) tests for.
+         * Death gate comment) tests for.
          *
-         * THIS IS NOT INDISTINGUISHABLE FROM ORDINARY LETHAL DAMAGE, and this comment used to say
+         * This is not indistinguishable from ordinary lethal damage, and this comment used to say
          * it was. It is indistinguishable to the GATE, which only asks whether health reached zero.
          * It is not indistinguishable to a script that gates its own death on a health BAND. The
          * scrapyard machine in Mos Espa asks for health at or below 900 of 999 while the player is
@@ -217,7 +217,7 @@ static void __cdecl on_npc_damage(char *frame_pointer)
     }
 }
 
-/* WHY EVERY NAKED DETOUR BELOW SAVES THE x87 STACK.
+/* Why every naked detour below saves the x87 stack.
  *
  * pushad saves the eight general purpose registers and pushfd saves EFLAGS. Neither touches the
  * FPU, and this is a 1999 build with no SSE: every float the engine holds lives in the eight deep

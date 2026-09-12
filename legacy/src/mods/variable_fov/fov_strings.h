@@ -12,7 +12,7 @@
  *   1. `Language` from the ini, when set, the truth the user knows themselves;
  *   2. otherwise the Windows UI language, as an approximation;
  *   3. otherwise English.
- * English is additionally the fallback for each individual row, so a missing translation is an
+ * English is also the fallback for each individual row, so a missing translation is an
  * untranslated caption rather than an empty one.
  *
  * CHARACTER SET: letters, digits and spaces, nothing else. rdFont substitutes '?' for a glyph the

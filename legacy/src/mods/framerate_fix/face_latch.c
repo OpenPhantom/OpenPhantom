@@ -63,10 +63,10 @@
  * an E8 rel32 sweep of the whole .text, not on the call sites that were already known, and that
  * single caller bounds this module to the facing command:
  *
- *     FIRST CALL   latches rec+0x1BC = rec+0x1C0, starts the clip, and when the opcode's third
+ *     First call   latches rec+0x1BC = rec+0x1C0, starts the clip, and when the opcode's third
  *                  operand is zero ORs RDMODE_HOLDEND into the track's mode flags at 0x42E456 and
  *                  0x42E47A. Returns 0, meaning still running.
- *     LATER CALLS  0x42E483 resolves the track, tests bComplete at track+0x140, returns 0 while it
+ *     Later calls  0x42E483 resolves the track, tests bComplete at track+0x140, returns 0 while it
  *                  is clear, and otherwise CLEARS it at 0x42E4AE and returns 1.
  *
  * This asks the engine first and keeps its answer whenever it says "still running", so the hook

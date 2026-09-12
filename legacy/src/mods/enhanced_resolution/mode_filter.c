@@ -1,7 +1,7 @@
 /* mode_filter.c: keep the engine's 64 mode slots for modes it can actually use.
  *
  * ==============================================================================================
- * THE CEILING, and why it is not the one everybody looks at
+ * The ceiling, and why it is not the one everybody looks at
  *
  * The options screen shows what graphics_buildModeList produced, and that list is capped by this
  * DLL at MaxMenuModes. Every field report about missing resolutions gets blamed on that cap, and
@@ -31,7 +31,7 @@
  * and one user sees every resolution while the next sees a third of them.
  *
  * ==============================================================================================
- * WHAT THIS DOES
+ * What this does
  *
  * It answers the callback itself for the modes that cannot survive the later test, and returns
  * DDENUMRET_OK without letting them consume a slot:
@@ -43,7 +43,7 @@
  * the engine would have kept is dropped, and the enumeration is never cancelled early by us.
  *
  * "Usable" is doing real work in that second line. A record can be 16-bit RGB and still be turned
- * away by graphics_findMode, which additionally wants five bits in each channel, so a duplicate is
+ * away by graphics_findMode, which also wants five bits in each channel, so a duplicate is
  * only suppressed when the record already holding that size would satisfy that test too. Without
  * it a driver that offered one size twice, narrow first and 565 second, would end up with only
  * the narrow record and a resolution that no longer resolves at all.
@@ -54,7 +54,7 @@
  * per refresh rate as well, and then a single resolution can eat a dozen slots on its own.
  *
  * ==============================================================================================
- * WHAT IT CANNOT DO
+ * What it cannot do
  *
  * Two ceilings sit between this and "every resolution Windows offers", and neither is ours:
  *

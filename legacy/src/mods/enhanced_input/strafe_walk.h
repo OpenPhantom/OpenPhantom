@@ -23,7 +23,7 @@ float strafe_walk_travel_offset(float strafe, float forward, float drive_sign);
  *
  * `current` moves toward `target` so that 90 % of any gap is closed in `settle_seconds` of REAL
  * time, whatever the substep is worth, so the substep is an argument and not a compile-time
- * constant. The step is additionally limited to `max_rate_deg_per_second` of travel,
+ * constant. The step is also limited to `max_rate_deg_per_second` of travel,
  * so a large gap cannot produce a first-substep spike.
  *
  * Returns `target` exactly once the remaining gap falls inside the dead band, so the value lands
@@ -48,7 +48,7 @@ void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, uint8_t *const *player_cel
  * their ramp, the acceleration and the collision, then follows for free, because it is the
  * engine walking rather than this DLL shoving.
  *
- * `clear_backward` additionally takes the backward bit off. Only a control scheme that turns the
+ * `clear_backward` also takes the backward bit off. Only a control scheme that turns the
  * body to face its travel may ask for that; see the reason at the implementation. */
 void strafe_walk_force_forward(uint8_t *record, bool clear_backward);
 

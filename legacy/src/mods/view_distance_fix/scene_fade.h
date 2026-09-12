@@ -12,7 +12,7 @@
  * flashing line and it lasts as long as the fade. The sky is such an area by construction, because
  * graphics_clearFrame clears the frame to the fog colour.
  *
- * WHY THIS IS A DURATION AND NOT A SWITCH. The steps are a property of the buffer and cannot be
+ * Why this is a duration and not a switch. The steps are a property of the buffer and cannot be
  * removed here; how long they are on screen is a property of the fade and can be. fmv_player's own
  * post-movie curtain is the control: it fades an alpha quad out through the SAME primitive into the
  * same 16-bit buffer, so it quantises identically, and it has never once been reported as flashing.

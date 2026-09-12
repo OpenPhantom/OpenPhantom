@@ -1,11 +1,11 @@
 /* sim_pause.h: stop the simulation while the panel is open, using the engine's own pause flag.
  *
- * WHY THIS EXISTS SEPARATELY FROM input_freeze.c. That file answers the two functions the game
+ * Why this exists separately from input_freeze.c. That file answers the two functions the game
  * reads input through with "nothing pressed", which stops the player taking orders. It does not
  * stop the world: NPCs keep walking, movers keep moving and timers keep running behind the
  * panel, and a player opening the overlay mid fight notices all of it.
  *
- * WHAT THE ENGINE ALREADY DOES. sys_frame gates its own simulation step on a flag:
+ * What the engine already does. sys_frame gates its own simulation step on a flag:
  *
  *     0043EA13  83 3D <g_disabled> 00   cmp  dword ptr [DAT_00881344],0
  *     0043EA1A  75 13                   jnz  past the step
@@ -19,7 +19,7 @@
  * keeps being drawn and the panel keeps being visible. Nothing has to be hooked: this is a flag the
  * frame function reads for itself every frame, and writing it is all a pause needs.
  *
- * WHAT THIS DELIBERATELY DOES NOT DO. gameplay_open_pause_menu also broadcasts task command 8 on
+ * What this deliberately does not do. gameplay_open_pause_menu also broadcasts task command 8 on
  * the way in and 9 on the way out, which is how it pauses audio as well. This does not, for a
  * specific reason: the pause broadcast only marks a task paused when its handler returns 0, and
  * iMUSE's handler returns 2, so the mark is never set and the matching resume never fires ImResume.
@@ -30,7 +30,7 @@
  * The previous value is remembered and restored rather than cleared to zero, so opening the panel
  * while the game is already paused for its own reasons cannot un-pause it on the way out.
  *
- * WHY THERE ARE HOLDERS RATHER THAN A SINGLE FLAG. Two features in this DLL want the simulation
+ * Why there are holders rather than a single flag. Two features in this DLL want the simulation
  * stopped and they can be on at the same time: the panel while it is open, and the free camera
  * for as long as it is flying. The free camera used to write the cell itself, which is how the
  * two of them broke each other. Turn the free camera on, open the panel so this remembers a 1,

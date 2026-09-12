@@ -1,6 +1,6 @@
 /* ground_clip_fix.c: a contact must not push a character nothing will collision test.
  *
- * THE SYMPTOM. A character sitting on a box can be walked down through it and under the level by
+ * The symptom. A character sitting on a box can be walked down through it and under the level by
  * bumping into her. Standing on her head does it fastest, she never comes back up, and the 1999
  * game as shipped does it too.
  *

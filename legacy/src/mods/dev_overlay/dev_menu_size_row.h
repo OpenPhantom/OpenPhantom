@@ -3,7 +3,7 @@
  * DevMenuSize exists because the engine knows the resolution and not the screen: a fixed pixel size
  * reads the same at 1080 and at 4K, and on a high density laptop panel those same pixels are tiny.
  *
- * IT SIZES ITSELF BY DEFAULT. DevMenuSize=0, the shipped value, holds the size the panel reads
+ * It sizes itself by default. DevMenuSize=0, the shipped value, holds the size the panel reads
  * at on a 1080 screen as the resolution changes: 1.0x at 1080 and below, 2.0x at 2160. That is a
  * READING size and deliberately not the largest that fits, which at 4K fills the screen. An
  * explicit number still overrides it, because only the person looking at the screen knows how far
@@ -25,7 +25,7 @@
 
 /* Below a third the text stops being legible, so that is the floor.
  *
- * FOUR IS THE CEILING ONLY ON A LARGE ENOUGH SCREEN. The panel is a fixed number of pixels times
+ * Four is the ceiling only on a large enough screen. The panel is a fixed number of pixels times
  * this scale, so four is right for a high density display and far too big for a small one: on a
  * 1280x800 Steam Deck it puts the panel past the edge of the screen, taking the row that would set
  * it back with it. dev_menu_size_row_clamp therefore lowers this ceiling in proportion to the

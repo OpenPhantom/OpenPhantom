@@ -40,7 +40,7 @@
 static bool overlay_entered;
 
 /* ==============================================================================================
- * WHERE THE PAINT HAPPENS, AND WHY IT MOVED
+ * Where the paint happens, and why it moved
  *
  * The panel was first painted from the shared per-frame hook, which runs its callbacks AFTER the
  * function it sits on. That function ends by closing the scene and flipping the page, so the panel
@@ -91,7 +91,7 @@ static uintptr_t      scene_end_call;      /* the call that is redirected, once 
 static void __cdecl hook_scene_end(void)
 {
     if (overlay_input_is_open()) {
-        /* THE PANEL CLOSES ITSELF WHEN IT CANNOT BE SEEN.
+        /* The panel closes itself when it cannot be seen.
          *
          * This is one of three places the scene is closed from; the other two belong to the front
          * end and to a movie. While one of those is running the panel would be open, the player

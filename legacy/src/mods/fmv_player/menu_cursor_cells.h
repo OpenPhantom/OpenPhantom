@@ -11,7 +11,7 @@
  * state. Writing the cells is deterministic; warping is not.
  *
  * One responsibility, kept apart for the same reason vlc_locate.c and movie_path.c are: the
- * cursor cells are nothing to do with playing a movie, and nothing else here needs to know they
+ * cursor cells are nothing to do with playing a movie, and no other file here needs to know they
  * exist. It is not the only part of fmv_player that resolves a signature; fmv_player.c,
  * render_curtain.c and sfx_mute.c each own their own sites too.
  * ============================================================================================ */

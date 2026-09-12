@@ -73,7 +73,7 @@
  *
  * Nothing there reads the yaw back. A census of the whole image says the same thing more strongly:
  * bapview_updateCam, 0x00418544 to 0x0041900C, contains exactly one dword store to `[reg + 0x38]`,
- * the one at 0x00418FAA. Across the whole of .text there are 64 dword stores to `[reg + 0x38]`, of
+ * the one at 0x00418FAA. Across all of .text there are 64 dword stores to `[reg + 0x38]`, of
  * which the only candidates that could be this record are the camera creation path at 0x00417F45
  * (`mov [eax+0x38], 0`, a reset) and the debug free flight camera at 0x00419136 to 0x00419380,
  * which is not on the shipped path. The pointer to the record, [0x008A011C], has 97 references

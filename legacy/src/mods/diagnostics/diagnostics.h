@@ -2,7 +2,7 @@
  *
  * Produces: diagnostics.dll
  *
- * WHAT THIS IS, and what it explicitly is NOT
+ * What this is, and what it explicitly is not
  *
  *   It is a tool for finding faults, not a feature. Every hook calls the original, returns its
  *   result unchanged, and touches neither registers nor flags nor any game field. A diagnostic
@@ -11,7 +11,7 @@
  *   If an area is not switched on in the ini, its detour is not installed at all. With
  *   Enabled=0 this DLL touches not one byte of the image; it does not even read .text.
  *
- * The levels: 0 = off, 1 = events, 2 = additionally the fine-grained traffic (channel
+ * The levels: 0 = off, 1 = events, 2 = events plus the fine-grained traffic (channel
  * allocation, opcodes).
  */
 #ifndef DIAGNOSTICS_H

@@ -1,7 +1,7 @@
 /* menu_island_clip.c: a menu may only draw where a menu can erase.
  *
  * ==============================================================================================
- * THE DEFECT, walked from the report to the bytes
+ * The defect, walked from the report to the bytes
  *
  * Reported from a 3840x2160 session with MenuKeepsResolution=1: hovering a button on the pause
  * menu's options screens leaves a blue smear at the left edge of the 640x480 menu island, one
@@ -32,7 +32,7 @@
  * subpages are exactly the screens that do not.
  *
  * ==============================================================================================
- * THE REPAIR
+ * The repair
  *
  * Clamp the sprite rectangle to the island before the blitter sees it, but ONLY while the menu
  * toolkit is the thing drawing. The gate is the engine's own bracket, not a guess of ours:
@@ -77,7 +77,7 @@
  * worth a correctness risk to avoid.
  *
  * ==============================================================================================
- * WHAT THIS IS NOT, stated honestly
+ * What this is not, stated honestly
  *
  * The retail rasteriser CROPPED a quad at the screen edge; clamping the rectangle SQUASHES the
  * texture into the remaining width instead, by the poked-out fraction. The reason is in the

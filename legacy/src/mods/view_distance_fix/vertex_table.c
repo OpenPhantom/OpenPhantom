@@ -31,7 +31,7 @@
  *     the same reasoning draw_table.c already gives its own counter at 0x59DEBC.
  *
  * ==============================================================================================
- * 1. THE THREE GATES, and why unlike the cell table this one aborts clean
+ * 1. The three gates, and why unlike the cell table this one aborts clean
  *
  * cell_watchdog.h already documents this precisely, "unlike the cell table the vertex cache
  * aborts CLEANLY (all three gates branch to a return before every write)". That is confirmed here
@@ -74,7 +74,7 @@
  * instruction instead of corrupting whatever memory happens to sit next.
  *
  * ==============================================================================================
- * 3. ALL OR NOTHING, same discipline as draw_table.c
+ * 3. all or nothing, same discipline as draw_table.c
  *
  *   pre-flight (NO write) -> buffer -> the twelve address operands -> the three gates LAST.
  *

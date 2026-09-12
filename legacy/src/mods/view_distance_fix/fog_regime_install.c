@@ -37,14 +37,14 @@
 #include <stdint.h>
 #include <string.h>
 
-/* --- 0x0041F14A  baplight_applyLevelFog: THE FOG BAND ---------------------------------------- *
+/* --- 0x0041F14A  baplight_applyLevelFog: the fog band ---------------------------------------- *
  *   55 / 8B EC / 83 EC 0C             prologue, 6 bytes, clean boundary
  *
  * It reads world+0x214 (the packed fog colour) into std3D_setFogColor 0x00487A30, then pushes
  * world+0x21C and world+0x218 into std3D_setFogRange 0x00487AC0 (0x0041F1B3 / 0x0041F1BD), then
  * turns the device fog state on or off from world+0x210 bit 0.
  *
- * TWO CALLERS, and both matter here: 0x0041CAA7 in the level-load path and 0x00438F77 at the tail
+ * Two callers, and both matter here: 0x0041CAA7 in the level-load path and 0x00438F77 at the tail
  * of the effects fog restore. Without a remembered load value the scale would SQUARE itself on the
  * second run, so nothing in this file ever computes from the value currently in the field.
  *
@@ -56,7 +56,7 @@ static const uint8_t SIG_APPLY_LEVEL_FOG[] = {
 };
 #define APPLY_LEVEL_FOG_PROLOGUE_SIZE 6u
 
-/* --- 0x00487B30  THE FOG REGIME: the engine has two, and the wrong one is in force ------------ *
+/* --- 0x00487B30  the fog regime: the engine has two, and the wrong one is in force ------------ *
  *   A1 6C 59 85 00      mov eax,[0x85596C]     the chosen device record
  *   8B 80 A4 01 00 00   mov eax,[eax+0x1A4]    the record carries a 0xFC-byte D3DDEVICEDESC copy
  *                                              at +0x138, so +0x1A4 = dpcTriCaps.dwRasterCaps
@@ -198,7 +198,7 @@ static bool write_fog_regime_byte(const char *what, uintptr_t address,
     return true;
 }
 
-/* THE DEVICE'S OWN FOG CAPABILITIES, read once the device exists and reported once.
+/* The device's own fog capabilities, read once the device exists and reported once.
  *
  * The engine asks this hardware one question, "can you do table fog", and acts on it. There is a
  * second bit in the same word that decides whether the fog it then configures can work at all:
@@ -389,7 +389,7 @@ void consider_pixel_fog(uint32_t caps)
     fog_state.pixel_fog_active = true;
     fog_state.projection_device = device;
 
-    /* ONE WAY, so there is no switch back. Going the other way needs the device reprogrammed,
+    /* One way, so there is no switch back. Going the other way needs the device reprogrammed,
      * because this engine only ever sets FOGTABLEMODE from inside applyLevelFog and that runs at
      * a level load. Reverting the three writes changes only what the NEXT load will push, so the
      * engine goes back to computing a per-vertex factor while the device is still told to ignore

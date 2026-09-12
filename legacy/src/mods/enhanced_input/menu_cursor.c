@@ -102,7 +102,7 @@
  * The field report that prompted it was a menu cursor stuttering badly during ordinary movement.
  * The integer loss is a few per cent at that speed and the screen-edge loss needs a fast flick. In
  * the same session's log the frame timing showed eleven hitches a second of about 20 ms with
- * vertical sync enabled, and that is the only measured quantity large enough to account for what
+ * vertical sync enabled, the only measured quantity large enough to account for what
  * was reported. This file repairs real defects in the input path; it should not be credited with a
  * smoothness that the frame delivery is still costing.
  */

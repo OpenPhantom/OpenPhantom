@@ -52,7 +52,7 @@
  *
  *   0043ea13  83 3D 44134838 00     cmp [00881344],0        ; a movie/quit state, untouched
  *   0043ea1a  75 13                 jnz past the substep call
- *   0043ea1c  83 3D 00000000 00     cmp [SIM PAUSE FLAG],0  ; THE CELL THIS FEATURE USES
+ *   0043ea1c  83 3D 00000000 00     cmp [sim pause flag],0  ; the cell this feature uses
  *   0043ea23  75 0A                 jnz past the substep call
  *   0043ea25  6A 00                 push 0
  *   0043ea27  E8 00000000           call FUN_004756fc       ; the whole substep loop
@@ -70,7 +70,7 @@
  * a deliberate, smaller freeze: enough to stop the world moving under a free camera, not a
  * reproduction of the retail pause experience.
  *
- * THE PATTERN FOR THIS GATE IS NOT REPEATED HERE. sim_pause.c, in this same DLL, resolves this
+ * The pattern for this gate is not repeated here. sim_pause.c, in this same DLL, resolves this
  * exact site, reads the same operand and owns the cell. This feature asks it to hold the pause
  * rather than resolving the address a second time and writing the cell itself. Two resolvers of
  * one address is how the two of them came to fight, and the sequence it produced left the game
@@ -91,7 +91,7 @@
  * overwrote. SIG_CAMERA_UPDATE and CAMERA_UPDATE_PROLOGUE_SIZE are copied from camera_sites.c
  * unchanged for exactly that reason: matching bytes, not just a matching address.
  *
- * WHERE THE CAMERA'S OWN POSITION LIVES, DISASSEMBLED DIRECTLY RATHER THAN TAKEN ON TRUST:
+ * Where the camera's own position lives, disassembled directly rather than taken on trust:
  *
  *   0041872f  MOV EAX,[gView]
  *   00418734  ADD EAX,0x14
@@ -289,7 +289,7 @@ static bool    freecam_hotkey_was_down;
  * The camera's height above it is not the exact drop, since the ground under the camera may be
  * lower still, but it is the right shape of number and it is never wrong about the direction.
  *
- * EIGHTY IS MEASURED, NOT DERIVED, AND THAT DISTINCTION COST A CRASH. It was briefly raised to
+ * Eighty is measured, not derived, and that distinction cost a crash. It was briefly raised to
  * 350 on the reasoning that the fall grace in cheats_fall_consequences.c suppresses the landing
  * damage and both deaths for ten seconds, and that ten seconds of falling at 40 units/s^2
  * clamped to 40 units/s (player+0x80, and 0x004a86f8) covers 380 units. That arithmetic is

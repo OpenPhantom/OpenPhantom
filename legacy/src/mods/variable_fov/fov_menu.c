@@ -35,13 +35,13 @@
  * ==============================================================================================
  * Why there is only one slider, and the two that were removed were removed on evidence
  *
- *   VIEW DISTANCE tore the picture apart. The log showed the slider pushing the range up and the
+ *   View distance tore the picture apart. The log showed the slider pushing the range up and the
  *   cell watchdog taking it back in the same frame, 1.50 -> 1.35, 1.60 -> 1.45, 1.70 -> 1.55,
  *   frame after frame. Two controls on one number, working against each other, make the geometry
  *   pop in rhythm. That is NOT an argument against the range itself, which still works from the
  *   ini; it is an argument against a slider whose value a control loop immediately overwrites.
  *
- *   ASPECT MODE was simply not what was wanted: both settings change the HORIZONTAL too, because
+ *   Aspect mode was simply not what was wanted: both settings change the HORIZONTAL too, because
  *   the engine only has one number. As a mode switch it belongs in the ini, not next
  *   to a slider it silently moves.
  */
@@ -71,7 +71,7 @@
  *   C7 45 B0 FFFFFFFF           result = -1
  *   C7 45 A0 00000000
  *   6A 00                       push selInit = 0
- *   68 88FB4A00                 push pWidgets = 0x4AFB88     <- THE WIDGET TABLE, imm at +0x1A
+ *   68 88FB4A00                 push pWidgets = 0x4AFB88     <- the widget table, imm at +0x1A
  *   68 F0ED4A00                 push pFontNames = 0x4AEDF0
  *   6A 00                       push field18 = 0
  *   68 10EE4A00                 push pBmpNames = 0x4AEE10
@@ -478,7 +478,7 @@ static bool build_widgets(uintptr_t site)
         return false;
     }
 
-    /* NO PLATE. See the layout above: this toolkit cannot crop or scale a bitmap, and no plate in
+    /* No plate. See the layout above: this toolkit cannot crop or scale a bitmap, and no plate in
      * the shared table is short enough for the 108-pixel strip that is free. The caption is drawn
      * over the screen's own background, which is opaque there. */
     if (!menu_patcher_append_slider(&menu_state.patch, WIDGET_ID_FOV_SLIDER,

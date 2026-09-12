@@ -74,7 +74,7 @@ static const uint8_t SIG_STUNT_CONTACT[] = {
 
 /* --- 0x0042F79A  candy_stuntTick: the TUMBLE of a severed piece ------------------------------- *
  *   89 45 FC / DB 45 FC          rand15() -> int
- *   D8 0D 84834A00               fmul [0x4A8384] = 1/32768   (the normaliser. DO NOT TOUCH,
+ *   D8 0D 84834A00               fmul [0x4A8384] = 1/32768   (the normaliser. Do not touch,
  *                                                             it has four readers)
  *   D8 0D 88834A00               fmul [0x4A8388] = 6.6       <- operand at +0x0E
  *   D8 2D 8C834A00               fsubr[0x4A838C] = 3.3       <- operand at +0x14
@@ -358,7 +358,7 @@ bool limb_flight_is_active(void)
 }
 
 /* ============================================================================================
- * THE SAMPLING, because two theories in a row without data were already two too many.
+ * The sampling, because two theories in a row without data were already two too many.
  *
  * Recorded AFTER the original tick but BEFORE our own intervention:
  *   life         remaining time (5.0 -> 0), says whether the rest phase is reached at all
@@ -366,7 +366,7 @@ bool limb_flight_is_active(void)
  *                writing it and no number in this block is the cause.
  *   spin         block+0x04, our lever
  *   vel          block+0x10, of which z is deliberately not zeroed
- *   groundDelta  block+0x6C, DECIDES THE ARM:  3.4e38 or > 1  => arm A (damps nothing)
+ *   GroundDelta  block+0x6C, decides the arm:  3.4e38 or > 1  => arm a (damps nothing)
  *                                              0 < d <= 1     => arm B (damps)
  *                                              d <= 0         => airborne, nothing at all
  * ============================================================================================ */
@@ -449,7 +449,7 @@ static void sample_stunt(uint8_t *block, float life)
  * the frame-rate DLL's pitch/roll interpolation only widens it from one axis to three and makes
  * it more noticeable.
  *
- * THE TREATMENT is what the engine already does for prevPos: maintain the field.
+ * The treatment is what the engine already does for prevPos: maintain the field.
  * ============================================================================================ */
 static void maintain_previous_rotation(uint8_t *block)
 {
@@ -514,7 +514,7 @@ static void release_previous_rotation_slot(const uint8_t *block)
 }
 
 /* ============================================================================================
- * THE REST STATE the engine does not have.
+ * The rest state the engine does not have.
  *
  * Arm B (0 < delta <= 1) damps spin with -0.5 and vel with 0.667; arm A (delta == 3.4e38 or
  * delta > 1) adds 90 degrees of yaw PER SUBSTEP and leaves spin ALONE. So a piece lying slightly
@@ -595,7 +595,7 @@ static int32_t __cdecl hook_stunt_tick(void)
         velocity[0] = 0.0f;
         velocity[1] = 0.0f;                        /* vel.z NOT - it may finish falling */
 
-        /* ONCE PER PIECE, and once really means once. A one-shot flag hid what was being
+        /* Once per piece, and once really means once. A one-shot flag hid what was being
          * reported (one message for five severings); remembering only the last block then went
          * the other way and printed sixteen messages for three pieces, because two of them
          * settled in the same second and alternated. Both times the message lied about how many

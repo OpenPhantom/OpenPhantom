@@ -3,7 +3,7 @@
  * The same switch the controls screen offers, reachable without leaving the game to find it. The
  * key is [enhanced_input] Strafe.
  *
- * IT CAN BE REFUSED, and the row cannot tell in advance. Strafe needs mouse look, because the
+ * It can be refused, and the row cannot tell in advance. Strafe needs mouse look, because the
  * engine's turnWheel is the only turn channel and driving it sideways clears the mouse with it, and
  * it needs the keyboard axis reader to have resolved. enhanced_input declines and says why in the
  * log; this row will then read back off on its next rebuild, which is the honest outcome and the

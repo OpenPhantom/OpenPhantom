@@ -1,6 +1,6 @@
 /* view_range.h: how far the world is drawn, and what is allowed to move that while it runs.
  *
- * THE SEAM. Lifted out of view_distance_fix.c, which was past the hard limit. What came across is
+ * The seam. Lifted out of view_distance_fix.c, which was past the hard limit. What came across is
  * one responsibility and all of the state it decides over: the field of view this DLL observes
  * for itself, the radius cap that pays for a widened picture, where the cut edge lands, the
  * bapmat_viewDistance detour that puts it there, and the per frame tick that arbitrates between

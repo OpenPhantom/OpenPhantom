@@ -6,11 +6,11 @@
  * one address. That evidence is what lets the address be trusted on a build where the globals
  * moved, so it stays.
  *
- * THE SEAM, if this grows again, is the player position log. dump_nearby_placements,
+ * The seam, if this grows again, is the player position log. dump_nearby_placements,
  * player_position_log_tick and the switch that arms them share only their throttle with the spawn
  * refusal census and the destroy observer, and none of the three reads the state of another.
  * ==============================================================================================
- * THE SILENT FAILURE, walked from the report to the bytes
+ * The silent failure, walked from the report to the bytes
  *
  * enemy_activationScan decides per placement whether the actor should exist. Once the distance
  * test, the difficulty band and the type test have all passed, it calls the spawn:
@@ -39,7 +39,7 @@
  * everything worked. This file is the only thing that can tell those two apart.
  *
  * ==============================================================================================
- * WHY IT MATTERS EVEN THOUGH THE ENGINE RETRIES
+ * Why it matters even though the engine retries
  *
  * The scan runs every AI tick, so a refused placement is tried again and usually succeeds once a
  * slot frees. That makes the ordinary case "appears late" rather than "never appears". What turns
@@ -52,7 +52,7 @@
  * the actors alive at one time, against 128 slots.
  *
  * ==============================================================================================
- * WHAT THIS DOES NOT SAY
+ * What this does not say
  *
  * The two refusal paths are inside the spawn and look identical from the call site, so this
  * cannot tell an exhausted actor pool from an exhausted thing pool. It reports that the engine
@@ -587,7 +587,7 @@ static destroy_census_state_t destroy_census;
  * label): enemy045 (127.1, 80.5, 23.1), enemy046 (126.5, 79.7, 23.1) and enemy048 (126.3, 80.9,
  * 23.1) on one lift; enemy076 (122.4, 64.0, 23.0) and enemy077 (122.5, 64.5, 23.0) on a second.
  *
- * WHY NONE OF IT SURVIVES. The stall it was built for was never this race. It was a VirtualQuery
+ * Why none of it survives. The stall it was built for was never this race. It was a VirtualQuery
  * guard on a hook in framerate_fix, since repaired. With that fixed, a session with no suppression
  * at all logged 128 reason-0 destroys across those five placements and held a flat 60 fps through
  * both lifts, with each of the five dying once, properly, by reason 1. The thrashing is real and

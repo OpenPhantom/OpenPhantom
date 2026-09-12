@@ -1,6 +1,6 @@
 /* mode_depth.h: which colour depth the whole mode chain runs at.
  *
- * The engine is 16 bit on the MODE LIST and RENDERER side, three hardcoded comparisons rather
+ * The engine is 16 bit on the mode list and renderer side, three hardcoded comparisons rather
  * than a pervasive assumption. The DirectDraw enumeration callback itself already handles
  * every depth: it switches on the bit count through a jump table, converts pitch to pixels with a
  * `pitch >> 2` arm for 32, and sizes the surface generically as `w * h * (bpp >> 3)`. So a 32-bit
@@ -16,16 +16,17 @@
  * an arbitrary mode, so a half-applied change is worse than none: the two gates alone would list
  * modes that cannot then be selected, and a saved resolution would quietly fall back.
  *
- * WHY ANYONE WOULD WANT THIS. At 16 bits a channel has 5 bits, and the engine fades a level in over
- * four seconds with a full-screen black quad, which multiplies the whole picture. As the multiplier
- * slides, a large area of one flat colour crosses a quantisation boundary all at once and steps as
- * a block while lit geometry does not, so the edge between them flashes. That was measured, and it
- * is the visible half of a precision problem that costs every gradient in the game.
+ * Why anyone would want this. At 16 bits a channel has 5 bits, and the engine fades a level in
+ * over four seconds with a full-screen black quad, which multiplies the whole picture. As the
+ * multiplier slides, a large area of one flat colour crosses a quantisation boundary all at once
+ * and steps as a block while lit geometry does not, so the edge between them flashes. That was
+ * measured, and it is the visible half of a precision problem that costs every gradient in the
+ * game.
  *
  * It needs the wrapper to be handing out 32-bit surfaces as well; the engine asking for a depth it
  * is not offered leaves the list empty, and no patch here can conjure one.
  *
- * HOW FAR 32 ACTUALLY GETS, MEASURED. All three sites open, DdrawOverrideBitMode=32 in dxwrapper:
+ * How far 32 actually gets, measured. All three sites open, DdrawOverrideBitMode=32 in dxwrapper:
  * the wrapper creates a genuine D3DFMT_X8R8G8B8 device at the full desktop resolution and the whole
  * Direct3D scene draws through it correctly. The renderer side of the sentence at the top of this
  * file is not the problem.

@@ -7,7 +7,7 @@
 /* overlay_input.c: one detour that opens the panel, drives it, and locks the game while it is up.
  *
  * ==============================================================================================
- * THE SITE
+ * The site
  *
  * The engine registers one function to see its window messages and hands it every one of them. It
  * is where the shipped game opens its own cheat console, on backspace. Retail WMAIN.EXE, 829,952
@@ -19,7 +19,7 @@
  *   0043F610  83 3D 3C A4 86 00 00     cmp [0086A43C],0     ; a movie is playing
  *   0043F617  74 07 / 33 C0 / E9 ..    if so, answer zero and do nothing
  *   0043F620  81 7D 0C 00 01 00 00     cmp [ebp+0x0C],0x100 ; the message, against WM_KEYDOWN
- *   0043F641  83 3D B4 CF 6C 00 00     cmp [006CCFB4],0     ; THE MODAL CELL
+ *   0043F641  83 3D B4 cf 6C 00 00     cmp [006CCFB4],0     ; the modal cell
  *   0043F648  74 04                    a RAISED cell jumps past the result and answers 0
  *
  * Two things come out of that listing and both are load bearing.
@@ -40,7 +40,7 @@
  * pattern that finds it has landed on the right function, which is worth having on its own.
  *
  * ==============================================================================================
- * WHAT THIS DOES AND DOES NOT STOP, BECAUSE THE FIRST VERSION CLAIMED TOO MUCH
+ * What this does and does not stop, because the first version claimed too much
  *
  * Answering a message here instead of passing it on stops everything the engine drives FROM window
  * messages. That is the cheat console, the pause, and the menu keys.
@@ -51,7 +51,7 @@
  * world runs on behind the box. There is no ready made input lock in this engine to borrow, and
  * pretending otherwise in a comment is worse than saying so.
  *
- * THE POINTER comes from the system cursor, which is where the game's own menu pointer comes from,
+ * The pointer comes from the system cursor, which is where the game's own menu pointer comes from,
  * and is mapped from the window's client pixels into the picture the engine draws. Those two are
  * usually the same size and the mapping is then the identity.
  * ============================================================================================ */
@@ -96,7 +96,7 @@ static const uint8_t SIG_KEY_HOOK[] = {
     0x83, 0xC4, 0x0C,                                      /* add esp,0x0C            */
     0x33, 0xC0,                                            /* xor eax,eax             */
     0xEB, 0x6F,                                            /* jmp out                 */
-    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00               /* cmp [THE MODAL CELL],0  */
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00               /* cmp [the modal cell],0  */
 };
 static const uint8_t MSK_KEY_HOOK[] = {
     0xFF, 0xFF, 0xFF,
@@ -139,7 +139,7 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define KEY_UP              0x26
 #define KEY_DOWN            0x28
 
-/* THE KEY THAT OPENS THE PANEL, AND WHY TWO OF THEM ARE ACCEPTED BY DEFAULT.
+/* The key that opens the panel, and why two of them are accepted by default.
  *
  * The key wanted is the one directly below Escape, where developer consoles have lived for
  * decades. Which virtual key that is depends on the keyboard: on a German layout it is the caret
@@ -151,7 +151,7 @@ _Static_assert(sizeof(SIG_KEY_HOOK) == sizeof(MSK_KEY_HOOK),
 #define KEY_BELOW_ESCAPE_DE 0xDC   /* caret, German and most continental layouts */
 #define KEY_BELOW_ESCAPE_US 0xC0   /* backtick, British and American layouts      */
 
-/* BOTH KEY MESSAGES, BECAUSE OPENKEY CAN NAME A SYSTEM KEY.
+/* Both key messages, because OpenKey can name a system key.
  *
  * Windows sends the function keys as WM_SYSKEYDOWN rather than WM_KEYDOWN, on their own and with no
  * modifier held, because they can reach for a window's menu bar. A handler watching only WM_KEYDOWN
@@ -303,7 +303,7 @@ bool overlay_input_is_open(void)
     return input_state.open;
 }
 
-/* THE POINTER COMES FROM THE SYSTEM CURSOR, WHICH IS WHERE THE GAME'S OWN MENU POINTER COMES FROM.
+/* The pointer comes from the system cursor, which is where the game's own menu pointer comes from.
  *
  * The first attempt integrated the device deltas the game was being denied. It moved, but it was
  * not usable: a relative stream has no home position, it drifts, and its speed is a number somebody
@@ -502,7 +502,7 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
     (void)lparam;
 
     if (is_key_down(message)) {
-        /* WHAT IS DELIBERATELY NOT SWALLOWED. Alt+F4 and Alt+Tab belong to the system and to the
+        /* What is deliberately not swallowed. Alt+F4 and Alt+Tab belong to the system and to the
          * person at the keyboard, not to a panel: a modal overlay that can trap somebody in a full
          * screen game is a worse defect than any it fixes. Both arrive with the alt bit set in the
          * message's own context, bit 29 of the flags, and that bit is what MSG_SYS_KEY_DOWN means,
@@ -544,7 +544,7 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
             }
             return true;      /* everything else is swallowed, same as the panel-wide lock below */
         }
-        /* SCROLLING BY KEY, AND NOT ONLY BY WHEEL. The machine that needs a scrolling list most is
+        /* Scrolling by key, and not only by wheel. The machine that needs a scrolling list most is
          * the one with the smallest screen, and on a Steam Deck there is no wheel at all unless
          * somebody has bound one in Steam Input. These four are otherwise unused by the panel.
          *

@@ -1,7 +1,7 @@
 /* cell_watchdog.h: measure the two walls that a longer view distance runs into, and back off.
  *
  * ==============================================================================================
- * WALL 1: THE CELL TABLE
+ * Wall 1: the cell table
  *
  * bapdraw_gatherCell checks its 8192-entry limit EXACTLY ONCE, at function entry
  * (0x4064B8 `cmp eax,0x2000`). The face loop afterwards runs unchecked to 0x406815, and
@@ -22,7 +22,7 @@
  * tight or too loose. So we measure.
  *
  * ==============================================================================================
- * WALL 2: THE VERTEX CACHE, and it is the nastier one
+ * Wall 2: the vertex cache, and it is the nastier one
  *
  * 16384 slots of 0x40 bytes = exactly 1 MiB. If gate 1 (0x41A0DF) trips, the counter is left at
  * exactly 0x4000, the counter is written BEFORE the branch, and the other two gates then trip

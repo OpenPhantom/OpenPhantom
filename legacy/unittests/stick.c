@@ -69,7 +69,7 @@ static void test_speed(void)
     ut_near((double)length(x, y), 1.0, 0.0005, "a full push on one axis is exactly full speed");
     ut_near((double)y, 0.0, 0.0005, "a push along one axis puts nothing on the other");
 
-    /* THE REGRESSION. This came back 1.414 while the magnitude was clamped before being used as
+    /* The regression. This came back 1.414 while the magnitude was clamped before being used as
      * the divisor, so a diagonal ran 41 percent faster than a straight push on any pad reporting a
      * square range, which includes Steam Input. */
     ut_check(stick_apply_radial_deadzone(FULL, FULL, DEADZONE, &x, &y),

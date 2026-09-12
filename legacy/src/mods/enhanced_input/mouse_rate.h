@@ -180,7 +180,7 @@ void mouse_rate_reset(mouse_rate_t *rate);
  * those reports spanned, measured from the previously consumed report to the newest one. A reader
  * that cannot say passes one packet and the frame's own duration, which loses the boundary
  * correction and keeps everything else. A reader that can say and had nothing to report this frame
- * passes zero packets, and that is not the same thing: an interval with no report in it says
+ * passes zero packets, not the same thing: an interval with no report in it says
  * nothing about the hand, and feeding it in as a zero makes a slow device look like a stopping
  * one.
  *

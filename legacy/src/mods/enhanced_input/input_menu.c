@@ -182,7 +182,7 @@ static const uint8_t MSK_OPTIONS_CONTROLS[] = {
 #define OPCODE_PUSH_IMM32           0x68u
 
 /* 0x0045EB7B, swmenu_getString(stringId, destination). It clears the destination first and then
- * indexes its table with NO BOUNDS CHECK, so every id handed to it has to be one this module
+ * Indexes its table with no bounds check, so every id handed to it has to be one this module
  * owns. */
 static const uint8_t SIG_GET_STRING[] = {
     0x55, 0x8B, 0xEC, 0x56, 0x57,

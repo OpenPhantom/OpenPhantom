@@ -358,7 +358,7 @@ _Static_assert(sizeof SIG_LEDGE_GRAB == sizeof MSK_LEDGE_GRAB,
  *   004131F7  8B 4D F0           mov  ecx,[ebp-0x10]
  *   004131FA  83 79 14 00        cmp  [ecx+0x14],0       the early out
  *
- * THE ACTORS, which are a different subject from the geometry above and needed their own site.
+ * The actors, which are a different subject from the geometry above and needed their own site.
  * Walls are polygons answered by a probe; a Gungan standing in a doorway is not a polygon at all,
  * it is a cylinder, and no wall probe has ever been able to see one. This is the layer that makes
  * bodies solid to each other: run against every other object in the actor band, it answers whether
@@ -497,7 +497,7 @@ static void *__cdecl hook_probe_wall_at(const void *pos, float z_lift, float rad
 
 
 /* ---------------------------------------------------------------------------------------------
- * THE GLIDE. Gravity is suspended for exactly as long as there is nothing underneath the player,
+ * The glide. Gravity is suspended for exactly as long as there is nothing underneath the player,
  * and not one frame longer. See this file's header for why that is the whole design and why the
  * flat hover it replaced was worse rather than simpler.
  * ------------------------------------------------------------------------------------------- */

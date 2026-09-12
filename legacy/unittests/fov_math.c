@@ -41,7 +41,7 @@ static void test_clamp(void)
 
 static void test_horizontal(void)
 {
-    /* THE RETAIL CROSS-CHECK: 4:3 with the authored vertical is the shipped 60 degrees. */
+    /* The retail cross-check: 4:3 with the authored vertical is the shipped 60 degrees. */
     ut_near(fov_horizontal_degrees(ASPECT_MODE_HOR_PLUS, 46.826f, 0.0f, 640, 480),
                 60.0f, 0.01f, "Hor+ at 4:3 reproduces the shipped 60 degrees");
 

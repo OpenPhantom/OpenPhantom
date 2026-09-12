@@ -102,7 +102,7 @@
  * still write half of its bytes legally.
  *
  * ==============================================================================================
- * 3. ALL OR NOTHING
+ * 3. all or nothing
  *
  * A half-relocated state is the worst imaginable: four append blocks of which one writes into the
  * new buffer and the others into the old table would chain `next` pointers across two buffers,

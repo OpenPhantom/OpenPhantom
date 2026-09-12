@@ -1,7 +1,7 @@
 /* cheats_no_fog.c: see cheats_no_fog.h.
  *
  * ==============================================================================================
- * THE SITE, REUSED FROM fog_regime.c RATHER THAN RE-DERIVED
+ * The site, reused from fog_regime.c rather than re-derived
  *
  * view_distance_fix's fog_regime.c already proved, in full, that the live world pointer, g_level,
  * can be read out of bapdraw_setFrameState's own operands with a cross check that costs nothing:
@@ -25,7 +25,7 @@
  * proven correct in one file does not need proving a second time in another, only citing.
  *
  * ==============================================================================================
- * FIRST VERSION CLEARED THE FLAG BIT. FIELD TESTING FOUND THAT BREAKS THE RENDERER.
+ * First version cleared the flag bit. Field testing found that breaks the renderer.
  *
  * The first version of this cheat cleared world+0x210 bit 0 every frame, "this world has fog",
  * off. Field testing found that leaves every moving actor (the player, fish, foliage) drawn as a
@@ -44,7 +44,7 @@
  * authored it, which is the one thing field testing showed matters.
  *
  * ==============================================================================================
- * WHY A PER-FRAME FORCE, NOT ONE WRITE, AND WHY IT REMEMBERS THE BAND RATHER THAN DECLINING
+ * Why a per-frame force, not one write, and why it remembers the band rather than declining
  *
  * Ammunition and health are each spent through one function this project can decline. Fog is not
  * spent through anything: it is two floats the renderer reads directly out of the level record

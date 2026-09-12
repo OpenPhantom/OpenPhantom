@@ -12,14 +12,14 @@
  * sensitivity row rather than a widget left behind on a screen meant to look untouched. Either the
  * screen is the one the game shipped or it is not.
  *
- * IT TAKES EFFECT ON THE NEXT LAUNCH, for a structural reason. Both screens are patched by
+ * It takes effect on the next launch, for a structural reason. Both screens are patched by
  * repointing the engine's own widget table once, while the game starts, and this
  * project has no path that puts such a table back. So the row writes the setting and says when it
  * will be seen.
  *
- * ONE ROW, TWO KEYS, in two different DLLs, and it reads ON only when both are on. A half state can
- * only be reached by editing the file by hand, and reporting that as ON would be a claim about a
- * screen that is only half changed.
+ * One row, two keys, in two different DLLs, and it reads ON only when both are on. A half state
+ * can only be reached by editing the file by hand, and reporting that as ON would be a claim about
+ * a screen that is only half changed.
  */
 #ifndef DEV_OVERLAY_MENU_EXTRAS_ROW_H
 #define DEV_OVERLAY_MENU_EXTRAS_ROW_H

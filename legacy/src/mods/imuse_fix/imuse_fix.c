@@ -259,7 +259,7 @@ static bool service_focus(int32_t paused, int32_t sys_pause, bool foreground)
     }
 
     /* The order the two pauses arrived in decides this, and getting it wrong plays music over the
-     * PAUSE MENU. The player can alt-tab away, we pause, and the pause menu can then open
+     * Pause menu. The player can alt-tab away, we pause, and the pause menu can then open
      * while the game is in the background, which sets the same latch a second time from the other
      * owner. Resuming on the way back would clear a latch the menu still believes it holds, and
      * the menu's own resume on the way out is then a no-op: music under an open pause menu until

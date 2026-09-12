@@ -1,6 +1,6 @@
 /* world_clock.h: put movers back on the simulation's own lattice instead of the frame's.
  *
- * THE DEFECT, and it is the cause rather than a symptom. The substep loop sets the world clock to
+ * The defect, and it is the cause rather than a symptom. The substep loop sets the world clock to
  * the end of each substep CLAMPED to the frame's target time, so the last substep of a frame
  * leaves the clock short. A mover derives its own step from the difference between two of those
  * values, so its sample pair spans the gap between frames rather than one simulation step: at 60

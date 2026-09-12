@@ -16,20 +16,20 @@
  * behind it is reordered. Deleting that reasoning to get under a limit would leave arithmetic
  * nobody can check, which the guidance here explicitly refuses.
  *
- * SO IT MOVED INSTEAD, to overlay_row_ids.h, when a bounds fix to the row array pushed this file
+ * So it moved instead, to overlay_row_ids.h, when a bounds fix to the row array pushed this file
  * past the hard limit. That header is the numbering, its reasoning and its asserts, plus the one
  * number that says how many rows the widest tab can build; nothing in it decides anything, and
  * every function that reads it stayed here. The fold's own text is the exception, because it is a
  * definition rather than a declaration and belongs in one translation unit.
  *
- * AN EARLIER SEAM was taken as well, and it was not the one this note used to name. Splitting
+ * An earlier seam was taken as well, and it was not the one this note used to name. Splitting
  * the OpenPhantom tab
  * into Cheats and Utilities moved the settings rows into overlay_utilities.c, which is a
  * better cut than the editing state machine this note previously proposed: those rows share none
  * of this file's navigation, search, folding or typing state, so what moved is a whole
  * responsibility and what stayed is the part that has to know which row is being typed into.
  *
- * THE SEAM, if it grows again, is that editing state machine after all: the typed value and hotkey
+ * The seam, if it grows again, is that editing state machine after all: the typed value and hotkey
  * capture reached through overlay_model_value_*() and overlay_model_capture_hotkey(). Both groups
  * now go through it, so it has two callers rather than one, which is the shape of something that
  * wants to be its own file.

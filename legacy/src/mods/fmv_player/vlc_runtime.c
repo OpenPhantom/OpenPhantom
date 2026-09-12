@@ -124,7 +124,7 @@ static bool init_worker(void)
     wchar_t plugin_path[MAX_PATH];
     const char *instance_args[3];
     int         instance_arg_count = 0;
-    /* CONFIRMED FIELD FIX for a ROG Ally X that reported silent movies with DSOAL installed.
+    /* Confirmed field fix for a ROG Ally X that reported silent movies with dsoal installed.
      *
      * --aout=mmdevice (forcing WASAPI) was the first fix tried, on the theory that libVLC's own
      * auto-probe was falling back to DirectSound and DSOAL (a DirectSound-to-OpenAL layer for the
@@ -210,7 +210,7 @@ static bool init_worker(void)
 }
 
 /* ============================================================================================
- * WHY THE LOAD ABOVE RUNS ON ITS OWN THREAD
+ * Why the load above runs on its own thread
  *
  * init_worker() walks the registry and the disk for a 32-bit VLC, loads two DLLs out of it and
  * then calls libvlc_new, which initialises VLC's entire plugin system. None of that is fast, and

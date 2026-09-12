@@ -56,7 +56,7 @@
  * taking only its HEIGHT from the rectangle supplied.
  *
  * ==============================================================================================
- * ONE TRAP, and it is why a label must carry parameter = -1
+ * One trap, and it is why a label must carry parameter = -1
  *
  * swmenu_build walks the array once and, for every widget of type 0 or 1 (SW_PIC and SW_TEXT)
  * whose `parameter` is >= 0, replaces `link` with the result of a lookup and then clears
@@ -70,7 +70,7 @@
  *   SW_TEXT  `link` IS the alignment. A pointer where an alignment belongs falls into the text
  *            draw's `default:` case with no positioning at all.
  *   SW_PIC   a non-NULL `link` makes the picture copy that other widget's `state` into its own
- *            EVERY FRAME, and a picture's state is its bitmap index, so the plate would change
+ *            Every frame, and a picture's state is its bitmap index, so the plate would change
  *            which bitmap it draws according to a check box on another screen.
  *
  * All 216 authored SW_TYPE_TEXT widgets in the retail data carry -1. The append functions below

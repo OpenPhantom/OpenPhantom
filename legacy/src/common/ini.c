@@ -59,7 +59,7 @@ bool ini_read_string(const char *section, const char *key, const char *default_v
         return false;
     }
 
-    /* ABSENT AND EMPTY are different, and the platform call cannot tell them apart on its
+    /* Absent and empty are different, and the platform call cannot tell them apart on its
        own. It answers with the number of characters it copied, and it copies the default when
        the key is missing, so a non-empty default always came back looking present. Every
        caller in this project happens to pass an empty default, where a count of zero means

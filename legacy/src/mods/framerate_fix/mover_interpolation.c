@@ -71,7 +71,7 @@
  *
  * The rejected alternative was to detour bapmap_matMul3 itself and work out from the arguments
  * which caller this is. That is one patch instead of four, and it puts this DLL in front of all
- * twelve call sites on every frame in order to act on three of them.
+ * twelve call sites on every frame to act on three of them.
  */
 #include "mover_interpolation.h"
 

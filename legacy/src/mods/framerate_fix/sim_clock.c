@@ -179,8 +179,8 @@ static sim_clock_state_t sim_state;
 
 /* The engine zeroes both clocks itself when a level opens, at 0x00475621 and 0x0047562B, and an
  * offset carried across that boundary would make the new level's world clock start at the previous
- * level's duration. A clock that went backwards is that event, and nothing else here can make it go
- * backwards.
+ * level's duration. A clock that went backwards is that event, and no other path here can make
+ * it go backwards.
  *
  * WHERE this runs is a defect that shipped. It used to run only at frame end, and the
  * substeps of the opening frame had already been handed time + offset by the hook below. The world

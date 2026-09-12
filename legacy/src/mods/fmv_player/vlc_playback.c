@@ -72,7 +72,7 @@ static bool escape_pressed_now(bool *was_down)
  *
  * The fix is in video_overlay.c and it is a window, not a key: under Wine the movie is drawn into a
  * CHILD of the game's own window, so no X11 window is ever created and the focus never moves.
- * FIELD CONFIRMED on Linux Mint. GetAsyncKeyState then answers exactly as it does on Windows, so
+ * Field confirmed on Linux Mint. GetAsyncKeyState then answers exactly as it does on Windows, so
  * there is one test here again and no Wine-only path at all. */
 
 

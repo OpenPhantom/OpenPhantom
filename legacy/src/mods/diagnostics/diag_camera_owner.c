@@ -377,7 +377,7 @@ int diag_camera_owner_install(int level)
                                      (const void *)hook_override_off, OVERRIDE_OFF_PROLOGUE,
                                      "a script giving the camera back (bapview_overrideOff)");
 
-    /* BOTH OR NEITHER is the only useful state. A take with nobody watching the release says the
+    /* Both or neither is the only useful state. A take with nobody watching the release says the
      * camera was taken and nothing about whether that was wrong; a release with nobody watching
      * the take is worse, since the interesting event is the one with no partner. */
     if (!on_live || !off_live) {

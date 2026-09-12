@@ -229,7 +229,7 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
      *
      *   00449F9C  E8 ..                    call the relative axis reader   ; the mouse turn
      *   00449FA7  D8 1D A4864A00           fcomp 0.0
-     *   0044A068  D8 0D DC864A00           fmul  6.0                       ; THE MOUSE ARM:
+     *   0044A068  D8 0D DC864A00           fmul  6.0                       ; the mouse arm:
      *   0044A077  D8 81 A4020000           fadd  turnWheel                 ;   turnWheel += ax * 6
      *   0044A08E  6A 00 / E8 ..            call the absolute axis reader   ; then the keys
      *   0044A0A6  0F 85 42 01 00 00        jne  0x0044A1EE                 ; neither axis moved

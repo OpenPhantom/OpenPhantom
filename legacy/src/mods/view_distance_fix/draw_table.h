@@ -6,7 +6,7 @@
  * page behind it, then the limit may RISE (32768 instead of 8192) and the overflow becomes
  * structurally unreachable.
  *
- * ORDERING CONSTRAINT, and it is not a matter of taste:
+ * Ordering constraint, and it is not a matter of taste:
  *   cell_watchdog_install() runs the cross-check `table + 0x2000*12 == bucket` against exactly the
  *   operands this module rewrites. If the relocation ran first, the watchdog would read our
  *   buffer address, the cross-check would fail, and it would switch itself off together with the

@@ -351,7 +351,7 @@ static void steer_with_mouse_look(steer_substep_t *s)
         engine_rate = enhanced_input_read_field(s->record, PLAYER_TURN_WHEEL);
 
         if (input_config()->restore_turn_rate) {
-            /* Nothing is written, and that is less than this used to do and more correct.
+            /* Nothing is written, less than this used to do and more correct.
              *
              * Writing our own rate was the second mistake here. The cell is an accumulator: the
              * original does turnWheel += ramp * axis, so a held key climbs 12, 26, 42, 60, 80,

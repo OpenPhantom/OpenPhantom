@@ -111,12 +111,12 @@
  * `configured_ratio` is the MenuScale setting: 0 means automatic, which is the default and the
  * useful answer; 1.0 is off; anything else is an explicit ratio, which exists for testing.
  *
- * WHERE AUTOMATIC TAKES ITS NUMBER FROM, and why it is one number rather than two. The engine blits
- * menu bitmaps one source pixel to one destination pixel, so the size a widget is drawn at is
- * simply the size of its bitmap. If the layout were scaled by one ratio and the artwork by another,
- * they would disagree everywhere: gaps, overlaps, and a canvas the background no longer covers,
- * which leaves stale pixels because nothing repaints them. So there is one ratio, and the two ends
- * of the question are settled in whichever order the install can settle them:
+ * Where automatic takes its number from, and why it is one number rather than two. The engine
+ * blits menu bitmaps one source pixel to one destination pixel, so the size a widget is drawn at
+ * is simply the size of its bitmap. If the layout were scaled by one ratio and the artwork by
+ * another, they would disagree everywhere: gaps, overlaps, and a canvas the background no longer
+ * covers, which leaves stale pixels because nothing repaints them. So there is one ratio, and the
+ * two ends of the question are settled in whichever order the install can settle them:
  *
  *   a converted set on disk   its size is the ratio, and the canvas is welded to it. The artwork
  *                             cannot follow a resolution change, so neither can the canvas.

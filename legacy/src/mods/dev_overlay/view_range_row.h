@@ -1,6 +1,6 @@
 /* view_range_row.h: the draw distance setting, as the overlay's own row sees it.
  *
- * WHY THIS GOES THROUGH THE INI RATHER THAN A FUNCTION CALL. The scale this row edits belongs to
+ * Why this goes through the INI rather than a function call. The scale this row edits belongs to
  * view_distance_fix.dll, and feature DLLs in this project never depend on each other at run time:
  * any one of them can be deleted from mods\ without breaking the others, and a direct call would
  * end that. The overlay therefore writes the value to engine_fixes.ini and view_distance_fix reads

@@ -37,7 +37,7 @@ typedef struct input_config {
     float camera_follow_settle_seconds;
     float camera_follow_rate;  /* degrees per second, so a right angle cannot whip the view */
 
-    /* HOW FAR the camera is allowed to drift. This setting decides whether it feels passive or
+    /* How far the camera is allowed to drift. This setting decides whether it feels passive or
      * fights the player. The walk's travel angle reaches a right angle on a
      * held sidestep, and a camera that follows all of it has turned the sidestep into a turn:
      * the stick is heading-relative, so once the view has swung round, the direction that

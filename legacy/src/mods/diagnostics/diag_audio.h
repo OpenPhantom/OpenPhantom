@@ -1,6 +1,6 @@
 /* diag_audio.h: observers for the sound and music subsystems.
  *
- * THE FUNNEL: all four trigger routes into audio (SoundPlaces, script op 0x603, mover keyframes,
+ * The funnel: all four trigger routes into audio (SoundPlaces, script op 0x603, mover keyframes,
  * actor slots) end in bapsound_play, and its flag word decides FIRST what a "sound" even is,
  * bit 0x8 is a music state, bit 0x400 a music sequence, everything else a voice. That one hook is
  * therefore simultaneously the complete music-trigger trace.

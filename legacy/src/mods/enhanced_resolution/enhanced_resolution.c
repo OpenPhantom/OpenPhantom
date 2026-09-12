@@ -1,7 +1,7 @@
 /* enhanced_resolution.c: lift the 4:3 lock, and cap the array it would otherwise overflow.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * graphics_buildModeList 0x46C592 filters the platform's raw DirectDraw table [0x862740]
  * (count [0x862014], stride 0x54) into this device's list. The acceptance rule, in code order:
@@ -39,7 +39,7 @@
  * be reviewed without it: with no acceptance rule written out in code order, `EB 32` is an
  * unaccountable two bytes.
  *
- * THE SEAM TAKEN was the mode table, now mode_table.c: reading the raw display list out of the
+ * The seam taken was the mode table, now mode_table.c: reading the raw display list out of the
  * instructions around the aspect gate, dumping it on request, and capping what the options
  * screen is handed. It reached this file exactly 900 lines, the hard limit, with a note that
  * said only 600 and so granted permission instead of warning. Only two values cross the new
@@ -279,7 +279,7 @@ static void load_config(void)
      * happens on a mode the engine's own constant was never written for. It does not move or
      * rescale any menu: the engine already centres those itself.
      *
-     * KNOWN COST, not yet reproduced here, and the reason this default is under review: the pause
+     * Known cost, not yet reproduced here, and the reason this default is under review: the pause
      * screens repair themselves through the menu toolkit's damage rectangles, which live in canvas
      * coordinates clipped to the same hard-coded 640x480 every blit in that toolkit clips to. A
      * cursor quad drawn partly outside the island cannot be expressed as a damage rectangle, so it

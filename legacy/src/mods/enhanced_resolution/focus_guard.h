@@ -19,7 +19,7 @@
  * Both are consequences of one event, and the event is observed in one place, so they live in one
  * file. Neither belongs in cursor_anchor.c, which would then be doing two jobs.
  *
- * WHAT IT HOLDS: exactly one piece of process-global state, the ClipCursor rectangle, and only
+ * What it holds: exactly one piece of process-global state, the ClipCursor rectangle, and only
  * while the game window is the foreground window. Every path out of that state is enumerated in
  * focus_guard.c above focus_guard_actions().
  */

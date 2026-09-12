@@ -99,7 +99,7 @@ typedef struct probe_state {
     int32_t watchdog_releases;
 
     /* The highest gate value seen since the last report. Sampling the gate once per frame FROM THE
-     * GAME THREAD almost always reads 0, because the game thread is not inside ImLock at the
+     * Game thread almost always reads 0, because the game thread is not inside ImLock at the
      * moment we look, so `gate=0` on a routine line is not a health certificate, it is the
      * expected reading. What the sample can see reliably is the value that never comes back down,
      * and the maximum shows a transient overlap on the way there. */
@@ -183,7 +183,7 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
         verdict = "the Windows timer itself stopped: the callback is not being fired at all, "
                   "which is not an iMUSE fault and not something the gate can explain";
     } else if (gate != 0) {
-        verdict = "THE GATE IS HELD BY NOBODY. This is the predicted failure: the counter that "
+        verdict = "the gate is held by nobody. This is the predicted failure: the counter that "
                   "guards the heartbeat is raised and lowered with plain, uninterlocked "
                   "instructions from two threads, and its own floor test means a lost decrement "
                   "can only ever leave it stuck HIGH. Nothing then refills the music buffer, and "
@@ -199,7 +199,7 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
                   "against a clock, and this analysis does not cover that case";
     }
 
-    log_error("MUSIC HEARTBEAT STALLED for %u ms. timer ticks %d (%s), gate %d (highest seen %d), "
+    log_error("music heartbeat stalled for %u ms. timer ticks %d (%s), gate %d (highest seen %d), "
               "re-entrancy %d. %s. Occurrence #%d.",
               (unsigned)stalled_ms, (int)ticks, timer_alive ? "still firing" : "FROZEN",
               (int)gate, (int)state.gate_max, (int)reentry, verdict, (int)state.stalls_seen);
@@ -553,7 +553,7 @@ bool music_probe_install(void)
 
     if (config.stress_hz > 0) {
         log_warning("MusicStressHz=%d: the music is being deliberately thrashed to reproduce the "
-                    "heartbeat stall. It will stutter and cut, and that is this setting working, "
+                    "heartbeat stall. It will stutter and cut, which is this setting working, "
                     "not a new fault. Set MusicStressHz=0 for normal play.",
                     (int)config.stress_hz);
     }

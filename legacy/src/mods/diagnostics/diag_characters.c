@@ -1,7 +1,7 @@
 /* diag_characters.c: name the characters standing near the player, and say which way each one is
  * moving vertically.
  *
- * WHAT THIS IS FOR. A field report names what a character looked like, not what the engine calls
+ * What this is for. A field report names what a character looked like, not what the engine calls
  * it, and the two are not easy to connect while playing. This walks the engine's own character
  * pool every so often and reports the ones within a radius of the player by name and position, so
  * a report can say which record it means. The vertical column is the second reason it exists: a
@@ -80,7 +80,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* --- 0x00431ff3, the character pool teardown. A DATA SITE ONLY, never hooked ------------------ *
+/* --- 0x00431ff3, the character pool teardown. A data site only, never hooked ------------------ *
  * Chosen because its very first test is against the pool pointer itself, so the address sits at a
  * fixed offset from a prologue:
  *
@@ -129,7 +129,7 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x3C, 0x85, 0x28, 0x52, 0x4B, 0x00, 0x01, 0x0F, 0x84, 0x95, 0x00, 0x00,
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
-/* SEARCHED AS A DETOUR TARGET even though nothing here hooks it. Searching for the plain
+/* Searched as a detour target even though nothing here hooks it. Searching for the plain
  * prologue instead is the entire reason this census used to switch itself off.
  *
  * diag_flow.c detours this same function, and with [diagnostics] Player=1 it gets there
@@ -143,7 +143,7 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
 #define PLAYER_RUN_PHASES_PROLOGUE 6u
 #define OFFSET_PLAYER_POINTER 0x27u
 
-/* THE DRAWN BODY, which is a different object from the record that owns it.
+/* The drawn body, which is a different object from the record that owns it.
  *
  * The player record holds its body at +0x0C, and a bapObj carries its own world position at
  * +0x18. That position is what the frame arm draws from, and it is NOT the position the
@@ -348,7 +348,7 @@ static bool report_character(uintptr_t record, const float player_position[3], b
                        (int)ai_mode, (double)vertical, (double)since,
                        character_scan_motion_text(character_scan_classify(since)),
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
-                       (int)move_mode, (move_mode & 1) ? " NOT COLLISION TESTED" : "",
+                       (int)move_mode, (move_mode & 1) ? " not collision tested" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     } else {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
@@ -357,7 +357,7 @@ static bool report_character(uintptr_t record, const float player_position[3], b
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical,
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
-                       (int)move_mode, (move_mode & 1) ? " NOT COLLISION TESTED" : "",
+                       (int)move_mode, (move_mode & 1) ? " not collision tested" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     }
     /* Arming on the Z rather than the whole position: the field this bug moves is the only one

@@ -157,7 +157,7 @@ static const uint8_t MSK_CAMERA_INTERP[] = {
  *
  *   8B 0D <regionYaw> / 51    arg 3: the authored yaw of the region under the player
  *   8B 15 <offset>    / 52    arg 2: the camera yaw offset
- *   A1    <yawLag>    / 50    arg 1: THE RECENTRE RATE
+ *   A1    <yawLag>    / 50    arg 1: the recentre rate
  *   E8 <lerpAngle>
  *   83 C4 0C
  *   D9 1D <offset>            offset := lerpAngle(rate, offset, regionYaw)   <- SAME operand again
@@ -485,7 +485,7 @@ _Static_assert(sizeof SIG_PLAYER_START_FIRE == sizeof MSK_PLAYER_START_FIRE,
  *
  * That live read is the whole reason this site exists. Plr_AutoAim runs substeps earlier, and the
  * heading it saw is long gone by now, so a heading swapped across Plr_AutoAim aims the search
- * cone and nothing else. What decides where the bolt goes is the heading the BODY has at this
+ * cone alone. What decides where the bolt goes is the heading the BODY has at this
  * instant, plus this offset cell. Correct the cell here and the shot can be aimed anywhere the
  * player is looking while the body walks wherever the keys say.
  *

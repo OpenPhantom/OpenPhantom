@@ -21,7 +21,7 @@
  * Take the cut if a second anchor ever appears, or when this file reaches the hard limit.
  *
  * ==============================================================================================
- * ONE ANCHOR, NOT SIXTEEN SIGNATURES
+ * One anchor, not sixteen signatures
  *
  * Every one of these lives inside a single retail function, gameplay_open_cheat_console, read in
  * full by decompiling 0x0042fc90. After the eleven-entry toggle loop cheats_original.c already
@@ -29,7 +29,7 @@
  * by whatever that code actually does, whether a function call, a direct write, or both.
  *
  * Rather than write and verify sixteen independent byte patterns, this resolves ONE signature for
- * the function's own prologue and reads everything else as a FIXED BYTE OFFSET from it. That is
+ * the function's own prologue and reads everything else as a fixed byte offset from it. That is
  * sound for the same reason cheats_original.c's OFFSET_NAME_TABLE and OFFSET_FLAG_ARRAY are: the
  * whole function is one compiled unit, so a recompile that relocates it moves every instruction
  * inside it by the same amount, and every address an instruction embeds is read out of the match
@@ -51,7 +51,7 @@
  * function, not estimated, and is the distance from 0x0042fc90 to the instruction in question.
  *
  * ==============================================================================================
- * THE COUNTER, WHAT IT REALLY DOES, AND WHY THE GATE MATCHES RETAIL'S OWN CAP ANYWAY
+ * The counter, what it really does, and why the gate matches retail's own cap anyway
  *
  * Full health and all-weapons-full-ammo both raise DAT_00872efc, capped under the console's own
  * `< 10` guard so the two effects themselves stop giving anything past a point. The first version
@@ -80,13 +80,13 @@
  * a cost of the effect itself, not a defect in how many times this panel lets you pay it.
  *
  * ==============================================================================================
- * TWO LABELS THIS FILE HAD WRONG THE FIRST TIME, CORRECTED FROM WHAT THE CALLEES ACTUALLY DO
+ * Two labels this file had wrong the first time, corrected from what the callees actually do
  *
  * Two of the three codes too short to be catalogued as strings were named from a fan-made cheat
  * sheet before either callee had actually been read, on the assumption that whichever mystery
  * one-shot codes were left over must be whichever screenshot rows were left over. That assumption
  * was wrong: "but i feel so good" and "happy", which the guess leaned on, turned out to already be
- * TOGGLE TABLE entries cheats_original.c covers on its own, not these two at all. Decompiling the
+ * Toggle table entries cheats_original.c covers on its own, not these two at all. Decompiling the
  * real callees:
  *
  *   FUN_0042945f -> FUN_004293e8: cycles DAT_004ac538 through 1..4, copies a 12-dword row out of a
@@ -160,7 +160,7 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
 
 /* The message ids retail's own console passes to FUN_0043dc61 after each effect, read straight off
  * the same disassembly as everything else here. Safe to carry as literals rather than resolve: each
- * is an immediate value baked into the CALL SITE'S OWN bytes, not a movable data address, the same
+ * is an immediate value baked into the call site's own bytes, not a movable data address, the same
  * reasoning the tech bonus case already documents. Graphics detail is the one exception, whose
  * message id is `DAT_004ac538 + 0x37` and has to be read fresh after the level actually changes. */
 #define MSG_KILL_SELF        0x46
@@ -371,7 +371,7 @@ static void resolve_difficulty(void)
     }
 }
 
-/* HELD BACK AS n/a, THE SAME WAY AND FOR THE SAME REASON AS WAVERING GRAPHICS.
+/* Held back as n/a, the same way and for the same reason as wavering graphics.
  *
  * The site resolves cleanly and the write runs without crashing on its own terms, but field
  * testing found triggering it from this panel, mid level, behaves badly enough to be worth not
@@ -391,7 +391,7 @@ static void resolve_credits(void)
     }
 }
 
-/* HELD BACK AS n/a ON PURPOSE, NOT BECAUSE IT FAILED TO RESOLVE.
+/* Held back as n/a on purpose, not because it failed to resolve.
  *
  * The site resolves cleanly, the flag and both apply calls all read as valid, in-image addresses,
  * and it runs without crashing. What it does not do, confirmed against the running game rather than
@@ -421,7 +421,7 @@ static void resolve_wavering_graphics(void)
              "resolve_wavering_graphics().");
 }
 
-/* HELD BACK AS N/A, the third row in this file that resolves and is still not offered.
+/* Held back as N/A, the third row in this file that resolves and is still not offered.
  *
  * The game's own debug mode draws its frame rate readout through the same text layer this panel
  * draws through, and running it from here breaks the panel: field confirmed, by turning it on and
@@ -634,7 +634,7 @@ bool cheats_original_actions_invoke(cheats_action_id_t id)
         print_message_if_available(MSG_ALL_WEAPONS_AMMO);
         return true;
 
-    /* QUEUED, NOT RUN HERE. The swap has a precondition read out of FUN_00447d18: a pointer in the
+    /* Queued, not run here. The swap has a precondition read out of FUN_00447d18: a pointer in the
      * player's own state block that reads as "no active controller" while dev_overlay is holding
      * the player suspended, which is the engine's own idle state and is exactly what the panel asks
      * for on every other frame it is open. Calling the swap now can silently do nothing, with no

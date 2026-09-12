@@ -51,7 +51,7 @@ static struct {
 static uint32_t size_list_count;
 static bool     size_list_open;
 
-/* THE DISPLAY'S OWN LIST, asked of Windows rather than of the engine.
+/* The display's own list, asked of Windows rather than of the engine.
  *
  * The engine has a list too, and enhanced_resolution owns it, but that is a different DLL and
  * feature DLLs in this tree do not depend on each other. Windows answers the same question from the

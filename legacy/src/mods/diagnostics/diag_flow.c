@@ -56,7 +56,7 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
 #define PLAYER_RUN_PHASES_PROLOGUE 6u
 #define OFFSET_PLAYER_POINTER      0x27u
 
-/* --- A DATA SITE ONLY, no hook: player_save 0x004479F8 pushes the mode pointer table as a
+/* --- A data site only, no hook: player_save 0x004479F8 pushes the mode pointer table as a
  *     `push imm32`. That is where [0x4B54B0] comes from.
  *   +0x0A : &g_plrModeTable */
 static const uint8_t SIG_PLAYER_MODE_TABLE[] = {

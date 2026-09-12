@@ -1,7 +1,7 @@
 /* crash_report.c: exception code, address, module, registers and the engine frames on the stack.
  *
  * ==============================================================================================
- * WHY THIS EXISTS
+ * Why this exists
  *
  * Three sessions in a row the log ended at the same place after a level load, with not one line
  * about what went wrong. Once the process hung inside a graphics wrapper's cleanup; once it died
@@ -188,7 +188,7 @@ static void report_faulting_bytes(uintptr_t instruction_pointer)
  * So a base in the sweep becomes a name by looking up the file, and the report takes no risk
  * to earn it.
  *
- * WHY THIS EXISTS AT ALL. The sweep used to recognise addresses in WMAIN and in nothing else,
+ * Why this exists at all. The sweep used to recognise addresses in WMAIN and in nothing else,
  * so the moment a fault came from one of this project DLLs the report went quiet exactly where
  * it mattered. A real one printed the engine frame loop and then stopped, with no return
  * address beneath it, and finding the DLL responsible took five rounds of disabling things by
@@ -319,7 +319,7 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
 }
 
 /* ==============================================================================================
- * WHY A FIRST-CHANCE ACCESS VIOLATION IS NOT A CRASH REPORT.
+ * Why a first-chance access violation is not a crash report.
  *
  * This project reads engine memory through the guarded readers in common/memory.c, and those are
  * SEH: memory_try_read wraps a memcpy in __try and __except and answers false when it faults.
@@ -345,7 +345,7 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
  * took it. The line is deliberately cheap: no module lookup, because that takes the loader lock
  * and this runs often.
  *
- * WHAT THIS COSTS. An access violation that something further out swallows, while the process then
+ * What this costs. An access violation that something further out swallows, while the process then
  * hangs rather than dying, is now one line instead of a report. That line still names the faulting
  * address, the address it touched and what it was doing, the part worth having; the registers
  * and the stack sweep are given up. That is the right way round: a report never

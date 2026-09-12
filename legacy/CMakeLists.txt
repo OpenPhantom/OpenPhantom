@@ -15,19 +15,19 @@ project(engine_fixes C)
 # a bug report could not say which patch it was against.
 enable_language(RC)
 
-# THE PATCH'S VERSION, and the only copy of it in this tree.
+# The patch's version, and the only copy of it in this tree.
 #
 # The project carries two numbers again, at j0nny's asking: the patch releases as 0.4.x and the
 # installer that carries it as 1.4.x. They were merged into one for 1.5.0 on the reasoning that they
-# had never been released apart, and that is being undone rather than argued with.
+# had never been released apart; that is being undone rather than argued with.
 #
-# THIS IS THE PATCH'S NUMBER. These DLLs are the patch, so they carry the patch's line: it is what
+# This is the patch's number. These DLLs are the patch, so they carry the patch's line: it is what
 # every binary's version resource is stamped with, what the log header prints, and what version.h
 # hands to any code that wants to say which build it is. The installer's own 1.4.x is a separate
 # number and lives in AppVer.
 #
-# THE LAST DIGIT COUNTS RELEASES. A new release, patch and installer together, adds one to both
-# lines. It is not a judgement about how much changed, which is what the old rule here tried to be.
+# The last digit counts releases. A new release, patch and installer together, adds one to both
+# lines. It is not a judgement about how much changed, the thing the old rule here tried to be.
 #
 # Inno cannot read a CMake variable, and wiring the build system into the installer would couple two
 # things that are otherwise independent, so AppVer keeps its own copy and the two move together by
@@ -90,7 +90,7 @@ endif()
 # executable, the fixes in mods\, the standalone scripts in tools\.
 set(ENGINE_FIX_OUTPUT ${CMAKE_BINARY_DIR}/dist)
 
-# The output directory is emptied at configure time, and that is a safety property rather than
+# The output directory is emptied at configure time, a safety property rather than
 # tidiness. CMake never deletes the output of a target that has stopped existing, so after a fix
 # is renamed or removed its old DLL simply stays in dist\mods, gets installed alongside the new
 # one, and the loader then applies two generations of the same patch to the same engine cells.

@@ -1,19 +1,19 @@
 /* diag_write_watch.c: which instruction wrote these four bytes.
  *
- * WHY THIS EXISTS. Reading the disassembly outward from a field tells you which functions COULD
+ * Why this exists. Reading the disassembly outward from a field tells you which functions could
  * write it. It does not tell you which one does, and this project has twice spent a long time on a
  * mechanism that turned out not to be the one running. A hardware data breakpoint answers the
  * question directly: the processor stops on the instruction that performed the write, and the
  * address in the exception's own context is that instruction. There is no inference left in it.
  *
- * HOW IT IS DONE, and why not the obvious way. The debug registers are per thread. The obvious
+ * How it is done, and why not the obvious way. The debug registers are per thread. The obvious
  * approach, calling SetThreadContext on GetCurrentThread from inside the frame callback, is not
  * reliable: a thread setting its own context has no defined behaviour for the register state it is
  * currently running on, and in practice the write is silently dropped, which looks exactly like
  * "nothing ever writes this field". A short lived helper thread suspends the simulation thread,
  * writes the registers into a stopped context, and resumes it. That is what a debugger does.
  *
- * The handler does NO FILE WORK. It runs inside an exception on the simulation thread, so it
+ * The handler does no file work. It runs inside an exception on the simulation thread, so it
  * records into a small fixed buffer and returns. The frame callback drains that buffer afterwards.
  * Logging from inside the handler would put file IO between the faulting instruction and the
  * instruction after it, which changes the timing of the very thing being measured, and would

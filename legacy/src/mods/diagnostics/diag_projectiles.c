@@ -26,7 +26,7 @@
  * force-remove entries from it and was deleted once these measurements were in; this is the
  * evidence it was built on and the evidence that removed it.
  *
- * HOW AN ENTRY GETS STUCK, confirmed by decompiling the removal path rather than inferred from the
+ * How an entry gets stuck, confirmed by decompiling the removal path rather than inferred from the
  * counts. FUN_004524b9 removes an entry one of two ways: an external flag (bit 0x40000000 of the
  * flags word at entry+0x84), or immediately on first contact, but only for an entry that does NOT
  * persist on impact (flag bit 0x2 clear). Bit 0x40000000 is set from exactly one place outside that
@@ -45,7 +45,7 @@
  * the persist bit is the only kind that can reach this state; an ordinary blaster bolt never
  * carries that flag and is removed correctly on its own first hit.
  *
- * WHAT IT COSTS: nothing measurable, and this is the part that was got wrong for a long time. The
+ * What it costs: nothing measurable, and this is the part that was got wrong for a long time. The
  * pileup was believed to cause a severe frame-rate stall at two lift platforms, on the evidence
  * that a fix which force-removed stuck entries did make the stall smaller. It was removing
  * collision traces that were hammering a hook in another DLL. With that hook repaired (see

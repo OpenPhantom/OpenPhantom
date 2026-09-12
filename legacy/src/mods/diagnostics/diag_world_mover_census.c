@@ -1,7 +1,7 @@
 /* diag_world_mover_census.c: which call site reaches the mover integrator, and how often it
  * finds anything to do.
  *
- * THE SEAM. This is the cut diag_world.c's own size note named before it was made. The census
+ * The seam. This is the cut diag_world.c's own size note named before it was made. The census
  * touches none of the detour state the observers around it share, it reads the engine through the
  * one detour that already exists for level 2, and everything it owns is its own. It leaves behind
  * three calls: one from hook_mover_tick, one from diag_trigger_install and one from the per-frame

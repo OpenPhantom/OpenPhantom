@@ -216,7 +216,7 @@ static void write_band(const fog_regime_band_t *band)
 
     /* The one invariant the renderer cannot survive being wrong about: bapdraw_setFrameState
      * disarms the ramp on a negative span and the emitter then writes a zero specular, which is
-     * FULLY FOGGED, not "no fog". Refusing here leaves the level exactly as authored. */
+     * Fully fogged, not "no fog". Refusing here leaves the level exactly as authored. */
     if (!(band->end > band->start)) {
         if (!fog_state.span_refused) {
             fog_state.span_refused = true;

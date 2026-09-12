@@ -20,7 +20,7 @@
  * render rate costs the simulation nothing, and nothing in this DLL touches that loop, except
  * to nail it down, see the sim-rate pin below.
  *
- * THE RENDER CAP is one dword:
+ * The render cap is one dword:
  *     0x475B82  mov [ebp-4], 0x3D088889     ; 1/30 s
  *     0x475B8B  mov [ebp-4], 0x3C888889     ; 1/60 s   ("60fps" cheat arm)
  *     0x475BAE  cmp [0x4B7D78], 0           ; g_frameLimiterOn, ships as 1
@@ -147,7 +147,7 @@ static const uint8_t SIG_SUBSTEP_SELECT[] = {
 /* --- 0x0046C1B5  g_clockTicks++ inside render_frameEnd --------------------------------------- *
  *   8B 15 10 87 86 00   mov edx, [g_clockTicks]     -> its address at +0x02
  *
- * g_clockTicks [0x868710] is incremented ONCE PER FRAME by exactly one instruction in the whole
+ * g_clockTicks [0x868710] is incremented once per frame by exactly one instruction in the whole
  * image. bapmap_waterWave 0x428615 reads it as if it were a clock, so at 144 fps the water runs
  * 4.8x too fast.
  *
@@ -637,7 +637,7 @@ static void on_frame(void)
                                    cinematic_gate_script_owns_camera());
     }
 
-    /* THE ANIMATION CLOCK, and it is a genuine choice rather than a fix.
+    /* The animation clock, and it is a genuine choice rather than a fix.
      * g_clockTicks is an INTEGER counter that the water wave consumes as
      * (float)(uint32_t)(ticks * rate) degrees, so its resolution is one tick, whatever we do.
      * (Not the UV scroll: see the corrected census at SIG_CLOCK_TICKS_INCREMENT. The surface UV

@@ -1,7 +1,7 @@
 # One DLL per independent fix, all of them landing in mods\.
 #
 # add_engine_fix(<name> <sources...>) builds <name>.dll from <name>/<source>. The directory name,
-# the DLL name, the ini section and the log prefix are all the same word, which is what lets a
+# the DLL name, the ini section and the log prefix are all the same word, and that lets a
 # player match a line in the log to a file on disk without a lookup table.
 
 function(add_engine_fix name)

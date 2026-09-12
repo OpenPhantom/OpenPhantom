@@ -1,11 +1,11 @@
 /* overlay_sites.c: every engine entry point the panel draws through.
  *
  * ==============================================================================================
- * THE SITES, AND HOW EACH ONE WAS ESTABLISHED
+ * The sites, and how each one was established
  *
  * All addresses are from retail WMAIN.EXE, 829,952 bytes, ImageBase 0x400000.
  *
- * THE FILLED SHAPE. 0x00419660 takes four screen coordinates, a packed ARGB and a layer, and is
+ * The filled shape. 0x00419660 takes four screen coordinates, a packed ARGB and a layer, and is
  * what the game draws its own letterbox bars and its screen tint with:
  *
  *   00419660  81 EC 84 00 00 00        sub esp,0x84        ; no frame pointer, an optimised leaf
@@ -35,7 +35,7 @@
  * asset to ship.
  *
  * ==============================================================================================
- * WHAT WENT WRONG THE FIRST TIME, BECAUSE IT COST A TEST ROUND
+ * What went wrong the first time, because it cost a test round
  *
  * Every pattern here was first written with its mask inverted. The shared matcher treats a NON ZERO
  * mask byte as "must match" and a zero as a wildcard, and these were written the other way round,
@@ -47,7 +47,7 @@
  * one: see the note beside the ammunition pattern in cheats_openphantom.c.
  *
  * ==============================================================================================
- * WHY THE PANEL IS DRAWN AND NOT BLITTED
+ * Why the panel is drawn and not blitted
  *
  * Every shape and every string goes through the engine on the frame it appears on. Nothing is
  * cached, no surface is held and no state is left changed behind us: the colour is set before each

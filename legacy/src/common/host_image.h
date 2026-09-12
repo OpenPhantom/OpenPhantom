@@ -2,7 +2,7 @@
  *
  * One responsibility: answer "where is the main executable, where is its code section, and which
  * directory did it come from". Everything that scans, range-checks or writes engine memory needs
- * those answers, and nothing else in `common` should be computing them a second time.
+ * those answers; no other file in `common` should be computing them a second time.
  *
  * host_image_resolve() is idempotent and must be called before any other function here returns
  * anything useful. The feature entry point does that once.

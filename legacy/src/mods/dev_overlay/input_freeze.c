@@ -1,7 +1,7 @@
 /* input_freeze.c: the two functions the whole game reads its input through.
  *
  * ==============================================================================================
- * THE TWO SITES
+ * The two sites
  *
  * Retail WMAIN.EXE, 829,952 bytes, ImageBase 0x400000. Both open the same way and both already
  * know how to answer when there is nothing to report; this borrows that answer.
@@ -20,7 +20,7 @@
  *             74 09
  *             83 3D D8 9A 4B 00 00
  *             75 07
- *             33 C0                    NOT READY: answer zero
+ *             33 C0                    not ready: answer zero
  *             E9 8A 00 00 00
  *             8B 45 08 6B C0 18        mov eax,[ebp+8]; imul eax,0x18  ; stride 0x18 per axis
  *
@@ -30,7 +30,7 @@
  * centred stick, would be a value nothing downstream has ever been given.
  *
  * ==============================================================================================
- * THE POINTER IS NOT BUILT FROM THESE DELTAS
+ * The pointer is not built from these deltas
  *
  * It was, once, and it was not usable: a relative stream has no home position, it drifts, and its
  * speed is a number somebody has to guess. The panel takes the system cursor instead, which is
@@ -48,7 +48,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* --- 0x00450FD8, THE PLAYER'S OWN SUSPEND STATE, and this is the lock that actually works.
+/* --- 0x00450FD8, the player's own suspend state, and this is the lock that actually works.
  *
  * The engine does not gate input with a flag. It reads the mouse inside the steering phase, and the
  * phases are dispatched from a table by the player's task; in a menu, a dialogue and a cutscene it
@@ -258,7 +258,7 @@ static void suspend_player(bool suspend)
     if (!freeze_state.suspended) {
         return;
     }
-    /* ONLY IF IT IS STILL THE ZERO WE WROTE.
+    /* Only if it is still the zero we wrote.
      *
      * The engine has its own suspend, and a cutscene starting while the panel is open would save
      * our zero into its own slot and put that zero back afterwards. Writing our remembered value

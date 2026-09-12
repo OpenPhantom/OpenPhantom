@@ -520,7 +520,7 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
 /* ==============================================================================================
  * The drawn angle
  *
- * Everything above runs on the simulation clock, once every 1/32 s, and that is right: a damper is
+ * Everything above runs on the simulation clock, once every 1/32 s, rightly: a damper is
  * a simulation quantity. What was wrong is that the damped value was also the DRAWN value. The pose
  * compositor multiplies the node euler in after the animation blend, so whatever stands in the node
  * is exactly what appears on screen, with nothing to smooth it. At 240 frames a second the body

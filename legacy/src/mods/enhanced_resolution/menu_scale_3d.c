@@ -29,7 +29,7 @@ typedef void(__cdecl *sw3d_draw_fn_t)(void *widget);
 /* 320 / tan(30 deg): the focal length, in pixels, of the lens the menus were authored under. */
 #define SW3D_AUTHORED_FOCAL 554.256f
 
-/* HOW FAR THE SIZE COMPENSATION IS ALLOWED TO GO. It has to stop somewhere.
+/* How far the size compensation is allowed to go. It has to stop somewhere.
  *
  * Holding a model's apparent size while the lens widens means growing it at a fixed distance, and
  * a model that grows far enough pushes its own front face through the near plane and is culled
@@ -100,9 +100,9 @@ void __cdecl hook_sw3d_draw(void *widget)
  *     offset = (canvas pixel - canvas centre) * depth / focalPx
  *
  * This computes exactly that, with the canvas centre being the scaled one and focalPx read from
- * the camera AT THIS INSTANT.
+ * The camera at this instant.
  *
- * WHY NOT KEEP REPOINTING THE CONSTANTS. That was the first version and it was wrong in a way no
+ * Why not keep repointing the constants. That was the first version and it was wrong in a way no
  * amount of care about the arithmetic would have fixed: the cell holding the focal has to be
  * written before the placement happens, and the placement happens after the camera has been
  * rebuilt for the frame. Refreshing it once per menu frame sampled a lens that had not changed

@@ -69,10 +69,10 @@
  * from the live cell: coming back from a cutscene puts the camera where the engine has just
  * recentred it, behind the player, instead of where the mouse left it a minute ago.
  *
- * An AUTHORED CAMERA REGION on the floor under the player's feet is a different event with the same
- * shape, and every shipped level carries between one and eight of them, chosen per floor polygon.
- * A region therefore REMEMBERS the wanted yaw across its hold and gives it back, bounded by an
- * angle. The reasoning is at release_for(), where the decision is made.
+ * An authored camera region on the floor under the player's feet is a different event with the
+ * same shape, and every shipped level carries between one and eight of them, chosen per floor
+ * polygon. A region therefore REMEMBERS the wanted yaw across its hold and gives it back, bounded
+ * by an angle. The reasoning is at release_for(), where the decision is made.
  *
  * The save game is settled by the scripted half. The offset is part of the save block, so a save
  * taken under free look carries a rotated one, but a load sets the camera's snap countdown, the

@@ -1,7 +1,7 @@
 /* cheats_original.c: the eleven codes the shipped game already understands.
  *
  * ==============================================================================================
- * WHERE THE TWO TABLES COME FROM
+ * Where the two tables come from
  *
  * Both are data, and data cannot be searched for. They are read out of the operands of the one
  * piece of code that touches both, the comparison loop inside the game's own cheat console. In the
@@ -10,21 +10,21 @@
  *   0042FE38  8D 55 E0                 lea  edx,[ebp-0x20]        ; what was typed
  *   0042FE3B  52                       push edx
  *   0042FE3C  8B 45 DC                 mov  eax,[ebp-0x24]        ; the row index
- *   0042FE3F  8B 0C 85 10 C8 4A 00     mov  ecx,[eax*4 + 004AC810] ; THE NAME TABLE
+ *   0042FE3F  8B 0C 85 10 C8 4A 00     mov  ecx,[eax*4 + 004AC810] ; the name table
  *   0042FE46  51                       push ecx
  *   0042FE47  E8 04 77 07 00           call the case insensitive compare
  *   0042FE4C  83 C4 08                 add  esp,8
  *   0042FE4F  85 C0                    test eax,eax
  *   0042FE51  75 47                    jnz  next row
  *   0042FE53  8B 55 DC                 mov  edx,[ebp-0x24]
- *   0042FE56  8B 04 95 80 22 88 00     mov  eax,[edx*4 + 00882280] ; THE FLAG ARRAY
+ *   0042FE56  8B 04 95 80 22 88 00     mov  eax,[edx*4 + 00882280] ; the flag array
  *   0042FE5D  83 F0 01                 xor  eax,1                  ; the toggle, and all of it
  *
  * The name table has exactly one reference in the whole code section and the flag array has four,
  * three of them in these few instructions. So this pattern is the only place both can be picked up
  * together, and it was chosen over the tidier looking sites nearby for that reason.
  *
- * `xor eax,1` is the entire operation the console performs ON THE FLAG. It does one more thing
+ * `xor eax,1` is the entire operation the console performs on the flag. It does one more thing
  * afterwards that this does not: it prints a line, taken from a parallel table of message ids
  * beside the names, through the on screen crawl. That is a confirmation for somebody who typed a
  * code blind, and the panel shows the state directly instead, so it is left out on purpose rather

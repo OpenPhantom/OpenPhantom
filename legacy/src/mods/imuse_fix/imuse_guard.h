@@ -14,7 +14,7 @@
  * `sites` must already be resolved. */
 bool imuse_guard_install(const imuse_sites_t *sites);
 
-/* PURE LOGIC, tested without the game: would this (parameter, value) pair reach one of the five
+/* Pure logic, tested without the game: would this (parameter, value) pair reach one of the five
  * refusals that return without releasing the lock? */
 bool imuse_guard_set_param_leaks(int32_t parameter, int32_t value);
 

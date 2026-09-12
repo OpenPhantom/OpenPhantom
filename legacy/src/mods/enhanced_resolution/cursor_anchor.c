@@ -1,7 +1,7 @@
 /* cursor_anchor.c: the engine re-centres the mouse pointer in the wrong coordinate space.
  *
  * ==============================================================================================
- * BYTE BASIS, the whole defect is nine instructions
+ * Byte basis, the whole defect is nine instructions
  *
  * control_recentreMouse takes ONE argument: the lParam of a WM_MOUSEMOVE, which Windows fills with
  * the pointer position in CLIENT coordinates. It compares that against (320,240) and, when it does

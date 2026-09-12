@@ -13,7 +13,7 @@
  * move at all, which on a keyboard reads as precision and on a pad reads as the camera asleep.
  *
  * ==============================================================================================
- * THIS FILE only answers a number. That is the whole correction
+ * This file only answers a number. That is the whole correction
  *
  * The first version wrote the camera's yaw offset cell directly and it fought the player, exactly
  * as camera_sites.h warns it would: "writing the offset without freezing the recentre gives a

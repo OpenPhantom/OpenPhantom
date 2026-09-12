@@ -2,7 +2,7 @@
  * curtain (render_curtain.c), not the master SFX volume, not dialogue, not music.
  *
  * ==============================================================================================
- * FINDING THE ACTUAL SOUND
+ * Finding the actual sound
  *
  * Two earlier attempts, both replaced:
  *
@@ -32,7 +32,7 @@
  * without having to catch each one individually first.
  *
  * ==============================================================================================
- * WHAT THIS DOES
+ * What this does
  *
  * Detours bapsound_play (0x0041681F, byte-identical to diagnostics/diag_audio.c's own
  * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the calls whose sound record's own

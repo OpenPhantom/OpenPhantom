@@ -1,12 +1,12 @@
 /* sound_lifetime_fix.c: a pinned voice must not keep a pointer into its caller's stack frame.
  *
- * THE SYMPTOM. Saving while enemy droids have blaster bolts in flight, then loading that save,
+ * The symptom. Saving while enemy droids have blaster bolts in flight, then loading that save,
  * crashes at the end of the load. The fault is an EXECUTE at FFFFFFFF reached through the window
  * message pump, with no engine frame under it. Turning sound effects off stops it. Turning the
  * volume to zero does not, because the volume gates no branch anywhere in the engine: it is handed
  * to Miles and no other code reads it.
  *
- * THE CAUSE. bapsound_play records the address the caller passed for its channel handle,
+ * The cause. bapsound_play records the address the caller passed for its channel handle,
  *
  *     g_channel[ch].pOwnerHandle = pHandle;
  *
@@ -33,15 +33,15 @@
  * flagged SNDF_STATIC_POS, all three blaster sounds, and every one of them wrote above the stack
  * pointer, into a frame still in use.
  *
- * THE FIX. Clear pOwnerHandle where the pin happens; the pin was already trying to do exactly
+ * The fix. Clear pOwnerHandle where the pin happens; the pin was already trying to do exactly
  * that. Only a handle pointing into the calling thread's own stack is cleared. A channel whose
  * owner lives anywhere else keeps the protocol it was written for, so this does not have to be
  * right about call sites nobody has looked at yet.
  *
- * WHAT THIS DOES NOT SETTLE. The write is a real defect and this removes it, but the chain from the
- * poisoned slot to the faulting instruction half a second later was never traced instruction by
- * instruction. If the crash survives this, the corruption was somewhere else, and the count below
- * still gives the useful half of the answer: how many dangling handles were detached.
+ * What this does not settle. The write is a real defect and this removes it, but the chain from
+ * the poisoned slot to the faulting instruction half a second later was never traced instruction
+ * by instruction. If the crash survives this, the corruption was somewhere else, and the count
+ * below still gives the useful half of the answer: how many dangling handles were detached.
  */
 #include "sound_lifetime_fix.h"
 

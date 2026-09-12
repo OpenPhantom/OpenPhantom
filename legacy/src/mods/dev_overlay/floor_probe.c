@@ -13,7 +13,7 @@
  * Its ACCEPTANCE rule has no downward limit. The 1.0 unit test at 0x004a80d0 rejects floors more
  * than a unit ABOVE the point, the step-up case, and a floor below is taken at any depth.
  *
- * ITS REACH IS STILL BOUNDED, AND NOT BY THAT RULE. Before any of that runs, the function rounds
+ * Its reach is still bounded, and not by that rule. Before any of that runs, the function rounds
  * the point to integers, asks the world at 0x008A0060 for the cell containing it, and then walks
  * only the polygons that cell offers. A point outside every cell, as any position well above the
  * level is, yields no candidates at all, so dist keeps its 3.4e38 seed and the answer is

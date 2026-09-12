@@ -54,7 +54,7 @@
  *     than the frame's duration. That is a boundary correction, and it cannot be done from a sum.
  *
  * It was on by default once and that build was rejected in one sitting for input lag, having been
- * tuned against the spread of the delivered step and nothing else.
+ * tuned against the spread of the delivered step alone.
  *
  * What the setting is for is the case the arithmetic cannot reach: a device that reports far more
  * slowly than the simulation consumes, which is a streamed or injected pointer rather than a mouse.

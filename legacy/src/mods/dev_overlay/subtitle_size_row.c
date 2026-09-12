@@ -55,7 +55,7 @@ float subtitle_size_row_get(void)
     if (!subtitle_size_row_parse(buffer, &value)) {
         return SUBTITLE_SIZE_DEFAULT;
     }
-    /* ZERO IS NOT SHOWN AS ZERO. It is enhanced_resolution's spelling for "leave the engine's own
+    /* Zero is not shown as zero. It is enhanced_resolution's spelling for "leave the engine's own
      * shrinking size alone", and it sits outside the band this row offers, so there is no honest
      * place to put a handle for it. The row reports the default instead, and a player who wants the
      * engine's own behaviour back sets 0 in the file, where the comment explains it. */

@@ -1,7 +1,7 @@
 /* view_settings.c: every key this DLL reads, the defaults behind them, the clamps they are held
  * to, and the few that are re-read while the game runs.
  *
- * THE SEAM. This is the seam the file it came out of had already named for itself: reading the
+ * The seam. This is the seam the file it came out of had already named for itself: reading the
  * settings touches no engine memory, resolves no signature, places no detour, and is the only
  * part of the feature a reader looking for a default cares about. It took the configuration
  * record with it and left every hook behind.
@@ -144,13 +144,13 @@ void view_settings_load(view_distance_config_t *config)
      * itself the way a cell-table one does. A larger ViewRangeScale does not make that jump safer,
      * it makes the jump BIGGER, which is the opposite of what real-time coverage alone could fix.
      *
-     * SECOND ATTEMPT, and the difference from the first is not more reasoning about the existing
+     * Second attempt, and the difference from the first is not more reasoning about the existing
      * wall, it is that the wall itself moved. RelocateVertexCache=1 (default, vertex_table.c) is
      * no longer a real-time watch on a fixed 16384-slot ceiling; it is a relocated 32768-slot
      * buffer, and a field session confirmed the relocation itself: engine_fixes.log shows all
      * 15/15 operands written and the watchdog's alarm rescaled to 24576, then a played session
      * with a widened FOV, thousands of decals and nearly 4800 mover poses produced not one
-     * VERTEX CACHE FULL line. That is evidence the relocation WORKS, not evidence 2.5 is safe:
+     * Vertex cache full line. That is evidence the relocation works, not evidence 2.5 is safe:
      * the counter still jumps rather than climbs, and this ceiling has been wrong once already on
      * an argument that sounded just as sound. So: one step, to 2.5, not back to 4.0, and it stays
      * here pending its own field test rather than being trusted on the strength of this one. */
@@ -172,11 +172,11 @@ void view_settings_load(view_distance_config_t *config)
 /* How often the ViewRangeScale key is re-read, in frames. The developer overlay writes that key
  * when its draw distance row is committed, and this is how the change reaches a running game.
  *
- * WHY A POLL AND NOT A CALL. The overlay lives in its own DLL, and feature DLLs in this project
+ * Why a poll and not a call. The overlay lives in its own DLL, and feature DLLs in this project
  * never depend on each other at run time: any one of them can be deleted from mods\ without
  * breaking the others. The ini is a channel both already have and neither owns.
  *
- * WHAT IT COSTS. One profile read a second. That is a file the operating system has cached and is
+ * What it costs. One profile read a second. That is a file the operating system has cached and is
  * measured in tens of microseconds, so amortised across sixty frames it is well under a microsecond
  * each. Worth stating rather than assuming, since this project has already been caught once by a
  * cheap looking call inside a per-frame path, but a once-a-second read is a different order of

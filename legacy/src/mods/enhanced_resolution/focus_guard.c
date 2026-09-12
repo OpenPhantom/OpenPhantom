@@ -1,7 +1,7 @@
 /* focus_guard.c: the window changes hands and the engine is never told.
  *
  * ==============================================================================================
- * BYTE BASIS 1. what the engine does on a focus change, which is almost nothing
+ * Byte basis 1. what the engine does on a focus change, which is almost nothing
  *
  * The window procedure is 0x0049905E, `C7 45 DC 5E 90 49 00` at 0x00498F6D writes it into the
  * `lpfnWndProc` field of the WNDCLASSA that RegisterClassA at 0x00498FD0 is handed. It switches on
@@ -41,7 +41,7 @@
  * not a defect this file repairs, and it is named here so nobody looks for it later.
  *
  * ----------------------------------------------------------------------------------------------
- * BYTE BASIS 2. the input devices are acquired once and never again
+ * Byte basis 2. the input devices are acquired once and never again
  *
  * stdControl_openMouse 0x0048DA7C sets the cooperative level, and it is the only site that does:
  *
@@ -88,7 +88,7 @@
  * by calling exactly the two leaves its own case 0x13 calls, in the same order.
  *
  * ----------------------------------------------------------------------------------------------
- * BYTE BASIS 3. why the pointer still leaves, and why capture does not save it
+ * Byte basis 3. why the pointer still leaves, and why capture does not save it
  *
  * The confinement is warp-on-every-WM_MOUSEMOVE, nothing more: the import table has ClipCursor
  * nowhere, and the whole USER32 cursor vocabulary is SetCapture, ReleaseCapture, SetCursor and
@@ -271,10 +271,10 @@ static focus_guard_state_t focus_state;
  * state, so there is no sequence of ticks that can leave a clip standing while the game is not in
  * front, not a missed transition, not a first tick, not a configuration change.
  *
- * CONFINE and RELEASE are mutually exclusive by construction: the first needs
+ * Confine and release are mutually exclusive by construction: the first needs
  * (has_focus && confine_wanted), the second needs its negation.
  *
- * ACQUIRE and UNACQUIRE are the only actions that reach into the engine, and they fire on an
+ * Acquire and unacquire are the only actions that reach into the engine, and they fire on an
  * observed CHANGE only. The first tick deliberately produces neither: at that point nothing has
  * gone wrong yet, and sending the engine a resume it did not ask for would flush the input buffers
  * for no reason.

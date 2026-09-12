@@ -14,7 +14,7 @@
  * effect on anything else. NOT touched: the normaliser [0x4A8384] = 1/32768, which has four
  * readers and is the rand15() conversion, not a flight constant.
  *
- * NOT FIXED, named honestly: the DIRECTION. enemy_detachPiece computes
+ * Not fixed, named honestly: the DIRECTION. enemy_detachPiece computes
  * `dir = nodeMat[0].t, nodeMat[n].t` (root minus joint) and from it the impulse with
  * `dz*0.25 + 0.15`; candy_stuntTick then rotates it out of the object's LOCAL frame into the
  * world. For a high node (head, neck) `dir` points DOWN, so the upward part flips negative. Fixing

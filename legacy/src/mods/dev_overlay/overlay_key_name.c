@@ -177,7 +177,7 @@ bool overlay_key_from_name(const char *text, int32_t *out)
      * written before this understood. It is also the only way to reach a key with no
      * name here, including the number row, whose keys are their own codes: 53 is the 5 key.
      *
-     * THE NUMBER ROW THEREFORE DOES NOT READ BACK from what the panel shows. The panel prints the
+     * The number row therefore does not read back from what the panel shows. The panel prints the
      * 5 key as "5" and this reads "5" as code 5, and the two cannot be reconciled: 0 has to keep
      * meaning unset, 8 and 9 are Backspace and Tab in every ini written before names existed, and
      * changing any of that would move somebody's working hotkey. Naming the ten keys some other

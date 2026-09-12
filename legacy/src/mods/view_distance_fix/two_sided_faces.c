@@ -1,7 +1,7 @@
 /* two_sided_faces.c: the software backface cull word, and the one detour that clears it for a
  * body with a hole in it.
  *
- * THE SEAM. Lifted out of view_distance_fix.c, which was past the hard limit. This is one whole
+ * The seam. Lifted out of view_distance_fix.c, which was past the hard limit. This is one whole
  * responsibility and it has nothing to do with how far the world is drawn: one engine byte, one
  * detour on rdThing_Draw, a per frame budget, and the predicate that decides what counts as
  * dismembered. All of the evidence that explains those came across with them.
@@ -59,7 +59,7 @@ static two_sided_state_t two_sided_state;
  * asset. The backface pass throws away roughly half of everything today, and only that keeps the
  * shipped game, with its ~36 simultaneous actors of ~165 faces, below the limit. If the vertex
  * buffer overflows, bapdraw_reserveVerts returns NULL and rdMesh_draw aborts silently: a
- * WHOLE MODEL disappears.
+ * Whole model disappears.
  *
  * So per object, and SHIPPED OFF. The marking needs no bookkeeping of its own: a thing with a set
  * entry in pMeshHidden has a hole, and that thing is the severed piece. It is off by default

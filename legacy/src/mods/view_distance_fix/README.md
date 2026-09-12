@@ -291,8 +291,8 @@ state, and the only place this engine programs the device's fog is inside `bapli
 which runs at a level load. Reverting the three writes changes only the byte that function will
 push *next time*, so a switch made while a level is up leaves the engine computing a per-vertex
 factor the device has been told to ignore, and nothing is fogged at all. Three fixes
-were tried in the game and none worked: reverting the writes alone, additionally handing back an
-identity projection, and additionally calling `applyLevelFog`'s original by hand to reprogram the
+were tried in the game and none worked: reverting the writes alone, also handing back an
+identity projection, and on top of that calling `applyLevelFog`'s original by hand to reprogram the
 device. Tested by a person each time, no fog each time. What remains unexplained is why the third
 did not work, since it is what a level load does; the honest reading is that something else in the
 device or wrapper state is also one-way, and it was not worth more attempts to find out. So the

@@ -18,7 +18,7 @@
  *   * the window and the graphics device already exist.
  *
  * ==============================================================================================
- * THE CHAIN
+ * The chain
  *
  * We take the dinput.dll name, so whatever used to answer to it must be given a new one. The
  * chain target is resolved in this order and the result is logged:

@@ -13,7 +13,7 @@
  *     fcomp [esp+0x84]               <- range * range, formed at 0x00404FEB `imul edx, ecx`
  *     test ah,1 / je drop
  *
- * The grid step is ONE WORLD UNIT: every world-to-cell conversion in that function is
+ * The grid step is one world unit: every world-to-cell conversion in that function is
  * `floor(coordinate - (-0.5))` (`fsub [0x4A8054]` with [0x4A8054] = -0.5f, then the float-to-int
  * at 0x0049A44C), with no scale factor anywhere. The emitter cull at 0x004221FA settles it
  * independently; it takes the SAME number, converts it with `fild`, and compares it against a

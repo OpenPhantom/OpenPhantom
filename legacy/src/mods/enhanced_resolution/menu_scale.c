@@ -251,7 +251,7 @@ static void scale_widgets(void *menu)
     scale_state.scaled_menu_count++;
 }
 
-/* THE SCREENS THAT MOVE THEIR OWN WIDGETS.
+/* The screens that move their own widgets.
  *
  * The pause screen and its four siblings slide in from the right: every frame while the panel is
  * moving, pausemenu_run and friends write rect.x on the backdrop and on the sixteen inventory slots

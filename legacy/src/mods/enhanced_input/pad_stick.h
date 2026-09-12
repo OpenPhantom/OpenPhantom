@@ -117,7 +117,7 @@ bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert
  * sideways component at all, exactly what the engine's own scheme puts in them.
  *
  * The stick is still read from XInput rather than handed back to the engine's own joystick
- * path, and that is deliberate: on a pad that reaches XInput but never WinMM, handing it back
+ * path, deliberately: on a pad that reaches XInput but never WinMM, handing it back
  * would hand back nothing and the player would still be stuck. This restores the BEHAVIOUR the
  * shipped game has, from a reading that works. */
 bool pad_stick_take_handback(uint8_t *record, bool stand_mode, float *out_turn,

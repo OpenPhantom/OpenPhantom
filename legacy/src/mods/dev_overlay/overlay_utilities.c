@@ -144,7 +144,7 @@ static bool draw_distance_row(uint32_t slot, const char *editing_text, bool capt
     }
 
     case UTILITIES_AUTO_RANGE:
-        /* GREYED WHILE THE ROW BELOW IS ON, because the two contradict each other and the one
+        /* Greyed while the row below is on, because the two contradict each other and the one
          * below wins. Strict mode declines the governor outright, so a switch still reading ON
          * would be describing something that is not happening.
          *

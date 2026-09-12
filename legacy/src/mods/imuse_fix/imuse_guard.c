@@ -1,7 +1,7 @@
 /* imuse_guard.c: close the two ways iMUSE's heartbeat lock gets stuck.
  *
  * ==============================================================================================
- * WHAT IS BROKEN
+ * What is broken
  *
  * iMUSE's script engine and its music mixer both run from ImHeartbeat, and ImHeartbeat runs only
  * while a counter reads zero. That counter is maintained by two functions:
@@ -159,14 +159,14 @@ static void __cdecl hook_im_unlock(void)
 }
 
 /* ==============================================================================================
- * QUIESCING THE OTHER THREADS, AND WHY ONLY THIS ONE WRITE NEEDS IT.
+ * Quiescing the other threads, and why only this one write needs it.
  *
  * iMUSE runs its heartbeat from a WINMM timer thread, and that thread calls ImLock. This patch is
  * therefore written over code another thread may be executing at that instant. Installing before
  * audio starts was the assumption that made it safe, and it was only ever an assumption: nothing
  * checked it and nothing wrote it down.
  *
- * IT MATTERS HERE BECAUSE THE INSTRUCTION BOUNDARIES MOVE. Before the patch the body is
+ * It matters here because the instruction boundaries move. Before the patch the body is
  *
  *     +0  FF 05 <abs32>   inc dword ptr [gate]     six bytes
  *     +6  C3              ret
@@ -187,14 +187,14 @@ static void __cdecl hook_im_unlock(void)
  * resumed and it is tried again a moment later; after eight attempts the patch declines, and
  * declining is handled by the caller exactly as any other failure to make the lock atomic is.
  *
- * NOTHING IS ALLOCATED WHILE THEY ARE SUSPENDED. patch_write_bytes reaches VirtualProtect, memcpy
+ * Nothing is allocated while they are suspended. patch_write_bytes reaches VirtualProtect, memcpy
  * and FlushInstructionCache and no further; if a suspended thread held a lock this one then
  * wanted, the process would stop there and never start again. That is also why the ImUnlock detour
  * is installed outside this window rather than inside it: detour_install builds a trampoline with
  * VirtualAlloc, and taking the address space lock while holding threads still is a worse trade
  * than the thing it would buy.
  *
- * WHAT ImUnlock DOES NOT NEED. Its patch puts a five byte jmp where a five byte mov was, so no
+ * What ImUnlock does not need. Its patch puts a five byte jmp where a five byte mov was, so no
  * boundary moves: an instruction pointer in that function is either at +0, which is valid before
  * and after, or already past +5. What is left there is the ordinary cross modifying code window,
  * which is narrow and which every detour in this project already lives with.

@@ -1,6 +1,6 @@
 /* view_range.c: the draw distance actually in force, frame by frame.
  *
- * THE SEAM. Lifted whole out of view_distance_fix.c, which was past the hard limit. Everything
+ * The seam. Lifted whole out of view_distance_fix.c, which was past the hard limit. Everything
  * that decides how far the world is drawn is here, together with the state it decides over: the
  * observed field of view, the radius cap, the cut edge, the bapmat_viewDistance detour and the
  * per frame tick. The tick came with it rather than staying with the install sequence because
@@ -8,7 +8,7 @@
  * the two-sided budget and the dither, have to happen once a frame at a fixed point in that
  * order.
  *
- * THE ORDER OF THE TICK IS ITS CORRECTNESS. The frame governor runs before the cell watchdog, the
+ * The order of the tick is its correctness. The frame governor runs before the cell watchdog, the
  * two raises sit between them, and the fog reads the settled number afterwards. Each step says
  * next to itself what breaks in the other order.
  */
@@ -221,7 +221,7 @@ void view_range_on_frame(void)
     two_sided_faces_begin_frame();
     view_settings_poll(range_state.config, &range_state.effective_view_scale);
 
-    /* STRICT MODE, and it is deliberately the first thing after the poll rather than a branch
+    /* Strict mode, and it is deliberately the first thing after the poll rather than a branch
      * wrapped around everything below.
      *
      * Every term further down either lowers the scale or raises it, and each has a reason. Strict

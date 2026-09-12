@@ -65,7 +65,7 @@ bool camera_compensation_build_anchor_blend(uint8_t *out, size_t out_size, const
  *
  * The anchor is not only what the camera is drawn from. bapview_buildCamView composes the eye
  * from it, and bapdraw_drawWorld collects the cells to draw in a circle centred on that eye. So
- * the anchor is the ORIGIN OF THE WORLD GATHER, and any lag in it is a gather that trails the
+ * The anchor is the origin of the world gather, and any lag in it is a gather that trails the
  * camera: cells ahead of the eye fall outside the radius and are never collected, which is world
  * geometry silently not drawn. The count stays the same because the radius does; it is the
  * membership that is wrong, so measuring the cell count never showed it.

@@ -18,7 +18,7 @@
  * has its OWN phase-2 pointer in its descriptor, so the steering there is the engine's own.
  *
  * The two thunks do NOT cover the same modes, and that asymmetry is used deliberately below:
- * phase 7 additionally runs while swimming, in a launched sidestep and in a fixed jump, which is
+ * phase 7 also runs while swimming, in a launched sidestep and in a fixed jump, which is
  * exactly where a body angle written in Stand would otherwise be stranded.
  *
  * ---- why the camera does not appear here -----------------------------------------------------
@@ -62,7 +62,7 @@
  *
  * ---- turning the walk, without turning the view ----------------------------------------------
  * Plr_Integrate builds the frame's displacement from sincos_deg(heading) INSIDE its own body, so
- * a heading that is offset only across that one call rotates the displacement and nothing else.
+ * a heading that is offset only across that one call rotates the displacement alone.
  * Afterwards heading is put back to the value the engine itself would have written, recomputed
  * with the engine's own formula and its own inputs:
  *
@@ -223,7 +223,7 @@ static void __cdecl integrate_thunk(void)
      * shipped. Unlike the sideways walk's travel offset a few lines below, this write is NOT undone
      * afterwards: the body has really turned, and the camera anchor, the vault probe and the
      * model's own world yaw all have to see it. The travel offset, on the other hand, remembers the
-     * heading in order to put it back once the original has run, and the restore recomputes
+     * heading so as to put it back once the original has run, and the restore recomputes
      * turnWheel * dt + heading_before. On the free-look branch phase 2 has zeroed the turn cell, so
      * that restore is exactly heading_before: capturing it BEFORE this call, as it used to, deleted
      * free look's body turn in full on every substep, while the aim stance went on recomputing the

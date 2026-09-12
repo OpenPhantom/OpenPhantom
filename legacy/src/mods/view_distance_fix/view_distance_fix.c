@@ -41,7 +41,7 @@
  * skipped, and an enemy that should be standing in front of the player is not there at all.
  * spawn_census.c counts exactly that.
  *
- * THE SEAMS TAKEN. This file was well past the hard limit, and three whole responsibilities came
+ * The seams taken. This file was well past the hard limit, and three whole responsibilities came
  * out of it, each carrying the byte evidence that explains it:
  *
  *   view_settings.c    the ini: every key, its default and its clamp, and the handful that are
@@ -95,7 +95,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* --- 0x0040E42A  bapmat_viewDistance: THE DRAW DISTANCE --------------------------------------- *
+/* --- 0x0040E42A  bapmat_viewDistance: the draw distance --------------------------------------- *
  *   55 / 8B EC / 51 / 8B 45 08        prologue, 7 bytes, clean boundary
  *   8B 48 14                          range = world->viewRange (+0x14, from B3D hdr+0x854)
  *
@@ -106,7 +106,7 @@ static const uint8_t SIG_VIEW_DISTANCE[] = {
     0x55, 0x8B, 0xEC, 0x51, 0x8B, 0x45, 0x08, 0x8B, 0x48, 0x14, 0x89, 0x4D, 0xFC, 0x8B, 0x55, 0x0C
 };
 
-/* --- 0x004371E4  enemy_activationScan: THE ACTIVATION RADIUS ---------------------------------- *
+/* --- 0x004371E4  enemy_activationScan: the activation radius ---------------------------------- *
  *   8B 55 F8 / 8B 42 28 / 50          push rec+0x28 = ACTIVE RANGE  -> arg3
  *   8B 4D FC / 83 C1 18 / 51          push playerBody+0x18
  *   8B 55 F8 / 81 C2 AC000000 / 52    push rec+0xAC
@@ -121,7 +121,7 @@ static const uint8_t SIG_ACTIVATION_SCAN[] = {
 };
 #define OFFSET_ACTIVATION_SCAN_CALL 0x18u
 
-/* --- 0x0040F3F7  rdMesh_draw: THE BACKFACE CULL ---------------------------------------------- *
+/* --- 0x0040F3F7  rdMesh_draw: the backface cull ---------------------------------------------- *
  *   (before) 8A 1D A0868600   mov bl,[0x8686A0]      <- the cull address, at anchor-4
  *   B8 01000000              mov eax,1
  *   84 D8                    test al,bl

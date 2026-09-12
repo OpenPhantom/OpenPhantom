@@ -32,7 +32,7 @@ bool ini_write_int  (const char *section, const char *key, int32_t value);
 
 /* A number that changes whenever the file has been written, and does not change while it has not.
  *
- * WHY THIS EXISTS. Reading a key means parsing the whole file, and this project's ini is around
+ * Why this exists. Reading a key means parsing the whole file, and this project's ini is around
  * ninety kilobytes. A feature that wants to notice an edit within a frame rather than within a
  * second cannot afford to do that every frame, and until now the only way to notice one at all was
  * to read the key and compare. This asks the file system for the last write time instead, which

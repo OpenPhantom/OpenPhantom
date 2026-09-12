@@ -177,7 +177,7 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
                              int32_t wanted_width, int32_t wanted_height,
                              window_mode_rect_t *out);
 
-/* Shrinks a client rectangle until the WINDOW AROUND IT fits the monitor, and recentres it.
+/* Shrinks a client rectangle until the window around it fits the monitor, and recentres it.
  *
  * `frame_width` and `frame_height` are the pixels the border and caption add to a client, which is
  * zero for the borderless modes and about 22 by 56 for a framed one at the usual metrics.
@@ -187,7 +187,7 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
  * answers what will actually fit, and it needs a number that can only be measured from a live
  * window. Keeping them apart is also what lets the second be checked without one.
  *
- * WHY IT MATTERS BEYOND THE WINDOW LOOKING RIGHT. The size that survives this is the size written
+ * Why it matters beyond the window looking right. The size that survives this is the size written
  * into the game's own settings file as the resolution to render at. Without it, choosing the
  * monitor's own resolution in a framed mode wrote a render size the window could never be: the
  * outer window came out larger than the screen, its caption above the top of it, and the picture

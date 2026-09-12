@@ -11,7 +11,7 @@
  * arrived at by trying the other thing, and deleting the account of it would leave a wall of
  * rectangles nobody can safely change.
  *
- * THE SEAM, if it grows again, is overlay_draw_paint() itself: the title band, the tabs and the
+ * The seam, if it grows again, is overlay_draw_paint() itself: the title band, the tabs and the
  * search field are three blocks that share nothing with the row list below them but the layout
  * they are measured against, and any of them would move out whole.
  */
@@ -33,9 +33,9 @@
 #include <stdint.h>
 
 /* ==============================================================================================
- * THE COLOURS, AND THE ONE RULE THAT MAKES THEM WORK
+ * The colours, and the one rule that makes them work
  *
- * EXACTLY ONE RECTANGLE IS TRANSLUCENT: the body. Everything else is opaque.
+ * Exactly one rectangle is translucent: the body. Everything else is opaque.
  *
  * That is arithmetic, not taste. A translucent rectangle drawn on top of another translucent
  * rectangle has a contrast that depends on the scene behind both. The panel used to draw its tabs
@@ -139,10 +139,10 @@ bool overlay_draw_screen(float *out_width, float *out_height)
     return true;
 }
 
-/* WHICH MODE STARTS A STRING WHERE IT IS PUT IS NOT DECIDABLE FROM THE BYTES. The three modes write
- * 1, 2 and 4 into the same field, and what that field means is a layer further down. Mode 0 was
- * tried and observed to CENTRE a string on the position it is given, so one of the other two starts
- * it there and the third ends it there. Rather than guess twice, it is a setting. */
+/* Which mode starts a string where it is put is not decidable from the bytes. The three modes
+ * write 1, 2 and 4 into the same field, and what that field means is a layer further down. Mode 0
+ * was tried and observed to CENTRE a string on the position it is given, so one of the other two
+ * starts it there and the third ends it there. Rather than guess twice, it is a setting. */
 static int32_t align_mode = 1;
 
 /* Not validated here, and not by the caller either: dev_overlay.c hands the TextAlign ini value
@@ -154,7 +154,7 @@ void overlay_draw_set_align(int32_t mode)
     align_mode = mode;
 }
 
-/* THE FONT HAS TO BE SET UP BEFORE IT IS MEASURED, AND THAT WAS THE BUG.
+/* The font has to be set up before it is measured, and that was the bug.
  *
  * font3d_measureChar answers for the font that is selected and the glyph scale that is set right
  * now. The panel measured first and set up afterwards, so it measured somebody else's font at
@@ -173,7 +173,7 @@ static void prepare_font(void)
      * screen size is what lets everything else here be written in pixels. */
     draw_state.pos_scale(1.0f / *draw_state.screen_w, 1.0f / *draw_state.screen_h);
 
-    /* THE GLYPH SCALE, AND WHY IT IS THIS FRACTION AND NOT ONE.
+    /* The glyph scale, and why it is this fraction and not one.
      *
      * The glyph layer below this one multiplies every glyph by screenWidth/640 and screenHeight/480
      * before it draws or measures: the font is authored for 640 by 480 and grows with the display
@@ -213,7 +213,7 @@ static float measured_text_height(void)
     return height;
 }
 
-/* THE SIXTH ARGUMENT IS A FLAG, NOT A LAYER, and this had it backwards once. Non zero draws the
+/* The sixth argument is a flag, not a layer, and this had it backwards once. Non zero draws the
  * shape there and then; zero puts it into the engine's deferred, sorted queue, which is not where a
  * fixed overlay belongs. The game's own menu backdrop passes one. */
 #define OVERLAY_DRAW_NOW 1
@@ -243,7 +243,7 @@ static void write(const char *what, float x, float y, uint32_t argb)
 
 /* A string, vertically centred in a band of `height` starting at `y`.
  *
- * THE ENGINE'S TEXT GROWS UPWARD FROM THE POSITION IT IS GIVEN. That position is the baseline, not
+ * The engine's text grows upward from the position it is given. That position is the baseline, not
  * the top edge, so treating it as a top left corner put every label at the top of its own band
  * with the rule and the chip sitting under it. Centring a glyph box of one text height in a
  * band therefore puts the baseline at the BOTTOM of that box, not the top. */
@@ -252,7 +252,7 @@ static void write_in(const char *what, float x, float y, float height, uint32_t 
     write(what, x, y + (height + overlay_layout()->text_h) * 0.5f, argb);
 }
 
-/* PREPARES THE FONT FIRST, and leaving that out was the defect this whole file was written around.
+/* Prepares the font first, and leaving that out was the defect this whole file was written around.
  *
  * The width of a string depends on the font selected and the glyph scale set at the moment it is
  * asked for, exactly as the height does. Only the height path went through the preparation, so the
@@ -281,7 +281,7 @@ static void fill_outlined(float x0, float y0, float x1, float y1, uint32_t borde
     fill(x0 + r, y0 + r, x1 - r, y1 - r, inner);
 }
 
-/* THERE IS NO CLIPPING, so a name wider than its room draws straight through the state beside it.
+/* There is no clipping, so a name wider than its room draws straight through the state beside it.
  * Shortened against the font's own measure and finished with two dots. */
 static const char *fit(const char *what, float room, char *scratch, size_t scratch_size)
 {

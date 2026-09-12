@@ -1,4 +1,4 @@
-/* dev_overlay.h: a panel over the running game, opened with the key below Escape.
+/* dev_overlay.h: a panel over the running game, opened with F6 or the key below Escape.
  *
  * It holds the cheats today and it is named for what it is rather than for what is in it: the
  * diagnostics and the developer tools that come later are groups inside this panel, not a second

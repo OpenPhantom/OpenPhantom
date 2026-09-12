@@ -246,16 +246,20 @@ static bool install_jump_entry(const uint8_t *pattern, size_t size, size_t prolo
     }
     /* The second load sits past the prologue and is always checked. The first sits inside the
      * eight bytes another DLL's detour replaces, so it is checked only while the head is still
-     * the authored push ebp; behind a jump it holds that jump's displacement. */
+     * the authored push ebp; behind a jump those four bytes are the last byte of the jump's
+     * displacement and whatever the detour left after it. */
     if (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_SECOND, &second) ||
-        second != player_slot_address() ||
-        (memory_read_u8(site, &head) && head == 0x55u &&
-         (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_FIRST, &first) ||
-          first != second))) {
-        log_warning("%s at %08X loads the player from %08X and %08X where every other reader "
-                    "uses %08X, so that half of jump boost is not offered", what,
-                    (unsigned)site, (unsigned)first, (unsigned)second,
-                    (unsigned)player_slot_address());
+        second != player_slot_address()) {
+        log_warning("%s at %08X loads the player from %08X where every other reader uses %08X, "
+                    "so that half of jump boost is not offered", what, (unsigned)site,
+                    (unsigned)second, (unsigned)player_slot_address());
+        return false;
+    }
+    if (memory_read_u8(site, &head) && head == 0x55u &&
+        (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_FIRST, &first) || first != second)) {
+        log_warning("%s at %08X loads the player from %08X in its prologue and from %08X after "
+                    "it, so that half of jump boost is not offered", what, (unsigned)site,
+                    (unsigned)first, (unsigned)second);
         return false;
     }
     if (!detour_install(detour, site, hook, prologue)) {

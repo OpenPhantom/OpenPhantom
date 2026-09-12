@@ -178,12 +178,11 @@ _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
 
 /* --- 0x0040FE70  rdThing_Draw: every drawn object's own render call, including the player ------
  * SUB ESP,0x48 / MOV ECX,0xC / PUSH EBP / MOV EBP,[ESP+0x50], with no push-ebp;mov-ebp,esp frame at
- * all: this is one of the frame-pointer-omitted /O2 translation units this game's own toolchain
- * analysis (see engine/engine-identification.md) already found this build mixes with /Od per
- * source file. Still plain __cdecl(thing*, matrix[12]) at the ABI boundary regardless of how the
- * callee itself addresses its own params internally; the caller pushes two dwords and cleans its
- * own stack afterward (ADD ESP,8), the same shape hook_use_ammo/hook_damage above already detour,
- * so a normally-typed hook works here too, no naked-asm trick needed.
+ * all: this is one of the frame-pointer-omitted /O2 translation units this build mixes with /Od
+ * ones, per source file. Still plain __cdecl(thing*, matrix[12]) at the ABI boundary regardless
+ * of how the callee itself addresses its own params internally; the caller pushes two dwords and
+ * cleans its own stack afterward (ADD ESP,8), the same shape hook_use_ammo/hook_damage above
+ * already detour, so a normally-typed hook works here too, no naked-asm trick needed.
  *
  * Confirmed via xrefs to have exactly two callers: FUN_00417930's own switch(kind==1) arm, which
  * is the path every ordinary object takes, the player included, and emitter_drawParticles, for

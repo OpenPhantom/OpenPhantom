@@ -10,7 +10,7 @@ The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover 
 
 | Component | Version | Licence | Upstream |
 |---|---|---|---|
-| OpenPhantom patch | 1.5.0 | this project's | https://github.com/OpenPhantom/OpenPhantom |
+| OpenPhantom patch | 0.4.4 | this project's | https://github.com/OpenPhantom/OpenPhantom |
 | VLC / libVLC | 3.0.23 | **GPL v2** | https://www.videolan.org/vlc/ |
 | DSOAL | r694 | **LGPL 2.1** | https://github.com/kcat/dsoal |
 | OpenAL Soft (inside DSOAL) | as shipped in DSOAL r694 | **LGPL 2** | https://github.com/kcat/openal-soft |
@@ -41,7 +41,7 @@ binaries are unaltered. Those seven are the ones to re-apply when the folder is 
 the way to find them is to diff the shipped file against the `dxwrapper.ini` inside the
 release archive rather than to trust this list.
 
-A seventh, `DdrawWriteToGDI`, ships at upstream's 0 and is written by the patch rather than by
+An eighth key, `DdrawWriteToGDI`, ships at upstream's 0 and is written by the patch rather than by
 this folder. It decides how large the surfaces the wrapper hands the engine are, so it has to
 follow `WindowedPresent` and cannot be a fixed value here; `enhanced_resolution` writes it when
 that setting changes, only when the two disagree, and never when this file is absent. It is the

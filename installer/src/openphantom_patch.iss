@@ -125,13 +125,9 @@ Source: "{#PatchSrc}\engine_fixes.ini"; DestDir: "{app}"; \
 Source: "{#PatchSrc}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
-; The file above came out of the patch archive and is accurate about that archive: the patch and
-; DxWrapper alone. It says of libVLC and FFmpeg that neither "is redistributed here",
-; which was true while the installer downloaded them and is not any more.
-;
-; Rather than edit it, which would make it wrong about the archive it describes and would be undone
-; the next time dist\patch is refreshed, this second file covers what the installer adds and opens
-; by correcting that one paragraph. Installed with the patch, because everything it names is
+; The file above came out of the patch archive and describes that archive: the patch and DxWrapper,
+; and where libVLC and FFmpeg come from when they are present. This second file covers what the
+; installer adds beyond the archive. Installed with the patch, because everything it names is
 ; installed with the patch or under it.
 Source: "dist\THIRD-PARTY-NOTICES-Installer.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
@@ -147,7 +143,7 @@ Source: "{#DxWrapperSrc}\dxwrapper-License.txt"; DestDir: "{app}"; \
 ; foreign one is the difference between the wrapper this release was tested with and one nobody has
 ; run.
 ;
-; This copy is not upstream's untouched: six settings are tuned for this game, and they are listed
+; This copy is not upstream's untouched: the settings tuned for this game are listed, and counted,
 ; in THIRD-PARTY-NOTICES.md. Re-apply them when dist\dxwrapper is refreshed, by diffing this file
 ; against the dxwrapper.ini inside the release archive rather than by working from that list.
 Source: "{#DxWrapperSrc}\dxwrapper.ini"; DestDir: "{app}"; \

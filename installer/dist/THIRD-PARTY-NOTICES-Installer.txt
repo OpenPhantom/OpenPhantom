@@ -7,28 +7,14 @@ of the OpenPhantom patch archive and describes what is in that archive: the
 patch itself and DxWrapper. This file describes everything else the installer
 put on your machine.
 
-Two files rather than one because each is accurate about what it covers, and
-neither would stay accurate if it were made to describe the other.
-
 
 -------------------------------------------------------------------------------
-1. A correction to the other file
+1. What the other file covers
 -------------------------------------------------------------------------------
 
-  Section 4 of THIRD-PARTY-NOTICES.txt is headed "Not in this archive: what
-  fmv_player uses", and says of libVLC and FFmpeg that "neither is in this
-  archive and neither is redistributed here", that the installer downloads
-  libVLC during installation, and that FFmpeg is downloaded on demand and lives
-  "nowhere in an installation".
-
-  That is still true of the patch archive. It is no longer true of this
-  installer, which carries both and downloads nothing:
-
-    libVLC     installed from inside the installer, not downloaded
-    FFmpeg     installed beside libVLC, not downloaded on first conversion
-
-  The rest of that section, on what these components are and how fmv_player
-  uses them, still holds.
+  THIRD-PARTY-NOTICES.txt names the patch and DxWrapper, and says of libVLC
+  and FFmpeg that neither is in the patch archive. Both are on this machine
+  because this installer carried them, so they are described below.
 
 
 -------------------------------------------------------------------------------
@@ -68,12 +54,12 @@ neither would stay accurate if it were made to describe the other.
     and covered by the project's own licence.
 
   dxwrapper.ini
-    Six settings differ from the file DxWrapper ships with its dx7.games
+    Seven settings differ from the file DxWrapper ships with its dx7.games
     build, all of them tuning this game rather than repairing DxWrapper:
     DdrawEmulateSurface, DdrawUseShadowSurface and DdrawEnableByteAlignment
     are 1 rather than 0, AnisotropicFiltering and DepthBiasFactor are 16
-    rather than 0, and ForceVsyncMode is 1 rather than 0. Everything else in
-    the file is upstream's. The DxWrapper binaries themselves are unaltered.
+    rather than 0, and ForceVsyncMode and EnableVSync are 1 rather than 0.
+    Everything else in the file is upstream's. The DxWrapper binaries themselves are unaltered.
     See THIRD-PARTY-NOTICES.txt for DxWrapper's own terms.
 
 

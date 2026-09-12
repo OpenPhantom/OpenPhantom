@@ -342,6 +342,122 @@ static bool swap_phase_pointers(void)
     return true;
 }
 
+/* Everything that stands on the phase table: mouse look, free look, the pad, the camera follow,
+ * the controls screen and the switch poll. AFTER the phase table, never before: several of them
+ * ask whether this DLL is really driving anything, and until the two pointers are in place the
+ * honest answer is no. */
+static void install_features(void)
+{
+    mouse_look_install(input_state.sites.read_relative_axis);
+
+    /* And free look after mouse look, which is an ordering constraint that lives in no type
+     * system. Free look drains the per-frame mouse bank a second time, once per rendered frame, so
+     * that the camera advances on every frame rather than only on the frames that run a substep,
+     * and that is only safe while the bank is live, because the degraded path answers a live,
+     * unzeroed sample that two readers would both receive. Whether the bank is live is not decided
+     * until mouse_look_install has returned. Called the other way round the feature still installs
+     * and still works one substep at a time, and says so, so a future reordering degrades rather
+     * than doubling the turn. */
+    (void)free_look_install(&input_state.sites, input_config()->strafe);
+
+    /* After free_look_install, because that call resolves the camera sites this borrows, and it
+     * installs whatever the free look setting says. */
+    pad_stick_configure(input_config()->pad_stick, input_config()->pad_controller_index,
+                        input_config()->pad_deadzone, input_config()->pad_run_threshold,
+                        input_config()->pad_run_hysteresis);
+    if (input_config()->pad_stick) {
+        pad_run_install();
+        input_mode_resolve();   /* only this stick goes around the engine's own bindings */
+    }
+
+    /* Not gated on the pad stick above. The axis walks the player through the engine's own
+     * reading, so it does it whether or not this DLL is driving the left stick, and a player
+     * running the engine's pad path with controller_input for the look meets it just the
+     * same. */
+    if (!input_config()->pad_engine_right_stick) {
+        (void)pad_axis_mute_install(PAD_AXIS_RIGHT_STICK_VERTICAL);
+    }
+
+    camera_follow_configure(input_config()->camera_follow, input_config()->strafe,
+                            input_config()->camera_follow_settle_seconds,
+                            input_config()->camera_follow_rate,
+                            input_config()->camera_follow_strength,
+                            input_config()->camera_follow_max_degrees);
+
+    /* The delivery filter is a DEPENDENCY of the per-frame view path, not a taste setting, and it
+     * is wired here because this is the first point at which it is known that the path is really
+     * running. Without it that path is at the mercy of the device's report rate. */
+    if (view_lead_is_active()) {
+        mouse_look_use_frame_clock_smoothing();
+    }
+
+    /* The controls screen is patched whatever the keyboard axis did, a repair rather than a
+     * reordering. The screen carries three widgets: the mouse sensitivity slider, the free
+     * look check box and the sideways walking check box. Only the last of them has anything to do
+     * with the keyboard axis, and gating all three on it meant that a build where one signature
+     * missed lost the sensitivity slider and the free look switch as well, while the log blamed a
+     * key nobody had asked about. input_menu_install offers the sideways box only when the feature
+     * behind it is really there, which is the question it should have been asking. */
+    if (input_state.sites.read_absolute_axis == NULL) {
+        log_warning("the keyboard turn axis did not resolve, so sideways walking has no key to be "
+                    "driven from and its check box is left off the controls screen. The mouse "
+                    "sensitivity slider and the free look switch are not affected.");
+    }
+    input_menu_install();
+
+    /* AFTER the controls screen, because that screen is the other writer of these two keys and
+     * this only makes an edit from somewhere else arrive sooner. */
+    input_switches_install();
+}
+
+/* What the log says the live control scheme is, once everything is in. */
+static void report_control_mode(void)
+{
+    log_info("the live control mode is %s. Mouse look on (%.3f deg per mouse count, banked per "
+             "frame=%d), strafe %s (inverted=%d, turns the body=%d, %.0f ms settle, %.0f deg/s "
+             "cap). Sideways movement is the engine's own walk or run, so it matches the gait. "
+             "Driven in Stand only; Sidle and FixedJump are excluded, and hanging, shimmy, death, "
+             "turret and swimming the engine excludes itself.",
+             free_look_is_enabled() ? "FREE LOOK (the mouse turns the camera, the body turns "
+                                      "toward its travel)"
+                                    : "MOUSE LOOK (the mouse turns the body, the camera follows)",
+             (double)mouse_look_degrees_per_count(), mouse_look_is_accumulating() ? 1 : 0,
+             input_config()->strafe ? "on" : "off",
+             input_config()->strafe_invert ? 1 : 0,
+             input_config()->strafe_turns_body ? 1 : 0,
+             (double)(input_config()->strafe_settle_seconds * MILLISECONDS_PER_SECOND),
+             (double)input_config()->strafe_turn_rate);
+    if (steer_lean_is_active()) {
+        log_info("the upper body leans into the turn. A held KEY uses the ENGINE'S OWN number: "
+                 "that cell ACCUMULATES, so a key climbs 12, 26, 42, 60, 80, 102 to the 120 deg/s "
+                 "clamp over seven substeps, which is 1.0 up to 10.0 degrees of chest and is the "
+                 "engine's own ease-in. Under the MOUSE the same cell is not a rate: its only way "
+                 "down is an outright store of zero, taken on any substep whose frame carried no "
+                 "report from the device, so the twist collapses to centre and climbs back many "
+                 "times a second. SteerLeanFromHand=%d decides which of the two drives the pose. "
+                 "The chest is skipped while the auto-aim claims it.",
+                 (int)(input_config()->steer_lean_from_hand ? 1 : 0));
+    } else {
+        log_info("SteerLean=0, so neither node is written here and the twist the ORIGINAL computed "
+                 "for this substep stands. With RestoreTurnRate=1 that cell is not cleared, so the "
+                 "upper body is not centred: it still carries the engine's own turn, mouse "
+                 "included.");
+    }
+    steer_log_configure(input_config()->steer_log);
+
+    if (input_config()->restore_turn_rate) {
+        log_info("the engine's turn cell gets the real rate back (clamped to its own 120 deg/s) "
+                 "instead of a zero, so the speed penalty on turning is the engine's again. It "
+                 "does NOT reach the follow camera: bapview_updateCam overwrites that cell with "
+                 "its own wrap difference before either of its tests, so the penalty ladder is "
+                 "all this buys. The view still turns as fast as the hand does; "
+                 "the double integration is taken out in phase 7. RestoreTurnRate=0 reverts it.");
+    } else {
+        log_info("RestoreTurnRate=0, the turn cell is zeroed as before, so turning costs no speed "
+                 "and the follow camera stays on its rigid arm");
+    }
+}
+
 void enhanced_input_install(void)
 {
     log_init("enhanced_input", false);
@@ -418,112 +534,8 @@ void enhanced_input_install(void)
 
     input_state.installed = true;
 
-    /* AFTER the phase table, never before: both of these ask whether this DLL is really driving
-     * anything, and until the two pointers are in place the honest answer is no. */
-    mouse_look_install(input_state.sites.read_relative_axis);
-
-    /* And free look after mouse look, which is an ordering constraint that lives in no type
-     * system. Free look drains the per-frame mouse bank a second time, once per rendered frame, so
-     * that the camera advances on every frame rather than only on the frames that run a substep,
-     * and that is only safe while the bank is live, because the degraded path answers a live,
-     * unzeroed sample that two readers would both receive. Whether the bank is live is not decided
-     * until mouse_look_install has returned. Called the other way round the feature still installs
-     * and still works one substep at a time, and says so, so a future reordering degrades rather
-     * than doubling the turn. */
-    (void)free_look_install(&input_state.sites, input_config()->strafe);
-
-    /* After free_look_install, because that call resolves the camera sites this borrows, and it
-     * installs whatever the free look setting says. */
-    pad_stick_configure(input_config()->pad_stick, input_config()->pad_controller_index,
-                        input_config()->pad_deadzone, input_config()->pad_run_threshold,
-                        input_config()->pad_run_hysteresis);
-    if (input_config()->pad_stick) {
-        pad_run_install();
-        input_mode_resolve();   /* only this stick goes around the engine's own bindings */
-    }
-
-    /* Not gated on the pad stick above. The axis walks the player through the engine's own
-     * reading, so it does it whether or not this DLL is driving the left stick, and a player
-     * running the engine's pad path with controller_input for the look meets it just the
-     * same. */
-    if (!input_config()->pad_engine_right_stick) {
-        (void)pad_axis_mute_install(PAD_AXIS_RIGHT_STICK_VERTICAL);
-    }
-
-    camera_follow_configure(input_config()->camera_follow, input_config()->strafe,
-                            input_config()->camera_follow_settle_seconds,
-                            input_config()->camera_follow_rate,
-                            input_config()->camera_follow_strength,
-                            input_config()->camera_follow_max_degrees);
-
-    /* The delivery filter is a DEPENDENCY of the per-frame view path, not a taste setting, and it
-     * is wired here because this is the first point at which it is known that the path is really
-     * running. Without it that path is at the mercy of the device's report rate. */
-    if (view_lead_is_active()) {
-        mouse_look_use_frame_clock_smoothing();
-    }
-
-    /* The controls screen is patched whatever the keyboard axis did, a repair rather than a
-     * reordering. The screen carries three widgets: the mouse sensitivity slider, the free
-     * look check box and the sideways walking check box. Only the last of them has anything to do
-     * with the keyboard axis, and gating all three on it meant that a build where one signature
-     * missed lost the sensitivity slider and the free look switch as well, while the log blamed a
-     * key nobody had asked about. input_menu_install offers the sideways box only when the feature
-     * behind it is really there, which is the question it should have been asking. */
-    if (input_state.sites.read_absolute_axis == NULL) {
-        log_warning("the keyboard turn axis did not resolve, so sideways walking has no key to be "
-                    "driven from and its check box is left off the controls screen. The mouse "
-                    "sensitivity slider and the free look switch are not affected.");
-    }
-    input_menu_install();
-
-    /* AFTER the controls screen, because that screen is the other writer of these two keys and
-     * this only makes an edit from somewhere else arrive sooner. */
-    input_switches_install();
-
-    log_info("the live control mode is %s. Mouse look on (%.3f deg per mouse count, banked per "
-             "frame=%d), strafe %s (inverted=%d, turns the body=%d, %.0f ms settle, %.0f deg/s "
-             "cap). Sideways movement is the engine's own walk or run, so it matches the gait. "
-             "Driven in Stand only; Sidle and FixedJump are excluded, and hanging, shimmy, death, "
-             "turret and swimming the engine excludes itself.",
-             free_look_is_enabled() ? "FREE LOOK (the mouse turns the camera, the body turns "
-                                      "toward its travel)"
-                                    : "MOUSE LOOK (the mouse turns the body, the camera follows)",
-             (double)mouse_look_degrees_per_count(), mouse_look_is_accumulating() ? 1 : 0,
-             input_config()->strafe ? "on" : "off",
-             input_config()->strafe_invert ? 1 : 0,
-             input_config()->strafe_turns_body ? 1 : 0,
-             (double)(input_config()->strafe_settle_seconds * MILLISECONDS_PER_SECOND),
-             (double)input_config()->strafe_turn_rate);
-    if (steer_lean_is_active()) {
-        log_info("the upper body leans into the turn. A held KEY uses the ENGINE'S OWN number: "
-                 "that cell ACCUMULATES, so a key climbs 12, 26, 42, 60, 80, 102 to the 120 deg/s "
-                 "clamp over seven substeps, which is 1.0 up to 10.0 degrees of chest and is the "
-                 "engine's own ease-in. Under the MOUSE the same cell is not a rate: its only way "
-                 "down is an outright store of zero, taken on any substep whose frame carried no "
-                 "report from the device, so the twist collapses to centre and climbs back many "
-                 "times a second. SteerLeanFromHand=%d decides which of the two drives the pose. "
-                 "The chest is skipped while the auto-aim claims it.",
-                 (int)(input_config()->steer_lean_from_hand ? 1 : 0));
-    } else {
-        log_info("SteerLean=0, so neither node is written here and the twist the ORIGINAL computed "
-                 "for this substep stands. With RestoreTurnRate=1 that cell is not cleared, so the "
-                 "upper body is not centred: it still carries the engine's own turn, mouse "
-                 "included.");
-    }
-    steer_log_configure(input_config()->steer_log);
-
-    if (input_config()->restore_turn_rate) {
-        log_info("the engine's turn cell gets the real rate back (clamped to its own 120 deg/s) "
-                 "instead of a zero, so the speed penalty on turning is the engine's again. It "
-                 "does NOT reach the follow camera: bapview_updateCam overwrites that cell with "
-                 "its own wrap difference before either of its tests, so the penalty ladder is "
-                 "all this buys. The view still turns as fast as the hand does; "
-                 "the double integration is taken out in phase 7. RestoreTurnRate=0 reverts it.");
-    } else {
-        log_info("RestoreTurnRate=0, the turn cell is zeroed as before, so turning costs no speed "
-                 "and the follow camera stays on its rigid arm");
-    }
+    install_features();
+    report_control_mode();
 }
 
 /* ==============================================================================================

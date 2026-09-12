@@ -415,9 +415,10 @@ static void patch_render_cap(void)
                      "the interpolation is",
                      refresh, framerate_state.config.target_fps);
             if (framerate_state.config.refresh_divisor > 0) {
-                log_info("RefreshDivisor=%d pins the cap at that fraction of the refresh, %d fps, "
-                         "and it will not step by itself",
-                         framerate_state.config.refresh_divisor, frame_cap_applied());
+                /* The cap clamps an out-of-range divisor and says so; this line reports the cap
+                 * it applied rather than the key as written, so the two agree. */
+                log_info("RefreshDivisor pins the cap at a fraction of the refresh, %d fps, and "
+                         "it will not step by itself", frame_cap_applied());
             } else if (!framerate_state.config.precise_frame_time) {
                 log_warning("RefreshDivisor=0 asks the cap to step down when the machine cannot "
                             "hold the refresh, but the frame's work is measured in the wait hook "

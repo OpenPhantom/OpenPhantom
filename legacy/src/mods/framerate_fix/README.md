@@ -456,16 +456,16 @@ measures the simulation clock and describes neither end of the mover's own move,
 drew the mover at a moment unrelated to both: against a 60 fps lattice it lands between 24 and
 27 ms behind, and it is the variation rather than the size that the eye reads as jitter.
 
-**What is known exactly, and without reading an absolute clock.** The simulation time only ever
-moves in whole substeps and the alpha is the phase of the frame's target between the last two of
-them, so the render time since any earlier frame is the substep period times the change in the
-alpha. The mover's own time base gives how much world time its last move covered. Neither
-quantity decays as a level runs, which matters because the level clock is a float32 whose
-resolution does.
+**What the two removed measurement modes rested on, kept as history.** The simulation time only
+ever moves in whole substeps and the alpha is the phase of the frame's target between the last two
+of them, so the render time since any earlier frame is the substep period times the change in the
+alpha. The mover's own time base gave how much world time its last move covered. Neither quantity
+decays as a level runs, which mattered because the level clock is a float32 whose resolution does.
 
-The phase is then that elapsed time over that interval, and the two useful answers differ by
-exactly one: the phase alone holds the mover one whole move behind, and one plus the phase asks
-for the frame's own time.
+The phase was then that elapsed time over that interval, and the two answers the modes gave
+differed by exactly one: the phase alone held the mover one whole move behind, and one plus the
+phase asked for the frame's own time. Nothing measures either quantity any more; the shipped
+blend applies the substep alpha, and the next section says why the modes went.
 
 ### Both of those looked worse in the game, and neither had run
 

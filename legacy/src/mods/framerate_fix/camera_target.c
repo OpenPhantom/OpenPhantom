@@ -167,8 +167,14 @@ void camera_target_install(bool enabled)
     if (!read_operand(site, OFFSET_PREV_ANCHOR_X_OPERAND, &prev_anchor) ||
         !read_operand(site, OFFSET_PREV_ANCHOR_Y_OPERAND, &prev_anchor_y) ||
         !read_operand(site, OFFSET_PREV_ANCHOR_Z_OPERAND, &prev_anchor_z) ||
-        !read_operand(site, OFFSET_PREV_HEADING_OPERAND, &prev_heading) ||
-        prev_anchor_y != prev_anchor + sizeof(float) ||
+        !read_operand(site, OFFSET_PREV_HEADING_OPERAND, &prev_heading)) {
+        log_warning("bapview_setCamTarget at %08X names a cell outside the image in one of its "
+                    "four operands (anchor %08X, %08X, %08X, heading %08X), so the camera's "
+                    "target pair is left alone", (unsigned)site, (unsigned)prev_anchor,
+                    (unsigned)prev_anchor_y, (unsigned)prev_anchor_z, (unsigned)prev_heading);
+        return;
+    }
+    if (prev_anchor_y != prev_anchor + sizeof(float) ||
         prev_anchor_z != prev_anchor + 2u * sizeof(float)) {
         log_warning("bapview_setCamTarget at %08X keeps the previous anchor at %08X, %08X and "
                     "%08X, which is not three floats in a row, so the camera's target pair is "

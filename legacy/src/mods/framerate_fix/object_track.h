@@ -134,10 +134,11 @@ float object_track_weight(float alpha, uint32_t gap);
  * real position for it draws things retail never showed; object_track.c says what that looked
  * like.
  */
-/* False when the pair was refused and `out_position` holds the current position unblended. The
- * caller cannot tell otherwise, and the difference matters: the camera aims at the player's
- * simulation position interpolated on the same alpha, so a refused body is drawn at a different
- * moment from the one the camera is pointing at and moves against the frame. */
+/* False when the pair was refused. `out_position` then holds the current position unblended,
+ * or, for an input that was not finite, the engine's own arithmetic run on it. The caller cannot
+ * tell otherwise, and the difference matters: the camera aims at the player's simulation position
+ * interpolated on the same alpha, so a refused body is drawn at a different moment from the one
+ * the camera is pointing at and moves against the frame. */
 bool object_track_blend(const float *previous, const float *current, float weight, float limit,
                         float *out_position);
 

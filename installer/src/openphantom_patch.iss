@@ -162,21 +162,14 @@ Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
 Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 
-; The menu artwork converter. Like the movie one it carries no content: it makes bigger copies of
-; the pictures already inside the player's own big.lab and LOCALIZE.LAB, into a menu_hd folder the
-; DLL mounts and reads the scale out of. Without it MenuScale finds no converted artwork and leaves
-; the menus exactly as they shipped, so the two halves install together or the feature is absent.
-;
-; The menu artwork converter is not installed any more, and neither is Setup's use of it. The patch
-; enlarges each menu picture as the game loads it, at whatever resolution is in force, so converting
-; a set beforehand buys nothing: it produces the same nearest neighbour pixels, costs between 210 MB
-; and 840 MB, and holds the menus at the one size it was made for instead of letting them follow a
-; resolution change. MenuArtDirectory still mounts a folder of that name, which is how anybody who
-; has drawn better artwork than the originals supplies it; that is a different thing from enlarging
-; the originals and is the half worth keeping.
+; There is no menu artwork converter any more. The patch enlarges each menu picture as the game
+; loads it, at whatever resolution is in force, so a set converted beforehand bought nothing: the
+; same nearest neighbour pixels, between 210 MB and 840 MB on disk, and menus held at the one size
+; the set was made for. MenuArtDirectory still mounts a folder of that name, for anybody who has
+; drawn better artwork than the originals; that is a different thing from enlarging the originals.
 
-; The converter Setup itself runs, now for the cutscenes alone. It is a plain Win32 console program
-; and therefore the only one of the three converters that works everywhere: Wine runs it exactly as
+; The converter Setup itself runs, for the cutscenes. It is a plain Win32 console program and
+; therefore the one of the three cutscene converters that works everywhere: Wine runs it exactly as
 ; Windows does, so an installation under Proton or Lutris converts during Setup instead of leaving
 ; the player a pair of shell commands. It produces output byte-identical to the scripts beside it,
 ; which is checked rather than assumed.

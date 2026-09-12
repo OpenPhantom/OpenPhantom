@@ -527,8 +527,9 @@ function SetFileAttributes(lpFileName: String; dwFileAttributes: Cardinal): Bool
 function SetEnvironmentVariable(lpName, lpValue: String): Boolean;
   external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
-{ SM_CXSCREEN and SM_CYSCREEN, for the menu artwork page's first option. Declared here with the
-  other imports rather than beside its callers, because an external has to be seen first. }
+{ SM_CXSCREEN and SM_CYSCREEN, for the starting resolution page's first option. Declared here
+  with the other imports rather than beside its callers, because an external has to be seen
+  first. }
 function GetSystemMetrics(nIndex: Integer): Integer;
   external 'GetSystemMetrics@user32.dll stdcall';
 
@@ -613,7 +614,7 @@ begin
   Result := FmtMessage(ExpandConstant('{cm:' + Name + '}'), [Argument]);
 end;
 
-{ The primary display, in pixels, for the menu artwork page's first option.
+{ The primary display, in pixels, for the starting resolution page's first option.
 
   SM_CXSCREEN and SM_CYSCREEN, which are the PRIMARY monitor rather than the whole desktop, and that
   is the wanted answer: the game runs on one monitor. They are also the values Windows reports after
@@ -1180,8 +1181,8 @@ begin
   Result := False;
 end;
 
-{ Leaving the menu artwork page. Only the typed answer can be wrong, and it is caught here rather
-  than at the end, because here the box is still in front of the person who filled it in.
+{ Leaving the starting resolution page. Only the typed answer can be wrong, and it is caught here
+  rather than at the end, because here the box is still in front of the person who filled it in.
 
   The ceiling is the engine's, not a preference: the run length encoder writes a literal control word
   as (run and 0xfff) while advancing the output by the whole run, so a canvas wider than 4095 pixels

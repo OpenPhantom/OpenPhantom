@@ -1,0 +1,35 @@
+/* version.rc: the version resource the extractor carries, so a properties dialog and a scanner
+ * report can name the build. The number is the installer's, AppVer in openphantom_installer.iss,
+ * because this program is part of the installer and ships nowhere else; the two move together by
+ * hand, and the installer's README lists both. The block name and the translation have to agree,
+ * as in the patch's own template: a mismatch compiles and reads back empty. */
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION    1,4,4,0
+PRODUCTVERSION 1,4,4,0
+FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+FILEFLAGS      0x0L
+FILEOS         VOS_NT_WINDOWS32
+FILETYPE       VFT_APP
+FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "OpenPhantom"
+            VALUE "FileDescription",  "is3_extract, OpenPhantom installer archive extractor"
+            VALUE "FileVersion",      "1.4.4"
+            VALUE "InternalName",     "is3_extract"
+            VALUE "LegalCopyright",   "OpenPhantom contributors. Not affiliated with LucasArts."
+            VALUE "OriginalFilename", "is3_extract.exe"
+            VALUE "ProductName",      "OpenPhantom"
+            VALUE "ProductVersion",   "1.4.4"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

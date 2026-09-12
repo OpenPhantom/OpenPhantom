@@ -46,14 +46,22 @@ set(OPENPHANTOM_VERSION
 
 # Gives one target the project's version resource. The module name goes into the description and
 # the original file name, so a properties dialog names the file it is actually looking at rather
-# than the project. Called by add_engine_fix and by the loader, which is the whole set of shipped
-# binaries; the unit tests are console programs that ship nowhere and do not get one.
+# than the project. Called by add_engine_fix, by the loader and by the converter, which is the
+# whole set of shipped binaries; the unit tests are console programs that ship nowhere and do not
+# get one. The third argument is the file type, "dll" unless "exe" is given.
 function(add_version_resource target)
     set(OP_MODULE_NAME ${target})
     if(ARGC GREATER 1)
         set(OP_MODULE_ROLE ${ARGV1})
     else()
         set(OP_MODULE_ROLE "OpenPhantom engine fix")
+    endif()
+    if(ARGC GREATER 2 AND ARGV2 STREQUAL "exe")
+        set(OP_FILE_TYPE VFT_APP)
+        set(OP_FILE_EXTENSION exe)
+    else()
+        set(OP_FILE_TYPE VFT_DLL)
+        set(OP_FILE_EXTENSION dll)
     endif()
     set(generated ${CMAKE_BINARY_DIR}/generated/${target}_version.rc)
     configure_file(${CMAKE_SOURCE_DIR}/src/common/version.rc.in ${generated} @ONLY)

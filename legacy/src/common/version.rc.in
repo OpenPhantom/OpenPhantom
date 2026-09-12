@@ -1,9 +1,9 @@
 /* version.rc.in: the version resource every shipped binary carries.
  *
- * Generated per target by CMake, so the file name and the description are the module's own and the
- * number is the project's.
+ * Generated per target by CMake, so the file name, the type and the description are the module's
+ * own and the number is the project's.
  *
- * THE BLOCK NAME AND THE TRANSLATION HAVE TO AGREE. "040904B0" is language 0x0409 and codepage
+ * The block name and the translation have to agree. "040904B0" is language 0x0409 and codepage
  * 0x04B0, and VarFileInfo below repeats the same pair as two integers. If they disagree the
  * resource compiles, links, and reads back empty, and nothing anywhere reports an error.
  */
@@ -15,7 +15,7 @@ PRODUCTVERSION @OPENPHANTOM_VERSION_MAJOR@,@OPENPHANTOM_VERSION_MINOR@,@OPENPHAN
 FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
 FILEFLAGS      0x0L
 FILEOS         VOS_NT_WINDOWS32
-FILETYPE       VFT_DLL
+FILETYPE       @OP_FILE_TYPE@
 FILESUBTYPE    VFT2_UNKNOWN
 BEGIN
     BLOCK "StringFileInfo"
@@ -23,11 +23,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName",      "OpenPhantom"
-            VALUE "FileDescription",  "@OP_MODULE_NAME@ - @OP_MODULE_ROLE@"
+            VALUE "FileDescription",  "@OP_MODULE_NAME@, @OP_MODULE_ROLE@"
             VALUE "FileVersion",      "@OPENPHANTOM_VERSION@"
             VALUE "InternalName",     "@OP_MODULE_NAME@"
             VALUE "LegalCopyright",   "OpenPhantom contributors. Not affiliated with LucasArts."
-            VALUE "OriginalFilename", "@OP_MODULE_NAME@.dll"
+            VALUE "OriginalFilename", "@OP_MODULE_NAME@.@OP_FILE_EXTENSION@"
             VALUE "ProductName",      "OpenPhantom"
             VALUE "ProductVersion",   "@OPENPHANTOM_VERSION@"
         END

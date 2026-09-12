@@ -48,6 +48,7 @@
 #define ENHANCED_RESOLUTION_SUBTITLE_SCALE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /* The band the row and its slider offer. Below a half the text is smaller than the engine's own at
  * 1080; above three it is wider than the wrap was authored for and would break lines oddly. */
@@ -61,5 +62,11 @@
 /* Reads the key, patches the operand, and starts watching the key for changes. Says in the log
  * what it found and what it did. */
 void subtitle_scale_install(void);
+
+/* Whether `return_address` is the subtitle layout's own call for the font's line height. The menu
+ * scale detours that function and answers a menu's text in drawn units; the subtitle is the one
+ * text drawn while a menu is open that is not the menu's, and it asks from exactly one call. False
+ * until the layout has resolved. */
+bool subtitle_scale_is_line_height_call(uintptr_t return_address);
 
 #endif /* ENHANCED_RESOLUTION_SUBTITLE_SCALE_H */

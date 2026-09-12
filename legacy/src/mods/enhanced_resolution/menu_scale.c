@@ -19,10 +19,12 @@
 
 #include "menu_scale_internal.h"
 #include "menu_scale_sites.h"
+#include "subtitle_scale.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
 
+#include <intrin.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -98,14 +100,21 @@ uint32_t __cdecl hook_query_font(void)
         return raw;
     }
 
+    /* The subtitle layout is the one text that is drawn while a menu is open and is not the
+     * menu's. It asks from a single call, known by the address it returns to, and the open-menu
+     * gate below cannot tell it apart: with the pause screen up every subtitle row took the
+     * menu's line height and dropped out of its box. */
+    if (subtitle_scale_is_line_height_call((uintptr_t)_ReturnAddress())) {
+        return raw;
+    }
+
     if (*menu_cells.current_menu == NULL) {
         /* Not a menu. Reported once, because it is the evidence that a caller exists which the
          * decompilation does not contain, and the next person to widen this needs to know. */
         if (!scale_state.warned_outside_menu) {
             scale_state.warned_outside_menu = true;
             log_info("font3d_queryFont was called with no menu open, so something outside the "
-                     "menus uses it: it is answered unscaled there. This is what mis-placed the "
-                     "subtitles before the gate existed");
+                     "menus uses it: it is answered unscaled there");
         }
         return raw;
     }

@@ -78,6 +78,19 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 };
 #define GLYPH_SCALE_WIDTH_OPERAND 8u
 
+/* --- the line height call, at 0x00431745 ----------------------------------------------------- *
+ *   E8 <rel>   call font3d_queryFont    then row y = 450 + height + 1, 18 per row up, less 13 or 4
+ *
+ * The one place the layout asks the font layer how tall a line is, and the reason a subtitle used
+ * to drop out of its box the moment a menu opened. The menu scale detours font3d_queryFont and
+ * answers a menu's text in drawn units, gated on a menu being open; the subtitle goes on drawing
+ * behind an open menu, its rows took the scaled height, and at 4K that put every row about fifty
+ * box units below the bar. The hook now recognises this call by the address it returns to and
+ * answers it raw whatever is open. Located from the glyph scale like the calls below, and the
+ * opcode is checked at resolve. */
+#define LINE_HEIGHT_CALL_FROM_GLYPH 0x1BFu   /* 0x00431745 - 0x00431586 */
+#define CALL_LENGTH 5u
+
 /* --- the two centring calls, at 0x0043177A and 0x0043179F ------------------------------------- *
  *   E8 <rel>   call screenWidth()    then (eax - 640) / 2, floored at zero
  *   E8 <rel>   call screenHeight()   then  eax - 480,      floored at zero
@@ -195,6 +208,7 @@ static struct {
     uintptr_t bar_site;
     uintptr_t width_getter;     /* where the two centring calls go, checked to be the getters */
     uintptr_t height_getter;
+    uintptr_t line_height_return;   /* what the line height call returns to, 0 until resolved */
     const volatile int32_t *screen_w;   /* the cells those getters load, read out of them */
     const volatile int32_t *screen_h;
     float   scale;              /* the player's multiplier, on top of fitting the height */
@@ -543,6 +557,11 @@ static bool install_patches(void)
     return true;
 }
 
+bool subtitle_scale_is_line_height_call(uintptr_t return_address)
+{
+    return state.line_height_return != 0 && return_address == state.line_height_return;
+}
+
 void subtitle_scale_install(void)
 {
     uintptr_t pos_site;
@@ -580,6 +599,18 @@ void subtitle_scale_install(void)
         !resolve_getter(glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, "screen height",
                         &state.height_getter, &state.screen_h)) {
         return;
+    }
+    {
+        uintptr_t call   = glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH;
+        uintptr_t target = 0;
+
+        if (!patch_read_call_target(call, &target)) {
+            log_warning("the site at %08X is not the line height call expected, so a subtitle "
+                        "drawn behind an open menu takes the menu's line height and sits below "
+                        "its box", (unsigned)call);
+        } else {
+            state.line_height_return = call + CALL_LENGTH;
+        }
     }
     state.pos_site   = pos_site;
     state.glyph_site = glyph_site;

@@ -112,6 +112,7 @@ the mode table that the aspect gate anchors.
 | `DLG_DrawLine`, the position scale pair | `0x00431545` | the two `fdiv [screenHeight]` / `fdiv [screenWidth]` operands repointed at cells holding the size the layout is told, **only** when `SubtitleScale` is not `0`. All ten subtitle sites or none, journaled and put back on refusal |
 | `DLG_DrawLine`, the glyph scale | `0x00431586` | the `fdiv [screenWidth]` operand repointed at the same told width |
 | the two wrap comparisons | `0x004315E3`, `0x00431630` | both `fcomp [580.0]` operands repointed at one cell holding the scaled wrap |
+| the line height call in `DLG_DrawLine` | `0x00431745` | **read, never patched**: the menu scale's `font3d_queryFont` hook recognises this caller by its return address and answers it unscaled, since the subtitle goes on drawing behind an open menu and its rows took the menu's line height |
 | the two centring calls | `0x0043177A`, `0x0043179F` | `call screenWidth()` / `call screenHeight()` redirected at getters of ours that answer the told size. Each is followed to its getter first, and the getter at `0x0046B7B0` and its twin are required to be the ten byte load-and-return |
 | the two offset clamps | `0x00431793`, `0x004317B6` | `jge` to `jmp`, one byte each, so a box taller than the display may sit above its top edge |
 | `dialog_drawBar` | `0x00430AC2` | detoured, 9-byte prologue; the subtitle backdrop is scaled about the horizontal centre and the bottom edge to match the text |
@@ -595,6 +596,13 @@ at `k = 1`. Only two calls reach that function and both are the subtitle's own b
 
 **Nothing else the font layer draws is affected.** The same layer draws every menu string and HUD
 readout; all ten writes are inside the dialogue's own drawing or reached only from it.
+
+**With a menu open the rows used to drop out of the bar.** Each row's vertical position adds the
+font's line height from `font3d_queryFont`, which the menu scale detours to answer a menu's text
+in drawn units, gated on a menu being open. The subtitle is drawn behind an open menu too, so the
+moment the pause screen came up every row took the scaled height, about fifty box units low at 4K.
+The hook now knows the subtitle's one line height call by the address it returns to and answers it
+raw whatever is open; seen and confirmed fixed in game on 2026-09-12.
 
 The two centring calls are followed to the getters they reach, each of which has to be the ten byte
 load-and-return the engine wrote, and the two display size cells are read out of those getters

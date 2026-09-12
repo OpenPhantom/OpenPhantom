@@ -143,6 +143,9 @@ add_unit_test(menu_refit enhanced_resolution
     enhanced_resolution/menu_island_clip.c
     enhanced_resolution/pointer_cage.c
     enhanced_resolution/window_fit.c
+    # the queryFont hook asks the subtitle layout whether a caller is its own line height call;
+    # unresolved in a test process, so it answers false and the hook takes the menu gate
+    enhanced_resolution/subtitle_scale.c
 )
 
 add_unit_test(menu_island_clip enhanced_resolution

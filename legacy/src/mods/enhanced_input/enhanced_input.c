@@ -392,6 +392,7 @@ void enhanced_input_install(void)
     }
 
     strafe_walk_bind(input_state.sites.set_node_yaw,
+                     input_state.sites.player_pointer,
                      input_config()->strafe_turns_body,
                      input_config()->strafe_settle_seconds,
                      input_config()->strafe_turn_rate);

@@ -34,11 +34,13 @@ float strafe_walk_travel_offset(float strafe, float forward, float drive_sign);
 float strafe_walk_damp_step(float current, float target, float substep_seconds,
                             float settle_seconds, float max_rate_deg_per_second);
 
-/* The engine entry the body turn goes through, whether the body is turned at all, and how the
- * angle is damped. Passing NULL for the entry leaves the walk working with the body left facing
- * the way it always did. */
-void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, bool turns_body,
-                      float settle_seconds, float max_rate_deg_per_second);
+/* The engine entry the body turn goes through, the cell the engine loads the player record from,
+ * whether the body is turned at all, and how the angle is damped. Passing NULL for the entry
+ * leaves the walk working with the body left facing the way it always did. The cell is what the
+ * drawn half checks a captured record against before writing through it; NULL skips that check
+ * and leaves only the readability test. */
+void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, uint8_t *const *player_cell,
+                      bool turns_body, float settle_seconds, float max_rate_deg_per_second);
 
 /* Tell the engine a forward walk is under way, in its own two fields and with its own arithmetic:
  * the forward bit the clip selector branches on, and the drive Plr_Steer writes for a fully

@@ -162,6 +162,7 @@ typedef struct strafe_walk_state {
     uint32_t          previous_tick;       /* the substep counter as of the last drawn frame   */
     uint32_t          opened_tick;         /* the substep counter when the damper last ran     */
     uint8_t          *record;              /* the player record, captured where it is known    */
+    uint8_t   *const *player_cell;         /* pPlayer: what the engine itself follows          */
 
     /* Resolved once at install. Plain pointers rather than reads through the memory helper: this
      * runs once per rendered frame and the cells are inside the host image, which is never
@@ -219,10 +220,11 @@ static void open_substep(uint8_t *record)
                                      ? *strafe_state.substep_counter : 0u;
 }
 
-void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, bool turns_body,
-                      float settle_seconds, float max_rate_deg_per_second)
+void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, uint8_t *const *player_cell,
+                      bool turns_body, float settle_seconds, float max_rate_deg_per_second)
 {
     strafe_state.set_node_yaw            = set_node_yaw;
+    strafe_state.player_cell             = player_cell;
     strafe_state.turns_body              = turns_body;
     strafe_state.settle_seconds          = settle_seconds;
     strafe_state.max_rate_deg_per_second = max_rate_deg_per_second;
@@ -719,9 +721,21 @@ static void draw_interpolated_angle(void)
     }
     /* The substep count above only ages the claim while substeps run. Between a level being torn
      * down and its loading screen ticking the counter the simulation is stopped, frames are still
-     * drawn, and the record is a pointer into memory the engine may have given back. Read through
-     * the guarded form here, which costs no system call, and drop the claim rather than follow a
-     * pointer that no longer reads. */
+     * drawn, and the record is a pointer into memory the engine may have given back.
+     *
+     * Two tests, and the readable one is not enough on its own. Readable is not live: a record
+     * the engine has released but whose page is still committed reads fine, and the body pointer
+     * read out of it is then whatever the allocator left there. So the claim is first held
+     * against the cell the engine itself loads the record from, pPlayer, read out of Plr_Steer's
+     * own operand at install and inside the image, so a plain read is the whole check. A record
+     * that is not what pPlayer holds now is not the player, whatever it reads as. Then the guarded
+     * read, which costs no system call, for the case where the cell still names memory that has
+     * since been unmapped. */
+    if (strafe_state.player_cell != NULL && *strafe_state.player_cell != record) {
+        strafe_state.owns_node = false;
+        strafe_state.record    = NULL;
+        return;
+    }
     if (!memory_try_readable((uintptr_t)record, PLAYER_DROP_TIMER + sizeof(float))) {
         strafe_state.owns_node = false;
         strafe_state.record    = NULL;

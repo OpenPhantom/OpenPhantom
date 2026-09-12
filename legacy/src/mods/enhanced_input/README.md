@@ -1043,6 +1043,14 @@ The claim now expires if the damper has not run for eight substeps, a quarter of
 longer than the whole settle and far longer than any gap it leaves while it is genuinely running.
 Nothing is lost by dropping it, because the next substep that drives a strafe opens a new one.
 
+That count only ages the claim while substeps run, so the drawn frames also test the record before
+touching it. A readability test alone was not enough: a record the engine has released but whose
+page is still committed reads fine, and the body pointer taken out of it is whatever the allocator
+left. So the captured record is first compared with the cell the engine loads the player from,
+`pPlayer`, read out of `Plr_Steer`'s own operand at install; a record that is not what that cell
+holds now is dropped without being read. The guarded read follows for the case where the cell
+still names memory that has since been unmapped.
+
 ## The left stick ran you forward when you only asked it to turn
 
 With the sideways walk off, pushing the stick left or right steered correctly and ran the player
@@ -1175,13 +1183,15 @@ subtraction across the `GetTickCount` wrap, which is a language guarantee rather
 of ours, and the rest is two window calls a console test cannot stage. Nothing about the gate
 reaches the log either, by design, so the log cannot confirm it and play is the only evidence.
 
-Four test files cover this feature. `unittests/mouse_rate.c` drives the rate estimator and the
-bank; `unittests/view_lead.c` proves a property of a sequence rather than of one call, that the
-drawn angle advances by one frame of hand movement on every frame while the body turns once per
-step, and it carries the first design as a regression because that one turned the camera backwards
-once per step; `unittests/delivery_rates.c` asks whether the delivery survives a slow mouse, which
-a field test on one desk cannot answer. The fourth, `unittests/strafe_walk.c` with 128 checks,
-covers:
+Six test files are built against this directory. `unittests/mouse_rate.c` drives the rate
+estimator and the bank; `unittests/view_lead.c` proves a property of a sequence rather than of one
+call, that the drawn angle advances by one frame of hand movement on every frame while the body
+turns once per step, and it carries the first design as a regression because that one turned the
+camera backwards once per step; `unittests/delivery_rates.c` asks whether the delivery survives a
+slow mouse, which a field test on one desk cannot answer; `unittests/mouse_look.c` checks the
+slider round trip and the degraded path's clamp; `unittests/input_mode.c` checks whether the pad
+stick may drive at all, with the unresolved binding set as its main case. The sixth,
+`unittests/strafe_walk.c`, covers:
 
 * the travel angle including the backward family;
 * the damper, framerate independence across 1/32 and 1/64, the 90 % settle definition, the rate

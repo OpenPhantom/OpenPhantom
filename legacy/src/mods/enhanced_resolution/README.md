@@ -389,7 +389,7 @@ was drawn on any path watched.
 
 **So the artwork conversion was not buying geometry.** The menus already scale. What the conversion
 bought was what happens to a small texture when a quad stretches it, against the rasteriser's own
-bilinear filter, which is the smoothing the retired `convert_menu.py` refused to use, and for a
+bilinear filter, which is the smoothing the retired menu art converter refused to use, and for a
 stated reason: after the engine converts a bitmap to 16 bit, a pixel that is exactly zero is a
 SKIP, so a smoothing filter invents near black where black was transparent and new exact zeros
 where there were none, haloing every button and punching holes in dark artwork. The converter
@@ -468,12 +468,11 @@ The two spaces agree for exactly one window position, the screen origin. That is
 puts its own window (`CreateWindowExA` at `0x499019` passes X = 0, Y = 0 and style `0x80000000`,
 `WS_POPUP`) and where it leaves it, because both of its own `SetWindowPos` calls carry
 `SWP_NOMOVE`. **`window_fit.c` is the only code that moves that window, and only when
-`FitWindowToMode=1`**, so
-this DLL makes the assumption false, and with the key at its new default of `0` it does not make
-it false at all. On a second monitor whose origin is at -1920,0 the warp target lands on the
-*other* display, the "already centred" test can never be true, and the pointer comes to rest
-outside the game window. Two field logs of the same build, one with `monitor at 0,0` and one with
-`monitor at -1920,0`, differ in exactly that and in nothing else.
+`FitWindowToMode=1`**, so this DLL makes the assumption false, and with the key at its new default
+of `0` it does not make it false at all. On a second monitor whose origin is at -1920,0 the warp
+target lands on the *other* display, the "already centred" test can never be true, and the pointer
+comes to rest outside the game window. Two field logs of the same build, one with `monitor at 0,0`
+and one with `monitor at -1920,0`, differ in exactly that and in nothing else.
 
 `cursor_anchor.c` converts the engine's own (320, 240) into screen coordinates with
 `ClientToScreen` before warping, and leaves the comparison in client space where it belongs. It is
@@ -738,8 +737,9 @@ turning on one key and not the other and nobody has run it.
 either, and it is known to be wrong: that setting arms the wrapper's own window management, which
 strips the frame and recentres the window. The shipped `dxwrapper.ini` has it at 0.
 
-Untested: two monitors, Wine and the Steam Deck, a resolution change during play, and a display
-with scaling set to anything other than 100 per cent. The per-apply log line prints the monitor
+Untested: two monitors, a resolution change during play, and a display with scaling set to
+anything other than 100 per cent. On the Steam Deck the window modes are confirmed in desktop mode
+and not available in Gaming Mode, which has no desktop for a window to sit on. The per-apply log line prints the monitor
 rectangle, `GetSystemMetrics` and the window rectangle read back precisely so that the last of
 those can be told apart from a fault when somebody does run it. The running window is about 2054 by
 2077 rather than the desktop-sized popup this module's headers used to describe, and that size is

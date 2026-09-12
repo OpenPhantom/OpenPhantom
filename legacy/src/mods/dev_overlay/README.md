@@ -547,10 +547,9 @@ which.
 
 ## The draw distance row
 
-The first row under **Utilities** edits `[view_distance_fix] ViewRangeScale`, the draw
-distance, typed
-in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`, so it
-is learned from the row rather than by having a number refused.
+The first row under **Utilities** edits `[view_distance_fix] ViewRangeScale`, the draw distance,
+typed in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`,
+so it is learned from the row rather than by having a number refused.
 
 **It has a slider on the line directly beneath it**, on its own line so the handle never covers the
 number it sets, which is the same shape the field of view and mouse speed rows use. The track spans
@@ -841,11 +840,11 @@ this row works whatever else is or is not in the `mods` folder.
 
 ## The panel had a row limit it could reach
 
-Every group on the open tab is built into one array each time the panel redraws, headings included,
-and the OpenPhantom tab holds three groups. With all three open, the "how to fly" fold open and a
-display offering a full size list, that tab wants 91 rows. The array held 64, and the row that did
-not fit was dropped by a bounds test that logged nothing. There is no scrolling, so a player had no
-way to tell a missing row from a feature that was never written.
+Every group on the open tab is built into one array each time the panel redraws, headings included.
+With every group open, the "how to fly" fold open and a display offering a full size list, the
+OpenPhantom tab wanted more rows than the array held, and the row that did not fit was dropped by a
+bounds test that logged nothing. There is no scrolling, so a player had no way to tell a missing
+row from a feature that was never written.
 
 The array now holds 128, and `overlay_model.c` asserts that against the parts the number is made of
 rather than restating it, so a group that grows past the array stops the build. The parts that only
@@ -890,7 +889,7 @@ exist. The checks live in `unittests/overlay_model.c`.
 
 Every row in the panel has been opened, drawn and switched against the running game, and the
 layout has been through several rounds of correction against screenshots. All of this
-project's cheats are accepted in game, in the 1.5.0 build, which was played through by hand.
+project's cheats are accepted in game, in the v0.4.1 build, which was played through by hand.
 
 **Field-tested against the running game, several rounds:** kill self, full health,
 all-weapons-full-ammo (including the shared gate greying both out together once spent, and now the
@@ -1110,8 +1109,9 @@ tells them they are in the right place.
 **Match the screen** writes `MatchDisplayRefresh`, and it is the row worth pressing. The frame limit
 decides how fast frames are produced, and the display shows them at its own rate, so a limit that
 does not divide into the refresh rate leaves the display repeating some frames and not others, on
-a pattern that shifts. Platforms, the camera and everything else in motion go choppy while the
-frame counter reads perfectly steady.
+a pattern that shifts. Everything in motion judders slightly while the frame counter reads
+perfectly steady. The choppy platforms once blamed on this were the camera target pair collapsing
+while riding, repaired in `framerate_fix`; the cap was never the cause.
 
 **Fraction of the screen's rate** writes `RefreshDivisor`. `auto` lets framerate_fix step the cap
 down to a half, a third or a quarter of the refresh when the machine cannot hold the rate above,

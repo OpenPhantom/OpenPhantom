@@ -2,9 +2,8 @@
  * read out of the engine.
  *
  * The engine keeps a previous position beside each object's current one and draws the object
- * between the two, and that interpolation is how anything moves smoothly at a frame rate above
- * the 32 Hz simulation. That pair is right while a character walks. It is not right while one
- * rides a
+ * between the two, and that interpolation is how anything moves smoothly at a frame rate above the
+ * 32 Hz simulation. That pair is right while a character walks. It is not right while one rides a
  * platform: the carry runs a second pose commit in the same step and, because the first has
  * already run, the second captures a previous position that is already the current one. The pair
  * goes flat, there is nothing to blend, and the rider steps 32 times a second against a platform

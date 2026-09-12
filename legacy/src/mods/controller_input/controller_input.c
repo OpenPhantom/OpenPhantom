@@ -228,11 +228,10 @@ static void synthesize_pause_press(void)
     (void)SendInput(1, &input, sizeof(INPUT));
 }
 
-/* Whether this game's movement/roll keys are read through WM_KEYDOWN, GetAsyncKeyState or
- * DirectInput's own polled keyboard state has not been confirmed the way Escape's path was; this
- * game's use of a dinput.dll loader in the first place is evidence DirectInput reads at least some
- * of its input; that is a real and different question from the two paths Escape was proven to
- * reach. Field-test before trusting this. */
+/* Which of WM_KEYDOWN, GetAsyncKeyState and DirectInput's polled keyboard state the game reads its
+ * movement and roll keys through has not been established from the bytes the way Escape's path
+ * was. It has been established in play: the synthesised Alt and arrow taps roll the character, and
+ * the README's testing status records the sessions. */
 static void set_alt_held(bool want_held)
 {
     INPUT input;

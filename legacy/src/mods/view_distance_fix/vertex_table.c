@@ -203,19 +203,19 @@ static bool allocate_buffer(void)
     reserved = (uint8_t *)VirtualAlloc(NULL, BUFFER_BYTES + GUARD_BYTES, MEM_RESERVE,
                                        PAGE_NOACCESS);
     if (reserved == NULL) {
-        log_error("vertex table: VirtualAlloc(RESERVE %u B) failed (%lu), NOT ONE BYTE patched",
+        log_error("vertex table: VirtualAlloc(RESERVE %u B) failed (%lu), not one byte patched",
                   (unsigned)(BUFFER_BYTES + GUARD_BYTES), (unsigned long)GetLastError());
         return false;
     }
     if (VirtualAlloc(reserved, BUFFER_BYTES, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        log_error("vertex table: VirtualAlloc(COMMIT %u B) failed (%lu), NOT ONE BYTE patched",
+        log_error("vertex table: VirtualAlloc(COMMIT %u B) failed (%lu), not one byte patched",
                   (unsigned)BUFFER_BYTES, (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
     if (VirtualAlloc(reserved + BUFFER_BYTES, GUARD_BYTES, MEM_COMMIT, PAGE_NOACCESS) == NULL) {
-        log_error("vertex table: the guard page at %08X could not be committed (%lu), NOT "
-                  "ONE BYTE patched", (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
+        log_error("vertex table: the guard page at %08X could not be committed (%lu), not "
+                  "one byte patched", (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
@@ -224,7 +224,7 @@ static bool allocate_buffer(void)
             != sizeof(information) ||
         information.Protect != PAGE_NOACCESS || information.State != MEM_COMMIT) {
         log_error("vertex table: the guard page at %08X does not carry PAGE_NOACCESS "
-                  "(State %08lX, Protect %08lX), NOT ONE BYTE patched",
+                  "(State %08lX, Protect %08lX), not one byte patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)information.State, (unsigned long)information.Protect);
         VirtualFree(reserved, 0, MEM_RELEASE);
@@ -291,7 +291,7 @@ static bool find_address_sites(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_M
         }
     }
     if (!all_ok) {
-        log_warning("vertex table: unexpected match count, unknown image, NOT ONE BYTE patched");
+        log_warning("vertex table: unexpected match count, unknown image, not one byte patched");
         return false;
     }
     return true;
@@ -305,7 +305,7 @@ static bool find_gate_sites(uintptr_t gates[GATE_WORD_COUNT])
         gates[index] = signature_find_unique(GATE_PATTERNS[index].bytes, NULL,
                                              GATE_PATTERNS[index].size);
         if (gates[index] == 0) {
-            log_warning("vertex table: %s did not resolve uniquely, NOT ONE BYTE patched",
+            log_warning("vertex table: %s did not resolve uniquely, not one byte patched",
                         GATE_PATTERNS[index].name);
             return false;
         }
@@ -353,7 +353,7 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
     }
 
     if (table_state.word_count != WORD_COUNT) {
-        log_error("vertex table: %u instead of %u sites collected, NOT ONE BYTE patched",
+        log_error("vertex table: %u instead of %u sites collected, not one byte patched",
                   (unsigned)table_state.word_count, (unsigned)WORD_COUNT);
         table_state.word_count = 0;
         return false;
@@ -371,7 +371,7 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
         }
         if (table_state.words[word_index].old_value != table_state.words[word_index].expected) {
             log_warning("vertex table: pre-flight: site %u/%u (%s) at %08X carries %08X, "
-                        "expected %08X, NOT ONE BYTE patched", (unsigned)(word_index + 1),
+                        "expected %08X, not one byte patched", (unsigned)(word_index + 1),
                         (unsigned)WORD_COUNT, table_state.words[word_index].description,
                         (unsigned)table_state.words[word_index].address,
                         (unsigned)table_state.words[word_index].old_value,

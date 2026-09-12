@@ -319,11 +319,10 @@ the game's own joystick bindings instead and fixed in `enhanced_input`. The sett
 the narrower reason described above, and the right stick was confirmed behaving correctly in
 the run that proved the other fix.
 
-The diagonal correction and the `LookSensitivity` range check are built and unit tested, and
-**not yet played**. The look will turn more slowly on a diagonal than it used to, by up to 41
-percent at the corner. A straight push up, down, left or right is unchanged to the last decimal.
-Worth a pass with the right stick pushed into each corner to say whether the speed feels right, not
-only whether it is right.
+The diagonal correction and the `LookSensitivity` range check are built, unit tested and
+**played**, with a pad, in the 0.4.4 build. The look turns more slowly on a diagonal than it used
+to, by up to 41 percent at the corner, and a straight push up, down, left or right is unchanged to
+the last decimal.
 
 Everything below this predates that change.
 

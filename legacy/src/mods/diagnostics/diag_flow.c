@@ -587,8 +587,8 @@ int diag_fx_install(int fx_level)
         installed += diag_install_observer(sites, SITE_DRAW_POLY_DECALS, &flow_state.draw_decals,
                                            (const void *)hook_draw_poly_decals,
                                            DRAW_POLY_DECALS_PROLOGUE,
-                                           "every decal DRAW, and whether the texture page is there")
-                     ? 1 : 0;
+                                           "every decal DRAW, and whether the texture page is "
+                                           "there") ? 1 : 0;
         installed += diag_install_observer(sites, SITE_SELECT_CEL, &flow_state.select_cel,
                                            (const void *)hook_select_cel, SELECT_CEL_PROLOGUE,
                                            "materials the decal drawer REFUSES (that call site "

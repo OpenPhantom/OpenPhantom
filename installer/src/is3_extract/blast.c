@@ -26,7 +26,8 @@ static const uint8_t LITERAL_LENGTHS[] = {
 
 /* Length codes, 16 symbols, each selecting a base and a number of extra bits. */
 static const uint8_t LENGTH_LENGTHS[] = { 2, 35, 36, 53, 38, 23 };
-static const uint16_t LENGTH_BASE[]   = { 3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136, 264 };
+static const uint16_t LENGTH_BASE[]   = { 3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136,
+                                          264 };
 static const uint8_t  LENGTH_EXTRA[]  = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 /* Distance codes, 64 symbols carrying the high bits of the distance. */
@@ -289,7 +290,8 @@ const char *blast_result_text(blast_result_t result)
     switch (result) {
     case BLAST_OK:                    return "ok";
     case BLAST_ERR_LITERAL_MODE:      return "the stream header does not name a valid literal mode";
-    case BLAST_ERR_DICTIONARY_SIZE:   return "the stream header does not name a valid dictionary size";
+    case BLAST_ERR_DICTIONARY_SIZE:
+        return "the stream header does not name a valid dictionary size";
     case BLAST_ERR_TRUNCATED:         return "the compressed stream ends before its end marker";
     case BLAST_ERR_DISTANCE:          return "a back-reference points before the start of the data";
     case BLAST_ERR_WRITE:             return "the output could not be written";

@@ -1238,15 +1238,14 @@ shipped with. The same two switches are always reachable from the dev menu's Uti
 which is where they were exercised.
 
 **One inference that play does not settle.** That an authored camera region released the gate
-during ordinary walking is read out of the bytes, and no amount of ordinary play tells the two apart
-from the outside. It is the only one of the gate's conditions that *can* fire while merely walking;
-the other five are
-scripted (`gOver` has seven call sites, all cutscene, scene-op or set-piece code), or level
-transitions (`reset` is set to 3 by `bapview_newView` and to 1 by the save restore, and is
-decremented once per camera update), or structural. `FreeLookLog=1` for one session answers it
-outright: if the release lines name *an authored camera region under the player*, the inference
-holds; if they name something else, the fix above is aimed at the wrong condition and the lines say
-which one to aim at instead.
+during ordinary walking is read out of the bytes, and no amount of ordinary play tells the two
+apart from the outside. It is the only one of the gate's conditions that *can* fire while merely
+walking; the other five are scripted (`gOver` has seven call sites, all cutscene, scene-op or
+set-piece code), or level transitions (`reset` is set to 3 by `bapview_newView` and to 1 by the
+save restore, and is decremented once per camera update), or structural. `FreeLookLog=1` for one
+session answers it outright: if the release lines name *an authored camera region under the
+player*, the inference holds; if they name something else, the fix above is aimed at the wrong
+condition and the lines say which one to aim at instead.
 
 ## The camera has two yaw arms, and free look forces one of them
 

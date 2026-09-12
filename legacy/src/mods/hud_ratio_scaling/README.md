@@ -152,7 +152,7 @@ engine's size.
 ## Testing status
 
 * **Compiled and linked** with the configured 32-bit MSVC toolset, `/W4 /WX`, zero warnings.
-* **Unit tested offline**, `unittests/hud_layout.c`, 56 checks, all passing, over all 26 display
+* **Unit tested offline**, `unittests/hud_layout.c`, all passing, over all 26 display
   modes the game offers. They cover: every one of the four blocks classified correctly and
   uniquely at every mode; both numbers landing on the exact centre of their own block at every
   mode; and the two identities, measured as a **bit-exact deviation of 0.0**, `SquareHud=0` with

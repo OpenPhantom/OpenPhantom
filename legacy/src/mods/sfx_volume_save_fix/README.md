@@ -157,7 +157,7 @@ twice (`0x00417459` and `0x0041778C`), so the pattern is the whole 30-byte body.
 Bug 1 (wrong saved value) was confirmed fixed in game before the guard branch was restored. Bug 2
 (dropped load-time apply) was diagnosed from two real runs' logs and fixed per the analysis
 above. **Both the restored guard branch and the bug-2 re-apply are accepted in game**, in the
-1.5.0 build, which was played through by hand.
+v0.4.1 build, which was played through by hand.
 
 The log line to look for is `startup SFX volume (N) applied`. The actual test is whether the value
 in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.

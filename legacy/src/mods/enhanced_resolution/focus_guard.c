@@ -5,9 +5,8 @@
  *
  * The window procedure is 0x0049905E, `C7 45 DC 5E 90 49 00` at 0x00498F6D writes it into the
  * `lpfnWndProc` field of the WNDCLASSA that RegisterClassA at 0x00498FD0 is handed. It switches on
- * `msg - 2`
- * through the byte table at 0x004991EB and the address table at 0x004991D7, and exactly four
- * messages have a case. WM_ACTIVATEAPP (0x1C) is one of them:
+ * `msg - 2` through the byte table at 0x004991EB and the address table at 0x004991D7, and exactly
+ * four messages have a case. WM_ACTIVATEAPP (0x1C) is one of them:
  *
  *   004990E5  8B 45 10              mov  eax,[ebp+0x10]        ; wParam: 1 = activated
  *   004990E8  A3 A0 A5 4B 00        mov  [004BA5A0], eax

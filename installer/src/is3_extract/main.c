@@ -99,7 +99,8 @@ static int list_members(const char *archive_path)
     return EXIT_OK;
 }
 
-static int extract_member(const char *archive_path, const char *member_name, const char *output_path)
+static int extract_member(const char *archive_path, const char *member_name,
+                          const char *output_path)
 {
     is3_archive_t       archive;
     const is3_member_t *member;

@@ -194,7 +194,8 @@ accept, a ceiling of zero, and the counts that would wrap if the pool question w
 passed in, so the test drives the same code the game runs without an engine cell anywhere near it.
 
 **The unit test builds and passes.** `face_bounds` is a registered ctest target, so CI runs it.
-**Not run in the game.**
+**Installed in every played build since it shipped**, as one of the components the installer does
+not let a player untick, and no guarded path has been observed firing.
 
 An untriggered session is the expected result rather than evidence that the guard works: on a
 correct scene and a working device none of the three paths is taken. What can be confirmed in game

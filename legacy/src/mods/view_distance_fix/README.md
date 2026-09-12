@@ -578,11 +578,10 @@ including the table/bucket cross-check and the three-hit count on the ecx append
 **Accepted in game**, in the v0.4.1 build, which was played through by hand.
 
 The fog regime in particular was settled by running it rather than by reading it: the vertex
-format, the capability bit, the two `FOGTABLEMODE` writers and the constant-zero specular
-fallback are all read out of
-the image, but whether the fog is then visible on screen is only answerable in play, and it is.
-The band reported in a real log matches the arithmetic exactly; the same comparison proved the
-field-of-view cosine had stopped being applied.
+format, the capability bit, the two `FOGTABLEMODE` writers and the constant-zero specular fallback
+are all read out of the image, but whether the fog is then visible on screen is only answerable in
+play, and it is. The band reported in a real log matches the arithmetic exactly; the same
+comparison proved the field-of-view cosine had stopped being applied.
 
 `FogBandScale` is newer than that session and has been played since. It ships at 0.60 rather than
 1.0, a value chosen by looking at it in the running game by two people, and the shipped default was
@@ -619,6 +618,6 @@ no torn geometry. The line to look for:
 [view_distance_fix] vertex table relocated to ........ (32768 slots of 64 B = 2097152 B), guard page ........ (PAGE_NOACCESS), gates 16384 -> 32768, 15/15 operands written.
 ```
 
-Its absence, or a "NOT ONE BYTE patched" / "unexpected match count, unknown image" warning next to
+Its absence, or a "not one byte patched" / "unexpected match count, unknown image" warning next to
 it, means the relocation declined and the vertex cache stays at its retail 16384-slot limit.
 Everything else in this DLL keeps working exactly as it did before this feature existed.

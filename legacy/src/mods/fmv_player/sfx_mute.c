@@ -35,14 +35,14 @@
  * What this does
  *
  * Detours bapsound_play (0x0041681F, byte-identical to diagnostics/diag_audio.c's own
- * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the calls whose sound record's own
- * name matches the shared `FS?J*` shape (case-insensitive; the third character is a wildcard, the
- * rest of the name after `J` is not checked); every other sound, including both spoken lines,
+ * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the calls whose sound record's
+ * own name matches the shared `FS?J*` shape (case-insensitive; the third character is a wildcard,
+ * the rest of the name after `J` is not checked); every other sound, including both spoken lines,
  * passes through untouched. Armed and disarmed exactly like the two earlier, replaced attempts
  * were: begin() when the curtain arms, watching pPlayer+0xA0 (the position-override flag
  * documented beside PLAYER_OVERRIDE_FLAG_OFFSET below) so end() can fire the instant that
- * transient actually
- * finishes, with the curtain's own timer as a fallback cap if the flag is never seen.
+ * transient actually finishes, with the curtain's own timer as a fallback cap if the flag is never
+ * seen.
  */
 #include "sfx_mute.h"
 

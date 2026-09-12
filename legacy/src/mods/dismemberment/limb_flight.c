@@ -427,8 +427,10 @@ static void sample_stunt(uint8_t *block, float life)
  *
  * Measured, not asserted (120 samples over three pieces):
  *
- *   sever[0] t=0.53 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000) vel(0 0 0.032)
- *   sever[0] t=2.66 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000) vel(0 0 0.032)
+ *   sever[0] t=0.53 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000)
+ *            vel(0 0 0.032)
+ *   sever[0] t=2.66 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000)
+ *            vel(0 0 0.032)
  *
  * `spin` is zero from 0.5 s on and `rot` is LITERALLY constant over seconds. 112 of 120 samples
  * are in arm B, the damping one. the piece lies still in the simulation. That retired three

@@ -224,7 +224,7 @@ _Static_assert(sizeof SIG_SUBSTEP_COUNTER == sizeof MSK_SUBSTEP_COUNTER,
  * 0x0043D8BE, and it is reached from inside the pool loop, so bracketing the one call covers its
  * three draws too.
  *
- * WHY THE CALL SITE AND NOT THE PROLOGUE. 0x0043D095 opens `55 8B EC 83 EC 70 56`, so its prologue
+ * Why the call site and not the prologue. 0x0043D095 opens `55 8B EC 83 EC 70 56`, so its prologue
  * is six bytes, and a scan of every relative branch between it and the next function finds none
  * that targets those six bytes. A prologue detour would therefore have been legal here, unlike the
  * display flip elsewhere in this engine where a retry jumps back into its own second instruction.

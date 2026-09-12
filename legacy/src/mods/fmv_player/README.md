@@ -511,7 +511,7 @@ not change); and writing the drawn cursor's cells directly (confirmed to land ce
 launch across repeated testing, where two earlier attempts each looked right once and then were
 not).
 
-**The form in this tree is accepted in game**, in the 1.5.0 build, which was played through by
+**The form in this tree is accepted in game**, in the v0.4.1 build, which was played through by
 hand. It compiles with the configured 32-bit MSVC toolset, `/W4 /WX`, zero warnings, and
 `movie_path.c` is covered by `unittests/movie_path.c`. The two things that had differed from the
 last tested form have both been played since: the close request recognised with `PM_NOREMOVE` on

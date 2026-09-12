@@ -152,7 +152,7 @@ not hold the value this DLL expects.
 
 ## Testing status
 
-**A unit test for the size validation, and accepted in game**, in the 1.5.0 build, which was
+**A unit test for the size validation, and accepted in game**, in the v0.4.1 build, which was
 played through by hand. This copy builds and links here, `/W4 /WX` clean, and ships in the
 patch. The pattern work below is what establishes where it acts.
 

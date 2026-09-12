@@ -222,18 +222,18 @@ static bool allocate_buffer(void)
     reserved = (uint8_t *)VirtualAlloc(NULL, BUFFER_BYTES + GUARD_BYTES, MEM_RESERVE,
                                        PAGE_NOACCESS);
     if (reserved == NULL) {
-        log_error("VirtualAlloc(RESERVE %u B) failed (%lu), NOT ONE BYTE patched",
+        log_error("VirtualAlloc(RESERVE %u B) failed (%lu), not one byte patched",
                   (unsigned)(BUFFER_BYTES + GUARD_BYTES), (unsigned long)GetLastError());
         return false;
     }
     if (VirtualAlloc(reserved, BUFFER_BYTES, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        log_error("VirtualAlloc(COMMIT %u B) failed (%lu), NOT ONE BYTE patched",
+        log_error("VirtualAlloc(COMMIT %u B) failed (%lu), not one byte patched",
                   (unsigned)BUFFER_BYTES, (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
     if (VirtualAlloc(reserved + BUFFER_BYTES, GUARD_BYTES, MEM_COMMIT, PAGE_NOACCESS) == NULL) {
-        log_error("the guard page at %08X could not be committed (%lu), NOT ONE BYTE patched",
+        log_error("the guard page at %08X could not be committed (%lu), not one byte patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES), (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
@@ -244,7 +244,7 @@ static bool allocate_buffer(void)
             != sizeof(information) ||
         information.Protect != PAGE_NOACCESS || information.State != MEM_COMMIT) {
         log_error("the guard page at %08X does not carry PAGE_NOACCESS (State %08lX, "
-                  "Protect %08lX), NOT ONE BYTE patched",
+                  "Protect %08lX), not one byte patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)information.State, (unsigned long)information.Protect);
         VirtualFree(reserved, 0, MEM_RELEASE);
@@ -317,7 +317,7 @@ static bool find_anchors(uintptr_t *append_edx, uintptr_t *append_ecx, uintptr_t
 
     if (edx_hits != EXPECTED_APPEND_EDX || ecx_hits != EXPECTED_APPEND_ECX ||
         gate_hits != EXPECTED_GATHER_GATE) {
-        log_warning("unexpected match count, unknown image, NOT ONE BYTE patched. (obiold.exe "
+        log_warning("unexpected match count, unknown image, not one byte patched. (obiold.exe "
                     "carries four ecx blocks instead of three and is recognised by exactly that.)");
         return false;
     }
@@ -350,7 +350,7 @@ static bool check_table_addresses(uintptr_t append_edx, uint32_t *out_table)
         !memory_is_inside_image(bucket, sizeof(uint32_t)) ||
         !memory_is_inside_image(counter, sizeof(uint32_t))) {
         log_warning("cross-check failed, table %08X, +4 %08X, table+0x2000*12 = %08X, "
-                    "buckets %08X, counter %08X. NOT ONE BYTE patched. (netobi.exe fails exactly "
+                    "buckets %08X, counter %08X. not one byte patched. (netobi.exe fails exactly "
                     "here.)",
                     (unsigned)table, (unsigned)table_plus_four,
                     (unsigned)(table + OLD_ENTRY_COUNT * ENTRY_STRIDE),
@@ -377,8 +377,8 @@ static bool check_ecx_anchors(const uintptr_t *append_ecx, uint32_t table)
             return false;
         }
         if (plus_four != table + 4 || base != table) {
-            log_warning("ecx anchor %08X carries %08X/%08X instead of %08X/%08X, NOT ONE "
-                        "BYTE patched", (unsigned)append_ecx[index], (unsigned)plus_four,
+            log_warning("ecx anchor %08X carries %08X/%08X instead of %08X/%08X, not one "
+                        "byte patched", (unsigned)append_ecx[index], (unsigned)plus_four,
                         (unsigned)base, (unsigned)(table + 4), (unsigned)table);
             return false;
         }
@@ -402,7 +402,7 @@ static bool check_gate_immediate(uintptr_t gate_immediate, uint32_t *out_value)
     }
     if (value != GATE_RETAIL && value != GATE_LOWERED) {
         log_warning("the limit at %08X reads %u; expected %u (shipped) or %u (lowered by the cell "
-                    "watchdog), NOT ONE BYTE patched",
+                    "watchdog), not one byte patched",
                     (unsigned)gate_immediate, (unsigned)value,
                     (unsigned)GATE_RETAIL, (unsigned)GATE_LOWERED);
         return false;
@@ -427,7 +427,7 @@ static bool check_census(uint32_t table)
                  (unsigned)CENSUS_TABLE, (unsigned)CENSUS_TABLE_PLUS4);
         return false;
     }
-    log_warning("census %u/%u instead of %u/%u, unknown image, NOT ONE BYTE patched",
+    log_warning("census %u/%u instead of %u/%u, unknown image, not one byte patched",
                 (unsigned)table_hits, (unsigned)plus4_hits,
                 (unsigned)CENSUS_TABLE, (unsigned)CENSUS_TABLE_PLUS4);
     return false;
@@ -465,7 +465,7 @@ static bool build_word_list(const uintptr_t *append_ecx, uintptr_t append_edx,
     add_word(gate_immediate, gate_value, false, "the limit");
 
     if (table_state.word_count != WORD_COUNT) {
-        log_error("%u instead of %u sites collected, NOT ONE BYTE patched",
+        log_error("%u instead of %u sites collected, not one byte patched",
                   (unsigned)table_state.word_count, (unsigned)WORD_COUNT);
         table_state.word_count = 0;
         return false;
@@ -483,7 +483,7 @@ static bool build_word_list(const uintptr_t *append_ecx, uintptr_t append_edx,
         }
         if (table_state.words[index].old_value != table_state.words[index].expected) {
             log_warning("pre-flight: site %u/%u (%s) at %08X carries %08X, expected %08X, "
-                        "NOT ONE BYTE patched",
+                        "not one byte patched",
                         (unsigned)(index + 1), (unsigned)WORD_COUNT,
                         table_state.words[index].description,
                         (unsigned)table_state.words[index].address,

@@ -26,9 +26,8 @@
 /* `mode` is 0 off, 1 the remembered previous position, 2 a deliberate PASSTHROUGH, and 3 the
  * passthrough again with a report of where the remembered position would have differed.
  *
- * On the passthrough: the
- * patch is placed and the call is made, but the arithmetic is the engine's own, reading the
- * object's previous position exactly as the replaced instructions did.
+ * On the passthrough: the patch is placed and the call is made, but the arithmetic is the engine's
+ * own, reading the object's previous position exactly as the replaced instructions did.
  *
  * Mode 2 exists because mode 1 was played once and refused, with characters flying around the
  * level, and two explanations were left standing: the placement of the patch, or the position

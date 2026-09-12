@@ -193,7 +193,7 @@ The contact impulse is still visible in the census at the moment it is applied, 
 happens and simply goes nowhere. That is the intended behaviour rather than the impulse being
 suppressed.
 
-20 checks cover the decision, using the modes read out of the live level rather than invented ones.
+The checks cover the decision, using the modes read out of the live level rather than invented ones.
 **The test for the regression comes before the test for the bug**, because that is the failure that
 actually reached a player: a character whose velocity is unchanged either side of the handler is
 left alone whatever its mode.

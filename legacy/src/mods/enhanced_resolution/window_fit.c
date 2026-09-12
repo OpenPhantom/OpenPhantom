@@ -30,8 +30,8 @@
  *
  *   0045F7A7  E8 <rel32>   call graphics_getWidth
  *   0045F7AC  3B 05 ...    cmp  eax,[max_menu_Width]
- *   0045F7C8  E8 <rel32>   call graphics_setResolution(640,480)  ENTERING a menu: the mode goes DOWN
- *   0045F7F4  E8 <rel32>   call graphics_setMode(savedIndex)     LEAVING  a menu: the mode goes UP
+ *   0045F7C8  E8 <rel32>   call graphics_setResolution(640,480)  ENTERING a menu: mode goes DOWN
+ *   0045F7F4  E8 <rel32>   call graphics_setMode(savedIndex)     LEAVING  a menu: mode goes UP
  *
  * and the options screen's own apply calls graphics_setMode directly too, twice (0x0044162C and
  * 0x0044163C). A window fit driven from graphics_setResolution therefore heard the mode drop to

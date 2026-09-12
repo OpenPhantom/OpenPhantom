@@ -37,13 +37,12 @@
  * there is nothing left to twist: the weapon points where the player looks by construction, and
  * firing feels the same in both control schemes.
  *
- * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. The code is a few dozen stores;
- * the rest is the reasoning, and
- * every paragraph of it records a mistake that was made or nearly made, writing from the frame
- * hook, leashing the camera to the body, treating a cutscene and a floor polygon as the same
- * release, correcting a twist against a moving reference, and four rounds of building on an
- * addition that only one of the engine's two yaw arms performs. None of that is visible in the
- * stores themselves.
+ * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. The code is a few dozen stores; the
+ * rest is the reasoning, and every paragraph of it records a mistake that was made or nearly made,
+ * writing from the frame hook, leashing the camera to the body, treating a cutscene and a floor
+ * polygon as the same release, correcting a twist against a moving reference, and four rounds of
+ * building on an addition that only one of the engine's two yaw arms performs. None of that is
+ * visible in the stores themselves.
  *
  * The camera half was lifted out when this file reached 1139 lines, 239 past the hard limit. An
  * earlier note here recommended moving only the arming gate, build_gate() and release_for(), which

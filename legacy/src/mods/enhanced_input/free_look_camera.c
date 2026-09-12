@@ -422,8 +422,8 @@ static void advance_wanted_yaw(float interpolated)
      *
      * The theft is the worse half. This drain CONSUMES and zeroes the bank, so taking it here also
      * took motion phase 2 was going to turn the body with, and the player's own look went weak on
-     * the same frames the camera lurched. One writer: when the follow is driving, the wanted yaw is
-     * set absolutely a few lines above and nothing may add to it. */
+     * the same frames the camera lurched. One writer: when the follow is driving, the wanted yaw
+     * is set absolutely a few lines above and nothing may add to it. */
     if (free_state->drain_per_frame && !camera_follow_wants_camera()) {
         float banked = mouse_look_take_frame_degrees();
 

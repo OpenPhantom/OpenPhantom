@@ -217,7 +217,7 @@ static void test_folder(void)
 
 int main(void)
 {
-    /* --- the basename, which is the part the engine's own naming decides ---------------------- */
+    /* --- the basename, which is the part the engine's own naming decides ------------------- */
     test_basename();
     test_whole_path();
     test_refusals();

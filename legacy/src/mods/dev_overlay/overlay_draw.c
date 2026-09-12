@@ -474,7 +474,8 @@ static void paint_tabs(const layout_t *lay, float left, float right)
 
         if (active) {
             fill(x0, y0, x0 + lay->tab_w[i], y0 + lay->tab_h, C_TAB_ON_FILL);
-            fill(x0, y0 + lay->tab_h - lay->rule * 3.0f, x0 + lay->tab_w[i], y0 + lay->tab_h, C_ACCENT);
+            fill(x0, y0 + lay->tab_h - lay->rule * 3.0f, x0 + lay->tab_w[i], y0 + lay->tab_h,
+                 C_ACCENT);
         }
         write_in(TAB_TITLE[i], x0 + lay->text_h, y0, lay->tab_h,
                  active ? C_TAB_ON_TEXT : C_TAB_OFF_TEXT);
@@ -518,7 +519,8 @@ static void paint_search(const layout_t *lay, float left, float right)
 }
 
 /* A group heading: the band, the accent, the expand marker and the label. */
-static void paint_group_row(const layout_t *lay, float left, float right, float y, const overlay_row_t *row, bool is_hot)
+static void paint_group_row(const layout_t *lay, float left, float right, float y,
+                            const overlay_row_t *row, bool is_hot)
 {
     const float cy = y + lay->row_h * 0.5f;
     const float mx = left + EDGE_PAD * lay->text_h;
@@ -538,10 +540,11 @@ static void paint_group_row(const layout_t *lay, float left, float right, float 
     write_in(row->label, left + GROUP_X * lay->text_h, y, lay->row_h, C_GROUP_TEXT);
 }
 
-static void paint_slider_row(const layout_t *lay, float left, float right, float y, uint32_t index, uint32_t slot,
-                             const overlay_row_t *row, bool is_hot)
+static void paint_slider_row(const layout_t *lay, float left, float right, float y,
+                             uint32_t index, uint32_t slot, const overlay_row_t *row,
+                             bool is_hot)
 {
-    /* A LINE OF ITS OWN, under the value it drives, and running nearly the panel's width.
+    /* A line of its own, under the value it drives, and running nearly the panel's width.
      * The first version squeezed the track into the gap between the name and the chip,
      * which put it within a few pixels of both: it was fiddly to grab, and at the panel's
      * smaller sizes it read as though it were striking the name through. A row costs one
@@ -583,8 +586,8 @@ static void paint_slider_row(const layout_t *lay, float left, float right, float
     }
 }
 
-static void paint_info_row(const layout_t *lay, float left, float right, float y, const overlay_row_t *row, char *scratch,
-                           size_t scratch_size)
+static void paint_info_row(const layout_t *lay, float left, float right, float y,
+                           const overlay_row_t *row, char *scratch, size_t scratch_size)
 {
     /* Full row width, no chip and no hover fill, because it is a note attached to the row
      * above it, not a control of its own, and dimmed the same way an unavailable row's
@@ -598,8 +601,9 @@ static void paint_info_row(const layout_t *lay, float left, float right, float y
 }
 
 /* Every other row: the hover, the name, the leader and the chip. */
-static void paint_value_row(const layout_t *lay, float left, float right, float y, const overlay_row_t *row, bool is_hot,
-                            char *scratch, size_t scratch_size)
+static void paint_value_row(const layout_t *lay, float left, float right, float y,
+                            const overlay_row_t *row, bool is_hot, char *scratch,
+                            size_t scratch_size)
 {
     if (is_hot) {
         fill(left + lay->rule, y, right - lay->rule, y + lay->row_h, C_ROW_HOT);
@@ -742,9 +746,9 @@ bool overlay_draw_paint(void)
     paint_search(&lay, left, right);
 
     /* --- the list ------------------------------------------------------------------------------
-     * DRAWN BY POSITION, INDEXED BY ROW. `i` counts down the panel and `index` counts down the tab,
-     * and they differ by wherever the list is scrolled to. Everything below keys off `row`, so only
-     * the two lines that turn a position into a row have to know scrolling exists. */
+     * Drawn by position, indexed by row. `i` counts down the panel and `index` counts down the
+     * tab, and they differ by wherever the list is scrolled to. Everything below keys off `row`,
+     * so only the two lines that turn a position into a row have to know scrolling exists. */
     first = overlay_model_scroll(lay.visible_rows);
     memset(tracks, 0, sizeof tracks);
     for (i = 0; i < lay.visible_rows; ++i) {

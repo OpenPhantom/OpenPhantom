@@ -478,8 +478,8 @@ void enhanced_input_install(void)
      * turnWheel, which clears the mouse with it. Without mouse look a character would be left
      * that cannot turn at all. */
     if (input_config()->strafe && !input_config()->mouse_look) {
-        log_warning("Strafe=1 requires MouseLook=1, because turnWheel is the only turn channel, so "
-                    "strafe is switched OFF");
+        log_warning("Strafe=1 requires MouseLook=1, because turnWheel is the only turn channel, "
+                    "so strafe is switched OFF");
         input_config_set_strafe(false);
     }
     if (!input_config()->mouse_look) {
@@ -514,13 +514,13 @@ void enhanced_input_install(void)
                      input_config()->strafe_turn_rate);
 
     /* The hand rate may only take over on substeps where no turn KEY is held, and the only way to
-     * know that is the absolute axis reader. If it did not resolve, the axis reads zero forever and
-     * every held key would be mistaken for a mouse substep, which would flatten the engine's own
-     * ease-in on the one input that never needed this. So a missing reader takes the feature away
-     * rather than letting it run on an answer it cannot get. */
+     * know that is the absolute axis reader. If it did not resolve, the axis reads zero forever
+     * and every held key would be mistaken for a mouse substep, which would flatten the engine's
+     * own ease-in on the one input that never needed this. So a missing reader takes the feature
+     * away rather than letting it run on an answer it cannot get. */
     if (input_config()->steer_lean_from_hand && input_state.sites.read_absolute_axis == NULL) {
-        log_warning("the keyboard turn axis did not resolve, so the upper body keeps following the "
-                    "engine's own turn cell. A held key cannot be told from a mouse substep "
+        log_warning("the keyboard turn axis did not resolve, so the upper body keeps following "
+                    "the engine's own turn cell. A held key cannot be told from a mouse substep "
                     "without that reader, and guessing would flatten the keyboard's ease-in.");
     }
     steer_lean_bind(input_state.sites.set_node_yaw, input_config()->steer_lean,

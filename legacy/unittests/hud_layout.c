@@ -16,6 +16,7 @@
 
 #include "hud_layout.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -500,17 +501,21 @@ static void test_hud_glyph_rule(void)
     ut_near(sx, 1.6f, 0.0005f, "HudScale alone doubles the HUD glyph horizontally");
     ut_near(sy, 1.6f, 0.0005f, "HudScale alone doubles the HUD glyph vertically");
 
+    /* "Left alone" is a multiply by exactly 1.0, so the tolerance could be zero; it is one float
+     * epsilon because a compiler that evaluates float arithmetic in x87 extended precision under a
+     * strict C standard carries the product through the compare at that width, and a zero
+     * tolerance then fails on a value that is, once stored, the one it started as. */
     sx = 0.8f;
     sy = 0.8f;
     hud_glyph_scale(&sx, &sy, 0.0f, 0.0f, 1.0f, true);
-    ut_near(sx, 0.8f, 0.0f, "an unusable screen size leaves the HUD glyph pair alone");
-    ut_near(sy, 0.8f, 0.0f, "an unusable screen size leaves the HUD glyph vertical alone");
+    ut_near(sx, 0.8f, FLT_EPSILON, "an unusable screen size leaves the HUD glyph pair alone");
+    ut_near(sy, 0.8f, FLT_EPSILON, "an unusable screen size leaves the HUD glyph vertical alone");
 
     sx = 0.8f;
     sy = 0.8f;
     hud_glyph_scale(&sx, &sy, (float)NAN, (float)NAN, 1.0f, true);
-    ut_near(sx, 0.8f, 0.0f, "a NaN screen size is unusable too, and the horizontal stands");
-    ut_near(sy, 0.8f, 0.0f, "as does the vertical");
+    ut_near(sx, 0.8f, FLT_EPSILON, "a NaN screen size is unusable too, and the horizontal stands");
+    ut_near(sy, 0.8f, FLT_EPSILON, "as does the vertical");
 }
 
 /* The number split and the multipliers, handed a screen that is not a number. */

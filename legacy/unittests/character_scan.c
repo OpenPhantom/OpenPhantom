@@ -185,10 +185,12 @@ static void test_the_name_field(void)
     character_scan_copy_name("obinpc03", 0u, name, sizeof(name));
     ut_check(name[0] == '\0', "and so does a source of no length");
 
-    /* Nothing to assert beyond not writing: a zero length destination has nowhere to put even a
-       terminator, so the only correct behaviour is to leave it alone. */
+    /* A zero length destination has nowhere to put even a terminator, so the only correct
+       behaviour is to leave it alone, and the byte it would have terminated at is the witness. */
+    name[0] = 'x';
     character_scan_copy_name("obinpc03", 8u, name, 0u);
-    ut_check(1, "a destination of no length is left untouched rather than terminated out of range");
+    ut_check(name[0] == 'x',
+             "a destination of no length is left untouched rather than terminated out of range");
 }
 
 static void test_the_motion_names(void)
@@ -269,7 +271,8 @@ static void test_the_tracking_table_at_its_limits(void)
              "a record address of zero is the free marker, so it is never tracked as a character");
 
     character_scan_track_reset(NULL, 4u);
-    ut_check(1, "resetting a null table does nothing rather than writing through it");
+    ut_check(character_scan_track(table, 2u, 0x30u, 4.0f, &change) && change == 1.0f,
+             "resetting a null table does nothing, and the real table still remembers its records");
 }
 
 int main(void)

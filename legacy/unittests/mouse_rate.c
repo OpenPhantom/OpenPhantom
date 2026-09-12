@@ -247,6 +247,7 @@ static double step_spread_percent(const run_t *run)
 static void test_conserves(void)
 {
     static const float report_rates[4] = { 62.5f, 125.0f, 250.0f, 1000.0f };
+    size_t failures_before = ut_failures();
     int i;
 
     for (i = 0; i < 4; ++i) {
@@ -258,7 +259,8 @@ static void test_conserves(void)
                       run.delivered + run.banked - run.emitted);
         }
     }
-    ut_check(1, "delivered plus banked equals emitted at every report rate");
+    ut_check(ut_failures() == failures_before,
+             "delivered plus banked equals emitted at every report rate");
 }
 
 /* ==============================================================================================
@@ -290,6 +292,7 @@ static void test_conserves(void)
 static void test_never_reverses(void)
 {
     static const float report_rates[4] = { 30.0f, 62.5f, 125.0f, 1000.0f };
+    size_t failures_before = ut_failures();
     int i;
 
     for (i = 0; i < 4; ++i) {
@@ -317,8 +320,9 @@ static void test_never_reverses(void)
                       two.delivered, one.delivered);
         }
     }
-    ut_check(1, "a rightward hand never produces a leftward step, with one consumer or two");
-    ut_check(1, "and a second consumer cannot double the turn");
+    ut_check(ut_failures() == failures_before,
+             "a rightward hand never produces a leftward step, with one consumer or two, the "
+             "ledger balances with two, and a second consumer cannot double the turn");
 }
 
 /* ==============================================================================================
@@ -403,6 +407,7 @@ static void test_spread_beats_the_plain_path(void)
 {
     static const float report_rates[4] = { 62.5f, 104.0f, 125.0f, 500.0f };
     static const float frame_rates[3]  = { 64.0f, 91.5f, 144.0f };
+    size_t failures_before = ut_failures();
     double worst_fast_delay = 0.0;
     int i;
     int j;
@@ -445,10 +450,10 @@ static void test_spread_beats_the_plain_path(void)
             }
         }
     }
-    ut_check(1, "the reconstruction beats the plain spread at every report and frame rate");
-    ut_checkf(1, "a fast device is at most %.1f ms behind the hand, against the 31.2 ms allowed",
-              worst_fast_delay * 1000.0);
-    ut_check(1, "and no device exceeds the configured smoothing ceiling");
+    ut_checkf(ut_failures() == failures_before,
+              "the reconstruction beats the plain spread at every report and frame rate, a fast "
+              "device is at most %.1f ms behind the hand against the 31.2 ms allowed, and no "
+              "device exceeds the configured smoothing ceiling", worst_fast_delay * 1000.0);
 }
 
 /* The bound the whole design turns on: a device slower than the consumer cannot be made smooth by

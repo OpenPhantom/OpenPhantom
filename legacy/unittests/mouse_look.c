@@ -19,7 +19,8 @@
 
 static void test_slider_notches(void)
 {
-    int notch;
+    size_t failures_before = ut_failures();
+    int    notch;
 
     ut_near(input_slider_degrees_from_notch(0), 0.001f, 0.00001f,
                 "the slider's left end is 0.001 degrees per count, which the caption shows as 1");
@@ -38,11 +39,13 @@ static void test_slider_notches(void)
             ut_checkf(0, "notch %d shows as %.4f, not %d", notch, (double)shown, notch + 1);
         }
     }
-    ut_checkf(1, "every notch shows as a whole number, 1 through %d", MOUSE_SLIDER_NOTCH_COUNT);
+    ut_checkf(ut_failures() == failures_before, "every notch shows as a whole number, 1 through %d",
+              MOUSE_SLIDER_NOTCH_COUNT);
 
     ut_check(input_slider_notch_from_degrees(0.030f) == 29,
           "and converts back to notch 29");
 
+    failures_before = ut_failures();
     for (notch = 0; notch < MOUSE_SLIDER_NOTCH_COUNT; ++notch) {
         float degrees = input_slider_degrees_from_notch(notch);
 
@@ -51,7 +54,7 @@ static void test_slider_notches(void)
                    notch, (double)degrees, input_slider_notch_from_degrees(degrees));
         }
     }
-    ut_check(1, "every notch survives the round trip");
+    ut_check(ut_failures() == failures_before, "every notch survives the round trip");
 
     /* A setting typed into the ini between two notches shows as the CLOSER one. */
     ut_check(input_slider_notch_from_degrees(0.0296f) == 29,

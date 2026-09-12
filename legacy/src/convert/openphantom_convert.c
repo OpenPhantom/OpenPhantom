@@ -325,7 +325,9 @@ static int read_lab_directory(const unsigned char *data, long size,
         return -1;
     }
     names_at = 16 + (long)count * 16;
-    if (names_at + (long)name_bytes > size) {
+    /* Unsigned, and arranged so nothing wraps: a name block at or past 0x80000000 cast to long
+     * reads as negative, and the sum would pass a test meant to keep it inside the file. */
+    if (names_at > size || name_bytes > (unsigned long)(size - names_at)) {
         return -1;
     }
 

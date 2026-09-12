@@ -106,6 +106,38 @@ static bool   npc_damage_skip;
 #define NPC_SHOOTER_CLASS_OFFSET 0x08u
 #define SHOOTER_CLASS_PLAYER        1
 
+/* WHOSE SIDE IS THE VICTIM ON. The engine has no faction table; the one word it has is the body's
+ * own class at +0x04, the same word the collision layers filter on and the one this file zeroes
+ * to switch collision off. A census of every actor placement in the eleven shipped levels says
+ * how the game uses the low band:
+ *
+ *     1   the player, and the party members that share the player's class so that his bolts
+ *         pass them: Qui-Gon, Obi-Wan, Jar Jar, Padme, Panaka, Anakin, the queen in her dress
+ *     2   combat and ambient NPCs: battle droids, thugs, jawas, gamorreans, animals
+ *     3   civilians and talkers: Watto, the Coruscant crowd, Palpatine, the Naboo pilots
+ *     4   tripod guns, 8 tanks (remapped to 2 by the spawner), 10 and up the pickups
+ *     9   the escort: the queen, Panaka, the Naboo guards, Jar Jar and Padme in the race
+ *
+ * A script can re-side an actor while the level runs (the "Set Owner" opcode writes this word),
+ * so the test reads the live word at the hit rather than anything authored. One shot is for
+ * enemies: a victim of the player's own class, an escort or a civilian takes the ordinary hit. */
+#define BODY_CLASS_PLAYER_PARTY  1
+#define BODY_CLASS_CIVILIAN      3
+#define BODY_CLASS_ESCORT        9
+
+static bool victim_is_on_the_players_side(const void *victim)
+{
+    const char *body = *(const char *const *)((const char *)victim + NPC_BODY_OFFSET);
+    int32_t     body_class;
+
+    if (body == NULL) {
+        return false;
+    }
+    body_class = *(const int32_t *)(body + NPC_BODY_CLASS_OFFSET);
+    return body_class == BODY_CLASS_PLAYER_PARTY || body_class == BODY_CLASS_CIVILIAN ||
+           body_class == BODY_CLASS_ESCORT;
+}
+
 /* WHOSE SHOT WAS THAT. Without this the cheat is not "the player one shots NPCs", it is "every
  * source of damage in the game is lethal": a droid firing at another droid kills it outright, and
  * so does a stray bolt that happens to catch Qui-Gon or Jar Jar, which can end an escort without
@@ -139,7 +171,7 @@ static void __cdecl on_npc_damage(char *frame_pointer)
         return;
     }
     if (own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].on &&
-        damage_came_from_the_player(frame_pointer)) {
+        damage_came_from_the_player(frame_pointer) && !victim_is_on_the_players_side(victim)) {
         /* <=0 is what the death gate this function feeds (0x00437070, see dismemberment.c's own
          * DEATH GATE comment) tests for.
          *

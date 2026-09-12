@@ -217,7 +217,11 @@ retail's own death gate at `0x0043707D`.
 * **Invincible NPCs** skips the block, so health is untouched.
 * **One-shot NPCs (your damage)** writes health straight to zero. The death gate this function
   feeds tests for exactly that. It fires **only for damage that came from the player**, so NPCs
-  fighting each other are unaffected.
+  fighting each other are unaffected, and **only against an enemy**: the victim's body class,
+  the one word the engine sides its actors by, is read at the hit, and a victim of the player's
+  own class (the party), an escort (class 9, the queen and her guards) or a civilian (class 3)
+  takes the ordinary hit. A sabre swing through the queen used to kill her outright with the
+  cheat on. The class census behind those three numbers is in `cheats_npc_damage.c`.
 
 Invincible wins if both are somehow on at once: refusing the hit outright is more obviously
 correct than a hit that is at the same time "took no damage" and "died".

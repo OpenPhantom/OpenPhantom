@@ -424,6 +424,288 @@ static float widest_chip(void)
     return widest;
 }
 
+/* The body, its frame, the accent cap, the title and the closing hint. */
+static void paint_frame(const layout_t *lay, float left, float right)
+{
+    /* --- the body, its frame, and the accent cap ------------------------------------------------
+     * The cap is the answer to a title with no weight: with one font at one size weight cannot come
+     * from the type, so it comes from a saturated bar directly above it, and it is the top border
+     * as well, so it costs nothing. */
+    fill(left, lay->top, right, lay->top + lay->height, C_PANEL_BODY);
+    fill(left, lay->top, right, lay->top + lay->cap_h, C_ACCENT);
+    fill(left, lay->top, left + lay->rule, lay->top + lay->height, C_BORDER);
+    fill(right - lay->rule, lay->top, right, lay->top + lay->height, C_BORDER);
+    fill(left, lay->top + lay->height - lay->rule, right, lay->top + lay->height, C_BORDER);
+
+    /* --- the title, and the one thing a floating panel must say: how to close it ------- */
+    fill(left + lay->rule, lay->top + lay->cap_h, right - lay->rule, lay->top + lay->title_h,
+         C_BAND_TITLE);
+    fill(left, lay->top + lay->title_h - lay->rule, right, lay->top + lay->title_h, C_RULE);
+    write_in("Cheatmenu", left + EDGE_PAD * lay->text_h, lay->top + lay->cap_h,
+             lay->title_h - lay->cap_h, C_ACCENT);
+    {
+        /* A queued swap outranks the usual hint while one is pending: it is the more useful thing
+         * to say right now, and the row itself already reads QUEUED, so this is confirming what
+         * closing does rather than introducing new information. Kept short rather than naming the
+         * character: the panel's width is sized to fit the longest ROW label, not this hint plus
+         * "Cheatmenu" both fitting the title band together, and a name-carrying hint here would be
+         * the one string in the whole panel that was never checked against that budget. */
+        const char *hint = (cheats_original_actions_pending_label() != NULL)
+                          ? "Close applies the queued swap" : "Esc closes";
+
+        write_in(hint, right - EDGE_PAD * lay->text_h - text_width(hint), lay->top + lay->cap_h,
+                 lay->title_h - lay->cap_h, C_ROW_TEXT_DIM);
+    }
+}
+
+static void paint_tabs(const layout_t *lay, float left, float right)
+{
+    uint32_t i;
+
+    /* --- the tabs. The inactive one gets NO fill, and without that absence they do not read as
+     * tabs: one rectangle among words is unambiguously the selected one at any scene brightness,
+     * while a second rectangle both competes with the first and converges on it as the game gets
+     * brighter. --- */
+    fill(left, lay->top + lay->search_top - lay->rule, right, lay->top + lay->search_top, C_RULE);
+    for (i = 0; i < OVERLAY_LAYOUT_TABS; ++i) {
+        const bool  active = ((uint32_t)overlay_model_tab() == i);
+        const float x0 = left + lay->tab_x0[i];
+        const float y0 = lay->top + lay->tabs_top;
+
+        if (active) {
+            fill(x0, y0, x0 + lay->tab_w[i], y0 + lay->tab_h, C_TAB_ON_FILL);
+            fill(x0, y0 + lay->tab_h - lay->rule * 3.0f, x0 + lay->tab_w[i], y0 + lay->tab_h, C_ACCENT);
+        }
+        write_in(TAB_TITLE[i], x0 + lay->text_h, y0, lay->tab_h,
+                 active ? C_TAB_ON_TEXT : C_TAB_OFF_TEXT);
+    }
+}
+
+static void paint_search(const layout_t *lay, float left, float right)
+{
+    const char *typed;
+
+    /* --- the search field. Opaque with a light border rather than a translucent black rectangle:
+     * the same shape, and the difference between a well and a hole.
+     *
+     * Typing only reaches this box once it has been clicked into, and the input layer's focus
+     * gate is what holds that. The border and the caret say so: the accent border
+     * and the caret both only appear once a click actually landed here, so the box never LOOKS
+     * ready to type into before it is. --- */
+    {
+        const bool  focused = overlay_input_search_focused();
+        const float fy0 = lay->top + lay->search_top + (lay->search_h - 1.5f * lay->text_h) * 0.5f;
+        const float fy1 = fy0 + 1.5f * lay->text_h;
+        const float tx = left + (EDGE_PAD + 0.5f) * lay->text_h;
+        float       caret;
+
+        fill_outlined(left + EDGE_PAD * lay->text_h, fy0, right - EDGE_PAD * lay->text_h, fy1,
+                      focused ? C_ACCENT : C_FIELD_BORDER, C_FIELD_FILL);
+        typed = overlay_model_search();
+        if (typed[0] != 0) {
+            write_in(typed, tx, fy0, fy1 - fy0, C_TYPED);
+            caret = tx + text_width(typed) + lay->rule * 2.0f;
+        } else {
+            write_in("Search", tx + 0.5f * lay->text_h, fy0, fy1 - fy0, C_PLACEHOLDER);
+            caret = tx;
+        }
+        if (focused) {
+            fill(caret, fy0 + 0.25f * lay->text_h, caret + lay->rule * 2.0f,
+                 fy0 + 1.25f * lay->text_h, C_ACCENT);
+        }
+    }
+    fill(left, lay->top + lay->rows_top - lay->rule, right, lay->top + lay->rows_top, C_RULE);
+}
+
+/* A group heading: the band, the accent, the expand marker and the label. */
+static void paint_group_row(const layout_t *lay, float left, float right, float y, const overlay_row_t *row, bool is_hot)
+{
+    const float cy = y + lay->row_h * 0.5f;
+    const float mx = left + EDGE_PAD * lay->text_h;
+
+    fill(left + lay->rule, y, right - lay->rule, y + lay->row_h,
+         is_hot ? C_GROUP_HOT : C_GROUP_BAND);
+    fill(left + lay->rule, y, right - lay->rule, y + lay->rule, C_RULE);
+    fill(left + lay->rule, y, left + lay->rule + 0.25f * lay->text_h, y + lay->row_h, C_ACCENT);
+
+    /* Two rectangles rather than a plus and a minus: in a fixed bitmap font a hyphen is a
+     * smudge, and two fills give a marker at exactly the size and weight wanted. */
+    fill(mx, cy - lay->rule, mx + 0.5f * lay->text_h, cy + lay->rule, C_ACCENT);
+    if (!row->expanded) {
+        fill(mx + 0.25f * lay->text_h - lay->rule, cy - 0.25f * lay->text_h,
+             mx + 0.25f * lay->text_h + lay->rule, cy + 0.25f * lay->text_h, C_ACCENT);
+    }
+    write_in(row->label, left + GROUP_X * lay->text_h, y, lay->row_h, C_GROUP_TEXT);
+}
+
+static void paint_slider_row(const layout_t *lay, float left, float right, float y, uint32_t index, uint32_t slot,
+                             const overlay_row_t *row, bool is_hot)
+{
+    /* A LINE OF ITS OWN, under the value it drives, and running nearly the panel's width.
+     * The first version squeezed the track into the gap between the name and the chip,
+     * which put it within a few pixels of both: it was fiddly to grab, and at the panel's
+     * smaller sizes it read as though it were striking the name through. A row costs one
+     * line and buys a target several times longer.
+     *
+     * Indented to the same column as the note under the draw distance, so it is plainly
+     * attached to the row above rather than a control of its own. */
+    const float x0   = left + NAME_X * lay->text_h;
+    const float x1   = right - EDGE_PAD * lay->text_h;
+    const float mid  = y + lay->row_h * 0.5f;
+    const float half = lay->rule * 1.5f;
+    const float grip = lay->text_h * 0.30f;
+    float       shown = row->fraction;
+    int32_t     drag_row = -1;
+    float       drag_fraction = 0.0f;
+    float       at;
+
+    if (!row->available || !(x1 > x0)) {
+        return;
+    }
+    /* While THIS row is the one being dragged the handle comes from the pointer rather than
+     * from the value read back out of the settings file. The write is throttled and the
+     * pointer is not, so drawing from the file would move the handle in thirty steps a
+     * second against a hand moving in sixty. */
+    if (overlay_input_drag(&drag_row, &drag_fraction) && drag_row == (int32_t)index) {
+        shown = drag_fraction;
+    }
+    at = x0 + (x1 - x0) * shown;
+
+    fill(x0, mid - half, x1, mid + half, C_CHIP_OFF);
+    fill(x0, mid - half, at, mid + half, is_hot ? C_ACCENT : C_CHIP_OFF_TEXT);
+    fill(at - grip * 0.5f, y + 0.22f * lay->row_h, at + grip * 0.5f, y + 0.78f * lay->row_h,
+         is_hot ? C_ACCENT : C_CHIP_OFF_TEXT);
+
+    if (slot < TRACK_SLOTS) {
+        tracks[slot].present = true;
+        tracks[slot].x0 = x0;
+        tracks[slot].x1 = x1;
+    }
+}
+
+static void paint_info_row(const layout_t *lay, float left, float right, float y, const overlay_row_t *row, char *scratch,
+                           size_t scratch_size)
+{
+    /* Full row width, no chip and no hover fill, because it is a note attached to the row
+     * above it, not a control of its own, and dimmed the same way an unavailable row's
+     * name is so it reads as secondary at a glance rather than as another cheat to look
+     * for. */
+    const float name_x = left + NAME_X * lay->text_h;
+    const float room = right - EDGE_PAD * lay->text_h - name_x;
+    const char *label = fit(row->label, room, scratch, scratch_size);
+
+    write_in(label, name_x, y, lay->row_h, C_ROW_TEXT_DIM);
+}
+
+/* Every other row: the hover, the name, the leader and the chip. */
+static void paint_value_row(const layout_t *lay, float left, float right, float y, const overlay_row_t *row, bool is_hot,
+                            char *scratch, size_t scratch_size)
+{
+    if (is_hot) {
+        fill(left + lay->rule, y, right - lay->rule, y + lay->row_h, C_ROW_HOT);
+        fill(left + lay->rule, y, left + lay->rule * 4.0f, y + lay->row_h, C_ACCENT);
+    }
+
+    /* A hotkey row, and now a value row too, get the action's own chip styling, since both
+     * are buttons that start something rather than a plain switch, the same as ACTION, but
+     * never fall through to "RUN": source_row() always populates value for either kind
+     * (the bound key's name / "Set" / "...", or the current number / what is being typed),
+     * so that arm of the word choice below is dead for both and kept only because ACTION
+     * still needs it. */
+    const bool  is_action = (row->kind == OVERLAY_ROW_ACTION ||
+                             row->kind == OVERLAY_ROW_HOTKEY ||
+                             row->kind == OVERLAY_ROW_VALUE);
+    const char *word = chip_word(row);
+    const float chip_w = text_width(word) + lay->text_h;
+    const float chip_x1 = right - EDGE_PAD * lay->text_h;
+    const float chip_x0 = chip_x1 - chip_w;
+    const float name_x = left + NAME_X * lay->text_h;
+    const float room = chip_x0 - GUTTER_MIN * lay->text_h - name_x;
+    const char *label = fit(row->label, room, scratch, scratch_size);
+    const float lead_x0 = name_x + text_width(label) + 0.5f * lay->text_h;
+    const float lead_x1 = chip_x0 - 0.5f * lay->text_h;
+
+    /* The leader is drawn only where the gap actually is, between THIS name and THIS row's
+     * state, so it is self evidently that row's connector. Below the minimum gutter the two
+     * are already adjacent and a rule between them is clutter; the same test is what keeps
+     * an inverted rectangle from ever reaching the engine. */
+    if (lead_x1 - lead_x0 >= GUTTER_MIN * lay->text_h) {
+        fill(lead_x0, y + (lay->row_h - lay->rule) * 0.5f, lead_x1,
+             y + (lay->row_h + lay->rule) * 0.5f, is_hot ? C_LEADER_HOT : C_LEADER);
+    }
+
+    write_in(label, name_x, y, lay->row_h, row->available ? C_ROW_TEXT : C_ROW_TEXT_DIM);
+
+    if (!row->available) {
+        write_in(word, chip_x0 + CHIP_PAD * lay->text_h, y, lay->row_h, C_STATE_NA);
+    } else if (row->pending) {
+        /* Queued reads as "this will happen", the same claim ON already makes, so it gets
+         * ON's own colour rather than a third one; a fourth chip colour buys nothing a
+         * different WORD does not already say on its own. */
+        fill(chip_x0, y + 0.1875f * lay->row_h, chip_x1, y + 0.8125f * lay->row_h, C_CHIP_ON);
+        write_in(word, chip_x0 + CHIP_PAD * lay->text_h, y, lay->row_h, C_CHIP_ON_TEXT);
+    } else if (is_action) {
+        fill(chip_x0, y + 0.1875f * lay->row_h, chip_x1, y + 0.8125f * lay->row_h,
+             C_CHIP_ACTION);
+        write_in(word, chip_x0 + CHIP_PAD * lay->text_h, y, lay->row_h, C_CHIP_ACTION_TEXT);
+    } else {
+        fill(chip_x0, y + 0.1875f * lay->row_h, chip_x1, y + 0.8125f * lay->row_h,
+             row->on ? C_CHIP_ON : C_CHIP_OFF);
+        write_in(word, chip_x0 + CHIP_PAD * lay->text_h, y, lay->row_h,
+                 row->on ? C_CHIP_ON_TEXT : C_CHIP_OFF_TEXT);
+    }
+}
+
+/* --- the scroll indicator, and only when there is something to indicate -------------------
+ * A thumb on the inside of the right border, as long a fraction of the track as the visible
+ * rows are of all of them, and as far down it as the list is scrolled. It is drawn rather than
+ * clickable on purpose: the wheel and the keys already move the list, and a draggable bar this
+ * thin would be a target the game's own pointer is not precise enough to hit.
+ *
+ * Absent entirely when everything fits, so the ordinary panel is exactly what it always was. */
+static void paint_scroll_indicator(const layout_t *lay, float right, uint32_t first)
+{
+    const uint32_t count = overlay_model_row_count();
+
+    if (count > lay->visible_rows && lay->visible_rows > 0u) {
+        const float track_y0 = lay->top + lay->rows_top;
+        const float track_y1 = track_y0 + (float)lay->visible_rows * lay->row_h;
+        const float track_h  = track_y1 - track_y0;
+        const float w        = lay->rule * 3.0f;
+        const float x1       = right - lay->rule;
+        const float x0       = x1 - w;
+        float       thumb_h  = track_h * (float)lay->visible_rows / (float)count;
+        float       thumb_y;
+
+        if (thumb_h < lay->text_h) {
+            thumb_h = lay->text_h;         /* never so short it reads as a speck */
+        }
+        thumb_y = track_y0 + (track_h - thumb_h) *
+                  ((float)first / (float)(count - lay->visible_rows));
+
+        fill(x0, track_y0, x1, track_y1, C_RULE);
+        fill(x0, thumb_y, x1, thumb_y + thumb_h, C_ACCENT);
+    }
+}
+
+static void paint_pointer(const layout_t *lay, float pointer_x, float pointer_y)
+{
+    if (draw_state.draw_sprite != NULL && draw_state.cursor_texture != NULL &&
+        *draw_state.cursor_texture != NULL) {
+        draw_state.draw_sprite(*draw_state.cursor_texture,
+                               pointer_x, pointer_x + CURSOR_SIZE,
+                               pointer_y, pointer_y + CURSOR_SIZE,
+                               CURSOR_COLOUR, CURSOR_FILL);
+    } else {
+        const float arm = 0.4f * lay->text_h;
+
+        fill(pointer_x - arm, pointer_y - lay->rule, pointer_x + arm, pointer_y + lay->rule,
+             C_POINTER);
+        fill(pointer_x - lay->rule, pointer_y - arm, pointer_x + lay->rule, pointer_y + arm,
+             C_POINTER);
+    }
+}
+
 bool overlay_draw_paint(void)
 {
     layout_t    lay;
@@ -435,7 +717,6 @@ bool overlay_draw_paint(void)
     int32_t     hot;
     uint32_t    i;
     uint32_t    first;             /* the row drawn at the top, see the list below */
-    const char *typed;
     char        scratch[OVERLAY_LABEL_MAX + 4];
 
     if (!overlay_draw_screen(NULL, NULL)) {
@@ -456,84 +737,9 @@ bool overlay_draw_paint(void)
     overlay_input_pointer(&pointer_x, &pointer_y);
     hot = overlay_draw_row_at(pointer_x, pointer_y);
 
-    /* --- the body, its frame, and the accent cap ------------------------------------------------
-     * The cap is the answer to a title with no weight: with one font at one size weight cannot come
-     * from the type, so it comes from a saturated bar directly above it, and it is the top border
-     * as well, so it costs nothing. */
-    fill(left, lay.top, right, lay.top + lay.height, C_PANEL_BODY);
-    fill(left, lay.top, right, lay.top + lay.cap_h, C_ACCENT);
-    fill(left, lay.top, left + lay.rule, lay.top + lay.height, C_BORDER);
-    fill(right - lay.rule, lay.top, right, lay.top + lay.height, C_BORDER);
-    fill(left, lay.top + lay.height - lay.rule, right, lay.top + lay.height, C_BORDER);
-
-    /* --- the title, and the one thing a floating panel must say: how to close it ------- */
-    fill(left + lay.rule, lay.top + lay.cap_h, right - lay.rule, lay.top + lay.title_h,
-         C_BAND_TITLE);
-    fill(left, lay.top + lay.title_h - lay.rule, right, lay.top + lay.title_h, C_RULE);
-    write_in("Cheatmenu", left + EDGE_PAD * lay.text_h, lay.top + lay.cap_h,
-             lay.title_h - lay.cap_h, C_ACCENT);
-    {
-        /* A queued swap outranks the usual hint while one is pending: it is the more useful thing
-         * to say right now, and the row itself already reads QUEUED, so this is confirming what
-         * closing does rather than introducing new information. Kept short rather than naming the
-         * character: the panel's width is sized to fit the longest ROW label, not this hint plus
-         * "Cheatmenu" both fitting the title band together, and a name-carrying hint here would be
-         * the one string in the whole panel that was never checked against that budget. */
-        const char *hint = (cheats_original_actions_pending_label() != NULL)
-                          ? "Close applies the queued swap" : "Esc closes";
-
-        write_in(hint, right - EDGE_PAD * lay.text_h - text_width(hint), lay.top + lay.cap_h,
-                 lay.title_h - lay.cap_h, C_ROW_TEXT_DIM);
-    }
-
-    /* --- the tabs. The inactive one gets NO fill, and without that absence they do not read as
-     * tabs: one rectangle among words is unambiguously the selected one at any scene brightness,
-     * while a second rectangle both competes with the first and converges on it as the game gets
-     * brighter. --- */
-    fill(left, lay.top + lay.search_top - lay.rule, right, lay.top + lay.search_top, C_RULE);
-    for (i = 0; i < OVERLAY_LAYOUT_TABS; ++i) {
-        const bool  active = ((uint32_t)overlay_model_tab() == i);
-        const float x0 = left + lay.tab_x0[i];
-        const float y0 = lay.top + lay.tabs_top;
-
-        if (active) {
-            fill(x0, y0, x0 + lay.tab_w[i], y0 + lay.tab_h, C_TAB_ON_FILL);
-            fill(x0, y0 + lay.tab_h - lay.rule * 3.0f, x0 + lay.tab_w[i], y0 + lay.tab_h, C_ACCENT);
-        }
-        write_in(TAB_TITLE[i], x0 + lay.text_h, y0, lay.tab_h,
-                 active ? C_TAB_ON_TEXT : C_TAB_OFF_TEXT);
-    }
-
-    /* --- the search field. Opaque with a light border rather than a translucent black rectangle:
-     * the same shape, and the difference between a well and a hole.
-     *
-     * Typing only reaches this box once it has been clicked into, and the input layer's focus
-     * gate is what holds that. The border and the caret say so: the accent border
-     * and the caret both only appear once a click actually landed here, so the box never LOOKS
-     * ready to type into before it is. --- */
-    {
-        const bool  focused = overlay_input_search_focused();
-        const float fy0 = lay.top + lay.search_top + (lay.search_h - 1.5f * lay.text_h) * 0.5f;
-        const float fy1 = fy0 + 1.5f * lay.text_h;
-        const float tx = left + (EDGE_PAD + 0.5f) * lay.text_h;
-        float       caret;
-
-        fill_outlined(left + EDGE_PAD * lay.text_h, fy0, right - EDGE_PAD * lay.text_h, fy1,
-                      focused ? C_ACCENT : C_FIELD_BORDER, C_FIELD_FILL);
-        typed = overlay_model_search();
-        if (typed[0] != 0) {
-            write_in(typed, tx, fy0, fy1 - fy0, C_TYPED);
-            caret = tx + text_width(typed) + lay.rule * 2.0f;
-        } else {
-            write_in("Search", tx + 0.5f * lay.text_h, fy0, fy1 - fy0, C_PLACEHOLDER);
-            caret = tx;
-        }
-        if (focused) {
-            fill(caret, fy0 + 0.25f * lay.text_h, caret + lay.rule * 2.0f,
-                 fy0 + 1.25f * lay.text_h, C_ACCENT);
-        }
-    }
-    fill(left, lay.top + lay.rows_top - lay.rule, right, lay.top + lay.rows_top, C_RULE);
+    paint_frame(&lay, left, right);
+    paint_tabs(&lay, left, right);
+    paint_search(&lay, left, right);
 
     /* --- the list ------------------------------------------------------------------------------
      * DRAWN BY POSITION, INDEXED BY ROW. `i` counts down the panel and `index` counts down the tab,
@@ -552,185 +758,18 @@ bool overlay_draw_paint(void)
         }
 
         if (row.kind == OVERLAY_ROW_GROUP) {
-            const float cy = y + lay.row_h * 0.5f;
-            const float mx = left + EDGE_PAD * lay.text_h;
-
-            fill(left + lay.rule, y, right - lay.rule, y + lay.row_h,
-                 is_hot ? C_GROUP_HOT : C_GROUP_BAND);
-            fill(left + lay.rule, y, right - lay.rule, y + lay.rule, C_RULE);
-            fill(left + lay.rule, y, left + lay.rule + 0.25f * lay.text_h, y + lay.row_h, C_ACCENT);
-
-            /* Two rectangles rather than a plus and a minus: in a fixed bitmap font a hyphen is a
-             * smudge, and two fills give a marker at exactly the size and weight wanted. */
-            fill(mx, cy - lay.rule, mx + 0.5f * lay.text_h, cy + lay.rule, C_ACCENT);
-            if (!row.expanded) {
-                fill(mx + 0.25f * lay.text_h - lay.rule, cy - 0.25f * lay.text_h,
-                     mx + 0.25f * lay.text_h + lay.rule, cy + 0.25f * lay.text_h, C_ACCENT);
-            }
-            write_in(row.label, left + GROUP_X * lay.text_h, y, lay.row_h, C_GROUP_TEXT);
-            continue;
-        }
-
-        if (row.kind == OVERLAY_ROW_SLIDER) {
-            /* A LINE OF ITS OWN, under the value it drives, and running nearly the panel's width.
-             * The first version squeezed the track into the gap between the name and the chip,
-             * which put it within a few pixels of both: it was fiddly to grab, and at the panel's
-             * smaller sizes it read as though it were striking the name through. A row costs one
-             * line and buys a target several times longer.
-             *
-             * Indented to the same column as the note under the draw distance, so it is plainly
-             * attached to the row above rather than a control of its own. */
-            const float x0   = left + NAME_X * lay.text_h;
-            const float x1   = right - EDGE_PAD * lay.text_h;
-            const float mid  = y + lay.row_h * 0.5f;
-            const float half = lay.rule * 1.5f;
-            const float grip = lay.text_h * 0.30f;
-            float       shown = row.fraction;
-            int32_t     drag_row = -1;
-            float       drag_fraction = 0.0f;
-            float       at;
-
-            if (!row.available || !(x1 > x0)) {
-                continue;
-            }
-            /* While THIS row is the one being dragged the handle comes from the pointer rather than
-             * from the value read back out of the settings file. The write is throttled and the
-             * pointer is not, so drawing from the file would move the handle in thirty steps a
-             * second against a hand moving in sixty. */
-            if (overlay_input_drag(&drag_row, &drag_fraction) && drag_row == (int32_t)index) {
-                shown = drag_fraction;
-            }
-            at = x0 + (x1 - x0) * shown;
-
-            fill(x0, mid - half, x1, mid + half, C_CHIP_OFF);
-            fill(x0, mid - half, at, mid + half, is_hot ? C_ACCENT : C_CHIP_OFF_TEXT);
-            fill(at - grip * 0.5f, y + 0.22f * lay.row_h, at + grip * 0.5f, y + 0.78f * lay.row_h,
-                 is_hot ? C_ACCENT : C_CHIP_OFF_TEXT);
-
-            if (i < TRACK_SLOTS) {
-                tracks[i].present = true;
-                tracks[i].x0 = x0;
-                tracks[i].x1 = x1;
-            }
-            continue;
-        }
-
-        if (row.kind == OVERLAY_ROW_INFO) {
-            /* Full row width, no chip and no hover fill, because it is a note attached to the row
-             * above it, not a control of its own, and dimmed the same way an unavailable row's
-             * name is so it reads as secondary at a glance rather than as another cheat to look
-             * for. */
-            const float name_x = left + NAME_X * lay.text_h;
-            const float room = right - EDGE_PAD * lay.text_h - name_x;
-            const char *label = fit(row.label, room, scratch, sizeof scratch);
-
-            write_in(label, name_x, y, lay.row_h, C_ROW_TEXT_DIM);
-            continue;
-        }
-
-        if (is_hot) {
-            fill(left + lay.rule, y, right - lay.rule, y + lay.row_h, C_ROW_HOT);
-            fill(left + lay.rule, y, left + lay.rule * 4.0f, y + lay.row_h, C_ACCENT);
-        }
-
-        {
-            /* A hotkey row, and now a value row too, get the action's own chip styling, since both
-             * are buttons that start something rather than a plain switch, the same as ACTION, but
-             * never fall through to "RUN": source_row() always populates value for either kind
-             * (the bound key's name / "Set" / "...", or the current number / what is being typed),
-             * so that arm of the word choice below is dead for both and kept only because ACTION
-             * still needs it. */
-            const bool  is_action = (row.kind == OVERLAY_ROW_ACTION ||
-                                     row.kind == OVERLAY_ROW_HOTKEY ||
-                                     row.kind == OVERLAY_ROW_VALUE);
-            const char *word = chip_word(&row);
-            const float chip_w = text_width(word) + lay.text_h;
-            const float chip_x1 = right - EDGE_PAD * lay.text_h;
-            const float chip_x0 = chip_x1 - chip_w;
-            const float name_x = left + NAME_X * lay.text_h;
-            const float room = chip_x0 - GUTTER_MIN * lay.text_h - name_x;
-            const char *label = fit(row.label, room, scratch, sizeof scratch);
-            const float lead_x0 = name_x + text_width(label) + 0.5f * lay.text_h;
-            const float lead_x1 = chip_x0 - 0.5f * lay.text_h;
-
-            /* The leader is drawn only where the gap actually is, between THIS name and THIS row's
-             * state, so it is self evidently that row's connector. Below the minimum gutter the two
-             * are already adjacent and a rule between them is clutter; the same test is what keeps
-             * an inverted rectangle from ever reaching the engine. */
-            if (lead_x1 - lead_x0 >= GUTTER_MIN * lay.text_h) {
-                fill(lead_x0, y + (lay.row_h - lay.rule) * 0.5f, lead_x1,
-                     y + (lay.row_h + lay.rule) * 0.5f, is_hot ? C_LEADER_HOT : C_LEADER);
-            }
-
-            write_in(label, name_x, y, lay.row_h, row.available ? C_ROW_TEXT : C_ROW_TEXT_DIM);
-
-            if (!row.available) {
-                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_STATE_NA);
-            } else if (row.pending) {
-                /* Queued reads as "this will happen", the same claim ON already makes, so it gets
-                 * ON's own colour rather than a third one; a fourth chip colour buys nothing a
-                 * different WORD does not already say on its own. */
-                fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h, C_CHIP_ON);
-                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_CHIP_ON_TEXT);
-            } else if (is_action) {
-                fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h,
-                     C_CHIP_ACTION);
-                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h, C_CHIP_ACTION_TEXT);
-            } else {
-                fill(chip_x0, y + 0.1875f * lay.row_h, chip_x1, y + 0.8125f * lay.row_h,
-                     row.on ? C_CHIP_ON : C_CHIP_OFF);
-                write_in(word, chip_x0 + CHIP_PAD * lay.text_h, y, lay.row_h,
-                         row.on ? C_CHIP_ON_TEXT : C_CHIP_OFF_TEXT);
-            }
+            paint_group_row(&lay, left, right, y, &row, is_hot);
+        } else if (row.kind == OVERLAY_ROW_SLIDER) {
+            paint_slider_row(&lay, left, right, y, index, i, &row, is_hot);
+        } else if (row.kind == OVERLAY_ROW_INFO) {
+            paint_info_row(&lay, left, right, y, &row, scratch, sizeof scratch);
+        } else {
+            paint_value_row(&lay, left, right, y, &row, is_hot, scratch, sizeof scratch);
         }
     }
 
-    /* --- the scroll indicator, and only when there is something to indicate -------------------
-     * A thumb on the inside of the right border, as long a fraction of the track as the visible
-     * rows are of all of them, and as far down it as the list is scrolled. It is drawn rather than
-     * clickable on purpose: the wheel and the keys already move the list, and a draggable bar this
-     * thin would be a target the game's own pointer is not precise enough to hit.
-     *
-     * Absent entirely when everything fits, so the ordinary panel is exactly what it always was. */
-    {
-        const uint32_t count = overlay_model_row_count();
-
-        if (count > lay.visible_rows && lay.visible_rows > 0u) {
-            const float track_y0 = lay.top + lay.rows_top;
-            const float track_y1 = track_y0 + (float)lay.visible_rows * lay.row_h;
-            const float track_h  = track_y1 - track_y0;
-            const float w        = lay.rule * 3.0f;
-            const float x1       = right - lay.rule;
-            const float x0       = x1 - w;
-            float       thumb_h  = track_h * (float)lay.visible_rows / (float)count;
-            float       thumb_y;
-
-            if (thumb_h < lay.text_h) {
-                thumb_h = lay.text_h;         /* never so short it reads as a speck */
-            }
-            thumb_y = track_y0 + (track_h - thumb_h) *
-                      ((float)first / (float)(count - lay.visible_rows));
-
-            fill(x0, track_y0, x1, track_y1, C_RULE);
-            fill(x0, thumb_y, x1, thumb_y + thumb_h, C_ACCENT);
-        }
-    }
-
-    /* --- last, so nothing covers it: the game's own pointer, in its own texture -------- */
-    if (draw_state.draw_sprite != NULL && draw_state.cursor_texture != NULL &&
-        *draw_state.cursor_texture != NULL) {
-        draw_state.draw_sprite(*draw_state.cursor_texture,
-                               pointer_x, pointer_x + CURSOR_SIZE,
-                               pointer_y, pointer_y + CURSOR_SIZE,
-                               CURSOR_COLOUR, CURSOR_FILL);
-    } else {
-        const float arm = 0.4f * lay.text_h;
-
-        fill(pointer_x - arm, pointer_y - lay.rule, pointer_x + arm, pointer_y + lay.rule,
-             C_POINTER);
-        fill(pointer_x - lay.rule, pointer_y - arm, pointer_x + lay.rule, pointer_y + arm,
-             C_POINTER);
-    }
+    paint_scroll_indicator(&lay, right, first);
+    paint_pointer(&lay, pointer_x, pointer_y);
     return true;
 }
 

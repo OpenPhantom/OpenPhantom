@@ -219,59 +219,47 @@ static bool restart_is_pending(void)
     return device_is_windowed() != (current_mode() != MODE_AUTHENTIC);
 }
 
-void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
-                        overlay_row_t *out)
+/* One entry of the open size list. True when `slot` was one. */
+static bool size_entry_row(uint32_t slot, overlay_row_t *out)
 {
-    if (out == NULL) {
-        return;
+    uint32_t entry = 0;
+    int32_t  chosen_width;
+    int32_t  chosen_height;
+
+    if (!slot_is_size_entry(slot, &entry)) {
+        return false;
     }
-    /* Nothing here is typed into any more: the size is chosen from the display's own list, so no
-     * row has an edit in progress to be shown. Kept in the signature because the caller hands the
-     * same three things to every group and this one having a different shape would be worse. */
-    (void)editing_text;
-
-    {
-        uint32_t entry = 0;
-
-        if (slot_is_size_entry(slot, &entry)) {
-            int32_t chosen_width  = ini_read_int(RESOLUTION_SECTION, "WindowedWidth", 0);
-            int32_t chosen_height = ini_read_int(RESOLUTION_SECTION, "WindowedHeight", 0);
-
-            out->kind      = OVERLAY_ROW_CHEAT;
-            out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
-            out->value[0]  = 0;
-
-            if (entry == 0u) {
-                /* Lit by the absence of a size rather than by a number, the same test the row
-                 * above reads to decide it says auto. One test, one meaning. */
-                out->on = !(chosen_width > 0 && chosen_height > 0);
-                copy_label(out->label, "    auto (match the game's own size)");
-                return;
-            }
-
-            out->on = size_list[entry - 1u].width == chosen_width &&
-                      size_list[entry - 1u].height == chosen_height;
-            _snprintf(out->label, sizeof out->label, "    %dx%d",
-                      (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
-            out->label[sizeof out->label - 1] = 0;
-            return;
-        }
-    }
-    slot = slot_without_list(slot);
+    chosen_width  = ini_read_int(RESOLUTION_SECTION, "WindowedWidth", 0);
+    chosen_height = ini_read_int(RESOLUTION_SECTION, "WindowedHeight", 0);
 
     out->kind      = OVERLAY_ROW_CHEAT;
-    out->on        = false;
-    out->available = true;
+    out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
     out->value[0]  = 0;
-    out->expanded  = false;
-    out->pending   = false;
-    out->fraction  = 0.0f;
 
+    if (entry == 0u) {
+        /* Lit by the absence of a size rather than by a number, the same test the row above reads
+         * to decide it says auto. One test, one meaning. */
+        out->on = !(chosen_width > 0 && chosen_height > 0);
+        copy_label(out->label, "    auto (match the game's own size)");
+        return true;
+    }
+
+    out->on = size_list[entry - 1u].width == chosen_width &&
+              size_list[entry - 1u].height == chosen_height;
+    _snprintf(out->label, sizeof out->label, "    %dx%d",
+              (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
+    out->label[sizeof out->label - 1] = 0;
+    return true;
+}
+
+/* The five shapes. True when `slot` was one of them. */
+static bool mode_row(uint32_t slot, overlay_row_t *out)
+{
     switch ((window_slot_t)slot) {
     case WINDOW_MODE_ROW_AUTHENTIC:
         copy_label(out->label, "Fullscreen (restart to take effect)");
         out->on = current_mode() == MODE_AUTHENTIC;
-        return;
+        return true;
 
     /* Greyed while fullscreen is on, all four of them, which makes the row above a switch that
      * governs the group rather than the first of five equals. Nothing below it describes a shape
@@ -284,26 +272,60 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
         copy_label(out->label, "Borderless, the whole monitor");
         out->on        = current_mode() == MODE_BORDERLESS;
         out->available = shape_rows_usable();
-        return;
+        return true;
 
     case WINDOW_MODE_ROW_WINDOWED:
         copy_label(out->label, "In a window, fixed size");
         out->on        = current_mode() == MODE_WINDOWED;
         out->available = shape_rows_usable();
-        return;
+        return true;
 
     case WINDOW_MODE_ROW_RESIZABLE:
         copy_label(out->label, "In a window you can resize");
         out->on        = current_mode() == MODE_RESIZABLE;
         out->available = shape_rows_usable();
-        return;
+        return true;
 
     case WINDOW_MODE_ROW_BORDERLESS_SIZED:
         copy_label(out->label, "Borderless, at the size below");
         out->on        = current_mode() == MODE_BORDERLESS_SIZED;
         out->available = shape_rows_usable();
-        return;
+        return true;
 
+    default:
+        return false;
+    }
+}
+
+void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
+                        overlay_row_t *out)
+{
+    if (out == NULL) {
+        return;
+    }
+    /* Nothing here is typed into any more: the size is chosen from the display's own list, so no
+     * row has an edit in progress to be shown. Kept in the signature because the caller hands the
+     * same three things to every group and this one having a different shape would be worse. */
+    (void)editing_text;
+
+    if (size_entry_row(slot, out)) {
+        return;
+    }
+    slot = slot_without_list(slot);
+
+    out->kind      = OVERLAY_ROW_CHEAT;
+    out->on        = false;
+    out->available = true;
+    out->value[0]  = 0;
+    out->expanded  = false;
+    out->pending   = false;
+    out->fraction  = 0.0f;
+
+    if (mode_row(slot, out)) {
+        return;
+    }
+
+    switch ((window_slot_t)slot) {
     /* The way back to the engine's own shape, as a choice of its own rather than as the side
      * effect of pressing the lit row. It was that side effect first, and it made the group read as
      * broken: pressing the mode you were already in dropped you to a frameless oversized window,

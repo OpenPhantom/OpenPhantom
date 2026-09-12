@@ -360,6 +360,121 @@ static uint32_t openphantom_row_id(uint32_t slot)
     return slot - FREECAM_INFO_LINE_COUNT;   /* a fixed row, pushed down the screen by them */
 }
 
+/* The cheats group: the rows that line up with cheats_own_id_t, and the four that do not (the
+ * jump boost scale, the teleport key, free camera itself and its folded note). `id` arrives as
+ * a screen position and continues as a row id. */
+static void openphantom_row(uint32_t id, overlay_row_t *out)
+{
+    /* Arriving as a screen position and continuing as an id. Reassigned rather than kept in
+       a second local so that no comparison below can accidentally reach the slot instead. */
+    id = openphantom_row_id(id);
+    out->id = id;
+
+    if (id == JUMP_SCALE_ROW_ID) {
+        out->kind = OVERLAY_ROW_VALUE;
+        copy_label(out->label, "Jump boost scale");
+        out->on = false;        /* meaningless for a value row; never read by the drawer */
+        out->available = cheats_openphantom_is_available(CHEATS_OWN_JUMP_BOOST);
+        /* Read live either way, same reasoning as the hotkey row just below: mid-edit shows
+         * exactly what has been typed with a trailing cursor, otherwise the value this cheat
+         * would multiply by right now if switched on, formatted the same "1.30x" way its own
+         * chip is meant to be typed back in. */
+        if (model.editing_value && model.editing_value_row == JUMP_SCALE_ROW_ID) {
+            _snprintf(out->value, sizeof out->value, "%s_", model.value_edit_buf);
+        } else {
+            _snprintf(out->value, sizeof out->value, "%.2fx",
+                     (double)cheats_openphantom_jump_boost_scale());
+        }
+        out->value[sizeof out->value - 1] = '\0';
+        return;
+    }
+    if (id == HOTKEY_ROW_ID) {
+        out->kind = OVERLAY_ROW_HOTKEY;
+        copy_label(out->label, "Free camera teleport key");
+        out->on = false;        /* meaningless for a hotkey row; never read by the drawer */
+        out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
+        /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
+         * guess at; "RUN" and "OFF" are both wrong for a key binding. */
+        if (model.capturing_hotkey) {
+            _snprintf(out->value, sizeof out->value, "...");
+        } else {
+            int32_t vk = cheats_openphantom_freecam_hotkey();
+            if (vk != 0) {
+                overlay_key_name(vk, out->value, sizeof out->value);
+            } else {
+                _snprintf(out->value, sizeof out->value, "Set");
+            }
+        }
+        out->value[sizeof out->value - 1] = '\0';
+        return;
+    }
+    if (id == FREECAM_ROW_ID) {
+        /* Free camera itself, one slot after its own teleport-key row now rather than at its
+         * plain cheats_own_id_t position; see HOTKEY_ROW_ID/FREECAM_ROW_ID above. Named by
+         * CHEATS_OWN_FREECAM explicitly rather than casting id the way the generic fallback
+         * below does for the rest of them: id here is FREECAM_ROW_ID, one past the real
+         * enum's range, and casting that would ask cheats_openphantom.c about an id it never
+         * offered a name for. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        copy_label(out->label, cheats_openphantom_name(CHEATS_OWN_FREECAM));
+        out->on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
+        out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
+        /* Free camera specifically also needs a teleport key bound before it can be switched
+         * ON, and cheats_openphantom_toggle() enforces this too, so this is display honesty
+         * rather than the only gate: a row that looked clickable but silently refused every
+         * click would be worse than one that shows why. Once it IS on, availability no longer
+         * depends on this: the row is unreachable anyway with the mouse claimed, and the
+         * hotkey is how it actually turns back off. */
+        if (!out->on && cheats_openphantom_freecam_hotkey() == 0) {
+            out->available = false;
+        }
+        return;
+    }
+    if (id == INFO_ROW_ID) {
+        out->kind = OVERLAY_ROW_INFO;
+        copy_label(out->label,
+                  model.freecam_info_expanded ? "- How free camera flies"
+                                               : "+ How free camera flies");
+        out->expanded = model.freecam_info_expanded;
+        out->on = false;
+        out->available = true;
+        return;
+    }
+    if (id == END_LEVEL_ROW_ID) {
+        out->kind = OVERLAY_ROW_ACTION;
+        /* It HAS been played since this row was added, so the label no longer says it
+           has not. It stays marked as a debug tool, which is still true: it is a jump to the
+           next level with none of the bookkeeping the game itself does on the way out of
+           one. */
+        copy_label(out->label, "Skip to next level (debug)");
+        out->on = false;         /* meaningless for an action; never read by the drawer */
+        out->available = cheats_openphantom_end_level_is_available();
+        return;
+    }
+    if (model.freecam_info_expanded && id >= FREECAM_LINE_FIRST_ID &&
+        id < FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT) {
+        char line[OVERLAY_LABEL_MAX];
+
+        out->kind = OVERLAY_ROW_INFO;
+        _snprintf(line, sizeof line, "    %s",
+                  FREECAM_INFO_LINES[id - FREECAM_LINE_FIRST_ID]);
+        line[sizeof line - 1] = '\0';
+        copy_label(out->label, line);
+        out->on = false;
+        out->available = true;   /* a nested line, not a gate; never clicked either way */
+        return;
+    }
+    /* Everything left is one of the other cheats (ammunition, health, invincible NPCs,
+     * one-shot NPCs, giant player, tiny player, no clip, jump boost's own toggle), whose ids
+     * still line up 1:1 with cheats_own_id_t; only free camera's own slot was repurposed
+     * above, and jump boost's toggle keeps its own plain id even though the row right after
+     * it does not. */
+    out->kind = OVERLAY_ROW_CHEAT;
+    copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
+    out->on = cheats_openphantom_is_on((cheats_own_id_t)id);
+    out->available = cheats_openphantom_is_available((cheats_own_id_t)id);
+}
+
 static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
 {
     out->group = (uint32_t)group;
@@ -441,114 +556,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
     }
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* Arriving as a screen position and continuing as an id. Reassigned rather than kept in
-           a second local so that no comparison below can accidentally reach the slot instead. */
-        id = openphantom_row_id(id);
-        out->id = id;
-
-        if (id == JUMP_SCALE_ROW_ID) {
-            out->kind = OVERLAY_ROW_VALUE;
-            copy_label(out->label, "Jump boost scale");
-            out->on = false;        /* meaningless for a value row; never read by the drawer */
-            out->available = cheats_openphantom_is_available(CHEATS_OWN_JUMP_BOOST);
-            /* Read live either way, same reasoning as the hotkey row just below: mid-edit shows
-             * exactly what has been typed with a trailing cursor, otherwise the value this cheat
-             * would multiply by right now if switched on, formatted the same "1.30x" way its own
-             * chip is meant to be typed back in. */
-            if (model.editing_value && model.editing_value_row == JUMP_SCALE_ROW_ID) {
-                _snprintf(out->value, sizeof out->value, "%s_", model.value_edit_buf);
-            } else {
-                _snprintf(out->value, sizeof out->value, "%.2fx",
-                         (double)cheats_openphantom_jump_boost_scale());
-            }
-            out->value[sizeof out->value - 1] = '\0';
-            return;
-        }
-        if (id == HOTKEY_ROW_ID) {
-            out->kind = OVERLAY_ROW_HOTKEY;
-            copy_label(out->label, "Free camera teleport key");
-            out->on = false;        /* meaningless for a hotkey row; never read by the drawer */
-            out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
-            /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
-             * guess at; "RUN" and "OFF" are both wrong for a key binding. */
-            if (model.capturing_hotkey) {
-                _snprintf(out->value, sizeof out->value, "...");
-            } else {
-                int32_t vk = cheats_openphantom_freecam_hotkey();
-                if (vk != 0) {
-                    overlay_key_name(vk, out->value, sizeof out->value);
-                } else {
-                    _snprintf(out->value, sizeof out->value, "Set");
-                }
-            }
-            out->value[sizeof out->value - 1] = '\0';
-            return;
-        }
-        if (id == FREECAM_ROW_ID) {
-            /* Free camera itself, one slot after its own teleport-key row now rather than at its
-             * plain cheats_own_id_t position; see HOTKEY_ROW_ID/FREECAM_ROW_ID above. Named by
-             * CHEATS_OWN_FREECAM explicitly rather than casting id the way the generic fallback
-             * below does for the rest of them: id here is FREECAM_ROW_ID, one past the real
-             * enum's range, and casting that would ask cheats_openphantom.c about an id it never
-             * offered a name for. */
-            out->kind = OVERLAY_ROW_CHEAT;
-            copy_label(out->label, cheats_openphantom_name(CHEATS_OWN_FREECAM));
-            out->on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
-            out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
-            /* Free camera specifically also needs a teleport key bound before it can be switched
-             * ON, and cheats_openphantom_toggle() enforces this too, so this is display honesty
-             * rather than the only gate: a row that looked clickable but silently refused every
-             * click would be worse than one that shows why. Once it IS on, availability no longer
-             * depends on this: the row is unreachable anyway with the mouse claimed, and the
-             * hotkey is how it actually turns back off. */
-            if (!out->on && cheats_openphantom_freecam_hotkey() == 0) {
-                out->available = false;
-            }
-            return;
-        }
-        if (id == INFO_ROW_ID) {
-            out->kind = OVERLAY_ROW_INFO;
-            copy_label(out->label,
-                      model.freecam_info_expanded ? "- How free camera flies"
-                                                   : "+ How free camera flies");
-            out->expanded = model.freecam_info_expanded;
-            out->on = false;
-            out->available = true;
-            return;
-        }
-        if (id == END_LEVEL_ROW_ID) {
-            out->kind = OVERLAY_ROW_ACTION;
-            /* It HAS been played since this row was added, so the label no longer says it
-               has not. It stays marked as a debug tool, which is still true: it is a jump to the
-               next level with none of the bookkeeping the game itself does on the way out of
-               one. */
-            copy_label(out->label, "Skip to next level (debug)");
-            out->on = false;         /* meaningless for an action; never read by the drawer */
-            out->available = cheats_openphantom_end_level_is_available();
-            return;
-        }
-        if (model.freecam_info_expanded && id >= FREECAM_LINE_FIRST_ID &&
-            id < FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT) {
-            char line[OVERLAY_LABEL_MAX];
-
-            out->kind = OVERLAY_ROW_INFO;
-            _snprintf(line, sizeof line, "    %s",
-                      FREECAM_INFO_LINES[id - FREECAM_LINE_FIRST_ID]);
-            line[sizeof line - 1] = '\0';
-            copy_label(out->label, line);
-            out->on = false;
-            out->available = true;   /* a nested line, not a gate; never clicked either way */
-            return;
-        }
-        /* Everything left is one of the other cheats (ammunition, health, invincible NPCs,
-         * one-shot NPCs, giant player, tiny player, no clip, jump boost's own toggle), whose ids
-         * still line up 1:1 with cheats_own_id_t; only free camera's own slot was repurposed
-         * above, and jump boost's toggle keeps its own plain id even though the row right after
-         * it does not. */
-        out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
-        out->on = cheats_openphantom_is_on((cheats_own_id_t)id);
-        out->available = cheats_openphantom_is_available((cheats_own_id_t)id);
+        openphantom_row(id, out);
         return;
     }
 }

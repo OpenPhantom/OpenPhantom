@@ -98,25 +98,12 @@ static void clamp_fraction(overlay_row_t *out)
     }
 }
 
-void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
-                           overlay_row_t *out)
+/* The draw distance: the value, its slider, the number in force, and the two switches that
+ * decide who else may lower it. True when `slot` was one of these. */
+static bool draw_distance_row(uint32_t slot, const char *editing_text, bool capturing,
+                              overlay_row_t *out)
 {
-    if (out == NULL) {
-        return;
-    }
-
-    /* Every row here edits a settings file rather than reaching into the running game, so unlike
-     * the cheats group none of them can be unavailable for want of a resolved site: they work with
-     * no level loaded and whether or not the DLL that reads the setting is installed at all. The
-     * one exception below is a row whose setting has nothing to act on, which is a different
-     * question from a row that could not be wired up. */
-    out->kind      = OVERLAY_ROW_CHEAT;
-    out->on        = false;
-    out->available = true;
-    out->value[0]  = '\0';
-    out->expanded  = false;
-    out->pending   = false;
-
+    (void)capturing;
     switch ((utilities_slot_t)slot) {
     case UTILITIES_VIEW_RANGE:
         out->kind = OVERLAY_ROW_VALUE;
@@ -124,7 +111,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
            a number refused. */
         copy_label(out->label, "Draw distance (1.0 to 2.5)");
         fill_typed(out, editing_text, view_range_row_format, view_range_row_get());
-        return;
+        return true;
 
     case UTILITIES_VIEW_RANGE_TRACK:
         out->kind = OVERLAY_ROW_SLIDER;
@@ -135,7 +122,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         out->fraction = (view_range_row_get() - VIEW_RANGE_MIN) /
                         (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
         clamp_fraction(out);
-        return;
+        return true;
 
     case UTILITIES_VIEW_RANGE_LIVE: {
         /* A note rather than a control, so it cannot be clicked into and cannot be mistaken for
@@ -153,7 +140,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
             copy_label(out->label, "  in force: not reported");
         }
         out->label[sizeof out->label - 1] = '\0';
-        return;
+        return true;
     }
 
     case UTILITIES_AUTO_RANGE:
@@ -169,7 +156,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "Draw distance follows the frame rate");
         out->available = !strict_range_row_get();
         out->on = out->available && auto_range_row_get();
-        return;
+        return true;
 
     case UTILITIES_STRICT_RANGE:
         /* Named for the trade rather than for the machinery, like the row above it. The frame rate
@@ -178,8 +165,20 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
          * the ini and in strict_range_row.h rather than in 47 characters. */
         copy_label(out->label, "Keep the draw distance (costs frame rate)");
         out->on = strict_range_row_get();
-        return;
+        return true;
 
+    default:
+        return false;
+    }
+}
+
+/* The fog and its neighbour: no fog, dismemberment, the thickness and its slider, and what the
+ * band is measured against. True when `slot` was one of these. */
+static bool fog_row(uint32_t slot, const char *editing_text, bool capturing,
+                    overlay_row_t *out)
+{
+    (void)capturing;
+    switch ((utilities_slot_t)slot) {
     case UTILITIES_NO_FOG:
         /* The only row in this group that is a cheat by origin. It sits here rather than with
          * the cheats because a player looking for it is looking at the fog, and the fog
@@ -191,7 +190,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "No fog");
         out->on = cheats_no_fog_is_on();
         out->available = cheats_no_fog_is_available();
-        return;
+        return true;
 
     /* Beside the fog rather than among the cheats, and for the same reason the fog row is here:
      * this one is remembered in the settings file and the cheats are not. A row whose effect
@@ -201,26 +200,37 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "Lightsaber dismemberment");
         out->on = dismemberment_row_get();
         out->available = true;
-        return;
+        return true;
 
     case UTILITIES_FOG_BAND:
         out->kind = OVERLAY_ROW_VALUE;
         copy_label(out->label, "Fog thickness (0.25 to 1.0)");
         fill_typed(out, editing_text, fog_band_row_format, fog_band_row_get());
-        return;
+        return true;
 
     case UTILITIES_FOG_BAND_TRACK:
         out->kind = OVERLAY_ROW_SLIDER;
         copy_label(out->label, "");
         out->fraction = (fog_band_row_get() - FOG_BAND_MIN) / (FOG_BAND_MAX - FOG_BAND_MIN);
         clamp_fraction(out);
-        return;
+        return true;
 
     case UTILITIES_FOG_FOLLOW:
         copy_label(out->label, "Fog follows the draw distance");
         out->on = fog_follow_row_get();
-        return;
+        return true;
 
+    default:
+        return false;
+    }
+}
+
+/* The field of view: the value and its slider. True when `slot` was one of these. */
+static bool field_of_view_row(uint32_t slot, const char *editing_text, bool capturing,
+                              overlay_row_t *out)
+{
+    (void)capturing;
+    switch ((utilities_slot_t)slot) {
     case UTILITIES_FOV: {
         /* The one row here that can be unavailable. Every other row edits a settings file and works
          * with the DLL that reads it gone; this one needs a width in degrees that only variable_fov
@@ -239,7 +249,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
             out->available = false;
             copy_label(out->value, "");
         }
-        return;
+        return true;
     }
 
     case UTILITIES_FOV_TRACK: {
@@ -251,7 +261,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "");
         if (!fov_row_get(&degrees)) {
             out->available = false;    /* no published base, so nothing to place a handle against */
-            return;
+            return true;
         }
         /* Guarded rather than assumed: both ends come out of the file, and somebody who sets them
          * equal would otherwise divide by zero here. */
@@ -260,18 +270,30 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
          * clamp_fraction above for why the row keeps the honest number and the handle does
          * not. */
         clamp_fraction(out);
-        return;
+        return true;
     }
 
+    default:
+        return false;
+    }
+}
+
+/* The input rows: free look, strafe, the two built on free look, and the mouse speed with its
+ * slider. True when `slot` was one of these. */
+static bool input_row(uint32_t slot, const char *editing_text, bool capturing,
+                      overlay_row_t *out)
+{
+    (void)capturing;
+    switch ((utilities_slot_t)slot) {
     case UTILITIES_FREE_LOOK:
         copy_label(out->label, "Free look");
         out->on = free_look_row_get();
-        return;
+        return true;
 
     case UTILITIES_STRAFE:
         copy_label(out->label, "Strafe");
         out->on = strafe_row_get();
-        return;
+        return true;
 
     case UTILITIES_CAMERA_FOLLOW:
         /* Directly under strafe, because it is the only row here whose availability depends on
@@ -282,7 +304,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "Camera follows you (turns on free look)");
         out->on = camera_follow_row_get();
         out->available = camera_follow_row_available();
-        return;
+        return true;
 
     case UTILITIES_AIR_CONTROL:
         /* Next to the camera follow because it shares its dependency: both are built on free
@@ -293,7 +315,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         copy_label(out->label, "Steer a jump in the air (free look)");
         out->on = air_control_row_get();
         out->available = air_control_row_available();
-        return;
+        return true;
 
     case UTILITIES_SENSITIVITY:
         out->kind = OVERLAY_ROW_VALUE;
@@ -301,7 +323,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
          * recognises this one. */
         copy_label(out->label, "Mouse speed");
         fill_typed(out, editing_text, sensitivity_row_format, sensitivity_row_get());
-        return;
+        return true;
 
     case UTILITIES_SENSITIVITY_TRACK: {
         const float value = sensitivity_row_get();
@@ -317,15 +339,26 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
         if (out->fraction > 1.0f) {
             out->fraction = 1.0f;
         }
-        return;
+        return true;
     }
 
+    default:
+        return false;
+    }
+}
+
+/* The rest: the menu extras, the subtitle size and its slider, the panel's own size, and the key
+ * that opens it. True when `slot` was one of these. */
+static bool presentation_row(uint32_t slot, const char *editing_text, bool capturing,
+                             overlay_row_t *out)
+{
+    switch ((utilities_slot_t)slot) {
     case UTILITIES_MENU_EXTRAS:
         /* Named for what a reader sees rather than for the three widgets, and it says when,
          * because a switch that appears to do nothing is worse than one that explains itself. */
         copy_label(out->label, "Show extra menu options (restart the game)");
         out->on = menu_extras_row_get();
-        return;
+        return true;
 
     case UTILITIES_SUBTITLE_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
@@ -333,7 +366,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
          * so it need not be found by having a value refused. */
         copy_label(out->label, "Subtitle size (0.50 to 3.0)");
         fill_typed(out, editing_text, subtitle_size_row_format, subtitle_size_row_get());
-        return;
+        return true;
 
     case UTILITIES_SUBTITLE_SIZE_TRACK: {
         const float value = subtitle_size_row_get();
@@ -345,14 +378,14 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
          * nothing reads, which is how every cross-DLL row here already behaves. */
         out->fraction = (value - SUBTITLE_SIZE_MIN) / (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
         clamp_fraction(out);
-        return;
+        return true;
     }
 
     case UTILITIES_DEV_MENU_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
         copy_label(out->label, "Dev menu size (0.33 to 4.0)");
         fill_typed(out, editing_text, dev_menu_size_row_format, dev_menu_size_row_get());
-        return;
+        return true;
 
     case UTILITIES_OPEN_KEY:
         out->kind = OVERLAY_ROW_HOTKEY;
@@ -372,16 +405,45 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
             }
         }
         out->value[sizeof out->value - 1] = '\0';
-        return;
+        return true;
 
     default:
-        /* Past the end. Answered as an empty unavailable row rather than left as whatever the
-         * caller's struct held: a caller asking for a slot that does not exist has a bug, and a
-         * blank row makes that bug visible instead of showing stale text. */
-        copy_label(out->label, "");
-        out->available = false;
+        return false;
+    }
+}
+
+void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
+                           overlay_row_t *out)
+{
+    if (out == NULL) {
         return;
     }
+
+    /* Every row here edits a settings file rather than reaching into the running game, so unlike
+     * the cheats group none of them can be unavailable for want of a resolved site: they work with
+     * no level loaded and whether or not the DLL that reads the setting is installed at all. The
+     * one exception below is a row whose setting has nothing to act on, which is a different
+     * question from a row that could not be wired up. */
+    out->kind      = OVERLAY_ROW_CHEAT;
+    out->on        = false;
+    out->available = true;
+    out->value[0]  = '\0';
+    out->expanded  = false;
+    out->pending   = false;
+
+    if (draw_distance_row(slot, editing_text, capturing, out) ||
+        fog_row(slot, editing_text, capturing, out) ||
+        field_of_view_row(slot, editing_text, capturing, out) ||
+        input_row(slot, editing_text, capturing, out) ||
+        presentation_row(slot, editing_text, capturing, out)) {
+        return;
+    }
+
+    /* Past the end. Answered as an empty unavailable row rather than left as whatever the
+     * caller's struct held: a caller asking for a slot that does not exist has a bug, and a
+     * blank row makes that bug visible instead of showing stale text. */
+    copy_label(out->label, "");
+    out->available = false;
 }
 
 bool overlay_utilities_row_is_value(uint32_t slot)

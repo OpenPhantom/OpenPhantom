@@ -110,7 +110,7 @@ the mode table that the aspect gate anchors.
 | `graphics_findMode` depth gate | `0x0046BC28` | the same byte, the same shape |
 | `graphics_setResolution` fallback template | `0x0046BF0F` | one byte, the `bpp = 16` immediate of the descriptor built on the stack when `findMode` fails |
 | `swrle_compressVBuffer`, `swrle_blit` | `0x004612D0`, `0x004616CC` | first byte to `ret`, **only** when `ModeBitDepth=32` opened all three gates. A diagnostic that removes all 2-D art; see `sw_blit_guard.h` |
-| `DLG_DrawLine`, the position scale pair | `0x00431545` | the two `fdiv [screenHeight]` / `fdiv [screenWidth]` operands repointed at cells holding the size the layout is told, **only** when `SubtitleScale` is not `0`. All ten subtitle sites or none, journaled and put back on refusal |
+| `DLG_DrawLine`, the position scale pair | `0x00431545` | the two `fdiv [screenHeight]` / `fdiv [screenWidth]` operands repointed at cells holding the size the layout is told, **only** when `SubtitleScale` is not `0`. All twelve subtitle sites or none, journaled and put back on refusal |
 | `DLG_DrawLine`, the glyph scale | `0x00431586` | the `fdiv [screenWidth]` operand repointed at the same told width |
 | the two wrap comparisons | `0x004315E3`, `0x00431630` | both `fcomp [580.0]` operands repointed at one cell holding the scaled wrap |
 | the line height call in `DLG_DrawLine` | `0x00431745` | **read, never patched**: the menu scale's `font3d_queryFont` hook recognises this caller by its return address and answers it unscaled, since the subtitle goes on drawing behind an open menu and its rows took the menu's line height |
@@ -575,10 +575,10 @@ box taller than the display and pushes the baseline off the bottom. By height th
 1.333xH wide, narrower than the screen, so it pillarboxes as the layout expects. At 640x480 with a
 scale of 1 every number is the one the engine already had.
 
-**Eleven writes, all or nothing.** Three grow the box, two put it back where it belongs, three
-keep the line breaks with it, two let it hang off the top edge once it is taller than the screen,
-and one detour moves the backdrop quad to match. Each of those was found by a screenshot of what
-breaks without it:
+**Twelve sites, all or nothing.** Three writes grow the box, two put it back where it belongs,
+three keep the line breaks with it, one keeps the rows in the box while a menu is open, two let it
+hang off the top edge once it is taller than the screen, and one detour moves the backdrop quad to
+match. Each of those was found by a screenshot of what breaks without it:
 
 * glyphs alone, and the rows stayed 18 pixels apart while the letters grew, so three lines landed on
   top of each other
@@ -603,14 +603,18 @@ horizontal centre and `y` about the bottom edge, where the text is anchored, and
 at `k = 1`. Only two calls reach that function and both are the subtitle's own bars.
 
 **Nothing else the font layer draws is affected.** The same layer draws every menu string and HUD
-readout; all eleven writes are inside the dialogue's own drawing or reached only from it.
+readout; all eleven writes are inside the dialogue's own drawing or reached only from it, and the
+one detour is on a function only the dialogue's bars call.
 
 **With a menu open the rows used to drop out of the bar.** Each row's vertical position adds the
 font's line height from `font3d_queryFont`, which the menu scale detours to answer a menu's text
 in drawn units, gated on a menu being open. The subtitle is drawn behind an open menu too, so the
 moment the pause screen came up every row took the scaled height, about fifty box units low at 4K.
-The hook now knows the subtitle's one line height call by the address it returns to and answers it
-raw whatever is open; seen and confirmed fixed in game on 2026-09-12.
+That one call is now redirected to a function of the subtitle scale's own, which asks the menu
+scale for the answer beneath its hook, so the hook never sees it. An earlier form had the hook
+recognise the call by the address it returned to, which holds only while nothing else detours
+`font3d_queryFont` after this DLL; the redirect was built the same afternoon and has not been
+played, the return-address form was seen fixed in game on 2026-09-12.
 
 The two centring calls are followed to the getters they reach, each of which has to be the ten byte
 load-and-return the engine wrote, and the two display size cells are read out of those getters

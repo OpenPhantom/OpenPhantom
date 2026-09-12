@@ -6,7 +6,7 @@
  * grown to more than twice what this project allows. The offsets and cells the rest of the
  * feature needs are in menu_scale_sites.h.
  *
- * SIZE NOTE: over the 600 line mark. Fourteen sites, each with the disassembly that proves it,
+ * SIZE NOTE: over the 600 line mark. Fifteen sites, each with the disassembly that proves it,
  * and the reads that turn their operands into the engine cells the feature uses; the code is a
  * table and one resolver. Cutting the evidence from the patterns it proves is the one seam there
  * is, and it is the wrong one.

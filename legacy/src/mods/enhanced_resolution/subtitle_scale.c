@@ -1,9 +1,12 @@
 /* subtitle_scale.c: see subtitle_scale.h.
  *
- * SIZE NOTE: a little over the 600 line mark. Ten sites, each with its disassembly, the mapping
- * argument that ties them together, and the journal that puts all ten back when one refuses.
- * The writes and the checks in front of them belong beside the sites they are about. */
+ * SIZE NOTE: a little over the 600 line mark. Twelve sites inside DLG_DrawLine and the bar it
+ * draws, each with its disassembly, the mapping argument that ties them together, and the journal
+ * that puts every write back when one refuses. The writes and the checks in front of them belong
+ * beside the sites they are about. */
 #include "subtitle_scale.h"
+
+#include "menu_scale.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -79,7 +82,9 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 #define GLYPH_SCALE_WIDTH_OPERAND 8u
 
 /* --- the measure call inside the wrap loop, at 0x0043161D ------------------------------------- *
+ *   51         push ecx                    the character, after the two out pointers
  *   E8 <rel>   call font3d_measureChar     one character, its width added to the row's total
+ *   83 C4 0C   add esp,0Ch                 the caller drops three arguments: cdecl
  *
  * The engine's measure answers `glyph width x scale + 1`: the pixel of spacing between glyphs is
  * added after the scale, in device pixels. The draw advances by the glyph's own advance times
@@ -91,6 +96,40 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
  * will be drawn; every other caller of the measure keeps the engine's own arithmetic. */
 #define MEASURE_CALL_FROM_GLYPH 0x97u   /* 0x0043161D - 0x00431586 */
 
+/* Where that call goes has to be the measure and not merely an address inside the image, since
+ * the replacement calls it with three arguments and cleans them itself. font3d_measureChar at
+ * 0x0046B2FC opens with a test of the current font and an early return:
+ *
+ *   55 8B EC 83 EC 0C     push ebp / mov ebp,esp / sub esp,0Ch
+ *   83 3D <font> 00       cmp dword [pCurFont],0
+ *   75 04                 jne +4
+ *   33 C0 EB 67           xor eax,eax / jmp to the epilogue
+ *   A1 <font> 8B 48 2C    mov eax,[pCurFont] / mov ecx,[eax+2Ch]
+ *
+ * Checked at the address the call names, with the six byte prologue allowed to be a jump, since a
+ * DLL that detours the measure for its own purposes has replaced exactly those bytes. */
+static const uint8_t SIG_MEASURE_CHAR[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C,
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x75, 0x04,
+    0x33, 0xC0,
+    0xEB, 0x67,
+    0xA1, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x48, 0x2C
+};
+static const uint8_t MSK_MEASURE_CHAR[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_MEASURE_CHAR == sizeof MSK_MEASURE_CHAR,
+               "the measure char pattern and its mask are different lengths");
+#define MEASURE_CHAR_PROLOGUE 6u
+
 /* --- the line height call, at 0x00431745 ----------------------------------------------------- *
  *   E8 <rel>   call font3d_queryFont    then row y = 450 + height + 1, 18 per row up, less 13 or 4
  *
@@ -98,9 +137,13 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
  * to drop out of its box the moment a menu opened. The menu scale detours font3d_queryFont and
  * answers a menu's text in drawn units, gated on a menu being open; the subtitle goes on drawing
  * behind an open menu, its rows took the scaled height, and at 4K that put every row about fifty
- * box units below the bar. The hook now recognises this call by the address it returns to and
- * answers it raw whatever is open. Located from the glyph scale like the calls below, and the
- * opcode is checked at resolve. */
+ * box units below the bar. The call is redirected to a function of this file's that asks the menu
+ * scale for the answer beneath its hook, so the hook never sees the call and has nothing to tell
+ * apart. An earlier version had the hook recognise the call by the address it returned to; that
+ * holds only while no other DLL detours font3d_queryFont after this one, and the moment one did
+ * the rows would have dropped out of the box again with nothing in the log. Located from the glyph
+ * scale like the calls below, and the call is required to go where the menu scale resolved the
+ * function before it is moved. */
 #define LINE_HEIGHT_CALL_FROM_GLYPH 0x1BFu   /* 0x00431745 - 0x00431586 */
 #define CALL_LENGTH 5u
 
@@ -212,7 +255,7 @@ static float told_wrap   = AUTHORED_WRAP;
 
 static struct {
     detour_t  bar;
-    bool      installed;        /* the eleven writes are in place */
+    bool      installed;        /* the eleven writes and the detour are in place */
     bool      abandoned;        /* one of them was refused, the rest were put back, and it is not
                                  * tried again: a site that was wrong once is wrong every time */
     bool      resolved;         /* the sites are known, which happens long before the display is */
@@ -221,7 +264,7 @@ static struct {
     uintptr_t bar_site;
     uintptr_t width_getter;     /* where the two centring calls go, checked to be the getters */
     uintptr_t height_getter;
-    uintptr_t line_height_return;   /* what the line height call returns to, 0 until resolved */
+    uintptr_t line_height_target;   /* where the line height call went, 0 until resolved */
     uintptr_t measure_char;         /* the engine's own measure, where the wrap's call went */
     const volatile int32_t *screen_w;   /* the cells those getters load, read out of them */
     const volatile int32_t *screen_h;
@@ -259,6 +302,22 @@ static int32_t __cdecl told_measure_char(uint32_t character, float *out_width, f
 
     if (answer != 0 && out_width != NULL && state.seen_h > 0) {
         *out_width += box_scale(state.seen_h) - 1.0f;
+    }
+    return answer;
+}
+
+/* The replacement for the line height call: the font layer's own answer from beneath the menu
+ * scale's hook, and the engine's own when that hook is not installed, which is the same number by
+ * the other route. */
+typedef uint32_t(__cdecl *query_font_fn_t)(void);
+
+static uint32_t __cdecl told_query_font(void)
+{
+    bool     hooked = false;
+    uint32_t answer = menu_scale_query_font_beneath(&hooked);
+
+    if (!hooked && state.line_height_target != 0) {
+        answer = ((query_font_fn_t)state.line_height_target)();
     }
     return answer;
 }
@@ -334,11 +393,12 @@ static bool recompute(void)
     return true;
 }
 
-/* ALL ELEVEN OR NONE. Three make the box bigger, two put it back where it belongs, three keep the
- * line breaks where the box is, two let it hang off the top edge once it is taller than the
- * screen, and the last moves the backdrop quad to match. Any subset is a box of the wrong size,
- * in the wrong place, wrapping at the wrong column, with its text under the bottom of the display,
- * or with the panel behind it still the old size, and every one of those has been photographed. */
+/* All twelve or none. Three make the box bigger, two put it back where it belongs, three keep the
+ * line breaks where the box is, one keeps the rows in the box while a menu is open, two let it
+ * hang off the top edge once it is taller than the screen, and the last moves the backdrop quad to
+ * match. Any subset is a box of the wrong size, in the wrong place, wrapping at the wrong column,
+ * with its text under the bottom of the display, or with the panel behind it still the old size,
+ * and every one of those has been photographed. */
 static bool install_patches(void);
 
 /* Once a second, which is far more often than anybody drags. It exists for two reasons: the
@@ -383,42 +443,49 @@ static void on_frame(void)
              (int)state.told_w, (int)state.told_h, (int)w, (int)h, (double)box_scale(h));
 }
 
-/* The ten reversible writes are journaled as they go, so a refusal part way through puts the
+/* The eleven reversible writes are journaled as they go, so a refusal part way through puts the
  * earlier ones back and the engine draws its own box, the way the header promises. The detour is
- * the eleventh and last, because a detour cannot be taken out again.
+ * the twelfth and last, because a detour cannot be taken out again.
  *
- * The journal is why the three writers below do their own check and then call write_journaled,
- * where patch_repoint_operand and patch_redirect_call would do check and write in one call: those
- * two write without handing back what they found, and the before-bytes have to be in the journal
- * before the write lands or there is nothing to put back. The checks themselves go through the
- * patch layer where it has the function. */
+ * Every write goes through the patch layer, which checks the range, writes and reads back. The
+ * journal records what was there before each write, and it can, because every writer here knows
+ * that in advance: patch_repoint_operand writes only when the operand still holds the value it was
+ * given as expected, so the before-value is that expected value; a redirected call still holds
+ * the displacement to the getter it was checked against; a byte is read before it is changed. */
 typedef struct written_bytes {
     uintptr_t at;
     uint8_t   size;
     uint8_t   before[4];
 } written_bytes_t;
 
-static written_bytes_t journal[10];
+static written_bytes_t journal[11];
 static size_t          journal_count;
 
-static bool write_journaled(uintptr_t at, const void *bytes, size_t size)
+static bool journal_add(uintptr_t at, const void *before, size_t size)
 {
     written_bytes_t *entry;
 
     if (journal_count >= sizeof journal / sizeof journal[0] || size > sizeof entry->before) {
         return false;
     }
-    entry = &journal[journal_count];
-    if (!memory_read(at, entry->before, size)) {
-        return false;
-    }
+    entry       = &journal[journal_count++];
     entry->at   = at;
     entry->size = (uint8_t)size;
+    memcpy(entry->before, before, size);
+    return true;
+}
+
+static bool write_journaled(uintptr_t at, const void *bytes, size_t size)
+{
+    uint8_t before[4];
+
+    if (size > sizeof before || !memory_read(at, before, size)) {
+        return false;
+    }
     if (patch_write_bytes(at, bytes, size) != PATCH_RESULT_OK) {
         return false;
     }
-    ++journal_count;
-    return true;
+    return journal_add(at, before, size);
 }
 
 static void undo_journal(void)
@@ -432,21 +499,16 @@ static void undo_journal(void)
 
 /* An absolute operand is repointed only when it still holds what it was matched with. The pattern
  * proved it once, at resolve; the writes happen later, once the display exists, and this is what
- * makes them refuse a second run or a site something else has moved in the meantime.
- *
- * The compare is patch_repoint_operand's, written out here because that function goes on to
- * write and does not hand back the value it found, and the journal needs it before the write. */
+ * makes them refuse a second run or a site something else has moved in the meantime. The patch
+ * layer does the compare and the write; a refusal is logged there. */
 static bool repoint_operand(uintptr_t at, uint32_t expected_old, const void *cell)
 {
-    uint32_t current = 0;
-    uint32_t value   = (uint32_t)(uintptr_t)cell;
-
-    if (!memory_read_u32(at, &current) || current != expected_old) {
-        log_warning("the operand at %08X holds %08X where %08X was expected, so the subtitle box "
-                    "is left alone", (unsigned)at, (unsigned)current, (unsigned)expected_old);
+    if (patch_repoint_operand(at, expected_old, (uint32_t)(uintptr_t)cell) != PATCH_RESULT_OK) {
+        log_warning("the operand at %08X was not repointed, so the subtitle box is left alone",
+                    (unsigned)at);
         return false;
     }
-    return write_journaled(at, &value, sizeof value);
+    return journal_add(at, &expected_old, sizeof expected_old);
 }
 
 /* The literal a pattern carries at an operand, which is the value that operand is expected to
@@ -493,23 +555,24 @@ static bool unclamp(uintptr_t site)
     return write_journaled(site, &jmp, sizeof jmp);
 }
 
-/* A call is redirected only while it still goes to the getter it was resolved against. The
+/* A call is redirected only while it still goes to the function it was resolved against. The
  * instruction stays a call and its length does not change; only where it goes does, and only at
- * this one site. The displacement is the one patch_redirect_call would write, computed here
- * because that function writes it unjournaled and the patch layer has no form that only
- * computes it. */
-static bool retarget_call(uintptr_t site, uintptr_t expected_getter, const void *destination)
+ * this one site. The before-bytes are the displacement that reached the expected target. */
+static bool retarget_call(uintptr_t site, uintptr_t expected_target, const void *destination)
 {
     uintptr_t current = 0;
-    uint32_t  rel;
+    uint32_t  before;
 
-    if (!patch_read_call_target(site, &current) || current != expected_getter) {
-        log_warning("the call at %08X does not go to the getter at %08X any more, so the subtitle "
-                    "box is left alone", (unsigned)site, (unsigned)expected_getter);
+    if (!patch_read_call_target(site, &current) || current != expected_target) {
+        log_warning("the call at %08X does not go to %08X any more, so the subtitle box is left "
+                    "alone", (unsigned)site, (unsigned)expected_target);
         return false;
     }
-    rel = (uint32_t)((uintptr_t)destination - (site + CALL_LENGTH));
-    return write_journaled(site + 1u, &rel, sizeof rel);
+    before = (uint32_t)(expected_target - (site + CALL_LENGTH));
+    if (patch_redirect_call(site, destination) != PATCH_RESULT_OK) {
+        return false;
+    }
+    return journal_add(site + 1u, &before, sizeof before);
 }
 
 /* Whether the ten bytes at `at` are a getter, operand aside. */
@@ -559,6 +622,18 @@ static bool install_patches(void)
     if (state.abandoned) {
         return false;
     }
+    /* The line height call has to go where the menu scale found font3d_queryFont, so that the
+     * function it is redirected to asks beneath the right hook. With the menu scale not installed
+     * there is no hook and no site, and the redirected call answers with the engine's own
+     * function, so nothing changes. */
+    if (menu_scale_query_font_site() != 0 &&
+        state.line_height_target != menu_scale_query_font_site()) {
+        state.abandoned = true;
+        log_warning("the line height call goes to %08X and the menu scale found font3d_queryFont "
+                    "at %08X, so the subtitle box keeps the engine's own size",
+                    (unsigned)state.line_height_target, (unsigned)menu_scale_query_font_site());
+        return false;
+    }
     journal_count = 0;
     if (!repoint_operand(state.pos_site + POS_SCALE_HEIGHT_OPERAND,
                          pattern_operand(SIG_POS_SCALE, POS_SCALE_HEIGHT_OPERAND), &told_height) ||
@@ -575,13 +650,15 @@ static bool install_patches(void)
                        (const void *)told_screen_height) ||
         !retarget_call(state.glyph_site + MEASURE_CALL_FROM_GLYPH, state.measure_char,
                        (const void *)told_measure_char) ||
+        !retarget_call(state.glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH, state.line_height_target,
+                       (const void *)told_query_font) ||
         !unclamp(state.glyph_site + CLAMP_X_FROM_GLYPH) ||
         !unclamp(state.glyph_site + CLAMP_Y_FROM_GLYPH) ||
         !detour_install(&state.bar, state.bar_site, (const void *)hook_draw_bar,
                         DRAW_BAR_PROLOGUE)) {
         undo_journal();
         state.abandoned = true;
-        log_warning("one of the subtitle box's eleven sites was refused, so the ones already "
+        log_warning("one of the subtitle box's twelve sites was refused, so the ones already "
                     "written were put back and the engine draws its own box this session");
         return false;
     }
@@ -596,11 +673,6 @@ static bool install_patches(void)
              "draws is affected",
              (int)state.told_w, (int)state.told_h, (int)state.seen_w, (int)state.seen_h);
     return true;
-}
-
-bool subtitle_scale_is_line_height_call(uintptr_t return_address)
-{
-    return state.line_height_return != 0 && return_address == state.line_height_return;
 }
 
 void subtitle_scale_install(void)
@@ -641,25 +713,26 @@ void subtitle_scale_install(void)
                         &state.height_getter, &state.screen_h)) {
         return;
     }
-    /* The wrap's measure: the call must go into the image, and where it goes is remembered as
-     * the function the replacement calls. */
-    if (!patch_read_call_target(glyph_site + MEASURE_CALL_FROM_GLYPH, &state.measure_char)) {
-        log_warning("the site at %08X is not the measure call expected, so the subtitle box "
-                    "keeps the engine's own size",
-                    (unsigned)(glyph_site + MEASURE_CALL_FROM_GLYPH));
+    /* The wrap's measure: the call must go to a function that opens the way font3d_measureChar
+     * does, and where it goes is remembered as the function the replacement calls. */
+    if (!patch_read_call_target(glyph_site + MEASURE_CALL_FROM_GLYPH, &state.measure_char) ||
+        signature_find_at(state.measure_char, SIG_MEASURE_CHAR, MSK_MEASURE_CHAR,
+                          sizeof SIG_MEASURE_CHAR, MEASURE_CHAR_PROLOGUE) == 0) {
+        log_warning("the call at %08X does not go to the measure expected (it goes to %08X), so "
+                    "the subtitle box keeps the engine's own size",
+                    (unsigned)(glyph_site + MEASURE_CALL_FROM_GLYPH),
+                    (unsigned)state.measure_char);
         return;
     }
-    {
-        uintptr_t call   = glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH;
-        uintptr_t target = 0;
-
-        if (!patch_read_call_target(call, &target)) {
-            log_warning("the site at %08X is not the line height call expected, so a subtitle "
-                        "drawn behind an open menu takes the menu's line height and sits below "
-                        "its box", (unsigned)call);
-        } else {
-            state.line_height_return = call + CALL_LENGTH;
-        }
+    /* The line height: the call must go into the image. Whether it goes where the menu scale
+     * finds font3d_queryFont is checked when the writes are made, since this runs before the menu
+     * scale has resolved anything. */
+    if (!patch_read_call_target(glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH,
+                                &state.line_height_target)) {
+        log_warning("the site at %08X is not the line height call expected, so the subtitle box "
+                    "keeps the engine's own size",
+                    (unsigned)(glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH));
+        return;
     }
     state.pos_site   = pos_site;
     state.glyph_site = glyph_site;

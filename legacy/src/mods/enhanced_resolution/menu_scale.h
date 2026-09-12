@@ -141,4 +141,15 @@ float menu_scale_ratio(void);
  * is sized from this, because the canvas is exactly the region the menus can repaint. */
 void menu_scale_canvas(int32_t *out_width, int32_t *out_height);
 
+/* font3d_queryFont's answer from beneath this module's hook: what the engine, and any DLL that
+ * detoured the function before this one, say the line height is, with none of the scaling the hook
+ * adds. `*out_hooked` is false, and the answer 0, while the hook is not installed; the caller then
+ * asks the engine itself, which is the same answer by a different route. For the subtitle layout,
+ * which draws behind an open menu and must not take the menu's line height. */
+uint32_t menu_scale_query_font_beneath(bool *out_hooked);
+
+/* Where font3d_queryFont is, as this module resolved it, or 0. A caller redirecting its own call
+ * to that function checks the call went there first. */
+uintptr_t menu_scale_query_font_site(void);
+
 #endif /* MENU_SCALE_H */

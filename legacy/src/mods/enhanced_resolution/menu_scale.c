@@ -19,12 +19,10 @@
 
 #include "menu_scale_internal.h"
 #include "menu_scale_sites.h"
-#include "subtitle_scale.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
 
-#include <intrin.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -100,14 +98,13 @@ uint32_t __cdecl hook_query_font(void)
         return raw;
     }
 
-    /* The subtitle layout is the one text that is drawn while a menu is open and is not the
-     * menu's. It asks from a single call, known by the address it returns to, and the open-menu
-     * gate below cannot tell it apart: with the pause screen up every subtitle row took the
-     * menu's line height and dropped out of its box. */
-    if (subtitle_scale_is_line_height_call((uintptr_t)_ReturnAddress())) {
-        return raw;
-    }
-
+    /* The subtitle layout is the one text drawn while a menu is open that is not the menu's, and
+     * the open-menu gate below cannot tell it apart: with the pause screen up every subtitle row
+     * took the menu's line height and dropped out of its box. It is not told apart here either.
+     * The subtitle scale points the layout's one line height call at a function of its own, which
+     * asks menu_scale_query_font_beneath for the answer under this hook, so this hook never sees
+     * that call at all. An earlier version recognised it by the address it returned to, which
+     * holds only while nothing else detours this function after this DLL. */
     if (*menu_cells.current_menu == NULL) {
         /* Not a menu. Reported once, because it is the evidence that a caller exists which the
          * decompilation does not contain, and the next person to widen this needs to know. */
@@ -119,6 +116,19 @@ uint32_t __cdecl hook_query_font(void)
         return raw;
     }
     return (uint32_t)((float)raw * scale_state.ratio_y + 0.5f);
+}
+
+uint32_t menu_scale_query_font_beneath(bool *out_hooked)
+{
+    query_font_fn_t original = (query_font_fn_t)scale_state.query_font_detour.original;
+
+    *out_hooked = (original != NULL);
+    return (original != NULL) ? original() : 0u;
+}
+
+uintptr_t menu_scale_query_font_site(void)
+{
+    return menu_scale_sites[SITE_QUERY_FONT].address;
 }
 
 /* Has this menu already been scaled? The engine hands back the same pointers for the life of the

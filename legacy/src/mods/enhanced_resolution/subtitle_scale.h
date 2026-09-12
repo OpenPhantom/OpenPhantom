@@ -14,23 +14,31 @@
  *
  * ============================== How this changes it ===========================================
  *
- * By moving the DIVISOR, not by patching arithmetic or detouring the font layer.
+ * By telling the layout the screen is smaller than it is, and touching nothing the font layer
+ * does for anyone else.
  *
- * The division is `fdiv dword [screenWidth]`, and the address in it is a plain absolute operand
- * four bytes wide. Pointing it at a cell of this module's own leaves the instruction, the register
- * state and the stack exactly as they were, and turns the engine's own expression into
+ * The layout's three divisions are `fdiv dword [screenWidth]` and its two siblings, each with a
+ * plain absolute operand four bytes wide. Pointing those at cells of this module's own leaves the
+ * instructions, the register state and the stack exactly as they were, and turns the engine's own
+ * expression into
  *
  *     640.0 / ourCell
  *
  * so ourCell = 640 gives a scale of 1, which is the size the text has at 640x480, at every
- * resolution. A user scale s is ourCell = 640/s.
+ * resolution. A user scale s is ourCell = 640/s. Because the cells are ours and live, a new value
+ * takes effect on the next subtitle drawn, with no repatching, so the developer menu's slider can
+ * be dragged and watched.
  *
- * Two things fall out of that shape and both are worth having. Nothing else is touched: the same
- * font layer draws every menu string and every HUD readout, and a detour on it would have had to
- * work out which caller it was serving, which is the classifier problem hud_ratio_scaling had to
- * solve for the same reason. And because the cell is ours and live, a new value takes effect on
- * the next subtitle drawn, with no repatching, so the developer menu's slider can be dragged and
- * watched.
+ * The rest of the layout has to be told the same lie, and each piece is told it at its own call
+ * site inside DLG_DrawLine rather than by detouring the function it calls: the two centring calls
+ * go to two getters of this module's that answer the told size, the wrap's measure call goes to a
+ * function that adds the spacing the engine's measure leaves unscaled, the line height call goes
+ * to one that answers from beneath the menu scale's hook, the two wrap comparisons read a cell of
+ * ours, and the two clamps that floored the offset at zero are opened. Only the backdrop bar is
+ * detoured, because it is drawn from one function with nothing in the caller to redirect. Every
+ * other caller of the font layer, every menu string and every HUD readout, keeps the engine's own
+ * arithmetic, a promise a detour on the font layer could not have made without working out which
+ * caller it was serving.
  *
  * ============================== Why the box and not the font =================================
  *
@@ -39,10 +47,11 @@
  * not a font size, it is a 640x480 box of fixed pixels with the text measured inside it, and the
  * only two things that put that box on the screen are the centring and the position scale.
  *
- * So both of those are told the screen is smaller than it is, and nothing inside the box is
- * touched. That matters beyond tidiness: the row pitch, the baseline, the wrap and the two nudges
- * live in the one part of the dialogue file the decompilation admits it never reconstructed, and
- * this way none of them has to be understood, let alone patched.
+ * So both of those are told the screen is smaller than it is, and the arithmetic inside the box
+ * is left as the engine wrote it. The row pitch, the baseline and the two nudges live in the one
+ * part of the dialogue file the decompilation admits it never reconstructed, and none of them is
+ * patched; the wrap is the exception, because its measure disagrees with the draw by the spacing,
+ * and the disagreement was photographed as text running out of the bar.
  */
 #ifndef ENHANCED_RESOLUTION_SUBTITLE_SCALE_H
 #define ENHANCED_RESOLUTION_SUBTITLE_SCALE_H
@@ -62,11 +71,5 @@
 /* Reads the key, patches the operand, and starts watching the key for changes. Says in the log
  * what it found and what it did. */
 void subtitle_scale_install(void);
-
-/* Whether `return_address` is the subtitle layout's own call for the font's line height. The menu
- * scale detours that function and answers a menu's text in drawn units; the subtitle is the one
- * text drawn while a menu is open that is not the menu's, and it asks from exactly one call. False
- * until the layout has resolved. */
-bool subtitle_scale_is_line_height_call(uintptr_t return_address);
 
 #endif /* ENHANCED_RESOLUTION_SUBTITLE_SCALE_H */

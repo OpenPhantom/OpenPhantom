@@ -312,25 +312,40 @@ static bool cage_offsets_are_sane(uintptr_t site)
 
 /* Writes the four clamps ABSOLUTELY from the canvas size. Never `imm += delta`, so writing them
  * a second time writes the same numbers rather than drifting. */
+/* Four immediates, written as one: a refusal part way through puts the ones already written back
+ * to what they held, so a cage is never half one size and half another, and the caller's "nothing
+ * has been changed" is true. */
 static bool write_clamps(int32_t width, int32_t height)
 {
-    int      clamp_width = 0;
-    int      clamp_height = 0;
-    uint32_t cage_width;
-    uint32_t cage_height;
-    size_t   index;
+    int       clamp_width = 0;
+    int       clamp_height = 0;
+    uintptr_t immediate[4];
+    uint32_t  before[4];
+    uint32_t  after[4];
+    size_t    written = 0;
 
     if (!pointer_cage_extent((int)width, (int)height, &clamp_width, &clamp_height)) {
         return false;
     }
-    cage_width  = (uint32_t)clamp_width;
-    cage_height = (uint32_t)clamp_height;
+    immediate[0] = cage_state.width_immediates[0];
+    immediate[1] = cage_state.height_immediates[0];
+    immediate[2] = cage_state.width_immediates[1];
+    immediate[3] = cage_state.height_immediates[1];
+    after[0] = after[2] = (uint32_t)clamp_width;
+    after[1] = after[3] = (uint32_t)clamp_height;
 
-    for (index = 0; index < 2; ++index) {
-        if (patch_write_u32(cage_state.width_immediates[index], cage_width) != PATCH_RESULT_OK ||
-            patch_write_u32(cage_state.height_immediates[index], cage_height) != PATCH_RESULT_OK) {
-            return false;
+    for (written = 0; written < 4; ++written) {
+        if (!memory_read_u32(immediate[written], &before[written]) ||
+            patch_write_u32(immediate[written], after[written]) != PATCH_RESULT_OK) {
+            break;
         }
+    }
+    if (written < 4) {
+        while (written > 0) {
+            --written;
+            (void)patch_write_u32(immediate[written], before[written]);
+        }
+        return false;
     }
 
     cage_state.applied_width  = width;

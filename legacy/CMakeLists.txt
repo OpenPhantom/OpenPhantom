@@ -80,7 +80,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 if(MSVC)
     # Warnings are errors. Integer truncation, pointer truncation and signed/unsigned conversions
     # are precisely the mistakes that stay invisible here until the game crashes.
-    add_compile_options(/W4 /WX /GS- /permissive-)
+    add_compile_options(/W4 /WX /permissive-)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN)
     # Static CRT: these DLLs are dropped into a 1999 game folder and must not need a redistributable.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

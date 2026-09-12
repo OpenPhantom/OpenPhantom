@@ -700,8 +700,9 @@ static bool resolve_message_mailbox(void)
         !read_cell(send, SEND_MESSAGE_B_OPERAND,     &limb_state.message_b) ||
         !read_cell(first, NODE_POST_OPERAND,         &limb_state.message_node) ||
         !read_cell(second, NODE_POST_OPERAND,        &node_again)) {
-        log_error("a mailbox operand at %08X or %08X names a cell outside the image, feature OFF",
-                  (unsigned)send, (unsigned)first);
+        log_error("a mailbox operand in sendMessage at %08X or in the node posts at %08X or %08X "
+                  "names a cell outside the image, feature OFF",
+                  (unsigned)send, (unsigned)first, (unsigned)second);
         return false;
     }
     if (node_again != limb_state.message_node) {

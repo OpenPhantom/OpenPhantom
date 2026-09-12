@@ -71,14 +71,21 @@ inside it closes. Asking whether the lock is clear *now* also covers the second 
 which deleting the count test on its own would have left in place.
 
 **Nothing else's camera is ever touched.** The setter is called from inside `Dialog_SpeakSingle`, so
-a take is credited to the dialogue by that function being on the stack when it happens. A take from
-the
-cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered as not ours.
+a take is credited to the dialogue by that function being on the stack when it happens: a detour on
+it counts how deep inside a spoken line the thread is, and the setter's hook reads that count. A
+take from the cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered as not
+ours.
 
-Installed all three detours or none. Without the setter nothing knows whose camera it is; without
-the clearer it would think the dialogue still holds one the engine already gave back; and the close
-is the only moment it acts at. Any two of them is not a smaller version of this fix; it is a wrong
-one.
+An earlier version read the address control returned to from the setter instead, which is the
+engine's only while this module's hook is the outermost link of the detour chain. The loader
+installs in name order, so `diagnostics` chains in front of it, and with its camera owner census
+on the take was credited to nobody and the fix never fired, in the session somebody was
+instrumenting the fault in.
+
+Installed all four detours or none. Without the spoken line nothing knows whose camera it is;
+without the setter and the clearer it would think the dialogue still holds one the engine already
+gave back; and the close is the only moment it acts at. Any three of them is not a smaller version
+of this fix; it is a wrong one.
 
 ## Configuration: `[camera_handback_fix]`
 
@@ -91,7 +98,11 @@ one.
 **The repair was watched working, in the game.** In a logged session all five sites resolved, and
 three consecutive lines show the whole mechanism: free look released with the scripted-camera
 flag set, this module reported handing the camera back, and free look re-armed on the very next
-line with the flag clear. That is the fault and its repair inside three lines of one log.
+line with the flag clear. That is the fault and its repair inside three lines of one log. That
+session ran the earlier attribution, by return address, with three detours. The spoken-line count
+that replaced it was built and run in the game afterwards, and the "closed still holding the
+camera and it was LEFT alone" line, which only prints for a take this module credited to the
+dialogue, appeared in play; the hand-back itself was not watched again under the new mechanism.
 
 **The original visible symptom was not cured by a direct before-and-after.** It was found on the
 run up Otoh Gunga's escape route after Jar Jar joins, and by the time this module worked that

@@ -287,6 +287,25 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     }
     if (record == character_census.watched_record) {
         character_census.watched_seen = true;   /* in the pool, whether or not in range */
+        /* The name is checked here, on every scanned slot that is the watched one, and not after
+         * the radius test below: a slot that changed hands to a differently named character
+         * standing outside the radius was marked seen and never checked, so the watch went on
+         * reporting the newcomer under the old label until it walked into range. The record stays
+         * remembered while the disarm declines, so the next scan tries again; zeroing it
+         * regardless left the registers armed with nothing able to drop them. */
+        if (diag_write_watch_is_armed() &&
+            memory_try_read(record + CHARACTER_NAME_OFFSET, raw_name, sizeof(raw_name))) {
+            character_scan_copy_name(raw_name, sizeof(raw_name), name, sizeof(name));
+            if (strncmp(name, character_census.watched_name,
+                        sizeof(character_census.watched_name)) != 0) {
+                diag_log_write("chr    the watched slot now holds %s, not %s, so the watch is "
+                               "dropped", name, character_census.watched_name);
+                diag_write_watch_disarm();
+                if (!diag_write_watch_is_armed()) {
+                    character_census.watched_record = 0;
+                }
+            }
+        }
     }
     if (!memory_try_read((uintptr_t)body + OBJECT_POSITION_OFFSET, position, sizeof(position)) ||
         !memory_try_read((uintptr_t)body + OBJECT_PREVIOUS_POSITION_OFFSET, previous,
@@ -344,15 +363,6 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     /* Arming on the Z rather than the whole position: the field this bug moves is the only one
        worth a breakpoint, and the four watchable bytes have to be exactly the four being written
        or the report names the wrong instruction. */
-    if (record == character_census.watched_record && diag_write_watch_is_armed()) {
-        if (strncmp(name, character_census.watched_name, sizeof(character_census.watched_name))
-            != 0) {
-            diag_log_write("chr    the watched slot now holds %s, not %s, so the watch is dropped",
-                           name, character_census.watched_name);
-            diag_write_watch_disarm();
-            character_census.watched_record = 0;
-        }
-    }
     if (watch_wanted(name) && !diag_write_watch_is_armed()) {
         char      label[48];
         uintptr_t field;
@@ -518,13 +528,17 @@ static void character_census_tick(void)
     }
 
     /* A watched character that was not in this scan has despawned; its slot is free for the next
-     * spawn, and the watch would report that one under this one's name. */
+     * spawn, and the watch would report that one under this one's name. The record is forgotten
+     * only once the disarm went through; while it declines, the watch is still armed and this
+     * runs again on the next scan. */
     if (character_census.watched_record != 0 && !character_census.watched_seen &&
         diag_write_watch_is_armed() && scan_complete) {
         diag_log_write("chr    %s is no longer in the pool, so the watch is dropped",
                        character_census.watched_name);
         diag_write_watch_disarm();
-        character_census.watched_record = 0;
+        if (!diag_write_watch_is_armed()) {
+            character_census.watched_record = 0;
+        }
     }
 
     diag_log_write("chr  census: %u named of %u live characters%s, player at (%.1f, %.1f, %.1f)%s",

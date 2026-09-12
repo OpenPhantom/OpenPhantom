@@ -36,14 +36,14 @@
 
 #define INPUT_SECTION "enhanced_input"
 
-/* Degrees the camera may turn in ONE rendered frame before the turn is worth a line. At 90 frames
- * per second 25 degrees is 2250 deg/s, which no ordinary frame of play reaches: the engine's own
- * turn ceiling is 120 deg/s and the mouse bolt cuts a hand off at 3000. It is deliberately well
- * below the reported symptom, "it whips completely round", so that the smaller swings leading
- * up to one are caught too. */
-/* Off, the same as the shipped file and the README both say. It was 25, so an installation whose
+/* Degrees the camera may turn in ONE rendered frame before the turn is worth a line. Off, the
+ * same as the shipped file and the README both say. It was 25, so an installation whose
  * engine_fixes.ini predates the key armed a measurement nobody asked for and wrote a line every
- * time the camera moved that far. 25 is still the number worth typing to turn it on. */
+ * time the camera moved that far. 25 is still the number worth typing to turn it on: at 90 frames
+ * per second it is 2250 deg/s, which no ordinary frame of play reaches, since the engine's own
+ * turn ceiling is 120 deg/s and the mouse bolt cuts a hand off at 3000, and it is well below the
+ * reported symptom, "it whips completely round", so the smaller swings leading up to one are
+ * caught too. */
 #define DEFAULT_JUMP_DEGREES 0.0f
 #define MIN_JUMP_DEGREES      1.0f
 #define MAX_JUMP_DEGREES    180.0f

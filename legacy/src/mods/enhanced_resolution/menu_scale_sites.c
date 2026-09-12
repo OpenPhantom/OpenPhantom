@@ -670,10 +670,9 @@ static bool read_cell(uintptr_t site, size_t operand, size_t size, uint32_t *cel
 {
     uint32_t value = 0;
 
-    if (!memory_read_u32(site + operand, &value) || !memory_is_inside_image(value, size)) {
-        log_warning("the %s operand at %08X names %08X, which is not inside the image, so the "
-                    "menus are left at their authored size", what, (unsigned)(site + operand),
-                    (unsigned)value);
+    if (!memory_read_image_cell(site + operand, size, &value)) {
+        log_warning("the %s operand at %08X does not name a readable cell inside the image, so "
+                    "the menus are left at their authored size", what, (unsigned)(site + operand));
         return false;
     }
     if (*cell != 0 && *cell != value) {

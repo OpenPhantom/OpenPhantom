@@ -276,21 +276,11 @@ static signature_t sites[SITE_COUNT] = {
 /* ============================================================================================ */
 static bool read_cell(uintptr_t site, uint32_t offset, const char *what, uint32_t *out)
 {
-    uint32_t cell = 0;
-
-    if (!memory_read_u32(site + offset, &cell)) {
-        log_warning("could not read the %s operand at %08X", what, (unsigned)(site + offset));
+    if (!memory_read_image_cell(site + offset, sizeof(uint32_t), out)) {
+        log_warning("the %s operand at %08X does not name a readable cell inside the image, "
+                    "refused", what, (unsigned)(site + offset));
         return false;
     }
-    /* An engine global lives in the image. Anything else means the pattern matched something that
-     * is not the function it was cut from, and believing it would write into a stranger. */
-    if (!memory_is_inside_image(cell, sizeof(uint32_t)) ||
-        !memory_is_readable_range(cell, sizeof(uint32_t))) {
-        log_warning("the %s would be at %08X, which is not a readable address inside the image, "
-                    "refused", what, (unsigned)cell);
-        return false;
-    }
-    *out = cell;
     return true;
 }
 

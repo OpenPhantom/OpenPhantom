@@ -37,18 +37,10 @@ void vlc_playback_set_stretch(bool stretch)
     vlc_stretch_to_window = stretch;
 }
 
-static bool foreground_belongs_to_us(void)
-{
-    DWORD process_id = 0;
-
-    GetWindowThreadProcessId(GetForegroundWindow(), &process_id);
-    return process_id == GetCurrentProcessId();
-}
-
 static bool escape_pressed_now(bool *was_down)
 {
     bool down = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
-    bool fresh = down && !*was_down && foreground_belongs_to_us();
+    bool fresh = down && !*was_down && platform_foreground_is_ours();
 
     *was_down = down;
     return fresh;
@@ -278,7 +270,7 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game
              * program was one of the things that made this feel like a separate application. The
              * test is only applied once playback is under way, because the foreground has not
              * necessarily settled in the moment the overlay appears. */
-            if (!foreground_belongs_to_us()) {
+            if (!platform_foreground_is_ours()) {
                 log_info("the game lost the foreground during playback, ending the movie the way "
                          "the engine's own player does");
                 break;

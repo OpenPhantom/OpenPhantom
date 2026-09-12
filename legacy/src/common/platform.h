@@ -22,4 +22,8 @@
  * The answer is settled once and remembered, because it cannot change while the process lives. */
 bool platform_is_wine(void);
 
+/* True when the foreground window belongs to this process. Three DLLs ask it before they act on
+ * a key or the cursor, so a game that is not in front is left alone. No window means no. */
+bool platform_foreground_is_ours(void);
+
 #endif /* PLATFORM_H */

@@ -2,6 +2,7 @@
 #include "mover_evenness.h"
 
 #include "common/logging.h"
+#include "common/numeric.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -22,18 +23,6 @@ static uint32_t evenness_judged;
 static uint32_t evenness_uneven;
 static uint32_t evenness_raw_between;   /* raw frames drawn the frame after a blended one */
 static float    evenness_worst;
-
-/* Finite by the bit pattern, the same two integer instructions object_track.c uses: this runs on
- * the mover draw path, where the CRT's classifier is a copy through the x87 unit and a call, and
- * object_interpolation.c carries what that cost on the object draw path. The square root above it
- * is a CRT call as well, one reason the whole instrument is off unless asked for. */
-static bool finite_bits(float value)
-{
-    uint32_t bits;
-
-    memcpy(&bits, &value, sizeof bits);
-    return (bits & 0x7F800000u) != 0x7F800000u;
-}
 
 void mover_evenness_enable(bool enabled)
 {
@@ -75,7 +64,7 @@ void mover_evenness_note(mover_evenness_state_t *state, const float *translation
         dz = translation[2] - state->last[2];
         step = (float)sqrt((double)(dx * dx + dy * dy + dz * dz));
 
-        if (finite_bits(step)) {
+        if (numeric_is_finite(step)) {
             /* The middle of the three is the one judged, against the mean of its neighbours.
              * All three must be real motion, so a mover coming to rest is not condemned for
              * having stopped. */

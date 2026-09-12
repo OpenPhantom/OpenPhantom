@@ -12,6 +12,7 @@
 
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/numeric.h"
 
 #include <stdbool.h>
 
@@ -111,17 +112,6 @@
 
 static mouse_config_t config;
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 const mouse_config_t *mouse_config(void)
 {
     return &config;
@@ -134,8 +124,8 @@ void mouse_config_load(void)
 
     config.degrees_per_count =
         ini_read_float(INPUT_SECTION, "MouseDegreesPerCount", DEFAULT_DEGREES_PER_COUNT);
-    config.degrees_per_count = clamp_float(config.degrees_per_count,
-                                           MIN_DEGREES_PER_COUNT, MAX_DEGREES_PER_COUNT);
+    config.degrees_per_count = numeric_clamp(config.degrees_per_count,
+                                             MIN_DEGREES_PER_COUNT, MAX_DEGREES_PER_COUNT);
 
     /* The setting is in degrees per mouse count and everything upstream of it is in the reader's
      * own axis units, so the conversion happens once, here.
@@ -150,8 +140,8 @@ void mouse_config_load(void)
 
     config.max_turn_rate =
         ini_read_float(INPUT_SECTION, SPIKE_LIMIT_KEY, DEFAULT_MAX_TURN_RATE);
-    config.max_turn_rate = clamp_float(config.max_turn_rate,
-                                       MIN_MAX_TURN_RATE, MAX_MAX_TURN_RATE);
+    config.max_turn_rate = numeric_clamp(config.max_turn_rate,
+                                         MIN_MAX_TURN_RATE, MAX_MAX_TURN_RATE);
 
     config.accumulate_requested = ini_read_bool(INPUT_SECTION, "MouseAccumulate", true);
     config.raw_requested        = ini_read_bool(INPUT_SECTION, "MouseRawInput", true);
@@ -166,7 +156,7 @@ void mouse_config_load(void)
     if (config.smoothing_is_automatic) {
         smoothing_ms = DEFAULT_SMOOTH_CEILING_MS;
     }
-    smoothing_ms = clamp_float(smoothing_ms, 0.0f, MAX_SMOOTHING_MS);
+    smoothing_ms = numeric_clamp(smoothing_ms, 0.0f, MAX_SMOOTHING_MS);
     config.smooth_ceiling_seconds = smoothing_ms / MILLISECONDS_PER_SECOND;
 
     /* The migrations, said loudly and exactly once each. A negative default is impossible for all
@@ -212,8 +202,8 @@ bool mouse_config_set_degrees_per_count(float degrees_per_count)
         return false;
     }
 
-    config.degrees_per_count     = clamp_float(degrees_per_count, MIN_DEGREES_PER_COUNT,
-                                               MAX_DEGREES_PER_COUNT);
+    config.degrees_per_count     = numeric_clamp(degrees_per_count, MIN_DEGREES_PER_COUNT,
+                                                 MAX_DEGREES_PER_COUNT);
     config.degrees_per_axis_unit = config.degrees_per_count / ENGINE_AXIS_SCALE;
 
     /* The bank is left alone. It holds counts the player has already made at the old sensitivity,

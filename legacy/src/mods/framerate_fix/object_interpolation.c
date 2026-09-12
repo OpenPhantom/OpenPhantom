@@ -5,6 +5,7 @@
 #include "substep_counter.h"
 
 #include "common/logging.h"
+#include "common/numeric.h"
 #include "common/patch.h"
 #include "common/signature.h"
 
@@ -127,20 +128,9 @@ static bool      limit_reported;
 static uint32_t  not_a_number_seen;
 static bool      nan_reported;
 
-/* Finite by the bit pattern: an exponent field of all ones is an infinity or a NaN and nothing
- * else is. Two integer instructions, no CRT, no x87. See the contract above for why that matters
- * here of all places. */
-static bool finite_bits(float value)
-{
-    uint32_t bits;
-
-    memcpy(&bits, &value, sizeof bits);
-    return (bits & 0x7F800000u) != 0x7F800000u;
-}
-
 static bool finite3(const float *v)
 {
-    return finite_bits(v[0]) && finite_bits(v[1]) && finite_bits(v[2]);
+    return numeric_is_finite(v[0]) && numeric_is_finite(v[1]) && numeric_is_finite(v[2]);
 }
 
 /* Reports where the remembered previous position differs from the engine's by enough to be
@@ -231,7 +221,7 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
      * walk as a teleport and stops smoothing exactly where the frame rate needs it most. */
     if (!object_track_blend(previous, current, object_track_weight(alpha, gap),
                             object_travel_limit * (float)gap, drawn)) {
-        if (!finite3(previous) || !finite3(current) || !finite_bits(alpha)) {
+        if (!finite3(previous) || !finite3(current) || !numeric_is_finite(alpha)) {
             /* Not a teleport: an object retail draws as nothing, and so does this. */
             ++not_a_number_seen;
         } else {

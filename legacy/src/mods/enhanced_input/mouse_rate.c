@@ -18,6 +18,8 @@
  */
 #include "mouse_rate.h"
 
+#include "common/numeric.h"
+
 #include <math.h>
 #include <stdbool.h>
 
@@ -55,20 +57,6 @@
  * would stretch the filter to a quarter of a second on one bad frame. */
 #define MAX_REPORT_SECONDS 0.100f
 
-/* The MAXIMUM wins where the two bounds cross, and they can cross here: the time constant's floor
- * is a property of the arithmetic while its ceiling is a number out of the player's ini, so a
- * ceiling below the floor is a configuration rather than a mistake. Returning the floor in that
- * case handed 2 ms of smoothing to somebody who had written MouseSmoothMaxMs=0, which only shows
- * on a device reporting faster than about 3 kHz, since that is where six report intervals first
- * fall below the floor. */
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        value = minimum;
-    }
-    return (value > maximum) ? maximum : value;
-}
-
 static float magnitude_of(float value)
 {
     return (value < 0.0f) ? -value : value;
@@ -80,7 +68,7 @@ static float weight(float span, float tau)
     if (!(tau > 0.0f) || !(span > 0.0f)) {
         return 1.0f;
     }
-    return clamp_float(1.0f - (float)exp(-(double)span / (double)tau), 0.0f, 1.0f);
+    return numeric_clamp(1.0f - (float)exp(-(double)span / (double)tau), 0.0f, 1.0f);
 }
 
 void mouse_rate_reset(mouse_rate_t *rate)
@@ -121,8 +109,13 @@ float mouse_rate_time_constant(const mouse_rate_t *rate, float max_time_constant
      * directly. It also put the two delivery rules within a hair of each other, since at tau equal
      * to the step the exponential share and the rate term are the same size, so the delivery kept
      * flipping between the smooth one and the frame-grouped one. Reported from a real machine as
-     * lag and stutter at the same time, the pair of symptoms that combination produces. */
-    return clamp_float(wanted, TIME_CONSTANT_FLOOR, max_time_constant_seconds);
+     * lag and stutter at the same time, the pair of symptoms that combination produces.
+     *
+     * The ceiling has to win where it sits below the floor, which the shared clamp guarantees:
+     * a version that returned the floor handed 2 ms of smoothing to somebody who had written
+     * MouseSmoothMaxMs=0, visible only on a device reporting faster than about 3 kHz, where six
+     * report intervals first fall below the floor. */
+    return numeric_clamp(wanted, TIME_CONSTANT_FLOOR, max_time_constant_seconds);
 }
 
 void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, float span_seconds,
@@ -184,7 +177,7 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
     /* The report interval. Until a full window has closed there is nothing better than this call's
      * own arithmetic, and being roughly right at once beats being exactly right in a quarter of a
      * second; a device that has just been picked up must be sized before then. */
-    measured = clamp_float(span_seconds / (float)packets, MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
+    measured = numeric_clamp(span_seconds / (float)packets, MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
     if (!rate->primed) {
         rate->report_seconds = measured;
         rate->primed         = true;
@@ -208,8 +201,8 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
      * are blended so that what is left of it averages away rather than stepping. */
     if (rate->window_packets >= REPORT_WINDOW_PACKETS ||
         (rate->window_seconds >= REPORT_WINDOW_SECONDS && rate->window_packets > 0u)) {
-        measured = clamp_float(rate->window_seconds / (float)rate->window_packets,
-                               MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
+        measured = numeric_clamp(rate->window_seconds / (float)rate->window_packets,
+                                 MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
         if (rate->window_ready) {
             rate->report_seconds += (measured - rate->report_seconds) * WINDOW_BLEND;
         } else {
@@ -292,9 +285,9 @@ float mouse_rate_take(mouse_rate_t *rate, float dt, float max_time_constant_seco
      * The clamp costs the lead, which is at most one report interval of latency, and it buys a
      * delivery that cannot reverse, which is the one a player actually notices. */
     if (bank > 0.0f) {
-        wanted = clamp_float(wanted, 0.0f, bank);
+        wanted = numeric_clamp(wanted, 0.0f, bank);
     } else {
-        wanted = -clamp_float(-wanted, 0.0f, -bank);
+        wanted = -numeric_clamp(-wanted, 0.0f, -bank);
     }
 
     /* The floor. Whatever the rate estimate says, an exponential share of the bank leaves on every

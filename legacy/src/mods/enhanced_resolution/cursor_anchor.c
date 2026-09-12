@@ -102,6 +102,7 @@
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/platform.h"
 #include "common/signature.h"
 
 #include <windows.h>
@@ -208,7 +209,6 @@ typedef struct cursor_anchor_state {
     bool          active;
 
     HWND         *window_slot;      /* the engine's own handle cell, or NULL on the fallback */
-    DWORD         process_id;
 
     detour_t      recentre_detour;
     detour_t      capture_detour;
@@ -240,18 +240,6 @@ bool cursor_anchor_point_is_centre(uint32_t packed_client_point)
 }
 
 /* ============================================================================================ */
-static bool foreground_belongs_to_us(void)
-{
-    HWND  foreground = GetForegroundWindow();
-    DWORD owner = 0;
-
-    if (foreground == NULL) {
-        return false;
-    }
-    GetWindowThreadProcessId(foreground, &owner);
-    return owner == cursor_state.process_id;
-}
-
 static HWND anchor_window(void)
 {
     if (cursor_state.window_slot != NULL) {
@@ -299,7 +287,7 @@ static int32_t __cdecl hook_recentre_mouse(int32_t packed_client_point)
 
     /* Alt-Tab has to free the pointer, and it must not depend on WM_ACTIVATEAPP reaching the
      * engine: a graphics wrapper in front of the window procedure can filter that message out. */
-    if (!foreground_belongs_to_us()) {
+    if (!platform_foreground_is_ours()) {
         return 0;
     }
 
@@ -333,7 +321,7 @@ static void __cdecl hook_capture_mouse(void)
      * decides, and doing it this way keeps the original's other two effects untouched. */
     cursor_state.original_capture();
 
-    if (cursor_state.active && foreground_belongs_to_us() && !pointer_release_is_active()) {
+    if (cursor_state.active && platform_foreground_is_ours() && !pointer_release_is_active()) {
         (void)warp_to_client_centre();
     }
 }
@@ -409,7 +397,6 @@ bool cursor_anchor_install(bool enabled, bool window_is_moved)
         return cursor_state.active;
     }
     cursor_state.installed = true;
-    cursor_state.process_id = GetCurrentProcessId();
 
     if (!enabled) {
         log_info("KeepCursorInWindow=0, the engine re-centres the pointer in screen coordinates "

@@ -566,23 +566,14 @@ static signature_t sites[SITE_COUNT] = {
 static bool read_cell(uintptr_t site, uintptr_t operand_offset, const char *what,
                       uint32_t *out_address)
 {
-    uint32_t address = 0;
-
     if (site == 0) {
         return false;
     }
-    if (!memory_read_u32(site + operand_offset, &address)) {
-        log_warning("%s: the operand at %08X+%02X is unreadable, refused",
-                    what, (unsigned)site, (unsigned)operand_offset);
+    if (!memory_read_image_cell(site + operand_offset, sizeof(float), out_address)) {
+        log_warning("%s: the operand at %08X+%02X does not name a readable cell inside the "
+                    "image, refused", what, (unsigned)site, (unsigned)operand_offset);
         return false;
     }
-    if (!memory_is_inside_image(address, sizeof(float))) {
-        log_warning("%s would be at %08X, outside the image, refused",
-                    what, (unsigned)address);
-        return false;
-    }
-
-    *out_address = address;
     return true;
 }
 

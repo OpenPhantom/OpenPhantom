@@ -69,6 +69,7 @@
 #include "common/detour.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/numeric.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -153,19 +154,6 @@ static void write_field(uint8_t *record, int offset, float value)
     *(float *)(record + offset) = value;
 }
 
-/* Also catches NaN through the negated comparison, and turns either infinity into a bound, so a
- * finite pair of limits guarantees a finite result. */
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 /* ==============================================================================================
  * Configuration. Every float is passed through clamp_float, which turns NaN into the minimum and
  * either infinity into a bound, so a finite pair of limits guarantees a finite setting.
@@ -232,7 +220,7 @@ void free_look_load_config(void)
     free_state.config.aim_strafe_swing =
         ini_read_float(INPUT_SECTION, "FreeLookAimStrafeSwing", DEFAULT_AIM_STRAFE_SWING);
     free_state.config.aim_strafe_swing =
-        clamp_float(free_state.config.aim_strafe_swing, 0.0f, MAX_AIM_TWIST_MAX);
+        numeric_clamp(free_state.config.aim_strafe_swing, 0.0f, MAX_AIM_TWIST_MAX);
 
     free_state.config.rigid_mouse_look_camera =
         ini_read_bool(INPUT_SECTION, "MouseLookRigidCamera", true);
@@ -250,13 +238,13 @@ void free_look_load_config(void)
     }
 
     settle_ms = ini_read_float(INPUT_SECTION, "FreeLookBodyTurnMs", DEFAULT_BODY_SETTLE_MS);
-    settle_ms = clamp_float(settle_ms, 0.0f, MAX_BODY_SETTLE_MS);
+    settle_ms = numeric_clamp(settle_ms, 0.0f, MAX_BODY_SETTLE_MS);
     free_state.config.body_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
 
     free_state.config.body_turn_rate =
         ini_read_float(INPUT_SECTION, "FreeLookBodyTurnMaxDegPerSec", DEFAULT_BODY_TURN_RATE);
     free_state.config.body_turn_rate =
-        clamp_float(free_state.config.body_turn_rate, MIN_BODY_TURN_RATE, MAX_BODY_TURN_RATE);
+        numeric_clamp(free_state.config.body_turn_rate, MIN_BODY_TURN_RATE, MAX_BODY_TURN_RATE);
 
     /* Zero is a legitimate setting and means "never take the wanted yaw back": the camera is then
      * always picked up wherever the engine's recentre had got to, as this feature did before the
@@ -264,7 +252,7 @@ void free_look_load_config(void)
     free_state.config.region_recover_degrees =
         ini_read_float(INPUT_SECTION, "FreeLookRegionRecoverDeg", DEFAULT_REGION_RECOVER_DEG);
     free_state.config.region_recover_degrees =
-        clamp_float(free_state.config.region_recover_degrees, 0.0f, MAX_REGION_RECOVER_DEG);
+        numeric_clamp(free_state.config.region_recover_degrees, 0.0f, MAX_REGION_RECOVER_DEG);
 
     free_state.config.log_transitions = ini_read_bool(INPUT_SECTION, "FreeLookLog", false);
 

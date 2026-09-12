@@ -31,6 +31,7 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/numeric.h"
 #include "common/signature.h"
 
 #include <windows.h>
@@ -295,21 +296,10 @@ static bool current_mode_size(int *out_width, int *out_height)
     return true;
 }
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 static float read_hud_scale(void)
 {
-    return clamp_float(ini_read_float(HUD_SECTION, "HudScale", 1.0f),
-                       HUD_SCALE_MIN, HUD_SCALE_MAX);
+    return numeric_clamp(ini_read_float(HUD_SECTION, "HudScale", 1.0f),
+                         HUD_SCALE_MIN, HUD_SCALE_MAX);
 }
 
 static void load_config(void)

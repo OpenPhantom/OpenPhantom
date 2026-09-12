@@ -151,13 +151,9 @@ static bool read_cell(uintptr_t site, size_t offset, const char *what, uintptr_t
     uint32_t address = 0;
 
     *out = 0;
-    if (!memory_read_u32(site + offset, &address) || address == 0) {
-        log_warning("the %s operand at %08X could not be read", what, (unsigned)(site + offset));
-        return false;
-    }
-    if (!memory_is_inside_image((uintptr_t)address, sizeof(uint32_t))) {
-        log_warning("the %s operand reads back as %08X, outside the host image, refused", what,
-                    (unsigned)address);
+    if (!memory_read_image_cell(site + offset, sizeof(uint32_t), &address)) {
+        log_warning("the %s operand at %08X does not name a readable cell inside the image, "
+                    "refused", what, (unsigned)(site + offset));
         return false;
     }
     *out = (uintptr_t)address;

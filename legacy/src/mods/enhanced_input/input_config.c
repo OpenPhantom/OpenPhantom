@@ -12,6 +12,7 @@
 
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/numeric.h"
 
 #include <stdbool.h>
 
@@ -93,17 +94,6 @@
 
 static input_config_t config;
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 const input_config_t *input_config(void)
 {
     return &config;
@@ -136,7 +126,7 @@ void input_config_load(void)
     /* Zero is a legitimate setting and means "no damping": the angle steps between 0, +-45 and
      * +-90 the way it used to, so the two are comparable in one build. */
     settle_ms = ini_read_float(INPUT_SECTION, "StrafeSettleMs", DEFAULT_STRAFE_SETTLE_MS);
-    settle_ms = clamp_float(settle_ms, 0.0f, MAX_STRAFE_SETTLE_MS);
+    settle_ms = numeric_clamp(settle_ms, 0.0f, MAX_STRAFE_SETTLE_MS);
     config.strafe_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
 
     config.steer_lean = ini_read_bool(INPUT_SECTION, "SteerLean", true);
@@ -145,64 +135,64 @@ void input_config_load(void)
     config.restore_turn_rate =
         ini_read_bool(INPUT_SECTION, "RestoreTurnRate", true);
     config.steer_lean_test_degrees =
-        clamp_float(ini_read_float(INPUT_SECTION, "SteerLeanTestDegrees", 0.0f), -90.0f, 90.0f);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "SteerLeanTestDegrees", 0.0f), -90.0f, 90.0f);
     config.steer_log = ini_read_int(INPUT_SECTION, "SteerLog", 0);
     if (config.steer_log < 0)                      { config.steer_log = 0; }
     if (config.steer_log > MAX_STEER_LOG_SUBSTEPS) { config.steer_log = MAX_STEER_LOG_SUBSTEPS; }
 
     config.strafe_turn_rate =
         ini_read_float(INPUT_SECTION, "StrafeTurnRate", DEFAULT_STRAFE_TURN_RATE);
-    config.strafe_turn_rate = clamp_float(config.strafe_turn_rate,
-                                          MIN_STRAFE_TURN_RATE, MAX_STRAFE_TURN_RATE);
+    config.strafe_turn_rate = numeric_clamp(config.strafe_turn_rate,
+                                            MIN_STRAFE_TURN_RATE, MAX_STRAFE_TURN_RATE);
 
     /* Off by default: it changes how the game is played rather than repairing a fault, which
      * is the same reason free look ships off. */
     config.camera_follow = ini_read_bool(INPUT_SECTION, "CameraFollow", false);
     settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowSettleMs",
                                DEFAULT_CAMERA_FOLLOW_SETTLE_MS);
-    settle_ms = clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_SETTLE_MS);
+    settle_ms = numeric_clamp(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_SETTLE_MS);
     config.camera_follow_settle_seconds = settle_ms / MILLISECONDS_PER_SECOND;
     config.camera_follow_rate =
-        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowRate",
-                                   DEFAULT_CAMERA_FOLLOW_RATE),
-                    MIN_CAMERA_FOLLOW_RATE, MAX_CAMERA_FOLLOW_RATE);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "CameraFollowRate",
+                                     DEFAULT_CAMERA_FOLLOW_RATE),
+                      MIN_CAMERA_FOLLOW_RATE, MAX_CAMERA_FOLLOW_RATE);
     config.camera_follow_strength =
-        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowStrength",
-                                   DEFAULT_CAMERA_FOLLOW_STRENGTH), 0.0f, 1.0f);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "CameraFollowStrength",
+                                     DEFAULT_CAMERA_FOLLOW_STRENGTH), 0.0f, 1.0f);
     config.camera_follow_max_degrees =
-        clamp_float(ini_read_float(INPUT_SECTION, "CameraFollowMaxDeg",
-                                   DEFAULT_CAMERA_FOLLOW_MAX_DEG),
-                    0.0f, MAX_CAMERA_FOLLOW_MAX_DEG);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "CameraFollowMaxDeg",
+                                     DEFAULT_CAMERA_FOLLOW_MAX_DEG),
+                      0.0f, MAX_CAMERA_FOLLOW_MAX_DEG);
 
     settle_ms = ini_read_float(INPUT_SECTION, "CameraFollowHoldMs",
                                DEFAULT_CAMERA_FOLLOW_HOLD_MS);
     config.camera_follow_hold_seconds =
-        clamp_float(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_HOLD_MS) / MILLISECONDS_PER_SECOND;
+        numeric_clamp(settle_ms, 0.0f, MAX_CAMERA_FOLLOW_HOLD_MS) / MILLISECONDS_PER_SECOND;
 
     config.air_control = ini_read_bool(INPUT_SECTION, "AirControl", false);
     settle_ms = ini_read_float(INPUT_SECTION, "AirControlSettleMs", DEFAULT_AIR_SETTLE_MS);
     config.air_settle_seconds =
-        clamp_float(settle_ms, 0.0f, MAX_AIR_SETTLE_MS) / MILLISECONDS_PER_SECOND;
+        numeric_clamp(settle_ms, 0.0f, MAX_AIR_SETTLE_MS) / MILLISECONDS_PER_SECOND;
     config.air_turn_rate =
-        clamp_float(ini_read_float(INPUT_SECTION, "AirControlRate", DEFAULT_AIR_TURN_RATE),
-                    MIN_AIR_TURN_RATE, MAX_AIR_TURN_RATE);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "AirControlRate", DEFAULT_AIR_TURN_RATE),
+                      MIN_AIR_TURN_RATE, MAX_AIR_TURN_RATE);
 
     /* On by default, unlike the two features above it, because this is a REPAIR rather than a
      * change of scheme: it gives the pad the direction and the magnitude the engine's own path
      * throws away, and a machine with no pad plugged in never reaches any of it. */
     config.pad_stick = ini_read_bool(INPUT_SECTION, "PadStick", true);
     config.pad_controller_index =
-        (int)clamp_float((float)ini_read_int(INPUT_SECTION, "PadControllerIndex", 0),
-                         0.0f, (float)MAX_PAD_CONTROLLER_INDEX);
+        (int)numeric_clamp((float)ini_read_int(INPUT_SECTION, "PadControllerIndex", 0),
+                           0.0f, (float)MAX_PAD_CONTROLLER_INDEX);
     config.pad_deadzone =
-        clamp_float(ini_read_float(INPUT_SECTION, "PadDeadzone", DEFAULT_PAD_DEADZONE),
-                    0.0f, 0.9f);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "PadDeadzone", DEFAULT_PAD_DEADZONE),
+                      0.0f, 0.9f);
     config.pad_run_threshold =
-        clamp_float(ini_read_float(INPUT_SECTION, "PadRunThreshold",
-                                   DEFAULT_PAD_RUN_THRESHOLD), 0.0f, 1.0f);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "PadRunThreshold",
+                                     DEFAULT_PAD_RUN_THRESHOLD), 0.0f, 1.0f);
     config.pad_run_hysteresis =
-        clamp_float(ini_read_float(INPUT_SECTION, "PadRunHysteresis",
-                                   DEFAULT_PAD_RUN_HYSTERESIS), 0.0f, 0.25f);
+        numeric_clamp(ini_read_float(INPUT_SECTION, "PadRunHysteresis",
+                                     DEFAULT_PAD_RUN_HYSTERESIS), 0.0f, 0.25f);
 
     /* Off by default, which is a repair: the shipped binding on that axis walks the player
      * from the stick they are aiming with. 1 hands it back to somebody who bound it on
@@ -212,8 +202,8 @@ void input_config_load(void)
 
     config.key_turn_rate =
         ini_read_float(INPUT_SECTION, "KeyTurnRate", DEFAULT_KEY_TURN_RATE);
-    config.key_turn_rate = clamp_float(config.key_turn_rate,
-                                       MIN_KEY_TURN_RATE, MAX_KEY_TURN_RATE);
+    config.key_turn_rate = numeric_clamp(config.key_turn_rate,
+                                         MIN_KEY_TURN_RATE, MAX_KEY_TURN_RATE);
 
     mouse_look_load_config();
     free_look_load_config();

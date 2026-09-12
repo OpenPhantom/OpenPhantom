@@ -40,6 +40,9 @@ add_unit_test(stick "")
 # nor says when it has cut.
 add_unit_test(text "")
 
+# The clamp and the finite test, header only, so the test is the only translation unit.
+add_unit_test(numeric "")
+
 # The music volume latch: the two-deep rule that decides what a provider change puts back, in the
 # file the hooks feed. The hooks themselves need a patched process and are not linked.
 add_unit_test(music_volume imuse_fix imuse_fix/music_volume_latch.c)

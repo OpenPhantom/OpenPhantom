@@ -164,6 +164,7 @@
 #include "common/frame_hook.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/numeric.h"
 
 #include <windows.h>
 
@@ -316,17 +317,6 @@ typedef struct mouse_look_state {
 
 static mouse_look_state_t mouse_state;
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 /* ==============================================================================================
  * The pure half
  * ============================================================================================ */
@@ -341,7 +331,7 @@ float mouse_look_clamp_step(float degrees, float span_seconds,
             limit = hard_cap_degrees;
         }
     }
-    return clamp_float(degrees, -limit, limit);
+    return numeric_clamp(degrees, -limit, limit);
 }
 
 /* ==============================================================================================
@@ -788,7 +778,7 @@ static float deliver(float dt_seconds)
 
     /* The last bolt, unchanged in meaning: whatever else happens, one step stays clear of the angle
      * at which a turn becomes ambiguous. */
-    return clamp_float(degrees, -MOUSE_MAX_STEP_DEGREES, MOUSE_MAX_STEP_DEGREES);
+    return numeric_clamp(degrees, -MOUSE_MAX_STEP_DEGREES, MOUSE_MAX_STEP_DEGREES);
 }
 
 /* Everything this file drains is gated on the engine running its own player phases, which is the

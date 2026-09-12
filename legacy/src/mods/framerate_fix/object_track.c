@@ -1,6 +1,8 @@
 /* object_track.c: see object_track.h. */
 #include "object_track.h"
 
+#include "common/numeric.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -29,22 +31,9 @@ static size_t slot_for(uintptr_t key)
     return (size_t)(mixed % OBJECT_TRACK_SLOTS);
 }
 
-/* Finite by the bit pattern, not through the CRT. An exponent field of all ones is an infinity
- * or a NaN, and no finite value has one; the compiler turns this into two integer instructions,
- * where the CRT's classifier is a copy through the x87 unit and a call. This runs on every drawn
- * object on every frame, under the engine's own floating-point state, and it must not touch that
- * state. */
-static bool finite_bits(float value)
-{
-    uint32_t bits;
-
-    memcpy(&bits, &value, sizeof bits);
-    return (bits & 0x7F800000u) != 0x7F800000u;
-}
-
 static bool finite3(const float *v)
 {
-    return finite_bits(v[0]) && finite_bits(v[1]) && finite_bits(v[2]);
+    return numeric_is_finite(v[0]) && numeric_is_finite(v[1]) && numeric_is_finite(v[2]);
 }
 
 static bool entry_is_stale(const track_entry_t *entry)
@@ -136,7 +125,7 @@ float object_track_weight(float alpha, uint32_t gap)
     if (gap <= 1u) {
         return alpha;            /* the engine's own weight, and the case at every usable rate */
     }
-    if (!finite_bits(alpha)) {
+    if (!numeric_is_finite(alpha)) {
         /* The blend refuses this below and draws the object where it is. Inventing a number here
          * would hide that from the one place set up to catch it. */
         return alpha;
@@ -174,7 +163,7 @@ bool object_track_blend(const float *previous, const float *current, float weigh
      * So the comparison below is allowed to be false for a NaN, the blend goes ahead, and the
      * answer is not a number exactly as the replaced bytes would have made it. The caller is told
      * it was refused so it can count what it saw, but what it draws is retail's nothing. */
-    if (!finite3(previous) || !finite3(current) || !finite_bits(weight)) {
+    if (!finite3(previous) || !finite3(current) || !numeric_is_finite(weight)) {
         out_position[0] = previous[0] + (current[0] - previous[0]) * weight;
         out_position[1] = previous[1] + (current[1] - previous[1]) * weight;
         out_position[2] = previous[2] + (current[2] - previous[2]) * weight;

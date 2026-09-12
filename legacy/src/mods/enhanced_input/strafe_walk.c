@@ -99,6 +99,7 @@
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/numeric.h"
 #include "common/signature.h"
 
 #include <math.h>
@@ -190,17 +191,6 @@ static float read_field(const uint8_t *record, int offset)
 static void write_field(uint8_t *record, int offset, float value)
 {
     *(float *)(record + offset) = value;
-}
-
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
 }
 
 /* Called at the top of every substep in which our damper is about to run. It records the angle the
@@ -427,7 +417,7 @@ float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds)
     }
 
     target = strafe_walk_travel_offset(strafe, forward, drive_sign);
-    target = clamp_float(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
+    target = numeric_clamp(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
 
     open_substep(record);
     strafe_state.theta_degrees = strafe_walk_damp_step(
@@ -455,7 +445,7 @@ float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
     }
 
     target = strafe_walk_travel_offset(strafe, forward, drive_sign);
-    target = clamp_float(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
+    target = numeric_clamp(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
 
     open_substep(record);
     strafe_state.theta_degrees = strafe_walk_damp_step(

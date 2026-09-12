@@ -140,6 +140,20 @@ bool memory_read_u32(uintptr_t address, uint32_t *out)
     return memory_read(address, out, sizeof(*out));
 }
 
+bool memory_read_image_cell(uintptr_t operand_address, size_t cell_size, uint32_t *out_cell)
+{
+    uint32_t cell = 0;
+
+    if (out_cell == NULL || !memory_read_u32(operand_address, &cell)) {
+        return false;
+    }
+    if (!memory_is_inside_image(cell, cell_size) || !memory_is_readable_range(cell, cell_size)) {
+        return false;
+    }
+    *out_cell = cell;
+    return true;
+}
+
 /* The structured exception handler is the whole point of these two, so they must not be folded back
  * into the functions above: a __try frame around a memcpy is a few instructions of setup on x86,
  * while VirtualQuery is a system call, and the difference only matters where these are used.

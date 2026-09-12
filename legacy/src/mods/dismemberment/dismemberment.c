@@ -74,6 +74,7 @@
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/numeric.h"
 #include "common/patch.h"
 #include "common/signature.h"
 
@@ -312,17 +313,6 @@ const limb_config_t *limb_config(void)
 }
 
 /* ============================================================================================ */
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 static void load_config(void)
 {
     limb_config_t *config = &limb_state.config;
@@ -338,16 +328,16 @@ static void load_config(void)
     }
     config->mode = (limb_mode_t)mode;
 
-    config->spin_scale     = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SpinScale", 0.35f),
-                                         0.0f, 2.0f);
-    config->gravity_scale  = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "GravityScale",
-                                                        0.40f), 0.1f, 2.0f);
-    config->settle_seconds = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleSeconds",
-                                                        1.20f), 0.0f, 5.0f);
-    config->settle_damping = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleDamping",
-                                                        0.80f), 0.1f, 1.0f);
-    config->yaw_scale      = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "YawScale", 0.12f),
-                                         0.0f, 2.0f);
+    config->spin_scale     = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SpinScale",
+                                                          0.35f), 0.0f, 2.0f);
+    config->gravity_scale  = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "GravityScale",
+                                                          0.40f), 0.1f, 2.0f);
+    config->settle_seconds = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SettleSeconds",
+                                                          1.20f), 0.0f, 5.0f);
+    config->settle_damping = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SettleDamping",
+                                                          0.80f), 0.1f, 1.0f);
+    config->yaw_scale      = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "YawScale", 0.12f),
+                                           0.0f, 2.0f);
     config->diagnostics    = ini_read_bool(DISMEMBERMENT_SECTION, "Diagnostics", false);
 }
 
@@ -667,8 +657,7 @@ static bool read_cell(uintptr_t site, uint32_t operand, volatile const int32_t *
 {
     uint32_t address = 0;
 
-    if (!memory_read_u32(site + operand, &address) ||
-        !memory_is_inside_image(address, sizeof(int32_t))) {
+    if (!memory_read_image_cell(site + operand, sizeof(int32_t), &address)) {
         return false;
     }
     *out = (volatile const int32_t *)(uintptr_t)address;

@@ -35,6 +35,12 @@ bool memory_read(uintptr_t address, void *destination, size_t size);
 bool memory_read_u8 (uintptr_t address, uint8_t  *out);
 bool memory_read_u32(uintptr_t address, uint32_t *out);
 
+/* The read every site table makes: the 32-bit operand of a matched instruction names an engine
+ * cell, and the cell has to be `cell_size` bytes that lie inside the host image and are readable.
+ * Anything else means the pattern matched something that is not the function it was cut from, and
+ * believing it would read or write into a stranger. Install time only, like every read above. */
+bool memory_read_image_cell(uintptr_t operand_address, size_t cell_size, uint32_t *out_cell);
+
 /* The same guarantee for code that runs once per drawn object rather than once at install.
  *
  * Everything above asks the operating system whether the range is readable, one system call per

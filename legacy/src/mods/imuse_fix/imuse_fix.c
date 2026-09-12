@@ -52,6 +52,7 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/platform.h"
 #include "common/text.h"
 
 #include <windows.h>
@@ -89,8 +90,6 @@ typedef struct imuse_fix_state {
     music_sites_t sites;
     music_latch_fn_t pause_music;
     music_latch_fn_t resume_music;
-
-    DWORD process_id;
 
     /* Did WE pause it? Nothing else may be resumed by the guard. */
     bool we_paused;
@@ -140,18 +139,6 @@ static void load_configuration(void)
 }
 
 /* ============================================================================================ */
-static bool foreground_belongs_to_us(void)
-{
-    HWND  foreground = GetForegroundWindow();
-    DWORD owner = 0;
-
-    if (foreground == NULL) {
-        return false;
-    }
-    GetWindowThreadProcessId(foreground, &owner);
-    return owner == state.process_id;
-}
-
 static int32_t read_cell(const volatile int32_t *cell, int32_t absent)
 {
     if (cell == NULL) {
@@ -349,14 +336,14 @@ static void imuse_fix_frame(void)
         }
         state.orphan_frames = 0;
         note_state(attached, read_cell(state.sites.paused, 0),
-                   read_cell(state.sites.sys_pause_on, 0), foreground_belongs_to_us(),
+                   read_cell(state.sites.sys_pause_on, 0), platform_foreground_is_ours(),
                    "system is not attached");
         return;
     }
 
     paused = read_cell(state.sites.paused, 0);
     sys_pause = read_cell(state.sites.sys_pause_on, 0);
-    foreground = foreground_belongs_to_us();
+    foreground = platform_foreground_is_ours();
 
     note_state(attached, paused, sys_pause, foreground, "state changed");
 
@@ -385,7 +372,6 @@ void imuse_fix_install(void)
         return;
     }
     state.installed = true;
-    state.process_id = GetCurrentProcessId();
 
     log_init("imuse_fix", false);
 

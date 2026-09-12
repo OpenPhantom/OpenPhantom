@@ -3,6 +3,18 @@
 
 #include <windows.h>
 
+bool platform_foreground_is_ours(void)
+{
+    HWND  foreground = GetForegroundWindow();
+    DWORD owner      = 0;
+
+    if (foreground == NULL) {
+        return false;
+    }
+    GetWindowThreadProcessId(foreground, &owner);
+    return owner == GetCurrentProcessId();
+}
+
 bool platform_is_wine(void)
 {
     static int cached = -1;      /* -1 not yet asked, 0 no, 1 yes */

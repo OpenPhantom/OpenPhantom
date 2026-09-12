@@ -116,12 +116,12 @@ static bool is_close_request(const MSG *message)
  * during a movie was thrown away rather than delivered late, and the engine came out of each movie
  * having silently missed all of it.
  *
- * PM_NOREMOVE answers the same question without that cost: the two close requests are recognised
- * where they lie, and only THEY are then removed and re-posted, so the game's own pump finds them
- * once this call returns. Everything else stays exactly where it was, in order.
+ * PM_NOREMOVE answers the same question without that cost: the close request is recognised where
+ * it lies, and only IT is then removed and re-posted, so the game's own pump finds it once this
+ * call returns. Everything else stays exactly where it was, in order.
  *
- * The range filter keeps this cheap: both requests live in the keyboard and non-client mouse
- * ranges, so nothing else is even looked at. */
+ * The range filter keeps this cheap: the request is one non-client mouse message, so nothing else
+ * is even looked at. The table has one row now that the keyboard range is gone. */
 static bool close_was_requested(HWND game_window)
 {
     static const struct { UINT first; UINT last; } ranges[] = {

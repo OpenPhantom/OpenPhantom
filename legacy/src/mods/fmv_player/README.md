@@ -67,15 +67,14 @@ not deferred, it was **discarded**, and the engine came out of each movie having
 all of it. The pump is now scoped to the overlay window's own handle, so the game's traffic simply
 waits, in order, for the game's own pump to resume.
 
-One thing had to survive that change. The overlay never takes activation, so a close request,
-Alt+F4 as `WM_SYSKEYDOWN`/`VK_F4` or the close box as `WM_NCLBUTTONDOWN`/`HTCLOSE`, is addressed to
-the *game's* window, which a scoped peek never retrieves. Left at that, the game could not be
-closed until the movie ended, which for the credits is minutes and which the retail Bink path does
-not do. So the game's queue is *looked at* with `PM_NOREMOVE` for exactly those two messages, and
-only one of them is ever removed, immediately re-posted so the engine's own window procedure
-honours it once the movie call returns. Nothing else on that queue is touched. `WM_QUIT` needs no
-handling: it is a thread message with no window, a scoped peek never sees it, and it stays queued
-for the game's own pump.
+One thing had to survive that change. The overlay never takes activation, so a close box click,
+`WM_NCLBUTTONDOWN`/`HTCLOSE`, is addressed to the *game's* window, which a scoped peek never
+retrieves, and a loop that ignored it would eat the request on the way past. So the game's queue
+is *looked at* with `PM_NOREMOVE` for exactly that one message, which is then removed and
+immediately re-posted so the engine's own window procedure sees it once the movie call returns.
+Nothing else on that queue is touched. Alt+F4 used to be peeked for as well and is not any more;
+**Closing the game during a movie** below says why. `WM_QUIT` needs no handling: it is a thread
+message with no window, a scoped peek never sees it, and it stays queued for the game's own pump.
 
 **libVLC loads on its own thread.** Locating a 32-bit VLC, loading two DLLs out of it and calling
 `libvlc_new`, which initialises VLC's entire plugin system, is not fast, and doing it at install
@@ -407,6 +406,15 @@ clear, so the hook hands those calls to the original rather than answering for t
 deferring is the safe direction: it reproduces retail behaviour whatever the answer turns out to
 be. Its address is read out of the matched `cmp` operand rather than written down as a constant.
 
+**The second gate is honoured, and the cell behind it is held.** `[0086a43c]` is what the engine
+means by "a cutscene is on screen": the retail function refuses and returns 0 while it is set, then
+sets it for the length of the movie, and other parts of the engine read it. The display hot keys
+are ignored while it stands and the game's own key hook steps aside. The hook hands a call made
+while it is set to the original, and for a movie it plays itself it sets the cell immediately
+before the picture goes up and clears it immediately after, with nothing in between that can
+return early, so it cannot be left standing. Its address is read out of both the `cmp` and the
+`mov` operand, and the two must agree before either is used.
+
 ### The drawn menu cursor's cells
 
 The one other place this DLL reads or writes engine memory, kept in `menu_cursor_cells.c` so it is
@@ -465,9 +473,6 @@ movie player.
 
 ## Known limitations
 
-* **`[0086a43c]` is not reproduced.** The retail function latches it on entry; the hook does not.
-  It has the shape of a re-entrancy guard, and the hook blocks the game's only thread for the whole
-  movie, so nothing can observe it in between, but that is reasoning, not a sweep.
 * **The success return value is `1`, and only its non-zeroness is evidenced.** All three refusal
   paths above return 0, so zero means "did not play". Which non-zero value the retail function
   returns on success has not been read out of the image, and no caller has been shown to
@@ -551,8 +556,10 @@ message-delivery behaviour and on libVLC's own long-stable C ABI.
 
 Two deliberate tests are worth doing by hand:
 
-* Press **Alt+F4 during a converted movie.** The game should close, and the log should carry `the
-  player asked to close the game during playback`. If it does not close, the `PM_NOREMOVE` probe is
-  not seeing the request.
+* **Click the game window's close box during a converted movie**, in window mode. The movie should
+  end and the log should carry `the player asked to close the game during playback`. If the movie
+  plays on, the `PM_NOREMOVE` probe is not seeing the request. The game itself does not close, and
+  that is not a fault of this DLL: the engine discards `WM_CLOSE` at all times, and Alt+F4 does
+  nothing during a movie for the same reason it does nothing during play.
 * **Move the mouse during a movie**, then look at where the drawn menu cursor is when the menu comes
   back. It should be in the middle of the menu, every launch, regardless of where the pointer was.

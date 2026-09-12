@@ -102,10 +102,11 @@ bool vlc_playback_is_still_loading(void);
  * the one message that BEGINS a close, the close box as WM_NCLBUTTONDOWN/HTCLOSE, which is then
  * removed and immediately re-posted, so the request survives to be honoured by the engine's own
  * window procedure once this returns. Alt+F4 was handled here too and is not any more; see
- * vlc_playback.c for what went wrong with it.
- * Without it the game cannot be closed until the movie ends, which for the credits is minutes and
- * which the retail Bink path does not do. WM_QUIT needs no handling here: it is a thread message
- * with no window, a scoped peek never retrieves it, and it stays queued for the game's own pump.
+ * vlc_playback.c for what went wrong with it. The engine discards WM_CLOSE at all times, so this
+ * does not make the close box close the game during a movie; it keeps the loop from eating a
+ * request on the way past, and ends the movie. WM_QUIT needs no handling here: it is a thread
+ * message with no window, a scoped peek never retrieves it, and it stays queued for the game's own
+ * pump.
  *
  * What none of this touches, because it has been claimed here before and is worth stating plainly:
  * SENT messages. The MSG that PeekMessageW fills in only ever carries queued messages, while a

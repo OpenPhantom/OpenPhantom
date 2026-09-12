@@ -143,9 +143,10 @@ code was never going to honour.
 
 The menu's own arithmetic truncates in both directions: the slider seeds from
 `trunc(volume / 127 * 19)` and a drag writes back `trunc(notch / 19 * 127)`. Notch 5 gives
-`SVOL=33`, and 33 seeds back to `trunc(4.937)`, which is notch 4. Only 0 and 19 survive the round
-trip exactly. That is 1999 engine behaviour and not something this DLL changes, so **check
-`SVOL=` in `obi.ini` and the log, never the slider's position.**
+`SVOL=33`, and in the shipped engine 33 seeds back to `trunc(4.937)`, which is notch 4; only 0 and
+19 survived the round trip exactly. This DLL now rounds the seed (**The sliders walk downward**
+below), so 33 seeds to notch 5 again, but nineteen notches are still a coarse reading of a
+`0..127` value, so **check `SVOL=` in `obi.ini` and the log, never the slider's position.**
 
 ## Testing status
 

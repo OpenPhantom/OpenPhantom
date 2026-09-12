@@ -19,6 +19,11 @@ never stops, so with nothing refilling it the buffer circles its last second of 
 
 **Names every change**, on request, one line per transition.
 
+Two later repairs live in the same DLL because they are the same subsystem: the heartbeat lock
+inside `IMUSE.DLL` that gets stuck and leaves the music looping one fragment (**The "one second on
+a loop" defect**), and the audio screen's provider change throwing away a music slider move (**The
+provider change discards a slider move**).
+
 ## What it is NOT: the return-value patch
 
 There is a well-travelled explanation of this game's music defect: the music module's command
@@ -41,12 +46,11 @@ The orphan guard is the honest version of the same worry. Instead of predicting 
 get stuck it watches whether it *is* stuck, repairs it and says so, which means a log **without**
 that line is evidence rather than silence.
 
-## This is not known to fix the "one second on a loop" defect
+## The "one second on a loop" defect
 
 The reported symptom, music suddenly hangs and repeats a short fragment endlessly while the game
-carries on running normally, has **not** been traced to a cause. It is reported to occur without
-any mods installed, so it is not something this project introduced. Three things are ruled out by
-bytes rather than by argument:
+carries on running normally, occurs without any mods installed, so it is not something this project
+introduced. Three things in the host image are ruled out by bytes rather than by argument:
 
 * it is not the return value above (that path does not gate on it);
 * it is not the per-frame music service failing to be sent, the pause menu is the only thing that
@@ -54,11 +58,19 @@ bytes rather than by argument:
 * it is not the module re-entrancy counter, which has 36 references image-wide and not one of them
   is a `cmp` or a `test`.
 
-Set `MusicLog=1` for one session when it happens. If the guard's repair line appears, a stuck pause
-was the cause after all and the mechanism that set it is worth finding. If it never appears while
-the music is looping, the pause latch is innocent and the defect is inside `IMUSE.DLL` or below it
-in the DirectSound path; this installation has DSOAL in the `dsound.dll` slot, which the engine
-cannot see and this DLL cannot repair.
+The cause is inside `IMUSE.DLL`, in the counter that gates its heartbeat. The heartbeat is the only
+thing that refills the music buffer, the buffer plays looping, and the counter is raised and lowered
+by two threads with plain uninterlocked instructions whose floor test means it can only ever get
+stuck too high. There is a second, deterministic way in: `ImSetParam` takes that lock before it
+range-checks and five of its refusals return without releasing it. Both are closed by
+`MusicLockFix`, the watchdog behind it is `MusicHeartbeatWatchdog`, and **Patching code another
+thread may be running** below says how the write is made safe.
+
+`MusicProbe=1` states the failure as two numbers, the heartbeat count and the lock, and writes
+nothing. If the count keeps advancing while the music is stuck, the lock is innocent and the defect
+is below it in the DirectSound path; this installation has DSOAL in the `dsound.dll` slot, which
+the engine cannot see and this DLL cannot repair. `MusicLog=1` separately reports a stuck pause
+latch, which is a different fault with the same sound.
 
 ## Supported executables
 
@@ -77,7 +89,7 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 | `OrphanGraceFrames` | `120` | 12-6000 | consecutive frames the ownerless state must persist first |
 | `MusicLog` | `0` | | one line per **change** of the music state, capped at 400 a session |
 | `MusicVolumeAcrossProvider` | `1` | | keep the music volume across a 3-D provider change. See **The provider change discards a slider move** |
-| `MusicHeartbeatWatchdog` | `1` | | the net behind the lock repair, and it only ever releases: when no heartbeat body has run for the time below while the timer keeps firing and the lock is held, the lock is written back to zero. Neither it nor the stall report judges anything until the heartbeat has been seen to run once, because the baseline is stamped at process start and the first frame can arrive seconds later, before the music has attached |
+| `MusicHeartbeatWatchdog` | `1` shipped, `0` for a file without the key | | the net behind the lock repair, and it only ever releases: when no heartbeat body has run for the time below while the timer keeps firing and the lock is held, the lock is written back to zero. Neither it nor the stall report judges anything until the heartbeat has been seen to run once, because the baseline is stamped at process start and the first frame can arrive seconds later, before the music has attached |
 | `MusicHeartbeatWatchdogMs` | `400` | 200-10000 | how long the body has to be silent first. Its own threshold: it used to be reachable only from inside the 1500 ms stall report, so every value under 1500 was dead, the shipped 400 included |
 | `MusicLockFix` | `1` | | the repair itself: both sides of the heartbeat lock made atomic, and the five parameter ranges whose refusal inside the DLL keeps the lock forever refused before they reach it. Two writes into the mapped DLL; if either half cannot be installed both are rolled back |
 | `MusicProbe` | `0` | | measurement: reads the heartbeat count and the lock once a frame and writes nothing, so a stall shows as two numbers |
@@ -87,8 +99,11 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 
 ## Engine locations
 
-Nothing is patched and nothing is detoured. Five sites are located by signature; two are **called**,
-five cells are **read**, and no byte of the image is written.
+The pause and the orphan guard patch nothing and detour nothing. Five sites are located by
+signature; two are **called**, five cells are **read**, and no byte of the host image is written
+for them. The two other things this DLL does are not so restrained: the volume restore places three
+detours in the host image, and the lock repair writes into the mapped `IMUSE.DLL`. Each has its own
+section below.
 
 | Site | What it gives |
 |---|---|
@@ -99,9 +114,10 @@ five cells are **read**, and no byte of the image is written.
 | `sys_pause` | read: the pause menu's own latch, which distinguishes an owned pause from an orphan |
 
 Cross-checks before any of it is believed: the pause latch is named by two independent patterns, the
-attached flag by three, and the re-entrancy counter by three. A disagreement refuses the whole
-install rather than picking a winner. Every resolved cell must also lie inside the host image and be
-readable.
+attached flag by three, and the re-entrancy counter by three. A disagreement about a cell the
+feature needs refuses the whole install rather than picking a winner; one about the optional cue
+getters drops the getters and says so. Every resolved cell must also lie inside the host image and
+be readable.
 
 Neither `bapMusicPause` nor `bapMusicResume` checks whether the music system is up; both call into
 `IMUSE.DLL` unconditionally. Nothing here calls either of them unless the attached flag reads

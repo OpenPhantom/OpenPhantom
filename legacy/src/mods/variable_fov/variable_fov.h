@@ -26,7 +26,9 @@ float variable_fov_extra_degrees(void);
 /* The horizontal field of view this canvas would have with NO offset at all, the pure result of
  * the aspect mode. The slider needs it to turn an absolute angle into an offset, and taking it
  * from here rather than subtracting the offset from the live value keeps the arithmetic honest
- * when the live value has been clamped. 0 = nothing has been computed yet, or STRETCH. */
+ * when the live value has been clamped. 0 = STRETCH, where there is no computed field. Before any
+ * projection has been built the canvas is unknown and fov_math answers the authored 60 instead,
+ * so a zero never means "not yet". */
 float variable_fov_base_horizontal_degrees(void);
 
 /* Sets the offset, rebuilds the projection immediately and writes the value back to the ini.

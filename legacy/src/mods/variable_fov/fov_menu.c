@@ -259,8 +259,9 @@ static float offset_for_notch(int notch)
 {
     float base = variable_fov_base_horizontal_degrees();
 
-    /* No base yet, or ASPECT_MODE_STRETCH, where there is no computed field to offset from. Fall
-     * back to treating the notch as the old pure offset rather than writing a wild number. */
+    /* ASPECT_MODE_STRETCH, where there is no computed field to offset from. It is the only way
+     * here: before a projection has been built the base is the authored 60, not zero. Fall back to
+     * treating the notch as the old pure offset rather than writing a wild number. */
     if (!(base > 0.0f)) {
         return (float)notch * NOTCH_STEP_DEGREES;
     }

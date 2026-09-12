@@ -11,6 +11,7 @@
 #include "diag_present.h"
 #include "diag_characters.h"
 #include "diag_camera_owner.h"
+#include "diag_footsteps.h"
 #include "diag_projectiles.h"
 #include "diag_world.h"
 
@@ -75,6 +76,8 @@ static void load_config(void)
                                                                                               : 0;
     diagnostics_state.camera_owner =
         ini_read_bool(DIAGNOSTICS_SECTION, "CameraOwner", false) ? 1 : 0;
+    diagnostics_state.footsteps =
+        ini_read_bool(DIAGNOSTICS_SECTION, "Footsteps", false) ? 1 : 0;
     diagnostics_state.characters = read_level_max("Characters", 2);
     diagnostics_state.characters_radius =
         ini_read_int(DIAGNOSTICS_SECTION, "CharactersRadius", DEFAULT_CHARACTERS_RADIUS);
@@ -137,7 +140,7 @@ static bool any_area_enabled(void)
             diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
             diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
             diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0 ||
-            diagnostics_state.camera_owner != 0);
+            diagnostics_state.camera_owner != 0 || diagnostics_state.footsteps != 0);
 }
 
 void diagnostics_install(void)
@@ -170,12 +173,13 @@ void diagnostics_install(void)
     diagnostics_installed = true;
 
     log_info("areas audio=%d music=%d trigger=%d fsm=%d level=%d player=%d dialogue=%d fx=%d "
-             "frame=%d present=%d projectiles=%d cameraOwner=%d | census=%dms max=%d lines/s",
+             "frame=%d present=%d projectiles=%d cameraOwner=%d footsteps=%d | census=%dms "
+             "max=%d lines/s",
              diagnostics_state.audio, diagnostics_state.music, diagnostics_state.trigger,
              diagnostics_state.fsm, diagnostics_state.level, diagnostics_state.player,
              diagnostics_state.dialogue, diagnostics_state.fx, diagnostics_state.frame,
              diagnostics_state.present, diagnostics_state.projectiles,
-             diagnostics_state.camera_owner,
+             diagnostics_state.camera_owner, diagnostics_state.footsteps,
              diagnostics_state.audio_census_ms, diagnostics_state.max_lines_per_second);
 
     observers += diag_audio_install(diagnostics_state.audio, diagnostics_state.audio_census_ms);
@@ -191,6 +195,7 @@ void diagnostics_install(void)
     observers += diag_present_install(diagnostics_state.present);
     observers += diag_projectiles_install(diagnostics_state.projectiles);
     observers += diag_camera_owner_install(diagnostics_state.camera_owner);
+    observers += diag_footsteps_install(diagnostics_state.footsteps);
     observers += diag_characters_install(diagnostics_state.characters,
                                          diagnostics_state.characters_radius,
                                          diagnostics_state.characters_watch,

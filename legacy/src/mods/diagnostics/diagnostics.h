@@ -53,6 +53,10 @@ typedef struct diagnostics_config {
      * shot the player has walked away from until the level reloads. See diag_camera_owner.c. */
     int  camera_owner;        /* 1 = on, no further levels                                      */
 
+    /* Where the wet footprints come from: the footstep tick's wet stamp as it happens, with the
+     * polygon and its material, and the start of each wet print spell. See diag_footsteps.c. */
+    int  footsteps;           /* 1 = on, no further levels                                      */
+
     /* The engine's own character pool, walked read only: who is standing near the player, what the
      * engine calls them, and whether they are gaining or losing height. See diag_characters.c. */
     int  characters;          /* 1 = the ones near the player, 2 = every live one               */

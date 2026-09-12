@@ -240,6 +240,7 @@ add_engine_fix(diagnostics
     diag_present.c
     diag_projectiles.c
     diag_camera_owner.c
+    diag_footsteps.c
     diag_characters.c
     character_scan.c
     debug_register.c

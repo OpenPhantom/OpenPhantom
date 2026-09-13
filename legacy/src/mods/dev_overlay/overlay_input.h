@@ -34,6 +34,12 @@ void overlay_input_set_key(int32_t virtual_key);
 /* Whether the panel is open right now. The frame hook asks this to decide whether to paint. */
 bool overlay_input_is_open(void);
 
+/* Whether an open panel is hidden: not drawn, while everything else about it stays. Only the free
+ * camera's flight can hide it, with the keys that would otherwise close it, and the hiding ends
+ * with the flight; this is where that end is noticed, so it is asked once per frame, by the same
+ * hook. */
+bool overlay_input_is_hidden(void);
+
 /* Closes the panel and releases the player. Called from the paint when the frame it would draw into
  * is not the one the player sees, so a level ending, a cutscene or a movie cannot leave the game
  * held with nothing on screen. */

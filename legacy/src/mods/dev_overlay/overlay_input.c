@@ -206,6 +206,7 @@ typedef struct overlay_input_state {
     uintptr_t         site;              /* the message hook, once resolved */
     uint32_t          modal;             /* the cell read out of it, as proof */
     bool              open;
+    bool              hidden;            /* open but not drawn, for as long as the camera flies */
     bool              saw_a_message;
     bool              search_focused;    /* whether a click has landed in the search field yet */
     detour_t          detour;
@@ -256,8 +257,12 @@ static overlay_input_state_t input_state;
  * out from under a camera that is still detoured and still flying, and the camera is left broken.
  * Field confirmed.
  *
- * So the two ways a PERSON closes the panel, Escape and the key that opened it, are refused while
- * the camera is on. Nothing is taken away: free camera cannot be switched on at all without a key
+ * So the two ways a PERSON closes the panel, Escape and the key that opened it, do not close it
+ * while the camera is on. They hide it instead: the panel stops being drawn and everything else
+ * about it stays as it is, the freeze, the pause and the keys it swallows, so the picture is the
+ * camera's alone and nothing under it has changed. The same two keys show it again, and it shows
+ * itself the moment the flight ends, so a panel that is holding the game is never one that
+ * cannot be seen. Nothing is taken away: free camera cannot be switched on at all without a key
  * bound (see cheats_openphantom_toggle), and F4 is always there besides, so the flight can always
  * be ended and the panel closes normally the moment it is. Ending the flight is the way out, and
  * it is the ONLY thing that was ever going to leave both halves consistent.
@@ -271,9 +276,18 @@ static bool free_camera_holds_panel(void)
     return cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
 }
 
+static void toggle_hidden(void)
+{
+    input_state.hidden = !input_state.hidden;
+    log_info("the overlay is %s while the free camera flies; the same key %s it again, and it "
+             "comes back when the flight ends",
+             input_state.hidden ? "hidden" : "shown", input_state.hidden ? "shows" : "hides");
+}
+
 static void set_open(bool open)
 {
     input_state.open = open;
+    input_state.hidden = false;
     input_state.search_focused = false;   /* every open starts unfocused; see the header comment
                                             * on overlay_input_search_focused() for why */
     input_freeze_set(open);
@@ -303,6 +317,15 @@ void overlay_input_close(void)
 bool overlay_input_is_open(void)
 {
     return input_state.open;
+}
+
+bool overlay_input_is_hidden(void)
+{
+    if (input_state.hidden && !free_camera_holds_panel()) {
+        input_state.hidden = false;
+        log_info("the overlay is shown again: the flight has ended");
+    }
+    return input_state.hidden;
 }
 
 /* The pointer comes from the system cursor, which is where the game's own menu pointer comes from.
@@ -591,7 +614,8 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         }
         if (wparam == KEY_ESCAPE) {
             if (free_camera_holds_panel()) {
-                return true;    /* swallowed, not acted on; see free_camera_holds_panel */
+                toggle_hidden();    /* not closed; see free_camera_holds_panel */
+                return true;
             }
             set_open(false);
             return true;
@@ -711,10 +735,7 @@ static int32_t __cdecl hook_key(uint32_t window, int32_t message, int32_t wparam
             return HANDLED;
         }
         if (input_state.open && free_camera_holds_panel()) {
-            /* Said once per attempt rather than silently swallowed: a key that does nothing needs
-             * to say why, and the panel itself cannot say it while the camera owns the screen. */
-            log_info("the overlay stayed open: the free camera is flying, and closing the panel "
-                     "would break it. End the flight first with your teleport key or F4");
+            toggle_hidden();
             return HANDLED;
         }
         log_info("the overlay was %s with key %02X",

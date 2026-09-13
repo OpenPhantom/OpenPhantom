@@ -90,7 +90,7 @@ static uintptr_t      scene_end_call;      /* the call that is redirected, once 
 
 static void __cdecl hook_scene_end(void)
 {
-    if (overlay_input_is_open()) {
+    if (overlay_input_is_open() && !overlay_input_is_hidden()) {
         /* The panel closes itself when it cannot be seen.
          *
          * This is one of three places the scene is closed from; the other two belong to the front

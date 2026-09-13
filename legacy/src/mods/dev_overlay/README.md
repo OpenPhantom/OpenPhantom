@@ -406,6 +406,12 @@ A fallback that always means the same thing is worth more than one more thing to
 Alt+F4 still closes the game, because Alt is not read here. With no key bound the cheat refuses
 to switch on at all.
 
+**Hiding the panel.** While the camera is flying the panel cannot be closed, because it is what
+holds the game still under the camera (see below). The open key and Escape hide it instead, so the
+picture is the camera's alone, and the same keys bring it back; it comes back by itself when the
+flight ends. Hidden is only not drawn: the freeze, the pause and the keys the panel swallows are
+all still there, so hiding is safe where closing is not.
+
 **One guard.** Mouse look measures the pointer's movement between frames
 against an anchor it re-centres each frame. Anything else that also moves the pointer, a cursor
 cage or another overlay, turns that difference into a constant that is not hand movement and that
@@ -962,7 +968,9 @@ Three things this needed that were each found in the field, not predicted:
   the key doing nothing.
 * The panel is locked open while the camera is flying: neither Escape nor the open key will close
   it, because closing it mid-flight leaves the camera stranded with no cursor to recover it. The
-  only ways out are the bound key and F4. The fly-controls fold now says so.
+  only ways out are the bound key and F4. The fly-controls fold now says so. Since 2026-09-14 the
+  two keys hide and show the panel instead of doing nothing; a person pressing them mid-flight
+  wanted the panel out of the picture, not the flight ended.
 
 Tested in game on Windows: teleport across a room, teleport onto a ledge, F4 from mid-air, and the
 panel refusing to close while flying.

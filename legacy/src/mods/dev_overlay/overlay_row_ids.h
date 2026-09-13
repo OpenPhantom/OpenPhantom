@@ -65,11 +65,12 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
  * same for the way back out, since once free camera is on, this fold is the only place left that
  * still says which key does that. */
 #define INFO_ROW_ID (FREECAM_ROW_ID + 1u)
-/* Nine lines, not six, because two of them describe the two ways out and each is a sentence wider
- * than the panel. A line that does not fit is drawn clipped, running off the edge of the box with
- * no ellipsis and no wrap, so the reader loses the end of exactly the sentence that tells them how
- * to get out. Each is written as a line plus a continuation indented two spaces instead. */
-#define FREECAM_INFO_LINE_COUNT 9u
+/* Eleven lines, not seven, because three of them describe hiding the panel and the two ways out,
+ * and each is a sentence wider than the panel. A line that does not fit is drawn clipped, running
+ * off the edge of the box with no ellipsis and no wrap, so the reader loses the end of exactly
+ * the sentence that tells them how to get out. Each is written as a line plus a continuation
+ * indented two spaces instead. */
+#define FREECAM_INFO_LINE_COUNT 11u
 
 /* The rows the OpenPhantom group holds that are not one of its own cheats: the jump-boost scale,
  * the free-camera teleport key, the "how to fly" fold and "Skip to next level". Named rather than

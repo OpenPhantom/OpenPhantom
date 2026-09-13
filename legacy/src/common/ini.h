@@ -5,6 +5,11 @@
  *
  * This module knows nothing about what any key means. Range checks, NaN handling and semantic
  * validation belong to the feature that owns the value.
+ *
+ * Reads are remembered per key and asked of the file again only when its write time has moved,
+ * checked at most ten times a second, or when this DLL wrote it. A caller may read a key every
+ * frame; under Wine the profile API opens the file on every call, and the developer panel's rows
+ * did exactly that.
  */
 #ifndef COMMON_INI_H
 #define COMMON_INI_H

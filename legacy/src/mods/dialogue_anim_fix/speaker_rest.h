@@ -11,16 +11,19 @@
  *
  * So this applies the menu rule to the scripted path. Everyone who has spoken is watched:
  * whenever their body has sat for half a second on a clip the engine itself has parked, while
- * they are not the one talking, one of two things. The stand itself, clip 0, put on by the
- * script in its play-once mode, has the freeze bit taken off its track and carries on from
- * where it stopped, no new clip, no crossfade. Anything else, a one-shot gesture or a talk clip
- * the script froze to end the talking, is followed by clip 0 with the clip's own flags, through
+ * they are not the one talking, one of two things. The stand itself, put on by the script in
+ * its play-once mode, has the freeze bit taken off its track and carries on from where it
+ * stopped, no new clip, no crossfade. Anything else, a one-shot gesture or a talk clip the
+ * script froze to end the talking, is followed by the stand with the clip's own flags, through
  * the crossfade the script interpreter uses; the talk clip the moment the voice ends, the
- * gesture once its pass is done. "Parked" is the engine's own mark, not a guess: the track's clock
- * pinned at the clip's last frame by the freeze bit or the hold bit. A walk, a run, a loop or a
- * gesture still in flight is never at its end for longer than a frame, so a moving body is never
- * touched; a first version tested "complete and not looping" and stopped walking characters,
- * because a walk wraps without a loop flag. A body on its death clip is left down.
+ * gesture once its pass is done. The stand is the model's unarmed one where it has one, found
+ * by name, else clip 0, the engine's own idle: an armed character's model has the armed stance
+ * as clip 0, right in play and wrong in a scene with his hands empty. "Parked" is the engine's
+ * own mark, not a guess: the track's clock pinned at the clip's last frame by the freeze bit or
+ * the hold bit. A walk, a run, a loop or a gesture still in flight is never at its end for
+ * longer than a frame, so a moving body is never touched; a first version tested "complete and
+ * not looping" and stopped walking characters, because a walk wraps without a loop flag. A body
+ * on its death clip is left down.
  *
  * Not only while the scene lasts. A first version let go of everyone the moment the scene's
  * lock dropped, and the last speaker of every conversation stayed frozen on the look-around the

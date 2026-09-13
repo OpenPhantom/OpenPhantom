@@ -21,6 +21,7 @@
 #define KEYFRAME_NAME_SIZE           0x24u
 #define CLIP_TABLE_LIMIT             256
 #define STAND_CLIP                   0       /* the engine's own idle: clip 0 of every model */
+#define CLIP_FLAG_LOOP               0x04u
 
 /* The puppet track, the engine's own marks of a parked clip. The mode word at +0x13C is copied
  * from the clip and then given bit 0x01 by the scene's Animation opcode in its play-once mode;
@@ -55,6 +56,7 @@ static struct {
 } rest;
 
 static bool clip_is_death(uint32_t body, int32_t index);
+static int32_t rest_clip_of(uint32_t body);
 
 void speaker_rest_install(speaker_play_clip_fn_t play_clip)
 {
@@ -80,11 +82,13 @@ void speaker_rest_note_line_end(uint32_t body, uintptr_t track)
         /* A looping clip in the play-once mode is a talk clip the script froze to end the
          * talking, and the pass running when the voice stops would nod on past it. The engine
          * drops a menu-line speaker to the stand the moment the voice ends; so does this. */
-        rest.play_clip(body, STAND_CLIP, PLAY_CLIP_CROSSFADE);
+        int32_t stand = rest_clip_of(body);
+
+        rest.play_clip(body, stand, PLAY_CLIP_CROSSFADE);
         ++rest.rests;
         log_info("speaker %08X's voice ended on clip %d, a talk clip in the play-once mode: cut "
-                 "with the voice, the body goes to its stand, clip 0 (rest %u)", (unsigned)body,
-                 (int)clip, (unsigned)rest.rests);
+                 "with the voice, the body goes to its stand, clip %d (rest %u)", (unsigned)body,
+                 (int)clip, (int)stand, (unsigned)rest.rests);
     }
     for (i = 0; i < WATCHED_LIMIT; ++i) {
         if (rest.watched[i].body == body) {
@@ -150,6 +154,45 @@ static bool clip_name_of(uint32_t body, int32_t index, char name[KEYFRAME_NAME_S
            memory_try_read((uintptr_t)clip + CLIP_TRACK_FLAGS_OFFSET, flags, sizeof *flags);
 }
 
+/* The clip a body rests on: the model's unarmed stand where it has one, else clip 0, the
+ * engine's own idle. An armed character's model has the armed stance as clip 0, quiweap.baf's
+ * obwstnd2 for one, which is right for him in play with the sabre in his hand and wrong in a
+ * scene with his hands empty; the same model carries qufstnd1, which Theed's own script uses
+ * for him between lines. A stand is a clip with "stnd" or "stand" in its name; an armed one
+ * says so in the name too: wp, sbr, obw, baz, gun. A looping one is preferred. */
+static int32_t rest_clip_of(uint32_t body)
+{
+    static const char *const ARMED[] = { "wp", "sbr", "obw", "baz", "gun" };
+    int32_t  first_named = -1;
+    int32_t  i;
+    char     name[KEYFRAME_NAME_SIZE + 1];
+    uint32_t flags = 0;
+
+    for (i = 0; i < CLIP_TABLE_LIMIT && clip_name_of(body, i, name, &flags); ++i) {
+        size_t k;
+        bool   armed = false;
+
+        if (!name_has(name, "stnd") && !name_has(name, "stand")) {
+            continue;
+        }
+        for (k = 0; k < sizeof ARMED / sizeof ARMED[0]; ++k) {
+            if (name_has(name, ARMED[k])) {
+                armed = true;
+            }
+        }
+        if (armed) {
+            continue;
+        }
+        if ((flags & CLIP_FLAG_LOOP) != 0) {
+            return i;
+        }
+        if (first_named < 0) {
+            first_named = i;
+        }
+    }
+    return first_named >= 0 ? first_named : STAND_CLIP;
+}
+
 /* A body parked on its death is left there. The names are the models' own: nc2die1, shmdie1,
  * ankdie1, death1 to death3. A scene actor carries no health cell to ask instead. */
 static bool clip_is_death(uint32_t body, int32_t index)
@@ -192,6 +235,7 @@ static bool settle(int i, uint32_t speaker, uintptr_t (*body_track)(uint32_t), D
     uintptr_t track = body_track(body);
     uint32_t flags = 0;
     uint32_t mode = 0;
+    int32_t  stand;
 
     if (now - rest.watched[i].last_line_ms > WATCH_LIMIT_MS) {
         return true;
@@ -213,7 +257,8 @@ static bool settle(int i, uint32_t speaker, uintptr_t (*body_track)(uint32_t), D
     if (clip_is_death(body, clip)) {
         return true;
     }
-    if (clip == STAND_CLIP && (flags & TRACK_FLAG_HELD) == 0) {
+    stand = rest_clip_of(body);
+    if (clip == stand && (flags & TRACK_FLAG_HELD) == 0) {
         /* The stand itself, put on by the script in its play-once mode and frozen after one
          * pass. The freeze bit comes off and the stand carries on from where it stopped, as
          * the model authored it; no new clip, no crossfade. The opcode only sets the bit when
@@ -223,17 +268,17 @@ static bool settle(int i, uint32_t speaker, uintptr_t (*body_track)(uint32_t), D
         *(volatile uint32_t *)(track + TRACK_MODE_OFFSET) = mode & ~TRACK_MODE_HOLD_END;
         ++rest.rests;
         rest.watched[i].parked_clip = -1;
-        log_info("speaker %08X was parked on their stand, clip 0, which the script put on in "
+        log_info("speaker %08X was parked on their stand, clip %d, which the script put on in "
                  "its play-once mode: the freeze comes off and the stand carries on (rest %u)",
-                 (unsigned)body, (unsigned)rest.rests);
+                 (unsigned)body, (int)stand, (unsigned)rest.rests);
         return false;
     }
-    rest.play_clip(body, STAND_CLIP, PLAY_CLIP_CROSSFADE);
+    rest.play_clip(body, stand, PLAY_CLIP_CROSSFADE);
     ++rest.rests;
     rest.watched[i].parked_clip = -1;
     log_info("speaker %08X was parked on clip %d, held on its last frame, and nothing followed "
-             "it: the body goes to its stand, clip 0, with the clip's own flags (rest %u)",
-             (unsigned)body, (int)clip, (unsigned)rest.rests);
+             "it: the body goes to its stand, clip %d, with the clip's own flags (rest %u)",
+             (unsigned)body, (int)clip, (int)stand, (unsigned)rest.rests);
     return false;                               /* watched on, for the next parking */
 }
 

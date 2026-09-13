@@ -31,7 +31,7 @@ catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "
 | `Enabled` | `1` | | |
 | `HoldSeconds` | `3.0` | 0.5-30.0 | how long with nobody speaking before the fix disarms itself for the rest of the level, in a scene whose exchange ends (Mos Espa; the jail row never disarms, since the parked node lasts the level) |
 | `SpeakerGestureRepeat` | `1` | | a speaker keeps animating for the whole of their line: while a body holds the speaker lock and the voice has at least the clip's length still to play, a clip that has played through on it is started again (issue 23). Whoever is speaking, in every scene, and never past the line. `0` leaves a gesture holding its last frame |
-| `SpeakerRest` | `1` | | a speaker left frozen after their line goes to their idle: once their body has sat half a second on a clip the engine has parked, while they are not the one talking, a frozen stand has the freeze taken off, and anything else parked is followed by clip 0, the stand, with its own flags. The engine's own rule after a menu line, applied to scripted lines. `0` leaves them frozen, as the scripts shipped |
+| `SpeakerRest` | `1` | | a speaker left frozen after their line goes to their idle: once their body has sat half a second on a clip the engine has parked, while they are not the one talking, a frozen stand has the freeze taken off, and anything else parked is followed by the stand with its own flags, the model's unarmed one where it has one, else clip 0. The engine's own rule after a menu line, applied to scripted lines. `0` leaves them frozen, as the scripts shipped |
 
 ## Engine locations
 
@@ -232,7 +232,17 @@ uses. Only the stand is unfrozen: talk clips are flagged to loop as well, and th
 how the script ends the talking; a first version unfroze those too and Qui-Gon talked on after
 his line in Theed. A talk clip of that kind is not even given the half second: the pass running
 when the voice stops would nod on past it, so it is cut with the voice, straight to the stand,
-which is when the engine drops a menu-line speaker too. "Parked" is the
+which is when the engine drops a menu-line speaker too.
+
+The stand is not always clip 0. Qui-Gon is three models: `quigon.baf`, whose clip 0 is the unarmed
+`stnd-no1`; `quiweap.baf`, the armed NPC of the ship and Theed, whose clip 0 is `obwstnd2`, the
+sabre stance; and `quifinal.baf` for the duel, the same stance. The engine's idle is clip 0, and
+for an armed model that is the armed stance, right for him in play with the sabre in his hand and
+wrong in a scene with his hands empty, which is where the first build put him. `quiweap.baf` also
+carries `qufstnd1`, the unarmed stand Theed's own script uses for him between lines, so the rest
+target is the model's unarmed stand where it has one: a clip named as a stand (`stnd`, `stand`)
+that is not named for a weapon (`wp`, `sbr`, `obw`, `baz`, `gun`), a looping one first. A model
+without one, the duel's among them, rests on clip 0. "Parked" is the
 track's clock pinned at the clip's last frame under the freeze or hold bit, which nothing that
 moves ever has for more than a frame. The half second is for scripts that follow a line with a
 clip of their own. A body on its death clip is left down. The log names every rest with the body
@@ -271,8 +281,9 @@ his last line took its freeze off and kept turning his head to the end of the sc
 first level's opening, where two speakers' one-shot gestures went to their stands, a walk was
 left alone, and a stand the script froze at the end of the walk was unfrozen (a third body whose
 script put a looping stance on it was never touched, as the log showed); in Theed, where the
-talk clip cut with the voice; and then through every in-engine cutscene and every level's
-opening in one sitting, with nothing wrong to report.
+talk clip cut with the voice; then through every in-engine cutscene and every level's opening in
+one sitting, with nothing wrong to report; and the ship and Theed again once the unarmed stand
+replaced the sabre stance.
 
 The jail was traced before it was added: the prisoner's placement is `enemy031`, his model
 `nabcit2.3do`, his script mode goes to 7 on his second bark and stays there for the rest of the

@@ -3,13 +3,15 @@
  * A scene puts a short clip on a speaker's body when their line starts, a stand fidget or a
  * cutscene gesture of two or three seconds authored as one pass, and the body holds the last
  * frame of it for the rest of the line. A long line is spoken standing still from a third of
- * the way in (issue 23). While a body holds the conversation's speaker lock and the voice is
- * still playing, a clip that has played through on it is started again, so the gesture runs
- * for as long as the line does. Whoever is speaking: the player character's lines in a scene
- * are spoken through a scene actor of their own, and the other actors' lines through theirs.
+ * the way in (issue 23). While a body holds the conversation's speaker lock and the voice has
+ * at least the clip's length still to play, a clip that has played through on it is started
+ * again, so the gesture runs for as long as the line does and never past it. Whoever is
+ * speaking: the player character's lines in a scene are spoken through a scene actor of their
+ * own, and the other actors' lines through theirs.
  *
- * A script waiting on that clip's completion is delayed until the voice ends, which is the
- * pacing the scene already has; nothing else the script does is touched.
+ * Each pass ends as the scene's own did, held on its last frame, and the last one ends before
+ * the voice does; a script waiting on the clip's completion sees it at most a pass later than
+ * it would have. Nothing else the script does is touched.
  */
 #ifndef SPEAKER_GESTURE_H
 #define SPEAKER_GESTURE_H

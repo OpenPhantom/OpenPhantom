@@ -542,8 +542,8 @@ static void test_open_freecam_fold(void)
     ut_check(overlay_model_row_count() ==
                  4u + (uint32_t)CHEATS_OWN_COUNT + 4u + 11u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary and its eleven lines and the skip-to-next-level action are all "
-             "on screen, with the utilities heading below them");
+             "the fold's own summary and its eleven lines and the skip-to-next-level action are "
+             "all on screen, with the utilities heading below them");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");

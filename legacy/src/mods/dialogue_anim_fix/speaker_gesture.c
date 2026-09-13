@@ -373,6 +373,14 @@ static bool bind_voice_clock(void)
     return true;
 }
 
+void speaker_gesture_level_changed(void)
+{
+    gesture.line_speaker      = 0;
+    gesture.line_replays      = 0;
+    gesture.line_held_seconds = 0.0f;
+    speaker_rest_forget_all();
+}
+
 bool speaker_gesture_install(const volatile uint32_t *speaker_lock, bool repeat, bool rest)
 {
     uint32_t bark = 0;

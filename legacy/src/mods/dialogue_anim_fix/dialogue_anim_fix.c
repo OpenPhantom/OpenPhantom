@@ -527,6 +527,7 @@ static int32_t __cdecl hook_level_load(const char *path)
     }
     fix_state.armed = (fix_state.scope != NULL);
     release_all_tracked_actors();
+    speaker_gesture_level_changed();
     fix_state.last_dialogue_activity_tick = 0;
     if (fix_state.armed) {
         log_info("dialogue_anim_fix: armed for \"%s\", watching for %s%s%s%s%s", path,

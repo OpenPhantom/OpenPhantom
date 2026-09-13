@@ -63,6 +63,11 @@ void speaker_rest_install(speaker_play_clip_fn_t play_clip)
     rest.play_clip = play_clip;
 }
 
+void speaker_rest_forget_all(void)
+{
+    memset(rest.watched, 0, sizeof rest.watched);
+}
+
 void speaker_rest_note_line_end(uint32_t body, uintptr_t track)
 {
     int      slot = -1;

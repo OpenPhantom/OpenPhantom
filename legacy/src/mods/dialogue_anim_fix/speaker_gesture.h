@@ -24,4 +24,8 @@
  * the same per-frame check. Returns true when that check is in place. */
 bool speaker_gesture_install(const volatile uint32_t *speaker_lock, bool repeat, bool rest);
 
+/* A level is being loaded: every body followed here belongs to the level going away, so the
+ * line in progress and the rest's watch list are dropped before their memory is reused. */
+void speaker_gesture_level_changed(void);
+
 #endif /* SPEAKER_GESTURE_H */

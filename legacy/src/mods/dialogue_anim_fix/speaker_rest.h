@@ -47,6 +47,9 @@ void speaker_rest_install(speaker_play_clip_fn_t play_clip);
  * a menu line. */
 void speaker_rest_note_line_end(uint32_t body, uintptr_t track);
 
+/* Every watched body is let go, unplayed: the level that owned them is going away. */
+void speaker_rest_forget_all(void);
+
 /* Once a frame. `speaker` is the body holding the speaker lock while a voice plays, 0 when
  * none; `body_track` gives the puppet track a body's base clip is on, 0 when it does not read. */
 void speaker_rest_on_frame(uint32_t speaker, uintptr_t (*body_track)(uint32_t body));

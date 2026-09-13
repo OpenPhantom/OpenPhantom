@@ -540,9 +540,9 @@ static void test_open_freecam_fold(void)
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 4u + (uint32_t)CHEATS_OWN_COUNT + 4u + 9u,
+                 4u + (uint32_t)CHEATS_OWN_COUNT + 4u + 11u,
              "open, the heading, the cheats, the scale row, the hotkey row, free camera's own row, "
-             "the fold's own summary and its nine lines and the skip-to-next-level action are all "
+             "the fold's own summary and its eleven lines and the skip-to-next-level action are all "
              "on screen, with the utilities heading below them");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 3u, &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
@@ -557,23 +557,27 @@ static void test_open_freecam_fold(void)
              "the first line sits immediately below the summary, not at the end of the group");
     ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 4u),
              "but a line itself does nothing when clicked; only the summary is interactive");
-    /* Nine lines, not six: the two that describe the two ways out are each a sentence too long to
-       fit the panel's width, so each is written as a line plus an indented continuation rather
-       than being allowed to run off the edge. The count is what this pins down: a line added
-       without the rows below it moving is the failure that would otherwise go unseen. */
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 11u, &row) &&
+    /* Eleven lines, not seven: the three that describe hiding the panel and the two ways out are
+       each a sentence too long to fit the panel's width, so each is written as a line plus an
+       indented continuation instead of being allowed to run off the edge. The count is what this
+       pins down: a line added without the rows below it moving is the failure that would
+       otherwise go unseen. */
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 9u, &row) &&
+                 strcmp(row.label, "    Your dev menu open key or Escape") == 0,
+             "the sixth line names the key that hides the panel while the camera flies");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 13u, &row) &&
                  strcmp(row.label, "    F4 ends the flight and leaves") == 0,
-             "the eighth line names the other way out, the one that leaves the player put");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 12u, &row) &&
+             "the tenth line names the other way out, the one that leaves the player put");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 14u, &row) &&
                  strcmp(row.label, "      the player where they were") == 0,
-             "and the ninth is its continuation, indented past the line it finishes");
+             "and the eleventh is its continuation, indented past the line it finishes");
 
     /* The rows that were below the summary are still below the lines, in the order they had. A
        fold that reorders the rows around it would be worse than one that does not open. */
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 13u, &row) &&
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 15u, &row) &&
                  row.kind == OVERLAY_ROW_ACTION,
-             "the skip-to-next-level action is pushed down the screen by the nine lines");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 14u, &row) &&
+             "the skip-to-next-level action is pushed down the screen by the eleven lines");
+    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 16u, &row) &&
                  row.kind == OVERLAY_ROW_GROUP,
              "and the utilities heading after it, which is the whole tab accounted for");
 }
@@ -585,7 +589,7 @@ static void test_close_freecam_fold(void)
              "the same summary row closes it back up");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == 4u + (uint32_t)CHEATS_OWN_COUNT + 4u,
-             "its nine lines are gone again, back to costing one row like any other cheat");
+             "its eleven lines are gone again, back to costing one row like any other cheat");
 }
 
 static void test_group_folds_back(void)
@@ -707,7 +711,7 @@ static void test_labels_and_chips_fit(void)
     overlay_model_rebuild();
     check_every_row_fits("the OpenPhantom tab");
 
-    /* And with the fold open, whose nine lines are the longest text in the panel and the only
+    /* And with the fold open, whose eleven lines are the longest text in the panel and the only
        rows that are sometimes absent. */
     (void)overlay_model_activate((uint32_t)CHEATS_OWN_COUNT + 3u);
     overlay_model_rebuild();

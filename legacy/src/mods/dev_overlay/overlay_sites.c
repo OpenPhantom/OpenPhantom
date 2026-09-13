@@ -61,6 +61,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
+#include "common/screen_fill.h"
 #include "common/signature.h"
 
 #include <stdbool.h>
@@ -473,6 +474,7 @@ bool overlay_draw_resolve(void)
     }
 
     draw_state.quad = (draw_quad_fn_t)quad;
+    (void)screen_fill_resolve(quad);
     draw_state.select = (select_fn_t)select;
     draw_state.colour = (set_colour_fn_t)colour;
     draw_state.text = (draw_text_fn_t)text;

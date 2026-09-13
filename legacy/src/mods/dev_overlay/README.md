@@ -74,6 +74,16 @@ six call sites reach it and five lie inside the fade and letterbox module, which
 filled shapes. One of those sites cleans 24 bytes after the call, which is where the six arguments
 and the calling convention come from.
 
+**The fills are drawn with our own vertices, through the routine's own three calls.** The routine
+writes every vertex with `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`, the far plane. NVIDIA
+and AMD draw that; an Intel UHD laptop drew the panel's text and pointer (the font layer and a
+textured sprite) with none of its fills, and the movie player's post-movie curtain vanished with
+them, which showed as the character dropping in after a movie. `common/screen_fill.c` reads the
+three calls the routine's immediate arm makes (the render state word, no texture, a triangle fan
+of transformed vertices) out of its body, checks the bytes around each first, and makes the same
+calls with `z = 0` and `rhw = 1`, the values Direct3D defines for a transformed vertex. If the arm
+ever fails to read, the routine itself is called as before and the log says so.
+
 **Text is not drawn in pixels by default.** The font layer keeps a position scale and a glyph scale,
 and the layer below it multiplies every glyph by the display over 640 by 480 before it draws *or
 measures*. Both scales, the alignment and the font itself are set before every string **and before

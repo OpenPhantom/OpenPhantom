@@ -27,6 +27,8 @@
 #include "overlay_model.h"
 #include "overlay_sites.h"
 
+#include "common/screen_fill.h"
+
 #include <stdbool.h>
 #include <string.h>
 #include <stddef.h>
@@ -213,20 +215,17 @@ static float measured_text_height(void)
     return height;
 }
 
-/* The sixth argument is a flag, not a layer, and this had it backwards once. Non zero draws the
- * shape there and then; zero puts it into the engine's deferred, sorted queue, which is not where a
- * fixed overlay belongs. The game's own menu backdrop passes one. */
-#define OVERLAY_DRAW_NOW 1
-
 /* The engine's own numbers for its pointer, taken from the four lines its menus draw it with. */
 #define CURSOR_SIZE   32.0f
 #define CURSOR_COLOUR 0xF0FFFFFFu
 #define CURSOR_FILL   1.0f
 
 
+/* Through common/screen_fill.c, which calls the routine's own three calls with vertices every
+ * driver draws; the routine's own vertices lost every fill on an Intel UHD laptop. */
 static void fill(float x0, float y0, float x1, float y1, uint32_t argb)
 {
-    draw_state.quad(x0, y0, x1, y1, argb, OVERLAY_DRAW_NOW);
+    screen_fill(x0, y0, x1, y1, argb);
 }
 
 /* The scales are set on every string rather than once per paint. Anything else drawn in the same

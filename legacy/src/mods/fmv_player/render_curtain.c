@@ -27,6 +27,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
+#include "common/screen_fill.h"
 #include "common/signature.h"
 
 #include <windows.h>
@@ -91,7 +92,6 @@ _Static_assert(sizeof SIG_SCREEN_SIZE == sizeof MSK_SCREEN_SIZE,
 #define OFFSET_SCREEN_HEIGHT 1u
 #define OFFSET_SCREEN_WIDTH  8u
 
-#define OVERLAY_DRAW_NOW 1
 #define CALL_REL32_OPCODE 0xE8u
 #define CALL_REL32_LENGTH  5u
 
@@ -192,8 +192,7 @@ static void __cdecl hook_scene_end(void)
                   *curtain_state.screen_h > 0.0f) {
             uint32_t argb = curtain_state.fading ? fade_argb(now) : 0xFF000000u;
 
-            curtain_state.quad(0.0f, 0.0f, *curtain_state.screen_w, *curtain_state.screen_h, argb,
-                               OVERLAY_DRAW_NOW);
+            screen_fill(0.0f, 0.0f, *curtain_state.screen_w, *curtain_state.screen_h, argb);
         }
     }
     curtain_state.scene_end_original();
@@ -257,6 +256,7 @@ void render_curtain_install(void)
     }
 
     curtain_state.quad = (draw_quad_fn_t)quad_site;
+    (void)screen_fill_resolve(quad_site);
     curtain_state.screen_w = (const volatile float *)(uintptr_t)width_cell;
     curtain_state.screen_h = (const volatile float *)(uintptr_t)height_cell;
     curtain_state.resolved = true;

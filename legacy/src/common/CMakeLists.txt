@@ -21,6 +21,7 @@ add_library(engine_fixes_common STATIC
     cinematic_gate.c
     stick.c
     text.c
+    screen_fill.c
 )
 
 target_include_directories(engine_fixes_common PUBLIC

@@ -273,7 +273,10 @@ frame. `render_curtain.c` instead redirects the same call `dev_overlay`'s own ch
 the one that closes the scene right before the page is shown, and draws a full-screen rectangle
 through the engine's own filled-shape primitive (`0x00419660`, byte-identical to
 `dev_overlay/overlay_sites.c`'s own `SIG_DRAW_QUAD`; what the game draws its own letterbox bars and
-screen tint with), packed ARGB with the alpha carrying the fade. That is real content on the frame
+screen tint with), packed ARGB with the alpha carrying the fade. The vertices are our own, through
+`common/screen_fill.c`: the routine's own carry `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`,
+which an Intel UHD laptop refused to draw, so its player saw the drop-in the curtain exists to
+hide; see that file's header. That is real content on the frame
 the game actually presents, so any capture method shows exactly what the player sees, and a cheat
 panel opened on top of it still draws on top, for the same reason: this file's hook runs as the
 outer wrapper (loading after "dev_overlay" alphabetically), draws its own quad, then calls through

@@ -380,6 +380,7 @@ typedef struct dialogue_anim_fix_state {
 
     uint32_t hold_ms;
     bool     speaker_gesture;     /* SpeakerGestureRepeat: a speaker animates for a whole line */
+    bool     speaker_rest;        /* SpeakerRest: a parked speaker in a scene goes to clip 0 */
     DWORD    last_dialogue_activity_tick;   /* 0 = no dialogue observed since the last arm or
                                              * release */
 
@@ -406,6 +407,7 @@ static void load_config(void)
     fix_state.hold_ms = (uint32_t)(hold_seconds * 1000.0f);
     fix_state.speaker_gesture = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerGestureRepeat",
                                               true);
+    fix_state.speaker_rest    = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerRest", true);
 }
 
 /* Every tracked actor is let go: this fix's hands come off them completely until the level is
@@ -815,12 +817,16 @@ void dialogue_anim_fix_install(void)
     if (!resolve_dialogue_cells()) {
         return;
     }
-    if (fix_state.speaker_gesture) {
-        (void)speaker_gesture_install(fix_state.current_speaker);
-    } else {
+    if (!fix_state.speaker_gesture) {
         log_info("SpeakerGestureRepeat=0, a gesture on a speaker's line holds its last frame "
                  "once it has played through, as the engine shipped");
     }
+    if (!fix_state.speaker_rest) {
+        log_info("SpeakerRest=0, a speaker parked on that last frame in a scene stays there, as "
+                 "the scripts shipped");
+    }
+    (void)speaker_gesture_install(fix_state.current_speaker, fix_state.speaker_gesture,
+                                  fix_state.speaker_rest);
 
     if (sites[SITE_LEVEL_LOAD].address != 0) {
         if (!detour_install(&fix_state.level_load, sites[SITE_LEVEL_LOAD].address,

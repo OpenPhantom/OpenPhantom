@@ -1,14 +1,16 @@
 # dialogue_anim_fix
 
 **Produces:** `dialogue_anim_fix.dll` -> `mods\`, from `dialogue_anim_fix.c` (the hold),
-`idle_clip.c` (the generated idle the jail row rests on) and `speaker_gesture.c` (a speaker
-animates for the whole of their line).
+`idle_clip.c` (the generated idle the jail row rests on), `speaker_gesture.c` (a speaker animates
+for the whole of their line) and `speaker_rest.c` (a speaker left frozen after their line goes to
+their idle).
 
-Two faults, one narrow and one wide. A character whose script parks on its talking animation and
+Three faults, one narrow and two wide. A character whose script parks on its talking animation and
 never leaves it: two scenes are known and the hold acts in exactly those two, on purpose; see "Why
-this narrow" below. And a speaker whose gesture plays through part way into a long line and holds
-its last frame for the rest of it: every scene does that, and the gesture repeat acts on whoever
-holds the speaker lock.
+this narrow" below. A speaker whose gesture plays through part way into a long line and holds its
+last frame for the rest of it: every scene does that, and the gesture repeat acts on whoever holds
+the speaker lock. And a speaker left frozen once their line is over, through the reply and after
+the exchange: nearly every scripted line does that, and the rest acts on whoever has spoken.
 
 * Level 6, Mos Espa, the opening in-engine cutscene: Obi-Wan and Qui-Gon talk, and Obi-Wan's head
   keeps moving as if he were still talking during Qui-Gon's own line.
@@ -29,6 +31,7 @@ catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "
 | `Enabled` | `1` | | |
 | `HoldSeconds` | `3.0` | 0.5-30.0 | how long with nobody speaking before the fix disarms itself for the rest of the level, in a scene whose exchange ends (Mos Espa; the jail row never disarms, since the parked node lasts the level) |
 | `SpeakerGestureRepeat` | `1` | | a speaker keeps animating for the whole of their line: while a body holds the speaker lock and the voice has at least the clip's length still to play, a clip that has played through on it is started again (issue 23). Whoever is speaking, in every scene, and never past the line. `0` leaves a gesture holding its last frame |
+| `SpeakerRest` | `1` | | a speaker left frozen after their line goes to their idle: once their body has sat half a second on a clip the engine has parked, while they are not the one talking, a frozen stand has the freeze taken off, and anything else parked is followed by clip 0, the stand, with its own flags. The engine's own rule after a menu line, applied to scripted lines. `0` leaves them frozen, as the scripts shipped |
 
 ## Engine locations
 
@@ -201,10 +204,49 @@ that leaves at least the clip's length, with 0.2 s of grace for the crossfade. T
 held on its last frame before the voice does, as the one pass the scene started always did, and
 the log names each line with the clip, the replays and how long that final hold was.
 
-What follows the line is the scene's own: a speaker is left on the last frame of their gesture
-until their script or their character's behaviour puts the next clip on, and most scripts put
-nothing. An attempt to put the model's stand on after a line was tried and withdrawn the same
-day: clips that wrap without a loop flag, walks among them, read as parked and were stopped.
+## The speaker who freezes once the line is over
+
+Researched before it was built, after a first attempt at it was withdrawn (below). The engine has
+two dialogue paths and they differ. After a menu line (opcode 0x500, the branching conversations
+the player drives) the engine itself drops the speaker's clip latch to 0, the model's stand, the
+moment the voice ends (`ai_runMenu`, game/enemy.c in the recreation), so the speaker idles as any
+character does. After a scripted line (opcode 0x504) it plays the voice and touches no clip: what
+the script put on the body stays. Decoding every level's scripts: of the 2119 scripted lines in
+the game, 47% are followed by an Animation opcode in its play-once mode, which adds a freeze bit
+to the track that the puppet tests before the clip's own loop flag, so even a looping stand plays
+one pass and pins its clock on the last frame; 33% by a walk; 2% ever reach a looping stand
+through the script. Mos Espa's scripts put Qui-Gon's stand on him that way after his last line,
+and he stood frozen from Shmi's "thank you" to the end of the scene. It was confirmed in the
+shipped game, with framerate_fix out, before anything was written: talk, one pass of the stand,
+nothing. The stands themselves are not still: Qui-Gon's turns his head 25 degrees every 2.9
+seconds, most townsfolk stands 30 to 50; about a dozen minor models have a still one.
+
+`speaker_rest.c` applies the menu rule to the scripted path. Everyone who has spoken is watched
+for a minute after their last line. Whenever their body has sat half a second on a clip the
+engine has parked, while they are not the one talking, one of two things: the stand itself, put
+on by the script in its play-once mode, has the freeze bit taken off its track and loops on from
+where it stopped, no new clip, no crossfade (the opcode only sets the bit when it starts a clip,
+so it does not come back); anything else, a one-shot gesture or a talk clip the script froze, is
+followed by clip 0 with the clip's own flags, through the crossfade the script interpreter itself
+uses. Only the stand is unfrozen: talk clips are flagged to loop as well, and the freeze on one is
+how the script ends the talking; a first version unfroze those too and Qui-Gon talked on after
+his line in Theed. A talk clip of that kind is not even given the half second: the pass running
+when the voice stops would nod on past it, so it is cut with the voice, straight to the stand,
+which is when the engine drops a menu-line speaker too. "Parked" is the
+track's clock pinned at the clip's last frame under the freeze or hold bit, which nothing that
+moves ever has for more than a frame. The half second is for scripts that follow a line with a
+clip of their own. A body on its death clip is left down. The log names every rest with the body
+and the clips.
+
+Two things it was not, and why. The first attempt tested "complete and not looping", and a walk
+wraps without a loop flag, so walking characters were stopped; the clock test replaced it. The
+complete flag itself is no use for this either: a script sitting on its Animation node polls and
+clears it every tick. And a version limited to the scene's own duration let go of the last
+speaker at the moment the scene ended on his frozen stand.
+
+What it leaves alone: a looping clip the script asked for as a loop (the Jedi's sabre stance on
+the Federation ship, played with empty hands, is the script's own and the shipped game's), a
+walk, a menu line, and the jail prisoner, whose hold is the scope table's business.
 
 ## What this does NOT fix
 
@@ -214,7 +256,7 @@ whose talk animation lingers past their own line, in any other scene, is a diffe
 with `[diagnostics] Dialogue=1` and `Characters=1`, which give the level file and the speaker, and
 add a row to the table with the model name. The jail row was added exactly that way.
 
-## Testing status: accepted in game (2026-08-22; the jail 2026-09-12; the gesture 2026-09-13)
+## Testing status: accepted in game (2026-08-22; the jail 2026-09-12; the gesture and the rest 2026-09-13)
 
 Confirmed live against the Mos Espa opening cutscene: Obi-Wan's head stops the moment Qui-Gon's
 line starts and stays stopped, without freezing him solid, and every other actor in the level keeps
@@ -223,6 +265,14 @@ animating normally both during and after the exchange.
 The gesture repeat was played in two levels' scenes with lines of seven and eight seconds: every
 speaker kept moving for the whole of their line and stopped with it, and the log named each line
 with the clip, the number of times it was started again and the final hold.
+
+The rest was played in Mos Espa (Qui-Gon, Shmi and Anakin), where Qui-Gon's frozen stand after
+his last line took its freeze off and kept turning his head to the end of the scene; in the
+first level's opening, where two speakers' one-shot gestures went to their stands, a walk was
+left alone, and a stand the script froze at the end of the walk was unfrozen (a third body whose
+script put a looping stance on it was never touched, as the log showed); in Theed, where the
+talk clip cut with the voice; and then through every in-engine cutscene and every level's
+opening in one sitting, with nothing wrong to report.
 
 The jail was traced before it was added: the prisoner's placement is `enemy031`, his model
 `nabcit2.3do`, his script mode goes to 7 on his second bark and stays there for the rest of the

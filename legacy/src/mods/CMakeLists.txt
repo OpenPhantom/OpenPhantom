@@ -318,6 +318,7 @@ add_engine_fix(dialogue_anim_fix
     dialogue_anim_fix.c
     idle_clip.c
     speaker_gesture.c
+    speaker_rest.c
 )
 target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 

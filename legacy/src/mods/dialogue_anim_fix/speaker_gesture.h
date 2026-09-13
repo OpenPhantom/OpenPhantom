@@ -19,8 +19,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* `speaker_lock` is the conversation's speaker cell, already resolved by the caller. Returns
- * true when the per-frame check is in place. */
-bool speaker_gesture_install(const volatile uint32_t *speaker_lock);
+/* `speaker_lock` is the conversation's speaker cell, already resolved by the caller. `repeat`
+ * is the gesture repeat above, `rest` the stand in a cutscene (speaker_rest.h); both ride on
+ * the same per-frame check. Returns true when that check is in place. */
+bool speaker_gesture_install(const volatile uint32_t *speaker_lock, bool repeat, bool rest);
 
 #endif /* SPEAKER_GESTURE_H */

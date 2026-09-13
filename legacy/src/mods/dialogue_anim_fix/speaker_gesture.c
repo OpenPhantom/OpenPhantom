@@ -1,5 +1,6 @@
 /* speaker_gesture.c: see speaker_gesture.h. */
 #include "speaker_gesture.h"
+#include "speaker_rest.h"
 
 #include "common/frame_hook.h"
 #include "common/logging.h"
@@ -103,6 +104,7 @@ typedef void    (__stdcall *ail_ms_position_fn_t)(uint32_t sample, int32_t *tota
 #define SAMPLE_3D_BYTES_PER_FRAME  2.0f
 
 
+
 /* The body, the same layout every other reader of it in this project uses. */
 #define OBJECT_THING_OFFSET        0x9Cu
 #define OBJECT_BASE_CLIP_OFFSET    0xE8u
@@ -158,6 +160,7 @@ static struct {
     ail_3d_bytes_fn_t        sample_3d_offset;
     ail_3d_rate_fn_t         sample_3d_rate;
     ail_ms_position_fn_t     sample_ms_position;
+    bool                     repeat;
 
     uint32_t line_speaker;     /* the body of the line being followed, 0 between lines */
     int32_t  line_clip;
@@ -296,6 +299,7 @@ static void end_line(void)
 {
     if (gesture.line_speaker != 0) {
         ++gesture.lines;
+        speaker_rest_note_line_end(gesture.line_speaker, base_track(gesture.line_speaker));
         if (gesture.line_replays != 0) {
             log_info("speaker %08X's line ended: clip %d was started again %u time(s), and "
                      "held its last frame for the final %.1f s of the voice, where another "
@@ -317,6 +321,7 @@ static void on_frame_repeat_gesture(void)
     uint32_t body = *gesture.speaker_lock;
     int32_t  clip = 0;
 
+    speaker_rest_on_frame(*gesture.bark >= 0 ? body : 0u, base_track);
     if (body == 0 || *gesture.bark < 0 ||
         !memory_try_read((uintptr_t)body + OBJECT_BASE_CLIP_OFFSET, &clip, sizeof clip)) {
         end_line();
@@ -327,7 +332,7 @@ static void on_frame_repeat_gesture(void)
         gesture.line_speaker = body;
     }
     gesture.line_clip = clip;
-    if (base_clip_complete(body) && replay_fits(base_track(body))) {
+    if (gesture.repeat && base_clip_complete(body) && replay_fits(base_track(body))) {
         replay_base_clip(body, clip);
         ++gesture.line_replays;
     }
@@ -368,10 +373,13 @@ static bool bind_voice_clock(void)
     return true;
 }
 
-bool speaker_gesture_install(const volatile uint32_t *speaker_lock)
+bool speaker_gesture_install(const volatile uint32_t *speaker_lock, bool repeat, bool rest)
 {
     uint32_t bark = 0;
 
+    if (!repeat && !rest) {
+        return false;
+    }
     signature_resolve_table(sites, SITE_COUNT);
     if (sites[SITE_DIALOG_RENDER].address == 0 || sites[SITE_PLAY_CLIP].address == 0 ||
         sites[SITE_PIN_CHANNEL].address == 0) {
@@ -379,7 +387,7 @@ bool speaker_gesture_install(const volatile uint32_t *speaker_lock)
                     "still holds its last frame for the rest of a long line");
         return false;
     }
-    if (!bind_voice_clock()) {
+    if (repeat && !bind_voice_clock()) {
         return false;
     }
     if (!memory_read_u32(sites[SITE_DIALOG_RENDER].address + RENDER_BARK_OPERAND, &bark) ||
@@ -391,15 +399,25 @@ bool speaker_gesture_install(const volatile uint32_t *speaker_lock)
     gesture.speaker_lock = speaker_lock;
     gesture.bark         = (const volatile int32_t *)(uintptr_t)bark;
     gesture.play_clip    = (play_clip_fn_t)sites[SITE_PLAY_CLIP].address;
+    gesture.repeat       = repeat;
 
     if (!frame_hook_add(on_frame_repeat_gesture)) {
-        log_warning("the per-frame hook could not be installed, so the gesture repeat stays off");
+        log_warning("the per-frame hook could not be installed, so the gesture repeat and the "
+                    "rest in a cutscene stay off");
         return false;
     }
-    log_info("a speaker keeps animating for the whole of their line: a clip that has played "
-             "through on the speaker's body is started again while the voice has at least the "
-             "clip's length still to play (bark channel %08X, bapobj_playClip %08X, channel "
-             "bank %08X)", (unsigned)bark, (unsigned)sites[SITE_PLAY_CLIP].address,
-             (unsigned)gesture.channel_bank);
+    if (repeat) {
+        log_info("a speaker keeps animating for the whole of their line: a clip that has played "
+                 "through on the speaker's body is started again while the voice has at least "
+                 "the clip's length still to play (bark channel %08X, bapobj_playClip %08X, "
+                 "channel bank %08X)", (unsigned)bark, (unsigned)sites[SITE_PLAY_CLIP].address,
+                 (unsigned)gesture.channel_bank);
+    }
+    if (rest) {
+        speaker_rest_install((speaker_play_clip_fn_t)gesture.play_clip);
+        log_info("a speaker the engine has parked on a clip's last frame after their line goes "
+                 "to their stand, clip 0 with its own flags, half a second later, as the engine "
+                 "does after a menu line");
+    }
     return true;
 }

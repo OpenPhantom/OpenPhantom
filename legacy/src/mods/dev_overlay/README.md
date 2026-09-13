@@ -407,10 +407,10 @@ Alt+F4 still closes the game, because Alt is not read here. With no key bound th
 to switch on at all.
 
 **Hiding the panel.** While the camera is flying the panel cannot be closed, because it is what
-holds the game still under the camera (see below). The open key and Escape hide it instead, so the
-picture is the camera's alone, and the same keys bring it back; it comes back by itself when the
-flight ends. Hidden is only not drawn: the freeze, the pause and the keys the panel swallows are
-all still there, so hiding is safe where closing is not.
+holds the game still under the camera (see below). The dev menu's open key and Escape hide it
+instead, so the picture is the camera's alone, and the same keys bring it back; it comes back by
+itself when the flight ends. Hidden is only not drawn: the freeze, the pause and the keys the panel
+swallows are all still there, so hiding is safe where closing is not.
 
 **One guard.** Mouse look measures the pointer's movement between frames
 against an anchor it re-centres each frame. Anything else that also moves the pointer, a cursor

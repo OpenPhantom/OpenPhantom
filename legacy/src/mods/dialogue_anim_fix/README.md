@@ -1,10 +1,14 @@
 # dialogue_anim_fix
 
-**Produces:** `dialogue_anim_fix.dll` -> `mods\`, from `dialogue_anim_fix.c` (the hold) and
-`idle_clip.c` (the generated idle the jail row rests on).
+**Produces:** `dialogue_anim_fix.dll` -> `mods\`, from `dialogue_anim_fix.c` (the hold),
+`idle_clip.c` (the generated idle the jail row rests on) and `speaker_gesture.c` (a speaker
+animates for the whole of their line).
 
-A character whose script parks on its talking animation and never leaves it. Two scenes are
-known and this acts in exactly those two, on purpose; see "Why this narrow" below.
+Two faults, one narrow and one wide. A character whose script parks on its talking animation and
+never leaves it: two scenes are known and the hold acts in exactly those two, on purpose; see "Why
+this narrow" below. And a speaker whose gesture plays through part way into a long line and holds
+its last frame for the rest of it: every scene does that, and the gesture repeat acts on whoever
+holds the speaker lock.
 
 * Level 6, Mos Espa, the opening in-engine cutscene: Obi-Wan and Qui-Gon talk, and Obi-Wan's head
   keeps moving as if he were still talking during Qui-Gon's own line.
@@ -24,6 +28,7 @@ catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "
 |---|---|---|---|
 | `Enabled` | `1` | | |
 | `HoldSeconds` | `3.0` | 0.5-30.0 | how long with nobody speaking before the fix disarms itself for the rest of the level, in a scene whose exchange ends (Mos Espa; the jail row never disarms, since the parked node lasts the level) |
+| `SpeakerGestureRepeat` | `1` | | a speaker keeps animating for the whole of their line: while a body holds the speaker lock and the voice is still playing, a clip that has played through on it is started again (issue 23). Whoever is speaking, in every scene. `0` leaves a gesture holding its last frame |
 
 ## Engine locations
 
@@ -166,6 +171,26 @@ actor, played with clip 5, still asked for after it ended" and stood him back up
 death. The census caught it: `ai=4 anim=5/5 body=5 hp=-7`. A hold never begins on an actor whose
 health is below 1.
 
+## The speaker who stops moving part way through a line
+
+Traced with the player's body clips in the diagnostics log through a scene with four lines. The
+scene puts a short clip on the speaker's body when their line starts: a stand fidget of 2.9
+seconds (`stnd-no2`), a cutscene gesture of 1.7 (`cutscn3`), read by name and length out of the
+player model's own clip table. Each is authored as one pass, its track reports complete two or
+three seconds in, and the body holds the last frame for the rest of the line; a line of seven
+seconds is spoken standing still from a third of the way in. Between lines the plain stand loops
+as authored, arms down, which is the "freeze" of the report. The scene actors' bodies do the same
+with their own gesture clips.
+
+`speaker_gesture.c` follows the conversation's speaker lock, the body a line is credited to, and
+once a frame while the voice channel is live starts that body's base clip again whenever its
+track reports complete, with the crossfade the script interpreter itself uses. That covers every
+speaker without naming any: a first version followed the player's own body and matched nothing,
+because the player character's lines in a scene are spoken through a scene actor of their own. A
+script waiting on the gesture's completion is delayed until the voice ends, which is the pacing
+the scene already has. The listener's stand between lines is left as authored: it loops, and
+inventing fidgets for it would be new behaviour.
+
 ## What this does NOT fix
 
 Nothing outside the two scenes in the scope table. It never arms in any other level, and even in
@@ -174,11 +199,15 @@ whose talk animation lingers past their own line, in any other scene, is a diffe
 with `[diagnostics] Dialogue=1` and `Characters=1`, which give the level file and the speaker, and
 add a row to the table with the model name. The jail row was added exactly that way.
 
-## Testing status: accepted in game (2026-08-22; the jail 2026-09-12)
+## Testing status: accepted in game (2026-08-22; the jail 2026-09-12; the gesture 2026-09-13)
 
 Confirmed live against the Mos Espa opening cutscene: Obi-Wan's head stops the moment Qui-Gon's
 line starts and stays stopped, without freezing him solid, and every other actor in the level keeps
 animating normally both during and after the exchange.
+
+The gesture repeat was played in two levels' scenes with lines of seven and eight seconds: every
+speaker kept moving for the whole of their line, and the log named each line with the clip and
+the number of times it was started again.
 
 The jail was traced before it was added: the prisoner's placement is `enemy031`, his model
 `nabcit2.3do`, his script mode goes to 7 on his second bark and stays there for the rest of the

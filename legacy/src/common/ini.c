@@ -34,10 +34,15 @@ static char ini_file_path[MAX_PATH];
  * cache at once, since the profile API may reflow more than the one key.
  *
  * Direct mapped on a hash of section and key: a collision is a refetch, because the slot's own
- * names are compared before it is believed. The value is kept exactly as
- * the profile API returned it, ABSENT sentinel included, so presence is remembered too. A value
- * longer than the slot holds, or a caller with a buffer bigger than the slot, goes to the API
- * directly and is not cached; no key this project ships is that long. */
+ * names are compared before it is believed. The value is kept exactly as the profile API
+ * returned it, ABSENT sentinel included, so presence is remembered too. A value longer than the
+ * slot holds, or a caller with a buffer bigger than the slot, goes to the API directly and is not
+ * cached; no key this project ships is that long.
+ *
+ * One thread. Every reader and writer of the settings in this project runs on the game's own
+ * thread, from a frame hook or an install; the cache has no lock and is not safe to reach from
+ * another. controller_input polls on a thread of its own and reads its settings once, at install,
+ * before that thread starts. */
 #define INI_CACHE_SLOTS      256u
 #define INI_CACHE_NAME_MAX   48u
 #define INI_RECHECK_MS       100u

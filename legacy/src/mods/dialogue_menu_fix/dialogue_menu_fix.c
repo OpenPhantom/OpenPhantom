@@ -376,13 +376,17 @@ static int32_t __cdecl hook_is_facing_target(int32_t actor, int32_t check_player
     uint32_t              body = 0;
 
     if (result != 0 || check_player == 0) {
-        end_facing_hold();
+        if (actor == fix_state.facing_actor) {   /* another actor's test does not end a streak */
+            end_facing_hold();
+        }
         return result;
     }
     if (*fix_state.active == 0 || *fix_state.rows <= 0 ||
         !memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof body) ||
         body == 0 || body != *fix_state.speaker_lock) {
-        end_facing_hold();
+        if (actor == fix_state.facing_actor) {
+            end_facing_hold();
+        }
         return 0;
     }
     if (fix_state.facing_actor != actor) {

@@ -37,7 +37,7 @@ order of thing from a per-object syscall.
 | `FogInsideCut` | `2` | 0-2 | where the band may end: `0` unbounded, `1` capped to the no-pop-in limit, `2` assigned from the draw distance. See the three rules below |
 | `FogSettleSeconds` | `1.5` | 0-10 | how long a fog change takes; `0` steps immediately |
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
-| `FogBandScale` | `0.60` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. 1.0 is the computed limit, where the fog is guaranteed to hide the edge; the shipped 0.60 is taste inside it. Polled while running |
+| `FogBandScale` | `1.00` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. 1.0 is the computed limit, where the fog is guaranteed to hide the edge; anything below is taste inside it. Polled while running |
 | `LevelOpenSeconds` | `0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0`, the default, leaves the engine's own behaviour alone |
 | `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it |
 | `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |
@@ -583,11 +583,12 @@ are all read out of the image, but whether the fog is then visible on screen is 
 play, and it is. The band reported in a real log matches the arithmetic exactly; the same
 comparison proved the field-of-view cosine had stopped being applied.
 
-`FogBandScale` is newer than that session and has been played since. It ships at 0.60 rather than
-1.0, a value chosen by looking at it in the running game by two people, and the shipped default was
-then launched with no `FogBandScale` line present: the log reported `fog band: scaled to 0.60 of
-where the terms above it put it`, and a level authoring 8.0 to 32.0 came out as 3.4 to 13.6 at a
-draw distance of 22 and 75.2 degrees. Dragging the developer menu's fog row through 0.55, 0.32 and
+`FogBandScale` is newer than that session and has been played since. It shipped at 0.60 for a
+while, a value chosen by looking at it in the running game by two people, and went back to 1.0,
+the computed limit, once more of the levels had been looked at: the nearer band hid more of an
+opening shot than it improved. At 0.60 a launch with no `FogBandScale` line present logged `fog
+band: scaled to 0.60 of where the terms above it put it`, and a level authoring 8.0 to 32.0 came
+out as 3.4 to 13.6 at a draw distance of 22 and 75.2 degrees. Dragging the developer menu's fog row through 0.55, 0.32 and
 0.61 and back was picked up within the second each time and left the key at 0.60 in the file, so
 the row round-trips. That session also had the device answering `table fog YES, w fog YES`, so it
 ran on the per-pixel path rather than the per-vertex ramp.

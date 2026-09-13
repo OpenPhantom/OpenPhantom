@@ -53,6 +53,7 @@
 #include "decal_fix.h"
 
 #include "dry_at_start.h"
+#include "scorch_reach.h"
 
 #include "common/detour.h"
 #include "common/host_image.h"
@@ -186,6 +187,7 @@ typedef struct decal_fix_state {
     bool            installed;
     bool            enabled;
     bool            dry_at_start;      /* the two wet stamp stores write long ago, not zero */
+    bool            scorch_reach;      /* the burn's cell query reaches as far as its sphere */
     bool            neutralise_zbias;
     bool            zbias_neutralised;
     float           depth_bias;
@@ -207,6 +209,7 @@ static void load_config(void)
 {
     decal_state.enabled    = ini_read_bool(DECAL_FIX_SECTION, "Enabled", true);
     decal_state.dry_at_start = ini_read_bool(DECAL_FIX_SECTION, "DryAtStart", true);
+    decal_state.scorch_reach = ini_read_bool(DECAL_FIX_SECTION, "ScorchReach", true);
     decal_state.neutralise_zbias =
         ini_read_bool(DECAL_FIX_SECTION, "NeutraliseZBias", true);
     /* DEFAULT 0. The geometric nudge was this DLL's first theory and it is NOT the fix: the engine
@@ -437,6 +440,12 @@ void decal_fix_install(void)
     } else {
         log_info("DryAtStart=0, a body spawned or restored in the first eight seconds of the "
                  "process leaves wet prints on dry ground, as the engine shipped");
+    }
+    if (decal_state.scorch_reach) {
+        (void)scorch_reach_install();
+    } else {
+        log_info("ScorchReach=0, a burn wider than 0.95 units asks too few cells and a mark "
+                 "across two polygons can lose its far half, as the engine shipped");
     }
 
     signature_resolve_table(sites, SITE_COUNT);

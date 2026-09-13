@@ -19,6 +19,7 @@ match, the DLL changes nothing and says so.
 | `DepthBias` | `0.0` | 0-0.01 | how far a decal is pulled towards the camera, in device depth. Ships at 0, meaning off: pulling the vertex was measured and changed nothing, and `NeutraliseZBias` above is what does the work |
 | `StateClear` | `0` | | bits to clear from the decal's render state word `0x0010AE40` before it reaches the engine. An instrument, not a feature |
 | `StateSet` | `0` | | bits to set in the same word. Both ship at 0, so the word reaches the engine exactly as it left `bapvrt_drawPolyDecals`. They exist to settle which removed state costs the decal in single runs instead of one rebuild per suspect: that word asks for at least two things Direct3D 9 removed, ZBIAS (bit `0x00100000`, state 47) and `TEXTUREMAPBLEND=DECALALPHA` (bit `0x00000400`, state 21), and a translation layer may honour, drop or mistranslate either |
+| `ScorchReach` | `1` | | a burn reaches every polygon its mark touches. Three things in the engine's burn stopped it: the cell query around an impact is capped at 1.9 units while the polygon test uses the mark's full size; a quad is tested against the mark's sphere as two triangles that do not cover it, so a mark centred just across a quad's fourth edge skips that quad; and a neighbour that slopes away from the shot by a little more than the shot's own angle is refused as facing away. All three give a blast mark cut along a straight line with part missing (issue 28). The cap is stepped over, the second triangle becomes the one that covers the quad, and a neighbour is refused only past about 45 degrees. A repair: a mark that fits inside one polygon is unchanged |
 | `DryAtStart` | `1` | | a freshly spawned or restored body starts dry. The game lays wet footprints for eight seconds after a footstep in water, timed on a clock that starts with the process, and a new body's last-wet time is written as zero, so for the first eight seconds after launch every character that has never touched water leaves wet prints on dry ground. The two stores of that zero write a time long past instead. A repair: nothing differs once eight seconds have passed |
 
 `DepthBias=0` is not the same as `Enabled=0`. It is an amount rather than a switch, and it ships at
@@ -33,6 +34,10 @@ turns off `NeutraliseZBias`, which is the byte that brings the decals back.
 | the ZBIAS branch | `0x00488270` | one byte, `je` (`74`) -> `jmp` (`EB`), **only** when `NeutraliseZBias=1`. Validated as the expected `je` before it is written, so a second install declines |
 | the depth compare selector | `0x00487672` | **read, never patched**, and only for the mask cell operand at `+23`. Read per call rather than latched at install: at the host entry point the graphics are not up and the cell is still zero |
 | `bapvrt_drawPolyDecals` | `0x0041C87D` | the one and only caller, read during the RE, not patched |
+| the query box cap in `fx_scorch` | `0x00456ECA` | the `jne` that keeps a box under 1.9 units, made a `jmp`, **only** when `ScorchReach=1`; found by a pattern over the compare, the store and the call that follows, both constant cells masked |
+| the quad's second sphere test in `fx_scorch` | `0x00456FDE` | the call of `inter_sphereVsTriangle` with vertices 1-2-3; its return address is what the detour below answers differently, **only** when `ScorchReach=1`; found by a pattern over the vertex count test, the three pushes and the call, the call's displacement masked and read back to prove it reaches the function below |
+| `inter_sphereVsTriangle` | `0x0046DBCA` | detoured; every caller gets the original, except a call returning into the site above, which is handed vertices 0, 2 and 3 of the same quad |
+| the facing test in `fx_scorchProjectPoly` | `0x00457126` | the operand of `fcomp` against a shared zero, repointed to a cell of this DLL's holding 0.7, **only** when `ScorchReach=1`; the cell it pointed at is read and must hold zero first |
 | the wet stamp in `bapobj_init` | `0x0041235F` | the immediate of `mov [thing+0x108],0` at `0x00412359`, repointed from 0 to a time long past, **only** when `DryAtStart=1`; found by an address-free pattern over the five stores around it |
 | the wet stamp in `bapobj_restoreObject` | `0x00410FFA` | the same store at `0x00410FF4`, the one field the restore clears after copying the saved record back; both immediates are written or neither |
 
@@ -150,6 +155,53 @@ stamp with the clock exactly as before. The restore's clear is kept in the same 
 from a previous process was on a different clock and must not come back, and now it comes back
 as "long ago" rather than as "now".
 
+## The mark cut in half
+
+`fx_scorch` (`0x00456E8B`) gathers the cells around the impact with a box of the mark's size
+times two, then tests every gathered polygon against a sphere of the full size and stamps each
+one the sphere touches, one decal per polygon, all under one owner. The box is capped at 1.9
+units; the sphere is not. The ground scorch is placed at size 1.25, so the box is already past the
+cap and asks a 1.9 unit box for cells while testing a 2.5 unit sphere. A polygon whose cell lies
+more than 0.95 units from the impact is never gathered, so the part of the mark that falls on it
+is never stamped, and the mark ends in a straight line at the polygon's edge with the far half
+missing. That is the picture in issue 28: half a blast mark on the sand, cut clean.
+
+`ScorchReach` steps over the store of the cap, so the box is always the mark's size times two,
+which is the reach the sphere test already has. Nothing else in the function reads the cap. A
+sabre scorch or a small shot mark fits inside 1.9 units and gathers exactly what it did.
+
+That was the first repair, and the picture after it still showed cut marks, along polygon edges
+and not cell edges. The second cause is a few instructions further on. Each gathered polygon
+is tested against the sphere as triangles, and a quad as two: vertices 0-1-2, then 1-2-3
+(`lea ecx,[ebp-0x40]`, which is `verts + 1`). Those two triangles do not tile a quad; 0-1-2 and
+0-2-3 do. The wedge along the edge from vertex 3 back to vertex 0 is never tested, so a mark
+centred on the polygon next door, just across that edge, overlaps the quad only in the wedge, the
+quad is skipped, and the mark ends in a straight line along that edge. One edge in four of every
+floor quad does it, so some marks across a seam are whole and some are cut.
+
+The right second triangle is not three vectors in a row, so the call's argument cannot be fixed
+with a different displacement. `inter_sphereVsTriangle` is detoured instead, and for a call whose
+return address is that one site it is handed a copy of vertices 0, 2 and 3; every other caller in
+the engine, the sabre and the projectile tests included, gets the original untouched. The call's
+displacement is read back and must reach the detoured function, so the site and the callee are
+proven to be each other's before anything is installed.
+
+The third cause is in the projector, and it showed once the first two were gone: marks still cut
+at every fold in the sand, flat seams included. `fx_scorchProjectPoly` refuses a polygon whose
+normal faces along the shot, the dot of the two above zero. For the polygon the shot hit that dot
+is near minus one. The same test runs on every polygon of the splash, and ground falling away
+from a low shot by a few degrees more than the shot's own angle gives a small positive number and
+is refused, so the mark ends at the fold. The compare's operand, a shared cell holding zero, is
+repointed to a cell of this DLL's holding 0.7, the sine of about 45 degrees: a neighbour that has
+merely folded a little is stamped and one on the far side of a ridge is still refused. The mirror
+and the mark type read the same dot afterwards and are untouched.
+
+What is left is a mark across a steep corner. The projector puts a mark on each polygon
+by that polygon's own facing, a plan view and the big burn on a floor, a side view and the shot
+texture on anything steeper than 45 degrees, so the two halves across such a fold are projected on
+different planes with different textures and cannot meet. That is how the game was drawn in 1999,
+before the decals went missing on modern wrappers, and it is left as it is.
+
 ## What this does NOT fix
 
 * **A decal that is never stamped.** This DLL sits after the pool; if `bapvrt_addDecal` never
@@ -158,10 +210,16 @@ as "long ago" rather than as "now".
 * **`fx_rampFog`.** The cutscene tint walks the *device's* fog start and is inert under
   `view_distance_fix`'s vertex-fog regime. Unrelated to decals and unchanged here.
 
-## Testing status: accepted in game (2026-08-07, the dry start 2026-09-12)
+## Testing status: accepted in game (2026-08-07, the dry start 2026-09-12, the reach 2026-09-13)
 
 Ground shadows, scorch marks and footprints are back under `dxwrapper` with `Dd7to9=1`, with
 `NeutraliseZBias=1` and `DepthBias=0.0`. The single byte at `0x00488270` is the whole fix.
+
+**The reach is accepted in game.** Three rounds in the Mos Espa canyon, each after one of the
+three repairs: the cap alone left marks cut along polygon edges; the quad's second triangle fixed
+the flat seams and left the folds; the facing threshold fixed the folds. The last picture showed a
+dozen marks whole across seams and folds, the only cuts at steep corners, where the engine's own
+projection changes. Sabre marks on walls unchanged.
 
 **The dry start is accepted in game.** The defect was reproduced first, a save loaded seven
 seconds after launch leaving wet prints on a metal floor with the footstep observer recording the

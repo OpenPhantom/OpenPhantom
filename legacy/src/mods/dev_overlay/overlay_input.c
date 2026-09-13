@@ -220,6 +220,8 @@ typedef struct overlay_input_state {
     bool              dragging;
     int32_t           drag_row;
     float             drag_fraction;      /* where the POINTER is, updated every frame */
+    float             drag_written;       /* the last fraction that reached the file */
+    uint32_t          drag_apply_ms;      /* this slider's own write interval */
     uint32_t          drag_last_apply_ms;
 } overlay_input_state_t;
 
@@ -344,11 +346,31 @@ void overlay_input_update_scroll(void)
  * traffic for one dragged handle, and the stutter it causes would be blamed on the setting being
  * changed rather than on the changing of it.
  *
- * Thirty a second reads as continuous for a field of view, which is a slow zoom rather than
- * anything with an edge in it, and the reader on the other side notices within a frame because it
- * checks the file's timestamp rather than parsing it. The handle itself follows the pointer at the
- * full frame rate whatever this is set to: what is throttled is the write, not the drawing. */
-#define DRAG_APPLY_MS 33u
+ * Thirty a second was the one figure for every slider, and it was sized on Windows, where a write
+ * costs a few hundred microseconds. Under Wine the profile layer parses and rewrites the whole
+ * file on every write and every other DLL's next read parses it again, and a Steam Deck dragging
+ * any slider fell to seven frames a second on that. So there are two rates now. The field of view
+ * keeps thirty a second, because its whole effect is the picture zooming under the hand and at
+ * four a second that zoom is a series of steps, which is worse than the frame cost; every other
+ * slider writes four times a second, and the release below always writes the final position, so
+ * nothing the hand settled on is lost. The handle itself follows the pointer at the full frame
+ * rate whatever the write rate: what is throttled is the write, not the drawing. */
+#define DRAG_APPLY_MS       250u
+#define DRAG_APPLY_FULL_MS   33u
+
+/* The drag is over: whatever the hand settled on reaches the file now, throttle or not. */
+static void end_drag(void)
+{
+    if (!input_state.dragging) {
+        return;
+    }
+    input_state.dragging = false;
+    if (input_state.drag_fraction != input_state.drag_written &&
+        overlay_model_slider_set((uint32_t)input_state.drag_row, input_state.drag_fraction)) {
+        input_state.drag_written = input_state.drag_fraction;
+        overlay_model_rebuild();
+    }
+}
 
 static void update_drag(void)
 {
@@ -362,7 +384,7 @@ static void update_drag(void)
      * a button-up can be delivered to a window that is not this one, which would otherwise leave a
      * handle stuck to the pointer for the rest of the session. */
     if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
-        input_state.dragging = false;
+        end_drag();
         return;
     }
 
@@ -381,12 +403,13 @@ static void update_drag(void)
     input_state.drag_fraction = fraction;
 
     now = (uint32_t)GetTickCount();
-    if (now - input_state.drag_last_apply_ms < DRAG_APPLY_MS) {
+    if (now - input_state.drag_last_apply_ms < input_state.drag_apply_ms) {
         return;
     }
     input_state.drag_last_apply_ms = now;
 
     if (overlay_model_slider_set((uint32_t)input_state.drag_row, fraction)) {
+        input_state.drag_written = fraction;
         overlay_model_rebuild();
     }
 }
@@ -479,7 +502,10 @@ static void click(float x, float y)
             input_state.dragging = true;
             input_state.drag_row = track;
             input_state.drag_fraction = fraction;
-            input_state.drag_last_apply_ms = 0u;   /* the first move applies immediately */
+            input_state.drag_written = fraction;
+            input_state.drag_apply_ms = overlay_model_slider_wants_full_rate((uint32_t)track)
+                                            ? DRAG_APPLY_FULL_MS : DRAG_APPLY_MS;
+            input_state.drag_last_apply_ms = (uint32_t)GetTickCount();
             if (overlay_model_slider_set((uint32_t)track, fraction)) {
                 overlay_model_rebuild();
             }
@@ -614,7 +640,7 @@ static bool handle(int32_t message, int32_t wparam, uint32_t lparam)
         /* Swallowed like every other pointer message, and it ends a drag. update_drag polls the
          * button as well, so a release delivered somewhere else still ends it; this is the path
          * that ends it on the same frame rather than on the next one. */
-        input_state.dragging = false;
+        end_drag();
         return true;
 
     default:

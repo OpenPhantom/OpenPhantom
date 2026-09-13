@@ -528,6 +528,11 @@ bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key)
     return open_key_row_set(virtual_key);
 }
 
+bool overlay_utilities_slider_wants_full_rate(uint32_t slot)
+{
+    return (utilities_slot_t)slot == UTILITIES_FOV_TRACK;
+}
+
 bool overlay_utilities_slider_set(uint32_t slot, float fraction)
 {
     float low;

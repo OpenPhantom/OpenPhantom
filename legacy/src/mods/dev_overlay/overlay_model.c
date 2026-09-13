@@ -858,3 +858,14 @@ bool overlay_model_slider_set(uint32_t index, float fraction)
     }
     return overlay_utilities_slider_set(row.id - UTILITIES_FIRST_ID, fraction);
 }
+
+bool overlay_model_slider_wants_full_rate(uint32_t index)
+{
+    overlay_row_t row;
+
+    if (!overlay_model_row(index, &row) || row.kind != OVERLAY_ROW_SLIDER ||
+        row.group != (uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES) {
+        return false;
+    }
+    return overlay_utilities_slider_wants_full_rate(row.id - UTILITIES_FIRST_ID);
+}

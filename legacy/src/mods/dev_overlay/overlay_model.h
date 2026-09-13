@@ -104,6 +104,9 @@ void overlay_model_reset(void);
  * value the game is not in. */
 bool overlay_model_slider_set(uint32_t index, float fraction);
 
+/* Whether a drag on the slider at `index` writes at the full rate; see the utilities page. */
+bool overlay_model_slider_wants_full_rate(uint32_t index);
+
 overlay_tab_t overlay_model_tab(void);
 void overlay_model_set_tab(overlay_tab_t tab);
 

@@ -671,6 +671,13 @@ from the file would move it in thirty steps against a hand moving in sixty. On t
 `variable_fov` polls every frame but asks the file system for its last write time before parsing
 anything, so it notices within a frame without reading ninety kilobytes sixty times a second.
 
+Thirty a second is the field of view's rate alone. Every other slider writes four times a second
+and once more on release, since a Steam Deck fell to seven frames a second dragging any of them:
+under Wine the profile layer parses and rewrites the whole file on every write, and every other
+DLL's next read parses it again. The field of view keeps the full rate on purpose, because its
+whole effect is the picture zooming under the hand, and at four a second that zoom is a series of
+steps, which is worse than the frame cost.
+
 **It is also the only row here that can be unavailable.** Every other row edits a settings file and
 works with the DLL that reads it deleted from `mods\`. This one needs a published width, so with
 `variable_fov` absent it greys out rather than inventing a number that would be wrong on some

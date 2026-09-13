@@ -63,6 +63,11 @@ bool overlay_utilities_commit(uint32_t slot, const char *text);
  * grid, for the reason recorded at the first of them in overlay_utilities.c. */
 bool overlay_utilities_slider_set(uint32_t slot, float fraction);
 
+/* Whether a drag on this slider should reach the file at the full rate the panel allows rather
+ * than the sparing one. The field of view is the one that does: its whole effect is the picture
+ * zooming under the hand, and at a few writes a second that zoom is a series of steps. */
+bool overlay_utilities_slider_wants_full_rate(uint32_t slot);
+
 /* Binds a key. False when the slot is not the key row or the key was refused. */
 bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key);
 

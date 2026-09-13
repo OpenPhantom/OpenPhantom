@@ -26,7 +26,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Fsm` | `0` | 1 AI mode changes, 2 plus **every executed opcode** |
 | `Level` | `0` | 1 level loading and the cutscene lock |
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |
-| `Dialogue` | `0` | 1 spoken lines and voice files, and the script side of them: every Statement opcode, each change of a Dialog Box opcode's actor, line or answer with a visit count, and each change of a Check For opcode's answer in its dialogue modes |
+| `Dialogue` | `0` | 1 spoken lines and voice files, and the script side of them: every Statement opcode, each change of a Dialog Box opcode's actor, line or answer with a visit count, each change of a Check For opcode's answer in its dialogue modes, and the player's body clips on each change, base and overlay layer, with the base track's complete flag and what the record driving the body, if any, asks for |
 | `Fx` | `0` | 1 emitters on/off/destroyed, 2 plus every decal **stamped**, 3 plus every decal **drawn** |
 | `Frame` | `0` | 1 one frame-time summary a second, 2 plus the frames around every hitch. A hitch is both a percentage past the median of the last 64 frames and at least two milliseconds past it; without that floor the instrument reports scheduler noise as hitches and, because each dump writes from inside the frame callback, stretches the frames it measures |
 | `FrameHitchPercent` | `0` | how far past the median counts as a hitch. 0 uses the built-in default |

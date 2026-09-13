@@ -4,6 +4,8 @@
 #include "diag_install.h"
 #include "diag_log.h"
 
+#include "common/frame_hook.h"
+#include "common/memory.h"
 #include "common/signature.h"
 
 #include <stdbool.h>
@@ -70,10 +72,41 @@ _Static_assert(sizeof SIG_CHECK_FOR_OP == sizeof MSK_CHECK_FOR_OP,
                "the check-for pattern and its mask are different lengths");
 #define CHECK_FOR_OP_PROLOGUE 6u
 
+/* --- Plr_RunPhases 0x00448297, a data site only ------------------------------------------------ *
+ * The same site diag_characters.c and diag_flow.c read the player pointer from, at +0x27; each
+ * observer keeps its own copy so the evidence sits beside the code that depends on it. Searched
+ * as a detour target because diag_flow.c detours it under Player=1 and gets there first. */
+static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,
+    0x00, 0xC7, 0x45, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x8B, 0x45, 0xF8, 0x83,
+    0x3C, 0x85, 0x28, 0x52, 0x4B, 0x00, 0x01, 0x0F, 0x84, 0x95, 0x00, 0x00,
+    0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
+};
+#define PLAYER_RUN_PHASES_PROLOGUE 6u
+#define OFFSET_PLAYER_POINTER      0x27u
+
+/* The player's drawn body and the two clips on it: the same offsets the character census reads,
+ * a player record's body at +0x0C, the base clip at +0xE8 and the overlay clip at +0xF4. The
+ * player is not in the character pool, so the census never shows it; during a conversation the
+ * player's own listening and talking clips live here. */
+#define PLAYER_OBJECT_OFFSET       0x0Cu
+#define OBJECT_BASE_CLIP_OFFSET    0xE8u
+#define OBJECT_BASE_SLOT_OFFSET    0xECu    /* the puppet track the base clip is on */
+#define OBJECT_OVERLAY_CLIP_OFFSET 0xF4u
+#define OBJECT_OWNER_OFFSET        0xA0u    /* the character record driving this body, if any */
+#define OBJECT_THING_OFFSET        0x9Cu
+#define THING_PUPPET_OFFSET        0x18u
+#define PUPPET_TRACKS_OFFSET       0x08u
+#define PUPPET_TRACK_STRIDE        0x14Cu
+#define TRACK_COMPLETE_OFFSET      0x140u
+#define OWNER_ANIM_PLAYING_OFFSET  0x1BCu   /* the character record's own animation pair */
+#define OWNER_ANIM_WANTED_OFFSET   0x1C0u
+
 enum {
     SITE_MENU_OP,
     SITE_STATEMENT_OP,
     SITE_CHECK_FOR_OP,
+    SITE_PLAYER_RUN_PHASES,
     SITE_COUNT
 };
 
@@ -81,7 +114,9 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR_MASKED("op_dialog_box", SIG_MENU_OP, MSK_MENU_OP, MENU_OP_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR("op_statement", SIG_STATEMENT_OP, STATEMENT_OP_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR_MASKED("op_check_for", SIG_CHECK_FOR_OP, MSK_CHECK_FOR_OP,
-                                  CHECK_FOR_OP_PROLOGUE)
+                                  CHECK_FOR_OP_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("player_run_phases", SIG_PLAYER_RUN_PHASES,
+                           PLAYER_RUN_PHASES_PROLOGUE)
 };
 
 typedef int32_t (__cdecl *menu_op_fn_t)(int32_t actor, void *ip, const uint32_t *operands);
@@ -103,7 +138,81 @@ static struct {
     int32_t  last_line;
     int32_t  last_result;
     unsigned visits;
+
+    /* the player's body clips, one line per change */
+    uint32_t *player_slot;
+    int32_t   player_base;
+    int32_t   player_overlay;
+    int32_t   player_complete;
+    int32_t   player_wanted;
+    bool      player_seen;
 } ops;
+
+/* The complete flag of the track the base clip is on, or -1 when the chain does not read. */
+static int32_t base_track_complete(uint32_t body)
+{
+    uint32_t thing = 0;
+    uint32_t puppet = 0;
+    int32_t  slot = -1;
+    int32_t  complete = -1;
+
+    if (!memory_try_read((uintptr_t)body + OBJECT_THING_OFFSET, &thing, sizeof thing) ||
+        thing == 0 ||
+        !memory_try_read((uintptr_t)thing + THING_PUPPET_OFFSET, &puppet, sizeof puppet) ||
+        puppet == 0 ||
+        !memory_try_read((uintptr_t)body + OBJECT_BASE_SLOT_OFFSET, &slot, sizeof slot) ||
+        slot < 0 || slot > 7 ||
+        !memory_try_read((uintptr_t)puppet + PUPPET_TRACKS_OFFSET +
+                         (uint32_t)slot * PUPPET_TRACK_STRIDE + TRACK_COMPLETE_OFFSET,
+                         &complete, sizeof complete)) {
+        return -1;
+    }
+    return complete;
+}
+
+static void player_clips_tick(void)
+{
+    uint32_t player = 0;
+    uint32_t body = 0;
+    int32_t  base = -1;
+    int32_t  overlay = -1;
+
+    if (ops.player_slot == NULL ||
+        !memory_try_read((uintptr_t)ops.player_slot, &player, sizeof player) || player == 0 ||
+        !memory_try_read((uintptr_t)player + PLAYER_OBJECT_OFFSET, &body, sizeof body) ||
+        body == 0 ||
+        !memory_try_read((uintptr_t)body + OBJECT_BASE_CLIP_OFFSET, &base, sizeof base) ||
+        !memory_try_read((uintptr_t)body + OBJECT_OVERLAY_CLIP_OFFSET, &overlay,
+                         sizeof overlay)) {
+        return;
+    }
+    {
+        int32_t  complete = base_track_complete(body);
+        uint32_t owner = 0;
+        int32_t  wanted = -1;
+        int32_t  playing = -1;
+
+        if (memory_try_read((uintptr_t)body + OBJECT_OWNER_OFFSET, &owner, sizeof owner) &&
+            owner != 0) {
+            (void)memory_try_read((uintptr_t)owner + OWNER_ANIM_WANTED_OFFSET, &wanted,
+                                  sizeof wanted);
+            (void)memory_try_read((uintptr_t)owner + OWNER_ANIM_PLAYING_OFFSET, &playing,
+                                  sizeof playing);
+        }
+        if (!ops.player_seen || base != ops.player_base || overlay != ops.player_overlay ||
+            complete != ops.player_complete || wanted != ops.player_wanted) {
+            diag_log_write("dlg  player body clips base=%d overlay=%d complete=%d, owner %08X "
+                           "asks %d and believes %d (body %08X)", (int)base, (int)overlay,
+                           (int)complete, (unsigned)owner, (int)wanted, (int)playing,
+                           (unsigned)body);
+            ops.player_base     = base;
+            ops.player_overlay  = overlay;
+            ops.player_complete = complete;
+            ops.player_wanted   = wanted;
+            ops.player_seen     = true;
+        }
+    }
+}
 
 static void flush_menu_streak(void)
 {
@@ -179,5 +288,12 @@ int diag_dialogue_ops_install(int dialogue_level)
                                        (const void *)hook_check_for_op, CHECK_FOR_OP_PROLOGUE,
                                        "opcode 0x605 Check For, the dialogue modes, each change")
                  ? 1 : 0;
+    ops.player_slot = (uint32_t *)diag_derive_address(sites, SITE_PLAYER_RUN_PHASES,
+                                                      OFFSET_PLAYER_POINTER, "pPlayer");
+    if (ops.player_slot != NULL && frame_hook_add(player_clips_tick)) {
+        diag_log_write("dlg  the player's body clips are reported on each change, base and "
+                       "overlay layer");
+        ++installed;
+    }
     return installed;
 }

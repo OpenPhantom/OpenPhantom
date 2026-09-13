@@ -59,6 +59,7 @@
 #include "render_guard.h"
 
 #include "face_bounds.h"
+#include "flat_quad.h"
 
 #include "common/detour.h"
 #include "common/host_image.h"
@@ -483,6 +484,7 @@ void render_guard_install(void)
     guard_state.installed = true;
 
     install_depth_compare_guard();
+    flat_quad_install();
 
     log_info("deferred face submit %08X guarded: at most %u vertices a face, pool cursor %08X with "
              "a ceiling of %u vertices. A face past either bound is refused the same way the "

@@ -410,9 +410,15 @@ bool overlay_draw_resolve(void)
         return true;
     }
 
-    if (!resolve_one(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD,
-                     "the filled shape drawer", &quad) ||
-        !resolve_one(SIG_SYS_FONT, MSK_SYS_FONT, sizeof SIG_SYS_FONT,
+    /* The quad is looked for the way a detoured site is, because render_guard replaces it whole
+     * (flat_quad.c) and the load order that puts this DLL first is alphabetical, not promised. */
+    quad = signature_find_detour_target(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD, 6u);
+    if (quad == 0) {
+        log_warning("the filled shape drawer did not resolve, so the overlay cannot draw and "
+                    "stays closed");
+        return false;
+    }
+    if (!resolve_one(SIG_SYS_FONT, MSK_SYS_FONT, sizeof SIG_SYS_FONT,
                      "the built in font", &sys_font) ||
         !resolve_one(SIG_SELECT, MSK_SELECT, sizeof SIG_SELECT,
                      "the font selector", &select) ||

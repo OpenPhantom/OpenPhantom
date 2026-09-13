@@ -227,7 +227,9 @@ void render_curtain_install(void)
                     "cannot be drawn into the picture");
         return;
     }
-    quad_site = signature_find_unique(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD);
+    /* Looked for the way a detoured site is: render_guard replaces the routine whole. */
+    quad_site = signature_find_detour_target(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD,
+                                             6u);
     if (quad_site == 0) {
         log_warning("render_curtain: the engine's own filled-shape drawer did not resolve, the "
                     "post-movie curtain cannot be drawn");

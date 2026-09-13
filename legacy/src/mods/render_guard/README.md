@@ -1,10 +1,13 @@
 # render_guard
 
-**Produces:** `render_guard.dll` -> `mods\`
+**Produces:** `render_guard.dll` -> `mods\`, from `render_guard.c` (the bounds and the depth
+comparison), `face_bounds.c` (the two comparisons, testable) and `flat_quad.c` (the engine's flat
+screen quad with vertices every driver draws).
 
 Two arrays in the engine's deferred face path are filled without checking either bound, and one of
 them ends on the submitting function's saved return address. The same DLL replaces a depth
-comparison the engine can compute as a value Direct3D does not define.
+comparison the engine can compute as a value Direct3D does not define, and it replaces the
+engine's flat screen quad, whose vertices Intel's Direct3D 9 driver does not draw.
 
 Nothing here changes what a scene inside the authored limits draws.
 
@@ -24,6 +27,7 @@ disables that one part and says so in the log.
 | `MaxDeferredVertices` | `30` | 1-31 | the most vertices one deferred face may carry |
 | `PoolCapacityVertices` | `8196` | 0 or more | the ceiling on the shared vertex pool; `0` switches that second bound off |
 | `GuardDepthCompare` | `1` | | substitute LESS when the comparison mapper answers 0 |
+| `GuardFlatQuads` | `1` | | draw the engine's flat screen quads with `rhw = 1` and `z = 0` instead of its own `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`, which Intel does not draw |
 
 `MaxDeferredVertices` above 31 or below 1 is refused with a log line and the authored 30 is used
 instead: 32 is the array and its 33rd entry is the return address, so there is nothing sensible to
@@ -42,6 +46,7 @@ log line.
 | its entry ceiling immediate | site + `0x12` | same | read, never written |
 | the pool cursor advance | `0x00487EEB` | `0x00487E8B` | its operand is read to locate the cursor cell at `0x00867380`; not patched |
 | the capability to comparison mapper | `0x0048AAF9` | `0x0048AA99` | detoured, 11 byte prologue |
+| the flat screen quad | `0x00419660` | untested | replaced whole, 6 byte prologue; its four callees are read out of its body at `+0x153`, `+0x15C`, `+0x16C` and `+0x18B` |
 
 ## Hooks installed
 
@@ -52,6 +57,31 @@ the original first and only looks at its answer.
 The 8 byte prologue is not a typo. The submit function has no frame pointer at all: it loads its
 queue count from an absolute address, reserves its locals, and pushes the callee saved registers
 only afterwards, so the first instruction boundary at or past five bytes is eight.
+
+## The flat screen quad
+
+The engine draws every untextured rectangle on the screen through one routine: the fade veil, the
+letterbox bars, the menu backdrops, the black the loading bar is repainted over between steps. It
+writes each vertex with `rhw = 0` and, on a 16-bit depth buffer (the one dxwrapper creates for
+this game, `D3DFMT_D16` in its log), `z = 1.0`, the far plane. NVIDIA and AMD draw that. Intel
+does not: a report from an Intel UHD laptop had the developer panel's text and pointer with none
+of its fills, the movie player's post-movie curtain missing (seen as the character dropping in
+after a movie), and, once those two were repaired at their callers through `common/screen_fill.c`,
+the loading screen's bar frames and percentages piling up on each other, because the black behind
+them never landed. A quad at the far plane loses a LESS depth test against a cleared buffer, and a
+zero `rhw` is a division the driver may drop the primitive over.
+
+`flat_quad.c` replaces the routine whole. It is the recreation's forty lines with two fields
+changed, `rhw = 1` and `z = 0`, the values Direct3D defines for a transformed vertex; `z = 0` is
+also what the routine itself writes on any depth buffer that is not 16-bit. Both arms are kept, the
+immediate one making the routine's own three host calls and the queued one handing the fan to the
+engine's sorted queue as before; the four targets are read out of the routine's body with the
+bytes around each call checked first, and if anything does not read the routine is left as it is
+and the log says so. On a driver that drew the original the pixels are the same.
+
+The two callers that resolve this routine by pattern, `dev_overlay` and `fmv_player`, look for it
+the way a detoured site is looked for, since the load order that puts them ahead of this DLL is
+alphabetical and not promised.
 
 ## What is wrong
 
@@ -138,6 +168,10 @@ happens, and `PoolCapacityVertices` is how to answer it.
 * The pool cursor is read fresh on every call rather than tracked, because the engine zeroes it
   when it drains the queue and this hook has no reliable way to see that moment.
 * There is no uninstall, a property of the shared detour layer rather than of this feature.
+* **The flat quad repair has not been seen working on Intel.** It was built after the reporter had
+  gone. What it does on NVIDIA is verified to be the same picture; what it does on Intel follows
+  from the same change having brought back the panel fills and the curtain there, through
+  `common/screen_fill.c`, and from the loading bar's black going through the same vertices.
 
 ## Fallback behaviour
 
@@ -196,6 +230,11 @@ passed in, so the test drives the same code the game runs without an engine cell
 **The unit test builds and passes.** `face_bounds` is a registered ctest target, so CI runs it.
 **Installed in every played build since it shipped**, as one of the components the installer does
 not let a player untick, and no guarded path has been observed firing.
+
+**The flat quad replacement was played on the rig (NVIDIA)** through a level load, a movie, a
+cutscene with letterbox bars and the developer panel, all four callers of the routine, with the
+picture unchanged and the log naming the four targets it read (`00488210`, `00488510`, `00487260`,
+`00487C50`), which match the reference bytes of the retail image.
 
 An untriggered session is the expected result rather than evidence that the guard works: on a
 correct scene and a working device none of the three paths is taken. What can be confirmed in game

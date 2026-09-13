@@ -283,6 +283,7 @@ add_engine_fix(render_guard
     dll_main.c
     render_guard.c
     face_bounds.c
+    flat_quad.c
 )
 
 # An effect with no geometry state, re-rolled once per rendered frame because that is what 1999

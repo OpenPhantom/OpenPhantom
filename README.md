@@ -7,7 +7,7 @@
 
 OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a modern installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom reverse engineers and reconstructs the game's engine as documented, maintainable source code, with tools for modding, editing and extending the game.
 
-**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** | [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) | [Discord](https://discord.gg/73UbZN2y7x) | [Website](https://swopenphantom.org/)
+**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x) · [Website](https://swopenphantom.org/)
 
 The project has two parts. The legacy patches are useful today: they modify the retail executable in memory so the game you already own runs with modern fixes. The reconstructed engine is the long-term work: rebuilding the game's systems from the ground up as clean source code that can support deeper modding and new features.
 

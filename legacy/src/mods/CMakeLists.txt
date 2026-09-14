@@ -358,6 +358,15 @@ add_engine_fix(dev_overlay
     sensitivity_row.c
     free_look_row.c
     strafe_row.c
+    controller_mode_row.c
+    overlay_controls.c
+    overlay_picture.c
+    overlay_fog.c
+    overlay_freecam.c
+    overlay_dismember.c
+    overlay_menu_extras.c
+    overlay_cheats.c
+    overlay_row_fill.c
     air_control_row.c
     camera_follow_row.c
     strict_range_row.c

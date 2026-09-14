@@ -1,6 +1,6 @@
 /* overlay_model.c: the panel's state and the list of rows that follows from it.
  *
- * The Original tab holds two groups and the OpenPhantom tab four, and the structure carries more,
+ * The Original tab holds two groups and the OpenPhantom tab ten, and the structure carries more,
  * on purpose: the diagnostics and the developer tools that will hang off this panel are groups
  * beside the cheats, not a second panel, and a shape that already folds and searches them costs
  * nothing now.
@@ -28,20 +28,31 @@
  * share none of this file's navigation, search, folding or typing state, so what moved is a whole
  * responsibility and what stayed is the part that has to know which row is being typed into.
  *
- * The seam, if it grows again, is that editing state machine after all: the typed value and hotkey
- * capture reached through overlay_model_value_*() and overlay_model_capture_hotkey(). Both groups
- * now go through it, so it has two callers rather than one, which is the shape of something that
- * wants to be its own file.
+ * A third seam was taken when a sixth group put this file within fifteen lines of the hard limit:
+ * the cheats group's own rows, the one group whose rows this file still described itself, went
+ * to overlay_cheats.c the way every settings group already had, with the model handing in the
+ * state a row needs (which fold is open, what is being typed, whether a key is being captured)
+ * instead of the rows reading it here.
+ *
+ * The seam, if it grows again, is the editing state machine: the typed value and hotkey capture
+ * reached through overlay_model_value_*() and overlay_model_capture_hotkey(). Every group goes
+ * through it, which is the shape of something that wants to be its own file.
  */
 #include "overlay_model.h"
 
 #include "common/logging.h"
 #include "common/text.h"
 
-#include "overlay_key_name.h"
+#include "overlay_cheats.h"
+#include "overlay_controls.h"
+#include "overlay_dismember.h"
+#include "overlay_fog.h"
+#include "overlay_framerate.h"
+#include "overlay_freecam.h"
+#include "overlay_menu_extras.h"
+#include "overlay_picture.h"
 #include "overlay_row_ids.h"
 #include "overlay_utilities.h"
-#include "overlay_framerate.h"
 #include "overlay_window.h"
 
 #include "cheats_openphantom.h"
@@ -69,7 +80,13 @@ static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_TOGGLES */
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_FREECAM   */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_DISMEMBER */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_PICTURE   */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_FOG       */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_CONTROLS  */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_WINDOW    */
     OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_FRAMERATE */
 };
@@ -82,8 +99,6 @@ typedef struct overlay_model_state {
     uint32_t      row_count;
     bool          capturing_hotkey;   /* a hotkey row is waiting for a keypress */
     uint32_t      capturing_hotkey_row;   /* which one; two rows here bind a key */
-    bool          freecam_info_expanded;   /* the "how to fly" row is showing its lines */
-    bool          freecam_was_on;     /* last-seen CHEATS_OWN_FREECAM state, to catch the edge */
     bool          editing_value;           /* a value row is waiting for typed digits */
     uint32_t      editing_value_row;       /* which one, an id in the OpenPhantom group */
     char          value_edit_buf[7];  /* what has been typed so far; six usable characters plus
@@ -95,21 +110,6 @@ typedef struct overlay_model_state {
 
 static overlay_model_state_t model;
 
-/* The fold's own text, one row per line. The count and the ids these are drawn under are
- * in overlay_row_ids.h with the rest of the numbering; only the words are here. */
-static const char *const FREECAM_INFO_LINES[FREECAM_INFO_LINE_COUNT] = {
-    "Needs a teleport key set first",
-    "WASD to move",
-    "Mouse to look",
-    "E / Q for up and down",
-    "Scroll wheel changes speed",
-    "Your dev menu open key or Escape",
-    "  hides the panel and shows it again",
-    "Your teleport key ends the flight",
-    "  and brings the player here",
-    "F4 ends the flight and leaves",
-    "  the player where they were"
-};
 /* ============================================================================================ */
 
 static char lower(char c)
@@ -168,9 +168,10 @@ void overlay_model_reset(void)
     model.search[0] = '\0';
     model.row_count = 0;
     model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
-    model.freecam_info_expanded = false;   /* folds closed on every open, same as the groups do */
+    overlay_freecam_reset();             /* the "how to fly" fold, closed like the groups */
+    overlay_menu_extras_reset();         /* and the "what this adds" fold, the same */
+    overlay_controls_reset();            /* and the "what these do" fold */
     overlay_window_reset();              /* and the window group's size list, same reason */
-    model.freecam_was_on = false;   /* re-synced against the real state on the very next rebuild */
     model.editing_value = false;   /* same reasoning as capturing_hotkey just above */
     model.value_edit_buf[0] = '\0';
 
@@ -181,7 +182,13 @@ void overlay_model_reset(void)
      * five cheats with a settings row appended and settings kept arriving, until a reader had to
      * scroll past invincibility to reach the draw distance. */
     model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Utilities";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_FREECAM].title = "Free camera";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_DISMEMBER].title = "Dismemberment";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Cheatmenu options";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS].title = "In game options extras";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_PICTURE].title = "Enhanced resolution";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_FOG].title = "Fog";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_CONTROLS].title = "Enhanced input";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_WINDOW].title = "Window mode";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_FRAMERATE].title = "Frame rate";
     for (i = 0; i < (uint32_t)OVERLAY_GROUP_COUNT; ++i) {
@@ -320,160 +327,28 @@ static uint32_t source_count(overlay_group_t group)
         return (uint32_t)CHEATS_ACTION_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
         return OVERLAY_UTILITIES_ROW_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_PICTURE:
+        return OVERLAY_PICTURE_ROW_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_FOG:
+        return OVERLAY_FOG_ROW_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
+        return overlay_controls_row_count();   /* eight, and the fold's lines while open */
     case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
         return overlay_window_row_count();
     case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
         return OVERLAY_FRAMERATE_ROW_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_FREECAM:
+        return overlay_freecam_row_count();   /* three, and the fold's lines while it is open */
+    case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
+        return OVERLAY_DISMEMBER_ROW_COUNT;
+    case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
+        return overlay_menu_extras_row_count();   /* two, and the fold's lines while open */
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* +4, one for each row this group holds that is not one of its own cheats: the jump-boost
-         * scale row, inserted right after jump boost's own toggle row; the free-camera teleport key
-         * row, which takes over free camera's own (now shifted) numeric slot; the "how to fly"
-         * fold, one past where free camera itself now sits; and "Skip to next level", one past
-         * that. See JUMP_SCALE_ROW_ID/HOTKEY_ROW_ID/FREECAM_ROW_ID/INFO_ROW_ID/END_LEVEL_ROW_ID
-         * and their own handling in source_row() below. The fold's own lines add
-         * FREECAM_INFO_LINE_COUNT more only while it is open, the same shape a group's own child
-         * count already uses in append_group() below.
-         *
-         * This number and the row ids above move together. Adding a row and forgetting this
-         * leaves the new row built but never drawn, as happened when one was added. */
-        return (uint32_t)CHEATS_OWN_COUNT + OPENPHANTOM_EXTRA_ROWS +
-               (model.freecam_info_expanded ? FREECAM_INFO_LINE_COUNT : 0u);
+        /* Every cheat but free camera, the jump-boost scale and the level skip; the numbering
+         * is in overlay_row_ids.h. */
+        return OVERLAY_CHEATS_ROW_COUNT;
     }
-}
-
-/* Slot is the position a row occupies on screen within this group; the answer is the id that
- * belongs there. The two are the same number until the free camera fold opens, because that is
- * the only thing in this group that changes how many rows there are. When it is open, its lines
- * are drawn where they read, directly under the summary, while keeping the ids at the end of the
- * space where they can grow and shrink without moving anything else. The fixed rows below the
- * summary keep their ids and simply sit further down the screen.
- *
- * Everything downstream compares against the fixed constants above and never against a slot, so
- * activation, hotkey capture and value editing are all unaffected by the fold being open. */
-static uint32_t openphantom_row_id(uint32_t slot)
-{
-    if (!model.freecam_info_expanded || slot <= INFO_ROW_ID) {
-        return slot;                 /* shut, or at or above the summary: the orders agree */
-    }
-    if (slot <= INFO_ROW_ID + FREECAM_INFO_LINE_COUNT) {
-        return FREECAM_LINE_FIRST_ID + (slot - INFO_ROW_ID - 1u);      /* one of the lines */
-    }
-    return slot - FREECAM_INFO_LINE_COUNT;   /* a fixed row, pushed down the screen by them */
-}
-
-/* The cheats group: the rows that line up with cheats_own_id_t, and the four that do not (the
- * jump boost scale, the teleport key, free camera itself and its folded note). `id` arrives as
- * a screen position and continues as a row id. */
-static void openphantom_row(uint32_t id, overlay_row_t *out)
-{
-    /* Arriving as a screen position and continuing as an id. Reassigned rather than kept in
-       a second local so that no comparison below can accidentally reach the slot instead. */
-    id = openphantom_row_id(id);
-    out->id = id;
-
-    if (id == JUMP_SCALE_ROW_ID) {
-        out->kind = OVERLAY_ROW_VALUE;
-        copy_label(out->label, "Jump boost scale");
-        out->on = false;        /* meaningless for a value row; never read by the drawer */
-        out->available = cheats_openphantom_is_available(CHEATS_OWN_JUMP_BOOST);
-        /* Read live either way, same reasoning as the hotkey row just below: mid-edit shows
-         * exactly what has been typed with a trailing cursor, otherwise the value this cheat
-         * would multiply by right now if switched on, formatted the same "1.30x" way its own
-         * chip is meant to be typed back in. */
-        if (model.editing_value && model.editing_value_row == JUMP_SCALE_ROW_ID) {
-            text_format(out->value, sizeof out->value, "%s_", model.value_edit_buf);
-        } else {
-            text_format(out->value, sizeof out->value, "%.2fx",
-                     (double)cheats_openphantom_jump_boost_scale());
-        }
-        out->value[sizeof out->value - 1] = '\0';
-        return;
-    }
-    if (id == HOTKEY_ROW_ID) {
-        out->kind = OVERLAY_ROW_HOTKEY;
-        copy_label(out->label, "Free camera teleport key");
-        out->on = false;        /* meaningless for a hotkey row; never read by the drawer */
-        out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
-        /* Always populated, never left for the drawer's own ACTION/CHEAT fallback word to
-         * guess at; "RUN" and "OFF" are both wrong for a key binding. */
-        if (model.capturing_hotkey) {
-            text_format(out->value, sizeof out->value, "...");
-        } else {
-            int32_t vk = cheats_openphantom_freecam_hotkey();
-            if (vk != 0) {
-                overlay_key_name(vk, out->value, sizeof out->value);
-            } else {
-                text_format(out->value, sizeof out->value, "Set");
-            }
-        }
-        out->value[sizeof out->value - 1] = '\0';
-        return;
-    }
-    if (id == FREECAM_ROW_ID) {
-        /* Free camera itself, one slot after its own teleport-key row now rather than at its
-         * plain cheats_own_id_t position; see HOTKEY_ROW_ID/FREECAM_ROW_ID above. Named by
-         * CHEATS_OWN_FREECAM explicitly rather than casting id the way the generic fallback
-         * below does for the rest of them: id here is FREECAM_ROW_ID, one past the real
-         * enum's range, and casting that would ask cheats_openphantom.c about an id it never
-         * offered a name for. */
-        out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, cheats_openphantom_name(CHEATS_OWN_FREECAM));
-        out->on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
-        out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
-        /* Free camera specifically also needs a teleport key bound before it can be switched
-         * ON, and cheats_openphantom_toggle() enforces this too, so this is display honesty
-         * rather than the only gate: a row that looked clickable but silently refused every
-         * click would be worse than one that shows why. Once it IS on, availability no longer
-         * depends on this: the row is unreachable anyway with the mouse claimed, and the
-         * hotkey is how it actually turns back off. */
-        if (!out->on && cheats_openphantom_freecam_hotkey() == 0) {
-            out->available = false;
-        }
-        return;
-    }
-    if (id == INFO_ROW_ID) {
-        out->kind = OVERLAY_ROW_INFO;
-        copy_label(out->label,
-                  model.freecam_info_expanded ? "- How free camera flies"
-                                               : "+ How free camera flies");
-        out->expanded = model.freecam_info_expanded;
-        out->on = false;
-        out->available = true;
-        return;
-    }
-    if (id == END_LEVEL_ROW_ID) {
-        out->kind = OVERLAY_ROW_ACTION;
-        /* It HAS been played since this row was added, so the label no longer says it
-           has not. It stays marked as a debug tool, which is still true: it is a jump to the
-           next level with none of the bookkeeping the game itself does on the way out of
-           one. */
-        copy_label(out->label, "Skip to next level (debug)");
-        out->on = false;         /* meaningless for an action; never read by the drawer */
-        out->available = cheats_openphantom_end_level_is_available();
-        return;
-    }
-    if (model.freecam_info_expanded && id >= FREECAM_LINE_FIRST_ID &&
-        id < FREECAM_LINE_FIRST_ID + FREECAM_INFO_LINE_COUNT) {
-        char line[OVERLAY_LABEL_MAX];
-
-        out->kind = OVERLAY_ROW_INFO;
-        text_format(line, sizeof line, "    %s",
-                    FREECAM_INFO_LINES[id - FREECAM_LINE_FIRST_ID]);
-        copy_label(out->label, line);
-        out->on = false;
-        out->available = true;   /* a nested line, not a gate; never clicked either way */
-        return;
-    }
-    /* Everything left is one of the other cheats (ammunition, health, invincible NPCs,
-     * one-shot NPCs, giant player, tiny player, no clip, jump boost's own toggle), whose ids
-     * still line up 1:1 with cheats_own_id_t; only free camera's own slot was repurposed
-     * above, and jump boost's toggle keeps its own plain id even though the row right after
-     * it does not. */
-    out->kind = OVERLAY_ROW_CHEAT;
-    copy_label(out->label, cheats_openphantom_name((cheats_own_id_t)id));
-    out->on = cheats_openphantom_is_on((cheats_own_id_t)id);
-    out->available = cheats_openphantom_is_available((cheats_own_id_t)id);
 }
 
 static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
@@ -527,6 +402,52 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         overlay_utilities_row(id, editing, capturing, out);
         return;
     }
+    case OVERLAY_GROUP_OPENPHANTOM_PICTURE: {
+        /* The same shape as the utilities: a slot is its position, the id carries a base, and
+         * only the typed rows need to know what is being typed. No key rows here. */
+        const char *editing = NULL;
+
+        out->id = PICTURE_FIRST_ID + id;
+        if (model.editing_value && model.editing_value_row == out->id) {
+            editing = model.value_edit_buf;
+        }
+        overlay_picture_row(id, editing, out);
+        return;
+    }
+    case OVERLAY_GROUP_OPENPHANTOM_FOG: {
+        const char *editing = NULL;
+
+        out->id = FOG_FIRST_ID + id;
+        if (model.editing_value && model.editing_value_row == out->id) {
+            editing = model.value_edit_buf;
+        }
+        overlay_fog_row(id, editing, out);
+        return;
+    }
+    case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
+        out->id = DISMEMBER_FIRST_ID + id;
+        overlay_dismember_row(id, out);
+        return;
+    case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
+        out->id = MENU_EXTRAS_FIRST_ID + id;
+        overlay_menu_extras_row(id, out);
+        return;
+    case OVERLAY_GROUP_OPENPHANTOM_FREECAM:
+        /* The key row is the one capture this group holds; the fold's state is the group's own. */
+        out->id = FREECAM_FIRST_ID + id;
+        overlay_freecam_row(id, model.capturing_hotkey && model.capturing_hotkey_row == out->id,
+                            out);
+        return;
+    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS: {
+        const char *editing = NULL;
+
+        out->id = CONTROLS_FIRST_ID + id;
+        if (model.editing_value && model.editing_value_row == out->id) {
+            editing = model.value_edit_buf;
+        }
+        overlay_controls_row(id, editing, out);
+        return;
+    }
     case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE: {
         /* Same shape again: the id carries a base so no two groups' ids can be confused. */
         const char *editing = NULL;
@@ -556,7 +477,11 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
     }
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        openphantom_row(id, out);
+        /* A slot here is its id, and the jump-boost scale is the one row the model's own typing
+         * state can name. */
+        out->id = id;
+        overlay_cheats_row(id, (model.editing_value && model.editing_value_row == JUMP_SCALE_ROW_ID)
+                                   ? model.value_edit_buf : NULL, out);
         return;
     }
 }
@@ -611,21 +536,8 @@ static void append_group(overlay_group_t group)
 void overlay_model_rebuild(void)
 {
     uint32_t g;
-    bool     freecam_on = cheats_openphantom_is_on(CHEATS_OWN_FREECAM);
 
-    if (freecam_on != model.freecam_was_on) {
-        /* Free camera just changed state, either by the panel's own toggle or (more often) its
-         * hotkey, which flips this straight inside cheats_openphantom.c without ever going through
-         * overlay_model_activate(). Catching it here, on every rebuild, is what sees the hotkey
-         * path too. The mouse is fully claimed for as long as free camera flies, so this is also
-         * the only way the fold could open at all without a click reaching it, and forcing it
-         * shut again the instant free camera turns off is what keeps an old reading list from
-         * lingering once there is nothing left it is explaining. A manual click in between still
-         * wins over this: it only fires again on the NEXT genuine on/off flip, not every frame. */
-        model.freecam_info_expanded = freecam_on;
-        model.freecam_was_on = freecam_on;
-    }
-
+    overlay_freecam_sync();   /* the fold follows the camera's own on/off, hotkey path included */
     model.row_count = 0;
     for (g = 0; g < (uint32_t)OVERLAY_GROUP_COUNT; ++g) {
         if (GROUP_TAB[g] == model.tab) {
@@ -665,12 +577,17 @@ bool overlay_model_activate(uint32_t index)
         return false;
     }
     if (row.kind == OVERLAY_ROW_INFO) {
-        /* Only the fold's own summary row (id == INFO_ROW_ID) is interactive; the lines it
-         * reveals when open are notes, not controls, the same as an ordinary INFO row always
-         * was; they just never had anything to do. */
-        if (row.id == INFO_ROW_ID) {
-            model.freecam_info_expanded = !model.freecam_info_expanded;
-            return true;
+        /* Only a fold's own summary row is interactive; the lines it reveals when open are
+         * notes, not controls, the same as an ordinary INFO row always was, and the group
+         * answers false for those itself. Three groups carry a fold. */
+        if (row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM) {
+            return overlay_freecam_toggle(row.id - FREECAM_FIRST_ID);
+        }
+        if (row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS) {
+            return overlay_menu_extras_toggle(row.id - MENU_EXTRAS_FIRST_ID);
+        }
+        if (row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_CONTROLS) {
+            return overlay_controls_toggle(row.id - CONTROLS_FIRST_ID);
         }
         return false;
     }
@@ -692,17 +609,23 @@ bool overlay_model_activate(uint32_t index)
         model.value_edit_buf[0] = '\0';
         return true;
     }
-    if (row.kind == OVERLAY_ROW_ACTION && row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM) {
-        /* The only OpenPhantom row that is an action rather than a toggle, checked here, before
-         * the switch below, for the same reason HOTKEY/VALUE are: cheats_openphantom_toggle()
-         * would otherwise be asked for an id it was never given a name or an on/off for. */
-        return cheats_openphantom_end_level_invoke();
-    }
     switch ((overlay_group_t)row.group) {
     case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
         /* Every switch in that group, answered by the group itself. The two edit kinds above have
          * already been taken, so what reaches here is a plain toggle. */
         return overlay_utilities_toggle(row.id - UTILITIES_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_PICTURE:
+        return overlay_picture_toggle(row.id - PICTURE_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_FOG:
+        return overlay_fog_toggle(row.id - FOG_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_FREECAM:
+        return overlay_freecam_toggle(row.id - FREECAM_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
+        return overlay_dismember_toggle(row.id - DISMEMBER_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
+        return overlay_menu_extras_toggle(row.id - MENU_EXTRAS_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
+        return overlay_controls_toggle(row.id - CONTROLS_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
         return overlay_window_toggle(row.id - WINDOW_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
@@ -714,15 +637,9 @@ bool overlay_model_activate(uint32_t index)
         return cheats_original_actions_invoke((cheats_action_id_t)row.id);
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* row.id is FREECAM_ROW_ID for free camera's own row now, not CHEATS_OWN_FREECAM, and one
-         * past the real enum's range, because the hotkey row took over free camera's old slot
-         * (see HOTKEY_ROW_ID/FREECAM_ROW_ID above). Casting that straight through would ask
-         * cheats_openphantom_toggle() for an id its own bounds check refuses, so the click would
-         * silently do nothing; map it back to the real id here instead. Every other id in this
-         * group still lines up 1:1 with cheats_own_id_t, so only this one case needs remapping. */
-        (void)cheats_openphantom_toggle(
-            row.id == FREECAM_ROW_ID ? CHEATS_OWN_FREECAM : (cheats_own_id_t)row.id);
-        return true;
+        /* A cheat or the level skip, told apart by id in the group's own file. The typed row
+         * was taken above. */
+        return overlay_cheats_toggle(row.id);
     }
 }
 
@@ -742,6 +659,10 @@ void overlay_model_capture_hotkey(int32_t virtual_key)
     model.capturing_hotkey = false;
     /* Tested from the HIGHEST base downwards. These are open-ended ranges, so asking about
      * Utilities first would answer yes for a Window row as well and bind the wrong setting. */
+    if (row >= FREECAM_FIRST_ID) {
+        cheats_openphantom_freecam_set_hotkey(virtual_key);
+        return;
+    }
     if (row >= WINDOW_FIRST_ID) {
         (void)overlay_window_bind(row - WINDOW_FIRST_ID, virtual_key);
         return;
@@ -751,9 +672,7 @@ void overlay_model_capture_hotkey(int32_t virtual_key)
          * same shape the value rows use for text that is not a number. The refused keys are the
          * ones that would leave the panel unopenable or unusable; see open_key_row.c. */
         (void)overlay_utilities_bind(row - UTILITIES_FIRST_ID, virtual_key);
-        return;
     }
-    cheats_openphantom_freecam_set_hotkey(virtual_key);
 }
 
 bool overlay_model_is_editing_value(void)
@@ -813,6 +732,18 @@ void overlay_model_value_commit(void)
     }
 
     /* Highest base first, for the reason given at the matching test in the hotkey path. */
+    if (row >= FOG_FIRST_ID) {
+        (void)overlay_fog_commit(row - FOG_FIRST_ID, model.value_edit_buf);
+        return;
+    }
+    if (row >= PICTURE_FIRST_ID) {
+        (void)overlay_picture_commit(row - PICTURE_FIRST_ID, model.value_edit_buf);
+        return;
+    }
+    if (row >= CONTROLS_FIRST_ID) {
+        (void)overlay_controls_commit(row - CONTROLS_FIRST_ID, model.value_edit_buf);
+        return;
+    }
     if (row >= FRAMERATE_FIRST_ID) {
         /* A refused limit leaves the setting alone and the row shows it unchanged, which is the
          * same contract every other typed row here has. */
@@ -855,10 +786,16 @@ bool overlay_model_slider_set(uint32_t index, float fraction)
     if (!overlay_model_row(index, &row) || row.kind != OVERLAY_ROW_SLIDER || !row.available) {
         return false;
     }
-    if (row.group != (uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES) {
-        return false;              /* nothing else offers one; see overlay_utilities_slider_set */
+    switch ((overlay_group_t)row.group) {
+    case OVERLAY_GROUP_OPENPHANTOM_PICTURE:
+        return overlay_picture_slider_set(row.id - PICTURE_FIRST_ID, fraction);
+    case OVERLAY_GROUP_OPENPHANTOM_FOG:
+        return overlay_fog_slider_set(row.id - FOG_FIRST_ID, fraction);
+    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
+        return overlay_controls_slider_set(row.id - CONTROLS_FIRST_ID, fraction);
+    default:
+        return false;              /* nothing else offers one */
     }
-    return overlay_utilities_slider_set(row.id - UTILITIES_FIRST_ID, fraction);
 }
 
 bool overlay_model_slider_wants_full_rate(uint32_t index)
@@ -866,8 +803,8 @@ bool overlay_model_slider_wants_full_rate(uint32_t index)
     overlay_row_t row;
 
     if (!overlay_model_row(index, &row) || row.kind != OVERLAY_ROW_SLIDER ||
-        row.group != (uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES) {
-        return false;
+        row.group != (uint32_t)OVERLAY_GROUP_OPENPHANTOM_PICTURE) {
+        return false;              /* the field of view is the one, and it is in that group */
     }
-    return overlay_utilities_slider_wants_full_rate(row.id - UTILITIES_FIRST_ID);
+    return overlay_picture_slider_wants_full_rate(row.id - PICTURE_FIRST_ID);
 }

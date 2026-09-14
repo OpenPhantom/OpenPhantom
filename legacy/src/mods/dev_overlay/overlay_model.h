@@ -24,12 +24,13 @@
 #define OVERLAY_LABEL_MAX    48u
 
 /* Every group on the open tab is built at once, headings included, and the OpenPhantom tab holds
- * four of them. With all four open, the "how to fly" fold open and a display offering a full size
- * list, that tab reaches 98 rows. This was 64, so 27 of the 91 the tab then had were built and
- * dropped by a bounds test with no log and no way to scroll to what went missing.
+ * ten of them. With all ten open, every fold open and a display offering a full size list, that
+ * tab passes 128 rows. This was 64 when the tab had four groups, so 27 of the 91 it then had
+ * were built and dropped by a bounds test with no log and no way to scroll to what went missing.
  * overlay_row_ids.h asserts this against the parts it is made of, so a group that grows past it
- * stops the build rather than quietly losing its last rows. */
-#define OVERLAY_ROWS_MAX     128u
+ * stops the build rather than quietly losing its last rows, which is how the third fold's lines
+ * raised it to 160. */
+#define OVERLAY_ROWS_MAX     160u
 
 typedef enum overlay_tab {
     OVERLAY_TAB_ORIGINAL = 0,
@@ -45,7 +46,13 @@ typedef enum overlay_group {
     OVERLAY_GROUP_ORIGINAL_TOGGLES = 0,
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
     OVERLAY_GROUP_OPENPHANTOM,
+    OVERLAY_GROUP_OPENPHANTOM_FREECAM,
+    OVERLAY_GROUP_OPENPHANTOM_DISMEMBER,
     OVERLAY_GROUP_OPENPHANTOM_UTILITIES,
+    OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS,
+    OVERLAY_GROUP_OPENPHANTOM_PICTURE,
+    OVERLAY_GROUP_OPENPHANTOM_FOG,
+    OVERLAY_GROUP_OPENPHANTOM_CONTROLS,
     OVERLAY_GROUP_OPENPHANTOM_WINDOW,
     OVERLAY_GROUP_OPENPHANTOM_FRAMERATE,
     OVERLAY_GROUP_COUNT

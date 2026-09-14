@@ -10,7 +10,14 @@ set(MODS ${CMAKE_SOURCE_DIR}/src/mods)
 function(add_unit_test name module_dir)
     set(sources "")
     foreach(source ${ARGN})
-        list(APPEND sources ${MODS}/${source})
+        # A source named under unittests/ is one of this directory's own, shared between two
+        # programs; everything else is a module source under src/mods.
+        if(source MATCHES "^unittests/")
+            string(REPLACE "unittests/" "" own ${source})
+            list(APPEND sources ${CMAKE_CURRENT_SOURCE_DIR}/${own})
+        else()
+            list(APPEND sources ${MODS}/${source})
+        endif()
     endforeach()
 
     add_executable(${name}_test ${name}.c unittest.c ${sources})
@@ -287,8 +294,11 @@ add_unit_test(texture_size large_textures large_textures/texture_size.c)
 
 # The overlay's model: which rows are on screen, and the search that decides it. Built against the
 # real cheat sources rather than stubs, so the test also pins down what the panel looks like on an
-# executable neither of them could resolve.
-add_unit_test(overlay_model dev_overlay
+# executable neither of them could resolve. Two programs share the list: overlay_model walks the
+# navigation, the cheats, the free camera and the folds, and overlay_groups walks the settings
+# groups by position. One program held both until the tenth group put it over the size limit.
+set(OVERLAY_MODEL_SOURCES
+    unittests/overlay_stubs.c
     dev_overlay/overlay_model.c
     # the groups whose rows the model dispatches to, the same as the Utilities group below
     dev_overlay/overlay_framerate.c
@@ -306,6 +316,15 @@ add_unit_test(overlay_model dev_overlay
     dev_overlay/sensitivity_row.c
     dev_overlay/free_look_row.c
     dev_overlay/strafe_row.c
+    dev_overlay/controller_mode_row.c
+    dev_overlay/overlay_controls.c
+    dev_overlay/overlay_picture.c
+    dev_overlay/overlay_fog.c
+    dev_overlay/overlay_freecam.c
+    dev_overlay/overlay_dismember.c
+    dev_overlay/overlay_menu_extras.c
+    dev_overlay/overlay_cheats.c
+    dev_overlay/overlay_row_fill.c
     dev_overlay/air_control_row.c
     dev_overlay/camera_follow_row.c
     dev_overlay/strict_range_row.c
@@ -335,6 +354,8 @@ add_unit_test(overlay_model dev_overlay
     # resolved site every entry point returns immediately, as a test process wants.
     dev_overlay/sim_pause.c
 )
+add_unit_test(overlay_model dev_overlay ${OVERLAY_MODEL_SOURCES})
+add_unit_test(overlay_groups dev_overlay ${OVERLAY_MODEL_SOURCES})
 
 # The character census reads a live process, so what can be tested without the game is the
 # arithmetic underneath it: the pool slot walk, the radius test, the vertical classification and

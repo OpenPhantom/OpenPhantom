@@ -18,14 +18,17 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds four groups, split the same way and for the same reason the Original tab
-  is: **Cheats** are the things that change the game, **Utilities** are the settings that configure
-  this patch, **Window mode** is the shape of the window, and **Frame rate** is how many frames a
-  second go into it. It began as one group with a settings row appended, and the settings outgrew
-  the cheats, so a reader had to scroll past invincibility to reach the draw distance. Window mode
-  came out of Utilities for the same reason plus one of its own: its rows answer a single question a
-  player arrives with, and half of them are unusable until the game is restarted, which is worth
-  saying in one place rather than eleven times. Frame rate came out of it on the same argument.
+* **OpenPhantom** holds ten groups, one per subject a player comes for: **Cheats**, **Free
+  camera** (that cheat with its key and its instructions), **Dismemberment**, **Cheatmenu
+  options** (this panel's own size and key), **In game options extras** (whether this patch's
+  settings appear on the game's own screens), **Enhanced resolution** (the picture), **Fog**,
+  **Enhanced input** (the control scheme), **Window mode** and **Frame rate**. It began as one
+  group with a settings row appended, and the settings outgrew the cheats, so a reader had to
+  scroll past invincibility to reach the draw distance. A second group, Utilities, held every
+  setting for a while; Window mode came out of it first, because its rows answer a single question
+  and half of them are unusable until the game is restarted, which is worth saying in one place
+  rather than eleven times, and the rest followed on the same argument until each heading named
+  one thing and Utilities was left holding the panel's own two rows, so it was renamed for them.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
@@ -136,12 +139,26 @@ NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **No
 **Jump boost** and **Free camera**. They need fewer engine sites than that, because
 several pairs are two answers to one question and share a single detour.
 
-**No fog was a ninth and now lives under Utilities**, at the head of the fog settings. It is still
-the same code in `cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A
-player looking for it is looking at the fog, and the fog thickness and fog follow rows below it
-are the rest of that answer: this one removes the fog, the second says how thick it is, and the
-third says what it is measured against. The dismemberment row sits between them, for the reason
-given in its own section. Split across two groups they read as unrelated.
+**No fog was a ninth and now heads the Fog group.** It is still the same code in
+`cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A player looking for
+it is looking at the fog, and the fog thickness and fog follow rows below it are the rest of that
+answer: this one removes the fog, the second says how thick it is, and the third says what it is
+measured against. Split across two groups they read as unrelated.
+
+**Free camera is drawn by its own group**, directly under the cheats: its teleport key, the cheat
+itself and the "how to fly" fold, in that order, because read top to bottom they are the steps.
+The cheat is still `CHEATS_OWN_FREECAM` in `cheats_openphantom.c`; the cheats group counts to one
+short of it and the jump-boost scale takes its numeric slot, which puts the scale directly after
+jump boost's own toggle.
+
+**Lightsaber dismemberment has a heading of its own**, directly under the free camera's. It
+writes `[dismemberment] Mode`, 2 or 0, and never reaches into `dismemberment.dll`; that DLL
+re-reads the key about once a second. It lived with the settings for a while, on the argument that
+its choice survives the session and the cheats' do not, then among the cheats because a player
+looking for it looks there first, and a heading that says the word is where that player looks
+first of all. The key also takes 1, which corrects which limb the engine's own seven authored
+severings take without adding any; nobody wants that on purpose, so the row writes 2 or 0 and a
+reader who has set 1 by hand sees the row lit and keeps their setting until they press it.
 
 A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
 That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
@@ -407,7 +424,7 @@ Alt+F4 still closes the game, because Alt is not read here. With no key bound th
 to switch on at all.
 
 **Hiding the panel.** While the camera is flying the panel cannot be closed, because it is what
-holds the game still under the camera (see below). The dev menu's open key and Escape hide it
+holds the game still under the camera (see below). The Cheatmenu's open key and Escape hide it
 instead, so the picture is the camera's alone, and the same keys bring it back; it comes back by
 itself when the flight ends. Hidden is only not drawn: the freeze, the pause and the keys the panel
 swallows are all still there, so hiding is safe where closing is not.
@@ -576,11 +593,20 @@ anything, for either code, since they share the one counter. A row that greys ou
 because that shared budget ran out, not because a resolve failed; the panel does not need to say
 which.
 
+## The Enhanced resolution group
+
+The picture, under one heading: the draw distance with its slider, the number in force and its
+two gates, the field of view, and the subtitle size. They were the front half of Utilities until
+the settings there outnumbered everything else, and every one of them answers the same question a
+player arrives with. Three DLLs own the keys, `view_distance_fix`, `variable_fov` and
+`enhanced_resolution`, and none of them is called from here; each re-reads its keys about once a
+second. The fog has a group of its own directly under this one.
+
 ## The draw distance row
 
-The first row under **Utilities** edits `[view_distance_fix] ViewRangeScale`, the draw distance,
-typed in the same way as the jump-boost scale. Its label carries the accepted range, `1.0 to 2.5`,
-so it is learned from the row rather than by having a number refused.
+The first row under **Enhanced resolution** edits `[view_distance_fix] ViewRangeScale`, the draw
+distance, typed in the same way as the jump-boost scale. Its label carries the accepted range,
+`1.0 to 2.5`, so it is learned from the row rather than by having a number refused.
 
 **It has a slider on the line directly beneath it**, on its own line so the handle never covers the
 number it sets, which is the same shape the field of view and mouse speed rows use. The track spans
@@ -664,10 +690,11 @@ strict on to look at something and turns it off again gets their governor back, 
 discovering that a setting they never touched has been changed for them. So the row reports the
 state the game is in and the file keeps the state the reader asked for.
 
-## The field of view row, and the two control switches
+## The field of view row
 
-Three rows that reach settings owned by other DLLs, so the panel can change them without leaving
-the game to find the screen they normally live on.
+A row that reaches a setting owned by another DLL, so the panel can change it without leaving
+the game to find the screen it normally lives on. The control scheme's switches and the mouse
+speed were beside it until they became a group of their own, described further down.
 
 `Field of view` is `[variable_fov] ExtraDegrees`, it is the only row here that shows one number and
 writes another, and it is the only one with a **slider**. That key is an offset from a base that
@@ -709,47 +736,13 @@ works with the DLL that reads it deleted from `mods\`. This one needs a publishe
 canvas. Its range comes from that DLL's own `SliderMinFovDegrees` and `SliderMaxFovDegrees`, so
 widening the in-game slider widens this row with it.
 
-`Free look` and `Strafe` are `[enhanced_input] FreeLook` and `Strafe`, the two check boxes on the
-game's own controls screen. They carry that screen's own captions rather than a description this
-panel invented, so a reader who has seen it recognises these rows. **Either can be refused**, and
-the row cannot tell in advance: strafe needs mouse look and the keyboard axis reader, because the
-engine's `turnWheel` is the only turn channel and driving it sideways would clear the mouse with
-it; free look needs a follow camera that `enhanced_input` recognises. When one is declined it says
-why in the log and the row reads back off on its next rebuild, which is the honest outcome.
-
-**Two rows below those are the pad's, and both are built on free look.** `Camera follows you`
-writes `[enhanced_input] CameraFollow` and `Steer a jump in the air` writes `AirControl`. Each
-**writes `FreeLook=1` with itself**, because both are built on free look turning the body to
-face where it travels: the camera drifts at the body's heading, and the jump is steered by an
-angle measured against the camera. Without free look neither has anything to work with. The
-dependency is one way, so switching either off leaves free look alone, and switching free look
-off takes both down with it.
-
-**The row writes both keys rather than calling the feature**, and not for tidiness. Free look
-refuses while the player phases are stopped, the state the game is in while this panel is open,
-so a row that asked it directly would be refused every time it was clicked. Written to the file
-instead, the once-a-second re-read applies them in its own order once play resumes, with the
-refusal handling it already has.
-
-`Camera follows you` is **unavailable rather than hidden while `Strafe` is off**, because the walk
-never leaves the heading then and there is nothing to follow.
-
-`Steer a jump in the air` is available while **either** of them is on, and that difference is worth
-the sentence. **The shipped game steers a jump on its own**: the Jump and Fall descriptors both
-carry the ordinary steer phase, so the turn input has always turned the body in the air. What takes
-it away is free look, which handles the substep outside Stand so that the mouse stays on the camera.
-So this row is not an addition to the game, it is what gives back what our own scheme removed, and
-it is offered wherever that scheme is on. With free look on and the sideways walk off it still
-steers, with fewer directions, because a lone forward key is a turn toward the camera. With both
-off it is greyed out, because the engine is already doing the job.
-
-**All three needed the owning DLL to start reading its own settings back.** Both of those screens
-pushed outward only: they applied a change and then wrote the file, and nothing ever read it. A row
-here would have done nothing until the next launch. `variable_fov` and `enhanced_input` now re-read
-these keys once a second, the way `view_distance_fix` already did, so a row takes effect within the
-second. **A key is only re-read if it is named in that poll.** One added without it writes the
-file, nothing reads it back, and the row looks dead until the next launch. `CameraFollow` and
-`AirControl` are both in it.
+**The field of view and the control switches all needed the owning DLL to start reading its own
+settings back.** Both of those screens pushed outward only: they applied a change and then wrote
+the file, and nothing ever read it. A row here would have done nothing until the next launch.
+`variable_fov` and `enhanced_input` now re-read these keys once a second, the way
+`view_distance_fix` already did, so a row takes effect within the second. **A key is only re-read
+if it is named in that poll.** One added without it writes the file, nothing reads it back, and the
+row looks dead until the next launch. `CameraFollow` and `AirControl` are both in it.
 
 **Naming a key in that poll is not quite enough, and the second half cost a released build.**
 The poll reads each key and compares it against the value it last saw, and it reads all of
@@ -760,17 +753,15 @@ equal to it and is decided not to be a change, and the row goes dead until the g
 restarted. It now re-reads what is live on any pass where it acted. A row whose key another
 row can write needs that, or it works once and never again.
 
-`Mouse speed` is `[enhanced_input] MouseDegreesPerCount`, named after that screen's caption as
-well, and it has a track too. Unlike the
-field of view it needs nothing published, because both of its ends are fixed and are the same band
-the controls screen's own slider spanned. It is here because that screen no longer offers it.
-
-**And a last row decides whether any of this appears in the game's own menus.** `Show extra menu
-options (restart the game)` writes `[variable_fov] MenuSlider` and `[enhanced_input] MenuWidgets`
-together. Both ship off, so the video options and controls screens look as they did in 1999, and all
-four settings live here instead. It reads on only when both keys are on, since a half state can only
-be reached by editing the file by hand and reporting that as on would claim a screen is changed when
-it is half changed.
+**And a group of its own decides whether any of this appears in the game's own menus.** Under
+**In game options extras**, `Show extra menu options (restart the game)` writes
+`[variable_fov] MenuSlider` and `[enhanced_input] MenuWidgets` together. Both ship off, so the
+video options and controls screens look as they did in 1999, and all four settings live in this
+panel instead. It reads on only when both keys are on, since a half state can only be reached by
+editing the file by hand and reporting that as on would claim a screen is changed when it is half
+changed. Under it a fold, `What this adds`, opens into seven lines that say what the switch puts
+where, that it takes a restart, and that nothing here needs it, the same shape as the free
+camera's "how to fly" row.
 
 It says "on restart" on the row itself because it means it: both screens are patched by repointing
 the engine's own widget table once while the game starts, and this project has no path that puts
@@ -781,10 +772,10 @@ look ships on, so that slider was its only adjustment inside the game. That is w
 exists. Leaving one widget behind on a screen meant to look untouched would have been the worse
 answer: either the screen is the one the game shipped or it is not.
 
-## The fog rows
+## The Fog group
 
-Two rows under **Utilities**, both `[view_distance_fix]` keys the fog reads while the game runs, so
-each takes effect within about a second and neither needs a restart.
+No fog at its head, then two rows that are `[view_distance_fix]` keys the fog reads while the
+game runs, so each takes effect within about a second and neither needs a restart.
 
 `Fog thickness` carries a slider on the line beneath it, on the same terms as the draw distance
 above: `FOG_BAND_MIN` to `FOG_BAND_MAX`, rounded to a hundredth on a drag.
@@ -811,8 +802,8 @@ load, and switching while a level is up leaves nothing fogged at all.
 
 ## The key that opens this menu
 
-The last row under **Utilities** binds `[dev_overlay] OpenKey`. Click it, press a key, and it is
-bound in the running panel and written to the ini, so the next start already has it.
+The last row under **Cheatmenu options** binds `[dev_overlay] OpenKey`. Click it, press a key, and
+it is bound in the running panel and written to the ini, so the next start already has it.
 
 **The default accepts three keys**: F6, and the key directly below Escape, which is the backtick on
 a British or American layout and the caret on a German one. That last key has been the way in since
@@ -831,9 +822,9 @@ happen.
 
 ## The subtitle size row
 
-Two rows above the dev menu size, and it edits `[enhanced_resolution] SubtitleScale`: how big the
-subtitles are, as a multiple of the size they have at 640x480. Typed in like the rows above it, with
-the band in the label, and **dragged on the track beneath it**.
+The last two rows of **Enhanced resolution**, and it edits `[enhanced_resolution] SubtitleScale`:
+how big the subtitles are, as a multiple of the size they have at 640x480. Typed in like the rows
+above it, with the band in the label, and **dragged on the track beneath it**.
 
 **A track is right here, unlike the panel's own size.** That one was tried and taken back out,
 because dragging it moved the panel being dragged. This changes text somewhere else on the screen.
@@ -849,14 +840,16 @@ shrinking size alone", it sits outside the band this row offers, and there is no
 a handle for it. The row reports the default instead, and anyone who wants the engine's behaviour
 back sets `0` in the file, where the comment explains it.
 
-## The dev menu size row
+## The Cheatmenu size row
 
-The last row but one under **Utilities** edits `[dev_overlay] DevMenuSize`, which is how much bigger
-than its authored size this menu is drawn. Typed in like the two rows above it, with the accepted
-range, `0.33 to 4.0`, in the label.
+The first row under **Cheatmenu options** edits `[dev_overlay] DevMenuSize`, which is how much
+bigger than its authored size this menu is drawn. Typed in like the other value rows, with the
+accepted range, `0.33 to 4.0`, in the label.
 
-**It is named for the dev menu rather than for the panel**, because the menu is the thing a player
-already has a name for and the panel is an implementation detail of it.
+**It is named for the Cheatmenu rather than for the panel**, because the menu is the thing a
+player already has a name for, the one on its own title band, and the panel is an implementation
+detail of it. The key it writes keeps its older name, `DevMenuSize`, because a renamed key would
+silently drop every size already set in a player's file.
 
 **The menu is a fixed number of pixels, which is the problem this solves.** It reads the same on a
 1080 display as on a 4K one, which is deliberate: what it cannot know is how big those pixels
@@ -884,8 +877,9 @@ OpenPhantom tab wanted more rows than the array held, and the row that did not f
 bounds test that logged nothing. There is no scrolling, so a player had no way to tell a missing
 row from a feature that was never written.
 
-The array now holds 128, and `overlay_model.c` asserts that against the parts the number is made of
-rather than restating it, so a group that grows past the array stops the build. The parts that only
+The array now holds 160, and `overlay_row_ids.h` asserts that against the parts the number is made
+of rather than restating it, so a group that grows past the array stops the build; the third fold's
+lines did exactly that at 128, which is the assert doing its job. The parts that only
 the display knows, the size list among them, cannot be asserted, so an overflow also writes one
 warning naming the first row it dropped.
 
@@ -922,8 +916,12 @@ logged. Closing the list first and then pressing the row always worked, so this 
 
 `overlay_model` covers the half that can be checked without the game: the search, the folding,
 both groups on the Original tab, the tab switch, the bounds of the search box, the queued-swap
-sentinel (nothing reads as pending before `resolve()` has run) and every index that does not
-exist. The checks live in `unittests/overlay_model.c`.
+sentinel (nothing reads as pending before `resolve()` has run), the cheats, the free camera, the
+three folds and every index that does not exist. `overlay_groups` walks the settings groups by
+position, every row in the order it is drawn with its caption and whether it is offered. The two
+share the sources, the stubs and the row arithmetic and were one program until the tenth group
+put it over the size limit; the checks live in `unittests/overlay_model.c` and
+`unittests/overlay_groups.c`.
 
 Every row in the panel has been opened, drawn and switched against the running game, and the
 layout has been through several rounds of correction against screenshots. All of this
@@ -1060,24 +1058,68 @@ cap. The log lines to look for:
 ```
 
 
-## Lightsaber dismemberment sits in Utilities, not in Cheats
+## The Enhanced input group
 
-It is a cheat by any ordinary reading, and it is here for the same reason the no-fog row is: this
-row writes a settings key and the choice survives the session, while the cheats above it do not.
-A row whose effect outlives the run belongs with the settings.
+Five switches and the mouse speed, all of them `[enhanced_input]` keys, drawn under Enhanced
+resolution. They were Utilities rows until a player asked for one switch that turned the pad's
+scheme on, and a switch that sets four rows wants the four rows under it, under a heading that
+says what they are together.
 
-The row writes one key, `[dismemberment] Mode`, as 2 or 0. It does not reach into
-`dismemberment.dll` and could not: feature DLLs here never call each other, and the panel does not
-know whether that one is even loaded. That DLL re-reads the key about once a second and applies it,
-so a press changes the game within that second.
+`Mouse speed` is `[enhanced_input] MouseDegreesPerCount`, named after the controls screen's own
+caption, and it has a track too. Unlike the field of view it needs nothing published, because both
+of its ends are fixed and are the same band the controls screen's own slider spanned. It is here
+because that screen no longer offers it.
 
-The key also takes 1, which corrects which limb the engine's own seven authored severings take
-without adding any. Nobody wants that on purpose, so the row writes 2 or 0 and a reader who has set
-1 by hand sees the row lit and keeps their setting until they press it.
+Last in the group, a fold, `What these do`, opens into a line or two on each row above it, in the
+order they are drawn, the same shape as the free camera's "how to fly" row. It sits last so that
+its lines are the tail of the group and a slot stays its id whether or not it is open, so the
+mouse speed keeps a fixed id while it is being typed into.
+
+`Enhanced controller mode` sits at the top and is the one a pad player wants: one click writes
+`Strafe`, `FreeLook`, `CameraFollow` and `AirControl` on, and one click writes them off. Four rows
+carrying the game's own names give no hint that a pad wants all of them, and that is the whole
+reason the row exists. It has no key of its own: it reads ON exactly when the four under it do, so
+any of them can still be switched off alone, and the row then reads OFF, which is the truth. Each
+key is written through its own row, so the rules below, which one switches which on, hold here
+too.
+
+`Free look` and `Strafe` are `[enhanced_input] FreeLook` and `Strafe`, the two check boxes on the
+game's own controls screen. They carry that screen's own captions rather than a description this
+panel invented, so a reader who has seen it recognises these rows. **Either can be refused**, and
+the row cannot tell in advance: strafe needs mouse look and the keyboard axis reader, because the
+engine's `turnWheel` is the only turn channel and driving it sideways would clear the mouse with
+it; free look needs a follow camera that `enhanced_input` recognises. When one is declined it says
+why in the log and the row reads back off on its next rebuild, which is the honest outcome.
+
+**Two rows below those are the pad's, and both are built on free look.** `Camera follows you`
+writes `[enhanced_input] CameraFollow` and `Steer a jump in the air` writes `AirControl`. Each
+**writes `FreeLook=1` with itself**, because both are built on free look turning the body to
+face where it travels: the camera drifts at the body's heading, and the jump is steered by an
+angle measured against the camera. Without free look neither has anything to work with. The
+dependency is one way, so switching either off leaves free look alone, and switching free look
+off takes both down with it.
+
+**The row writes both keys rather than calling the feature**, and not for tidiness. Free look
+refuses while the player phases are stopped, the state the game is in while this panel is open,
+so a row that asked it directly would be refused every time it was clicked. Written to the file
+instead, the once-a-second re-read applies them in its own order once play resumes, with the
+refusal handling it already has.
+
+`Camera follows you` is **unavailable rather than hidden while `Strafe` is off**, because the walk
+never leaves the heading then and there is nothing to follow.
+
+`Steer a jump in the air` is available while **either** of them is on, and that difference is worth
+the sentence. **The shipped game steers a jump on its own**: the Jump and Fall descriptors both
+carry the ordinary steer phase, so the turn input has always turned the body in the air. What takes
+it away is free look, which handles the substep outside Stand so that the mouse stays on the camera.
+So this row is not an addition to the game, it is what gives back what our own scheme removed, and
+it is offered wherever that scheme is on. With free look on and the sideways walk off it still
+steers, with fewer directions, because a lone forward key is a turn toward the camera. With both
+off it is greyed out, because the engine is already doing the job.
 
 ## The Window mode group
 
-Ten rows, and the group is a good deal more stateful than Utilities, so the rules it follows are
+Ten rows, and the group is a good deal more stateful than most, so the rules it follows are
 worth writing down.
 
 **The five shape rows are one choice, not five switches.** Pressing the lit one does nothing. An

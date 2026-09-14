@@ -1,4 +1,4 @@
-/* overlay_utilities.h: the panel's second OpenPhantom group, the one that is not cheats.
+/* overlay_utilities.h: the panel's own settings, drawn as the group "Cheatmenu options".
  *
  * It is a group of its own because the tab began as five cheats with a settings row appended, and
  * settings kept arriving until the settings outnumbered the cheats and a reader scrolled past
@@ -12,6 +12,11 @@
  * What stays behind is the part that has to know which row is being typed into, because that is
  * the panel's state rather than any row's.
  *
+ * The settings then outgrew this group in turn, and the picture, the fog, the control scheme, the
+ * window, the frame rate and the game's own menus each became a group of their own; what is left
+ * here is the panel itself, the two rows a player sets once and does not come back to, and the
+ * heading says so.
+ *
  * The rows here are DESCRIBED and ACTED ON here, and NUMBERED by the caller. That split is what
  * keeps this file free of the id arithmetic the cheats group needs, where rows are positioned
  * relative to a cheat enum; a slot here is just its position in the list.
@@ -24,18 +29,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* In the order they are drawn. The draw distance first, because it is the setting a player came
- * looking for, with a note under it saying what the game is actually running; the key binding
- * last, because it is the one nobody needs twice. In between they sit next to what they affect:
- * the draw distance with its two gates, then no fog, then lightsaber dismemberment, then the
- * fog band and whether the fog follows the draw distance, then the view and control settings,
- * then the panel's own size.
- *
- * Six of these carry no text of their own. The live draw distance under the typed one reports
- * and is never clicked; the other five are slider tracks, under the draw distance, the fog
- * thickness, the field of view, the sensitivity and the subtitle size. Each track sits on its
- * own line so the handle never covers the number it sets. */
-#define OVERLAY_UTILITIES_ROW_COUNT 23u
+/* In the order they are drawn: the panel's own size, and the key that opens it, last because it
+ * is the one nobody needs twice. */
+#define OVERLAY_UTILITIES_ROW_COUNT 2u
 
 /* Fills everything about one row except `group` and `id`, which belong to the caller's numbering.
  *
@@ -48,25 +44,13 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
 /* True when this slot binds a key, the same question for the other kind of edit. */
 bool overlay_utilities_row_is_key(uint32_t slot);
 
-/* Flips a switch. False when the slot is not a switch, the row is unavailable, or the file could
- * not be written, and in every one of those the caller leaves the row where it was. */
+/* Always false: neither row here is a switch. Kept so every group answers the same four
+ * questions. */
 bool overlay_utilities_toggle(uint32_t slot);
 
 /* Commits typed text to a value row. False when the slot is not a value row or the text is not a
  * number, which leaves the setting alone rather than writing a zero. */
 bool overlay_utilities_commit(uint32_t slot, const char *text);
-
-/* Drags the slot's slider to `fraction`, 0 to 1. False when the slot has no slider or the write
- * failed. Five slots have one: the draw distance, the fog thickness, the field of view, the mouse
- * speed and the subtitle size. They are the settings whose whole range is worth sweeping through
- * to find a number, rather than typed once and left. Every one of them writes on a hundredth
- * grid, for the reason recorded at the first of them in overlay_utilities.c. */
-bool overlay_utilities_slider_set(uint32_t slot, float fraction);
-
-/* Whether a drag on this slider should reach the file at the full rate the panel allows rather
- * than the sparing one. The field of view is the one that does: its whole effect is the picture
- * zooming under the hand, and at a few writes a second that zoom is a series of steps. */
-bool overlay_utilities_slider_wants_full_rate(uint32_t slot);
 
 /* Binds a key. False when the slot is not the key row or the key was refused. */
 bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key);

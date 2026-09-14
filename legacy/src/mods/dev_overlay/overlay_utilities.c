@@ -1,56 +1,17 @@
 /* overlay_utilities.c: see overlay_utilities.h. */
 #include "overlay_utilities.h"
 
-#include "auto_range_row.h"
 #include "dev_menu_size_row.h"
-#include "dismemberment_row.h"
-#include "air_control_row.h"
-#include "camera_follow_row.h"
-#include "cheats_no_fog.h"
-#include "fog_band_row.h"
-#include "fog_follow_row.h"
-#include "fov_row.h"
-#include "menu_extras_row.h"
-#include "sensitivity_row.h"
-#include "free_look_row.h"
 #include "open_key_row.h"
-#include "strafe_row.h"
-#include "strict_range_row.h"
-#include "subtitle_size_row.h"
 #include "overlay_key_name.h"
-#include "view_range_live_row.h"
-#include "view_range_row.h"
+#include "overlay_row_fill.h"
 
 #include "common/text.h"
-
-#include <stdio.h>
-#include <string.h>
 
 /* The slots, in drawn order. Named rather than numbered at the use sites, because the order is a
  * reading decision and whoever changes it should have to change one list. */
 typedef enum utilities_slot {
-    UTILITIES_VIEW_RANGE = 0,
-    UTILITIES_VIEW_RANGE_TRACK,
-    UTILITIES_VIEW_RANGE_LIVE,
-    UTILITIES_AUTO_RANGE,
-    UTILITIES_STRICT_RANGE,
-    UTILITIES_NO_FOG,
-    UTILITIES_DISMEMBERMENT,
-    UTILITIES_FOG_BAND,
-    UTILITIES_FOG_BAND_TRACK,
-    UTILITIES_FOG_FOLLOW,
-    UTILITIES_FOV,
-    UTILITIES_FOV_TRACK,
-    UTILITIES_FREE_LOOK,
-    UTILITIES_STRAFE,
-    UTILITIES_CAMERA_FOLLOW,
-    UTILITIES_AIR_CONTROL,
-    UTILITIES_SENSITIVITY,
-    UTILITIES_SENSITIVITY_TRACK,
-    UTILITIES_MENU_EXTRAS,
-    UTILITIES_SUBTITLE_SIZE,
-    UTILITIES_SUBTITLE_SIZE_TRACK,
-    UTILITIES_DEV_MENU_SIZE,
+    UTILITIES_DEV_MENU_SIZE = 0,
     UTILITIES_OPEN_KEY
 } utilities_slot_t;
 
@@ -58,339 +19,24 @@ _Static_assert((uint32_t)UTILITIES_OPEN_KEY + 1u == OVERLAY_UTILITIES_ROW_COUNT,
                "the slot enum and OVERLAY_UTILITIES_ROW_COUNT have to end together, or the last "
                "row is either built and never drawn or drawn and never built");
 
-static void copy_label(char *out, const char *text)
+void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
+                           overlay_row_t *out)
 {
-    size_t i;
-
-    if (text == NULL) {
-        out[0] = '\0';
+    if (out == NULL) {
         return;
     }
-    for (i = 0; i + 1u < OVERLAY_LABEL_MAX && text[i] != '\0'; ++i) {
-        out[i] = text[i];
-    }
-    out[i] = '\0';
-}
+    overlay_row_defaults(out);
 
-/* The typed rows all show either what is being typed, with a cursor, or the stored value. Written
- * once because a difference between them in that is the kind of thing a reader notices and cannot
- * explain. */
-static void fill_typed(overlay_row_t *out, const char *editing_text,
-                       void (*format)(float, char *, size_t), float value)
-{
-    if (editing_text != NULL) {
-        text_format(out->value, sizeof out->value, "%s_", editing_text);
-    } else {
-        format(value, out->value, sizeof out->value);
-    }
-    out->value[sizeof out->value - 1] = '\0';
-}
-
-/* A handle belongs on its track. A value outside the slider's own ends is left honest on the row
- * above, because a setting typed into the file should read as what it is, but a fraction outside
- * 0 to 1 would draw the handle past the end of the track and read as a broken slider rather than
- * a value off the scale. Four rows want this, so it is written once. */
-static void clamp_fraction(overlay_row_t *out)
-{
-    if (out->fraction < 0.0f) {
-        out->fraction = 0.0f;
-    }
-    if (out->fraction > 1.0f) {
-        out->fraction = 1.0f;
-    }
-}
-
-/* The draw distance: the value, its slider, the number in force, and the two switches that
- * decide who else may lower it. True when `slot` was one of these. */
-static bool draw_distance_row(uint32_t slot, const char *editing_text, bool capturing,
-                              overlay_row_t *out)
-{
-    (void)capturing;
     switch ((utilities_slot_t)slot) {
-    case UTILITIES_VIEW_RANGE:
-        out->kind = OVERLAY_ROW_VALUE;
-        /* The accepted range is in the label rather than left for a player to discover by having
-           a number refused. */
-        copy_label(out->label, "Draw distance (1.0 to 2.5)");
-        fill_typed(out, editing_text, view_range_row_format, view_range_row_get());
-        return true;
-
-    case UTILITIES_VIEW_RANGE_TRACK:
-        out->kind = OVERLAY_ROW_SLIDER;
-        copy_label(out->label, "");
-        /* Both ends are compile-time constants here, unlike the field of view, whose ends come
-         * out of the settings file. So there is no divide-by-zero to guard and no way for a
-         * player to set them equal. */
-        out->fraction = (view_range_row_get() - VIEW_RANGE_MIN) /
-                        (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
-        clamp_fraction(out);
-        return true;
-
-    case UTILITIES_VIEW_RANGE_LIVE: {
-        /* A note rather than a control, so it cannot be clicked into and cannot be mistaken for
-         * something to set. What it reports is the number the game is running, which is not always
-         * the number above it: the frame governor lowers that when a scene costs too much, and the
-         * cell watchdog lowers it when the draw table or the vertex cache is near overflowing. On
-         * Coruscant the watchdog can pin it at 1.00 for a whole level, and the row above then shows
-         * a number nothing is using. */
-        char text[16];
-
-        out->kind = OVERLAY_ROW_INFO;
-        if (view_range_live_row_get(text, sizeof text)) {
-            text_format(out->label, sizeof out->label, "  in force: %s", text);
-        } else {
-            copy_label(out->label, "  in force: not reported");
-        }
-        out->label[sizeof out->label - 1] = '\0';
-        return true;
-    }
-
-    case UTILITIES_AUTO_RANGE:
-        /* Greyed while the row below is on, because the two contradict each other and the one
-         * below wins. Strict mode declines the governor outright, so a switch still reading ON
-         * would be describing something that is not happening.
-         *
-         * Its key is deliberately NOT written when that happens. A reader who had the governor on,
-         * turns strict on to look at something and turns it off again gets the governor back,
-         * rather than finding a setting they never changed has been changed for them. So this row
-         * reports the state the game is actually in, and the file keeps the state the reader
-         * asked for. */
-        copy_label(out->label, "Draw distance follows the frame rate");
-        out->available = !strict_range_row_get();
-        out->on = out->available && auto_range_row_get();
-        return true;
-
-    case UTILITIES_STRICT_RANGE:
-        /* Named for the trade rather than for the machinery, like the row above it. The frame rate
-         * is the cost a reader will actually meet, because the governor is the term that acts in
-         * ordinary play; the watchdog only acts above 1.00x, and what it costs when declined is in
-         * the ini and in strict_range_row.h rather than in 47 characters. */
-        copy_label(out->label, "Keep the draw distance (costs frame rate)");
-        out->on = strict_range_row_get();
-        return true;
-
-    default:
-        return false;
-    }
-}
-
-/* The fog and its neighbour: no fog, dismemberment, the thickness and its slider, and what the
- * band is measured against. True when `slot` was one of these. */
-static bool fog_row(uint32_t slot, const char *editing_text, bool capturing,
-                    overlay_row_t *out)
-{
-    (void)capturing;
-    switch ((utilities_slot_t)slot) {
-    case UTILITIES_NO_FOG:
-        /* The only row in this group that is a cheat by origin. It sits here rather than with
-         * the cheats because a player looking for it is looking at the fog, and the fog
-         * thickness and fog follow rows are the rest of that answer: this one removes the fog,
-         * the second decides how thick it is, and the third decides what it is measured
-         * against. The dismemberment row sits between them, for the reason recorded at its own
-         * case below. Split across two groups they read as unrelated. */
-        out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, "No fog");
-        out->on = cheats_no_fog_is_on();
-        out->available = cheats_no_fog_is_available();
-        return true;
-
-    /* Beside the fog rather than among the cheats, and for the same reason the fog row is here:
-     * this one is remembered in the settings file and the cheats are not. A row whose effect
-     * outlives the session sits with the settings, whatever it does to the game. */
-    case UTILITIES_DISMEMBERMENT:
-        out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, "Lightsaber dismemberment");
-        out->on = dismemberment_row_get();
-        out->available = true;
-        return true;
-
-    case UTILITIES_FOG_BAND:
-        out->kind = OVERLAY_ROW_VALUE;
-        copy_label(out->label, "Fog thickness (0.25 to 1.0)");
-        fill_typed(out, editing_text, fog_band_row_format, fog_band_row_get());
-        return true;
-
-    case UTILITIES_FOG_BAND_TRACK:
-        out->kind = OVERLAY_ROW_SLIDER;
-        copy_label(out->label, "");
-        out->fraction = (fog_band_row_get() - FOG_BAND_MIN) / (FOG_BAND_MAX - FOG_BAND_MIN);
-        clamp_fraction(out);
-        return true;
-
-    case UTILITIES_FOG_FOLLOW:
-        copy_label(out->label, "Fog follows the draw distance");
-        out->on = fog_follow_row_get();
-        return true;
-
-    default:
-        return false;
-    }
-}
-
-/* The field of view: the value and its slider. True when `slot` was one of these. */
-static bool field_of_view_row(uint32_t slot, const char *editing_text, bool capturing,
-                              overlay_row_t *out)
-{
-    (void)capturing;
-    switch ((utilities_slot_t)slot) {
-    case UTILITIES_FOV: {
-        /* The one row here that can be unavailable. Every other row edits a settings file and works
-         * with the DLL that reads it gone; this one needs a width in degrees that only variable_fov
-         * can publish, and inventing one would be wrong on some canvas. */
-        float degrees;
-        char  range[40];
-
-        out->kind = OVERLAY_ROW_VALUE;
-        text_format(range, sizeof range, "Field of view (%.0f to %.0f)",
-                    (double)fov_row_min(), (double)fov_row_max());
-        copy_label(out->label, range);
-        if (fov_row_get(&degrees)) {
-            fill_typed(out, editing_text, fov_row_format, degrees);
-        } else {
-            out->available = false;
-            copy_label(out->value, "");
-        }
-        return true;
-    }
-
-    case UTILITIES_FOV_TRACK: {
-        float degrees;
-        float low  = fov_row_min();
-        float high = fov_row_max();
-
-        out->kind = OVERLAY_ROW_SLIDER;
-        copy_label(out->label, "");
-        if (!fov_row_get(&degrees)) {
-            out->available = false;    /* no published base, so nothing to place a handle against */
-            return true;
-        }
-        /* Guarded rather than assumed: both ends come out of the file, and somebody who sets them
-         * equal would otherwise divide by zero here. */
-        out->fraction = (high > low) ? ((degrees - low) / (high - low)) : 0.0f;
-        /* ExtraDegrees can be set in the file to a width outside the slider's own ends; see
-         * clamp_fraction above for why the row keeps the honest number and the handle does
-         * not. */
-        clamp_fraction(out);
-        return true;
-    }
-
-    default:
-        return false;
-    }
-}
-
-/* The input rows: free look, strafe, the two built on free look, and the mouse speed with its
- * slider. True when `slot` was one of these. */
-static bool input_row(uint32_t slot, const char *editing_text, bool capturing,
-                      overlay_row_t *out)
-{
-    (void)capturing;
-    switch ((utilities_slot_t)slot) {
-    case UTILITIES_FREE_LOOK:
-        copy_label(out->label, "Free look");
-        out->on = free_look_row_get();
-        return true;
-
-    case UTILITIES_STRAFE:
-        copy_label(out->label, "Strafe");
-        out->on = strafe_row_get();
-        return true;
-
-    case UTILITIES_CAMERA_FOLLOW:
-        /* Directly under strafe, because it is the only row here whose availability depends on
-         * another row rather than on an engine site. Unavailable rather than hidden while
-         * strafe is off: the walk never leaves the heading then, so there is nothing to follow,
-         * and a reader hunting for it should find out why instead of wondering if it exists. */
-        out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, "Camera follows you (turns on free look)");
-        out->on = camera_follow_row_get();
-        out->available = camera_follow_row_available();
-        return true;
-
-    case UTILITIES_AIR_CONTROL:
-        /* Next to the camera follow because it shares its dependency: both are built on free
-         * look and both switch it on. It is a key as well, but a key alone was no use to the
-         * player who wanted it, since a pad on a handheld has no comfortable way to open an
-         * ini. */
-        out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, "Steer a jump in the air (free look)");
-        out->on = air_control_row_get();
-        out->available = air_control_row_available();
-        return true;
-
-    case UTILITIES_SENSITIVITY:
-        out->kind = OVERLAY_ROW_VALUE;
-        /* The name the game's own controls screen gave it, so a reader who has seen that screen
-         * recognises this one. */
-        copy_label(out->label, "Mouse speed");
-        fill_typed(out, editing_text, sensitivity_row_format, sensitivity_row_get());
-        return true;
-
-    case UTILITIES_SENSITIVITY_TRACK: {
-        const float value = sensitivity_row_get();
-
-        out->kind = OVERLAY_ROW_SLIDER;
-        copy_label(out->label, "");
-        /* No availability test, unlike the field of view: both ends of this one are fixed, so there
-         * is nothing to wait for another DLL to publish. */
-        out->fraction = (value - SENSITIVITY_MIN) / (SENSITIVITY_MAX - SENSITIVITY_MIN);
-        if (out->fraction < 0.0f) {
-            out->fraction = 0.0f;
-        }
-        if (out->fraction > 1.0f) {
-            out->fraction = 1.0f;
-        }
-        return true;
-    }
-
-    default:
-        return false;
-    }
-}
-
-/* The rest: the menu extras, the subtitle size and its slider, the panel's own size, and the key
- * that opens it. True when `slot` was one of these. */
-static bool presentation_row(uint32_t slot, const char *editing_text, bool capturing,
-                             overlay_row_t *out)
-{
-    switch ((utilities_slot_t)slot) {
-    case UTILITIES_MENU_EXTRAS:
-        /* Named for what a reader sees rather than for the three widgets, and it says when,
-         * because a switch that appears to do nothing is worse than one that explains itself. */
-        copy_label(out->label, "Show extra menu options (restart the game)");
-        out->on = menu_extras_row_get();
-        return true;
-
-    case UTILITIES_SUBTITLE_SIZE:
-        out->kind = OVERLAY_ROW_VALUE;
-        /* Named for what it changes rather than for the key it writes, with the band in the label
-         * so it need not be found by having a value refused. */
-        copy_label(out->label, "Subtitle size (0.50 to 3.0)");
-        fill_typed(out, editing_text, subtitle_size_row_format, subtitle_size_row_get());
-        return true;
-
-    case UTILITIES_SUBTITLE_SIZE_TRACK: {
-        const float value = subtitle_size_row_get();
-
-        out->kind = OVERLAY_ROW_SLIDER;
-        copy_label(out->label, "");
-        /* No availability test: both ends are fixed, so unlike the field of view nothing has to be
-         * published by another DLL first. With enhanced_resolution absent the drag writes a key
-         * nothing reads, which is how every cross-DLL row here already behaves. */
-        out->fraction = (value - SUBTITLE_SIZE_MIN) / (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
-        clamp_fraction(out);
-        return true;
-    }
-
     case UTILITIES_DEV_MENU_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
-        copy_label(out->label, "Dev menu size (0.33 to 4.0)");
-        fill_typed(out, editing_text, dev_menu_size_row_format, dev_menu_size_row_get());
-        return true;
+        overlay_row_label(out->label, "Cheatmenu size (0.33 to 4.0)");
+        overlay_row_typed(out, editing_text, dev_menu_size_row_format, dev_menu_size_row_get());
+        return;
 
     case UTILITIES_OPEN_KEY:
         out->kind = OVERLAY_ROW_HOTKEY;
-        copy_label(out->label, "Key that opens this menu");
+        overlay_row_label(out->label, "Key that opens this menu");
         if (capturing) {
             text_format(out->value, sizeof out->value, "...");
         } else {
@@ -406,47 +52,17 @@ static bool presentation_row(uint32_t slot, const char *editing_text, bool captu
             }
         }
         out->value[sizeof out->value - 1] = '\0';
-        return true;
+        return;
 
     default:
-        return false;
-    }
-}
-
-void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturing,
-                           overlay_row_t *out)
-{
-    if (out == NULL) {
+        /* Past the end. Answered as an empty unavailable row rather than left as whatever the
+         * caller's struct held: a caller asking for a slot that does not exist has a bug, and a
+         * blank row makes that bug visible instead of showing stale text. */
+        overlay_row_label(out->label, "");
+        out->available = false;
         return;
     }
-
-    /* Every row here edits a settings file rather than reaching into the running game, so unlike
-     * the cheats group none of them can be unavailable for want of a resolved site: they work with
-     * no level loaded and whether or not the DLL that reads the setting is installed at all. The
-     * one exception below is a row whose setting has nothing to act on, which is a different
-     * question from a row that could not be wired up. */
-    out->kind      = OVERLAY_ROW_CHEAT;
-    out->on        = false;
-    out->available = true;
-    out->value[0]  = '\0';
-    out->expanded  = false;
-    out->pending   = false;
-
-    if (draw_distance_row(slot, editing_text, capturing, out) ||
-        fog_row(slot, editing_text, capturing, out) ||
-        field_of_view_row(slot, editing_text, capturing, out) ||
-        input_row(slot, editing_text, capturing, out) ||
-        presentation_row(slot, editing_text, capturing, out)) {
-        return;
-    }
-
-    /* Past the end. Answered as an empty unavailable row rather than left as whatever the
-     * caller's struct held: a caller asking for a slot that does not exist has a bug, and a
-     * blank row makes that bug visible instead of showing stale text. */
-    copy_label(out->label, "");
-    out->available = false;
 }
-
 
 bool overlay_utilities_row_is_key(uint32_t slot)
 {
@@ -455,69 +71,20 @@ bool overlay_utilities_row_is_key(uint32_t slot)
 
 bool overlay_utilities_toggle(uint32_t slot)
 {
-    switch ((utilities_slot_t)slot) {
-    case UTILITIES_AUTO_RANGE:
-        if (strict_range_row_get()) {
-            return false;            /* greyed; the model refuses first, this is the second lock */
-        }
-        return auto_range_row_set(!auto_range_row_get());
-    case UTILITIES_STRICT_RANGE:
-        return strict_range_row_set(!strict_range_row_get());
-    case UTILITIES_NO_FOG:
-        return cheats_no_fog_toggle();
-    case UTILITIES_DISMEMBERMENT:
-        return dismemberment_row_set(!dismemberment_row_get());
-    case UTILITIES_FOG_FOLLOW:
-        return fog_follow_row_set(!fog_follow_row_get());
-    case UTILITIES_FREE_LOOK:
-        return free_look_row_set(!free_look_row_get());
-    case UTILITIES_STRAFE:
-        return strafe_row_set(!strafe_row_get());
-    case UTILITIES_CAMERA_FOLLOW:
-        if (!camera_follow_row_available()) {
-            return false;      /* nothing to follow without strafe; the row already says so */
-        }
-        return camera_follow_row_set(!camera_follow_row_get());
-    case UTILITIES_AIR_CONTROL:
-        if (!air_control_row_available()) {
-            return false;      /* nothing to steer by without strafe; the row already says so */
-        }
-        return air_control_row_set(!air_control_row_get());
-    case UTILITIES_MENU_EXTRAS:
-        return menu_extras_row_set(!menu_extras_row_get());
-    default:
-        return false;
-    }
+    (void)slot;
+    return false;    /* neither row is a switch: one is typed, the other binds a key */
 }
 
 bool overlay_utilities_commit(uint32_t slot, const char *text)
 {
     float parsed;
 
-    if (text == NULL || text[0] == '\0') {
+    if (text == NULL || text[0] == '\0' || (utilities_slot_t)slot != UTILITIES_DEV_MENU_SIZE) {
         return false;
     }
-
-    /* Refused rather than clamped when the text is not a number. Each of these would turn a typing
-     * mistake into an extreme: the shortest draw distance, the thickest fog the range allows, or
-     * the smallest panel, which is the worst of the three because it shrinks the thing being typed
-     * into. */
-    switch ((utilities_slot_t)slot) {
-    case UTILITIES_VIEW_RANGE:
-        return view_range_row_parse(text, &parsed) && view_range_row_set(parsed);
-    case UTILITIES_FOG_BAND:
-        return fog_band_row_parse(text, &parsed) && fog_band_row_set(parsed);
-    case UTILITIES_FOV:
-        return fov_row_parse(text, &parsed) && fov_row_set(parsed);
-    case UTILITIES_SENSITIVITY:
-        return sensitivity_row_parse(text, &parsed) && sensitivity_row_set(parsed);
-    case UTILITIES_SUBTITLE_SIZE:
-        return subtitle_size_row_parse(text, &parsed) && subtitle_size_row_set(parsed);
-    case UTILITIES_DEV_MENU_SIZE:
-        return dev_menu_size_row_parse(text, &parsed) && dev_menu_size_row_set(parsed);
-    default:
-        return false;
-    }
+    /* Refused rather than clamped when the text is not a number, because a typing mistake would
+     * otherwise become the smallest panel, which shrinks the thing being typed into. */
+    return dev_menu_size_row_parse(text, &parsed) && dev_menu_size_row_set(parsed);
 }
 
 bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key)
@@ -526,71 +93,4 @@ bool overlay_utilities_bind(uint32_t slot, int32_t virtual_key)
         return false;
     }
     return open_key_row_set(virtual_key);
-}
-
-bool overlay_utilities_slider_wants_full_rate(uint32_t slot)
-{
-    return (utilities_slot_t)slot == UTILITIES_FOV_TRACK;
-}
-
-bool overlay_utilities_slider_set(uint32_t slot, float fraction)
-{
-    float low;
-    float high;
-
-    if (fraction < 0.0f) {
-        fraction = 0.0f;
-    }
-    if (fraction > 1.0f) {
-        fraction = 1.0f;
-    }
-    if ((utilities_slot_t)slot == UTILITIES_VIEW_RANGE_TRACK) {
-        /* Rounded to a HUNDREDTH, the precision the row's own formatter shows (%.2f).
-         * Without it a drag writes more decimals than the text beside it displays and the two
-         * disagree about what was set.
-         *
-         * A fiftieth was tried and is wrong, because the grid has to contain both ends of
-         * every row that uses it. Fog thickness starts at 0.25, which is not a multiple of a
-         * fiftieth, so dragging fully left rounded up to 0.26 and the documented minimum
-         * could not be reached at all. Caught in a log, not in a test. */
-        float scale = VIEW_RANGE_MIN + fraction * (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
-
-        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
-        return view_range_row_set(scale);
-    }
-    if ((utilities_slot_t)slot == UTILITIES_FOG_BAND_TRACK) {
-        /* The same hundredth grid; see the draw distance above for why it is not a fiftieth. */
-        float scale = FOG_BAND_MIN + fraction * (FOG_BAND_MAX - FOG_BAND_MIN);
-
-        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
-        return fog_band_row_set(scale);
-    }
-    if ((utilities_slot_t)slot == UTILITIES_SENSITIVITY_TRACK) {
-        /* Not rounded to anything, unlike the field of view below: the band is a tenth of a degree
-         * wide and the row shows three decimals, so every position along the track is a value
-         * somebody can tell apart from the one beside it. */
-        return sensitivity_row_set(SENSITIVITY_MIN +
-                                   fraction * (SENSITIVITY_MAX - SENSITIVITY_MIN));
-    }
-    if ((utilities_slot_t)slot == UTILITIES_SUBTITLE_SIZE_TRACK) {
-        /* The same hundredth grid the draw distance uses, and for the same reason: the row beside
-         * this one shows two decimals, so a drag writing more would disagree with the text it is
-         * meant to be setting. */
-        float scale = SUBTITLE_SIZE_MIN + fraction * (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
-
-        scale = (float)((int)(scale * 100.0f + 0.5f)) / 100.0f;
-        return subtitle_size_row_set(scale);
-    }
-    if ((utilities_slot_t)slot != UTILITIES_FOV_TRACK) {
-        return false;
-    }
-    low  = fov_row_min();
-    high = fov_row_max();
-    if (!(high > low)) {
-        return false;
-    }
-    /* Rounded to whole degrees. The row shows whole degrees, so a drag that set 96.4 would display
-     * 96 and then write 96.4 back into the file, and the two would disagree for anyone reading it.
-     * A degree is also below what the eye picks out mid-drag. */
-    return fov_row_set((float)(int)(low + fraction * (high - low) + 0.5f));
 }

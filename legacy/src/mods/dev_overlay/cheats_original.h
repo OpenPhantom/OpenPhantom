@@ -14,6 +14,7 @@
 #define CHEATS_ORIGINAL_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* Eleven, and the count is the image's: the pointer table is terminated by a NULL dword and the
@@ -30,6 +31,13 @@ uint32_t cheats_original_count(void);
 /* The code as the game spells it, for example "turntables". NULL for an index out of range. The
  * string belongs to the image and outlives everything here. */
 const char *cheats_original_name(uint32_t index);
+
+/* What the code does, then the code in brackets, the way the one-shot group already names its
+ * rows: "Disable cheats (turntables)". The game's own table holds only the codes, and a row that
+ * says "perfection" tells nobody it is auto-fire. A code this file does not know is written on its
+ * own, so a table read out of a build with a different set still gets a row. Empty for an index
+ * out of range. */
+void cheats_original_label(uint32_t index, char *out, size_t size);
 
 /* Whether that row is on right now. Read fresh from the engine on every call, because the console
  * and a save game can both change it behind us. False for an index out of range. */

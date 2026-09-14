@@ -324,7 +324,10 @@ static float widen_over(float widest, uint32_t count, const char *(*name_of)(uin
 
 static const char *original_toggle_name(uint32_t i)
 {
-    return cheats_original_name(i);
+    static char label[OVERLAY_LABEL_MAX];   /* measured at once, never kept */
+
+    cheats_original_label(i, label, sizeof label);
+    return label;
 }
 
 static const char *original_action_name(uint32_t i)

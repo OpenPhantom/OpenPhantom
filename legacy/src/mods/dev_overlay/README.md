@@ -439,6 +439,15 @@ The console also prints a confirmation line from a parallel table of message ids
 on purpose: it exists to confirm a code somebody typed blind, and a panel that shows the state has
 nothing to confirm.
 
+**Each row says what the code does, then the code**, the way the one-shot group below already
+does: `Disable cheats (turntables)`, `Letterbox view (beyond cinema)`, `Slow motion mode (slowmo)`,
+`Auto-fire/attack (perfection)`, `Force push turns red (but i feel so good)`, `60 fps frame rate
+(60fps)`, `Wire frame view (perf)`, `First person view (naughty naughty)`, `Overhead view (from
+above)`, `Weapon 3 more powerful (happy)` and `Debug mode (oldcode)`. The image's table holds only
+the codes, and a row that read "perfection" told nobody it was auto-fire. The descriptions are
+matched by the code's text, not by its position, so a table read out of a build with a different
+set still gets a row for every code and an unknown one is written on its own.
+
 ## The sixteen one-shot codes, in `cheats_original_actions.c`
 
 Kill self, full health, all-weapons-full-ammo, the four play-as-character swaps, two ways to lower

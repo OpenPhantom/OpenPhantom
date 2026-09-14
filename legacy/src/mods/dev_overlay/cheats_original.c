@@ -40,10 +40,12 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* 0x0042FE38, forty bytes ending at the toggle itself. */
 static const uint8_t SIG_CONSOLE_LOOP[] = {
@@ -206,6 +208,48 @@ const char *cheats_original_name(uint32_t index)
         return NULL;
     }
     return original_state.names[index];
+}
+
+/* The eleven codes and what each does, matched by the code's own text and never by its index,
+ * because the index is the image's and the image is what this file refuses to assume. The words
+ * are the ones the published cheat lists use, shortened where a row would not fit the panel:
+ * "but i feel so good" turns the force push red. */
+static const struct {
+    const char *code;
+    const char *what;
+} DESCRIPTIONS[] = {
+    { "turntables",         "Disable cheats"         },
+    { "beyond cinema",      "Letterbox view"         },
+    { "slowmo",             "Slow motion mode"       },
+    { "perfection",         "Auto-fire/attack"       },
+    { "but i feel so good", "Force push turns red"   },
+    { "60fps",              "60 fps frame rate"      },
+    { "perf",               "Wire frame view"        },
+    { "naughty naughty",    "First person view"      },
+    { "from above",         "Overhead view"          },
+    { "happy",              "Weapon 3 more powerful" },
+    { "oldcode",            "Debug mode"             },
+};
+
+void cheats_original_label(uint32_t index, char *out, size_t size)
+{
+    const char *code = cheats_original_name(index);
+    size_t      i;
+
+    if (out == NULL || size == 0u) {
+        return;
+    }
+    if (code == NULL) {
+        out[0] = '\0';
+        return;
+    }
+    for (i = 0; i < sizeof DESCRIPTIONS / sizeof DESCRIPTIONS[0]; ++i) {
+        if (strcmp(code, DESCRIPTIONS[i].code) == 0) {
+            text_format(out, size, "%s (%s)", DESCRIPTIONS[i].what, code);
+            return;
+        }
+    }
+    text_format(out, size, "%s", code);
 }
 
 /* Read fresh every time. The console can flip a row behind us, a save game restores the block, and

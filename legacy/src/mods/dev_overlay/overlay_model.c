@@ -488,7 +488,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
     switch (group) {
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         out->kind = OVERLAY_ROW_CHEAT;
-        copy_label(out->label, cheats_original_name(id));
+        cheats_original_label(id, out->label, sizeof out->label);   /* what it does, and the code */
         out->on = cheats_original_is_on(id);
         out->available = true;         /* a row only exists here once its table resolved */
         return;

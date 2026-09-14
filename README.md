@@ -19,6 +19,10 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 *4K rendering with expanded draw distance.*
 
+<img width="1920" height="1080" alt="Star Wars Episode 1 The Phantom Menace Screenshot 2026 09 14 - 11 16 27 84" src="https://github.com/user-attachments/assets/59fd4625-e932-47fa-ad1a-18be13ede3e0" />
+
+*Free Camera/ No Clip/ Photo mode.*
+
 **Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
 
 ## What's Included  

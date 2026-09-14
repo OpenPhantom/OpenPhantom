@@ -29,7 +29,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 | | |
 |---|---|
-| [`installer/`](installer/) | **Working** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data: the disc archive is expanded on your machine. Everything it installs ships inside it and nothing is downloaded, so an installation does not depend on somebody else's hosting still being there. See its [README](installer/README.md) |
+| [`installer/`](installer/) | **Working** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data; the disc is read on your machine. Everything it installs is inside the installer and nothing is downloaded. See its [README](installer/README.md) |
 | [`legacy/`](legacy/) | **Working**  Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
@@ -37,30 +37,28 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 ## Version numbers
 
-The patch and the installer carry **two numbers**, and they always did apart from one release.
+The patch and the installer have **two separate version numbers**. They always did, apart from one
+release.
 
 | | numbering | tags |
 |---|---|---|
 | the patch, `legacy/` | `0.4.x` | `v0.4.0`, `v0.4.1`, ... |
 | the installer that carries it | `1.4.x` | `i1.4`, `i1.4.1`, ... |
 
-Both last digits move together on a release. The DLLs carry the **patch's** number, so a file's
-properties and the first line of `engine_fixes.log` read `0.4.2` while the installer that delivered
-them reads `1.4.2`. Two numbers on one machine is the cost of having two lines.
+The last digit moves together on a release. The DLLs carry the **patch** number, so a DLL's
+properties and the first line of `engine_fixes.log` say `0.4.3` while the installer that delivered
+them says `1.4.3`.
 
-**One release was made with the two merged into a single number**, published as `v1.5.0` and
-`i1.5.0`. That has been undone and the two lines are separate again, so on GitHub that release is
-renamed to **`v0.4.1` and `i1.4.1`**, which is where it belongs in both sequences. The release after
-it is `v0.4.2` and `i1.4.2`.
+**One release merged the two into a single number**, published as `v1.5.0` and `i1.5.0`. That's
+been undone. On GitHub that release is now **`v0.4.1` and `i1.4.1`**, and the one after it is
+`v0.4.2` and `i1.4.2`.
 
-**The rename is presentational and nothing was rebuilt.** The installer inside that release still
-reports `1.5.0` in its own properties and in Add and Remove Programs, because it is the same file
-that was published and re-cutting it would change every hash for no functional gain. If you have it
-installed, that is why the number you see does not match the name of the release you downloaded.
+**Only the release name changed; nothing was rebuilt.** The installer in that release still reports
+`1.5.0` in its properties and in Add and Remove Programs, because it's the same file. If you have it
+installed, that's why the number doesn't match the release name.
 
-Nothing in the installer compares version numbers. An existing installation is found by its
-application id and you are asked what to do with it, so no number decides whether an install is
-allowed.
+The installer doesn't compare version numbers. It finds an existing installation by its
+application id and asks what you want to do with it.
 
 ## Documentation
 
@@ -75,7 +73,7 @@ Full guides for installation, usage and configuration are in the
 ## Goals
 
 * Reconstruct the original engine as clean, maintainable source code.
-* Keep the original gameplay behaviour. Where the 1999 look or feel was deliberate, it stays.
+* Keep the original gameplay. If the 1999 look or feel was intended, it stays.
 * Run on modern systems, including Linux and 64 bit builds.
 * Improve stability, performance and extensibility without changing how the game plays.
 * Provide real tools for editing maps, assets and content.
@@ -83,22 +81,18 @@ Full guides for installation, usage and configuration are in the
 
 ## Getting involved
 
-This is a community project and it moves through people digging into details nobody has looked at
-yet. Code, documentation, tests, tooling, research notes and good bug reports are all worth
-having, and you do not need to know the engine to start.
+This is a community project. Code, documentation, tests, tooling, research notes and good bug
+reports are all welcome, and you don't need to know the engine to start.
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has how we work: how to report something usefully, what a
 pull request needs, and the ground rules for working against a binary you do not have the source
 to. Each component adds its own rules on top; `legacy/CONTRIBUTING.md` is the one that exists so
 far.
 
-The most useful thing right now is testing. Every fix here has been played with in a full
-installation, and several have been confirmed against the specific behaviour they change; each
-fix has its own README and that is where the claim for it lives. But played on a couple of
-machines is not works everywhere, so a report saying what happened on yours, with
-`engine_fixes.log` attached, is worth more than it sounds. Every fix names the build it was
-linked from on its own line in that log, which usually answers the first question a report
-raises.
+The most useful thing right now is testing. Every fix has been played in a full installation, and
+each one's README says what was checked. But a couple of machines isn't everywhere, so a report of
+what happened on yours, with `engine_fixes.log` attached, helps a lot. The log names the build each
+fix came from, which is usually the first thing we need to know.
 
 ## Discord
 
@@ -140,4 +134,4 @@ components under their own licences, which are named in the release notes.
 
 General enquiries and feedback: **openphantom@proton.me**
 
-For anything technical, an issue on this repository will reach more people and stays searchable.
+For anything technical, open an issue here; more people will see it and it stays searchable.

@@ -83,18 +83,45 @@ static struct {
     queue_fan_fn_t        queue_fan;
 } flat;
 
-/* The routine, as the recreation has it, with the two vertex fields changed. The far edges snap
- * outward, the near ones down, as the original's do. */
+/* The snap, from the bytes at 0x00419660 and not from the recreation's C, which the gate marks
+ * MISMATCH for this routine. The far edges add the word at 0x004a81b0, which is the float
+ * 0xbf7ff972 subtracted (so 0.9999 added), and go through the CRT's ceil at 0x0049a960 and then
+ * its floor at 0x0049a480; the near edges go through floor alone. So an integer far edge moves
+ * out by a whole pixel: the letterbox's W - 1 becomes W, and its H / 12 becomes H / 12 + 1. The
+ * recreation floors the far edge instead, and the first version of this file copied that, which
+ * drew every quad a pixel short on the right and at the bottom on every driver; the cutscene
+ * bars showed it as a sliver at their edges (2026-09-14, NVIDIA and the Deck alike, and gone
+ * with the routine left alone). The arithmetic is done in double the way the x87 code does it,
+ * the float operands widened and the CRT calls taking doubles, so the rounding lands where the
+ * engine's does at every size. */
+#define FAR_EDGE_BIAS_BITS 0xbf7ff972u
+
+static float far_edge(float v)
+{
+    float  bias;
+    double widened;
+
+    memcpy(&bias, &(uint32_t){ FAR_EDGE_BIAS_BITS }, sizeof bias);
+    widened = (double)v - (double)bias;
+    return (float)floor(ceil(widened));
+}
+
+static float near_edge(float v)
+{
+    return (float)floor((double)v);
+}
+
+/* The routine as the bytes have it, with the two vertex fields changed and nothing else. */
 static void __cdecl hook_draw_quad(float x0, float y0, float x1, float y1, uint32_t argb,
                                    int32_t immediate)
 {
     tl_vertex_t v[4];
     int         i;
 
-    x1 = floorf(x1 + 0.9999f);
-    y1 = floorf(y1 + 0.9999f);
-    x0 = floorf(x0);
-    y0 = floorf(y0);
+    x1 = far_edge(x1);
+    y1 = far_edge(y1);
+    x0 = near_edge(x0);
+    y0 = near_edge(y0);
     v[0].sx = x0;  v[0].sy = y0;
     v[1].sx = x1;  v[1].sy = y0;
     v[2].sx = x1;  v[2].sy = y1;
@@ -184,9 +211,10 @@ void flat_quad_install(void)
         return;
     }
     log_info("flat quads at %08X are drawn with rhw 1 and z 0 for every caller, the fades, the "
-             "letterbox bars, the menu backdrops and the loading bar's black among them (state "
-             "%08X, texture %08X, fan %08X, queue %08X). The routine's own rhw 0 and z 1.0 on a "
-             "16-bit depth buffer are not drawn by Intel.", (unsigned)quad,
+             "letterbox bars, the menu backdrops and the loading bar's black among them, snapped "
+             "as the routine snaps them, far edges up through ceil (state %08X, texture %08X, "
+             "fan %08X, queue %08X). The routine's own rhw 0 and z 1.0 on a 16-bit depth buffer "
+             "are not drawn by Intel.", (unsigned)quad,
              (unsigned)(uintptr_t)flat.set_render_state, (unsigned)(uintptr_t)flat.bind_texture,
              (unsigned)(uintptr_t)flat.draw_fan, (unsigned)(uintptr_t)flat.queue_fan);
 }

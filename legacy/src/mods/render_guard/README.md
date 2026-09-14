@@ -71,13 +71,25 @@ the loading screen's bar frames and percentages piling up on each other, because
 them never landed. A quad at the far plane loses a LESS depth test against a cleared buffer, and a
 zero `rhw` is a division the driver may drop the primitive over.
 
-`flat_quad.c` replaces the routine whole. It is the recreation's forty lines with two fields
-changed, `rhw = 1` and `z = 0`, the values Direct3D defines for a transformed vertex; `z = 0` is
-also what the routine itself writes on any depth buffer that is not 16-bit. Both arms are kept, the
-immediate one making the routine's own three host calls and the queued one handing the fan to the
-engine's sorted queue as before; the four targets are read out of the routine's body with the
-bytes around each call checked first, and if anything does not read the routine is left as it is
-and the log says so. On a driver that drew the original the pixels are the same.
+`flat_quad.c` replaces the routine whole. It is the routine as the bytes at `0x00419660` have it
+with two fields changed, `rhw = 1` and `z = 0`, the values Direct3D defines for a transformed
+vertex; `z = 0` is also what the routine itself writes on any depth buffer that is not 16-bit.
+Both arms are kept, the immediate one making the routine's own three host calls and the queued
+one handing the fan to the engine's sorted queue as before; the four targets are read out of the
+routine's body with the bytes around each call checked first, and if anything does not read the
+routine is left as it is and the log says so. On a driver that drew the original the pixels are
+the same.
+
+**The snap is the part that had to come from the bytes.** The first version of this file copied
+the recreation's C, which floors the far edge after adding `0.9999`. The bytes add the word at
+`0x004a81b0` (the float `0xbf7ff972`, subtracted, so `0.9999` added) and then call the CRT's
+`ceil` at `0x0049a960` before its `floor`; only the near edges floor alone. For an integer far
+edge the difference is a whole pixel: the cutscene letterbox's `W - 1` becomes `W` in the game
+and stayed `W - 1` in the copy, so every quad the copy drew was a pixel short on the right and
+at the bottom, on every driver, and the bars showed a sliver at their edges on NVIDIA and on
+the Deck alike (2026-09-14; `GuardFlatQuads=0` restored them, and changing `rhw` or `z` alone did
+not). The recreation's gate marks this routine MISMATCH, which was the warning: a MISMATCH body
+is a reading, not the routine, and a replacement is written from the bytes.
 
 The two callers that resolve this routine by pattern, `dev_overlay` and `fmv_player`, look for it
 the way a detoured site is looked for, since the load order that puts them ahead of this DLL is
@@ -169,9 +181,10 @@ happens, and `PoolCapacityVertices` is how to answer it.
   when it drains the queue and this hook has no reliable way to see that moment.
 * There is no uninstall, a property of the shared detour layer rather than of this feature.
 * **The flat quad repair has not been seen working on Intel.** It was built after the reporter had
-  gone. What it does on NVIDIA is verified to be the same picture; what it does on Intel follows
-  from the same change having brought back the panel fills and the curtain there, through
-  `common/screen_fill.c`, and from the loading bar's black going through the same vertices.
+  gone. What it does on Intel follows from the same change having brought back the panel fills
+  and the curtain there, through `common/screen_fill.c`, and from the loading bar's black going
+  through the same vertices. The snap correction of 2026-09-14 changes nothing on that side:
+  the vertices are a pixel further out, the fields are the same.
 
 ## Fallback behaviour
 
@@ -233,8 +246,12 @@ not let a player untick, and no guarded path has been observed firing.
 
 **The flat quad replacement was played on the rig (NVIDIA)** through a level load, a movie, a
 cutscene with letterbox bars and the developer panel, all four callers of the routine, with the
-picture unchanged and the log naming the four targets it read (`00488210`, `00488510`, `00487260`,
-`00487C50`), which match the reference bytes of the retail image.
+log naming the four targets it read (`00488210`, `00488510`, `00487260`, `00487C50`), which match
+the reference bytes of the retail image. "Picture unchanged" was the first version's claim and
+it was wrong by a pixel at the far edges: the letterbox sliver was reported the next day from a
+tester's NVIDIA machine and seen on the Deck, and the snap was rewritten from the bytes. The
+corrected routine was then confirmed the same day on both: the tester's RTX 3050 and Chip's
+Deck, the bars back where `GuardFlatQuads=0` puts them.
 
 An untriggered session is the expected result rather than evidence that the guard works: on a
 correct scene and a working device none of the three paths is taken. What can be confirmed in game

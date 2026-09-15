@@ -8,17 +8,16 @@ path runs at whatever rate the display does. This DLL makes all three answer fro
 substep counter instead, which advances 32 times a second whatever the display is doing.
 
 At 30 frames a second, the rate the game was authored for, this changes nothing you can see. It
-only takes effect above that, and what it restores is the authored appearance rather than a new
-one.
+only takes effect above that, and what it restores is the authored appearance.
 
 ## Supported executables
 
 Three builds of this engine ship inside one installation, and all three were checked: the retail
 `WMAIN.EXE`, `wmain.exe`, and `obi.exe`, which is a recompile. The German retail executable is byte
-identical to the English one, so it is the same build rather than a fourth. On `obi.exe` the five
+identical to the English one, so it is the same build and not a fourth. On `obi.exe` the five
 code anchors sit at the same addresses, while the two data cells this DLL reads have moved:
 the random seed to `0x004BA5CC` and the substep counter to `0x004B8810`. Both are read out of a
-matched operand rather than from a table, so that build is handled by the same code.
+matched operand, never from a table, so that build is handled by the same code.
 
 Every site resolves by pattern. A pattern that matches anything other than exactly once disables
 that one patch and says so in the log; the others still install.
@@ -97,7 +96,7 @@ fxfade     0x00439AB6   reached from bapobj_drawAll      PER FRAME
 ## What was deliberately left alone
 
 * **The body sphere**, `fxshield`. It lives in the same module as the arcs, carries three of the
-  eighteen sites across its two functions, and from the outside looks exactly like the arcs: a
+  eighteen sites across its two functions, and from the outside looks like the arcs: a
   random shape rebuilt around a body. It is on message `0x0E`, the substep broadcast, so it is
   already clocked correctly and pacing it would have made it worse. Reading the jump table, rather
   than trusting the resemblance, caught that.
@@ -124,7 +123,7 @@ fxfade     0x00439AB6   reached from bapobj_drawAll      PER FRAME
 * **The drawing path no longer advances the engine's global random generator** when the flicker or
   the halo is paced, because their replacements do not call it. The simulation's own sequence
   therefore stops depending on how many frames were drawn. The original was already frame rate
-  dependent at exactly that point, so no single authentic behaviour is given up, but it is a
+  dependent at that point, so no single authentic behaviour is given up, but it is a
   change. The arc bracket does not have this property: it restores the seed on the way out, so the
   simulation sees the sequence it would have seen.
 * Changing a key in the ini while the game runs does nothing. Everything here is decided once, at
@@ -140,7 +139,7 @@ nothing here can be put on a clock without both.
 
 If the per frame hook cannot be installed, the flicker and the halo are left alone. A draw order
 counter that never restarts would answer differently in successive frames of one substep, which is
-the defect rather than the repair. The arcs do not need the hook and are still paced.
+the defect, not the repair. The arcs do not need the hook and are still paced.
 
 Both cells are validated once at install and then read as plain loads. The hooks run on the drawing
 path, where a range check would cost a system call per frame.
@@ -159,14 +158,14 @@ substep answers alike across its frames while the next re-rolls; that two object
 not agree; and the cancellation the comments name.
 
 Every byte level claim above is read out of the shipped executables, and the pattern resolution was
-re-run against all three builds while preparing this tree rather than taken from the source it
-came from. All five patterns are unique in all three: the arc anchor matches at `0x00438D8B` in each of them,
+re-run against all three builds while preparing this tree, not taken from the source it came
+from. All five patterns are unique in all three: the arc anchor matches at `0x00438D8B` in each of them,
 and the flicker and halo anchors are unique in each. In `obi.exe` both redirected calls name
 `0x0049A520` where the retail builds name `0x0049A580`, which is the case the operand reading
 exists for.
 
 To check in game: run at an uncapped frame rate somewhere with lightning, and confirm the bolts
-crackle at a visible rate rather than blurring into noise. The log names each site it took and the
+crackle at a visible rate instead of blurring into noise. The log names each site it took and the
 address it redirected, so a patch that installed and then did nothing is visible there:
 
 ```

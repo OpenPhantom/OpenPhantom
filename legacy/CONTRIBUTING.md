@@ -3,8 +3,8 @@
 These are the rules this directory is held to. Most of them exist because breaking them cost
 somebody a day, and the ones that sound fussy are usually the ones that did.
 
-Patches are welcome. If something here gets in your way, say so in the pull request rather than
-working around it quietly.
+Patches are welcome. If something here gets in your way, say so in the pull request. Working
+around it quietly helps nobody.
 
 ## The shape of the thing
 
@@ -37,7 +37,7 @@ Both failures are silent and both lie about their cause. Without the first, ever
 writes is dropped, including the warnings that would name the problem, and the log shows only the
 loader's "calling engine_fix_install" line, which reads like a crash. Without the second the
 signature scanner searches an empty range, so every pattern comes back with zero matches, which
-reads exactly like an unsupported executable. That combination cost two full test rounds once.
+reads like an unsupported executable. That combination cost two full test rounds once.
 
 **The tree mirrors the installation.** `src/common` is the static library, `src/loader` builds the
 `dinput.dll` that sits beside the executable, and every directory under `src/mods` builds one DLL
@@ -94,7 +94,7 @@ restoration, instruction cache flushing or readable range checks in feature code
 
 **Validate the whole range you are about to touch, not just its first address.** Then read it back
 and refuse if it is not what you expected. That single habit is also what makes patches
-idempotent: a second run finds the new value rather than the expected old one and declines.
+idempotent: a second run finds the new value where it expected the old one, and declines.
 
 **An unknown build must fail safely.** Never patch optimistically. A partially installed feature
 must stay inactive, and a failure after earlier writes rolls those writes back: `patch_journal_t`
@@ -103,7 +103,7 @@ writes several places promises all of them or none. Detours are not journaled, b
 cannot be taken out, so a detour is placed last.
 
 **Log the branch, not only the result.** A silent exit is a blind spot. If a plausibility limit
-rejects something, it must say so rather than skip quietly.
+rejects something, it must say so.
 
 **Compute from the remembered original, never from the current value.** `baplight_applyLevelFog`
 has two callers, and without a remembered original the scale squares itself on the second run.
@@ -111,10 +111,10 @@ has two callers, and without a remembered original the scale squares itself on t
 **`memory_read_*` and `memory_is_readable_range` belong in installation code and in code that runs
 at human rates, never in a path the engine drives per object or per frame.** They call
 `VirtualQuery`, which is a system call, and `memory_read` validates the range again underneath, so
-a guarded pointer read costs two of them rather than one. Use `memory_try_read` or
+a guarded pointer read costs two of them. Use `memory_try_read` or
 `memory_try_readable` on any path the engine drives; a structured-exception frame is a few
 instructions of setup on x86, and it is also stricter, since it catches a fault anywhere in the
-range rather than trusting a walk done a moment earlier.
+range, where a walk done a moment earlier could be stale.
 
 This rule is written down because breaking it cost real time twice. A guard on
 `bapmap_tickMover`, which looks like draw-path frequency, was measured at 3,400 calls per frame
@@ -124,7 +124,7 @@ defect more mildly. `render_guard.c` had already stated the rule in a struct com
 only file that got it right, which is the argument for it living here instead.
 
 **Ask the cheap question first.** If an expensive walk feeds a test that will reject on a counter
-or a flag, do that test before the walk rather than after. `face_latch.c` walked four engine
+or a flag, do that test before the walk. `face_latch.c` walked four engine
 structures on every poll to answer a question its own throttle then discarded fifteen times out of
 sixteen.
 
@@ -136,12 +136,12 @@ return the original's result. Calculations and persistence belong in ordinary fu
 Calling conventions come from reverse engineering evidence, never from a guess. Get one wrong and
 the stack is corrupted at a point nowhere near the symptom.
 
-`common/detour.c` chains. That is the reason it exists rather than a vendored library.
+`common/detour.c` chains. That is why it exists and no vendored library does the job.
 When you place a detour on a function another DLL may also want, your `original` may be that DLL's
-hook rather than the engine. Call it exactly as if it were the real function and the chain unwinds
+hook and not the engine. Call it as if it were the real function and the chain unwinds
 correctly whatever order the DLLs loaded in. There is no uninstall, so a detour you place stands
 for the life of the process, and an install sequence that can fail halfway has to abandon the whole
-feature rather than leave live hooks behind.
+feature; live hooks left behind are the worse outcome.
 
 ## Comments
 
@@ -252,7 +252,7 @@ add_unit_test(<module> <directory under src/mods, or "" for common> [extra sourc
 
 Build the test against the **real** module, not a stub of it. A stub only proves the stub.
 
-Write the check text as a claim about the code rather than as a label: "an empty list is refused",
+Write the check text as a claim about the code: "an empty list is refused",
 not "test empty list". Where the check is the only place a byte level assumption is written down in
 English, that sentence is the documentation.
 

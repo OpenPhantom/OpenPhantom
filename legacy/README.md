@@ -6,7 +6,7 @@ replace it: it is a loader and a set of small DLLs that patch the retail executa
 
 Nothing on disk is modified. Drop the loader next to `WMAIN.EXE`, put the fixes you want in
 `mods\`, and each one patches the image as the game starts. Delete a DLL and its fix is gone.
-Delete the loader and the game is exactly as it shipped.
+Delete the loader and the game is as it shipped.
 
 |  |  |
 |---|---|
@@ -73,8 +73,8 @@ build output is tracked in this repository.
 ## Installing
 
 1. Copy `build/dist/dinput.dll` next to `WMAIN.EXE`.
-   **If a `dinput.dll` is already there, rename it to `dinput_orig.dll` first rather than
-   overwriting it.** Graphics wrappers and ASI loaders want the same slot, and the loader forwards
+   **If a `dinput.dll` is already there, rename it to `dinput_orig.dll` first; do not overwrite
+   it.** Graphics wrappers and ASI loaders want the same slot, and the loader forwards
    every DirectInput export to whatever it finds under that name, so the previous occupant keeps
    working.
 2. Copy the DLLs you want from `build/dist/mods/` into `<game>\mods\`.
@@ -118,8 +118,8 @@ rewrites your file for you.
 
 ## If a fix does not take
 
-Read `engine_fixes.log`. Every DLL logs the branch it took rather than just the result, so a fix
-that did nothing says which site failed to resolve. A byte pattern that does not match exactly once
+Read `engine_fixes.log`. Every DLL logs the branch it took as well as the result, so a fix that
+did nothing says which site failed to resolve. A byte pattern that does not match exactly once
 disables that one patch and leaves the engine untouched; the other fixes carry on. That is the
 designed behaviour on an executable these patterns were not cut from.
 
@@ -187,7 +187,7 @@ src/mods/decal_fix/
   README.md        settings, engine locations touched, testing status
 ```
 
-A larger one splits by responsibility rather than by size. `enhanced_input` has separate files for
+A larger one splits by responsibility. `enhanced_input` has separate files for
 the mouse, sideways walking, free look, the camera it steers, the byte patterns that find the
 engine sites, and the menu widgets it adds. The rule of thumb is that a new file earns its place
 when it has a job you can name in one sentence.
@@ -223,8 +223,8 @@ include.
 
 ### Tests
 
-`unittests/` holds one file per module under test, built against the real module rather than a
-stub. `unittest.c` is a small shared harness: `ut_check`, `ut_near`, `ut_section` and a summary.
+`unittests/` holds one file per module under test, built against the real module; a stub would
+prove only itself. `unittest.c` is a small shared harness: `ut_check`, `ut_near`, `ut_section` and a summary.
 Adding a suite is one line in `unittests/CMakeLists.txt`.
 
 They cover the arithmetic, which is where the mistakes that are invisible at run time live: field
@@ -263,7 +263,7 @@ three hooks and calls through it.
 
 **Validate, then write.** Every patch reads back what it is about to overwrite and refuses when it
 is not what it expected. That habit is also what makes the patches idempotent: a second run finds
-the new bytes rather than the expected old ones, and declines.
+the new bytes where it expected the old ones, and declines.
 
 ## Status
 
@@ -273,13 +273,13 @@ the new bytes rather than the expected old ones, and declines.
   shipped `IMUSE.DLL`, checked offline without running the game.
 
 What has and has not been tried in the running game is a per fix question, so each feature's own
-`README.md` answers it rather than this page.
+`README.md` answers it.
 
 ## Contributing
 
 `CONTRIBUTING.md` has the coding rules. They are short, and most of them exist because breaking one
-cost somebody a day. Patches are welcome; if a rule gets in your way, say so in the pull request
-rather than working around it quietly.
+cost somebody a day. Patches are welcome; if a rule gets in your way, say so in the pull request.
+Working around it quietly helps nobody.
 
 ## Legal
 

@@ -21,7 +21,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
-| `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. One of the four patches here that rewrite *instructions* rather than an operand, and the one with a switch of its own; see **Known limitations** |
+| `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. One of the four patches here that rewrite *instructions* and not an operand, and the one with a switch of its own; see **Known limitations** |
 | `CameraTargetPair` | `1` | the camera's two position samples stay two substeps apart while the player rides a mover. The player tick feeds the camera twice a substep on a mover and collapsed the pair, so the camera stepped at 32 Hz through every ride; see **The camera on a ride**. On even for a file that predates the key, which the rules allow for a repair every installation is meant to get |
 | `CompensateCameraInCutscenes` | `0` | at `0` a scripted camera gets an anchor weight of zero, so a placed shot holds its gather origin instead of easing toward it. The five lag cells stay compensated either way, because they damp the rig and the euler rather than the origin. `1` compensates the anchor during a scripted camera as well |
 | `CompensateAnimation` | `1` | the animation clock and the emitter dormancy counter |
@@ -33,11 +33,11 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `FaceLatchYield` | `16` | hand the scripted facing command a "still turning" answer on one simulation step in N, for a clip that has already clamped at its last frame. 0 switches it off, range 2-64 |
 | `PreciseFrameTime` | `1` | compute the frame delta in double instead of through the engine's float accumulator |
 | `RebaseSimClock` | `1` | take the same amount off both simulation clocks so their difference, which is the interpolation weight, keeps its precision on a long level |
-| `InterpolateParticles` | `1` | draw particles between simulation steps rather than on them |
+| `InterpolateParticles` | `1` | draw particles between simulation steps, not only on them |
 | `InterpolateMovers` | `1` | the same for movers: doors, lifts and platforms |
 | `MoverSubstepClock` | `1` | removes the substep loop's clamp of the world clock, so a mover integrates exactly one simulation step per substep and its sample pair lands on the same lattice as the alpha that blends it. On by default on the strength of the measurement below: without it a mover's drawn step disagrees with its neighbours on about one frame in three, and with it on about one in eighty, so `InterpolateMovers` barely works without this. It changes how movers move rather than only how they are drawn, which is a phase shift of under one substep for everything else on that clock. Engine location `bapmap_setWorldClock`, shared with `RebaseSimClock`. On even for a file that predates the key, which the rules allow for a repair every installation is meant to get |
 | `MoverTravelLimitPerStep` | `64.0` | world units a mover may cross in one simulation step before the blend refuses it and snaps instead. Guards against a teleport being smeared into a slide |
-| `InterpolateRiders` | `1` | keep each drawn object's previous position here rather than reading the engine's, which a platform's carry flattens. `2` and `3` are measurements rather than settings; see **A rider had nothing to be drawn between** |
+| `InterpolateRiders` | `1` | keep each drawn object's previous position here instead of reading the engine's, which a platform's carry flattens. `2` and `3` are measurements not settings; see **A rider had nothing to be drawn between** |
 | `RiderTravelLimitPerStep` | `2.0` | the furthest a CHARACTER may travel in one simulation step before the blend refuses it and draws it where it landed. Not the mover's number: 64 here is what made the first attempt unusable |
 | `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames, with the frames over 1.5x the cap split by whether the simulation stepped inside them |
 | `LogMoverSummary` | `0` | 1: every 600 frames, how many mover poses were blended, refused and unknown, the track wraps, and the refusals by guard. A measurement; the one line that says the interpolation installed and smoothed nothing is written once whatever this holds |
@@ -71,7 +71,7 @@ a whole-image search finds no reference to it.
 So a produced rate below the refresh rate means the display repeats frames on an irregular
 pattern. Measured on a 144 Hz screen, a cap of 100 leaves 44 refreshes a second repeating a frame
 and a cap of 144 leaves none; on a 90 Hz Steam Deck OLED a cap of 60 leaves 30. Uncapped is smooth
-as well, measured at 256 to 310 frames a second, but by brute force rather than by pacing, and it
+as well, measured at 256 to 310 frames a second, but by brute force and not by pacing, and it
 loads one core fully. `MatchDisplayRefresh` picks the one option that is both smooth and cheap.
 
 The instrument caveat that goes with this: the drawn evenness figures below are only meaningful at
@@ -94,7 +94,7 @@ with nothing wrong at all.
 | the anchor mean | `0x418623` | 63 bytes replaced by three 18-byte blends against a live weight |
 | the yaw deadband | `0x418715` | operand repointed at a scaled cell |
 | `bapview_setCamTarget` | `0x4184CC` | detoured, so the camera's two substep samples rotate once per substep. The player tick calls it twice a substep while the player rides a mover and collapsed the pair; the two operands it puts back, the previous anchor and the previous heading, are read off the site rather than carried here |
-| `bapobj_drawAll` position blend | `0x41125B` | 126 bytes replaced by a call, the largest patch here. The pattern is the whole region rather than a prefix, so every byte overwritten is checked before anything is written, and it carries no absolute address at all: every operand is relative to the frame pointer or to the object |
+| `bapobj_drawAll` position blend | `0x41125B` | 126 bytes replaced by a call, the largest patch here. The pattern is the whole region and not a prefix, so every byte overwritten is checked before anything is written, and it carries no absolute address at all: every operand is relative to the frame pointer or to the object |
 | `bapobj_drawAll` euler | `0x4112D9` | 0x20 bytes replaced by a call. Immediately after the position blend above, in the same function, and the two regions do not overlap, so neither install order matters |
 | `rdThing_Draw` pose gate | `0x410019` | `74 19` -> `90 90` |
 | facing completion test | `0x42E3AD` | detoured; one caller, the 0x202 handler |
@@ -125,7 +125,7 @@ with nothing wrong at all.
 
 ## Known limitations
 
-* **Four sites rewrite instructions rather than an operand, and all four fail closed.** The
+* **Four sites rewrite instructions and not an operand, and all four fail closed.** The
   anchor mean, 63 bytes at `0x418623`; the position blend in `bapobj_drawAll`, 126 bytes at
   `0x41125B`, the largest; the euler blend after it, 0x20 bytes at `0x4112D9`; and the pose gate
   in `rdThing_Draw`, two bytes at `0x410019`. Each is written only on an exact match of the whole
@@ -149,7 +149,7 @@ with nothing wrong at all.
   simulation not moving at all. Nothing has to defend against that. A stamp that moves while a
   position does not brings the remembered previous position up to the current one, which draws the
   object where it is, as the game did before any of this existed. The consequence is
-  bounded to a menu drawn over a live world, where a rider is drawn unsmoothed rather than wrongly.
+  bounded to a menu drawn over a live world, where a rider is drawn unsmoothed, not wrongly.
 * **An object carrying `BAPOBJ_POSE_MATRIX`, flag bit 2, never reaches the replaced region.**
   `bapobj_drawAll` tests that flag at `0x41121A` and, when it is set, takes the pose-override
   branch and jumps from `0x411256` straight to the shared merge point at `0x411394`, past the
@@ -158,7 +158,7 @@ with nothing wrong at all.
   changes nor can change that. No writer of that matrix during ordinary play has been identified,
   so whether anything in a level actually uses it is not established.
 * **Below 32 frames a second nothing here can be genuinely smooth.** That is a property of the
-  game rather than of this DLL. The simulation steps faster than the display can show the result,
+  game, not of this DLL. The simulation steps faster than the display can show the result,
   so several steps land between two frames and no amount of blending invents a frame that was
   never drawn. What the rider blend owes at those rates is to do no harm, which is checked: the
   drawn moment still trails the simulation by exactly one step and still advances evenly.
@@ -194,7 +194,7 @@ is a claim about the game.
 
 `FaceLatchYield` was tested in the game. At an uncapped rate of about 90 fps the swamp opening
 released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the scene plays at
-its authored pace rather than merely failing to hang. The confirming step, setting the key to 0
+its authored pace and does not merely fail to hang. The confirming step, setting the key to 0
 and checking that the freeze returns, has not been run yet.
 
 ## The plausibility bound
@@ -207,18 +207,18 @@ what shipped.
 
 `InterpolateMovers`, `InterpolateParticles`, `PreciseFrameTime` and `RebaseSimClock` were played
 and accepted by the maintainer, so they now default to on. That is a judgement about how
-they feel; the numbers in their own files are still a byte census and arithmetic rather than a
+they feel; the numbers in their own files are still a byte census and arithmetic, not a
 measurement of a session, and `sim_clock` and `mover_blend` have unit tests covering the
 arithmetic alone.
 
-**`InterpolateMovers` was field-reported as a severe frame-rate stall, and the cause was the guard
-rather than the interpolation.** A stall at two lift platforms had been attributed to the engine for
+**`InterpolateMovers` was field-reported as a severe frame-rate stall, and the cause was the guard,
+not the interpolation.** A stall at two lift platforms had been attributed to the engine for
 some time and was being compensated for in a separate DLL. Bisecting the installed mods against a
 pure retail install narrowed it here, and switching this one key off removed it: at the same
 encounter, the same 57 debris entries and the same 60 fps cap, the burst that creates the debris ran
 at 8.5 fps with movers on and 60.0 fps with them off.
 
-The mechanism was then measured rather than guessed, with the `Trigger=6` call-site censuses in
+The mechanism was then measured, with the `Trigger=6` call-site censuses in
 `diagnostics`. Polygon transforms were not the cost: `bapmap_polyToWorld` ran at 3,679 calls per
 frame with movers on against 3,090 with them off, which is nowhere near a tenfold difference in
 frame time. The mover census carried the answer instead, in its unattributed column: with movers on,
@@ -228,11 +228,11 @@ was in front of a function running 3,400 times a frame, and its `VirtualQuery` g
 cost.
 
 The repair is three calls changed from `memory_is_readable_range` to `memory_try_readable`, the
-structured-exception form `common/memory.c` documents for exactly this case. The spans validated are
+structured-exception form `common/memory.c` documents for this case. The spans validated are
 unchanged. Confirmed in game afterwards at both lifts: a flat 60.0 fps through the burst with
 `InterpolateMovers=1`, and the census showing 2,223 `tickMover` calls per frame still arriving
 through the detour with 6,960 poses blended and none refused, so the interpolation is doing its full
-job rather than having quietly stopped. That last check is the point: the call count did not fall,
+job and has not quietly stopped. That last check is the point: the call count did not fall,
 only the cost per call.
 
 The rest of this DLL is accepted in game too, in the v0.4.1 build, which was played through by
@@ -242,7 +242,7 @@ hand.
 
 A character riding a platform judders against the floor it is standing on. Smoothing the platform
 did not cause it and switching that smoothing off did not cure it, which is where the search
-started rather than where it ended.
+started, not where it ended.
 
 **The engine was never the problem.** `bapobj_drawAll` blends every drawn object between its
 previous and its current position on the substep alpha, and has since 1999. The pair it reads is
@@ -291,7 +291,7 @@ answer for falls back to the engine's own previous position, which reproduces th
 arithmetic exactly, so the worst case is the behaviour that shipped.
 
 `RiderTravelLimitPerStep` is the same guard `MoverTravelLimitPerStep` gives a platform: past it the
-object is drawn where it landed rather than being smeared across the gap, because a jump that large
+object is drawn where it landed instead of smeared across the gap, because a jump that large
 is a teleport and not motion.
 
 ### Testing status
@@ -299,8 +299,8 @@ is a teleport and not motion.
 Built, and unit tested for the sequence properties a game run cannot show: the
 same answer for every frame inside a step, moving on exactly once when the step does, how many
 steps separate the two samples and the weight that follows from it, two objects not reading each
-other's history, a full table refusing rather than guessing, a stale slot being reclaimed, and the
-travel limit on the whole vector rather than one axis.
+other's history, a full table refusing and not guessing, a stale slot being reclaimed, and the
+travel limit on the whole vector, not one axis.
 
 A second test, `rate_independence`, drives the same arithmetic over a run of frames at 20, 30, 32,
 51.7, 60, 64, 100, 144 and 240 frames a second, and once more with the frame times jittered the way
@@ -358,7 +358,7 @@ does no harm where it can do no good, which is all it owes. 32 exactly has not b
 the rate at which the earlier alpha-derived step count could stall altogether, and it is now read
 from a counter instead of inferred.
 
-One thing was added afterwards on a rules audit rather than from play. The travel limit is a
+One thing was added afterwards on a rules audit, not from play. The travel limit is a
 distance comparison, and every comparison against a value that is not a number is false, so a
 non-finite previous position would have passed the guard meant to refuse a bad one and been
 drawn. The finiteness test now runs before the limit, and the test covers it.
@@ -467,7 +467,7 @@ teleport smear. The count stays in the log as a warning, because a refusal is in
 except as the body drifting against a following camera.
 
 **Still open, and separate from this.** The platform itself is a touch jittery, which is the
-mover's own interpolation rather than the rider's. The instrument line reports 35 to 84 refused
+mover's own interpolation and not the rider's. The instrument line reports 35 to 84 refused
 poses per 600 frames against 10,000 to 15,000 blended, so about one pose in 250 is drawn unblended.
 Whether that accounts for what the eye sees is not established, and the refusal count does not yet
 say which of the guards refused.
@@ -497,7 +497,7 @@ the substep loop, which sets it to the end of each substep clamped to the frame'
 So the last substep of a frame leaves the world clock standing exactly at the moment that frame is
 meant to represent, and two things follow:
 
-* a frame that ran at least one substep leaves the mover exactly where the frame wants it, so there
+* a frame that ran at least one substep leaves the mover where the frame wants it, so there
   is nothing to interpolate and the alpha should not be applied at all;
 * a frame that ran no substep, which above 32 frames a second is most of them, leaves the clock
   untouched, `bapmap_tickMover` short-circuits on its own time base, and the mover is drawn where
@@ -506,7 +506,7 @@ meant to represent, and two things follow:
 A mover's newest pose is therefore never in the future and usually in the past. The substep alpha
 measures the simulation clock and describes neither end of the mover's own move, so applying it
 drew the mover at a moment unrelated to both: against a 60 fps lattice it lands between 24 and
-27 ms behind, and it is the variation rather than the size that the eye reads as jitter.
+27 ms behind, and it is the variation, not the size, that the eye reads as jitter.
 
 **What the two removed measurement modes rested on, kept as history.** The simulation time only
 ever moves in whole substeps and the alpha is the phase of the frame's target between the last two
@@ -602,7 +602,7 @@ frame were the same thing and none of it could be seen.
 
 `camera_target.c` detours the setter and lets the pair rotate once per substep: a second call in
 the same substep still updates the current sample, the heading, the turn rate and the ground block
-exactly as the engine's body does, and only the previous sample and heading are put back. The
+as the engine's body does, and only the previous sample and heading are put back. The
 substep is told from the next by the engine's own step counter. Played after the change: the pair
 read 0.0462 units apart, one substep, on every frame of the ride, and the platform was smooth at
 72. This is every lift and platform in the game, not that one.
@@ -634,14 +634,14 @@ hazard the old table had, a new level's mover allocated at an address the old le
 matching the old slot and inheriting a stranger's previous pose. And a slot whose mover has not
 ticked for 300 rendered frames can be taken by a newcomer, so a level that creates and destroys
 movers cannot fill it either. The window line reports how many times the table has been emptied
-so far, so a log shows the mechanism working rather than only its absence; the engine zeroes the
+so far, so a log shows the mechanism working and not only its absence; the engine zeroes the
 clock more than once while a level comes up, so that count runs ahead of the level count.
 
 Played after the fix through several level loads and onto a platform: smooth, and the same window
 that read ninety per cent unknown reads none. The table lives in `mover_slots.c` with no engine in
 it, and its test pins both ways a slot comes back and the two ways it must not: a full table refuses
-a newcomer rather than handing over a live slot, and a subnode asking for its own stale slot gets it
-back rather than a second one.
+a newcomer instead of handing over a live slot, and a subnode asking for its own stale slot gets it
+back, not a second one.
 
 ### A loop is not a reset
 
@@ -682,9 +682,9 @@ and an earlier version of the check asked for more than 550 on the assumption th
 every frame. It does not, and that same assumption is what made the three draw-side attempts fail,
 so the count is pinned down deliberately.
 
-**It changes a value the simulation reads, so defaulting it on needed a measurement rather than a
+**It changes a value the simulation reads, so defaulting it on needed a measurement, not a
 preference.** The world clock is read by the simulation,
-so this changes how movers move rather than how they are drawn. Un-clamped it runs up to one
+so this changes how movers move and not only how they are drawn. Un-clamped it runs up to one
 substep ahead of the frame's time, which is where the object simulation already sits. The average
 rate is untouched, since the loop runs the same number of substeps and each now advances the clock
 by exactly one step, so nothing speeds up or slows down; what shifts is phase, by under 31 ms, for
@@ -730,7 +730,7 @@ An earlier version of this section claimed the pose age of `0 to 1 frames` was e
 roll does not land on the same frame for every mover. It is not evidence of anything. The frame
 stamp is advanced at frame end, after the draw, so a mover ticked this frame reads 0 and the same
 mover on the following untick frame reads 1; at 60 fps about half the frames are each kind, so
-`0 to 1` is exactly what every mover rolling correctly produces. The reading was consistent with
+`0 to 1` is what every mover rolling correctly produces. The reading was consistent with
 the hypothesis and equally consistent with its opposite.
 
 The lead with evidence behind it is the one this file has flagged twice and never instrumented:
@@ -744,7 +744,7 @@ Two earlier attempts to measure this were narrower than they looked and are wort
 such. The first counted only the 280 frames where the alpha rises, skipping every frame where it
 wraps on the grounds that those are bookkeeping; those are the frames where the pair rolls, which
 is the most likely place for a jump, so it reported uniform motion having excluded the half that
-could have been uneven. The second reported ranges rather than frequencies, and a range cannot
+could have been uneven. The second reported ranges, not frequencies, and a range cannot
 distinguish smooth motion with one hiccup from motion that is uneven throughout.
 
 ## The offset has to be dropped where the level opens

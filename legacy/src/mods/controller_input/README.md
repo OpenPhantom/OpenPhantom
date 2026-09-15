@@ -23,7 +23,7 @@ synthesised Escape keypress. This DLL does the same things, directly, without Xi
 game's own joystick reading. Roll is different: the game's
 own controls screen already binds it to Left Alt or Right Alt held plus the Left or Right arrow key
 TAPPED (confirmed directly from that screen, not assumed, and confirmed again live: holding the
-direction key down instead of tapping it produced a diagonal drift rather than a clean roll), so
+direction key down instead of tapping it produced a diagonal drift and no roll), so
 the triggers here hold Alt and tap the arrow key repeatedly for as long as they stay pulled.
 
 Three separate installs, two different ways of exposing an Xbox-style pad to the game (a direct
@@ -63,7 +63,7 @@ answering the engine's own reading of that axis with a zero; this setting does n
 and was never going to. See **The right stick walked the player** in that module's README.
 
 What stands is the narrower claim: the count buys nothing. The axis is kept behind
-`LookVertical` rather than deleted, because two things do read a vertical mouse movement: the
+`LookVertical` and not deleted, because two things do read a vertical mouse movement: the
 menu pointer, and `dev_overlay`'s free camera, which pitches from the screen pointer and is the
 only vertical look in this project. Left and right are unaffected either way.
 
@@ -76,7 +76,7 @@ degrees per second at full deflection.
 
 No signature, no detour, no patch on the game. `XInputGetState` (Microsoft's own API, not Xidi,
 not WinMM) reads the pad on this DLL's own dedicated background thread (`CreateThread`), polling
-at a fixed real-time interval rather than once per rendered frame; see "Why a dedicated thread"
+at a fixed real-time interval and not once per rendered frame; see "Why a dedicated thread"
 below for why that matters. The right stick's horizontal deflection, after a radial deadzone, is
 scaled by `LookSensitivity` and by the real elapsed time since the last poll
 (`QueryPerformanceCounter`, not the engine's own clock), and sent as relative mouse movement via
@@ -92,7 +92,7 @@ threshold and one more every 150ms after that for as long as it stays past it, e
 A pad that disappears lets go of everything it was holding. The poll used to return on a failed
 read without releasing anything, so a trigger pulled at the moment the pad dropped out left a
 synthetic Alt down in the game, and in whatever took focus next, until the pad came back. The
-disconnect branch now releases exactly as the focus-loss branch always did.
+disconnect branch now releases as the focus-loss branch always did.
 
 ### The fraction owed is its own file
 
@@ -104,7 +104,7 @@ Two properties are written down as checks now. The first
 is the fraction, which only shows over a run of polls: at the shipped sensitivity one
 poll at a hundredth of the stick range is worth a third of a count, and a hundred of them have
 to turn the view by 32 counts arriving one at a time. Nothing in a play session can report on
-that, because a dead band at a tenth of the stick reads as a deadzone rather than as a fault.
+that, because a dead band at a tenth of the stick reads as a deadzone, not as a fault.
 
 The second is the cast. A sensitivity that is not a number reaches a cast to `long`, which is
 undefined and here lands on the most negative value a `long` holds, sending the pointer to the
@@ -129,7 +129,7 @@ matter what the game's own thread is doing.
 `enhanced_input.dll`'s own raw mouse reader (`raw_mouse.c`) accepts a `WM_INPUT` relative mouse
 report checking only its type field (`RIM_TYPEMOUSE`) and its relative/absolute flag; nothing in
 that code, or in the `RAWMOUSE` structure Windows hands it, can tell a real device from an
-injected one. `SendInput`-synthesised movement reaches it exactly like a real mouse would. This was
+injected one. `SendInput`-synthesised movement reaches it like a real mouse would. This was
 confirmed by reading that code directly, and confirmed again live across several play sessions on
 this specific executable, which has its own history of raw-input quirks under Windows' application
 compatibility shims (see `raw_mouse.c`'s own header comment) that a reading of the code alone could
@@ -144,10 +144,10 @@ already open) prevents a synthetic Escape from double-toggling anything. Two edg
 are left unguarded on purpose, because both already do something reasonable: if `dev_overlay`'s
 own panel is open, a synthesised Escape closes that panel instead of reaching the game; if
 `fmv_player` is mid-movie, a synthesised Escape skips the movie (via that feature's own
-`GetAsyncKeyState(VK_ESCAPE)` poll) rather than opening a menu. Neither is treated as a bug here.
+`GetAsyncKeyState(VK_ESCAPE)` poll) and opens no menu. Neither is treated as a bug here.
 
 Also confirmed live, played with `[fmv_player] Enabled=0` so every movie fell through to the
-untouched retail Bink player (`0x0046C35A`) rather than `fmv_player`'s own libVLC path: Start still
+untouched retail Bink player (`0x0046C35A`) and not `fmv_player`'s own libVLC path: Start still
 skips the movie. That function's own internal skip-key check was never decompiled, so which
 mechanism it actually reads from is not confirmed the way the other two paths are, but
 `SendInput` updates the same OS-level keyboard state that `WM_KEYDOWN` dispatch, `GetAsyncKeyState`
@@ -160,13 +160,13 @@ The binding itself is not a guess: read directly off the game's own Controls/Opt
 Left Alt or Right Alt held plus the Left or Right arrow key **tapped**, not held, rolls in that
 direction. The first version of this feature held the direction key down for as long as the
 trigger stayed pulled, matching how the rest of this DLL treats a held input; played live, that
-produced a diagonal drift rather than a clean roll. Whatever this game's roll handling actually
+produced a diagonal drift and no roll. Whatever this game's roll handling actually
 does with a continuously-held direction key, it is not the same thing a series of clean taps
 produces, so this now sends the direction key as repeated taps instead (see "How it works" above
-for the exact timing), matching the real input shape rather than assuming a held key would be
-read the same way as several distinct presses.
+for the exact timing), matching the real input shape; a held key is not read the same way as
+several distinct presses.
 
-Alt is shared between both triggers rather than pressed once per trigger, held from the first
+Alt is shared between both triggers, one press for both, held from the first
 trigger to engage and released only once the last one disengages, so pulling both at once does not
 send two Alt-down events.
 
@@ -179,14 +179,14 @@ needed here in the first place), which makes DirectInput a real candidate for ho
 just a theoretical one, and DirectInput in exclusive acquisition mode has a documented history
 elsewhere of not always seeing `SendInput`-synthesised keys the way non-exclusive raw input and
 message-based reads do. Whichever mechanism it actually is, the tap-shaped fix has since been played
-and confirmed working (see Testing status below), so this is now a known-working path rather than
-an open question about whether it works at all, just an open question about which of the three it
+and confirmed working (see Testing status below), so this is now a known-working path, and the
+open question is only which of the three it
 goes through.
 
 ### Why the recheck interval exists
 
 `XInputGetState` is documented to cost more when the requested slot is not connected, because the
-runtime rescans for hardware on every such call rather than answering from a cached state. Polling
+runtime rescans for hardware on every such call instead of answering from a cached state. Polling
 an empty slot at the ordinary 125Hz cadence would reintroduce a smaller version of the exact
 polling cost this DLL exists to remove. While no pad has been seen, this checks once every 500ms
 instead; once one is found, the ordinary cadence begins and stays on for the rest of the session.
@@ -259,14 +259,13 @@ described in `enhanced_input`'s README.
 
 ## Planned: reading more than XInput
 
-Wanted, not written. Recorded here so the next person starts from the constraint rather than the
-options.
+Wanted, not written. Recorded here so the next person starts from the constraint.
 
 **Why XInput and not something wider in the first place.** `XInputGetState` answers the whole
 question in one call and answers it in normalised form: sticks already scaled, triggers already
 0..255, buttons already named by their position on a known layout. Everything below returns raw
 device state and leaves the caller to work out which axis is which, where the centre is, and what
-the buttons are called. That mapping problem is exactly what the engine's own joystick path gets
+the buttons are called. That mapping problem is what the engine's own joystick path gets
 wrong, in the ways `enhanced_input` sets out, so a second implementation of it is a second chance
 to get it wrong.
 
@@ -287,14 +286,14 @@ to get it wrong.
   working under Wine on the Steam Deck, where the Linux confirmation in this project depends on it.
 
 **The shape to aim for.** One internal pad interface with XInput as the default backend, kept
-dependency-free, and a second backend chosen by a setting rather than by detection, so a reader with
+dependency-free, and a second backend chosen by a setting, never by detection, so a reader with
 an unusual device opts in and a reader with an Xbox pad is never routed through anything new. Start
 by making the existing code call through that interface with XInput behind it and no behaviour
 change at all; that step is worth doing on its own and it makes the rest small.
 
 **What is not known yet.** Whether Steam Input covers enough of the affected devices in practice
 that the whole thing is unnecessary for anyone playing through Steam. Worth asking before building:
-if the answer is yes, the honest fix is documentation rather than code.
+if the answer is yes, the honest fix is documentation, not code.
 
 ## Limitations
 
@@ -310,8 +309,8 @@ if the answer is yes, the honest fix is documentation rather than code.
   vertical camera to drive with it. That does not stop the right stick walking the player: the
   game's own joystick bindings do that, and the fix for it is not in this DLL. See above.
 * A large gap between polls (an Alt-Tab, a breakpoint, the disconnected-pad recheck interval) is
-  treated as zero elapsed time for the look calculation rather than firing one enormous turn when
-  polling resumes.
+  treated as zero elapsed time for the look calculation, so polling resumes without one enormous
+  turn.
 * Runs on its own thread for the life of the process, with no shutdown path, matching this
   project's own established DLLs (loaded once, never freed, per `common/detour.h`'s own "no
   uninstall" convention). The OS reclaims the thread when the process exits.
@@ -339,7 +338,7 @@ Everything below this predates that change.
 
 Played five times, three real bugs found and fixed, all three confirmed working on replay. Look,
 pause (opening and closing the menu, and skipping a movie through both `fmv_player`'s libVLC path
-and the untouched retail Bink player) and roll all now work exactly as they do on keyboard and
+and the untouched retail Bink player) and roll all now work as they do on keyboard and
 mouse, confirmed by the player directly.
 
 **Round one:** look worked immediately, axes correct. Opening the pause menu with Start also
@@ -359,8 +358,8 @@ skip check reads global OS keyboard state (`GetAsyncKeyState`), independent of w
 game's thread is parked in.
 
 **Fix:** moved this DLL off `frame_hook` entirely and onto its own dedicated background thread
-(`CreateThread`, polling `XInputGetState` on a fixed real-time interval rather than once per
-rendered frame). That thread keeps running, and can keep calling `SendInput`, no matter what the
+(`CreateThread`, polling `XInputGetState` on a fixed real-time interval, not once per rendered
+frame). That thread keeps running, and can keep calling `SendInput`, no matter what the
 game's main thread is doing, including inside `fmv_player`'s pump loop. Confirmed working on
 replay: look, opening the menu and closing it again all still work running on a thread instead of a
 frame hook, and Start now does skip a playing movie, both through `fmv_player`'s libVLC path and,
@@ -368,11 +367,11 @@ tested separately with `[fmv_player] Enabled=0`, through the untouched retail Bi
 
 **Round three:** roll, first version. Played once. Escape's own synthetic keys did reach whatever
 reads this game's roll input, unlike the doubt raised above, but holding the direction key down
-for as long as the trigger stayed pulled produced a diagonal drift rather than a clean roll.
+for as long as the trigger stayed pulled produced a diagonal drift and no roll.
 Confirmed with the player themselves: real play is "hold Alt, then tap Left or Right", not hold
 the direction key, which a held trigger was reproducing.
 
 **Fix:** each trigger now taps its own arrow key repeatedly instead of holding it down, one tap
 the instant the trigger crosses the threshold and one more every 150ms for as long as it stays
-past it. Confirmed working on replay: roll now feels and behaves exactly like keyboard and mouse,
-the player's own words, both directions clean rather than diagonal.
+past it. Confirmed working on replay: roll now feels and behaves like keyboard and mouse,
+the player's own words, both directions clean.

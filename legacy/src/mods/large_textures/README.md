@@ -143,7 +143,7 @@ rather than all of them.
 Each site is independent: different functions, different modules, no shared state and no ordering
 constraint between them. If one does not resolve, that patch is skipped, the other still applies,
 and the log names which of the two happened. If neither applies, the DLL logs `nothing was applied`
-and the game runs exactly as it would without it.
+and the game runs as it would without it.
 
 A size that is out of range, not a power of two, or already the engine's own is refused before any
 search happens, and each of those three refusals has its own log line. There is no path here that

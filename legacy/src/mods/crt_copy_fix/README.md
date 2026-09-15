@@ -37,7 +37,7 @@ MSVC inlined a hand-written, backwards-running copy loop that **loads before it 
 It reads `[-4 .. N-4]` and writes `[0 .. N-4]`. On the first row that read is `pixels - 4`.
 
 On heap memory this never shows, because `mem_alloc` puts a `0x10`-byte header in front. It becomes
-fatal exactly when the source is a locked DirectDraw surface whose preceding page is not mapped:
+fatal when the source is a locked DirectDraw surface whose preceding page is not mapped:
 
 ```
 ACCESS_VIOLATION at 0049222D, READ at 09BEEFFC

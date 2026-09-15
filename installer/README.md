@@ -28,7 +28,7 @@ The registry entry the game reads for its CD path is pointed at the installation
 removes the need for the disc in the drive.
 
 Everything else ships inside the installer, in `dist/`. Nothing is downloaded at any point, so an
-installation is reproducible years from now rather than dependent on somebody else's hosting.
+installation is reproducible years from now, with no dependence on somebody else's hosting.
 
 ## Components
 
@@ -62,7 +62,7 @@ different numbers on purpose, and both are set by hand:
 | `PatchVersion` in `src/openphantom_patch.iss` | which patch release `dist/patch` was taken from |
 | `OPENPHANTOM_VERSION` in `legacy/CMakeLists.txt` | the patch's number: every DLL's version resource, and the log header |
 
-The values are in those files rather than repeated here, where a copy went stale twice.
+The values are in those files and not repeated here, where a copy went stale twice.
 
 **The last digit of the installer counts installer builds.** Build a new one, add one. It is not a
 judgement about how much changed. An earlier rule here tried to be that.
@@ -133,9 +133,9 @@ is destroyed on the next refresh; that is why dxwrapper has a folder of its own.
 
 Two things do not survive a refresh on their own and have to be re-applied: the settings in
 `dxwrapper.ini` that differ from the file upstream ships, listed in `THIRD-PARTY-NOTICES.md`, and
-any component whose destination folders are derived rather than written out, currently the libVLC
-plugins. Diff the shipped ini against the one inside the release archive rather than working from
-a list; upstream adds settings between releases, and a new one arrives with its own default only
+any component whose destination folders are derived and not written out, currently the libVLC
+plugins. Diff the shipped ini against the one inside the release archive; do not work from a
+list, upstream adds settings between releases, and a new one arrives with its own default only
 if the file is rebuilt from theirs.
 
 ## Testing status
@@ -180,8 +180,7 @@ to read the decision in.
 were not reached: detecting a graphics wrapper that belongs to somebody else, the confirmation
 before a folder is deleted and the carrying out and back that goes with it, and retiring a
 controller wrapper an older version of this installer left under the name `winmm.dll`. Each of them
-stops rather than continuing optimistically, but a branch nobody has taken is a branch nobody has
-watched.
+stops, but a branch nobody has taken is a branch nobody has watched.
 
 If you exercise one, say which, and say what the folder looked like beforehand.
 

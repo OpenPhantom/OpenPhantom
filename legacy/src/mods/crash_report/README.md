@@ -27,16 +27,16 @@ Two hands, because one is not enough:
    handler is the important one of the two, not the other way round.
 
 **It changes nothing.** Both paths return `CONTINUE_SEARCH` or hand on to the previous filter, so
-the crash unfolds exactly as it would without us. A reporter that bends the control flow reports on
+the crash unfolds as it would without us. A reporter that bends the control flow reports on
 a different program than the one that crashed.
 
 ## How it survives its own report
 
 A crash reporter runs in the least forgiving conditions in the process, so three things are
-arranged deliberately rather than left to chance.
+arranged on purpose.
 
 * **It cannot re-enter itself.** If the reporter faults, the vectored handler sees that exception
-  exactly as it saw the first, and the reporter would recurse on an ever shorter stack until
+  as it saw the first, and the reporter would recurse on an ever shorter stack until
   something else killed the process, leaving the log ending mid line. One interlocked guard is
   held across the whole body. Two threads faulting at once resolve the same way: the second is
   dropped, because the first crash is the one worth reading.
@@ -77,7 +77,7 @@ arranged deliberately rather than left to chance.
   a budget of their own; the full report for one comes from the unhandled filter, which runs only
   when nothing else took it. Every other fatal code still gets its report at first chance, because
   a `memcpy` cannot raise an illegal instruction or a divide by zero. The cost is that an access
-  violation swallowed further out, while the process then hangs rather than dying, is one line
+  violation swallowed further out, after which the process hangs instead of dying, is one line
   instead of a report; that line still names the faulting address, what it touched and what it was
   doing, and the registers and stack sweep are given up.
 * Only genuinely fatal codes are reported. Breakpoints, C++ throws (`0xE06D7363`) and the
@@ -85,7 +85,7 @@ arranged deliberately rather than left to chance.
 * On `EXCEPTION_STACK_OVERFLOW` the report itself needs stack, and it has only the single page
   Windows leaves after clearing the guard. That report is therefore deliberately smaller: the byte
   dump around the faulting instruction is skipped, since on an overflow that instruction is
-  whichever one happened to touch the guard page rather than the bug, and the stack sweep is
+  whichever one happened to touch the guard page, not the bug, and the stack sweep is
   shortened to 512 bytes, since in a runaway recursion the repeating pattern of return addresses
   is already the answer. It still is not guaranteed to fit, but it is a great deal more likely to.
 
@@ -94,8 +94,8 @@ arranged deliberately rather than left to chance.
 Built and linked, `/W4 /WX` clean. No unit tests: there is no isolated pure logic here; every
 function either talks to the OS or formats a report.
 
-**Accepted in game, on real crashes rather than induced ones.** It caught a repeatable fault on
+**Accepted in game, on real crashes, none of them induced.** It caught a repeatable fault on
 three machines and produced the report that was used to diagnose it: the exception, the registers,
 the stack extent, and the module each frame belonged to. The module naming turned a report that
 read as a dead end into the one that named the fault, so that part is confirmed by having done its
-job rather than by having been looked at.
+job.

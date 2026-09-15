@@ -45,7 +45,7 @@ whichever trigger fires first wins.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | `0` loads nothing at all; the game runs exactly as before |
+| `Enabled` | `1` | `0` loads nothing at all; the game runs as before |
 | `ModDirectory` | `mods` | Relative to `WMAIN.EXE` |
 | `ChainDll` | *(empty)* | Explicit forward target, absolute or relative to the game folder |
 
@@ -59,12 +59,12 @@ each step logged:
 3. `<system directory>\dinput.dll`
 
 **If your game folder already has a `dinput.dll`**, a graphics wrapper, an ASI loader, rename
-it to `dinput_orig.dll` rather than overwriting it. Every export is forwarded to it and it keeps
+it to `dinput_orig.dll`; do not overwrite it. Every export is forwarded to it and it keeps
 working.
 
 ## Load order
 
-Alphabetical, so the sequence is reproducible rather than dependent on the file system.
+Alphabetical, so the sequence is reproducible whatever the file system returns.
 **Order encodes no dependencies:** no feature calls into another, and where two of them detour the
 same engine function, `common/detour.c` chains them so the result is identical either way.
 

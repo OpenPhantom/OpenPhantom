@@ -81,7 +81,7 @@ it means rather than describing the costume.
 
 **The name on its own does not identify a character.** It is copied out of the placement, and a
 placement name is a reused archetype label; two earlier attempts in this project to pin down a
-specific placement by name matching were both wrong for exactly that reason. It is the name
+specific placement by name matching were both wrong for that reason. It is the name
 together with the position that picks one out.
 
 The vertical column is the second reason it exists. Each line carries `since`, the height the
@@ -288,6 +288,6 @@ every mover at once, and a mover in motion covers the whole interval in a single
 platforms arrive. Movers at rest absorb the same jump invisibly, so without this the only symptom
 is the one thing that happened to be moving.
 
-It found exactly that: 59 movers each stepping 2.031 s on the frame a quicksave loaded, which was
+It found that: 59 movers each stepping 2.031 s on the frame a quicksave loaded, which was
 `framerate_fix` dropping its banked clock offset a frame later than the level opened. The reading
 is taken before the original runs, because the integrator overwrites the base it came from.

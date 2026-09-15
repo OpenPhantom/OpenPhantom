@@ -52,7 +52,7 @@ height and therefore keeps its shape. `SquareHud` derives the bar widths from th
 
 **The weapon icon is not exempt.** Its width comes from the height but its **left edge** comes from
 the width, so the two terms need different multipliers. Exempting the block entirely, as this DLL
-used to, leaves a hole between the bar and the icon exactly as wide as the bar
+used to, leaves a hole between the bar and the icon as wide as the bar
 lost: 97 px at 1920x1080.
 
 **Nothing grows relative to the screen.** Every extent is a fixed fraction, so the HUD occupies the
@@ -141,7 +141,7 @@ nothing is cached, by the engine or by this DLL. `status_drawHud` rebuilds all f
 the live screen size on every frame and the font layer re-reads the display size on every string,
 so a resolution change needs no notification to take effect. What is lost is the fresh log line
 after a mode change and the live re-read of `HudScale`, which then needs a restart. The warning in
-the log says exactly that.
+the log says that.
 
 If `font3d_draw` cannot be hooked, the four rectangles still move and the two numbers do not; the
 summary log line reports which of the two happened rather than claiming both.

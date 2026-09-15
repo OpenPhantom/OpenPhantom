@@ -69,9 +69,9 @@ handler run, and puts the velocity back if that character is one nothing will co
 ship's own velocity is identical either side of that call, so there is nothing to undo and it is
 never touched. Only a velocity the handler itself changed counts as a push.
 
-It restores the previous value rather than zero, so a flying character contacted mid flight keeps
+It restores the previous value, not zero, so a flying character contacted mid flight keeps
 the course it arrived with instead of stopping dead. Everything else the handler does, damage
-included, is left exactly as the engine wrote it.
+included, is left as the engine wrote it.
 
 ## The second route: a crusher takes its riders down with it
 
@@ -84,11 +84,11 @@ it is identical at 30 frames a second and at 100.
 collision polygons sits at floor height in that room. The floor probe selects it as the surface they
 are standing on, so when the mover runs its 29 units of travel they ride it down through the floor
 that is actually drawn there. A hardware write watch named every writer of their height, which is
-how the mover was identified rather than guessed at.
+how the mover was identified.
 
 **The carry is not doing anything wrong.** Its numbers are real work: the pose advances about 0.45
 of its travel each tick, the rotation delta is exactly zero, and the translation delta is a steady
--0.0008 in Z. That is also exactly what a genuinely descending platform looks like, so the
+-0.0008 in Z. That is also what a descending platform looks like, so the
 translation cannot be refused on its own account without freezing every rider on every lift.
 
 **The mover's type is not the test, and assuming it was would have broken real platforms.** The
@@ -116,7 +116,7 @@ the running game, so the level really does author a floor panel that drops five 
 characters riding it down is the game working as built; it simply reads as sinking.
 
 **Both routes have to be closed, and this cost a wrong fix first.** Refusing the carry alone reduced
-the fall from five centimetres to one and a half rather than stopping it, because
+the fall from five centimetres to one and a half and did not stop it, because
 `move_snapToGround` pulls an actor onto any floor within 0.35 units below their feet, every tick,
 and the crusher's polygon is that floor. A character released by the carry is snapped straight back
 down onto it. So the ground snap exempts a character standing on the same mover the carry refused,
@@ -143,8 +143,8 @@ descends with them, so by that measure nothing was ever wrong.
 | `bapmap_carryRider` | `0x40AF4C` | detoured over a 9-byte prologue, **only** when `CrusherCarry=1`; the engine's body still runs and only the rider position it hands back is refused |
 | `move_snapToGround` | `0x42ADB4` | detoured over a 6-byte prologue, **only** when `CrusherCarry=1`; the snap is declined for a character standing on a crusher the carry already refused, and only while the floor is below the feet |
 
-The contacted body comes from a global read out of the matched operand at `+0x07` rather than
-written down, and is refused if it does not land inside the image. Fields read, all confirmed by the
+The contacted body comes from a global read out of the matched operand at `+0x07`, never written
+down, and is refused if it does not land inside the image. Fields read, all confirmed by the
 diagnostics character census first: `body+0xA0` the owner, `character+0x98` the movement mode,
 `character+0xDC` the velocity.
 
@@ -179,11 +179,11 @@ it: a later level whose mover happened to carry the same number was taken for th
 refused and had its ground snap declined for the rest of the session.
 
 An entry is now the id together with the mover it was seen on. The same number on a different mover
-takes the old entry over rather than sitting beside it, because that can only mean a level has
+takes the old entry over instead of sitting beside it, because that can only mean a level has
 opened since and the old one cannot come back. That also stops a long session filling the table with
 movers from levels that have closed.
 
-The no-eviction rule is unchanged: a full table still refuses a new mover rather than dropping one,
+The no-eviction rule is unchanged: a full table still refuses a new mover and drops none,
 because dropping one would let a mover already being refused start carrying again halfway through
 its run.
 
@@ -196,10 +196,9 @@ session the ships, birds and droids on flying platforms all moved normally, whic
 previous attempt failed.
 
 The contact impulse is still visible in the census at the moment it is applied, so the push still
-happens and simply goes nowhere. That is the intended behaviour rather than the impulse being
-suppressed.
+happens and goes nowhere. That is the intended behaviour; the impulse is not suppressed.
 
-The checks cover the decision, using the modes read out of the live level rather than invented ones.
+The checks cover the decision, using the modes read out of the live level.
 **The test for the regression comes before the test for the bug**, because that is the failure that
 actually reached a player: a character whose velocity is unchanged either side of the handler is
 left alone whatever its mode.

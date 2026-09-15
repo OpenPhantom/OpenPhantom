@@ -144,7 +144,7 @@ confirmed offsets:
 | pSibling | `0x5C` | `0x98` |
 
 The absolute offsets differ, as they would between builds with different preceding fields. The
-order matches for six consecutive fields, including a gap on this side that lands exactly where
+order matches for six consecutive fields, including a gap on this side that lands where
 the other has a parent pointer. Three in a row could be coincidence; six, with the gap, is a
 shared ancestor.
 

@@ -47,7 +47,7 @@ design tried here, and each of the first three taught something the next one kep
 4. **The current design.** `WM_ACTIVATEAPP` is specifically a *cross-process* signal; Windows
    sends it when a window belonging to a different process becomes relevant, which a separate host
    process always was, regardless of `WS_EX_NOACTIVATE` (which governs keyboard activation, not
-   process identity). Moving the overlay back in-process, now that libVLC rather than `MFPlay`
+   process identity). Moving the overlay back in-process, now that libVLC and not `MFPlay`
    renders into it, removes that signal at the root: Windows does not raise `WM_ACTIVATEAPP` for a
    window becoming topmost within its own process.
 
@@ -70,7 +70,7 @@ waits, in order, for the game's own pump to resume.
 One thing had to survive that change. The overlay never takes activation, so a close box click,
 `WM_NCLBUTTONDOWN`/`HTCLOSE`, is addressed to the *game's* window, which a scoped peek never
 retrieves, and a loop that ignored it would eat the request on the way past. So the game's queue
-is *looked at* with `PM_NOREMOVE` for exactly that one message, which is then removed and
+is *looked at* with `PM_NOREMOVE` for that one message, which is then removed and
 immediately re-posted so the engine's own window procedure sees it once the movie call returns.
 Nothing else on that queue is touched. Alt+F4 used to be peeked for as well and is not any more;
 **Closing the game during a movie** below says why. `WM_QUIT` needs no handling: it is a thread
@@ -93,7 +93,7 @@ by `SetCursor(NULL)`, both immediately after `DestroyWindow()`, once per movie. 
 launching with `fmv_player` *disabled* visibly flashes the screen several times before the game
 settles, real minimise/restore cycles consistent with this game's exclusive-mode Direct3D9 device
 reacting to however Bink touches the display, while `fmv_player` *enabled* shows none of that,
-this DLL doing exactly what it was built to do. Something early in start-up leaves the OS
+this DLL doing what it was built to do. Something early in start-up leaves the OS
 cursor undone, and the retail path's own incidental flashing was quietly re-triggering a full
 activation handshake and curing it before the player ever saw it. A smooth, flicker-free window
 removes that accidental cure along with the flicker, so the symptom only ever appeared with this
@@ -114,7 +114,7 @@ window procedure does `g_menuCursorX += (client_x - 320)` and then clamps to the
 synthetic move only ever adds a delta to whatever the cells already held, a value this DLL has no
 way to know. The repair writes the two cells directly, to the middle of the island, with no message
 and no prior state involved, after draining the mouse backlog that would otherwise be applied on
-top of it. The four cells are found by pattern rather than hardcoded. They sit at different
+top of it. The four cells are found by pattern, none hardcoded. They sit at different
 addresses in the Edit Tool's own recompile of this engine, so four constants would have written
 into the wrong variables there. `menu_cursor_cells.c` carries the bytes and the measurements.
 
@@ -143,15 +143,15 @@ does not match switches off the part that needed it and the log says which.
 
 `Scaling` is applied when the movie plays, not when it is converted, so it works on files you
 already have and changing your mind costs nothing but a restart. Stretch is expressed as the
-overlay window's own ratio rather than a fixed 16:9, so it stays exact on a 16:10, a 21:9 or a
+overlay window's own ratio, not a fixed 16:9, so it stays exact on a 16:10, a 21:9 or a
 rotated panel, where a hard-coded ratio would leave bars on one axis and crop on the other. The
 export it needs is resolved as an optional one: a libVLC without it stays on letterbox and says so
-once, rather than failing the whole load over a preference.
+once; a preference does not fail the whole load.
 
 For a movie named `movie\arena` (the retail engine's own relative name, no extension), this looks
 for `<game>\<MovieDirectory>\arena.<Extension>`; flat, with no extra `movie\` subfolder beyond
 `MovieDirectory` itself, so converting your own files does not mean reproducing the retail path
-structure. If that file is not there, the movie plays exactly as it always did, through Bink.
+structure. If that file is not there, the movie plays as it always did, through Bink.
 
 ## What switches this feature off, and where to read it
 
@@ -182,15 +182,15 @@ mode this whole feature is most likely to present as.
    looked for `...\vlc.exe\libvlc.dll`, which meant it could never find anything.
 
 It must be **32-bit**. This is a 32-bit process and a 32-bit process cannot load a 64-bit DLL under
-any circumstances, an architecture wall rather than a version mismatch. Most current VLC downloads
-default to 64-bit, so the installer ships a 32-bit runtime rather than leaving it to the machine.
+any circumstances, an architecture wall and not a version mismatch. Most current VLC downloads
+default to 64-bit, so the installer ships a 32-bit runtime of its own.
 A player who installs the patch without that component, and has only a 64-bit VLC, gets Bink for
 every movie and a log line saying why.
 
 Nothing is linked against libVLC at build time. `LoadLibraryW` and `GetProcAddress` at run time
 mean nobody building this project needs libVLC headers or an import library, and all ten exports
-are required, so a libVLC that renamed or removed any of them switches this feature off rather than
-calling something under a name it no longer means.
+are required, so a libVLC that renamed or removed any of them switches this feature off; nothing
+is called under a name it no longer means.
 
 ## Getting your own movies converted
 
@@ -214,7 +214,7 @@ the game keeps its saved games inside it and cannot run otherwise. An `ffmpeg.ex
 this script would therefore be an executable that any user of the machine can replace, and the
 installer offers to run this tool right after installing. Searching there would turn "I can write to
 my own game folder" into "I can choose what runs next". `%LOCALAPPDATA%` belongs to one user.
-For the same reason the installer runs the conversion as the ordinary user rather than with its own
+For the same reason the installer runs the conversion as the ordinary user, without its own
 elevated rights.
 
 ### The default is the source's own resolution, on purpose
@@ -222,7 +222,7 @@ elevated rights.
 Upscaling a ~640x405 Bink source to 1080p with Lanczos adds no detail. It mostly spends bitrate on
 1999 compression artefacts, and the overlay scales whatever it is given to fill the window anyway.
 The real win of this tool is getting *out of Bink*, not the resolution, so the default leaves the
-picture and the frame rate exactly as they are. `-TargetHeight` is there if you want it.
+picture and the frame rate as they are. `-TargetHeight` is there if you want it.
 
 ### It never letterboxes into the file
 
@@ -277,7 +277,7 @@ screen tint with), packed ARGB with the alpha carrying the fade. The vertices ar
 `common/screen_fill.c`: the routine's own carry `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`,
 which an Intel UHD laptop refused to draw, so its player saw the drop-in the curtain exists to
 hide; see that file's header. That is real content on the frame
-the game actually presents, so any capture method shows exactly what the player sees, and a cheat
+the game actually presents, so any capture method shows what the player sees, and a cheat
 panel opened on top of it still draws on top, for the same reason: this file's hook runs as the
 outer wrapper (loading after "dev_overlay" alphabetically), draws its own quad, then calls through
 to dev_overlay's own hook, which paints the panel after.
@@ -309,7 +309,7 @@ well before the level even loads.
 fedship.b3d either: a second live capture, playing as Qui-Gon (`iamquigon`), catches the same
 transient at a DIFFERENT level's own opening (race.b3d) playing `FSUJSND1.wav` instead. Both share
 the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
-sound-specific suffix. `sfx_mute.c` now matches on that shape rather than on either exact name,
+sound-specific suffix. `sfx_mute.c` now matches on that shape and not on either exact name,
 so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having
 to catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
 byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips every call whose
@@ -318,7 +318,7 @@ suppression is armed, tracking `pPlayer+0xA0` directly so suppression ends the m
 it exists for actually finishes, or the curtain's own timer as a fallback cap. Every other sound,
 both spoken lines included, passes through untouched.
 
-## Which surface a movie gets, and why it is measured rather than configured
+## Which surface a movie gets, and why it is measured, not configured
 
 A movie has to cover what the player is looking at, and what that is depends on the shape the game's
 window is in.
@@ -356,7 +356,7 @@ once a second, so resizing the window while a cutscene runs leaves that one movi
 started at.
 
 Field confirmed on a Steam Deck in desktop mode: `the movie surface is 1280x800, taken from the
-game window's client area now`, matching the window rather than the panel.
+game window's client area now`, matching the window and not the panel.
 
 ## Why a separate window instead of drawing into the game's own surface
 
@@ -406,14 +406,14 @@ confirmed against a legitimate install: `GAMEDATA\MOVIE\ARENA.BIK`.
 
 The bare `push ebp / mov ebp,esp / sub esp,0x90` prologue shape recurs elsewhere in an 830 KB
 image, so the two-stage detour rule exists and this signature reaches two branches into the
-function rather than stopping at the prologue. Measured against the real retail `WMAIN.EXE`
+function instead of stopping at the prologue. Measured against the real retail `WMAIN.EXE`
 (829,952 bytes): exactly one match, all 72 bytes, at `0x0046C35A`.
 
 **The first gate is honoured.** The retail function refuses and returns 0 whenever `[006d6360]` is
-clear, so the hook hands those calls to the original rather than answering for them. What that cell
+clear, so the hook hands those calls to the original and answers none of them. What that cell
 *means* has not been established; no sweep of its writers was done. That is precisely why
 deferring is the safe direction: it reproduces retail behaviour whatever the answer turns out to
-be. Its address is read out of the matched `cmp` operand rather than written down as a constant.
+be. Its address is read out of the matched `cmp` operand, never written down as a constant.
 
 **The second gate is honoured, and the cell behind it is held.** `[0086a43c]` is what the engine
 means by "a cutscene is on screen": the retail function refuses and returns 0 while it is set, then
@@ -429,7 +429,7 @@ return early, so it cannot be left standing. Its address is read out of both the
 The one other place this DLL reads or writes engine memory, kept in `menu_cursor_cells.c` so it is
 the only file here that needs a signature at all. The window procedure's `WM_MOUSEMOVE` case, at
 `0x00460BCC` in retail, reached only after the engine's own recentring call at `0x0046A115` has
-confirmed the message is real movement rather than the echo of its own warp:
+confirmed the message is real movement and not the echo of its own warp:
 
 ```
 00460BCC  0F BF 55 14           movsx edx, word ptr [ebp+0x14]   ; client x
@@ -477,7 +477,7 @@ The audit's stated consequence, that a player could not close the game for the l
 does not follow: they cannot close it during ordinary gameplay either. Detecting the combination
 properly was tried and did exactly nothing useful, ending the movie and then posting a close the
 engine discarded. Making Alt+F4 genuinely close the game would be overriding a decision the engine
-took for itself. That is a behaviour change rather than a repair, and it does not belong in the
+took for itself. That is a behaviour change, not a repair, and it does not belong in the
 movie player.
 
 ## Known limitations
@@ -524,8 +524,8 @@ not).
 hand. It compiles with the configured 32-bit MSVC toolset, `/W4 /WX`, zero warnings, and
 `movie_path.c` is covered by `unittests/movie_path.c`. The two things that had differed from the
 last tested form have both been played since: the close request recognised with `PM_NOREMOVE` on
-the game's queue rather than being lost with the rest of the exclusion, and the four cursor cells
-resolved by pattern rather than written down as constants. That pattern is measured across all
+the game's queue instead of lost with the rest of the exclusion, and the four cursor cells
+resolved by pattern, none written down as a constant. That pattern is measured across all
 six available images, one match each, with all five of its cross-checks passing, including on the
 recompile where the cells move.
 
@@ -550,7 +550,7 @@ message-delivery behaviour and on libVLC's own long-stable C ABI.
 3. `libVLC is loading on its own thread ...`, then `using the ... libVLC in ...` and `libVLC ready,
    plugins from ...`. These say which of the three candidates answered and that the plugin set was
    complete enough for libVLC to start. The last one arrives on the background thread, so it may
-   appear after the interception line below rather than before it.
+   appear after the interception line below.
 4. `movie playback intercepted at ...`. The detour took.
 5. Then **one line per movie**: `playing "..." from ...`, or `no converted file for "..." at ...`,
    or, where a converted file does exist but libVLC cannot take it, either `libVLC is still loading
@@ -560,7 +560,7 @@ message-delivery behaviour and on libVLC's own long-stable C ABI.
    quietly failing.
 
    A machine with nothing converted never mentions libVLC at all: the readiness question is asked
-   only once there is a file to play, so "no usable libVLC" is a warning rather than a note. It
+   only once there is a file to play, so "no usable libVLC" is a warning, not a note. It
    means a converted movie was found and could not be used.
 
 Two deliberate tests are worth doing by hand:

@@ -17,7 +17,7 @@ nothing and says so in the log.
 
 Two of the three patterns carry absolute data addresses, because those addresses are the sites'
 own operands and the patterns are only unique with them in. The consequence: a build that relinked
-its data section fails those two and the DLL declines rather than guessing. Measured on every
+its data section fails those two and the DLL declines. Measured on every
 retail image to hand, including the German one, all three resolve exactly once; on the Edit Tool's
 own recompile of the engine only the address-free middle pattern resolves, and the DLL declines
 with a log line, the intended answer.
@@ -68,7 +68,7 @@ stay correct for in-game volume to be right at all.
 **Fix:** `bapsound_getMasterVolume` is entirely replaced (not wrapped: calling through to the AIL
 query first would just reintroduce the bug) with a detour that computes the same 0..127 integer
 the engine itself derived the mirror from, clamped to `[0, scale]`. Both data addresses are read
-out of `bapsound_setMasterVolume`'s own instruction stream rather than hardcoded, and range
+out of `bapsound_setMasterVolume`'s own instruction stream, never hardcoded, and range
 checked against the host image before they are followed.
 
 **The replacement keeps the original's own guard branch.** That is not a detail. The function
@@ -84,7 +84,7 @@ did **not** fix "resets on reload"; that symptom survived unchanged and led to b
 
 ## Bug 2: the loaded value was never applied (the actual cause of "resets to full on reload")
 
-`bapsound_moduleInit` (`0x004159F0`, runs once at startup) does this, in exactly this order:
+`bapsound_moduleInit` (`0x004159F0`, runs once at startup) does this, in this order:
 
 ```c
 ini_read_int_alt("SVOL", 127, &loaded);   // reads obi.ini correctly
@@ -114,7 +114,7 @@ apply that cannot work, and one live slider that can.
 
 **Confirmed** with a temporary diagnostic build across two separate sessions: the very first call
 to `bapsound_setMasterVolume` in each run showed the mirror ending up at `1.0` regardless of the
-argument passed in (`120` in one run, `0` in the other), exactly what "the guard blocked the
+argument passed in (`120` in one run, `0` in the other), what "the guard blocked the
 write and the mirror kept its old value" looks like from outside the function.
 
 **Fix:** `bapsound_setMasterVolume` is tapped (not replaced: the live path must keep working
@@ -166,7 +166,7 @@ in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.
 
 Music volume is unaffected by either bug. It round-trips through a simple engine-side float with
 no driver query and no ordering dependency on a "ready" flag. That pointed at these two
-SFX-specific sites rather than at the settings file or the code that reads it.
+SFX-specific sites and away from the settings file and the code that reads it.
 
 ## The sliders walk downward
 
@@ -213,7 +213,7 @@ seed has already made the value representable.
 `__ftol` is the compiler's own helper and the image calls it from everywhere, so rounding inside it
 would change every float-to-int conversion in the game. Only the two seed calls are redirected, to
 a thunk that adds a half and falls into the real helper. The helper is read out of the displacement
-being replaced rather than resolved separately, so a wrapper somebody else had already installed
+being replaced, not resolved separately, so a wrapper somebody else had already installed
 still runs. Both displacements are read and compared before either is written, and if they name
 different helpers nothing is touched.
 

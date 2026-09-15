@@ -19,7 +19,7 @@ Nothing here changes what a scene inside the authored limits draws.
 
 Three builds of this engine ship inside one installation and all three were checked: the retail
 `WMAIN.EXE`, `wmain.exe`, and `obi.exe`, which is a recompile. The German retail executable is
-byte identical to the English one, so it is the same build rather than a fourth. All three sites
+byte identical to the English one, so it is the same build and not a fourth. All three sites
 resolve on every one of them. Every site is found by pattern, and a pattern that does not match
 disables that one part and says so in the log.
 
@@ -170,14 +170,14 @@ That is a derivation, not a measurement.
 A census was attempted and did not settle it. Scanning `.text` for dword literals landing between
 the pool's base at `0x00734C10` and a generous end at `0x00790000` returns 74 hits at byte
 alignment, 15 of them dword aligned and only 6 real instruction operands, so most are coincidences
-inside instructions rather than addresses. From the other side, the nearest address above the pool's
+inside instructions, not addresses. From the other side, the nearest address above the pool's
 base that anything else is known to use is `0x008439AC`, which is 1.06 MB higher, so the pool is not
 immediately followed by anything identified. The derived capacity, `0x2004` vertices of 32 bytes
 each, which is `0x40080` bytes ending at `0x00774C90`, is consistent with that gap but not proven by
 it.
 
 So a refusal on this bound during ordinary play is evidence that the pool is bigger than the
-derivation, not evidence that the scene is too complex. The log says exactly that the first time it
+derivation, not evidence that the scene is too complex. The log says that the first time it
 happens, and `PoolCapacityVertices` is how to answer it.
 
 ## Known limitations
@@ -185,14 +185,14 @@ happens, and `PoolCapacityVertices` is how to answer it.
 * **The depth comparison repair is not expected to fire on modern hardware.** Any Direct3D 9 device
   advertises GREATER, so the mapper reaches the `0x10` arm and the hook passes the answer through
   untouched. Whether any real device takes the probe failure path has not been established, so
-  this substitutes rather than assumes either way.
+  this substitutes and assumes nothing either way.
 * **Only the first refusal of each kind is logged.** The counters keep running after that but no
   later line prints them, so a session's total is not visible in `engine_fixes.log`.
 * **The immediate path is not guarded.** Its limit is 64 and it is a different array in a different
   function; nothing here touches it.
-* The pool cursor is read fresh on every call rather than tracked, because the engine zeroes it
+* The pool cursor is read fresh on every call, never tracked, because the engine zeroes it
   when it drains the queue and this hook has no reliable way to see that moment.
-* There is no uninstall, a property of the shared detour layer rather than of this feature.
+* There is no uninstall, a property of the shared detour layer, not of this feature.
 * **The flat quad repair has not been seen working on Intel.** It was built after the reporter had
   gone. What it does on Intel follows from the same change having brought back the panel fills
   and the curtain there, through `common/screen_fill.c`, and from the loading bar's black going
@@ -310,8 +310,8 @@ or measuring the assets, not after building.
   when `D3DPTEXTURECAPS_SQUAREONLY` is set, which is Voodoo era hardware. Through a Direct3D 9
   translation layer the bit is not set and the path does not run. The engine's logic there is
   conditional and correctly conditional.
-* **The 256 pixel texture clamp.** The cache clamps both axes to 1..256 and crops rather than
-  scales. Measuring 4000 of the 6482 exported textures finds the most common sizes to be 32x32,
+* **The 256 pixel texture clamp.** The cache clamps both axes to 1..256 and crops; it does not
+  scale. Measuring 4000 of the 6482 exported textures finds the most common sizes to be 32x32,
   16x32, 64x32 and 64x64, and not one of them exceeds 256 in either axis, so the clamp never fires
   on the shipped assets.
 * **A 32 bit texture path.** The recorded cost is always `width * height * 2` and there is no 32
@@ -336,7 +336,7 @@ because this DLL exposes nothing but its install function and the comparisons we
 `unittests/face_bounds.c` covers both sides of each boundary and the exact boundary itself, a face
 carrying no vertices, a cursor that is already past the ceiling, the highest limit the ini will
 accept, a ceiling of zero, and the counts that would wrap if the pool question were asked as
-`used + count > capacity` rather than as a subtraction. The vertex limit and the pool ceiling are
+`used + count > capacity` instead of as a subtraction. The vertex limit and the pool ceiling are
 passed in, so the test drives the same code the game runs without an engine cell anywhere near it.
 
 **The unit test builds and passes.** `face_bounds` is a registered ctest target, so CI runs it.
@@ -363,7 +363,7 @@ tester's NVIDIA machine and seen on the Deck, and the snap was rewritten from th
 corrected routine was then confirmed the same day on both: the tester's RTX 3050 and Chip's
 Deck, the bars back where `GuardFlatQuads=0` puts them.
 
-An untriggered session is the expected result rather than evidence that the guard works: on a
+An untriggered session is the expected result, not evidence that the guard works: on a
 correct scene and a working device none of the three paths is taken. What can be confirmed in game
 is the install line in `engine_fixes.log`, which names the resolved submit address, the vertex
 limit in force, the pool cursor address and the ceiling derived from the engine's own instruction.

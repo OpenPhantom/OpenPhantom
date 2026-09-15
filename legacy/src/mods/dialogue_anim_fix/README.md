@@ -7,7 +7,7 @@ of their line), `speaker_rest.c` (a speaker left frozen after their line goes to
 `stand_in.c` (a line spoken by an invisible script anchor is gestured by the body it stands for).
 
 Four faults, one narrow and three wide. A character whose script parks on its talking animation and
-never leaves it: two scenes are known and the hold acts in exactly those two, on purpose; see "Why
+never leaves it: two scenes are known and the hold acts in those two, on purpose; see "Why
 this narrow" below. A speaker whose gesture plays through part way into a long line and holds its
 last frame for the rest of it: every scene does that, and the gesture repeat acts on whoever holds
 the speaker lock. And a speaker left frozen once their line is over, through the reply and after
@@ -172,7 +172,7 @@ anything this bug was never about.
 who is not the current speaker and whose target is not idle gets idled, and idled the prisoner's
 run between his two lines, which was "when he's running he has no animation". A script asks for
 ordinary clips between lines too. Only the id seen during the actor's own line is held, and only
-while the script keeps asking for exactly that, described in steps 3 and 5 above. The same build
+while the script keeps asking for that, described in steps 3 and 5 above. The same build
 also disarmed three seconds after the second line, while the parked node was the thing that
 needed holding. A row now says whether its exchange ends.
 
@@ -323,7 +323,7 @@ and even in those two it never touches an actor whose model name is not one the 
 Any other actor whose talk animation lingers past their own line, in any other scene, is a
 different report: play it with `[diagnostics] Dialogue=1` and `Characters=1`, which give the
 level file and the speaker, and add a row to the table with the model name. The jail row was
-added exactly that way.
+added that way.
 
 ## Testing status: accepted in game (2026-08-22; the jail 2026-09-12; the gesture and the rest 2026-09-13; the stand-in 2026-09-15)
 

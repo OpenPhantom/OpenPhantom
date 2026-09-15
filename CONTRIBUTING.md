@@ -13,7 +13,7 @@ just a good bug report. You do not need to know the engine to help.
 in a commit, not in a release, not in an issue attachment. Everything here operates on files the
 user already owns. A pull request that adds game data will be closed regardless of how good the
 rest of it is, and if something slips through, say so immediately so it can be removed from the
-history rather than quietly left there.
+history.
 
 This is not paperwork. It is the difference between a project that survives and one that does not.
 

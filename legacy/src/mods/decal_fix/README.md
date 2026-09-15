@@ -18,13 +18,13 @@ match, the DLL changes nothing and says so.
 | `NeutraliseZBias` | `1` | | write `je` -> `jmp` at `0x00488270`, so the decal arm issues `SetRenderState(D3DRENDERSTATE_ZBIAS, 0)` instead of `1`. **This is the fix.** A translation layer that synthesises a subtracting depth bias for a state Direct3D 9 does not have turns the engine's exact-equality decal test into a strict less-than and loses every decal |
 | `DepthBias` | `0.0` | 0-0.01 | how far a decal is pulled towards the camera, in device depth. Ships at 0, meaning off: pulling the vertex was measured and changed nothing, and `NeutraliseZBias` above is what does the work |
 | `StateClear` | `0` | | bits to clear from the decal's render state word `0x0010AE40` before it reaches the engine. An instrument, not a feature |
-| `StateSet` | `0` | | bits to set in the same word. Both ship at 0, so the word reaches the engine exactly as it left `bapvrt_drawPolyDecals`. They exist to settle which removed state costs the decal in single runs instead of one rebuild per suspect: that word asks for at least two things Direct3D 9 removed, ZBIAS (bit `0x00100000`, state 47) and `TEXTUREMAPBLEND=DECALALPHA` (bit `0x00000400`, state 21), and a translation layer may honour, drop or mistranslate either |
+| `StateSet` | `0` | | bits to set in the same word. Both ship at 0, so the word reaches the engine as it left `bapvrt_drawPolyDecals`. They exist to settle which removed state costs the decal in single runs instead of one rebuild per suspect: that word asks for at least two things Direct3D 9 removed, ZBIAS (bit `0x00100000`, state 47) and `TEXTUREMAPBLEND=DECALALPHA` (bit `0x00000400`, state 21), and a translation layer may honour, drop or mistranslate either |
 | `ScorchReach` | `1` | | a burn reaches every polygon its mark touches. Three things in the engine's burn stopped it: the cell query around an impact is capped at 1.9 units while the polygon test uses the mark's full size; a quad is tested against the mark's sphere as two triangles that do not cover it, so a mark centred just across a quad's fourth edge skips that quad; and a neighbour that slopes away from the shot by a little more than the shot's own angle is refused as facing away. All three give a blast mark cut along a straight line with part missing (issue 28). The cap is stepped over, the second triangle becomes the one that covers the quad, and a neighbour is refused only past about 45 degrees. A repair: a mark that fits inside one polygon is unchanged |
 | `SubmitTrace` | `0` | | a measurement: sample the x87 status word either side of every decal submit and name any submit across which the stack pointer moved; see the section below |
 | `DryAtStart` | `1` | | a freshly spawned or restored body starts dry. The game lays wet footprints for eight seconds after a footstep in water, timed on a clock that starts with the process, and a new body's last-wet time is written as zero, so for the first eight seconds after launch every character that has never touched water leaves wet prints on dry ground. The two stores of that zero write a time long past instead. A repair: nothing differs once eight seconds have passed |
 
-`DepthBias=0` is not the same as `Enabled=0`. It is an amount rather than a switch, and it ships at
-0, so that row documents a lever rather than something the patch is doing for you. `Enabled=0` also
+`DepthBias=0` is not the same as `Enabled=0`. It is an amount, not a switch, and it ships at 0,
+so that row documents a lever and not something the patch is doing for you. `Enabled=0` also
 turns off `NeutraliseZBias`, which is the byte that brings the decals back.
 
 ## Engine locations
@@ -122,7 +122,7 @@ not up yet and the cell still reads zero. The log names the answer once, on the 
 ```
 
 The engine reads the direction late for the same reason. The third sort key of its deferred draw
-list is direction-dependent rather than fixed.
+list is direction-dependent.
 
 ## Choosing the number
 
@@ -133,7 +133,7 @@ and a large one far away, which is the right shape: that is where depth resoluti
 
 Raise it if decals still flicker or vanish at a distance. Lower it if a decal shows through a thin
 piece of geometry standing on its polygon. The ceiling is `0.01`, and a value above it is clamped
-with a warning rather than honoured.
+with a warning.
 
 ## The wet prints that appear with no water
 
@@ -152,9 +152,9 @@ with `[diagnostics] Footsteps=1`: `wet prints begin ... the stamp is 7.28 s old 
 
 `DryAtStart` writes a time a thousand million seconds in the past in both stores, so a fresh body
 fails the test for the life of the process, and the first real footstep in water overwrites the
-stamp with the clock exactly as before. The restore's clear is kept in the same spirit: a stamp
+stamp with the clock as before. The restore's clear is kept in the same spirit: a stamp
 from a previous process was on a different clock and must not come back, and now it comes back
-as "long ago" rather than as "now".
+as "long ago" instead of "now".
 
 ## The mark cut in half
 
@@ -169,7 +169,7 @@ missing. That is the picture in issue 28: half a blast mark on the sand, cut cle
 
 `ScorchReach` steps over the store of the cap, so the box is always the mark's size times two,
 which is the reach the sphere test already has. Nothing else in the function reads the cap. A
-sabre scorch or a small shot mark fits inside 1.9 units and gathers exactly what it did.
+sabre scorch or a small shot mark fits inside 1.9 units and gathers what it did.
 
 That was the first repair, and the picture after it still showed cut marks, along polygon edges
 and not cell edges. The second cause is a few instructions further on. Each gathered polygon

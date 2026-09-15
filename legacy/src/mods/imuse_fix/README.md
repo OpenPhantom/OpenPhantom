@@ -29,7 +29,7 @@ provider change discards a slider move**).
 There is a well-travelled explanation of this game's music defect: the music module's command
 handler leaves its result at `2` ("not handled") for `case 8` (pause) and `case 9` (resume) where
 every other implemented case sets it to `0`, and a dispatcher pair in this engine gates its
-suspend/resume bookkeeping on exactly that result, pause sets a "suspended" bit only when the
+suspend/resume bookkeeping on that result, pause sets a "suspended" bit only when the
 handler returned 0, and resume skips any module whose bit is clear. The chain is real and the
 reading of those two dispatchers is correct.
 
@@ -146,7 +146,7 @@ It matters for `ImLock` specifically because the patch **moves an instruction bo
 return, would resume inside the address operand and run whatever it decoded as. Every other
 thread is therefore suspended and asked where its instruction pointer is, and the write happens
 only when none of them is inside the function. If one is, they are resumed and it is retried;
-after eight attempts the patch declines, and a declined lock is rolled back exactly as any other
+after eight attempts the patch declines, and a declined lock is rolled back as any other
 failure is.
 
 Nothing is allocated while threads are suspended, so the `ImUnlock` detour is installed

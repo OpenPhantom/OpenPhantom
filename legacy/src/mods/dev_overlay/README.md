@@ -8,7 +8,7 @@ breaking every `engine_fixes.ini` that mentions it.
 ## Supported executables
 
 Retail `WMAIN.EXE`. Every cheat and every row resolves its own sites by pattern, and a row whose
-site did not match is drawn greyed rather than hidden, so the panel says what is unavailable on
+site did not match is drawn greyed, not hidden, so the panel says what is unavailable on
 the executable in front of it. The addresses are beside each cheat below.
 
 ## What it looks like
@@ -28,7 +28,7 @@ Two tabs under a heading that reads `Cheatmenu`.
   scroll past invincibility to reach the draw distance. A second group, Utilities, held every
   setting for a while; Window mode came out of it first, because its rows answer a single question
   and half of them are unusable until the game is restarted, which is worth saying in one place
-  rather than eleven times, and the rest followed on the same argument until each heading named
+  and not eleven times, and the rest followed on the same argument until each heading named
   one thing and Utilities was left holding the panel's own two rows, so it was renamed for them.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
@@ -36,7 +36,7 @@ clearing it puts the fold back the way you left it. A switchable row shows its s
 `OFF` in a chip; a row that only runs once shows `RUN` instead, in the same shape but never green;
 green would say "this is on right now", which a fire-once row never is. Either kind shows `n/a`
 with no chip when the engine site behind it never resolved, or, for the two rows this can pin the
-difficulty, see below, when running it now would be unsafe rather than merely unresolved. The
+difficulty, see below, when running it now would be unsafe and not merely unresolved. The
 pointer is the game's own cursor.
 
 ## How it draws, and why there is no window
@@ -117,7 +117,7 @@ iMUSE's returns 2, so the mark is never set and the matching resume never fires 
 Copying it would risk leaving the music stopped with nothing to start it again, and audio that keeps
 going is a smaller wrong than silence that does not come back.
 
-Window messages are answered here rather than passed on, which covers the pause and the menu keys.
+Window messages are answered here and not passed on, which covers the pause and the menu keys.
 **Alt combinations are handed back untouched**, so Alt+F4 and Alt+Tab still work: a modal panel that
 can trap somebody in a full screen game would be worse than anything it fixes.
 
@@ -162,7 +162,7 @@ first of all. The key also takes 1, which corrects which limb the engine's own s
 severings take without adding any; nobody wants that on purpose, so the row writes 2 or 0 and a
 reader who has set 1 by hand sees the row lit and keeps their setting until they press it.
 
-A cheat whose site did not resolve is shown greyed rather than hidden, and cannot be switched.
+A cheat whose site did not resolve is shown greyed, never hidden, and cannot be switched.
 That is deliberate: a row that ticks and does nothing is worse than a row that says plainly it
 is not available on this executable. The five that read the player record (the two sizes, no clip,
 jump boost and the free camera) are not installed at all when the cell the engine reads the player
@@ -175,8 +175,8 @@ single hook in it.
 
 ### Unlimited ammunition and unlimited health
 
-The first two are one detour on one short function each, and both work by **declining** rather than
-by topping a value up.
+The first two are one detour on one short function each, and both work by **declining**, never by
+topping a value up.
 
 * **Unlimited ammunition** sits in front of the ammunition spend at `0x00459FD4`
   (`ammo[weaponId] -= n`, base `+0x10`). While it is on, the subtraction does not happen.
@@ -193,28 +193,28 @@ function that **gives** ammunition is byte for byte identical up to there and di
 against `sub`. Stopping earlier matched both, and detouring the wrong one would have made every
 pickup a no-op while the cheat was on.
 
-**Not covered**, because it is a different mechanism: anything that *sets* health rather than
+**Not covered**, because it is a different mechanism: anything that *sets* health instead of
 subtracting from it. A scripted death and the console's own `kill me now` both go elsewhere.
 
 * **No fog**, in `cheats_no_fog.c`, is a different shape from the other two because there is
   nothing to decline: fog is not spent through any function, it is state the renderer reads
   straight out of the loaded level's own record every frame. This reuses byte evidence
   `view_distance_fix`'s `fog_regime.c` already proved in full, the same `[g_level]` world
-  pointer, resolved and cross-checked the same way, rather than re-deriving it, though the two
+  pointer, resolved and cross-checked the same way, with no second derivation, though the two
   DLLs never touch each other's memory: this one resolves its own copy of the site independently,
   the same isolation every feature DLL here keeps. While the cheat is on, a per-frame hook
   (`common/frame_hook.h`, the same one `fog_regime.c` uses for its own easing) pushes the level's
   fog band (`world+0x218`/`0x21C`, both world-unit floats) out past anything the world walk's own
-  draw-distance cull can still be showing. The per-frame push survives a level change rather than
-  lasting only until the next one.
+  draw-distance cull can still be showing. The per-frame push survives a level change; it does
+  not last only until the next one.
 
   **The first version cleared `world+0x210` bit 0 instead, the level's "has fog" flag, and field
   testing found that breaks the renderer**: every moving actor drew as a flat, unlit silhouette,
   and setting the bit back did not undo it. Retail never toggles that bit at runtime at all, it is
   set once at level load and held fixed for the level's life, so a runtime flip exercises a
   combination of engine state nothing in 1999 ever produced. `fog_regime.c` never touches that bit
-  either, only the band. This now does the same rather than the flag. See the header comment
-  in `cheats_no_fog.c` for the full account, kept in rather than quietly fixed for
+  either, only the band. This now does the same and leaves the flag. See the header comment
+  in `cheats_no_fog.c` for the full account, kept in and not quietly fixed for
   the same reason the graphics detail / red highlight mislabelling is kept in
   `cheats_original_actions.c`'s own history.
 
@@ -226,11 +226,11 @@ subtracting from it. A scripted death and the console's own `kill me now` both g
   already were, but nothing else in the engine ever moves this band, so nothing else was ever going
   to hand it back. The remembered band survives the record being freed and reallocated on a level
   change the same way `fog_regime.c`'s own `is_the_same_level` does: by checking the record still
-  holds exactly what this file itself last wrote, not just that the pointer looks the same.
+  holds what this file itself last wrote, not only that the pointer looks the same.
 
 ### Invincible NPCs and one-shot NPCs
 
-Two opposite answers to the same fifteen bytes, so they share one detour rather than taking a
+Two opposite answers to the same fifteen bytes, so they share one detour instead of taking a
 signature each. `enemy_receiveDamage` changes an NPC's health in exactly one place, at
 `0x004338EC`, and that place is five back-to-back three-byte instructions with no `rel32` and
 nothing environment-dependent in it:
@@ -245,13 +245,13 @@ nothing environment-dependent in it:
 
 Traced forward to the end of the function, nothing later reads EAX, ECX or EDX left over from
 this block, and the first flag-testing instruction after it sets its own flags. That is what
-lets the hook decide whether the block runs **at all**, rather than having to preserve how it
+lets the hook decide whether the block runs **at all**, with nothing to preserve about how it
 executed. The `+0x38` health field is the one `dismemberment.c` already established from
 retail's own death gate at `0x0043707D`.
 
 * **Invincible NPCs** skips the block, so health is untouched.
 * **One-shot NPCs (your damage)** writes health straight to zero. The death gate this function
-  feeds tests for exactly that. It fires **only for damage that came from the player**, so NPCs
+  feeds tests for that. It fires **only for damage that came from the player**, so NPCs
   fighting each other are unaffected, and **only against an enemy**: the victim's body class,
   the one word the engine sides its actors by, is read at the hit, and a victim of the player's
   own class (the party), an escort (class 9, the queen and her guards) or a civilian (class 3)
@@ -279,17 +279,17 @@ reach the same function through `emitter_drawParticles` and are never touched.
 **The scale trick is already in the retail game.** A few instructions past this prologue, gated
 behind a cheat-flag slot and a hardcoded four-character model-name match, retail applies a flat
 3.0x scale to this exact incoming matrix through a small "compose a diagonal scale into this
-transform" utility. This calls that utility rather than reimplementing it, and finds its address
-out of the call rather than by an independent signature of its own. Giant player uses retail's
+transform" utility. This calls that utility, with no reimplementation, and finds its address
+out of the call, with no independent signature of its own. Giant player uses retail's
 own 3.0. Tiny player uses 0.35, which has no retail precedent in that direction and is simply a
 first guess at small but still visible and playable.
 
-The player's thing is chased off the player-record global on every call rather than cached. The
+The player's thing is chased off the player-record global on every call, never cached. The
 incoming matrix is a full rebuild of the player's position and orientation for this frame, every
 frame, so scaling it is inherently transient and switching either cheat off needs no un-write:
 the next call simply stops scaling.
 
-**Field-tested, and the caveat is kept rather than quietly fixed.** `matrix` is the caller's own
+**Field-tested, and the caveat is kept, not quietly fixed.** `matrix` is the caller's own
 working buffer, not something owned by this call, and `bapobj_drawAll` reads it again right
 after the call returns for something that has nothing to do with rendering. So scaling it in
 place also scales the force-push ability's reach and power. A local-copy version that left the
@@ -305,10 +305,10 @@ small hooks and one per-frame tick.
 not to be a collision routine at all: it is phase 9 of the player's own locomotion phase table.
 Suppressing it suppressed a whole phase of a state machine, only while the dispatch happened to be
 in that phase, and the floor went with it. Everything recorded against it, falling through
-modelled floors most of all, followed from the site rather than from the idea.
+modelled floors most of all, followed from the site, not from the idea.
 
 **Five things can stop the player, and each needed its own site.** Four of the five were found by
-measuring the running game rather than by reading it. They are listed here because the set is not
+measuring the running game, not by reading it. They are listed here because the set is not
 recoverable from any one of them.
 
 | what stops you | site | what it is |
@@ -346,15 +346,15 @@ suppressing it means reaching into everyone else's collision loop to hide one bo
 floor at all, because geometry is only modelled where the player was meant to go, so a working
 floor probe correctly reports none and gravity does the rest. Height is therefore held for exactly
 as long as there is nothing to stand on, and released the moment there is, so ordinary movement
-over real floor is not touched at all. "Nothing to stand on" means nothing within a sane drop
-rather than nothing whatsoever, because a lower storey far below is not somewhere to be set down.
+over real floor is not touched at all. "Nothing to stand on" means nothing within a sane drop,
+not nothing whatsoever, because a lower storey far below is not somewhere to be set down.
 
 **NPCs and the AI stay solid to the world.** They walk the same wall raycast for their locomotion,
 line of sight and path checks, so every hook answers only for the player, identified by the
-address of a field in the one player record rather than by any position value.
+address of a field in the one player record and never by a position value.
 
 **Buttons and push blocks still work**, because those probes ask the same function a different
-question, looking for a face to act on rather than one to be stopped by, and are excluded by mask.
+question, looking for a face to act on, not one to be stopped by, and are excluded by mask.
 
 **Free camera and this are mutually exclusive.** Both write the player's position from the same
 per-frame site in the same frame: free camera freezes the simulation and teleports the player to
@@ -364,8 +364,8 @@ toggle rule can be bypassed by a saved state or a level change and the check cos
 Free camera is the one that wins, because it is the one you cannot leave without its own hotkey.
 
 **Four of the five hooks are optional.** Only the ground wall probe is required; if any of the
-others stops resolving the cheat loses that one behaviour and says so in the log, rather than
-disappearing. An earlier build made one of them required and a signature that matched two
+others stops resolving the cheat loses that one behaviour and says so in the log; it does not
+disappear. An earlier build made one of them required and a signature that matched two
 functions instead of one took the whole cheat down with it.
 
 **A doors-only variant was built, tested and dropped.** It identified a door leaf by the mover
@@ -380,7 +380,7 @@ free camera below a partial resolve here is kept: it is a real cheat for part of
 than half a feature that does nothing.
 
 Each hook calls the original **first and unconditionally**. This is a boost, not a
-reimplementation. The jump happens exactly as retail built it, guard check and all, and
+reimplementation. The jump happens as retail built it, guard check and all, and
 only once it has decided to jump and written its own vertical velocity does the cheat scale what
 is now sitting at `+0xB4`, whichever path the original took, the fallback constant or the
 per-character table value. The multiplier is a number you can type on the cheat's own row.
@@ -390,7 +390,7 @@ retail's own ground-contact code does to a long fall, none of which is a cheat o
 none of which has a row:
 
 * the fixed ten-point landing damage every hard landing already risks, taken through this
-  module's own damage hook rather than around it, so Unlimited health still wins if both are on;
+  module's own damage hook and not around it, so Unlimited health still wins if both are on;
 * the outright force-kill, which retail applies unconditionally with no health check anywhere in
   the path, either after two seconds airborne or past a second fall-distance ceiling. This one
   was found only after a field report of a boosted jump ending in a death screen and a reload;
@@ -405,17 +405,16 @@ arriving at a camera that was flying is a fall the player did not choose to take
 
 ### Free camera
 
-Two engine sites and a hold on the simulation. It holds the world still through `sim_pause`
-rather than by any means of its own, and writes the camera pose **after** the engine has composed
-it rather than fighting the original for the fields.
+Two engine sites and a hold on the simulation. It holds the world still through `sim_pause`, by
+no means of its own, and writes the camera pose **after** the engine has composed it, so it never
+fights the original for the fields.
 
 Both sites, the pause flag and the camera object pointer must all resolve. A partial resolve is
 not offered as half a feature here: a camera that could roam but never stopped the world moving
 underneath it is not this thing, and neither is a pause with nothing to look through.
 
 **Flying it.** `W`/`S` forward and back, `A`/`D` strafe, `E`/`Q` up and down, the mouse to look,
-the wheel to change speed. Speed moves by a constant ratio per notch rather than a constant
-amount, which is Blender's fly-mode feel: even control at both ends, where a fixed addition would
+the wheel to change speed. Speed moves by a constant ratio per notch, not a constant amount, which is Blender's fly-mode feel: even control at both ends, where a fixed addition would
 be enormous down low and glacial up high.
 
 **Leaving it.** The bound key ends the flight and **brings the player to the camera**, which is
@@ -466,7 +465,7 @@ arrives again on the next frame, and the frame after. A steady vertical bias dri
 its clamp and pins it there: the camera stares at the floor, `W` flies into it, and no hand
 movement lifts it. Two guards close that off. A jump larger than a quarter of the screen in one
 frame is not a hand, so it contributes no rotation and simply re-syncs the anchor; and the anchor
-follows where the pointer actually **landed** rather than where it was sent, because a cage can
+follows where the pointer actually **landed**, not where it was sent, because a cage can
 refuse the position asked for and a stale anchor then measures the same refusal for ever.
 Reported from a tester's machine and confirmed fixed there. It was never reproduced here, which
 is the point: the other writer it collides with is not something every machine has.
@@ -533,22 +532,22 @@ set still gets a row for every code and an unknown one is written on its own.
 Kill self, full health, all-weapons-full-ammo, the four play-as-character swaps, two ways to lower
 the difficulty, one to raise it, a graphics detail level cycler, a red icon highlight toggle, and
 the "Tech Bonus!" message: thirteen of the sixteen codes the retail console understands that are
-not one of the eleven toggles above. Each is a row with a `RUN` chip rather than an `ON` / `OFF`
+not one of the eleven toggles above. Each is a row with a `RUN` chip instead of an `ON` / `OFF`
 one, because none of them are a state; typing `kill me now` does not leave anything switched on
 that a second look could find.
 
 **Three of the sixteen are held back as `n/a` on purpose, not because any failed to resolve:**
 
 * **Wavering graphics** (`drop a beat`) resolves cleanly, the flag and both apply calls all read as
-  valid addresses, and runs without crashing, but confirmed against the running game rather than
+  valid addresses, and runs without crashing, but confirmed against the running game, not
   assumed, it has no visible effect. What it flips is read inside two of the engine's own dense
   per-vertex model transform routines, deep enough that pinning down what it actually renders as
   would take real additional work. "Resolves and runs" is not the same claim as "does something a
-  player asked for", so it is offered as unavailable rather than as a row that ticks and, as far as
+  player asked for", so it is offered as unavailable and not as a row that ticks and, as far as
   this project can currently show, does nothing.
 * **View credits** (`gurshick`) also resolves cleanly and writes without crashing, but field testing
   found triggering it from this panel, mid level, misbehaves badly enough to be worth not offering
-  rather than diagnosing on the spot. Retail's own path to this code is the console, which pumps its
+  until it is diagnosed. Retail's own path to this code is the console, which pumps its
   own frame loop with the player never suspended, not this panel's path, so whatever the credits
   sequence expects to be true when it starts may simply not be, here.
 * **Debug mode** (the game's own debug/fps toggle) resolves, flag and code text both, and runs.
@@ -558,7 +557,7 @@ that a second look could find.
   label, so the cheat is still discoverable to anyone who wants to type it into the game's own
   console, where it works.
 
-All three resolutions are left in `cheats_original_actions.c` rather than deleted, one line from
+All three resolutions are left in `cheats_original_actions.c`, not deleted, one line from
 being restored if any of them is ever fully understood.
 
 **Most of these print the same on-screen confirmation retail's own console prints**, through the
@@ -575,7 +574,7 @@ it from the level just cycled TO (`DAT_004ac538 + 0x37`), read fresh after every
 message always names the level actually landed on.
 
 **The graphics detail row is the one exception to "every action shows `RUN`".** Its chip shows the
-level itself, `1` to `4`, read live off `DAT_004ac538` on every rebuild rather than cached from the
+level itself, `1` to `4`, read live off `DAT_004ac538` on every rebuild and not cached from the
 press that set it, the same cell the retail message above reads, so the row and the message can
 never disagree. It starts showing whatever level the game is already on, and each press updates it
 to the level just cycled to, which is the only one of the sixteen where a live number is more useful
@@ -597,7 +596,7 @@ in place of `RUN`, and the title bar swaps its usual `Esc closes` hint for `Clos
 swap`, and then `cheats_original_actions_apply_pending()` runs it once, from `overlay_input.c`,
 right after the panel closes and the player has been un-suspended again. Only the last press before
 closing takes effect; the four are mutually exclusive characters anyway, so replacing a pending one
-rather than queuing several is the honest behaviour. Every other action in this file still runs the
+instead of queuing several is the honest behaviour. Every other action in this file still runs the
 instant its row is pressed; this is the one exception, and it exists because of a real, confirmed
 collision between two of this project's own subsystems, not a general pattern the other fifteen
 needed too.
@@ -608,13 +607,13 @@ actually read, on the guess that whichever mystery codes were left over must be 
 screenshot rows were left over. That guess was wrong twice over in one go: the two screenshot rows
 it leaned on turned out to already belong to the eleven toggles above, under different codes
 entirely, and both labels have since been corrected to what their callees actually do, read
-straight out of the decompiled functions rather than guessed again. See the header comment in
-`cheats_original_actions.c` for the full account; it is left in rather than quietly fixed, because a
+straight out of the decompiled functions, not guessed again. See the header comment in
+`cheats_original_actions.c` for the full account; it is left in and not quietly fixed, because a
 project whose whole discipline is "byte evidence over assumption" should say so when it assumed
 anyway and got caught.
 
 **One anchor, not sixteen signatures.** All sixteen live inside one retail function,
-`gameplay_open_cheat_console` at `0x0042fc90`, decompiled in full rather than guessed at. After the
+`gameplay_open_cheat_console` at `0x0042fc90`, decompiled in full. After the
 eleven-entry loop above, it just chains `strcmpi` tests against the typed text, each followed by
 whatever that code does. Rather than sixteen independent byte patterns, this resolves ONE signature
 for that function's own prologue and reads every site as a fixed byte offset from it, sound for the
@@ -669,19 +668,19 @@ second. The fog has a group of its own directly under this one.
 
 The first row under **Enhanced resolution** edits `[view_distance_fix] ViewRangeScale`, the draw
 distance, typed in the same way as the jump-boost scale. Its label carries the accepted range,
-`1.0 to 2.5`, so it is learned from the row rather than by having a number refused.
+`1.0 to 2.5`, so it is learned from the row and not from a refused number.
 
 **It has a slider on the line directly beneath it**, on its own line so the handle never covers the
 number it sets, which is the same shape the field of view and mouse speed rows use. The track spans
-`VIEW_RANGE_MIN` to `VIEW_RANGE_MAX`, both compile-time constants here rather than settings, so
+`VIEW_RANGE_MIN` to `VIEW_RANGE_MAX`, both compile-time constants here, not settings, so
 unlike the field of view there is no way for a reader to set the two ends equal and nothing to guard
 against dividing by zero. A drag rounds to a hundredth, because the row's own formatter shows two
 decimals and a value with more than that would leave the number and the handle disagreeing about
 what had been set. A fiftieth was tried first and is wrong: the grid has to contain both ends of
 every row using it, and fog thickness starts at `0.25`, which a fiftieth rounds up to `0.26`, so
-the documented minimum could not be reached. That was caught in a log rather than by a test.
+the documented minimum could not be reached. That was caught in a log, not by a test.
 
-**It writes the ini rather than calling `view_distance_fix`.** Feature DLLs here never depend on
+**It writes the ini and never calls `view_distance_fix`.** Feature DLLs here never depend on
 each other at run time. Any one of them can be deleted from the `mods` folder without breaking the
 rest. The ini is a channel both already have and neither owns, `view_distance_fix` re-reads the
 key once a second and adopts it, and the setting survives a restart for free because it is written
@@ -706,11 +705,11 @@ be typed, committed and written to the ini, and the world would not change, beca
 already taken the scale and nothing on screen said so. The log said so, and nobody reads the log
 while playing.
 
-**It reads the ini rather than calling `view_distance_fix`**, the same way round as every other row
+**It reads the ini and never calls `view_distance_fix`**, the same way round as every other row
 here, except that the direction is reversed: that DLL publishes what it is running as
 `[view_distance_fix] EffectiveViewRange` and this only ever reads it. Editing that key does nothing,
 the next frame overwrites it, and a machine without `view_distance_fix` installed reads
-`in force: not reported` rather than a number this would otherwise have to invent.
+`in force: not reported`, not a number this would otherwise have to invent.
 
 ## The two switches under the draw distance
 
@@ -724,7 +723,7 @@ bigger hammer. It declines the governor, the level-opening window, the scripted-
 the cell watchdog**, so the number typed two rows above is the number in force on every frame.
 
 **The watchdog is the part to understand before leaving this on.** It is not automation for taste,
-it is a memory-corruption guard. The cell table ends exactly where the bucket list heads begin, its
+it is a memory-corruption guard. The cell table ends where the bucket list heads begin, its
 limit is checked once at the entry to the gather and not again, and an overflow was traced to an
 access violation in the draw function with a list head the renderer had read as a pointer. The
 vertex cache fails more quietly and more permanently: a vertex skipped once never gets a slot again
@@ -741,7 +740,7 @@ poor thing to leave on while playing.
 
 The row is named for the frame rate because that is the cost a reader will actually meet: the
 governor is the only one of the four that acts in ordinary play at `1.00x`. The watchdog's cost is
-real but conditional, and it is written here and in the ini rather than squeezed into a label.
+real but conditional, and it is written here and in the ini, where a label has no room for it.
 
 **The two switches are mutually exclusive, and the second one wins.** While strict is on the
 frame-rate row is greyed: it reads off and it cannot be clicked. The game is genuinely in that
@@ -749,7 +748,7 @@ state, because strict declines the governor outright. A row still reading ON ove
 is not acting would be a lie in the one place a reader looks to find out what is happening.
 
 What it deliberately does **not** do is write `FrameBackoff`. Someone who had the governor on, turns
-strict on to look at something and turns it off again gets their governor back, rather than
+strict on to look at something and turns it off again gets their governor back, instead of
 discovering that a setting they never touched has been changed for them. So the row reports the
 state the game is in and the file keeps the state the reader asked for.
 
@@ -765,7 +764,7 @@ depends on the canvas, the aspect mode and the engine's own projection, none of 
 DLL, so an offset is a number this row could display and nobody could read. `variable_fov` therefore
 publishes `BaseFov`, and the width of the picture is `BaseFov` plus `ExtraDegrees`.
 
-**The base is published rather than the current width, and the first version got that wrong.** The
+**The base is published, not the current width, and the first version got that wrong.** The
 width moves every time the offset does, which is every frame of a drag, so working the base out as
 "width minus offset" pairs a width written a moment ago with an offset written just now. The base
 drifts by the size of the last drag step, every step is then measured from a wrong origin, and the
@@ -779,8 +778,8 @@ one row and buys a track running nearly the width of the panel. The chip above s
 number and still opens for typing, so there are two ways to set either one.
 
 **Two rates, on purpose.** Writing a key rewrites the whole settings file, so a drag applies at
-thirty a second rather than at the frame rate; unthrottled it would be several megabytes a second of
-file traffic for one handle and the stutter would get blamed on the setting rather than the
+thirty a second, not at the frame rate; unthrottled it would be several megabytes a second of
+file traffic for one handle and the stutter would get blamed on the setting instead of the
 dragging. The handle itself is drawn from the pointer at the full frame rate, because drawing it
 from the file would move it in thirty steps against a hand moving in sixty. On the other side
 `variable_fov` polls every frame but asks the file system for its last write time before parsing
@@ -795,8 +794,7 @@ steps, which is worse than the frame cost.
 
 **It is also the only row here that can be unavailable.** Every other row edits a settings file and
 works with the DLL that reads it deleted from `mods\`. This one needs a published width, so with
-`variable_fov` absent it greys out rather than inventing a number that would be wrong on some
-canvas. Its range comes from that DLL's own `SliderMinFovDegrees` and `SliderMaxFovDegrees`, so
+`variable_fov` absent it greys out; a number it invented would be wrong on some canvas. Its range comes from that DLL's own `SliderMinFovDegrees` and `SliderMaxFovDegrees`, so
 widening the in-game slider widens this row with it.
 
 **The field of view and the control switches all needed the owning DLL to start reading its own
@@ -876,7 +874,7 @@ neither of those. F6 is in the same place on every keyboard and the retail game 
 **F5 would have been the obvious choice and is taken.** The retail default key table binds it to
 `CONTROL_FN_09`, read by the player's own weapons and force handler. The game reads its keys as
 DirectInput scancodes and never sees the window messages this panel hooks, so a shared key would do
-both things at once rather than one of them.
+both things at once.
 
 **Eight keys are refused**, all of which would lock a player out: Escape and Return and the four
 arrows, which drive the panel itself, and Alt and F4 together, so that Alt+F4 stays a way to quit
@@ -909,7 +907,7 @@ The first row under **Cheatmenu options** edits `[dev_overlay] DevMenuSize`, whi
 bigger than its authored size this menu is drawn. Typed in like the other value rows, with the
 accepted range, `0.33 to 4.0`, in the label.
 
-**It is named for the Cheatmenu rather than for the panel**, because the menu is the thing a
+**It is named for the Cheatmenu and not for the panel**, because the menu is the thing a
 player already has a name for, the one on its own title band, and the panel is an implementation
 detail of it. The key it writes keeps its older name, `DevMenuSize`, because a renamed key would
 silently drop every size already set in a player's file.
@@ -941,8 +939,8 @@ bounds test that logged nothing. There is no scrolling, so a player had no way t
 row from a feature that was never written.
 
 The array now holds 160, and `overlay_row_ids.h` asserts that against the parts the number is made
-of rather than restating it, so a group that grows past the array stops the build; the third fold's
-lines did exactly that at 128, which is the assert doing its job. The parts that only
+of instead of restating it, so a group that grows past the array stops the build; the third fold's
+lines did that at 128, which is the assert doing its job. The parts that only
 the display knows, the size list among them, cannot be asserted, so an overflow also writes one
 warning naming the first row it dropped.
 
@@ -950,7 +948,7 @@ warning naming the first row it dropped.
 
 Slots in the Window group shift down by the length of the size list while that list is open, and
 `source_row` and the activation path both take the shift out before they look at a slot. The
-binding path did not. With the list open, the release-key row arrived as slot 22 rather than 6, so
+binding path did not. With the list open, the release-key row arrived as slot 22, not 6, so
 the check for "is this a key row" said no, the binding was refused, and nothing was written or
 logged. Closing the list first and then pressing the row always worked, so this survived testing.
 
@@ -962,7 +960,7 @@ logged. Closing the list first and then pressing the row always worked, so this 
 | `OpenKey` | `0` | The key that opens the panel. `0` accepts F6 and whichever key sits below Escape: the caret on a German layout, the backtick on a British one. Takes a name (`F8`, `numpad +`, `backtick`, `A`) or a virtual key code. Written by the panel's own key-binding row, and typed by hand when you cannot open it. |
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
 | `DevMenuSize` | `0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
-| `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice rather than being edited here. |
+| `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice and is not edited here. |
 | `NewGameStartsAt` | `0` | The level a new game starts at, `1` to `11` in the game's order, `0` for its own first. Only a new game's first load is redirected. Written by the Level selection group's "New game starts at" list. |
 | `PauseFreezesAnimation` | `0` | Whether a pause, the panel open or the free camera flying, also holds the animations on the engine's own draw latch. Written by the "Animations freeze while paused" row. |
 | `FreeCameraWorldRuns` | `0` | Whether the world keeps moving under the free camera while it flies, with the player's own input held. Written by the "World runs while flying" row. One or the other of this and the freeze. |
@@ -971,7 +969,7 @@ logged. Closing the list first and then pressing the row always worked, so this 
 
 * The pointer arrives in the window's client pixels and is mapped into the picture the engine draws.
   Those are the same size in every mode this project ships, so the mapping is usually the identity.
-* A cheat or action whose site did not resolve is shown as `n/a` rather than hidden, so a panel on
+* A cheat or action whose site did not resolve is shown as `n/a`, not hidden, so a panel on
   an unsupported executable says what is missing instead of looking empty.
 * The panel selects a font, sets an alignment, two scales and a colour, and puts none of them back.
   Nothing else draws text between the panel and the end of the frame, so nothing is affected today.
@@ -1011,8 +1009,8 @@ authored band. Both directions are confirmed working now.
 **Free camera has had several field rounds.** Pausing the simulation and driving the camera object
 directly through a chained detour on `updateCam` both confirmed working; the WASD-along-view-
 direction formula was field-tested wrong once (a sign error in the yaw-to-world-axis conversion,
-found by comparing against the engine's own render-eye builder and its built-in debug free-cam
-rather than guessed a second time) and is now confirmed correct; the mouse axes were field-tested
+found by comparing against the engine's own render-eye builder and its built-in debug free-cam,
+not guessed a second time) and is now confirmed correct; the mouse axes were field-tested
 inverted and corrected (yaw's flip stuck, pitch's did not, it was already right and got reverted
 back). The line to look for:
 ```
@@ -1025,7 +1023,7 @@ replaced it outright; see `cheats_openphantom.h`'s own header comment for why.
 
 **The bound key teleports, F4 does not.** The key set in the panel ends the flight and brings the
 player to wherever the camera is. That is usually what the camera is being flown for. F4 ends the
-flight and leaves the player exactly where they were, and is fixed rather than bindable because a
+flight and leaves the player where they were, and is fixed, not bindable, because a
 fallback that always means the same thing is worth more than one more thing to configure. Both are
 read while the panel holds the simulation, so the move is written into a still-frozen world and
 the player's own physics resumes from the new place.
@@ -1034,7 +1032,7 @@ Three things this needed that were each found in the field, not predicted:
 
 * The position that moves is `pPlayer+0x118` (`pos`), not `+0x124` (`desiredPos`). Phase 12 copies
   `desiredPos` into `pos` only when `bMovedThisFrame` is set, and a standing player clears that
-  every substep, so a write to `+0x124` is simply discarded. The first attempt did exactly that and
+  every substep, so a write to `+0x124` is discarded. The first attempt did that and
   looked like it did nothing. Traced through j0nny's decomp of `Plr_CommitPose`.
 * The panel has to close itself on the way out. It holds the simulation just as the camera does, so
   without that the move does not resolve until the panel is closed by hand, which read, again, as
@@ -1061,11 +1059,11 @@ immortal, it made the fall endless. Field report:
 
 All of it is one cause. `floor_probe.c` asks the engine's own `bapmap_probeFloor` whether there is
 anywhere to land, once, at the moment a fall first becomes significant, and the answer gates every
-one of the five suppressions rather than only the death. A boosted jump has ground under it and
+one of the five suppressions, not only the death. A boosted jump has ground under it and
 keeps its full immunity however long it takes to come down; a fall with nothing under it behaves
-exactly as it does with no cheat installed at all, because that is the behaviour known to end
+as it does with no cheat installed at all, because that is the behaviour known to end
 properly. An unresolved probe answers "floor", so a build that cannot ask the question keeps the
-immunity it had rather than quietly starting to kill people.
+immunity it had and does not quietly start killing people.
 
 A time limit was tried first and was the wrong shape: it cannot tell a high jump from a void fall,
 so any value that spares the jump also lets the void fall run long enough to break.
@@ -1077,12 +1075,12 @@ to be standing still: the moment the movement phase ran it recomputed `desiredPo
 position with its own ground resolution applied and committed that back, so the player arrived at
 the right x and y planted on the floor. Writing `desiredPos` alone was tried even earlier and left
 them where they started, which is the same fault from the other side. Both are written, and the
-vertical velocity at `+0xB4` is zeroed so the fall starts from rest rather than carrying whatever
-the player had when the flight began.
+vertical velocity at `+0xB4` is zeroed so the fall starts from rest, without whatever the player
+had when the flight began.
 
 **The teleport will not drop the player further than the engine can cope with.** A drop onto a real
 floor still breaks it if it is high enough, so the drop is capped at 80 world units and a teleport
-past that ends the flight without moving anybody, exactly as F4 does.
+past that ends the flight without moving anybody, as F4 does.
 
 **Eighty is measured, and it was briefly raised to 350 with a crash to show for it.** The reasoning
 for raising it was that the fall grace above suppresses the damage and both deaths for ten seconds,
@@ -1144,13 +1142,13 @@ mouse speed keeps a fixed id while it is being typed into.
 `Enhanced controller mode` sits at the top and is the one a pad player wants: one click writes
 `Strafe`, `FreeLook`, `CameraFollow` and `AirControl` on, and one click writes them off. Four rows
 carrying the game's own names give no hint that a pad wants all of them, and that is the whole
-reason the row exists. It has no key of its own: it reads ON exactly when the four under it do, so
+reason the row exists. It has no key of its own: it reads ON when the four under it do, so
 any of them can still be switched off alone, and the row then reads OFF, which is the truth. Each
 key is written through its own row, so the rules below, which one switches which on, hold here
 too.
 
 `Free look` and `Strafe` are `[enhanced_input] FreeLook` and `Strafe`, the two check boxes on the
-game's own controls screen. They carry that screen's own captions rather than a description this
+game's own controls screen. They carry that screen's own captions and not a description this
 panel invented, so a reader who has seen it recognises these rows. **Either can be refused**, and
 the row cannot tell in advance: strafe needs mouse look and the keyboard axis reader, because the
 engine's `turnWheel` is the only turn channel and driving it sideways would clear the mouse with
@@ -1165,13 +1163,13 @@ angle measured against the camera. Without free look neither has anything to wor
 dependency is one way, so switching either off leaves free look alone, and switching free look
 off takes both down with it.
 
-**The row writes both keys rather than calling the feature**, and not for tidiness. Free look
+**The row writes both keys and does not call the feature**, and not for tidiness. Free look
 refuses while the player phases are stopped, the state the game is in while this panel is open,
 so a row that asked it directly would be refused every time it was clicked. Written to the file
 instead, the once-a-second re-read applies them in its own order once play resumes, with the
 refusal handling it already has.
 
-`Camera follows you` is **unavailable rather than hidden while `Strafe` is off**, because the walk
+`Camera follows you` is **unavailable, not hidden, while `Strafe` is off**, because the walk
 never leaves the heading then and there is nothing to follow.
 
 `Steer a jump in the air` is available while **either** of them is on, and that difference is worth
@@ -1190,7 +1188,7 @@ worth writing down.
 
 **The five shape rows are one choice, not five switches.** Pressing the lit one does nothing. An
 earlier build treated a second press as "turn this off" and dropped the player to the engine's own
-shape, which looks exactly like the window feature having stopped working.
+shape, which looks like the window feature having stopped working.
 
 **Fullscreen is the exception, and is a switch.** The engine's own shape covers most of a screen, so
 turning it on reads as going fullscreen and the next thing anyone does is press it again to come
@@ -1199,7 +1197,7 @@ than written to the settings file: it is a memory of a gesture, not a setting, a
 that nothing else reads would only leave a reader wondering what it was for.
 
 **The size list opens with `auto`, and that row is the whole reason it is a list of its own.** The
-entries below it are the display's own modes, asked of Windows rather than of the engine, so every
+entries below it are the display's own modes, asked of Windows and not of the engine, so every
 one of them is a real size. `auto` is not: it writes zero to both axes. The rest of the feature
 already reads that as "take the size the game is rendering", and it is what a fresh install has.
 Without a row for it, choosing any size was a one-way door out of the state the panel started in,
@@ -1216,12 +1214,12 @@ choice, so it is written wherever the shape is written and there is no row for i
 **Everything greys until the device is windowed.** The gate is what the device actually IS, which is
 not the same question as what the settings file says: that file is read once, when the engine builds
 its device, so after a press the two disagree until the game is restarted. Reading it once, before
-anything in the group can be pressed, makes the rows follow the device rather than the file.
+anything in the group can be pressed, makes the rows follow the device, not the file.
 Without that, switching fullscreen off un-greyed rows the device still could not carry.
 
 The two key bindings grey with everything else. Greying a binding row does not disable the key it
 names: Alt and Enter is the way out of fullscreen without opening this panel at all, and having the
-panel's own appearance take that away would be a trap rather than a tidy-up. What is given up while
+panel's own appearance take that away would be a trap, not a tidy-up. What is given up while
 they are grey is the ability to rebind them.
 
 **The size is a list, not two typed numbers.** It unfolds into the sizes the display reports, one
@@ -1232,11 +1230,11 @@ written as the resolution to render at, the engine opens whatever it finds at st
 cannot open stops the game before it draws anything. Catching that afterwards and explaining it is
 worse than not being able to say it.
 
-The list comes from Windows rather than from the engine. The engine has one and
+The list comes from Windows, not from the engine. The engine has one and
 `enhanced_resolution` owns it, but that is a different DLL and feature DLLs here do not depend on
 each other. Windows answers the same question from the same driver, and the DLL that actually
 writes the resolution checks its own list before it does, so a size offered here that the engine
-somehow does not know is refused there with a line saying so rather than reaching the settings
+somehow does not know is refused there with a line saying so, and never reaches the settings
 file.
 
 Sizes under 640x480 are dropped. That is not tidiness: below roughly that much client area the
@@ -1247,10 +1245,10 @@ echo test never matches, and a constant delta accumulates for as long as the win
 Six rows: the switch, the fraction and the number under it, and three lines saying what the
 three of them are for.
 The note is three rows because the panel is about forty-five characters wide and a longer label is
-cut off rather than wrapped; the continuations are indented past the line they finish, the same
+cut off, not wrapped; the continuations are indented past the line they finish, the same
 shape the free camera's how-to-fly lines use.
 
-It names what goes wrong rather than only that something does. Somebody reading that row has come
+It names what goes wrong and not only that something does. Somebody reading that row has come
 to it because the game looks bad while the numbers look fine, and the last line is the half that
 tells them they are in the right place.
 
@@ -1271,16 +1269,16 @@ configuration provides from 1.4.4, only the refresh and its fractions are even.
 
 Measured, because it cost the time to measure it: a limit of 100 on a 144 Hz screen leaves 44
 refreshes a second showing a repeat, and a limit of 60 on a 90 Hz Steam Deck OLED leaves 30. Both
-looked exactly like a fault in the interpolation, and both were chased as one.
+looked like a fault in the interpolation, and both were chased as one.
 
 **Frame rate limit** is `TargetFps`, typed. Zero means no limit at all, which reads as `none`. A
-number outside 0 to 1000 is refused rather than clamped: somebody typing 1440 for a 144 Hz screen
+number outside 0 to 1000 is refused, not clamped: somebody typing 1440 for a 144 Hz screen
 has made a mistake, and quietly handing them 1000 hides it.
 
 While the row above is on, this one reads `n/a` and greys. The setting still holds the number and
 `framerate_fix` still keeps it as the fallback for a screen that will not report a rate, but
 nothing is using it, and a number somebody can change and watch do nothing is worse than a number
-they cannot reach. Greyed rather than hidden, because a row that disappears takes the answer to
+they cannot reach. Greyed, not hidden, because a row that disappears takes the answer to
 "where did I set that" with it.
 
 All three rows write the settings file, the same as every other row that reaches out of this DLL.

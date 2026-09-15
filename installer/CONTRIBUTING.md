@@ -9,7 +9,7 @@ ruleset for patching a running binary, and nothing here places a detour or resol
 
 The expensive rules, and the reason for most of the code in `[Code]`.
 
-**Identify before replacing, and identify by content rather than by file name.** Three of the names
+**Identify before replacing, and identify by content, never by file name.** Three of the names
 this installer writes are contested, because another project may already be using them in the same
 folder: `dinput.dll`, `ddraw.dll` and `dsound.dll`. Our own files carry a marker string, so a file in
 one of those slots that does not carry it belongs to somebody else and is moved aside, never
@@ -18,7 +18,7 @@ destroy the thing the chain needs.
 
 **Prefer a name nobody contests.** `winmm.dll` used to be a fourth, back when this installer
 offered a controller wrapper installed under that name. It no longer installs a controller wrapper
-of any kind, so that fourth name is gone rather than merely avoided: controller support reads a pad
+of any kind, so that fourth name is gone, not merely avoided: controller support reads a pad
 directly and needs no DLL standing in front of another subsystem. Where a system name can be
 avoided, avoid it; not needing the name at all is better still.
 
@@ -41,7 +41,7 @@ destroyed on the next bump; that is why DxWrapper has a folder to itself.
 fresh, the player's files are copied out first, copied back last, and counted both ways.
 
 **Anything we did not install, we do not remove.** Inno records every file it wrote and the
-uninstaller removes exactly those.
+uninstaller removes those.
 
 ## Every external result is checked
 
@@ -78,7 +78,7 @@ its source folder exactly, and deriving one from the other is what keeps thirty 
 A plugin one folder over is not found, and the only symptom is `libvlc_new` refusing.
 
 Otherwise: three occurrences of the same shape is the threshold, and consolidate when doing so makes
-a property true rather than promised. Language idiom is not repetition; `ExpandConstant('{app}')`
+a property true instead of promised. Language idiom is not repetition; `ExpandConstant('{app}')`
 stands everywhere because that is how Inno is written.
 
 ## Naming
@@ -104,7 +104,7 @@ to stand on its own.
 * Absolute paths belonging to anyone's machine.
 * A download by the installer, at install time or after it, for any reason.
 
-  There is one bounded exception, and it is bounded rather than a hole. `dist/patch/` is also
+  There is one exception, and it is bounded. `dist/patch/` is also
   published as a patch archive on its own, and that archive carries no FFmpeg, so a player who
   installed the patch alone would have a cutscene converter with nothing to convert with. The
   reason this rule exists is preservation, and preservation is a promise the *installer* makes:

@@ -45,7 +45,7 @@ absolute 60 degrees horizontal gives about 36 degrees vertical against the autho
 i.e. narrower than the original game. That is a legitimate choice, and it is not the default; the
 default range simply starts there.
 
-`SliderMaxDegrees` is **no longer read**. It was renamed rather than reinterpreted: a tuned `40`
+`SliderMaxDegrees` is **no longer read**. It was renamed, not reinterpreted: a tuned `40`
 read as an absolute angle would have meant 40 degrees of view. A file still carrying it is told
 once in the log.
 
@@ -78,7 +78,7 @@ Slider at (0, 376, 250, 50) with its caption at (0, 426, 250, 50), **stacked, ba
 flush to the left edge** of the 640x480 canvas, on the free strip along the bottom of the screen.
 
 The pair was side by side first (caption at 20,392 with the gauge to its right) and that was
-rejected on the picture rather than on the numbers: the caption sat in the middle of an otherwise
+rejected on the picture, not on the numbers: the caption sat in the middle of an otherwise
 empty strip with the bar floating beside it, and the two read as two unrelated things. Stacked and
 hard left they read as one control, and the eye reaches the bar before the words naming it, the
 order the authored screen already uses for gamma.
@@ -125,7 +125,7 @@ audio screen's panel art sits on the **right**, where this screen already has it
 * **Up/Down do not reach the slider.** `options_video`'s arrow navigation is a hand-written graph
   over the authored ids and everything else falls into `default: break`. Tab, the mouse and Escape
   all work. Moving that switch means rewriting a jump table for a convenience, so it is stated
-  rather than patched around.
+  here and left alone.
 * The clamp is 5-170 degrees, deliberately below the engine's own 179: `bapdraw_drawWorld` computes
   `tan((fovDeg + 3)/2)`, which goes negative from 177 and collects **nothing**.
 * Changing `ExtraDegrees` in the ini while the game runs does nothing until the next canvas

@@ -320,6 +320,8 @@ add_engine_fix(dialogue_anim_fix
     idle_clip.c
     speaker_gesture.c
     speaker_rest.c
+    stand_in.c
+    stand_in_watch.c
 )
 target_link_libraries(dialogue_anim_fix PRIVATE winmm)
 

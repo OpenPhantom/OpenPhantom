@@ -111,6 +111,7 @@
 #include "dialogue_anim_fix.h"
 #include "idle_clip.h"
 #include "speaker_gesture.h"
+#include "stand_in.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -381,6 +382,7 @@ typedef struct dialogue_anim_fix_state {
     uint32_t hold_ms;
     bool     speaker_gesture;     /* SpeakerGestureRepeat: a speaker animates for a whole line */
     bool     speaker_rest;        /* SpeakerRest: a parked speaker in a scene goes to clip 0 */
+    bool     speaker_stand_in;    /* SpeakerStandIn: an anchor's line is gestured by its face */
     DWORD    last_dialogue_activity_tick;   /* 0 = no dialogue observed since the last arm or
                                              * release */
 
@@ -408,6 +410,8 @@ static void load_config(void)
     fix_state.speaker_gesture = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerGestureRepeat",
                                               true);
     fix_state.speaker_rest    = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerRest", true);
+    fix_state.speaker_stand_in = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerStandIn",
+                                               true);
 }
 
 /* Every tracked actor is let go: this fix's hands come off them completely until the level is
@@ -528,6 +532,7 @@ static int32_t __cdecl hook_level_load(const char *path)
     fix_state.armed = (fix_state.scope != NULL);
     release_all_tracked_actors();
     speaker_gesture_level_changed();
+    stand_in_level_changed();
     fix_state.last_dialogue_activity_tick = 0;
     if (fix_state.armed) {
         log_info("dialogue_anim_fix: armed for \"%s\", watching for %s%s%s%s%s", path,
@@ -559,6 +564,9 @@ static void __cdecl hook_dialog_statement(int32_t actor_record, void *node, int3
 
     original(actor_record, node, data);
     track_actor(actor_record);
+    if (fix_state.speaker_stand_in && data != NULL) {
+        stand_in_note_line(actor_record, data[1]);   /* A[1] is the line, as say_line reads it */
+    }
 }
 
 /* The clip on the body's base layer right now, or NONE when the body does not read. The engine
@@ -828,6 +836,12 @@ void dialogue_anim_fix_install(void)
     }
     (void)speaker_gesture_install(fix_state.current_speaker, fix_state.speaker_gesture,
                                   fix_state.speaker_rest);
+    if (fix_state.speaker_stand_in) {
+        fix_state.speaker_stand_in = stand_in_install(fix_state.current_speaker);
+    } else {
+        log_info("SpeakerStandIn=0, a line spoken by a script anchor with no body leaves the "
+                 "body it stands for wherever its own cycle is, as the scripts shipped");
+    }
 
     if (sites[SITE_LEVEL_LOAD].address != 0) {
         if (!detour_install(&fix_state.level_load, sites[SITE_LEVEL_LOAD].address,

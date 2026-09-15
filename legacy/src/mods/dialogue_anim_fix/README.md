@@ -2,15 +2,19 @@
 
 **Produces:** `dialogue_anim_fix.dll` -> `mods\`, from `dialogue_anim_fix.c` (the hold),
 `idle_clip.c` (the generated idle the jail row rests on), `speaker_gesture.c` (a speaker animates
-for the whole of their line) and `speaker_rest.c` (a speaker left frozen after their line goes to
-their idle).
+for the whole of their line), `speaker_rest.c` (a speaker left frozen after their line goes to
+their idle) and `stand_in.c` (a line spoken by an invisible script anchor is gestured by the body
+it stands for).
 
-Three faults, one narrow and two wide. A character whose script parks on its talking animation and
+Four faults, one narrow and three wide. A character whose script parks on its talking animation and
 never leaves it: two scenes are known and the hold acts in exactly those two, on purpose; see "Why
 this narrow" below. A speaker whose gesture plays through part way into a long line and holds its
 last frame for the rest of it: every scene does that, and the gesture repeat acts on whoever holds
 the speaker lock. And a speaker left frozen once their line is over, through the reply and after
-the exchange: nearly every scripted line does that, and the rest acts on whoever has spoken.
+the exchange: nearly every scripted line does that, and the rest acts on whoever has spoken. And
+a line spoken by an invisible script anchor beside the character it belongs to, whose own body
+runs a gesture cycle of its own and calls a second before or after the voice: sixty lines in the
+game come from such anchors, and the stand-in brings the body in on the ones that have a face.
 
 * Level 6, Mos Espa, the opening in-engine cutscene: Obi-Wan and Qui-Gon talk, and Obi-Wan's head
   keeps moving as if he were still talking during Qui-Gon's own line.
@@ -32,6 +36,7 @@ catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "
 | `HoldSeconds` | `3.0` | 0.5-30.0 | how long with nobody speaking before the fix disarms itself for the rest of the level, in a scene whose exchange ends (Mos Espa; the jail row never disarms, since the parked node lasts the level) |
 | `SpeakerGestureRepeat` | `1` | | a speaker keeps animating for the whole of their line: while a body holds the speaker lock and the voice has at least the clip's length still to play, a clip that has played through on it is started again (issue 23). Whoever is speaking, in every scene, and never past the line. `0` leaves a gesture holding its last frame |
 | `SpeakerRest` | `1` | | a speaker left frozen after their line goes to their idle: once their body has sat half a second on a clip the engine has parked, while they are not the one talking, a frozen stand has the freeze taken off, and anything else parked is followed by the stand with its own flags, the model's unarmed one where it has one, else clip 0. The engine's own rule after a menu line, applied to scripted lines. `0` leaves them frozen, as the scripts shipped |
+| `SpeakerStandIn` | `1` | | a line spoken by an invisible script anchor is gestured by the body it stands for: the nearest live actor on the speaker's model within twenty units whose script is playing a clip one pass at a time has that pass started again, or its stand ended, as the voice starts. Lines with no face and bodies on a looping clip or a walk are left alone. `0` leaves every such line as the scripts shipped |
 
 ## Engine locations
 
@@ -42,6 +47,9 @@ catch this conversation, since it uses opcode `0x504` "Statement", not `0x500` "
 | opcode `0x504` "Statement" | `0x00435A0A` | detoured; names an actor starting a line (the one this scene actually uses) |
 | `FUN_0042E3AD`, the primary-animation debounce/trigger | `0x0042E3AD` | resolved but never detoured, only called |
 | `Dialog_SpeakSingle` | `0x00430D12` | resolved, never detoured; the speaker cell and the line-in-progress flag are read out of its operands |
+| `DLG_Find` | `0x00431D1A` | resolved, called by the stand-in for a line's key; its two loads of the level pointer are read back and must agree |
+| `enemy_tickAll`'s head | `0x00431FF3` | a data site: the character pool pointer the stand-in walks, the operand at `+0x08`, the same site the diagnostics census reads |
+| `bapobj_playClip` | `0x0041263F` | resolved, called by the gesture repeat, the rest and the stand-in, never detoured |
 
 ## What is actually broken
 
@@ -258,15 +266,66 @@ What it leaves alone: a looping clip the script asked for as a loop (the Jedi's 
 the Federation ship, played with empty hands, is the script's own and the shipped game's), a
 walk, a menu line, and the jail prisoner, whose hold is the scope table's business.
 
+## The line the character on screen is not the one speaking
+
+Reported 2026-09-14 by a tester and confirmed on the rig: at the end of the first level Qui-Gon
+calls "Obi-Wan!" twice and his calling gesture plays a second after each voice, or a second
+before. The same with every switch in this DLL off, so the 1999 scripts' own. A probe with the
+diagnostics DLL (`Audio`, `Fsm` and `Dialogue` on) showed why. The speaker of all three lines
+there (`QGm3218` twice, then `QGm3219`, the transports) is `enemy056`, an actor on the
+`inviso.baf` template: a script anchor with no model, which the spawner marks with a bit of its
+own (`0x10000000` in the record's flag word) and the tick skips past. The Qui-Gon in view is
+`enemy057`, a cutscene double on `quiweap.baf` whose script, decoded with the editor's
+`svc/cli.py ai FEDSHIP qui-`, knows nothing of the lines: its start mode plays clip 22
+(`quitalk2`, 29 frames at 15 a second, the call) once, the next plays clip 0 (`obwstnd2`, the
+stance) once and returns, and so on round until flag 2 reads 2, which the anchor sets with the
+third line, so the third line is in sync (talk clip 23 starts the same tick) and the two calls
+land wherever the cycle is.
+
+The census of every level's scripts, the anchors' lines only, found sixty Statements from
+eighteen anchors: console refusals and the door's password voice (`CCm`, `SDd`), the podrace
+announcers and crowd (`HEm`, `RXm`, `REd`), Jar Jar, Shmi, Padme, Watto and C-3PO around the
+podrace start and Jar Jar at a log in the swamp (`JJD`, `SHd`, `PAd`, `WAm`, `3Pm`), and the
+three here. The podrace stand-ins wait on a global flag their anchor sets with the line, as the
+transports line does, so they are in sync already; Watto's script plays his clips in the
+looping mode. Only the two calls were found out of step, and the rule is written so that it
+would not touch the others: a body on a looping clip or a walk is never a candidate.
+
+`stand_in.c` hooks nothing of its own; the Statement detour this DLL already has hands it the
+actor and the line after the opcode has run. An actor without the anchor bit returns at once.
+For an anchor, `DLG_Find` gives the line's record and its key, `QGm3218`, whose first two
+characters name the speaker; a six row table turns that into the start of a model file name
+(`qui`, `jarjar`, `shmi`, `padme`, `watto`, `c3po`), and a line whose code is not in it is left
+alone and logged. The character pool is then walked, the same slot array the diagnostics census
+walks, for the nearest active actor with health on that model within twenty units of the anchor
+(the double is 8 from his, the player's own companion 25) whose base track carries the play-once
+bit the Animation opcode sets in its mode 0, so the script is running its clips one pass at a
+time. That body is nudged once. On a stand, by the clip's own name, the track's complete flag
+is raised at once: that is the flag the script's own Animation node polls, so the node returns
+1 on its next tick, the mode returns, and the next mode plays the gesture, with the voice. On
+anything else the clip is put on again through `bapobj_playClip` with the crossfade the
+interpreter uses and the mode word it had, so the gesture runs from its first frame with the
+voice and still plays once, but only after the face's script has ticked twice since the line,
+or has changed mode and ticked once in the new one, and only if that new mode did not ask for
+a clip of its own that is not a stand. The wait is for the scripts that answer a line
+themselves: the anchor's script and the face's run in the same substep, the anchor's first, so
+the transports line's flag is seen and the talk mode set in the tick the line starts in, and
+that mode's Animation opcode puts the talk clip on in the tick after. A restart made inside the
+opcode, or at the end of that frame, landed under the talk clip, a gesture fading straight into
+the talk (the first two builds did that; the log now says "answered the line itself" and leaves
+it). The script's own modes and clips are never written; only where in its own cycle the body
+is. The log names every nudge with the line's key, the body, its distance and the clip.
+
 ## What this does NOT fix
 
-Nothing outside the two scenes in the scope table. It never arms in any other level, and even in
-those two it never touches an actor whose model name is not one the scene names. Any other actor
-whose talk animation lingers past their own line, in any other scene, is a different report: play it
-with `[diagnostics] Dialogue=1` and `Characters=1`, which give the level file and the speaker, and
-add a row to the table with the model name. The jail row was added exactly that way.
+The hold: nothing outside the two scenes in the scope table. It never arms in any other level,
+and even in those two it never touches an actor whose model name is not one the scene names.
+Any other actor whose talk animation lingers past their own line, in any other scene, is a
+different report: play it with `[diagnostics] Dialogue=1` and `Characters=1`, which give the
+level file and the speaker, and add a row to the table with the model name. The jail row was
+added exactly that way.
 
-## Testing status: accepted in game (2026-08-22; the jail 2026-09-12; the gesture and the rest 2026-09-13)
+## Testing status: accepted in game (2026-08-22; the jail 2026-09-12; the gesture and the rest 2026-09-13; the stand-in 2026-09-15)
 
 Confirmed live against the Mos Espa opening cutscene: Obi-Wan's head stops the moment Qui-Gon's
 line starts and stays stopped, without freezing him solid, and every other actor in the level keeps
@@ -284,6 +343,15 @@ script put a looping stance on it was never touched, as the log showed); in Thee
 talk clip cut with the voice; then through every in-engine cutscene and every level's opening in
 one sitting, with nothing wrong to report; and the ship and Theed again once the unarmed stand
 replaced the sabre stance.
+
+The stand-in was played at the end of the first level through four builds in one sitting, the
+log read after each. The first build restarted the gesture inside the opcode and it faded into
+the transports talk clip; the second waited for the frame's end and was still a tick early; the
+third waited two ticks of the double's script and left the transports line to it, and the two
+calls were in time with the voice; the fourth added the cut with the voice and the parking of
+the unvoiced repeats, and the double calls twice with the voice, stands between, and takes his
+own talk clip for the transports line. The log named every step: two stand-ins, the two parks,
+the two cuts and the one line left to the script.
 
 The jail was traced before it was added: the prisoner's placement is `enemy031`, his model
 `nabcit2.3do`, his script mode goes to 7 on his second bark and stays there for the rest of the

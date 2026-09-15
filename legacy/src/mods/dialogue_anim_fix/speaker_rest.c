@@ -198,6 +198,15 @@ static int32_t rest_clip_of(uint32_t body)
     return first_named >= 0 ? first_named : STAND_CLIP;
 }
 
+bool speaker_rest_clip_is_stand(uint32_t body, int32_t index)
+{
+    char     name[KEYFRAME_NAME_SIZE + 1];
+    uint32_t flags = 0;
+
+    return clip_name_of(body, index, name, &flags) &&
+           (name_has(name, "stnd") || name_has(name, "stand"));
+}
+
 /* A body parked on its death is left there. The names are the models' own: nc2die1, shmdie1,
  * ankdie1, death1 to death3. A scene actor carries no health cell to ask instead. */
 static bool clip_is_death(uint32_t body, int32_t index)

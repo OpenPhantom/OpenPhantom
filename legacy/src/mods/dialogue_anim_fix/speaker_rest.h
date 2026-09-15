@@ -50,6 +50,10 @@ void speaker_rest_note_line_end(uint32_t body, uintptr_t track);
 /* Every watched body is let go, unplayed: the level that owned them is going away. */
 void speaker_rest_forget_all(void);
 
+/* Whether clip `index` of the model behind `body` is a stand, armed or not: "stnd" or "stand"
+ * in the clip's own name. False when the chain does not read. */
+bool speaker_rest_clip_is_stand(uint32_t body, int32_t index);
+
 /* Once a frame. `speaker` is the body holding the speaker lock while a voice plays, 0 when
  * none; `body_track` gives the puppet track a body's base clip is on, 0 when it does not read. */
 void speaker_rest_on_frame(uint32_t speaker, uintptr_t (*body_track)(uint32_t body));

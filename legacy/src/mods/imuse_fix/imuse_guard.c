@@ -320,7 +320,7 @@ static bool write_lock_body(uintptr_t im_lock, const uint8_t *bytes, size_t size
 static bool make_lock_atomic(uintptr_t im_lock)
 {
     uint8_t  atomic_increment[8];
-    uint8_t  existing[7];
+    uint8_t  existing[8];
     uint32_t gate_operand;
 
     if (!memory_read(im_lock, existing, sizeof(existing))) {
@@ -335,11 +335,13 @@ static bool make_lock_atomic(uintptr_t im_lock)
     if (existing[0] == 0xF0) {
         return true;
     }
-    /* Refuse unless it is exactly the body this was measured against: `FF 05 <abs32>` then `C3`.
-     * Resolving the site is not the same as knowing what is at it. */
-    if (existing[0] != 0xFF || existing[1] != 0x05 || existing[6] != 0xC3) {
-        log_warning("ImLock at %08X is not `inc [mem] / ret`, the atomic increment is NOT written",
-                    (unsigned)im_lock);
+    /* Refuse unless it is exactly the body this was measured against: `FF 05 <abs32>` then `C3`,
+     * then the compiler's 0x90 padding, which the prefix pushes the ret onto. Resolving the site
+     * is not the same as knowing what is at it, and the eighth byte is written too. */
+    if (existing[0] != 0xFF || existing[1] != 0x05 || existing[6] != 0xC3 ||
+        existing[7] != 0x90) {
+        log_warning("ImLock at %08X is not `inc [mem] / ret` followed by padding, the atomic "
+                    "increment is NOT written", (unsigned)im_lock);
         return false;
     }
 

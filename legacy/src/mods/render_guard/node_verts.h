@@ -26,6 +26,24 @@
 #ifndef NODE_VERTS_H
 #define NODE_VERTS_H
 
+#include "common/patch.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+
+/* The two instructions the repair makes no-ops: `fld dword [abs32]`, six bytes, and
+ * `fstp st(0)`, two. */
+typedef enum node_verts_instruction {
+    NODE_VERTS_FLD_M32,
+    NODE_VERTS_FSTP_ST0
+} node_verts_instruction_t;
+
+/* Replaces the instruction at `at` with no-ops of its length, through `journal`, after checking
+ * that its opcode bytes are the ones expected; refused, with nothing written, when they are not.
+ * Public for the unit test, which hands it bytes of its own. */
+bool node_verts_replace(patch_journal_t *journal, uintptr_t at, node_verts_instruction_t which,
+                        const char *what);
+
 /* Reads [render_guard] BalanceNodeVerts, on by default. */
 void node_verts_install(void);
 

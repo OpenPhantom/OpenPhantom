@@ -287,6 +287,7 @@ add_engine_fix(render_guard
     face_bounds.c
     flat_quad.c
     node_verts.c
+    halo_copy.c
     halo_verts.c
 )
 

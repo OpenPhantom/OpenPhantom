@@ -287,6 +287,14 @@ add_unit_test(substep_noise effect_clock effect_clock/substep_noise.c)
 # and the write that overruns still happens.
 add_unit_test(face_bounds render_guard render_guard/face_bounds.c)
 
+# The halo's node vertex copy, on structures of the test's own: every arm that does not copy
+# leaves twelve zeros, and a mesh longer than the buffer stops at its fourth vertex.
+add_unit_test(halo_copy render_guard render_guard/halo_copy.c)
+
+# The x87 balance's instruction replacement, on bytes of the test's own: the opcode is checked
+# before anything is written, a refusal writes nothing, and the journal puts it all back.
+add_unit_test(node_verts render_guard render_guard/node_verts.c)
+
 # Which requested texture ceiling is accepted, clamped or refused. The engine never asks the
 # device for its own maximum, so this validation is the only thing between a setting and a
 # surface creation that fails.

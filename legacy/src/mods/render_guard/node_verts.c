@@ -91,26 +91,29 @@ static const uint8_t FSTP_ST0[2] = { 0xDD, 0xD8 };
 #define FLD_M32_SIZE  6u
 #define FSTP_ST0_SIZE 2u
 
-static patch_journal_t journal;
+static patch_journal_t balance_journal;
 
 /* One instruction replaced, refused when the bytes there are not the opcode expected. A six
  * byte write goes in two, the journal holding four bytes an entry. */
-static bool replace(uintptr_t at, const uint8_t *opcode, const uint8_t *nops, size_t size,
-                    const char *what)
+bool node_verts_replace(patch_journal_t *journal, uintptr_t at, node_verts_instruction_t which,
+                        const char *what)
 {
-    uint8_t have[2] = { 0, 0 };
+    const uint8_t *opcode = (which == NODE_VERTS_FLD_M32) ? FLD_M32 : FSTP_ST0;
+    const uint8_t *nops   = (which == NODE_VERTS_FLD_M32) ? NOP6 : NOP2;
+    size_t         size   = (which == NODE_VERTS_FLD_M32) ? FLD_M32_SIZE : FSTP_ST0_SIZE;
+    uint8_t        have[2] = { 0, 0 };
 
     if (!memory_try_read(at, have, sizeof have) || have[0] != opcode[0] || have[1] != opcode[1]) {
         log_warning("%s at %08X reads %02X %02X, not the instruction expected, refused", what,
                     (unsigned)at, (unsigned)have[0], (unsigned)have[1]);
         return false;
     }
-    if (patch_journal_write_bytes(&journal, at, nops, size > 4u ? 4u : size) != PATCH_RESULT_OK) {
+    if (patch_journal_write_bytes(journal, at, nops, size > 4u ? 4u : size) != PATCH_RESULT_OK) {
         log_warning("%s at %08X could not be written, refused", what, (unsigned)at);
         return false;
     }
     if (size > 4u &&
-        patch_journal_write_bytes(&journal, at + 4u, nops + 4, size - 4u) != PATCH_RESULT_OK) {
+        patch_journal_write_bytes(journal, at + 4u, nops + 4, size - 4u) != PATCH_RESULT_OK) {
         log_warning("%s at %08X could not be written whole, refused", what, (unsigned)at);
         return false;
     }
@@ -131,7 +134,8 @@ static bool replace_failure_arms(const uint8_t *sig, const uint8_t *mask, size_t
         return false;
     }
     for (i = 0; i < count; ++i) {
-        if (!replace(hits[i] + fld_offset, FLD_M32, NOP6, FLD_M32_SIZE, what)) {
+        if (!node_verts_replace(&balance_journal, hits[i] + fld_offset, NODE_VERTS_FLD_M32,
+                                what)) {
             return false;
         }
     }
@@ -147,7 +151,7 @@ static bool replace_pop(const uint8_t *sig, const uint8_t *mask, size_t size,
         log_warning("%s did not resolve, refused", what);
         return false;
     }
-    return replace(site + pop_offset, FSTP_ST0, NOP2, FSTP_ST0_SIZE, what);
+    return node_verts_replace(&balance_journal, site + pop_offset, NODE_VERTS_FSTP_ST0, what);
 }
 
 void node_verts_install(void)
@@ -157,7 +161,7 @@ void node_verts_install(void)
                  "higher, as the game shipped");
         return;
     }
-    patch_journal_reset(&journal);
+    patch_journal_reset(&balance_journal);
     if (!replace_failure_arms(SIG_NODE_RANGE_RETURN, MSK_NODE_RANGE_RETURN,
                               sizeof SIG_NODE_RANGE_RETURN, NODE_RANGE_FLD_OFFSET,
                               "the node range return of the node vertex routines") ||
@@ -170,7 +174,7 @@ void node_verts_install(void)
                      CAPTURE_CALL_POP_OFFSET, "the blade capture's pop after the copy") ||
         !replace_pop(SIG_SET_BLADE_CALL, MSK_SET_BLADE_CALL, sizeof SIG_SET_BLADE_CALL,
                      SET_BLADE_CALL_POP_OFFSET, "the blade size's pop after the write")) {
-        patch_journal_undo(&journal);
+        patch_journal_undo(&balance_journal);
         log_warning("the x87 stack balance of the node vertex routines is left as shipped: one "
                     "of its seven sites refused and the others were put back");
         return;

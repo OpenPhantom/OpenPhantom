@@ -384,10 +384,22 @@ samples placed the pop: view_distance_fix's `ThingDrawTrace` shows the pointer u
 every `rdThing_Draw`, and decal_fix's `SubmitTrace` and render_guard's `DeferTrace` show it
 unmoved across every decal submit and deferred face, so it sits in the player's draw after the
 model draw returns and outside the decal path, in the halo and shield pass, the shadow
-projector's own body or the queue flush between asset groups. Which of those, and whether it is
-one of this project's DLLs or the engine's own, is the next run: the mods folder cut to
-`framerate_fix.dll` alone decides it. All four switches are off as shipped; they are
-measurements, kept for the same reason `InterpolateRiders=2` and `3` are.
+projector's own body or the queue flush between asset groups.
+
+Then whose it is. With the mods folder cut to `framerate_fix.dll` alone the pointer still
+wandered, through every value from 0 to 7, so none of the other twenty three DLLs is the cause.
+A frame-end sample was added to the trace for the last step, one `fnstsw` a frame from the
+frame callback, written when the pointer has moved since the last frame's end, which needs no
+hook in the draw at all; with every switch in this DLL off (no cap, no compensation, no
+interpolation of anything) and nothing else loaded, the pointer still wandered from the moment
+the level was up. So the underflow is the game's own, or the Direct3D path under it through
+dxwrapper, and this project's DLLs only decide where the garbage lands by changing the code
+around it. Compiled code cannot net-pop the x87 stack; a 1999 C call made without a prototype
+can, when the callee returns a float the caller was told is an int, or the other way round.
+Finding the instruction is a further hunt, with samples either side of the halo pass, the
+shadow projector and the queue flush; a fix would be a patch on that one site. All four
+switches are off as shipped; they are measurements, kept for the same reason
+`InterpolateRiders=2` and `3` are.
 
 **It took two failed play sessions to get there, and both are worth recording.**
 

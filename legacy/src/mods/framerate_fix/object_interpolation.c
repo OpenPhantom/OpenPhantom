@@ -332,6 +332,9 @@ void object_interpolation_install(int mode, float travel_limit)
     uint32_t  call_displacement;
     size_t    index;
 
+    /* Before the mode test: the trace is a measurement of the draw, not of this feature, and
+     * a run with the blend hook out of the picture is one of the measurements it is for. */
+    rider_trace_install();
     if (mode <= 0) {
         log_info("InterpolateRiders=0, a character carried by a platform keeps stepping at the "
                  "simulation rate");
@@ -390,7 +393,6 @@ void object_interpolation_install(int mode, float travel_limit)
                   (unsigned)site);
         return;
     }
-    rider_trace_install();
 
     if (object_mode == 3) {
         log_info("InterpolateRiders=3: the blend at %08X is the engine's own and the game is "

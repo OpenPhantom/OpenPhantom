@@ -53,6 +53,8 @@ static struct {
     uint32_t       count;
     uint32_t       dropped;
     uint8_t        key_down[256];
+    uint16_t       last_end_status;    /* the frame-end sample, for the change */
+    bool           end_sampled;
 } trace;
 
 static bool finite3(const float *v)
@@ -184,5 +186,20 @@ void rider_trace_frame(void)
     trace.count   = 0;
     trace.dropped = 0;
     note_keys();
+    {
+        uint16_t status = 0;
+
+        __asm {
+            fnstsw status
+        }
+        if (!trace.end_sampled ||
+            ((status ^ trace.last_end_status) & X87_STATUS_TOP_MASK) != 0) {
+            log_info("trace: frame %u ends with x87 status %04X, stack pointer %u",
+                     (unsigned)trace.frame, (unsigned)status,
+                     (unsigned)((status & X87_STATUS_TOP_MASK) >> 11));
+        }
+        trace.end_sampled     = true;
+        trace.last_end_status = status;
+    }
     ++trace.frame;
 }

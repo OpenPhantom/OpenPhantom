@@ -9,7 +9,11 @@
  * engine's pair was used, whether the limit refused, and the x87 status and control words at
  * entry; every key going down or up is recorded too, with the frame it happened on, so the two
  * can be laid side by side. Any object's blend that is refused, not finite, or entered with the
- * x87 stack not empty is recorded whatever its model.
+ * x87 stack not empty is recorded whatever its model. And once a frame, at the frame's end,
+ * the status word is sampled on its own and written whenever the stack pointer in it has moved
+ * since the last frame's end: that sample needs no blend hook, so it stands with
+ * InterpolateRiders off and every other switch in this DLL off, which is the run that decides
+ * whether the drift belongs to this DLL at all.
  *
  * Nothing is formatted inside the blend. The hook may not run a CRT floating-point routine, so
  * a record is a copy of the numbers into a ring, and the frame callback writes the ring out

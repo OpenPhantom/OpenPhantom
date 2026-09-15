@@ -49,6 +49,7 @@ add_engine_fix(framerate_fix
     particle_clock.c
     mover_interpolation.c
     object_interpolation.c
+    rider_trace.c
     object_track.c
     mover_blend.c
     mover_evenness.c
@@ -392,12 +393,12 @@ add_engine_fix(dev_overlay
     cheats_fall_consequences.c
     cheats_noclip.c
     cheats_free_camera.c
-    cheats_no_fog.c
     freecam_world.c
     freeze_anim_row.c
     start_level.c
     start_level_row.c
     overlay_levels.c
+    cheats_no_fog.c
     floor_probe.c
 )
 

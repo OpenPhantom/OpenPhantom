@@ -9,11 +9,13 @@
 #include "two_sided_faces.h"
 
 #include "common/detour.h"
+#include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 /* The cull word's address is read out of the `mov bl,[imm32]` four bytes in front of the resolved
  * anchor rather than written down. See that site's own pattern comment. */
@@ -47,9 +49,67 @@ typedef struct two_sided_state {
     int      count_this_frame;
     bool     enabled;
     int      max_per_frame;
+    bool     trace;            /* ThingDrawTrace: the x87 stack pointer across each draw */
+    unsigned trace_lines;
+    unsigned trace_drifts;
+    char     trace_model[16];  /* ThingDrawTraceModel: named every frame, drift or not */
+    unsigned trace_model_lines;
 } two_sided_state_t;
 
 static two_sided_state_t two_sided_state;
+
+/* --- ThingDrawTrace: a measurement for the blade drawn out of a hand --------------------------
+ * framerate_fix's rider trace found the x87 stack pointer (TOP, bits 11 to 13 of the status word)
+ * one higher at the blend of the object drawn after the player than at the player's own, every
+ * frame, in Mos Espa: a net pop somewhere in the player's draw. This samples the status word on
+ * the way into rdThing_Draw and on the way out, and names the model when they differ, so the
+ * drift can be placed inside the model draw or after it. Off as shipped. */
+#define X87_TOP_MASK           0x3800u
+#define TRACE_LINE_LIMIT       40u
+#define MODEL3_NAME_SIZE       0x24u
+
+static uint16_t x87_status_word(void)
+{
+    uint16_t status = 0;
+
+    __asm {
+        fnstsw status
+    }
+    return status;
+}
+
+static void trace_draw(void *thing, uint16_t before, uint16_t after)
+{
+    uint32_t model3 = 0;
+    char     name[MODEL3_NAME_SIZE + 1] = {0};
+    bool     moved = (before & X87_TOP_MASK) != (after & X87_TOP_MASK);
+    bool     named;
+
+    if (memory_try_read((uintptr_t)thing + THING_MODEL3, &model3, sizeof model3) && model3 != 0) {
+        (void)memory_try_read((uintptr_t)model3, name, MODEL3_NAME_SIZE);
+    }
+    named = two_sided_state.trace_model[0] != 0 &&
+            _strnicmp(name, two_sided_state.trace_model, strlen(two_sided_state.trace_model)) == 0;
+    if (named && two_sided_state.trace_model_lines < 400u) {
+        ++two_sided_state.trace_model_lines;
+        log_info("draw trace: rdThing_Draw of %s (thing %08X) entered with x87 status %04X and "
+                 "left with %04X", name, (unsigned)(uintptr_t)thing, (unsigned)before,
+                 (unsigned)after);
+    }
+    if (!moved) {
+        return;
+    }
+    ++two_sided_state.trace_drifts;
+    if (two_sided_state.trace_lines >= TRACE_LINE_LIMIT &&
+        two_sided_state.trace_drifts % 600u != 0u) {
+        return;
+    }
+    ++two_sided_state.trace_lines;
+    log_info("draw trace: rdThing_Draw of %s (thing %08X) entered with x87 status %04X and left "
+             "with %04X: the stack pointer moved inside the model draw (drift %u)",
+             name[0] ? name : "?", (unsigned)(uintptr_t)thing, (unsigned)before, (unsigned)after,
+             two_sided_state.trace_drifts);
+}
 
 /* ============================================================================================
  * Two-sided faces, but ONLY on dismembered bodies
@@ -136,9 +196,17 @@ static int32_t __cdecl hook_thing_draw(void *thing, void *matrix)
     thing_draw_fn_t original = (thing_draw_fn_t)two_sided_state.thing_draw_detour.original;
     uint8_t         saved;
     int32_t         result;
+    uint16_t        before = 0;
 
+    if (two_sided_state.trace) {
+        before = x87_status_word();
+    }
     if (!two_sided_state.enabled || two_sided_state.cull_word == NULL) {
-        return original(thing, matrix);
+        result = original(thing, matrix);
+        if (two_sided_state.trace) {
+            trace_draw(thing, before, x87_status_word());
+        }
+        return result;
     }
 
     saved = *two_sided_state.cull_word;
@@ -151,6 +219,9 @@ static int32_t __cdecl hook_thing_draw(void *thing, void *matrix)
     result = original(thing, matrix);              /* KEEP IT: it is the caller's visibility code */
 
     *two_sided_state.cull_word = saved;            /* ALWAYS back, see shot_drawAll */
+    if (two_sided_state.trace) {
+        trace_draw(thing, before, x87_status_word());
+    }
     return result;
 }
 
@@ -166,9 +237,26 @@ void two_sided_faces_install(uintptr_t cull_site, uintptr_t draw_site, bool enab
 
     two_sided_state.enabled       = enabled;
     two_sided_state.max_per_frame = max_per_frame;
+    two_sided_state.trace         = ini_read_bool("view_distance_fix", "ThingDrawTrace", false);
+    if (two_sided_state.trace) {
+        (void)ini_read_string("view_distance_fix", "ThingDrawTraceModel", "",
+                              two_sided_state.trace_model, sizeof two_sided_state.trace_model);
+        log_info("ThingDrawTrace=1: the x87 status word is sampled on the way into and out of "
+                 "every rdThing_Draw, and a model whose draw moves the stack pointer is named. "
+                 "A measurement; switch it off when the run is done");
+    }
 
     if (!two_sided_state.enabled) {
         log_info("TwoSidedSevered=0");
+        if (two_sided_state.trace && draw_site != 0 &&
+            !detour_install(&two_sided_state.thing_draw_detour, draw_site,
+                            (const void *)hook_thing_draw, THING_DRAW_PROLOGUE_SIZE)) {
+            /* The hook goes in for the measurement alone; with no cull word it only passes
+             * the call through and samples the status word either side of it. */
+            two_sided_state.trace = false;
+            log_warning("the rdThing_Draw detour at %08X failed, so ThingDrawTrace is off",
+                        (unsigned)draw_site);
+        }
         return;
     }
     if (cull_site == 0) {

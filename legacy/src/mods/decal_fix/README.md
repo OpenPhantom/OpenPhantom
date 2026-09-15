@@ -202,6 +202,13 @@ texture on anything steeper than 45 degrees, so the two halves across such a fol
 different planes with different textures and cannot meet. That is how the game was drawn in 1999,
 before the decals went missing on modern wrappers, and it is left as it is.
 
+## A measurement: `SubmitTrace`
+
+`[decal_fix] SubmitTrace=1` samples the x87 status word either side of every decal submit and
+names the call when the stack pointer moved across it. It exists for the blade drawn out of a
+hand, framerate_fix's README under that heading, and it answered that the pointer never moves
+across a submit, so the pop that hunt is after is not in the decal path. Off as shipped.
+
 ## What this does NOT fix
 
 * **A decal that is never stamped.** This DLL sits after the pool; if `bapvrt_addDecal` never

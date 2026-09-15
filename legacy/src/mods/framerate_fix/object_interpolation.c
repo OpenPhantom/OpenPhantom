@@ -2,6 +2,7 @@
 #include "object_interpolation.h"
 
 #include "object_track.h"
+#include "rider_trace.h"
 #include "substep_counter.h"
 
 #include "common/logging.h"
@@ -177,6 +178,8 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
     float        previous[3];
     float        drawn[3];
     uint32_t     step;
+    bool         from_tracker = false;
+    bool         refused = false;
     /* The engine's own pair is exactly one step apart, so a fallback leaves the weight equal to
      * the alpha and the limit unscaled, which is the replaced arithmetic exactly. The tracker
      * does not write through this on the paths where it has no answer, so it is set here
@@ -214,6 +217,8 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
         previous[1] = engine[1];
         previous[2] = engine[2];
         gap = 1u;
+    } else {
+        from_tracker = true;
     }
 
     /* The limit is per step, so two samples several steps apart are allowed proportionally more
@@ -231,12 +236,17 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
             float travel_squared = dx * dx + dy * dy + dz * dz;
 
             ++refused_by_limit;
+            refused = true;
             if (travel_squared > worst_travel_squared) {
                 worst_travel_squared = travel_squared;
             }
         }
     }
     ++blends_seen;
+    if (rider_trace_on()) {
+        rider_trace_blend(object, step, gap, alpha, object_track_weight(alpha, gap), previous,
+                          from_tracker, engine, current, drawn, refused);
+    }
 
     /* The deltas are the ENGINE'S, against obj+0x54, exactly as the replaced bytes computed them.
      * The disassembly of the rest of bapobj_drawAll shows nothing reading these three slots after
@@ -254,6 +264,7 @@ static void __cdecl hook_draw_position(char *object, char *frame_pointer)
 void object_interpolation_frame(void)
 {
     object_track_frame();
+    rider_trace_frame();
 
     /* Counted in every mode, because a refusal is invisible on screen except as the body drifting
      * against a camera that is following it. Said ONCE, on the first window that sees one: it is
@@ -379,6 +390,7 @@ void object_interpolation_install(int mode, float travel_limit)
                   (unsigned)site);
         return;
     }
+    rider_trace_install();
 
     if (object_mode == 3) {
         log_info("InterpolateRiders=3: the blend at %08X is the engine's own and the game is "

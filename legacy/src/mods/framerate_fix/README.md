@@ -362,6 +362,33 @@ distance comparison, and every comparison against a value that is not a number i
 non-finite previous position would have passed the guard meant to refuse a bad one and been
 drawn. The finiteness test now runs before the limit, and the test covers it.
 
+**It came back, and this time it was measured.** 2026-09-15, Mos Espa: standing beside Obi-Wan
+and pressing a key drew the beam out of him, every time, with `InterpolateRiders` on and not
+off. `rider_trace.c` was written for it: with `RiderTrace=1`, every blend of a model named by
+`RiderTraceModel` is recorded frame by frame with its inputs, its output and the x87 status and
+control words at the hook's entry, every key going down or up is recorded with its frame, and
+any blend that is refused, not finite or entered with the x87 stack in use is recorded whatever
+the model. Nothing is formatted inside the draw: the numbers are copied to a ring and written
+out after the frame, so the instrument adds none of the code the earlier hunt ruled out of the
+path. What it found is not in the values at all. The objects are drawn in alphabetical order
+of model file, and at the blend of the object drawn after the player's (`quigon.baf`) the x87
+stack pointer, TOP in the status word, reads one higher than at the player's own, every frame,
+with the tag word still saying every register is empty. The earlier hunt checked the tag word
+and found it clean, which it is; an empty tag word with TOP off zero is the signature of a
+stack **underflow**, one `fstp` more than `fld` somewhere in the player's draw, and the store
+that underflows writes the x87's indefinite NaN into whatever float the engine was storing at
+that moment, once a frame. The beam is a model drawn with that number in it, and it moves from
+model to model as the code around it changes: it was seen on the player on Coruscant, on
+Obi-Wan in Mos Espa, and off him again after a hook was added. Three further
+samples placed the pop: view_distance_fix's `ThingDrawTrace` shows the pointer unmoved across
+every `rdThing_Draw`, and decal_fix's `SubmitTrace` and render_guard's `DeferTrace` show it
+unmoved across every decal submit and deferred face, so it sits in the player's draw after the
+model draw returns and outside the decal path, in the halo and shield pass, the shadow
+projector's own body or the queue flush between asset groups. Which of those, and whether it is
+one of this project's DLLs or the engine's own, is the next run: the mods folder cut to
+`framerate_fix.dll` alone decides it. All four switches are off as shipped; they are
+measurements, kept for the same reason `InterpolateRiders=2` and `3` are.
+
 **It took two failed play sessions to get there, and both are worth recording.**
 
 The first sent characters flying around the level. Two explanations stood: the patch was in the

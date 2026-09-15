@@ -545,6 +545,15 @@ scene, not about seeing further than that ceiling.**
   instead, so those effects are inert. Nothing here made that worse and nothing here fixes it; it
   is a consequence of the regime switch and belongs in its own change.
 
+## A measurement: `ThingDrawTrace`
+
+`[view_distance_fix] ThingDrawTrace=1` samples the x87 status word on the way into and out of
+every `rdThing_Draw`, through the two-sided detour, which is placed for the measurement alone
+when `TwoSidedSevered` is off, and names a model whose draw moves the stack pointer; a model
+whose file starts with `ThingDrawTraceModel` is named every frame either way. It exists for the
+blade drawn out of a hand, framerate_fix's README under that heading, and it answered that the
+pointer never moves inside the model draw. Off as shipped.
+
 ## Fallback behaviour
 
 Each patch installs independently and says so. If `gather_append` does not match, the watchdog is

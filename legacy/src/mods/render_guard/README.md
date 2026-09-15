@@ -202,6 +202,13 @@ was fine here".
 Nothing is written to the image on any of these paths, so a partial install leaves the game exactly
 as it found it.
 
+## A measurement: `DeferTrace`
+
+`[render_guard] DeferTrace=1` samples the x87 status word either side of every deferred face
+and names the call when the stack pointer moved across it. It exists for the blade drawn out of
+a hand, framerate_fix's README under that heading, and it answered that the pointer never moves
+across a deferred face. Off as shipped.
+
 ## Considered and not built
 
 Four neighbouring repairs were proposed with this one and each was dropped after reading the bytes

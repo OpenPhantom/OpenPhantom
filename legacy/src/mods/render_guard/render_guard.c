@@ -295,9 +295,44 @@ static bool pool_would_overflow(uint32_t count)
                                            guard_state.pool_capacity, count);
 }
 
+
+/* --- a measurement for the blade drawn out of a hand ------------------------------------------
+ * framerate_fix's rider trace found the x87 stack pointer one higher after the player's draw than
+ * before it, every frame, and view_distance_fix's sample put the pop outside rdThing_Draw. This
+ * samples the status word either side of the call this hook wraps, and names the change. Off as
+ * shipped; DeferTrace=1 switches it on. */
+static bool     x87_trace;
+static unsigned x87_trace_lines;
+
+static uint16_t x87_status_word(void)
+{
+    uint16_t status = 0;
+
+    __asm {
+        fnstsw status
+    }
+    return status;
+}
+
+static void x87_trace_report(const char *what, uint16_t before, uint16_t after, uint32_t count)
+{
+    bool moved = ((before ^ after) & 0x3800u) != 0;
+
+    if (!moved && x87_trace_lines >= 200u) {
+        return;
+    }
+    ++x87_trace_lines;
+    log_info("x87 trace: %s entered with status %04X and left with %04X (%u vertices)%s", what,
+             (unsigned)before, (unsigned)after, (unsigned)count,
+             moved ? ": the stack pointer moved across the call" : "");
+}
+
 static void *__cdecl hook_defer_face(void *texture, uint32_t flags, void *vertices,
                                      uint32_t count, int32_t need_clip)
 {
+    void    *record;
+    uint16_t before = x87_trace ? x87_status_word() : 0u;
+
     if (face_bounds_vertex_count_refused(count, guard_state.max_vertices)) {
         ++guard_state.refused_vertices;
         if (!guard_state.said_vertices) {
@@ -324,7 +359,11 @@ static void *__cdecl hook_defer_face(void *texture, uint32_t flags, void *vertic
         return NULL;
     }
 
-    return guard_state.original(texture, flags, vertices, count, need_clip);
+    record = guard_state.original(texture, flags, vertices, count, need_clip);
+    if (x87_trace) {
+        x87_trace_report("the deferred face", before, x87_status_word(), count);
+    }
+    return record;
 }
 
 /* Substitutes only where the engine's own answer is not a comparison Direct3D defines. Every value
@@ -447,6 +486,7 @@ void render_guard_install(void)
         log_error("no 32-bit host image, neither bound is guarded");
         return;
     }
+    x87_trace = ini_read_bool(RENDER_GUARD_SECTION, "DeferTrace", false);
     if (!ini_read_bool(RENDER_GUARD_SECTION, "Enabled", true)) {
         log_info("disabled");
         return;

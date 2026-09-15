@@ -183,6 +183,37 @@ static signature_t sites[SITE_COUNT] = {
 typedef int32_t (__cdecl *decal_submit_fn_t)(void *stage, uint32_t render_state, float *vertices,
                                              uint32_t count, int32_t clipped, void *sorted);
 
+/* --- a measurement for the blade drawn out of a hand ------------------------------------------
+ * framerate_fix's rider trace found the x87 stack pointer one higher after the player's draw than
+ * before it, every frame, and view_distance_fix's sample put the pop outside rdThing_Draw. This
+ * samples the status word either side of the call this hook wraps, and names the change. Off as
+ * shipped; SubmitTrace=1 switches it on. */
+static bool     x87_trace;
+static unsigned x87_trace_lines;
+
+static uint16_t x87_status_word(void)
+{
+    uint16_t status = 0;
+
+    __asm {
+        fnstsw status
+    }
+    return status;
+}
+
+static void x87_trace_report(const char *what, uint16_t before, uint16_t after, uint32_t count)
+{
+    bool moved = ((before ^ after) & 0x3800u) != 0;
+
+    if (!moved && x87_trace_lines >= 200u) {
+        return;
+    }
+    ++x87_trace_lines;
+    log_info("x87 trace: %s entered with status %04X and left with %04X (%u vertices)%s", what,
+             (unsigned)before, (unsigned)after, (unsigned)count,
+             moved ? ": the stack pointer moved across the call" : "");
+}
+
 typedef struct decal_fix_state {
     bool            installed;
     bool            enabled;
@@ -208,6 +239,7 @@ static void neutralise_zbias(void);
 static void load_config(void)
 {
     decal_state.enabled    = ini_read_bool(DECAL_FIX_SECTION, "Enabled", true);
+    x87_trace              = ini_read_bool(DECAL_FIX_SECTION, "SubmitTrace", false);
     decal_state.dry_at_start = ini_read_bool(DECAL_FIX_SECTION, "DryAtStart", true);
     decal_state.scorch_reach = ini_read_bool(DECAL_FIX_SECTION, "ScorchReach", true);
     decal_state.neutralise_zbias =
@@ -341,6 +373,7 @@ static int32_t __cdecl hook_decal_submit(void *stage, uint32_t render_state, flo
     decal_submit_fn_t original = (decal_submit_fn_t)decal_state.submit.original;
     uint32_t          state = (render_state & ~decal_state.state_clear) | decal_state.state_set;
     int32_t           result;
+    uint16_t          before = x87_trace ? x87_status_word() : 0u;
 
     /* Everything that reaches this function is a decal, the site has one caller. The only reasons
      * to leave the geometry alone are a switched-off feature, a zero bias, or a fan that is not the
@@ -387,6 +420,9 @@ static int32_t __cdecl hook_decal_submit(void *stage, uint32_t render_state, flo
     }
 
     result = original(stage, state, vertices, count, clipped, sorted);
+    if (x87_trace) {
+        x87_trace_report("the decal submit", before, x87_status_word(), count);
+    }
 
     /* The function answers the question we have been asking. 0x00487F40 returns 0 when
      * std3D_deferFace (0x00487D20) refuses the face, the deferred pool is full, or the entry was

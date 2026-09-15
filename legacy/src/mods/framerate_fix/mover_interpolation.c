@@ -259,6 +259,7 @@ static const size_t REDIRECT_PATTERN_SIZE[REDIRECT_COUNT] = {
 typedef struct mover_interpolation_state {
     bool      installed;
     bool      enabled;
+    bool      log_summary;
     float     translation_limit;
 
     detour_t  tick;
@@ -687,13 +688,15 @@ static bool install_redirects(void)
     return true;
 }
 
-void mover_interpolation_install(bool enabled, float translation_limit, bool log_evenness)
+void mover_interpolation_install(bool enabled, float translation_limit, bool log_evenness,
+                                 bool log_summary)
 {
     if (mover_state.installed) {
         return;
     }
     mover_state.installed         = true;
     mover_evenness_enable(log_evenness);
+    mover_state.log_summary = log_summary;
     mover_state.translation_limit = (translation_limit > 0.0f) ? translation_limit : 0.0f;
 
     if (!enabled) {
@@ -753,7 +756,7 @@ void mover_interpolation_sample(void)
                     "or the previous pose is not reaching the draw.",
                     (unsigned)mover_state.frames, (unsigned)mover_state.unknown,
                     (unsigned)mover_state.rejected);
-    } else if (mover_state.blended != 0) {
+    } else if (mover_state.blended != 0 && mover_state.log_summary) {
         log_info("movers: %u poses blended, %u refused, %u unknown, %u track wraps of which %u "
                  "reset a subnode, over %u frames, the table emptied %u time%s so far. Refusals "
                  "by guard: %u held after a track reset, %u weight out of range, %u exactly at "

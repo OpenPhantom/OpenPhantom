@@ -238,6 +238,7 @@ typedef struct framerate_config {
     bool  interpolate_movers;
     bool  mover_substep_clock;
     bool  log_mover_evenness;
+    bool  log_mover_summary;
     float mover_travel_limit;    /* world units a mover may cross in one simulation step */
 
     /* The same question for what STANDS on a mover. A carried character has its previous
@@ -306,6 +307,8 @@ static void load_config(void)
         ini_read_bool(FRAMERATE_SECTION, "MoverSubstepClock", true);
     config->log_mover_evenness     =
         ini_read_bool(FRAMERATE_SECTION, "LogMoverEvenness", false);
+    config->log_mover_summary      =
+        ini_read_bool(FRAMERATE_SECTION, "LogMoverSummary", false);
     /* The migration, said once. A negative default is impossible for the old key, so this
      * detects presence and not merely a value, the way the mouse keys do. */
     {
@@ -775,7 +778,8 @@ void framerate_fix_install(void)
                       framerate_state.config.mover_substep_clock);
     mover_interpolation_install(framerate_state.config.interpolate_movers,
                                 framerate_state.config.mover_travel_limit,
-                                framerate_state.config.log_mover_evenness);
+                                framerate_state.config.log_mover_evenness,
+                                framerate_state.config.log_mover_summary);
 
     /* After the movers, because the two are read together in the log and a platform that is
      * not smoothed makes the rider question meaningless. Neither depends on the other at

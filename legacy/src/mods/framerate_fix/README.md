@@ -40,6 +40,7 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `InterpolateRiders` | `1` | keep each drawn object's previous position here rather than reading the engine's, which a platform's carry flattens. `2` and `3` are measurements rather than settings; see **A rider had nothing to be drawn between** |
 | `RiderTravelLimitPerStep` | `2.0` | the furthest a CHARACTER may travel in one simulation step before the blend refuses it and draws it where it landed. Not the mover's number: 64 here is what made the first attempt unusable |
 | `StatsFrameInterval` | `0` | >0: log a frame-time/substep summary every N frames, with the frames over 1.5x the cap split by whether the simulation stepped inside them |
+| `LogMoverSummary` | `0` | 1: every 600 frames, how many mover poses were blended, refused and unknown, the track wraps, and the refusals by guard. A measurement; the one line that says the interpolation installed and smoothed nothing is written once whatever this holds |
 | `LogMoverEvenness` | `0` | 1: every 600 frames, how many drawn mover frames disagreed with their neighbours by more than five per cent, raw fallback frames included, and how many raw frames landed straight after a blended one |
 | `StatsPlayerFrames` | `0` | >0: dump the player's draw interpolation for N frames |
 

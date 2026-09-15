@@ -261,10 +261,14 @@ size_t signature_count_dword(uint32_t value)
         return 0;
     }
 
-    /* Unaligned dword reads are legal on x86 and are what this census needs: the operand of an
-     * instruction is not aligned to anything. */
+    /* The operand of an instruction is not aligned to anything, so every byte offset is a
+     * candidate. The dword is assembled with memcpy, which the compiler folds to one unaligned
+     * load on x86 and which keeps the read inside the language. */
     for (offset = 0; offset <= text_size - sizeof(value); ++offset) {
-        if (*(const uint32_t *)(text + offset) == value) {
+        uint32_t candidate;
+
+        memcpy(&candidate, text + offset, sizeof candidate);
+        if (candidate == value) {
             ++hits;
         }
     }

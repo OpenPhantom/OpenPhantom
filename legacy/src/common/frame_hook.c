@@ -82,7 +82,7 @@ static bool install_detour(void)
         return true;
     }
 
-    /* Four DLLs want this one function, so the first installer's `jmp rel32` is the NORMAL
+    /* A dozen DLLs want this one function, so the first installer's `jmp rel32` is the NORMAL
      * state by the time the others look. signature_find_detour_target handles that. */
     frame_state.site = signature_find_detour_target(SIG_RENDER_FRAME_END, MSK_RENDER_FRAME_END,
                                                     sizeof(SIG_RENDER_FRAME_END),

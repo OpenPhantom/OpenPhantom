@@ -37,9 +37,10 @@ bool patch_validate_bytes(uintptr_t address, const uint8_t *expected_bytes, size
 }
 
 /* The original of the range being written, kept so a write that does not land can be put back
- * rather than left half applied. The widest run any patch in this tree writes is the 0x20 byte
- * euler replacement in framerate_fix, and the next is 25 bytes in crt_copy_fix, so this has room
- * to spare. A larger write is still read back; it just cannot be undone, and says so. */
+ * and not left half applied. The widest run any patch in this tree writes is the 126 byte
+ * rider blend in framerate_fix's object_interpolation.c, two bytes under this; the next are the
+ * 0x20 byte euler replacement in the same DLL and 25 bytes in crt_copy_fix. A larger write is
+ * still read back; it just cannot be undone, and says so. */
 #define PATCH_ROLLBACK_MAX 128u
 
 patch_result_t patch_write_bytes(uintptr_t address, const void *data, size_t size)

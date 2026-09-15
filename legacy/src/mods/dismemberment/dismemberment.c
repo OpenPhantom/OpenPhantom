@@ -61,10 +61,14 @@
  * SAME space (both are pNode->+0x44), so the substitution is type-safe.
  *
  * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. Most of the excess is the byte
- * evidence above rather than code. The six gates cannot be reviewed without it, and it has to
- * stand at the site.
+ * evidence above, not code. The six gates cannot be reviewed without it, and it has to stand at
+ * the site. The node walk and the body-part mask test took the seam to limb_nodes.c when this
+ * file came within twenty lines of the limit; the flight of the severed piece went to
+ * limb_flight.c before that.
  */
 #include "dismemberment.h"
+
+#include "limb_nodes.h"
 
 #include "limb_flight.h"
 
@@ -258,19 +262,8 @@ static signature_t sites[SITE_COUNT] = {
 #define THING_NODE_HIDDEN  0x28
 #define MODEL3_NODE_COUNT  0x54   /* proven by the copy loop 0x414456: cmp edx,[ecx+0x54] */
 #define MODEL3_NODES       0x58
-#define NODE_STRIDE        0xB4
-#define NODE_TYPE          0x48   /* the body-part mask */
-#define NODE_MESH_INDEX    0x4C   /* < 0 = this node carries no mesh */
-#define NODE_CHILD_COUNT   0x54
-#define NODE_FIRST_CHILD   0x58
-#define NODE_NEXT_SIBLING  0x5C
 #define CHARACTER_BODY     0x34   /* 0x433872: mov eax,[edx+0x34] */
 
-#define LIMB_MASK 0x6Eu           /* arms, head, legs, never 0x1 (generic), never 0x10 (hips) */
-#define ENGINE_TORSO_NODE_LIMIT 4 /* the engine's own `part > 4` rule at 0x43389D */
-
-#define MAX_SUBTREE_DEPTH    12
-#define MAX_PLAUSIBLE_KIDS  128u
 #define MAX_PLAUSIBLE_NODES 4096u
 
 #define MESSAGE_CODE_SABER 0x25
@@ -295,11 +288,6 @@ typedef struct dismemberment_state {
     volatile const int32_t *message_a;
     volatile const int32_t *message_b;
     volatile const int32_t *message_node;
-
-    /* Does this model carry a body-part mask at all? Cached per model pointer, otherwise the
-     * scan walks every node on every hit. */
-    const char       *mask_model;
-    bool              mask_answer;
 
     uint32_t          sever_count;
     int               hide_log_count;
@@ -342,96 +330,6 @@ static void load_config(void)
 }
 
 /* ============================================================================================ */
-static bool node_pointer_is_plausible(const void *pointer)
-{
-    return pointer != NULL && ((uintptr_t)pointer & 3u) == 0 && (uintptr_t)pointer > 0x10000u;
-}
-
-/* 30 shipped nodes carry NO mesh (tusken/tathum1/handmaid rthigh+lthigh, nimoid rlegdum, tank
- * waist, ...). For those there is no `keep` that hideMeshesBelow could match, and with no mesh
- * there is nothing to show either. Rather than passing the raw node index through (the old, wrong
- * Behaviour), we look for the first mesh in the subtree of that node: the topmost visible piece
- * of exactly this limb. If there is none, the node is unusable and is rejected. */
-int32_t limb_first_mesh_in_subtree(const uint8_t *node, int depth)
-{
-    uint32_t       child_count;
-    uint32_t       index;
-    const uint8_t *child;
-    int32_t        mesh;
-
-    if (!node_pointer_is_plausible(node) || depth > MAX_SUBTREE_DEPTH) {
-        return -1;
-    }
-    if (!memory_is_readable_range((uintptr_t)node, NODE_STRIDE)) {
-        return -1;
-    }
-
-    mesh = *(const int32_t *)(node + NODE_MESH_INDEX);
-    if (mesh >= 0) {
-        return mesh;
-    }
-
-    child_count = *(const uint32_t *)(node + NODE_CHILD_COUNT);
-    if (child_count > MAX_PLAUSIBLE_KIDS) {
-        return -1;
-    }
-
-    child = *(const uint8_t * const *)(node + NODE_FIRST_CHILD);
-    for (index = 0; index < child_count && node_pointer_is_plausible(child); ++index) {
-        mesh = limb_first_mesh_in_subtree(child, depth + 1);
-        if (mesh >= 0) {
-            return mesh;
-        }
-        child = *(const uint8_t * const *)(child + NODE_NEXT_SIBLING);
-    }
-
-    return -1;
-}
-
-static bool model_has_part_mask(const char *model, const char *nodes, uint32_t node_count)
-{
-    uint32_t index;
-
-    if (limb_state.mask_model == model) {
-        return limb_state.mask_answer;
-    }
-
-    limb_state.mask_answer = false;
-    for (index = 0; index < node_count; ++index) {
-        if ((*(const uint32_t *)(nodes + index * NODE_STRIDE + NODE_TYPE) & ~1u) != 0) {
-            limb_state.mask_answer = true;
-            break;
-        }
-    }
-    limb_state.mask_model = model;
-    return limb_state.mask_answer;
-}
-
-/* Gate 5. the authored mask, with a fallback.
- *
- * The census over 265 actor .baf files says: only ten rigs carry a body-part mask at all (anakin,
- * baron, baronsec, obiwan, quigon, queen, panaka, pitdroid, sithmrc2, jawagun); on every other
- * model EVERY node reads 0x1 = generic. A pure `type & 0x6E` gate therefore refuses on those
- * outright, so decapitation did not happen on all enemies.
- *
- * Hence two stages, and the ORDER is the statement:
- *   1. if the model carries a real mask ANYWHERE, that mask is the truth, a node without a limb
- *      bit is not severed, however large its index;
- *   2. if it carries none, the decision falls back to the engine's own rule `part > 4`. That is
- *      tuned to baronsec-shaped skeletons and protects the torso column there. On a foreign rig
- *      it is a heuristic, but it is THE ENGINE'S heuristic, not ours. */
-static bool part_mask_allows(uint32_t type, const char *model, const char *nodes,
-                             uint32_t node_count, int32_t node_index)
-{
-    if ((type & LIMB_MASK) != 0) {
-        return true;
-    }
-    if (model_has_part_mask(model, nodes, node_count)) {
-        return false;                              /* the model knows better */
-    }
-    return node_index > ENGINE_TORSO_NODE_LIMIT;   /* the engine's own bound */
-}
-
 /* Answers with the node the blade REALLY hit, or 0 when any of the gates is shut. 0 is the safe
  * value: the engine tests `> 0` at both use sites. */
 static int32_t blade_node(void *victim_body, void *attacker)
@@ -498,7 +396,7 @@ static int32_t blade_node(void *victim_body, void *attacker)
     }
     type = *(const uint32_t *)(nodes + (uint32_t)node_index * NODE_STRIDE + NODE_TYPE);
 
-    if (!part_mask_allows(type, model, nodes, node_count, node_index)) {
+    if (!limb_part_mask_allows(type, model, nodes, node_count, node_index)) {
         return 0;                                  /* gate 5 */
     }
 

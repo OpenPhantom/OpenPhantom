@@ -128,10 +128,12 @@ add_engine_fix(view_distance_fix
 add_engine_fix(dismemberment
     dll_main.c
     dismemberment.c
+    limb_nodes.c
     limb_flight.c
 )
 
-# Free look is four files. free_look.c is the body half, the on/off switch and installation;
+# Free look is five files. free_look.c is the body half, the on/off switch and installation;
+# free_look_aim.c is the shot under free look, the three detours on the attack path;
 # free_look_camera.c writes the camera's own yaw offset from a chained detour on updateCam and was
 # lifted out when the pair reached 1139 lines; camera_sites.c is the patterns that find that
 # camera, kept apart for the same reason player_sites.c is; free_look_math.c is the arithmetic,
@@ -155,6 +157,7 @@ add_engine_fix(enhanced_input
     pad_run.c
     menu_captions.c
     mouse_look.c
+    mouse_census.c
     mouse_config.c
     mouse_rate.c
     raw_mouse.c
@@ -164,6 +167,7 @@ add_engine_fix(enhanced_input
     steer_log.c
     strafe_walk.c
     free_look.c
+    free_look_aim.c
     free_look_camera.c
     free_look_log.c
     free_look_math.c
@@ -322,6 +326,7 @@ add_engine_fix(large_textures
 add_engine_fix(dialogue_anim_fix
     dll_main.c
     dialogue_anim_fix.c
+    scene_scope.c
     idle_clip.c
     speaker_gesture.c
     speaker_rest.c
@@ -397,6 +402,7 @@ add_engine_fix(dev_overlay
     cheats_fall_consequences.c
     cheats_noclip.c
     cheats_free_camera.c
+    freecam_teleport.c
     freecam_world.c
     freeze_anim_row.c
     start_level.c

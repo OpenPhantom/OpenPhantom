@@ -4,7 +4,8 @@
  * SIZE NOTE: over the 600 line mark, and most of it is the account below of what is actually
  * broken and the two mistakes already made here, with the five patterns and their evidence. The
  * code is three small hooks and one per-frame pass, and the reason each exists is not recoverable
- * from the code alone.
+ * from the code alone. The scene table and the actor identity reads took the seam to
+ * scene_scope.c when this file reached the hard limit.
  *
  * ============================== What is actually broken =======================================
  *
@@ -109,6 +110,8 @@
  * even there; it does nothing anywhere else in the game, on purpose.
  */
 #include "dialogue_anim_fix.h"
+
+#include "scene_scope.h"
 #include "idle_clip.h"
 #include "speaker_gesture.h"
 #include "stand_in.h"
@@ -287,9 +290,6 @@ static signature_t sites[SITE_COUNT] = {
                                   SPEAK_SINGLE_PROLOGUE)
 };
 
-#define ACTOR_PLACEMENT_OFFSET      0x04u    /* char[12], the placement label the spawn path
-                                              * copies in; the diagnostics census prints it */
-#define ACTOR_PLACEMENT_SIZE          12u
 #define ACTOR_OWN_BODY_OFFSET       0x34u    /* actor record -> its own body pointer */
 #define ACTOR_HEALTH_OFFSET         0x38u    /* int, the spawn path's local_8[0xe]; below 1 is
                                               * dead, and the diagnostics census reads the same
@@ -300,7 +300,6 @@ static signature_t sites[SITE_COUNT] = {
                                               * sight */
 #define BODY_THING_OFFSET           0x9Cu    /* body -> rdThing*, same offset dismemberment.c and
                                               * the earlier diagnostics build both already read */
-#define THING_MODEL3_OFFSET         0x04u    /* rdThing -> model3* */
 #define THING_PUPPET_OFFSET         0x18u    /* rdThing -> rdPuppet* */
 #define BODY_CURRENT_CLIP_OFFSET    0xE8u    /* body -> the clip last put on its base layer */
 #define BODY_PRIMARY_SLOT_OFFSET    0xECu    /* body -> the puppet track its base clip is on */
@@ -310,42 +309,6 @@ static signature_t sites[SITE_COUNT] = {
 #define PUPPET_TRACK_LIMIT             8     /* a slot index past this is not a slot */
 #define MAX_TRACKED_ACTORS               4u  /* two speakers, with headroom to spare */
 
-/* The scenes this acts in. One row per level: the actors by the first letters of their model's
- * own name, which is the same string the census in diagnostics resolves, the clip the actor is
- * put in once their line is over, and whether the exchange ends. A new report adds a row here
- * from one census run with Dialogue=1 and Characters=1.
- *
- *   espa.b3d   Mos Espa's opening cutscene: Obi-Wan's head keeps talking through Qui-Gon's line.
- *              The exchange ends and the fix disarms after it.
- *   queen.b3d  the Theed jail: a prisoner spoken to keeps the talking animation after the
- *              conversation is over, his script parked on its talk node for the rest of the
- *              level (issue 26). The census read him at 6/6 before he is spoken to, 8/8 through
- *              both his lines, 2/2 running between them, and 8/8 in script mode 7 for good after
- *              the second. His model, nabcit2, carries ten clips: 0 stnd1, 1 walk1, 2 run1,
- *              3 talk1, 4 hit1, 5 die1, 6 lmout, 7 talk2, 8 talk3, 9 butn1. Clips 0, 3, 6 and
- *              7 were each tried in the cell and none reads as a man waiting: the stand is a
- *              held pose and the other three are talking. So the stand, his own idle, is
- *              written over with the generated one in idle_clip.c before he is put in it, and
- *              the hands-up pass he sits in before he is spoken to is left as shipped. The row
- *              names him twice over, the model nabcit2 and the placement enemy031, so the other
- *              citizens in the level, some on the same model family, are never watched; the
- *              idle is written over the model's stand only once he is being held, so a run in
- *              which he is never spoken to changes nothing at all. Nothing ends, so nothing
- *              disarms. */
-typedef struct scene_scope {
-    const char *level_file;
-    const char *placement;          /* one placement label, or NULL for any with the model */
-    int32_t     rest_anim;          /* the clip the actor is put in after their line */
-    bool        generate_idle;      /* write the idle in idle_clip.c over that clip first */
-    bool        exchange_ends;      /* disarm after HoldSeconds of silence */
-    const char *prefixes[3];        /* NULL terminated */
-} scene_scope_t;
-
-static const scene_scope_t SCOPES[] = {
-    { "espa.b3d",  NULL,       0, false, true,  { "obinpc", "pquigon", NULL } },
-    { "queen.b3d", "enemy031", 0, true,  false, { "nabcit2", NULL, NULL } }
-};
-#define SCOPE_COUNT (sizeof SCOPES / sizeof SCOPES[0])
 #define DEFAULT_HOLD_SECONDS           3.0f   /* longer than the gap between two lines of the SAME
                                                * exchange, short enough to let go promptly once it
                                                * is genuinely over */
@@ -371,8 +334,8 @@ typedef struct dialogue_anim_fix_state {
     const volatile uint32_t *current_speaker;
     const volatile uint32_t *dialogue_active;
 
-    bool                 armed;     /* only true while the current level is in SCOPES */
-    const scene_scope_t *scope;     /* the row of SCOPES this level matched, NULL when none */
+    bool                 armed;     /* only true while the current level has a scene row */
+    const scene_scope_t *scope;     /* the row this level matched, NULL when none */
 
     int32_t  tracked_actors[MAX_TRACKED_ACTORS];
     uint32_t tracked_count;
@@ -427,76 +390,13 @@ static void release_all_tracked_actors(void)
     }
 }
 
-/* model3's own first bytes ARE a short name string, the same technique retail's own giant-model
- * special case in rdThing_Draw uses, and the same one the diagnostics build that first isolated
- * this bug already relied on. Returns false on any unreadable link in the chain, which reads as
- * "not a name we recognise" and leaves the actor untouched, the safe default. The reads are the
- * faulting kind rather than the asking kind: this runs inside the engine's own dialogue opcodes,
- * on pointers it handed over a moment ago. */
-static bool actor_name_starts_with(int32_t actor_record, const char *prefix)
-{
-    void  *body = NULL;
-    void  *thing = NULL;
-    void  *model3 = NULL;
-    char   name[9] = {0};
-    size_t prefix_len = strlen(prefix);
-
-    if (!memory_try_read((uintptr_t)actor_record + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
-        body == NULL) {
-        return false;
-    }
-    if (!memory_try_read((uintptr_t)body + BODY_THING_OFFSET, &thing, sizeof(thing)) ||
-        thing == NULL) {
-        return false;
-    }
-    if (!memory_try_read((uintptr_t)thing + THING_MODEL3_OFFSET, &model3, sizeof(model3)) ||
-        model3 == NULL) {
-        return false;
-    }
-    if (prefix_len >= sizeof(name) ||
-        !memory_try_read((uintptr_t)model3, name, prefix_len)) {
-        return false;
-    }
-    return memcmp(name, prefix, prefix_len) == 0;
-}
-
-/* The placement label is not unique across the game, so a row never relies on it alone: it
- * narrows a model match to one placement within the one level the row names. */
-static bool actor_placement_is(int32_t actor_record, const char *placement)
-{
-    char name[ACTOR_PLACEMENT_SIZE + 1] = {0};
-
-    return memory_try_read((uintptr_t)actor_record + ACTOR_PLACEMENT_OFFSET, name,
-                           ACTOR_PLACEMENT_SIZE) &&
-           strcmp(name, placement) == 0;
-}
-
-static bool actor_is_conversation_participant(int32_t actor_record)
-{
-    const scene_scope_t *scope = fix_state.scope;
-    size_t               i;
-
-    if (scope == NULL) {
-        return false;
-    }
-    if (scope->placement != NULL && !actor_placement_is(actor_record, scope->placement)) {
-        return false;
-    }
-    for (i = 0; scope->prefixes[i] != NULL; ++i) {
-        if (actor_name_starts_with(actor_record, scope->prefixes[i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
 /* Remember an actor only while armed and only when their own name matches this one conversation.
  * Capped and silent past the cap, which two names with headroom should never reach. */
 static void track_actor(int32_t actor_record)
 {
     uint32_t i;
 
-    if (!fix_state.armed || actor_record == 0 || !actor_is_conversation_participant(actor_record)) {
+    if (!fix_state.armed || !scene_scope_actor_matches(fix_state.scope, actor_record)) {
         return;
     }
     for (i = 0; i < fix_state.tracked_count; ++i) {
@@ -518,17 +418,8 @@ static int32_t __cdecl hook_level_load(const char *path)
 {
     level_load_fn_t original = (level_load_fn_t)fix_state.level_load.original;
     int32_t         result;
-    size_t          i;
 
-    fix_state.scope = NULL;
-    if (path != NULL) {
-        for (i = 0; i < SCOPE_COUNT; ++i) {
-            if (strstr(path, SCOPES[i].level_file) != NULL) {
-                fix_state.scope = &SCOPES[i];
-                break;
-            }
-        }
-    }
+    fix_state.scope = scene_scope_for_level(path);
     fix_state.armed = (fix_state.scope != NULL);
     release_all_tracked_actors();
     speaker_gesture_level_changed();
@@ -894,5 +785,6 @@ void dialogue_anim_fix_install(void)
     log_info("armed only in %u scenes, %s and %s: while there, the one animation a named "
              "speaker's line was played with is held off after that line for as long as their "
              "script keeps asking for it",
-             (unsigned)SCOPE_COUNT, SCOPES[0].level_file, SCOPES[1].level_file);
+             (unsigned)scene_scope_count(), scene_scope_at(0)->level_file,
+             scene_scope_at(1)->level_file);
 }

@@ -163,6 +163,11 @@ typedef struct free_look_state {
  * the host and the caller must abandon the whole feature rather than install its other hooks. */
 bool free_look_camera_install(free_look_state_t *state);
 
+/* Whether free look's STEERING is live: installed, the camera hold taken, and the player having
+ * asked for free look. The camera hold alone is not enough, since the camera follow borrows it;
+ * free_look.c has the account. The aim detours ask this on every call. */
+bool free_look_is_steering(void);
+
 /* Stop claiming the camera: clears the arming gate and drops the wanted yaw and the body target.
  *
  * There is no restore path to get wrong. The engine's camera update rewrites the recentre rate

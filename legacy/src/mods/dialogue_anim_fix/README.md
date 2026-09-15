@@ -1,10 +1,10 @@
 # dialogue_anim_fix
 
 **Produces:** `dialogue_anim_fix.dll` -> `mods\`, from `dialogue_anim_fix.c` (the hold),
-`idle_clip.c` (the generated idle the jail row rests on), `speaker_gesture.c` (a speaker animates
-for the whole of their line), `speaker_rest.c` (a speaker left frozen after their line goes to
-their idle) and `stand_in.c` (a line spoken by an invisible script anchor is gestured by the body
-it stands for).
+`scene_scope.c` (the scenes it acts in and which actor in one is a participant), `idle_clip.c`
+(the generated idle the jail row rests on), `speaker_gesture.c` (a speaker animates for the whole
+of their line), `speaker_rest.c` (a speaker left frozen after their line goes to their idle) and
+`stand_in.c` (a line spoken by an invisible script anchor is gestured by the body it stands for).
 
 Four faults, one narrow and three wide. A character whose script parks on its talking animation and
 never leaves it: two scenes are known and the hold acts in exactly those two, on purpose; see "Why

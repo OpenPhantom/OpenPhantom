@@ -29,9 +29,5 @@ void dismemberment_install(void);
 /* Read-only, for limb_flight.c. Valid after dismemberment_install(). */
 const limb_config_t *limb_config(void);
 
-/* Walks a node's subtree for the first node that carries a mesh, or -1.
- * Shared because both the mesh-index translation and the blade-node gate need it, and it walks
- * FOREIGN data: depth and child count are capped and every pointer is checked. */
-int32_t limb_first_mesh_in_subtree(const uint8_t *node, int depth);
 
 #endif /* DISMEMBERMENT_H */

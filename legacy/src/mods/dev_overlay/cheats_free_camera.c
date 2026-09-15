@@ -30,6 +30,7 @@
 #include "floor_probe.h"
 
 #include "sim_pause.h"
+#include "freecam_world.h"
 #include "overlay_input.h"
 
 #include "common/detour.h"
@@ -447,6 +448,7 @@ static void end_flight(void)
     /* Falling edge: hand the world back. The camera itself needs no un-write, because the
      * very next updateCam call recomputes it from the player the ordinary way, since
      * nothing here touches state (+0x00) or anything else the follow logic reads. */
+    freecam_world_release();
     sim_pause_hold(SIM_PAUSE_FREE_CAMERA, false);
     if (freecam_cursor_hidden) {
         ShowCursor(TRUE);
@@ -505,6 +507,7 @@ static void begin_flight(void *view)
         }
     }
     sim_pause_hold(SIM_PAUSE_FREE_CAMERA, true);
+    freecam_world_apply();      /* the world runs under that hold if the switch says so */
     QueryPerformanceFrequency(&freecam_perf_frequency);
     {
         LARGE_INTEGER now;
@@ -811,6 +814,7 @@ static void __cdecl hook_camera_update(void)
     if (exit_key_pressed()) {
         return;   /* end_flight runs on the NEXT call to this hook */
     }
+    freecam_world_apply();      /* every frame, so the switch takes mid flight too */
 
     if (is_game_foreground()) {
         float dt = flight_seconds();
@@ -874,6 +878,7 @@ bool install_freecam(void)
 
     own_state.camera_update_original = (camera_update_fn_t)own_state.camera_update_detour.original;
     own_state.camera_view_address    = (uintptr_t)view_address;
+    freecam_world_load();
 
     log_info("free camera: pausing through sim_pause, camera object pointer at %08X, update "
              "chained at %08X; WASD moves along the view, mouse looks, E/Q move vertically",

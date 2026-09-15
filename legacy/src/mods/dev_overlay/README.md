@@ -146,7 +146,8 @@ answer: this one removes the fog, the second says how thick it is, and the third
 measured against. Split across two groups they read as unrelated.
 
 **Free camera is drawn by its own group**, directly under the cheats: its teleport key, the cheat
-itself and the "how to fly" fold, in that order, because read top to bottom they are the steps.
+itself, the "Animations freeze while paused" and "World runs while flying" switches and the "how
+to fly" fold, in that order, because read top to bottom they are the steps.
 The cheat is still `CHEATS_OWN_FREECAM` in `cheats_openphantom.c`; the cheats group counts to one
 short of it and the jump-boost scale takes its numeric slot, which puts the scale directly after
 jump boost's own toggle.
@@ -423,6 +424,34 @@ A fallback that always means the same thing is worth more than one more thing to
 Alt+F4 still closes the game, because Alt is not read here. With no key bound the cheat refuses
 to switch on at all.
 
+**Holding the animations.** The pause skips the substeps and nothing else, and the puppet tracks
+are not stepped by the substeps: bapobj's draw pass advances every object's four tracks by the
+frame delta on each frame it draws them. So behind the panel and under the camera every walk
+cycle ran on the spot and every idle swayed. The engine's own pause menu stops that through a
+draw latch of its own, `g_objDrawPaused`, written by the one-line pair `bapobj_drawPause` and
+`bapobj_drawResume` (`0x00411019`, `0x0041100A`), which the draw pass tests before it steps a
+track and which also holds the interpolation alpha at its last value; `sim_pause` resolves the
+pair as one pattern, reads the cell out of both stores, and writes it beside the pause flag
+whenever a pause is in force, with the same capture and restore. The "Animations freeze while
+paused" row in the Free camera group is the switch, off as shipped so the pause keeps the look
+it has always had, and kept as `[dev_overlay] PauseFreezesAnimation`. It and "World runs while
+flying" are one or the other: switching either on switches the other off, since a world that
+runs is not paused and there is nothing for the freeze to hold. An object the engine flags to
+animate while paused still does, as it does behind the pause menu. Played 2026-09-15: with the
+freeze on, nobody walks on the spot under the camera; with the world running, the crowd carries
+on while the camera flies and the player stands.
+
+**Letting the world run.** The flight holds the simulation, and a held world is the wrong thing
+for watching a fight or a crowd from where the camera can go, so the group's third row, "World
+runs while flying", lets it carry on under the camera: `freecam_world.c` asks `sim_pause` to let
+the simulation run under the holders it keeps (`sim_pause_let_run`, which leaves the holders'
+own accounting alone, so the flight's end and the panel's close still put the right value back)
+and takes the player's input through the same holders the panel uses (`input_freeze_hold`), so
+the flight keys steer the camera alone and the player stands where they were left while
+everyone else moves. It is a setting, kept as `[dev_overlay] FreeCameraWorldRuns` and off as
+shipped, applied on every frame of a flight so it takes mid flight too, and released with the
+flight.
+
 **Hiding the panel.** While the camera is flying the panel cannot be closed, because it is what
 holds the game still under the camera (see below). The Cheatmenu's open key and Escape hide it
 instead, so the picture is the camera's alone, and the same keys bring it back; it comes back by
@@ -440,6 +469,39 @@ follows where the pointer actually **landed** rather than where it was sent, bec
 refuse the position asked for and a stale anchor then measures the same refusal for ever.
 Reported from a tester's machine and confirmed fixed there. It was never reproduced here, which
 is the point: the other writer it collides with is not something every machine has.
+
+### Level selection: the skip and the level a new game starts at
+
+A group of its own, directly under the cheats, holding the two rows about which level is
+played: "Skip to next level (debug)", which was the tail of the cheats, and "New game starts
+at", whose chip shows the choice as the number and the level's file stem, `6 espa`, and whose
+press opens a list of the eleven levels in the game's order, the chosen one lit, closing on a
+pick, the same shape as the window group's size list. Picking level one writes the setting
+as `0`, the game's own new game. It exists for modding: a save game carries the level it was
+made in, so a modded level file cannot be entered from a save of the unmodded game, and the
+shipped saves are all of that game. A level has to be entered as itself, from a new game, and
+this is how a new game gets there.
+
+The engine has the mechanism already. `level <n>` on the command line sets the front end's
+"start at" index, and New Game loads that row, plays its intro movie, shows its title and stamps
+the checkpoint as reaching it in play would. What it cannot do is survive the front end: the
+campaign loop zeroes the index at the end of every level, before the front end comes back, so a
+value set from inside the game is gone by the time New Game reads it, and the panel is not drawn
+in the front end. So `start_level.c` sits on `campaign_loadLevel` (`0x0043F70A`, the same site
+dialogue_anim_fix detours, chained) and redirects the one load that is a new game: the campaign
+index reads 0, the level outcome is below 4 (4 to 10 are the fail variants, so a restart of
+level one after a death is not a new game), the restore flag is clear (a save being loaded copies
+its own flow block over the live one first, and that block carries the flag set), and the path
+is the table's own first row. Then the campaign index is written to the chosen row and the
+original is called with that row's path, so the movie, the title and the checkpoint after the
+load all read the new index. The three cells and the table come out of three data sites in
+`campaign_run`, each operand read back and the two readings of a cell made to agree:
+`0x0043EBD6` (the restart), `0x0043EC59` (the New Game load) and `0x0043ED6B` (the level loop).
+
+What the player has on arrival is what a new campaign gives plus what the level's own script
+hands out, not the kit the shipped saves carry from the levels before. Kept as `[dev_overlay]
+NewGameStartsAt`, off as shipped. Played 2026-09-15: Mos Espa picked from the list, quit to
+the front end, New Game, and the level opened with its own movie and title.
 
 ## The eleven original toggle codes
 
@@ -900,6 +962,9 @@ logged. Closing the list first and then pressing the row always worked, so this 
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
 | `DevMenuSize` | `0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
 | `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice rather than being edited here. |
+| `NewGameStartsAt` | `0` | The level a new game starts at, `1` to `11` in the game's order, `0` for its own first. Only a new game's first load is redirected. Written by the Level selection group's "New game starts at" list. |
+| `PauseFreezesAnimation` | `0` | Whether a pause, the panel open or the free camera flying, also holds the animations on the engine's own draw latch. Written by the "Animations freeze while paused" row. |
+| `FreeCameraWorldRuns` | `0` | Whether the world keeps moving under the free camera while it flies, with the player's own input held. Written by the "World runs while flying" row. One or the other of this and the freeze. |
 
 ## Limitations
 

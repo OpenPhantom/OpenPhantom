@@ -38,11 +38,13 @@ static void open_the_groups_above(void)
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_LEVELS);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_DISMEMBER);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + 1u,
-             "the cheats, the free camera with its fold shut and the dismemberment switch are on "
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u,
+             "the cheats, the level selection with its list shut, the free camera with its fold "
+             "shut and the dismemberment switch are on "
              "screen, with every settings heading folded below them");
 }
 
@@ -55,7 +57,7 @@ static void test_utilities_group(void)
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_UTILITIES);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + 1u + OVERLAY_UTILITIES_ROW_COUNT,
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u + OVERLAY_UTILITIES_ROW_COUNT,
              "every heading, the cheats, free camera and dismemberment groups\' own rows, and "
              "both rows of this one under the fourth heading");
     ut_check(overlay_model_row(DIS_ROW(1), &row) && row.kind == OVERLAY_ROW_GROUP,
@@ -129,7 +131,8 @@ static void test_picture_group(void)
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_PICTURE);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + 1u + OVERLAY_UTILITIES_ROW_COUNT + 2u +
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u + OVERLAY_UTILITIES_ROW_COUNT +
+                 2u +
                  OVERLAY_PICTURE_ROW_COUNT,
              "open, its rows sit between the utilities and the fog heading");
 
@@ -206,7 +209,8 @@ static void test_fog_group(void)
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FOG);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + 1u + OVERLAY_UTILITIES_ROW_COUNT + 2u +
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u + OVERLAY_UTILITIES_ROW_COUNT +
+                 2u +
                  OVERLAY_PICTURE_ROW_COUNT + OVERLAY_FOG_ROW_COUNT,
              "open, its four rows sit between the picture and the enhanced input heading");
 
@@ -239,7 +243,8 @@ static void test_controls_group(void)
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_CONTROLS);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + 1u + OVERLAY_UTILITIES_ROW_COUNT + 2u +
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u + OVERLAY_UTILITIES_ROW_COUNT +
+                 2u +
                  OVERLAY_PICTURE_ROW_COUNT + OVERLAY_FOG_ROW_COUNT + OVERLAY_CONTROLS_FIXED_ROWS,
              "open, its eight rows sit between the fog and the window group\'s heading");
 

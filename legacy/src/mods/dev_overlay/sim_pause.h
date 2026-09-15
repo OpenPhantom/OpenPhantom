@@ -41,6 +41,19 @@
  * So the cell has exactly one writer now, and callers say who they are. The value underneath is
  * captured when the FIRST holder takes it and put back when the LAST one lets go, which keeps the
  * original promise above and makes it hold for any number of holders rather than only one.
+ *
+ * The animations are a second cell. The puppet tracks are not advanced by the simulation but by
+ * the draw: bapobj's draw pass steps every object's four tracks by the frame delta each frame it
+ * draws them, so with the substeps skipped every walk cycle still runs, on the spot, and every
+ * idle sways. The engine's own pause menu stops that through a latch of its own, g_objDrawPaused
+ * (written by the one-line pair bapobj_drawPause and bapobj_drawResume at 0x00411019 and
+ * 0x0041100A, set from the module's pause message and cleared from its resume), which the draw
+ * pass tests before stepping a track and which also holds the interpolation alpha at its last
+ * value, so the world keeps its exact sub-frame position. This writes the same latch beside the
+ * simulation flag while the pause is in force, when asked to (sim_pause_set_freeze_animation,
+ * off as shipped),
+ * with the same capture and restore as the flag's; an object flagged to animate while paused
+ * still does, as the engine intends for it.
  */
 #ifndef DEV_OVERLAY_SIM_PAUSE_H
 #define DEV_OVERLAY_SIM_PAUSE_H
@@ -66,5 +79,20 @@ typedef enum sim_pause_holder {
  * while any holder has it, and the value from before the first one is restored when the last
  * lets go. */
 void sim_pause_hold(sim_pause_holder_t who, bool held);
+
+/* Whether a pause also stops the animations, through the engine's own draw latch. Off by
+ * default; the row in the Free camera group and [dev_overlay] PauseFreezesAnimation drive it.
+ * Takes effect at once on a pause already in force. */
+void sim_pause_set_freeze_animation(bool freeze);
+bool sim_pause_freeze_animation(void);
+
+/* Whether the draw latch resolved, for the row that has to show why it cannot act. */
+bool sim_pause_freeze_animation_is_available(void);
+
+/* Lets the simulation run under the holders, or stops it again. The free camera's "world runs"
+ * switch: the holders stay as they are, so the accounting above is untouched and the flight's
+ * end and the panel's close still put the right value back; only what the cell says while a
+ * holder has it changes. Idempotent, so a caller may drive it every frame. */
+void sim_pause_let_run(bool run);
 
 #endif /* DEV_OVERLAY_SIM_PAUSE_H */

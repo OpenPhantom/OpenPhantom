@@ -341,6 +341,13 @@ set(OVERLAY_MODEL_SOURCES
     dev_overlay/cheats_fall_consequences.c
     dev_overlay/cheats_noclip.c
     dev_overlay/cheats_free_camera.c
+    dev_overlay/freecam_world.c
+    dev_overlay/freeze_anim_row.c
+    # The start level: its sites resolve nothing in a test process, so its row reads
+    # unavailable, which is the case the panel has to show.
+    dev_overlay/start_level.c
+    dev_overlay/start_level_row.c
+    dev_overlay/overlay_levels.c
     dev_overlay/cheats_no_fog.c
     # Both jump boost and the free camera ask the same "is there a floor under this" question,
     # so the module that owns it has to be linked beside them. It resolves nothing in a test
@@ -353,6 +360,9 @@ set(OVERLAY_MODEL_SOURCES
     # so the owner of that cell has to be linked in beside it. Nothing here calls into it: without a
     # resolved site every entry point returns immediately, as a test process wants.
     dev_overlay/sim_pause.c
+    # The free camera holds the player's input while the world runs under it, through the same
+    # holders the panel uses. Nothing here flies, so its detours are never placed.
+    dev_overlay/input_freeze.c
 )
 add_unit_test(overlay_model dev_overlay ${OVERLAY_MODEL_SOURCES})
 add_unit_test(overlay_groups dev_overlay ${OVERLAY_MODEL_SOURCES})

@@ -393,6 +393,11 @@ add_engine_fix(dev_overlay
     cheats_noclip.c
     cheats_free_camera.c
     cheats_no_fog.c
+    freecam_world.c
+    freeze_anim_row.c
+    start_level.c
+    start_level_row.c
+    overlay_levels.c
     floor_probe.c
 )
 

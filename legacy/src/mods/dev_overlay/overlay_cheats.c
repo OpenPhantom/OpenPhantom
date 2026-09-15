@@ -7,8 +7,8 @@
 
 #include "common/text.h"
 
-/* The cheats group: the rows that line up with cheats_own_id_t, and the two that do not (the
- * jump boost scale and the level skip). A slot here is its id. */
+/* The cheats group: the rows that line up with cheats_own_id_t, and the one that does not, the
+ * jump boost scale. A slot here is its id. */
 void overlay_cheats_row(uint32_t id, const char *editing_text, overlay_row_t *out)
 {
     if (out == NULL) {
@@ -32,16 +32,6 @@ void overlay_cheats_row(uint32_t id, const char *editing_text, overlay_row_t *ou
         out->value[sizeof out->value - 1] = '\0';
         return;
     }
-    if (id == END_LEVEL_ROW_ID) {
-        out->kind = OVERLAY_ROW_ACTION;
-        /* It HAS been played since this row was added, so the label no longer says it
-           has not. It stays marked as a debug tool, which is still true: it is a jump to the
-           next level with none of the bookkeeping the game itself does on the way out of
-           one. */
-        overlay_row_label(out->label, "Skip to next level (debug)");
-        out->available = cheats_openphantom_end_level_is_available();
-        return;
-    }
     if (id >= OVERLAY_CHEATS_ROW_COUNT) {
         overlay_row_label(out->label, "");    /* past the end; a blank shows the caller's bug */
         out->available = false;
@@ -58,9 +48,6 @@ void overlay_cheats_row(uint32_t id, const char *editing_text, overlay_row_t *ou
 
 bool overlay_cheats_toggle(uint32_t id)
 {
-    if (id == END_LEVEL_ROW_ID) {
-        return cheats_openphantom_end_level_invoke();
-    }
     if (id == JUMP_SCALE_ROW_ID || id >= OVERLAY_CHEATS_ROW_COUNT) {
         return false;    /* the typed row is the model's own business; past the end is nothing */
     }

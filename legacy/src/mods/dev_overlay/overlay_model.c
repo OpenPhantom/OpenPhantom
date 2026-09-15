@@ -49,6 +49,7 @@
 #include "overlay_fog.h"
 #include "overlay_framerate.h"
 #include "overlay_freecam.h"
+#include "overlay_levels.h"
 #include "overlay_menu_extras.h"
 #include "overlay_picture.h"
 #include "overlay_row_ids.h"
@@ -80,6 +81,7 @@ static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_TOGGLES */
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_LEVELS    */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_FREECAM   */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_DISMEMBER */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
@@ -169,6 +171,7 @@ void overlay_model_reset(void)
     model.row_count = 0;
     model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
     overlay_freecam_reset();             /* the "how to fly" fold, closed like the groups */
+    overlay_levels_reset();              /* and the level list */
     overlay_menu_extras_reset();         /* and the "what this adds" fold, the same */
     overlay_controls_reset();            /* and the "what these do" fold */
     overlay_window_reset();              /* and the window group's size list, same reason */
@@ -182,6 +185,7 @@ void overlay_model_reset(void)
      * five cheats with a settings row appended and settings kept arriving, until a reader had to
      * scroll past invincibility to reach the draw distance. */
     model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_LEVELS].title = "Level selection";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_FREECAM].title = "Free camera";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_DISMEMBER].title = "Dismemberment";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Cheatmenu options";
@@ -338,15 +342,17 @@ static uint32_t source_count(overlay_group_t group)
     case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
         return OVERLAY_FRAMERATE_ROW_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM_FREECAM:
-        return overlay_freecam_row_count();   /* three, and the fold's lines while it is open */
+        return overlay_freecam_row_count();   /* five, and the fold's lines while it is open */
+    case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
+        return overlay_levels_row_count();    /* two, and the list while it is open */
     case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
         return OVERLAY_DISMEMBER_ROW_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
         return overlay_menu_extras_row_count();   /* two, and the fold's lines while open */
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* Every cheat but free camera, the jump-boost scale and the level skip; the numbering
-         * is in overlay_row_ids.h. */
+        /* Every cheat but free camera and the jump-boost scale; the numbering is in
+         * overlay_row_ids.h. */
         return OVERLAY_CHEATS_ROW_COUNT;
     }
 }
@@ -428,6 +434,10 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         out->id = DISMEMBER_FIRST_ID + id;
         overlay_dismember_row(id, out);
         return;
+    case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
+        out->id = LEVELS_FIRST_ID + id;
+        overlay_levels_row(id, out);
+        return;
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
         out->id = MENU_EXTRAS_FIRST_ID + id;
         overlay_menu_extras_row(id, out);
@@ -480,7 +490,7 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
         /* A slot here is its id, and the jump-boost scale is the one row the model's own typing
          * state can name. */
         out->id = id;
-        overlay_cheats_row(id, (model.editing_value && model.editing_value_row == JUMP_SCALE_ROW_ID)
+        overlay_cheats_row(id, (model.editing_value && model.editing_value_row == id)
                                    ? model.value_edit_buf : NULL, out);
         return;
     }
@@ -622,6 +632,8 @@ bool overlay_model_activate(uint32_t index)
         return overlay_freecam_toggle(row.id - FREECAM_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
         return overlay_dismember_toggle(row.id - DISMEMBER_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
+        return overlay_levels_toggle(row.id - LEVELS_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
         return overlay_menu_extras_toggle(row.id - MENU_EXTRAS_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
@@ -637,8 +649,7 @@ bool overlay_model_activate(uint32_t index)
         return cheats_original_actions_invoke((cheats_action_id_t)row.id);
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* A cheat or the level skip, told apart by id in the group's own file. The typed row
-         * was taken above. */
+        /* A cheat; the typed row was taken above. */
         return overlay_cheats_toggle(row.id);
     }
 }
@@ -659,6 +670,9 @@ void overlay_model_capture_hotkey(int32_t virtual_key)
     model.capturing_hotkey = false;
     /* Tested from the HIGHEST base downwards. These are open-ended ranges, so asking about
      * Utilities first would answer yes for a Window row as well and bind the wrong setting. */
+    if (row >= LEVELS_FIRST_ID) {
+        return;     /* nothing there binds a key */
+    }
     if (row >= FREECAM_FIRST_ID) {
         cheats_openphantom_freecam_set_hotkey(virtual_key);
         return;
@@ -732,6 +746,9 @@ void overlay_model_value_commit(void)
     }
 
     /* Highest base first, for the reason given at the matching test in the hotkey path. */
+    if (row >= LEVELS_FIRST_ID) {
+        return;     /* nothing there is typed into */
+    }
     if (row >= FOG_FIRST_ID) {
         (void)overlay_fog_commit(row - FOG_FIRST_ID, model.value_edit_buf);
         return;

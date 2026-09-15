@@ -2,6 +2,8 @@
 #include "overlay_freecam.h"
 
 #include "cheats_openphantom.h"
+#include "freecam_world.h"
+#include "freeze_anim_row.h"
 #include "overlay_key_name.h"
 #include "overlay_row_fill.h"
 
@@ -96,6 +98,22 @@ void overlay_freecam_row(uint32_t slot, bool capturing, overlay_row_t *out)
         }
         return;
 
+    case OVERLAY_FREECAM_FREEZE_SLOT:
+        /* The pause's own look: on, the animations hold with it; off, as shipped, they run on
+         * the spot as they did. A setting, so never gated on the camera being on. */
+        overlay_row_label(out->label, "Animations freeze while paused");
+        out->on = freeze_anim_row_get();
+        out->available = freeze_anim_row_available();
+        return;
+
+    case OVERLAY_FREECAM_WORLD_SLOT:
+        /* A setting, not a cheat: it says what the next flight does, so it is never gated on
+         * the camera being on, and it writes the settings file like the Utilities rows do. */
+        overlay_row_label(out->label, "World runs while flying");
+        out->on = freecam_world_runs();
+        out->available = cheats_openphantom_is_available(CHEATS_OWN_FREECAM);
+        return;
+
     case OVERLAY_FREECAM_SUMMARY_SLOT:
         /* A fold on one row, the same shape as a group's own expand/collapse but scoped to the
          * lines under it. The marker is a character in the label, so the drawer needs nothing
@@ -133,6 +151,20 @@ bool overlay_freecam_toggle(uint32_t slot)
     switch (slot) {
     case OVERLAY_FREECAM_TOGGLE_SLOT:
         return cheats_openphantom_toggle(CHEATS_OWN_FREECAM);
+    case OVERLAY_FREECAM_FREEZE_SLOT:
+        /* One or the other: a world that runs under the camera is not paused, so there is
+         * nothing for the freeze to hold, and a row reading ON with no effect is worse than a
+         * row that goes off. Switching either on switches the other off; off leaves both off. */
+        if (!freeze_anim_row_get()) {
+            freecam_world_set_runs(false);
+        }
+        return freeze_anim_row_set(!freeze_anim_row_get());
+    case OVERLAY_FREECAM_WORLD_SLOT:
+        if (!freecam_world_runs()) {
+            (void)freeze_anim_row_set(false);
+        }
+        freecam_world_set_runs(!freecam_world_runs());
+        return true;
     case OVERLAY_FREECAM_SUMMARY_SLOT:
         freecam.fold_open = !freecam.fold_open;
         return true;

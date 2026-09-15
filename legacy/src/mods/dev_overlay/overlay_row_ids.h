@@ -19,6 +19,7 @@
 #include "overlay_dismember.h"
 #include "overlay_fog.h"
 #include "overlay_framerate.h"
+#include "overlay_levels.h"
 #include "overlay_menu_extras.h"
 #include "overlay_freecam.h"
 #include "overlay_model.h"
@@ -45,12 +46,10 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
                "JUMP_SCALE_ROW_ID to land right after its own toggle row");
 #define JUMP_SCALE_ROW_ID ((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u)
 
-/* "Skip to next level", after the scale and last. */
-#define END_LEVEL_ROW_ID (JUMP_SCALE_ROW_ID + 1u)
-
-/* The rows the cheats group draws: every cheat but free camera, the scale and the level skip.
- * Named because the ceiling below counts it too. */
-#define OVERLAY_CHEATS_ROW_COUNT (END_LEVEL_ROW_ID + 1u)
+/* The rows the cheats group draws: every cheat but free camera, and the scale, last. The level
+ * skip was the tail of this group until the Level selection group took it, with the level a new
+ * game starts at. Named because the ceiling below counts it too. */
+#define OVERLAY_CHEATS_ROW_COUNT (JUMP_SCALE_ROW_ID + 1u)
 
 /* The utilities group's own ids, numbered from a base clear of every id the cheats group above
  * can produce. */
@@ -90,9 +89,10 @@ _Static_assert(PICTURE_FIRST_ID + OVERLAY_PICTURE_ROW_COUNT <= FOG_FIRST_ID,
                "the Enhanced resolution rows have grown into the Fog group's ids: raise "
                "FOG_FIRST_ID");
 
-/* The free camera's group: the teleport key, the cheat itself and the "how to fly" fold with its
- * lines. Its ids are its slots, because the fold's lines are the last rows of the group and so
- * the tail of its id space is also the tail of the screen; nothing there needs remapping. */
+/* The free camera's group: the teleport key, the cheat itself, the two switches and the "how to
+ * fly" fold with its lines. Its ids are its slots, because the fold's lines are the last rows of
+ * the group and so the tail of its id space is also the tail of the screen; nothing there needs
+ * remapping. */
 #define FREECAM_FIRST_ID 320u
 _Static_assert(FOG_FIRST_ID + OVERLAY_FOG_ROW_COUNT <= FREECAM_FIRST_ID,
                "the Fog rows have grown into the Free camera group's ids: raise "
@@ -110,13 +110,22 @@ _Static_assert(DISMEMBER_FIRST_ID + OVERLAY_DISMEMBER_ROW_COUNT <= MENU_EXTRAS_F
                "the Dismemberment rows have grown into the In game options extras group's ids: "
                "raise MENU_EXTRAS_FIRST_ID");
 
-/* The ten groups on the OpenPhantom tab, every one of them open, the fold open and a full size
- * list: ten headings and every row each group can draw. This is the number OVERLAY_ROWS_MAX has
- * to cover, and the Original tab is far smaller. It once counted three groups and left the frame
- * rate group out, seven rows short of what overlay_model_rebuild() builds; the array still held
- * them, so nothing was lost, but the assert was guarding a smaller number than the real one. */
+/* The level selection group: the skip, the start level and its list. Its ids are its slots,
+ * the list's entries being the last rows of the group. */
+#define LEVELS_FIRST_ID 416u
+_Static_assert(MENU_EXTRAS_FIRST_ID + OVERLAY_MENU_EXTRAS_ROWS_MAX <= LEVELS_FIRST_ID,
+               "the In game options extras rows have grown into the Level selection group's "
+               "ids: raise LEVELS_FIRST_ID");
+
+/* The eleven groups on the OpenPhantom tab, every one of them open, the folds open and a full
+ * size list: eleven headings and every row each group can draw. This is the number
+ * OVERLAY_ROWS_MAX has to cover, and the Original tab is far smaller. It once counted three
+ * groups and left the frame rate group out, seven rows short of what overlay_model_rebuild()
+ * builds; the array still held them, so nothing was lost, but the assert was guarding a smaller
+ * number than the real one. */
 enum {
-    OPENPHANTOM_TAB_ROWS_MAX = 10u + OVERLAY_CHEATS_ROW_COUNT + OVERLAY_FREECAM_ROWS_MAX +
+    OPENPHANTOM_TAB_ROWS_MAX = 11u + OVERLAY_CHEATS_ROW_COUNT + OVERLAY_LEVELS_ROWS_MAX +
+                               OVERLAY_FREECAM_ROWS_MAX +
                                OVERLAY_DISMEMBER_ROW_COUNT + OVERLAY_MENU_EXTRAS_ROWS_MAX +
                                OVERLAY_UTILITIES_ROW_COUNT + OVERLAY_PICTURE_ROW_COUNT +
                                OVERLAY_FOG_ROW_COUNT + OVERLAY_CONTROLS_ROWS_MAX +

@@ -27,7 +27,10 @@
 #include "overlay_controls.h"
 #include "overlay_dismember.h"
 #include "overlay_fog.h"
+#include "freecam_world.h"
+#include "freeze_anim_row.h"
 #include "overlay_freecam.h"
+#include "overlay_levels.h"
 #include "overlay_menu_extras.h"
 #include "overlay_model.h"
 #include "overlay_picture.h"
@@ -151,15 +154,14 @@ static void test_folding(void)
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS,
-             "the OpenPhantom tab holds ten groups now, cheats, free camera, dismemberment, "
-             "Cheatmenu options, in game options extras, enhanced resolution, fog, enhanced "
-             "input, window and frame rate, and all of them start folded");
+             "the OpenPhantom tab holds eleven groups now, cheats, level selection, free camera, "
+             "dismemberment, Cheatmenu options, in game options extras, enhanced resolution, fog, "
+             "enhanced input, window and frame rate, and all of them start folded");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT,
-             "unfolding the cheats shows its heading, this project's cheats but free camera, the "
-             "jump-boost scale row and the skip-to-next-level action, with the free camera "
-             "heading still folded below them");
+             "unfolding the cheats shows its heading, this project's cheats but free camera and "
+             "the jump-boost scale row, with the level selection heading still folded below them");
     ut_check(overlay_model_row(1, &row) && row.kind == OVERLAY_ROW_CHEAT,
              "the row under the heading is a cheat");
     ut_check(!row.available,
@@ -235,28 +237,52 @@ static void test_edit_outside_capture(void)
              "and the stored scale never moved, since none of the four had a capture to act on");
 }
 
-static void test_end_level_row(void)
+static void test_cheats_end(void)
 {
-    ut_section("skip to next level, the one action row in this group");
+    ut_section("the scale is the last row of the cheats");
     ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 1u, &row) &&
-                 row.kind == OVERLAY_ROW_ACTION,
-             "an action rather than a toggle, and the last row the group holds");
-    ut_check(!row.available,
-             "unavailable here, since the cell it writes is resolved by the original cheat table "
-             "and nothing resolved in this test");
+                 row.kind == OVERLAY_ROW_GROUP,
+             "the row after the scale is the next group's heading: the level skip that used to "
+             "sit here is the Level selection group's now");
 }
 
+static void test_levels_group(void)
+{
+    ut_section("the level selection group, directly under the cheats");
+    ut_check(overlay_model_row(1u + OVERLAY_CHEATS_ROW_COUNT, &row) &&
+                 row.kind == OVERLAY_ROW_GROUP && strcmp(row.label, "Level selection") == 0,
+             "its heading follows the cheats group's last row, folded");
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_LEVELS);
+    overlay_model_rebuild();
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u,
+             "open, it holds two rows with its list shut: the skip and the start level");
+    ut_check(overlay_model_row(LVL_ROW(0), &row) && row.kind == OVERLAY_ROW_ACTION &&
+                 strcmp(row.label, "Skip to next level (debug)") == 0,
+             "the skip first, an action, as it was at the tail of the cheats");
+    ut_check(!row.available, "unavailable here, its site unresolved");
+    ut_check(overlay_model_row(LVL_ROW(1), &row) && row.kind == OVERLAY_ROW_ACTION &&
+                 strcmp(row.label, "New game starts at") == 0,
+             "the start level second, the row that opens the list");
+    ut_check(!row.available, "unavailable too, with the campaign sites unresolved");
+    ut_check(strcmp(row.value, "Off") == 0, "and off as shipped: a new game starts where it did");
+    ut_check(!overlay_model_activate(LVL_ROW(1)),
+             "an unavailable row does not open its list");
+    ut_check(overlay_model_row(LVL_ROW(2), &row) && row.kind == OVERLAY_ROW_GROUP &&
+                 strcmp(row.label, "Free camera") == 0,
+             "and the free camera heading comes straight after");
+}
 
 static void test_freecam_group(void)
 {
-    ut_section("the free camera group, directly under the cheats");
-    ut_check(overlay_model_row(1u + OVERLAY_CHEATS_ROW_COUNT, &row) &&
+    ut_section("the free camera group, directly under the level selection");
+    ut_check(overlay_model_row(LVL_ROW(OVERLAY_LEVELS_ENTRY_FIRST), &row) &&
                  row.kind == OVERLAY_ROW_GROUP && strcmp(row.label, "Free camera") == 0,
-             "its heading follows the cheats group's last row, folded");
+             "its heading follows the level selection group's last row, folded");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u,
-             "open, it holds three rows with its fold shut: the key, the cheat and the fold");
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u,
+             "open, it holds five rows with its fold shut: the key, the cheat, the two switches "
+             "and the fold");
 
     ut_check(overlay_model_row(FC_ROW(0), &row) && row.kind == OVERLAY_ROW_HOTKEY,
              "the teleport key first, so the rows read as the steps they are: set a key, then "
@@ -275,13 +301,34 @@ static void test_freecam_group(void)
     ut_check(!row.available,
              "and is unavailable with no teleport key bound, whatever its site did");
 
-    ut_check(overlay_model_row(FC_ROW(2), &row) && row.kind == OVERLAY_ROW_INFO,
+    ut_check(overlay_model_row(FC_ROW(2), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+                 strcmp(row.label, "Animations freeze while paused") == 0,
+             "the animation switch under the cheat: the pause's own look");
+    ut_check(!row.on, "off as shipped: a pause keeps the look it had, the idles moving");
+    ut_check(!row.available,
+             "unavailable here, where the draw latch it writes resolved nothing");
+
+    ut_check(overlay_model_row(FC_ROW(3), &row) && row.kind == OVERLAY_ROW_CHEAT &&
+                 strcmp(row.label, "World runs while flying") == 0,
+             "the world switch next, a setting for the next flight");
+    ut_check(!row.on, "off as shipped: a flight holds the world still unless asked otherwise");
+    ut_check(!row.available,
+             "unavailable here with free camera's own site unresolved, as the cheat is");
+
+    /* One or the other. Neither row is available in this process, its site unresolved, so the
+       model refuses the click before the rule runs; the rule itself is one line each way in
+       overlay_freecam_toggle(). What is pinned here is the shipped state: the freeze on and
+       the world held, never both on. */
+    ut_check(!freeze_anim_row_get() && !freecam_world_runs(),
+             "as shipped both are off: the world is held and the animations run on the spot");
+
+    ut_check(overlay_model_row(FC_ROW(4), &row) && row.kind == OVERLAY_ROW_INFO,
              "the how-to-fly fold last");
     ut_check(row.available, "always available, because it is a note and not gated behind any "
                             "site");
     ut_check(strcmp(row.label, "+ How free camera flies") == 0,
              "closed by default, marked with a plus the same way a group would be");
-    ut_check(overlay_model_row(FC_ROW(3), &row) && row.kind == OVERLAY_ROW_GROUP &&
+    ut_check(overlay_model_row(FC_ROW(5), &row) && row.kind == OVERLAY_ROW_GROUP &&
                  strcmp(row.label, "Dismemberment") == 0,
              "and the dismemberment heading comes straight after");
 }
@@ -291,7 +338,7 @@ static void test_dismember_group(void)
     ut_section("the dismemberment group, one switch under its own heading");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_DISMEMBER);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + 1u,
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u,
              "open, it holds the one row");
     ut_check(overlay_model_row(DIS_ROW(0), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Lightsaber dismemberment") == 0,
@@ -312,42 +359,42 @@ static void test_dismember_group(void)
 static void test_open_freecam_fold(void)
 {
     ut_section("opening the how-to-fly fold");
-    ut_check(overlay_model_activate(FC_ROW(2)),
+    ut_check(overlay_model_activate(FC_ROW(4)),
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u + OVERLAY_FREECAM_LINE_COUNT,
-             "open, the free camera group holds the key, the cheat, the fold's own summary and its "
-             "eleven lines, with the utilities heading below them");
-    ut_check(overlay_model_row(FC_ROW(2), &row) &&
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + OVERLAY_FREECAM_LINE_COUNT,
+             "open, the free camera group holds the key, the cheat, the two switches, the fold's "
+             "own summary and its eleven lines, with the utilities heading below them");
+    ut_check(overlay_model_row(FC_ROW(4), &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
     /* Directly under the summary that revealed them, which is the only place a reader looks for
        them; they are the last rows of the group, so a slot there is its id. */
-    ut_check(overlay_model_row(FC_ROW(3), &row) &&
+    ut_check(overlay_model_row(FC_ROW(5), &row) &&
                  row.kind == OVERLAY_ROW_INFO &&
                  strcmp(row.label, "    Needs a teleport key set first") == 0,
              "the first line sits immediately below the summary");
-    ut_check(!overlay_model_activate(FC_ROW(3)),
+    ut_check(!overlay_model_activate(FC_ROW(5)),
              "but a line itself does nothing when clicked; only the summary is interactive");
     /* Eleven lines, not seven: the three that describe hiding the panel and the two ways out are
        each a sentence too long to fit the panel's width, so each is written as a line plus an
        indented continuation instead of being allowed to run off the edge. The count is what this
        pins down: a line added without the rows below it moving is the failure that would
        otherwise go unseen. */
-    ut_check(overlay_model_row(FC_ROW(8), &row) &&
+    ut_check(overlay_model_row(FC_ROW(10), &row) &&
                  strcmp(row.label, "    Your Cheatmenu open key or Escape") == 0,
              "the sixth line names the key that hides the panel while the camera flies");
-    ut_check(overlay_model_row(FC_ROW(12), &row) &&
+    ut_check(overlay_model_row(FC_ROW(14), &row) &&
                  strcmp(row.label, "    F4 ends the flight and leaves") == 0,
              "the tenth line names the other way out, the one that leaves the player put");
-    ut_check(overlay_model_row(FC_ROW(13), &row) &&
+    ut_check(overlay_model_row(FC_ROW(15), &row) &&
                  strcmp(row.label, "      the player where they were") == 0,
              "and the eleventh is its continuation, indented past the line it finishes");
 
     /* The heading that was below the summary is still below the lines. A fold that reordered the
        rows around it would be worse than one that does not open. */
-    ut_check(overlay_model_row(FC_ROW(14), &row) && row.kind == OVERLAY_ROW_GROUP &&
+    ut_check(overlay_model_row(FC_ROW(16), &row) && row.kind == OVERLAY_ROW_GROUP &&
                  strcmp(row.label, "Dismemberment") == 0,
              "the dismemberment heading is pushed down the screen by the eleven lines");
 }
@@ -355,12 +402,13 @@ static void test_open_freecam_fold(void)
 static void test_close_freecam_fold(void)
 {
     ut_section("closing the how-to-fly fold again");
-    ut_check(overlay_model_activate(FC_ROW(2)),
+    ut_check(overlay_model_activate(FC_ROW(4)),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 3u,
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u,
              "its eleven lines are gone again, back to costing one row like any other");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM);
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_LEVELS);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT,
              "and the group folds back to its heading like any other");
@@ -493,7 +541,7 @@ static void test_labels_and_chips_fit(void)
 
     /* And with every fold open: their lines are the longest text in the panel and the only rows
        that are sometimes absent. */
-    (void)overlay_model_activate(FC_ROW(2));
+    (void)overlay_model_activate(FC_ROW(4));
     overlay_model_rebuild();
     check_every_row_fits("the OpenPhantom tab with the fly fold open");
     (void)overlay_model_activate(MENU_ROW(1) + OVERLAY_FREECAM_LINE_COUNT);
@@ -514,7 +562,8 @@ int main(void)
     test_jump_scale_clamps();
     test_jump_scale_row_availability();
     test_edit_outside_capture();
-    test_end_level_row();
+    test_cheats_end();
+    test_levels_group();
     test_freecam_group();
     test_dismember_group();
     test_open_freecam_fold();

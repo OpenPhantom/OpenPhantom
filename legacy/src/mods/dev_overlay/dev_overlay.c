@@ -25,6 +25,9 @@
 #include "overlay_input.h"
 #include "overlay_key_name.h"
 #include "overlay_model.h"
+#include "freeze_anim_row.h"
+#include "start_level.h"
+#include "start_level_row.h"
 
 #include "common/patch.h"
 #include "common/signature.h"
@@ -204,6 +207,11 @@ void dev_overlay_install(void)
     cheats_ready = cheats_original_resolve();
     cheats_ready = cheats_original_actions_resolve() || cheats_ready;
     cheats_ready = cheats_openphantom_install() || cheats_ready;
+    /* A new game beginning at a chosen level. Its own sites, its own refusal; the row reads
+     * unavailable when they did not resolve, and the setting is read either way. */
+    if (start_level_install()) {
+        start_level_row_load();
+    }
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "
                     "every cheat row in the panel is unavailable. The panel still opens, and its "
@@ -216,7 +224,9 @@ void dev_overlay_install(void)
     (void)input_freeze_install();
     /* Neither is a condition of the panel, and they fail independently: one stops the player being
        given orders, the other stops the simulation stepping at all. */
-    (void)sim_pause_install();
+    if (sim_pause_install()) {
+        freeze_anim_row_load();
+    }
 
     /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
      * window messages, which are overlay_input.c's own domain. Wired here, after both installs

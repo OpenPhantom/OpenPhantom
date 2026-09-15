@@ -1,7 +1,8 @@
 /* overlay_cheats.h: the panel's first OpenPhantom group, the cheats, as rows.
  *
- * The rows that line up with cheats_own_id_t, and the ones that do not: the jump boost scale in
- * the slot free camera's id would have had, and the skip-to-next-level action. Their ids and the
+ * The rows that line up with cheats_own_id_t, and the one that does not: the jump boost scale in
+ * the slot free camera's id would have had. The level skip was the tail of this group until the
+ * Level selection group took it. Their ids and the
  * reasoning behind each are in overlay_row_ids.h; this file is what each id looks like on screen
  * and what a click on it does. Free camera itself, its key and its fold are a group of their own,
  * overlay_freecam.c.
@@ -23,8 +24,8 @@
  * into the jump boost scale so far, or NULL. */
 void overlay_cheats_row(uint32_t id, const char *editing_text, overlay_row_t *out);
 
-/* Acts on a row by its id: flips a cheat, or runs the level skip.
- * The typed row is the model's own business and never reaches here. */
+/* Acts on a row by its id: flips a cheat. The typed row is the model's own business and never
+ * reaches here. */
 bool overlay_cheats_toggle(uint32_t id);
 
 #endif /* DEV_OVERLAY_OVERLAY_CHEATS_H */

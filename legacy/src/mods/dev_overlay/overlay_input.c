@@ -290,13 +290,13 @@ static void set_open(bool open)
     input_state.hidden = false;
     input_state.search_focused = false;   /* every open starts unfocused; see the header comment
                                             * on overlay_input_search_focused() for why */
-    input_freeze_set(open);
+    input_freeze_hold(INPUT_FREEZE_PANEL, open);
     /* The freeze stops the player being given orders; this stops the world carrying on regardless.
        Both, because either alone leaves half the game running: without the freeze the player moves
        behind the panel, and without this the NPCs, movers and timers do. */
     sim_pause_hold(SIM_PAUSE_PANEL, open);
     if (!open) {
-        /* AFTER input_freeze_set(false), not before: a queued play-as swap has its own precondition
+        /* AFTER the freeze is released, not before: a queued play-as swap has its own precondition
          * that reads as unmet while the player is suspended, and this call has just ended that
          * suspension. See cheats_original_actions.h's note on invoke() for why the swap is
          * queued rather than run the moment its row is pressed. */

@@ -23,7 +23,16 @@ bool input_freeze_install(void);
 /* Whether the freeze is armed at all, for the caller that has to be honest in its log line. */
 bool input_freeze_is_available(void);
 
-/* Freeze or release. While frozen, both readers answer neutral. */
-void input_freeze_set(bool frozen);
+/* Who is asking. One bit each, because they can overlap: the panel while it is open, and the
+ * free camera while it flies with the world running, when the flight keys must not reach the
+ * player. */
+typedef enum input_freeze_holder {
+    INPUT_FREEZE_PANEL       = 1u << 0,
+    INPUT_FREEZE_FREE_CAMERA = 1u << 1
+} input_freeze_holder_t;
+
+/* Takes or releases one holder. Both readers answer neutral while any holder has it. Idempotent
+ * per holder, so a caller may drive it from its own state every frame. */
+void input_freeze_hold(input_freeze_holder_t who, bool held);
 
 #endif /* INPUT_FREEZE_H */

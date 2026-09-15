@@ -1,13 +1,16 @@
 /* overlay_freecam.h: the panel's OpenPhantom group for the free camera.
  *
- * Three rows and a fold: the teleport key, the cheat itself, and "how to fly", which opens into
- * the lines that say what the keys do. They were the tail of the cheats group, with the most
- * involved id arithmetic in the panel to keep the fold's lines drawn under their summary while the
- * rows below kept fixed ids. Under a heading of their own the lines are the last rows there are,
- * so a slot is its id and nothing is remapped.
+ * Five rows and a fold: the teleport key, the cheat itself, whether the animations hold with
+ * the pause, whether the world runs while it flies, and "how to fly", which opens into the lines
+ * that say what the keys do. They were the
+ * tail of the cheats group, with the most involved id arithmetic in the panel to keep the fold's
+ * lines drawn under their summary while the rows below kept fixed ids. Under a heading of their
+ * own the lines are the last rows there are, so a slot is its id and nothing is remapped.
  *
  * Read top to bottom the rows tell the story on their own: set a teleport key, then the toggle
- * right below it stops reading unavailable, then the fold says how to fly it. The fold opens
+ * right below it stops reading unavailable, then the switches say whether the animations hold
+ * with the pause and whether the world moves under the camera, then the fold says how to fly
+ * it. The fold opens
  * itself when the camera goes on and shuts when it goes off, because the mouse is claimed for as
  * long as the camera flies and no click could reach it; see overlay_freecam_sync().
  */
@@ -19,11 +22,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* The slots: the key, the cheat, the fold's summary, then its lines only while it is open. */
+/* The slots: the key, the cheat, the two switches, the fold's summary, then its lines only
+ * while it is open. */
 #define OVERLAY_FREECAM_HOTKEY_SLOT  0u
 #define OVERLAY_FREECAM_TOGGLE_SLOT  1u
-#define OVERLAY_FREECAM_SUMMARY_SLOT 2u
-#define OVERLAY_FREECAM_LINE_FIRST   3u
+#define OVERLAY_FREECAM_FREEZE_SLOT  2u
+#define OVERLAY_FREECAM_WORLD_SLOT   3u
+#define OVERLAY_FREECAM_SUMMARY_SLOT 4u
+#define OVERLAY_FREECAM_LINE_FIRST   5u
 
 /* Eleven lines, not seven, because three of them describe hiding the panel and the two ways out,
  * and each is a sentence wider than the panel. A line that does not fit is drawn clipped, running
@@ -33,7 +39,7 @@
 #define OVERLAY_FREECAM_LINE_COUNT 11u
 #define OVERLAY_FREECAM_ROWS_MAX   (OVERLAY_FREECAM_LINE_FIRST + OVERLAY_FREECAM_LINE_COUNT)
 
-/* How many rows the group draws right now: three, or three and the lines. */
+/* How many rows the group draws right now: five, or five and the lines. */
 uint32_t overlay_freecam_row_count(void);
 
 /* Folds the lines, so the panel opens the way the groups do: folded. */

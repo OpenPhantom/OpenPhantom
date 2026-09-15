@@ -140,6 +140,7 @@ typedef int32_t (__cdecl *read_delta_fn_t)(int32_t axis);
 typedef struct input_freeze_state {
     bool            installed;
     bool            frozen;
+    uint32_t        holders;      /* bitmask of input_freeze_holder_t; frozen while any is set */
     detour_t        axis_detour;
     detour_t        delta_detour;
     void *const volatile *player_block;   /* the engine's own pointer at the player            */
@@ -271,8 +272,16 @@ static void suspend_player(bool suspend)
     freeze_state.suspended = false;
 }
 
-void input_freeze_set(bool frozen)
+void input_freeze_hold(input_freeze_holder_t who, bool held)
 {
+    bool frozen;
+
+    if (held) {
+        freeze_state.holders |= (uint32_t)who;
+    } else {
+        freeze_state.holders &= ~(uint32_t)who;
+    }
+    frozen = freeze_state.holders != 0u;
     if (freeze_state.frozen == frozen) {
         return;
     }

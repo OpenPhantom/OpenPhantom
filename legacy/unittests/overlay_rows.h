@@ -11,10 +11,12 @@
 #include <stdint.h>
 
 /* Rows by screen position with every group above them open, each heading one past the previous
-   group's last row. The free camera group's rows are counted with its fold shut, which every
-   section but the fold's own keeps true. Written once because every check below would otherwise
-   repeat the same arithmetic and one of them would eventually get it wrong. */
-#define FC_ROW(n)   (1u + OVERLAY_CHEATS_ROW_COUNT + 1u + (uint32_t)(n))
+   group's last row. The level selection group's rows are counted with its list shut and the free
+   camera group's with its fold shut, which every section but their own keeps true. Written once
+   because every check below would otherwise repeat the same arithmetic and one of them would
+   eventually get it wrong. */
+#define LVL_ROW(n)  (1u + OVERLAY_CHEATS_ROW_COUNT + 1u + (uint32_t)(n))
+#define FC_ROW(n)   (LVL_ROW(OVERLAY_LEVELS_ENTRY_FIRST) + 1u + (uint32_t)(n))
 #define DIS_ROW(n)  (FC_ROW(OVERLAY_FREECAM_LINE_FIRST) + 1u + (uint32_t)(n))
 #define UTIL_ROW(n) (DIS_ROW(OVERLAY_DISMEMBER_ROW_COUNT) + 1u + (uint32_t)(n))
 #define MENU_ROW(n) (UTIL_ROW(OVERLAY_UTILITIES_ROW_COUNT) + 1u + (uint32_t)(n))
@@ -22,7 +24,7 @@
 #define FOG_ROW(n)  (PIC_ROW(OVERLAY_PICTURE_ROW_COUNT) + 1u + (uint32_t)(n))
 #define CTRL_ROW(n) (FOG_ROW(OVERLAY_FOG_ROW_COUNT) + 1u + (uint32_t)(n))
 
-/* The ten headings of the OpenPhantom tab. */
-#define HEADINGS 10u
+/* The eleven headings of the OpenPhantom tab. */
+#define HEADINGS 11u
 
 #endif /* UNITTESTS_OVERLAY_ROWS_H */

@@ -49,4 +49,9 @@
 
 void controller_input_install(void);
 
+/* Called as the process ends. The poll thread is killed before any DLL is told the process is
+ * leaving, so a synthetic Alt it was holding for a pulled trigger would stay down in the system
+ * with nothing left to release it; this releases it. Nothing else is undone. */
+void controller_input_shutdown(void);
+
 #endif /* CONTROLLER_INPUT_H */

@@ -485,6 +485,16 @@ static void load_config(controller_input_config_t *config)
     }
 }
 
+void controller_input_shutdown(void)
+{
+    /* ExitProcess has already ended the poll thread by the time this runs, so the flag is not
+     * racing anything; the one SendInput here is the release that thread would have sent on its
+     * next poll. A process that dies hard never reaches this; that case is not covered. */
+    if (ci_state.alt_held) {
+        set_alt_held(false);
+    }
+}
+
 void controller_input_install(void)
 {
     DWORD thread_id = 0;

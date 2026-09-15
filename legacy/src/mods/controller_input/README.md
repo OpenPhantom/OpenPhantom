@@ -232,6 +232,11 @@ made somewhere else.
 The poll itself keeps running while unfocused, so the pad stays tracked and a return to the game is
 immediate.
 
+The same release runs once more as the process ends. The poll thread is gone by the time any DLL
+is told the process is leaving, so an Alt it was holding for a pulled trigger at that moment would
+stay down in the system with nothing left to lift it; the DLL's own unload releases it. A process
+that dies hard never gets there, and that case is not covered.
+
 ## Your controller has to be an XInput one
 
 This reads the pad with `XInputGetState` only. An Xbox pad works as it is; anything else has to be

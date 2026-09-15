@@ -2,15 +2,16 @@
 
 **Produces:** `render_guard.dll` -> `mods\`, from `render_guard.c` (the bounds and the depth
 comparison), `face_bounds.c` (the two comparisons, testable), `flat_quad.c` (the engine's flat
-screen quad with vertices every driver draws) and `node_verts.c` (the x87 stack the halo draw
-leaves one short).
+screen quad with vertices every driver draws), `node_verts.c` (the x87 stack the halo draw
+leaves one short) and `halo_verts.c` (a halo drawn from twelve floats nothing wrote).
 
 Two arrays in the engine's deferred face path are filled without checking either bound, and one of
 them ends on the submitting function's saved return address. The same DLL replaces a depth
 comparison the engine can compute as a value Direct3D does not define, it replaces the engine's
-flat screen quad, whose vertices Intel's Direct3D 9 driver does not draw, and it balances the x87
-stack across the node vertex copy, which every halo drawn left one short and which drew a blade
-out of a Jedi's hand.
+flat screen quad, whose vertices Intel's Direct3D 9 driver does not draw, it balances the x87
+stack across the node vertex copy, which every halo drawn left one short, and it culls a halo on
+a node with no mesh, which the engine built out of its own stale stack and drew as a blade out of
+a Jedi's hand.
 
 Nothing here changes what a scene inside the authored limits draws.
 
@@ -32,6 +33,7 @@ disables that one part and says so in the log.
 | `GuardDepthCompare` | `1` | | substitute LESS when the comparison mapper answers 0 |
 | `GuardFlatQuads` | `1` | | draw the engine's flat screen quads with `rhw = 1` and `z = 0` instead of its own `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`, which Intel does not draw |
 | `BalanceNodeVerts` | `1` | | make the two node vertex routines return nothing on every path and their three callers pop nothing, so a halo drawn no longer leaves the x87 stack pointer one higher; `0` leaves the stack as the game shipped it |
+| `GuardHaloVerts` | `1` | | cull a halo whose node has no mesh: `halo_draw`'s copy of the node's vertices zeroes its buffer when the copy has nothing to read, so the quad projects to a point and the engine's own two pixel cull drops it, instead of drawing it from whatever the stack held; `0` leaves the stack read as the game shipped it |
 | `DeferTrace` | `0` | | a measurement: sample the x87 status word either side of every deferred face and name any face across which the stack pointer moved; see the section below |
 
 `MaxDeferredVertices` above 31 or below 1 is refused with a log line and the authored 30 is used
@@ -57,6 +59,7 @@ log line.
 | `halo_draw`'s pop after the copy | `0x00439B46` | untested | `fstp st(0)` made a no-op |
 | `Plr_CaptureBladeMesh`'s pop | `0x00449884` | untested | the same |
 | `Plr_SetBladeSize`'s pop after the write | `0x00449E41` | untested | the same, the twin's one caller |
+| `halo_draw`'s call of the copy | `0x00439B41` | untested | the `call rel32` redirected to this DLL's copy, the callee untouched for its other two callers; the buffer is `[ebp-0x70]`, 48 bytes under the node pose |
 
 ## Hooks installed
 
@@ -252,7 +255,44 @@ bytes each) become no-ops, through the patch journal, each site checked for the 
 before it is written and every earlier write put back if one refuses. The two failure-arm
 patterns are expected to match exactly twice, once in each function; the three caller patterns
 once each. Played after the repair with the observer still on: zero moves across every call
-for the whole run, the frame-end pointer at 0 throughout, and no beam.
+for the whole run, the frame-end pointer at 0 throughout, and no beam. Then played with the
+observer off, on Windows and under Wine, and the beam was back with the stack still balanced.
+The underflow was one of two faults in the same halo, and the observer's own frames had hidden
+the other; the next section has it.
+
+## A halo drawn from twelve floats nothing wrote
+
+`halo_draw` keeps a 12 float buffer on its stack, `[ebp-0x70]`, for the four vertices of the
+node the halo hangs on, and fills it with one call of `bapobj_getNodeMeshVerts`. That routine
+writes nothing when the node index is past the model's node count or the node carries no mesh:
+it returns, and `halo_draw` reads the two vertices it wants, indices 0 and 2, out of whatever the
+stack held before the call. The halo is then a screen quad between two stale points, anchored on
+the node's pose, which for a blade halo is the hand. Usually the stale numbers are small and the
+routine's own "shorter than two pixels" test culls the quad; with the x87 stack one short they
+were the indefinite NaN, which that test cannot cull; and with the stack balanced they are
+whatever the calls before the draw left there, which any change of code layout changes. So the
+beam came and went with every rebuild of this project, went on Windows and under Wine while the
+diagnostics observer's seven detour frames sat in front of the draw, and came back on both the
+moment they were taken out.
+
+`halo_verts.c` diverts `halo_draw`'s call alone, through `patch_redirect_call`, so the routine's
+other two callers keep it. The replacement makes the same two tests the routine makes, from the
+same offsets (`obj+0x9C` the thing, `+4` the model, `model+0x54` the node count, `+0x58` the
+nodes at `0xB4` each, `node+0x4C` the mesh index, `model+0x28` the meshes at `0x70` each,
+`mesh+0x48` the vertex count, `+0x30` the vertices), copies at most the four vertices the buffer
+holds when they pass, and zeroes all twelve floats when they do not. Two zero vertices project to
+one point and the engine's own cull leaves nothing drawn. Whether the caller still pops a float
+after the call is read from the bytes at install, so the replacement returns one or nothing to
+match and the guard is correct with `BalanceNodeVerts` on or off. The first failure on each model
+and node is logged with the reason.
+
+Played 2026-09-15 in Mos Espa on the rig with the observer off: one line, `halo on obinpc.3do
+node 12: the node carries no mesh`, and the bar out of Obi-Wan's hand gone. Node 12 is the last
+of the four blade halos `halo_attachToThing` gives every model in the halo colour table, and on
+the NPC Obi-Wan model it is present, switched on and empty, so the fourth halo was built from the
+stack on every frame he was drawn. Played the same evening under Wine on NVIDIA and on Intel
+and on the Steam Deck, across several levels: the same single line each run and no other model
+named, so on the evidence so far his is the only model in the game with an empty halo node.
 
 ## A measurement: `DeferTrace`
 
@@ -304,9 +344,13 @@ passed in, so the test drives the same code the game runs without an engine cell
 **The node vertex balance was played on the rig (NVIDIA)** in Mos Espa beside Obi-Wan, with the
 diagnostics DLL's x87 observer on: the stack pointer no longer moved across any of the seven
 calls it watches and sat at 0 at every frame's end, where before the repair it had moved once a
-frame across the halo draw and cycled through every value; the beam out of Obi-Wan's hand was
-gone. The Coruscant case, the same fault on the player's own model, follows from the same
-measurement and has not been played separately.
+frame across the halo draw and cycled through every value. The same run under Wine on NVIDIA and
+on Intel gave the same zeros.
+
+**The halo guard was played on the rig** in Mos Espa with the observer off, where the balance
+alone still drew the bar: the log named `obinpc.3do` node 12 once and the bar was gone. Under
+Wine on NVIDIA and on Intel and on the Steam Deck, across several levels, the same one line and
+no bar.
 **Installed in every played build since it shipped**, as one of the components the installer does
 not let a player untick, and no guarded path has been observed firing.
 

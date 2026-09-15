@@ -60,6 +60,7 @@
 
 #include "face_bounds.h"
 #include "flat_quad.h"
+#include "halo_verts.h"
 #include "node_verts.h"
 
 #include "common/detour.h"
@@ -527,6 +528,7 @@ void render_guard_install(void)
     install_depth_compare_guard();
     flat_quad_install();
     node_verts_install();
+    halo_verts_install();
 
     log_info("deferred face submit %08X guarded: at most %u vertices a face, pool cursor %08X with "
              "a ceiling of %u vertices. A face past either bound is refused the same way the "

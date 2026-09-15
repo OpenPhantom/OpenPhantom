@@ -408,8 +408,10 @@ in the two blade mesh routines of the player's code. It is the game's own, it sh
 1999 executable, and it only shows on models that carry halos, the Jedi, so a beam was only
 ever seen out of a Jedi's hand. render_guard's `BalanceNodeVerts` makes the routine and its twin
 return nothing on every path and the three callers pop nothing; with it on the observer counts
-zero moves and the frame-end pointer stays at 0. The rest of that story is in render_guard's
-README.
+zero moves and the frame-end pointer stays at 0. That was half of it: with the observer off the
+bar came back on a balanced stack, because the halo whose node has no mesh is built from stale
+stack whatever the x87 pointer says, and the observer's own frames had been hiding that.
+render_guard's `GuardHaloVerts` culls that halo, and its README has the rest of the story.
 
 **It took two failed play sessions to get there, and both are worth recording.**
 

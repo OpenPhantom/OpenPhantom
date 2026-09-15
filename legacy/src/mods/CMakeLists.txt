@@ -287,6 +287,7 @@ add_engine_fix(render_guard
     face_bounds.c
     flat_quad.c
     node_verts.c
+    halo_verts.c
 )
 
 # An effect with no geometry state, re-rolled once per rendered frame because that is what 1999

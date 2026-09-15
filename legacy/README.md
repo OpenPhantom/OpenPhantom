@@ -40,10 +40,10 @@ included here or distributed with this project.
 | `dialogue_menu_fix` | Keeps a conversation open while the character's first line is still being spoken, instead of releasing you and starting the line again |
 | `crt_copy_fix` | Repairs an inlined copy loop that reads four bytes before its source, in 40 places |
 | `ground_clip_fix` | Stops a character the engine never collision tests from being pushed down through the floor it stands on, which is how a seated character can be walked under the level a fraction at a time |
-| `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |
+| `render_guard` | Bounds two unbounded writes in the deferred face path, repairs an undefined depth comparison answer, draws the engine's flat screen quads with vertices Intel's driver accepts, balances the x87 stack the halo draw left one short, and culls the halo the engine built from stale stack, the beam out of Obi-Wan's hand |
 | `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
-| `dev_overlay` | A panel over the running game, opened with F6 or the key below Escape: the game's own eleven cheat codes, nine this project adds, and the ground the developer tools will stand on |
+| `dev_overlay` | A panel over the running game, opened with F6 or the key below Escape: the game's own cheat codes, the nine this project adds, every OpenPhantom setting on a row, a free camera and a level to start a new game at |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
 | `sound_lifetime_fix` | Stops a pinned voice keeping the address of a local whose function has returned, which crashed a load made with blaster bolts in flight |
 | `camera_handback_fix` | Gives the camera back after a conversation that took it and never returned it |
@@ -101,16 +101,17 @@ setting that changes play and ships on (`MouseLook=1`), because a fresh install 
 game that can be played with a mouse; its code default is off, so an ini that predates the key
 leaves the game as it shipped, and the comment above the key says so.
 
-**Almost nothing writes to disk while you play.** Every diagnostic channel is off. Each DLL logs a
-few lines to `engine_fixes.log` when it installs and then goes quiet, which is enough for a bug
-report and costs nothing during play. `[crash_report]` is on for the same reason: it does nothing at
-all until the process dies.
+**Little writes to disk while you play.** Every measurement is off. Each DLL logs its install to
+`engine_fixes.log` and then writes only on an event worth a line: a level opening, a cutscene, the
+frame cap stepping, a dialogue the animation fix acted on, a halo it culled. That is enough for a
+bug report and costs nothing during play. `[crash_report]` is on for the same reason: it does
+nothing at all until the process dies.
 
-The one exception is `fmv_player`, which writes one line per cutscene naming either the file it
-played or the file it looked for and did not find. That is deliberate rather than an oversight: this
-is the one fix whose most likely failure is to install correctly and then quietly do nothing, and a
-log that goes silent after installing is exactly what that failure looks like. A handful of lines
-per playthrough is the cost of being able to tell the two apart.
+`fmv_player` writes one line per cutscene naming either the file it played or the file it looked
+for and did not find, on purpose: this is the one fix whose most likely failure is to install
+correctly and then quietly do nothing, and a log that goes silent after installing is what that
+failure looks like. A handful of lines per playthrough is the cost of being able to tell the
+two apart.
 
 When you upgrade, keep your own ini and copy across any keys the new version added. Nothing
 rewrites your file for you.

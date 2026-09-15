@@ -168,6 +168,11 @@ restoring somebody's own files back needs, and a returning player updating a pat
 run over a folder that already held all eleven slots now reports `complete_saves: 11 carried, 0
 written, 11 slots left alone because the player already had a save there`, and the saves loaded
 in the game afterwards were the player's own progress, not the bundled chapter starts.
+
+**A saved game carries the level it was made in, so the bundled saves open the shipped levels and
+no others.** A modded level file cannot be entered from a save of the unmodded game, the bundled
+ones included; it has to be entered from a new game, and the developer menu's Level selection
+group is how a new game gets there. That is a property of the game's save format, not of these files.
 `SetupLogging` is on because of this: the first installation to exercise the skip produced nothing
 to read the decision in.
 

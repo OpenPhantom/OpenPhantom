@@ -21,7 +21,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 <img width="1920" height="1080" alt="Star Wars Episode 1 The Phantom Menace Screenshot 2026 09 14 - 11 16 27 84" src="https://github.com/user-attachments/assets/59fd4625-e932-47fa-ad1a-18be13ede3e0" />
 
-*Free Camera/ No Clip/ Photo mode.*
+*Free camera, no clip and photo mode.*
 
 **Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
 
@@ -30,7 +30,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 | | |
 |---|---|
 | [`installer/`](installer/) | **Working** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data; the disc is read on your machine. Everything it installs is inside the installer and nothing is downloaded. See its [README](installer/README.md) |
-| [`legacy/`](legacy/) | **Working**  Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
+| [`legacy/`](legacy/) | **Working** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
 | `architecture/` | How the original engine is put together, written down. One note so far, on which toolchain built the retail executable and which engine family it belongs to |

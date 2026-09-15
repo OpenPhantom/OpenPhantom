@@ -18,11 +18,12 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds ten groups, one per subject a player comes for: **Cheats**, **Free
-  camera** (that cheat with its key and its instructions), **Dismemberment**, **Cheatmenu
-  options** (this panel's own size and key), **In game options extras** (whether this patch's
-  settings appear on the game's own screens), **Enhanced resolution** (the picture), **Fog**,
-  **Enhanced input** (the control scheme), **Window mode** and **Frame rate**. It began as one
+* **OpenPhantom** holds eleven groups, one per subject a player comes for: **Cheats**, **Free
+  camera** (that cheat with its key and its instructions), **Level selection** (the skip, and
+  the level a new game starts at), **Dismemberment**, **Cheatmenu options** (this panel's own
+  size and key), **In game options extras** (whether this patch's settings appear on the game's
+  own screens), **Enhanced resolution** (the picture), **Fog**, **Enhanced input** (the control
+  scheme), **Window mode** and **Frame rate**. It began as one
   group with a settings row appended, and the settings outgrew the cheats, so a reader had to
   scroll past invincibility to reach the draw distance. A second group, Utilities, held every
   setting for a while; Window mode came out of it first, because its rows answer a single question

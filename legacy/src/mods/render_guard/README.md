@@ -1,13 +1,16 @@
 # render_guard
 
 **Produces:** `render_guard.dll` -> `mods\`, from `render_guard.c` (the bounds and the depth
-comparison), `face_bounds.c` (the two comparisons, testable) and `flat_quad.c` (the engine's flat
-screen quad with vertices every driver draws).
+comparison), `face_bounds.c` (the two comparisons, testable), `flat_quad.c` (the engine's flat
+screen quad with vertices every driver draws) and `node_verts.c` (the x87 stack the halo draw
+leaves one short).
 
 Two arrays in the engine's deferred face path are filled without checking either bound, and one of
 them ends on the submitting function's saved return address. The same DLL replaces a depth
-comparison the engine can compute as a value Direct3D does not define, and it replaces the
-engine's flat screen quad, whose vertices Intel's Direct3D 9 driver does not draw.
+comparison the engine can compute as a value Direct3D does not define, it replaces the engine's
+flat screen quad, whose vertices Intel's Direct3D 9 driver does not draw, and it balances the x87
+stack across the node vertex copy, which every halo drawn left one short and which drew a blade
+out of a Jedi's hand.
 
 Nothing here changes what a scene inside the authored limits draws.
 
@@ -28,6 +31,8 @@ disables that one part and says so in the log.
 | `PoolCapacityVertices` | `8196` | 0 or more | the ceiling on the shared vertex pool; `0` switches that second bound off |
 | `GuardDepthCompare` | `1` | | substitute LESS when the comparison mapper answers 0 |
 | `GuardFlatQuads` | `1` | | draw the engine's flat screen quads with `rhw = 1` and `z = 0` instead of its own `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`, which Intel does not draw |
+| `BalanceNodeVerts` | `1` | | make the two node vertex routines return nothing on every path and their three callers pop nothing, so a halo drawn no longer leaves the x87 stack pointer one higher; `0` leaves the stack as the game shipped it |
+| `DeferTrace` | `0` | | a measurement: sample the x87 status word either side of every deferred face and name any face across which the stack pointer moved; see the section below |
 
 `MaxDeferredVertices` above 31 or below 1 is refused with a log line and the authored 30 is used
 instead: 32 is the array and its 33rd entry is the return address, so there is nothing sensible to
@@ -47,6 +52,11 @@ log line.
 | the pool cursor advance | `0x00487EEB` | `0x00487E8B` | its operand is read to locate the cursor cell at `0x00867380`; not patched |
 | the capability to comparison mapper | `0x0048AAF9` | `0x0048AA99` | detoured, 11 byte prologue |
 | the flat screen quad | `0x00419660` | untested | replaced whole, 6 byte prologue; its four callees are read out of its body at `+0x153`, `+0x15C`, `+0x16C` and `+0x18B` |
+| the node range return of `bapobj_getNodeMeshVerts` and its twin | `0x004137D0`, `0x004138A7` region | untested | one pattern matching twice, the `fld` of 0.0 at each hit made a no-op |
+| the missing table return of the same two | `0x004137FB`, `0x004138D1` region | untested | the same, the second failure arm |
+| `halo_draw`'s pop after the copy | `0x00439B46` | untested | `fstp st(0)` made a no-op |
+| `Plr_CaptureBladeMesh`'s pop | `0x00449884` | untested | the same |
+| `Plr_SetBladeSize`'s pop after the write | `0x00449E41` | untested | the same, the twin's one caller |
 
 ## Hooks installed
 
@@ -202,6 +212,48 @@ was fine here".
 Nothing is written to the image on any of these paths, so a partial install leaves the game exactly
 as it found it.
 
+## The x87 stack left one short by every halo drawn
+
+Found 2026-09-15, at the end of a hunt that began on Coruscant with a lightsaber blade drawn
+out of the player's hand and came back in Mos Espa out of Obi-Wan's, and that framerate_fix's
+README carries in full. Its last cut was the diagnostics DLL's `X87` observer, which samples the
+x87 status word either side of seven calls of the object draw: the stack pointer moved across
+`halo_drawForThing` on every frame the player's halos drew, once a frame, a net pop, and across
+nothing else, not the model draw, the track advance, the clip events, the shadow projector or
+the queue flush.
+
+The bytes say why. `bapobj_getNodeMeshVerts` (`0x0041378A`) copies a node's mesh vertices out
+and returns nothing on the path that does the copy; its two failure arms, a node index past the
+model's count and a model with no vertex table, leave through `fld` of a 0.0, a float return.
+Its twin `bapobj_setNodeMeshVerts` (`0x00413866`) has the same shape. Every caller of either
+follows the call with `fstp st(0)`, discarding a float the success path never pushed: `halo_draw`
+for each halo it draws, `Plr_CaptureBladeMesh` at the player's spawn and `Plr_SetBladeSize` as
+the blade grows and shrinks. That pop from an empty stack is a stack underflow: TOP in the
+status word goes up by one, every register still tagged empty, and the pointer stays wrong for
+the rest of the frame and into the next, cycling through all eight values over eight frames
+(measured in the trace, with the mods folder cut to one DLL and then with every switch in that
+DLL off, so the drift is the game's own). The recreation of the engine had already noted, at
+that function, "either the return value is never used, or this is a bug that has shipped"; it
+is the second, and the value is never used either, since every caller discards it.
+
+Halos are attached only to the models in the engine's halo colour table, the Jedi, so only a
+Jedi on screen runs the fault, and the garbage the wrong pointer produces lands in the halo and
+blade geometry of that same model: a beam out of a Jedi's hand, Obi-Wan's where he stands at
+the ship in Mos Espa, the player's own on Coruscant. Which float took it shifted with the code
+around the fault, so the beam moved with every rebuild of this project, and the first hunt,
+which took the CRT float classifier out of framerate_fix's blend hook, saw it go and could not
+say why. In 1999, under the DirectX 6 runtime, the same underflow left no visible
+trace; through dxwrapper's Direct3D 9 path it does. That last sentence is inferred from the two
+environments; everything above it is measured.
+
+`node_verts.c` makes the two functions return nothing on every path and the three callers pop
+nothing: the four `fld` of the failure arms (six bytes each) and the three `fstp st(0)` (two
+bytes each) become no-ops, through the patch journal, each site checked for the exact opcode
+before it is written and every earlier write put back if one refuses. The two failure-arm
+patterns are expected to match exactly twice, once in each function; the three caller patterns
+once each. Played after the repair with the observer still on: zero moves across every call
+for the whole run, the frame-end pointer at 0 throughout, and no beam.
+
 ## A measurement: `DeferTrace`
 
 `[render_guard] DeferTrace=1` samples the x87 status word either side of every deferred face
@@ -248,6 +300,13 @@ accept, a ceiling of zero, and the counts that would wrap if the pool question w
 passed in, so the test drives the same code the game runs without an engine cell anywhere near it.
 
 **The unit test builds and passes.** `face_bounds` is a registered ctest target, so CI runs it.
+
+**The node vertex balance was played on the rig (NVIDIA)** in Mos Espa beside Obi-Wan, with the
+diagnostics DLL's x87 observer on: the stack pointer no longer moved across any of the seven
+calls it watches and sat at 0 at every frame's end, where before the repair it had moved once a
+frame across the halo draw and cycled through every value; the beam out of Obi-Wan's hand was
+gone. The Coruscant case, the same fault on the player's own model, follows from the same
+measurement and has not been played separately.
 **Installed in every played build since it shipped**, as one of the components the installer does
 not let a player untick, and no guarded path has been observed firing.
 

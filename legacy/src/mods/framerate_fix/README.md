@@ -396,10 +396,20 @@ the level was up. So the underflow is the game's own, or the Direct3D path under
 dxwrapper, and this project's DLLs only decide where the garbage lands by changing the code
 around it. Compiled code cannot net-pop the x87 stack; a 1999 C call made without a prototype
 can, when the callee returns a float the caller was told is an int, or the other way round.
-Finding the instruction is a further hunt, with samples either side of the halo pass, the
-shadow projector and the queue flush; a fix would be a patch on that one site. All four
-switches are off as shipped; they are measurements, kept for the same reason
+All four switches are off as shipped; they are measurements, kept for the same reason
 `InterpolateRiders=2` and `3` are.
+
+**Found, the same day, and fixed in render_guard.** The diagnostics DLL's `X87` observer sampled
+the status word either side of seven calls of the object draw, and the pointer moved across
+`halo_drawForThing` alone, once a frame. The pop is `fstp st(0)` after `halo_draw`'s call of
+`bapobj_getNodeMeshVerts`, a routine that returns a float on its two failure arms and nothing on
+the path that does the copy, so every halo drawn pops an empty stack; the same call and pop sit
+in the two blade mesh routines of the player's code. It is the game's own, it ships in the
+1999 executable, and it only shows on models that carry halos, the Jedi, so a beam was only
+ever seen out of a Jedi's hand. render_guard's `BalanceNodeVerts` makes the routine and its twin
+return nothing on every path and the three callers pop nothing; with it on the observer counts
+zero moves and the frame-end pointer stays at 0. The rest of that story is in render_guard's
+README.
 
 **It took two failed play sessions to get there, and both are worth recording.**
 

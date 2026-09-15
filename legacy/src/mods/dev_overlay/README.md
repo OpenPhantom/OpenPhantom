@@ -133,11 +133,11 @@ character of every search. A click inside the field is what starts focus now, an
 it, or opening the panel fresh, ends it; the field's border and caret are only drawn while focused,
 so the box never looks ready to type into before it is.
 
-## The nine cheats this project adds
+## The ten cheats this project adds
 
 In the order the panel lists them: **Unlimited ammunition**, **Unlimited health**, **Invincible
-NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **No clip**,
-**Jump boost** and **Free camera**. They need fewer engine sites than that, because
+NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **No clip**, **Super
+run**, **Jump boost** and **Free camera**. They need fewer engine sites than that, because
 several pairs are two answers to one question and share a single detour.
 
 **No fog was a ninth and now heads the Fog group.** It is still the same code in
@@ -371,6 +371,34 @@ functions instead of one took the whole cheat down with it.
 **A doors-only variant was built, tested and dropped.** It identified a door leaf by the mover
 owning the polygon, which worked and was proven against the shipped levels. It is described at the
 head of `cheats_noclip.c` with what bringing it back would need.
+
+### Super run
+
+One float, no hook. The player's speed is not written by the run key: each stand tick decides
+which clip plays and hands two speed caps to `Plr_RampSpeedCaps` (`0x0044D05C`), which walks
+the live caps toward them by 0.25 a tick, and the integrator approaches the forward cap and
+multiplies by the frame's dt and the turn penalty. The caps are pushed as immediates, 3.5 world
+units a second for a run at `0x0044CE01` and 2.0 for a walk at `0x0044CF1D`; the two lightsaber
+lunges reach the same routine with a table value. Only the run push is touched: while the cheat
+is on its immediate holds 3.5 times the speed row's number, the engine's own ramp carries the
+speed up over a few ticks, and off undoes the write and the ramp brings it back down.
+
+The speed is the row directly under the toggle, `Super run speed (1.1 to 4.0x)`, typed or dragged
+on the track beneath it, the same shape as the draw distance. A drag writes `SuperRunScale` on a
+hundredths grid and, while the cheat is on, rewrites the run cap at once, so the speed follows
+the hand; the row and its track are unavailable with the toggle, since a number nothing is hooked
+to would be a lie.
+
+What a faster run does and does not change: the run clip plays at its authored rate, so above
+about 1.5x the feet visibly slide, the same gait note enhanced_input's pad stick makes; the turn
+penalty still applies; the walk, the lunges and the swim are as shipped; the wall probe is swept
+per substep, so at the 4x ceiling, 0.44 units a step, nothing is passed through. The pattern
+carries the 3.5 itself, matched once in the retail image, and the site has to read 3.5 at install
+or the row is unavailable.
+
+| Site | Address in retail | What it is |
+|---|---|---|
+| the run cap push | `0x0044CE01`, operand at `+1` | `push 3.5f` before the call of `Plr_RampSpeedCaps`; the imm32 is written through the journal and put back |
 
 ### Jump boost
 
@@ -960,6 +988,7 @@ logged. Closing the list first and then pressing the row always worked, so this 
 | `OpenKey` | `0` | The key that opens the panel. `0` accepts F6 and whichever key sits below Escape: the caret on a German layout, the backtick on a British one. Takes a name (`F8`, `numpad +`, `backtick`, `A`) or a virtual key code. Written by the panel's own key-binding row, and typed by hand when you cannot open it. |
 | `TextAlign` | `1` | Which of the font layer's three modes starts a string where it is put. `0` centres it on its position; `1` and `2` are the other two. |
 | `DevMenuSize` | `0` | How much bigger than its authored size to draw the menu, clamped to `0.33` and `4.0`. Written by the dev menu size row above, so it is normally set in game rather than here. |
+| `SuperRunScale` | `2.0` | What the run cap is multiplied by while the Super run cheat is on, `1.1` to `4.0`. Written by the Super run speed row and its slider, so it is normally set from the panel. |
 | `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice and is not edited here. |
 | `NewGameStartsAt` | `0` | The level a new game starts at, `1` to `11` in the game's order, `0` for its own first. Only a new game's first load is redirected. Written by the Level selection group's "New game starts at" list. |
 | `PauseFreezesAnimation` | `0` | Whether a pause, the panel open or the free camera flying, also holds the animations on the engine's own draw latch. Written by the "Animations freeze while paused" row. |

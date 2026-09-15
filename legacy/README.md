@@ -43,7 +43,7 @@ included here or distributed with this project.
 | `render_guard` | Bounds two unbounded writes in the deferred face path, repairs an undefined depth comparison answer, draws the engine's flat screen quads with vertices Intel's driver accepts, balances the x87 stack the halo draw left one short, and culls the halo the engine built from stale stack, the beam out of Obi-Wan's hand |
 | `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
-| `dev_overlay` | A panel over the running game, opened with F6 or the key below Escape: the game's own cheat codes, the nine this project adds, every OpenPhantom setting on a row, a free camera and a level to start a new game at |
+| `dev_overlay` | A panel over the running game, opened with F6 or the key below Escape: the game's own cheat codes, the ten this project adds, every OpenPhantom setting on a row, a free camera and a level to start a new game at |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
 | `sound_lifetime_fix` | Stops a pinned voice keeping the address of a local whose function has returned, which crashed a load made with blaster bolts in flight |
 | `camera_handback_fix` | Gives the camera back after a conversation that took it and never returned it |

@@ -487,11 +487,10 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
     }
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
-        /* A slot here is its id, and the jump-boost scale is the one row the model's own typing
-         * state can name. */
-        out->id = id;
-        overlay_cheats_row(id, (model.editing_value && model.editing_value_row == id)
-                                   ? model.value_edit_buf : NULL, out);
+        /* The group's own order, slot to id, so a typed row sits under its toggle. */
+        out->id = overlay_cheats_id_at(id);
+        overlay_cheats_row(out->id, (model.editing_value && model.editing_value_row == out->id)
+                                        ? model.value_edit_buf : NULL, out);
         return;
     }
 }
@@ -778,17 +777,9 @@ void overlay_model_value_commit(void)
         return;
     }
 
-    /* The jump-boost scale, with the same reasoning about a refused parse: atof() answers 0 for
-     * text that fails entirely, a lone full stop for instance, which this treats the same as a
-     * typed 0 or a negative rather than letting the setter's own clamp turn either into
-     * JUMP_BOOST_SCALE_MIN. */
-    {
-        float parsed = (float)atof(model.value_edit_buf);
-
-        if (parsed > 0.0f) {
-            cheats_openphantom_jump_boost_set_scale(parsed);
-        }
-    }
+    /* The cheats group's two typed rows, the jump boost scale and the super run speed; a refused
+     * parse leaves the value alone, the group says why. */
+    (void)overlay_cheats_commit(row, model.value_edit_buf);
 }
 
 void overlay_model_value_cancel(void)
@@ -810,6 +801,8 @@ bool overlay_model_slider_set(uint32_t index, float fraction)
         return overlay_fog_slider_set(row.id - FOG_FIRST_ID, fraction);
     case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
         return overlay_controls_slider_set(row.id - CONTROLS_FIRST_ID, fraction);
+    case OVERLAY_GROUP_OPENPHANTOM:
+        return overlay_cheats_slider_set(row.id, fraction);
     default:
         return false;              /* nothing else offers one */
     }

@@ -1,7 +1,7 @@
-/* cheats_openphantom.h: the nine codes this project adds: unlimited ammunition, unlimited
- * health, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip, jump boost and
- * free camera. No fog shares the panel but not this file's shape; it lives in cheats_no_fog.c
- * and is described below only where it differs from these.
+/* cheats_openphantom.h: the ten codes this project adds: unlimited ammunition, unlimited
+ * health, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip, super run, jump
+ * boost and free camera. No fog shares the panel but not this file's shape; it lives in
+ * cheats_no_fog.c and is described below only where it differs from these.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -44,6 +44,12 @@
  * player's own collision size, which lives elsewhere entirely. Mutually exclusive by construction,
  * see cheats_openphantom_toggle(), so the panel is never showing one as on while the other's own
  * scale is silently the one being applied.
+ *
+ * Super run is one float. The stand tick pushes the run cap, 3.5 units a second, to the engine's
+ * own ramp as an immediate, and while the cheat is on that immediate holds the cap times
+ * SuperRunScale; the ramp carries the live speed up to it and back down when the cheat goes off.
+ * Written through the patch journal with the shipped value remembered. cheats_super_run.c has
+ * the site and what a faster run does and does not change.
  *
  * Jump boost multiplies the vertical velocity the engine's own jump-entry code writes, rather than
  * reimplementing a jump. There are two sites, not one: mode 6 ("Jump") and mode 7 ("Jedi Jump")
@@ -133,6 +139,7 @@ typedef enum cheats_own_id {
     CHEATS_OWN_GIANT_PLAYER,
     CHEATS_OWN_TINY_PLAYER,
     CHEATS_OWN_NOCLIP,
+    CHEATS_OWN_SUPER_RUN,
     CHEATS_OWN_JUMP_BOOST,
     CHEATS_OWN_FREECAM,   /* MUST stay last; overlay_model.c's row layout relies on it, and its
                             * own _Static_assert fails the build if this ever stops being true */
@@ -160,6 +167,14 @@ bool cheats_openphantom_is_on(cheats_own_id_t id);
  * stored. */
 float cheats_openphantom_jump_boost_scale(void);
 void cheats_openphantom_jump_boost_set_scale(float scale);
+
+/* Super run's multiplier. Read from SuperRunScale at install; the setter clamps into the band
+ * below, writes the key, and if the cheat is on rewrites the run cap at once, so a drag on the
+ * panel's track changes the speed while it runs. False when the file could not be written. */
+#define SUPER_RUN_SCALE_MIN 1.1f
+#define SUPER_RUN_SCALE_MAX 4.0f
+float cheats_openphantom_super_run_scale(void);
+bool  cheats_openphantom_super_run_set_scale(float scale);
 
 /* Flips one and answers the new state. A cheat whose site did not resolve stays off, and free
  * camera specifically also stays off with no key bound. See cheats_openphantom.c. */

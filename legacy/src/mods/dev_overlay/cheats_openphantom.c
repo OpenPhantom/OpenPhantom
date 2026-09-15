@@ -1,5 +1,5 @@
 /* cheats_openphantom.c: unlimited ammunition, unlimited health, invincible NPCs, one-shot NPCs,
- * giant player, tiny player, jump boost and free camera.
+ * giant player, tiny player, no clip, super run, jump boost and free camera.
  *
  * SIZE NOTE: just over the 600 line mark. The file is the install pass and the panel's interface
  * to every cheat, and the byte evidence for the two sites it detours itself stands in the header
@@ -386,6 +386,7 @@ bool cheats_openphantom_install(void)
     own_state.cheats[CHEATS_OWN_GIANT_PLAYER].name = "Giant player";
     own_state.cheats[CHEATS_OWN_TINY_PLAYER].name = "Tiny player";
     own_state.cheats[CHEATS_OWN_NOCLIP].name = "No clip";
+    own_state.cheats[CHEATS_OWN_SUPER_RUN].name = "Super run";
     own_state.cheats[CHEATS_OWN_JUMP_BOOST].name = "Jump boost";
     own_state.cheats[CHEATS_OWN_FREECAM].name = "Free camera";
 
@@ -404,6 +405,7 @@ bool cheats_openphantom_install(void)
     }
 
     install_npc_damage();
+    install_super_run();
 
     /* The five below read the player through the engine's own cell. Without that cell none of
      * them can do its job, so none is installed: a detour that reads the wrong player is worse
@@ -436,6 +438,7 @@ bool cheats_openphantom_install(void)
            own_state.cheats[CHEATS_OWN_GIANT_PLAYER].available ||
            own_state.cheats[CHEATS_OWN_TINY_PLAYER].available ||
            own_state.cheats[CHEATS_OWN_NOCLIP].available ||
+           own_state.cheats[CHEATS_OWN_SUPER_RUN].available ||
            own_state.cheats[CHEATS_OWN_JUMP_BOOST].available ||
            own_state.cheats[CHEATS_OWN_FREECAM].available ||
            cheats_no_fog_is_available();
@@ -496,6 +499,12 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
         return false;
     }
     own_state.cheats[id].on = !own_state.cheats[id].on;
+    /* Super run is a write into the run site, made here and undone here, so the row and the
+     * bytes cannot disagree: a write that does not land puts the flag back. */
+    if (id == CHEATS_OWN_SUPER_RUN && !cheats_super_run_apply(own_state.cheats[id].on)) {
+        own_state.cheats[id].on = !own_state.cheats[id].on;
+        return own_state.cheats[id].on;
+    }
     /* Giant and tiny player are mutually exclusive: turning one on turns the other off, rather
      * than leaving a row reading ON that has no visible effect because hook_thing_draw's own
      * precedence (giant checked first) is the one actually deciding what gets applied. */

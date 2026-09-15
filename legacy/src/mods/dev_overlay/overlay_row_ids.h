@@ -31,25 +31,32 @@
 
 #include <stdint.h>
 
-/* The cheats group's ids line up with cheats_own_id_t, with two exceptions. Free camera has a
- * group of its own now, and it is the LAST id of that enum, so the cheats group stops one short
- * of it and its numeric slot is free: the jump-boost scale row takes it, which puts the
- * scale directly after jump boost's own toggle, so a player reads "Jump boost: ON" and the number
- * it is multiplying by in the very next row. That only lines up because jump boost sits directly
- * before free camera with nothing else between them, and free camera is last; the asserts fail
- * the build the day either stops being true instead of silently renumbering something else. */
+/* The cheats group's ids. A toggle's id is its cheats_own_id_t; the three rows that are not
+ * toggles carry ids past that enum. Free camera has a group of its own, and it is the LAST id of
+ * the enum, so its number is free and the jump-boost scale row takes it; super run's speed row
+ * and its slider track take the two numbers after the enum. The group's DRAWN order is a slot
+ * table in overlay_cheats.c, which puts each typed row directly under the toggle it belongs to:
+ * a player reads "Super run: ON" and the speed on the next line, "Jump boost: ON" and its scale
+ * on the next. The asserts fail the build the day the enum's tail changes shape instead of
+ * silently renumbering something else. */
 _Static_assert((uint32_t)CHEATS_OWN_FREECAM == (uint32_t)CHEATS_OWN_COUNT - 1u,
-               "free camera must stay the last cheat in cheats_own_id_t: the cheats group counts "
-               "to one short of it and the free camera group draws it instead");
+               "free camera must stay the last cheat in cheats_own_id_t: the cheats group draws "
+               "every id below it and the free camera group draws it instead");
 _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREECAM,
                "jump boost must sit directly before free camera in cheats_own_id_t for "
-               "JUMP_SCALE_ROW_ID to land right after its own toggle row");
-#define JUMP_SCALE_ROW_ID ((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u)
+               "JUMP_SCALE_ROW_ID to take free camera's number");
+#define JUMP_SCALE_ROW_ID       ((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u)
+#define SUPER_RUN_SPEED_ROW_ID  ((uint32_t)CHEATS_OWN_COUNT)
+#define SUPER_RUN_TRACK_ROW_ID  ((uint32_t)CHEATS_OWN_COUNT + 1u)
 
-/* The rows the cheats group draws: every cheat but free camera, and the scale, last. The level
- * skip was the tail of this group until the Level selection group took it, with the level a new
- * game starts at. Named because the ceiling below counts it too. */
-#define OVERLAY_CHEATS_ROW_COUNT (JUMP_SCALE_ROW_ID + 1u)
+/* The rows the cheats group draws: every cheat but free camera, super run's speed and its
+ * track, and the jump boost scale. The level skip was the tail of this group until the Level
+ * selection group took it. The two slots named are the ones the tests are written against. */
+#define OVERLAY_CHEATS_ROW_COUNT            12u
+#define OVERLAY_CHEATS_SUPER_RUN_SPEED_SLOT 8u
+#define OVERLAY_CHEATS_JUMP_SCALE_SLOT      11u
+_Static_assert(SUPER_RUN_TRACK_ROW_ID + 1u == OVERLAY_CHEATS_ROW_COUNT,
+               "the cheats group's highest id and its row count disagree");
 
 /* The utilities group's own ids, numbered from a base clear of every id the cheats group above
  * can produce. */

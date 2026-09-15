@@ -346,6 +346,7 @@ set(OVERLAY_MODEL_SOURCES
     # The cheats were split by responsibility when cheats_openphantom.c passed twice the size this
     # project allows. They still share one state record, so the test links them all together.
     dev_overlay/cheats_npc_damage.c
+    dev_overlay/cheats_super_run.c
     dev_overlay/cheats_jump_boost.c
     dev_overlay/cheats_fall_consequences.c
     dev_overlay/cheats_noclip.c

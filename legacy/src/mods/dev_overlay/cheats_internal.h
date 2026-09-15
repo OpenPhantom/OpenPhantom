@@ -142,6 +142,7 @@ bool cheats_install_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
 
 /* Each group installs itself; cheats_openphantom_install calls them in order. */
 void install_npc_damage(void);
+void install_super_run(void);
 void install_jump_boost(void);
 void install_fall_punishment_immunity(void);
 void install_noclip(void);
@@ -151,6 +152,10 @@ void install_noclip(void);
  * every frame from the chained camera update, the one site in this group that always runs. */
 void cheats_noclip_tick(void);
 bool install_freecam(void);
+
+/* Super run's one write, on or off; false when the site never resolved or the write did not
+ * land, so the toggle can put its flag back. */
+bool cheats_super_run_apply(bool on);
 
 /* The player damage hook, which unlimited health owns. Jump boost calls it rather than the engine
  * original, so that turning unlimited health on still wins when both cheats are on at once: the

@@ -352,7 +352,7 @@ static void test_typed_rows_kept_apart(void)
     {
         uint32_t utility_id = row.id;
 
-        ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT, &row) &&
+        ut_check(overlay_model_row(1u + OVERLAY_CHEATS_JUMP_SCALE_SLOT, &row) &&
                      row.kind == OVERLAY_ROW_VALUE,
                  "and so does the cheats group's own typed row, the jump-boost scale");
         ut_check(row.id != utility_id,

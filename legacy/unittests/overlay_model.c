@@ -168,20 +168,54 @@ static void test_folding(void)
              "and with no engine behind it the row reports itself unavailable rather than ticking");
     ut_check(!overlay_model_activate(1),
              "switching an unavailable cheat is refused instead of quietly doing nothing");
+    ut_check(overlay_model_row(1u + (uint32_t)CHEATS_OWN_SUPER_RUN, &row) &&
+                 row.kind == OVERLAY_ROW_CHEAT && !row.available,
+             "super run is a switch drawn under no clip, and with no run site behind it reports "
+             "itself unavailable");
+    ut_check(overlay_model_row(1u + OVERLAY_CHEATS_SUPER_RUN_SPEED_SLOT, &row) &&
+                 row.kind == OVERLAY_ROW_VALUE && row.id == SUPER_RUN_SPEED_ROW_ID &&
+                 strcmp(row.label, "Super run speed (1.1 to 4.0x)") == 0 && !row.available,
+             "its speed is the typed row directly under it, unavailable for the same reason");
+    ut_check(overlay_model_row(2u + OVERLAY_CHEATS_SUPER_RUN_SPEED_SLOT, &row) &&
+                 row.kind == OVERLAY_ROW_SLIDER && row.id == SUPER_RUN_TRACK_ROW_ID &&
+                 !row.available,
+             "and its track is the row under that");
+    ut_check(!overlay_model_slider_set(2u + OVERLAY_CHEATS_SUPER_RUN_SPEED_SLOT, 0.5f),
+             "a drag on the track is refused while the cheat has no site");
+    ut_check(overlay_model_row(3u + OVERLAY_CHEATS_SUPER_RUN_SPEED_SLOT, &row) &&
+                 row.kind == OVERLAY_ROW_CHEAT && row.id == (uint32_t)CHEATS_OWN_JUMP_BOOST,
+             "jump boost's own toggle follows the track");
+}
+
+static void test_super_run_scale_clamps(void)
+{
+    ut_section("the super run speed setter clamps on its own, with no panel involved");
+    (void)cheats_openphantom_super_run_set_scale(0.5f);
+    ut_check(cheats_openphantom_super_run_scale() > 1.09f &&
+                 cheats_openphantom_super_run_scale() < 1.11f,
+             "a value below the floor is clamped up to it");
+    (void)cheats_openphantom_super_run_set_scale(99.0f);
+    ut_check(cheats_openphantom_super_run_scale() > 3.99f &&
+                 cheats_openphantom_super_run_scale() < 4.01f,
+             "a value above the ceiling is clamped down to it");
+    (void)cheats_openphantom_super_run_set_scale(2.0f);
+    ut_check(cheats_openphantom_super_run_scale() > 1.99f &&
+                 cheats_openphantom_super_run_scale() < 2.01f,
+             "a value inside the band is kept as typed");
 }
 
 static void test_jump_scale_row(void)
 {
     ut_section("the jump-boost scale row, right after jump boost's own toggle");
-    /* Row 0 is the heading, rows 1..7 are the seven cheats ahead of jump boost in the enum, row 8
-     * is jump boost's own toggle (id 7), and the scale row takes over free camera's OLD slot: id
-     * CHEATS_OWN_COUNT-1, row CHEATS_OWN_COUNT, one level further out than the hotkey row used to
-     * sit before this row was inserted ahead of it. */
+    /* Row 0 is the heading; the group's own slot table draws the toggles with super run's speed
+     * and track under super run, then jump boost's toggle, then its scale last: slot
+     * OVERLAY_CHEATS_JUMP_SCALE_SLOT, one row further down. The scale's ID is free camera's
+     * number, the last of the enum. */
     cheats_openphantom_jump_boost_set_scale(2.5f);
     overlay_model_rebuild();
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT, &row) &&
-                 row.kind == OVERLAY_ROW_VALUE,
-             "the row at free camera's old slot is now the jump-boost scale row");
+    ut_check(overlay_model_row(1u + OVERLAY_CHEATS_JUMP_SCALE_SLOT, &row) &&
+                 row.kind == OVERLAY_ROW_VALUE && row.id == JUMP_SCALE_ROW_ID,
+             "the last row of the group is the jump-boost scale row, with free camera's number");
     ut_check(strcmp(row.label, "Jump boost scale") == 0, "named for what it edits");
     ut_check(!row.available,
              "unavailable too, because it follows jump boost's own site, which resolved nothing "
@@ -213,7 +247,7 @@ static void test_jump_scale_row_availability(void)
      * read the number this would produce) would be worse than one that shows why it cannot be
      * touched yet, same as this file's own header comment already argues for the hotkey row. */
     ut_check(!overlay_model_is_editing_value(), "nothing is being edited yet");
-    ut_check(!overlay_model_activate((uint32_t)CHEATS_OWN_COUNT),
+    ut_check(!overlay_model_activate(1u + OVERLAY_CHEATS_JUMP_SCALE_SLOT),
              "starting an edit on an unavailable row is refused the same as any other cheat");
     ut_check(!overlay_model_is_editing_value(),
              "and refusing it must not have left an edit armed with nothing behind it");
@@ -240,7 +274,7 @@ static void test_edit_outside_capture(void)
 static void test_cheats_end(void)
 {
     ut_section("the scale is the last row of the cheats");
-    ut_check(overlay_model_row((uint32_t)CHEATS_OWN_COUNT + 1u, &row) &&
+    ut_check(overlay_model_row(2u + OVERLAY_CHEATS_JUMP_SCALE_SLOT, &row) &&
                  row.kind == OVERLAY_ROW_GROUP,
              "the row after the scale is the next group's heading: the level skip that used to "
              "sit here is the Level selection group's now");
@@ -560,6 +594,7 @@ int main(void)
     test_folding();
     test_jump_scale_row();
     test_jump_scale_clamps();
+    test_super_run_scale_clamps();
     test_jump_scale_row_availability();
     test_edit_outside_capture();
     test_cheats_end();

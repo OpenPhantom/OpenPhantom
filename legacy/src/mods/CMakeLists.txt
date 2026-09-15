@@ -398,6 +398,7 @@ add_engine_fix(dev_overlay
     cheats_original_actions.c
     cheats_openphantom.c
     cheats_npc_damage.c
+    cheats_super_run.c
     cheats_jump_boost.c
     cheats_fall_consequences.c
     cheats_noclip.c

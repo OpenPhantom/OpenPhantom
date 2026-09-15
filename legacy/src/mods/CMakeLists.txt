@@ -241,6 +241,7 @@ add_engine_fix(diagnostics
     diag_flow.c
     diag_frame.c
     diag_present.c
+    diag_x87.c
     diag_projectiles.c
     diag_camera_owner.c
     diag_dialogue_ops.c

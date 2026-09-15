@@ -34,6 +34,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Present` | `0` | 1 names which output path is live, 2 also times the flip and says whether it blocks in the driver or spins |
 | `Projectiles` | `0` | 1 counts the engine's own ballistic-physics list every 30 frames, and past 10 live entries also names the first few by position, so a pileup reads as stacked or spread at a glance |
 | `CameraOwner` | `0` | 1 reports every take and release of the engine's scripted-camera flag with the caller that asked and a running depth. Seven places set that flag and six clear it, so a take with no release is possible, and it strands the camera on a forced region until the level reloads. This is the census that found the fault `camera_handback_fix` repairs. The callers are found by scanning the code section for direct calls to the two functions at install, and the retail names are attached only where the scan found a call at the address they were written for, so a different build still names every caller as found or not found. The two run together now: they share three functions and each declares them as detour targets, and the one of the three too short to anchor on once detoured is found behind its neighbour |
+| `X87` | `0` | 1 samples the x87 status word either side of seven calls of the object draw, the model draw, the puppet track advance, the clip events, the halo and shield pass, the halos alone, the shadow projector and the deferred queue flush, counts every call across which the stack pointer moved, per function, writes the first two dozen with both words, and reports the pointer at each frame's end when it has moved. This is the observer that placed the halo draw's stack underflow, which render_guard's `BalanceNodeVerts` repairs |
 | `Footsteps` | `0` | 1 reports where the wet footprints come from. The engine stamps a body as wet on every footstep tick whose floor polygon carries material 12, 13 or 14, and lays wet prints on any other material for eight seconds after the stamp; this reports each stamp with the polygon, its surface word and the position, once when it begins and once a second while it lasts, and the start of each print spell with the material and the age of the stamp. A wet print on ground that should be dry is then traceable to the polygon that stamped it, or to a floor pointer that was not a polygon for a tick |
 | `Characters` | `0` | 1 names the characters within `CharactersRadius` of the player every 60 frames, with position, state, AI mode, the animation wanted and the one playing, the clip on each body layer, health, and the height each gained or lost since the previous report; 2 reports every live character in the level and ignores the radius |
 | `CharactersRadius` | `12` | world units around the player that `Characters=1` reports. Ignored at level 2, and a value below 1 falls back to the default |
@@ -61,6 +62,7 @@ area is switched on. The sources carry the disassembly beside each pattern; this
 | `Level` | `campaign_loadLevel` `0x0043F70A`, `Dialog_EnterInputLock` `0x00430ED9`, `Dialog_LeaveInputLock` `0x00430F18` |
 | `Player` | `Plr_RunPhases` `0x00448297`, the mode pointer table `player_save` pushes at `0x004479F8` (a data site) |
 | `Characters` | the character pool teardown `0x00431FF3` (a data site, never hooked) and `Plr_RunPhases` again |
+| `X87` | `bapthing_dispatch` `0x00417930`, `rdPuppet_updateTrack` `0x00483D20`, `bapobj_dispatchClipEvents` `0x00411897`, `fx_thingDraw` `0x00438E78`, `halo_drawForThing` `0x00439A54`, `fxprint_projectFloor` `0x0043A5FF`, `bapdraw_flushQueue` `0x00402155` |
 | `Present` | `stdDisplay_present` `0x0048F052`, the flip flag derivation `0x00487640` |
 | `Trigger` | `bapmap_openMover` `0x00408B50`, `bapmap_closeMover` `0x00408DF5`, `bapmap_tickMover` `0x00409170`, `bapmap_polyToWorld` `0x00419490`, `bapvrt_transformWorld` `0x004199B0`, and the two traces `0x0040BE00` and `0x0040C2BE` at the higher levels |
 | the projectile census | the list head test at `0x0045243E` |
@@ -267,7 +269,12 @@ retail builds.
 **The audio observers are accepted in game.** They were used to find a live defect: the channel
 release observer reported three voices holding an owner handle that pointed into the calling
 thread's stack, named the sound in each and where the write would land. The fix was built
-from that. The other areas are still offline only.
+from that.
+
+**`X87` is accepted in game.** Its first run placed the x87 stack underflow that framerate_fix's
+rider trace had found: the pointer moved across `halo_drawForThing` once a frame and across
+none of the other six calls, and with render_guard's `BalanceNodeVerts` on it moved across
+nothing. The other areas are still offline only.
 
 ## A mover about to take an oversized step
 

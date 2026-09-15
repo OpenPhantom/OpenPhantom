@@ -9,6 +9,7 @@
 #include "diag_frame.h"
 #include "diag_log.h"
 #include "diag_present.h"
+#include "diag_x87.h"
 #include "diag_characters.h"
 #include "diag_camera_owner.h"
 #include "diag_dialogue_ops.h"
@@ -73,6 +74,7 @@ static void load_config(void)
     diagnostics_state.fx       = read_level_max("Fx", 3);
     diagnostics_state.frame    = read_level("Frame");
     diagnostics_state.present  = read_level("Present");
+    diagnostics_state.x87      = ini_read_bool(DIAGNOSTICS_SECTION, "X87", false) ? 1 : 0;
     diagnostics_state.projectiles = ini_read_bool(DIAGNOSTICS_SECTION, "Projectiles", false) ? 1
                                                                                               : 0;
     diagnostics_state.camera_owner =
@@ -141,7 +143,8 @@ static bool any_area_enabled(void)
             diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
             diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
             diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0 ||
-            diagnostics_state.camera_owner != 0 || diagnostics_state.footsteps != 0);
+            diagnostics_state.camera_owner != 0 || diagnostics_state.footsteps != 0 ||
+            diagnostics_state.x87 != 0);
 }
 
 void diagnostics_install(void)
@@ -195,6 +198,7 @@ void diagnostics_install(void)
     observers += diag_frame_install(diagnostics_state.frame,
                                     diagnostics_state.frame_hitch_percent);
     observers += diag_present_install(diagnostics_state.present);
+    observers += diag_x87_install(diagnostics_state.x87);
     observers += diag_projectiles_install(diagnostics_state.projectiles);
     observers += diag_camera_owner_install(diagnostics_state.camera_owner);
     observers += diag_footsteps_install(diagnostics_state.footsteps);

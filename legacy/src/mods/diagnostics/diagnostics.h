@@ -42,6 +42,7 @@ typedef struct diagnostics_config {
      * whether a DirectDraw wrapper owns the presentation at all or the frame goes past it into the
      * window through GDI. */
     int  present;             /* 1 = the live path, 2 = plus the addresses it resolved to       */
+    int  x87;                 /* 1 = the stack pointer sampled around the object draw's calls   */
 
     /* The engine's own generic ballistic-physics list (blaster bolts, confirmed; whatever else
      * shares it, unconfirmed): a live count every 30 frames, plus a position sample of the first

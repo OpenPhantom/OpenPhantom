@@ -76,4 +76,13 @@ bool overlay_input_drag(int32_t *row, float *fraction);
  * accumulator. */
 int32_t overlay_input_take_wheel_delta(void);
 
+/* The pad's way in, from pad_panel.c; each is what the mouse or a key already does. The press
+ * is the left button, down or up, so held it drags a slider; the escape is the Escape key's
+ * steps; the toggle is the open key's, opening, closing, or hiding while the camera flies. The
+ * window is the game's, for the pad to move the cursor in, NULL while the panel is shut. */
+void *overlay_input_window(void);
+void overlay_input_pad_press(bool down);
+void overlay_input_pad_escape(void);
+void overlay_input_pad_toggle_open(void);
+
 #endif /* OVERLAY_INPUT_H */

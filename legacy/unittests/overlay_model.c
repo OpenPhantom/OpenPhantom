@@ -459,7 +459,7 @@ static void test_open_freecam_fold(void)
                  HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + 5u +
                      OVERLAY_FREECAM_LINE_COUNT,
              "open, the free camera group holds the key, the cheat, the two switches, the fold's "
-             "own summary and its eleven lines, with the utilities heading below them");
+             "own summary and its fifteen lines, with the utilities heading below them");
     ut_check(overlay_model_row(FC_ROW(4), &row) &&
                  strcmp(row.label, "- How free camera flies") == 0,
              "the summary itself now reads open, marked with a minus");
@@ -471,11 +471,11 @@ static void test_open_freecam_fold(void)
              "the first line sits immediately below the summary");
     ut_check(!overlay_model_activate(FC_ROW(5)),
              "but a line itself does nothing when clicked; only the summary is interactive");
-    /* Eleven lines, not seven: the three that describe hiding the panel and the two ways out are
-       each a sentence too long to fit the panel's width, so each is written as a line plus an
-       indented continuation instead of being allowed to run off the edge. The count is what this
-       pins down: a line added without the rows below it moving is the failure that would
-       otherwise go unseen. */
+    /* Fifteen lines, not seven: the three that describe hiding the panel and the two ways out
+       are each a sentence too long to fit the panel's width, so each is written as a line plus
+       an indented continuation, and the pad's four lines follow. The count is what this pins
+       down: a line added without the rows below it moving is the failure that would otherwise
+       go unseen. */
     ut_check(overlay_model_row(FC_ROW(10), &row) &&
                  strcmp(row.label, "    Your Cheatmenu open key or Escape") == 0,
              "the sixth line names the key that hides the panel while the camera flies");
@@ -485,12 +485,17 @@ static void test_open_freecam_fold(void)
     ut_check(overlay_model_row(FC_ROW(15), &row) &&
                  strcmp(row.label, "      the player where they were") == 0,
              "and the eleventh is its continuation, indented past the line it finishes");
+    ut_check(overlay_model_row(FC_ROW(16), &row) &&
+                 strcmp(row.label, "    Pad: left stick flies, right stick looks,") == 0 &&
+                 overlay_model_row(FC_ROW(19), &row) &&
+                 strcmp(row.label, "      View hides and shows the panel") == 0,
+             "the pad's four lines close the fold, the last one the opening button's");
 
     /* The heading that was below the summary is still below the lines. A fold that reordered the
        rows around it would be worse than one that does not open. */
-    ut_check(overlay_model_row(FC_ROW(16), &row) && row.kind == OVERLAY_ROW_GROUP &&
+    ut_check(overlay_model_row(FC_ROW(20), &row) && row.kind == OVERLAY_ROW_GROUP &&
                  strcmp(row.label, "Dismemberment") == 0,
-             "the dismemberment heading is pushed down the screen by the eleven lines");
+             "the dismemberment heading is pushed down the screen by the fifteen lines");
 }
 
 static void test_close_freecam_fold(void)
@@ -500,7 +505,7 @@ static void test_close_freecam_fold(void)
              "the same summary row closes it back up");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + 5u,
-             "its eleven lines are gone again, back to costing one row like any other");
+             "its fifteen lines are gone again, back to costing one row like any other");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_SPAWN);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_LEVELS);

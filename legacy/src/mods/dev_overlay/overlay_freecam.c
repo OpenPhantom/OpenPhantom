@@ -22,7 +22,11 @@ static const char *const FREECAM_INFO_LINES[OVERLAY_FREECAM_LINE_COUNT] = {
     "Your teleport key ends the flight",
     "  and brings the player here",
     "F4 ends the flight and leaves",
-    "  the player where they were"
+    "  the player where they were",
+    "Pad: left stick flies, right stick looks,",
+    "  triggers climb and dive, bumpers speed,",
+    "  A brings the player here, B leaves them,",
+    "  View hides and shows the panel"
 };
 
 static struct {

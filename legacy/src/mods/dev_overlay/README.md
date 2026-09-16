@@ -126,6 +126,31 @@ The panel closes itself if it is asked to paint into a frame the player is not s
 end and a movie look like that from here. Otherwise a level ending could leave the game held with
 nothing on screen.
 
+**A controller drives the panel too** (`pad_input.c`, `pad_panel.c`). The pad is read through XInput
+once a frame from the same hook that draws the panel, the call `controller_input` makes on a thread
+of its own; two readers of one pad are fine, the API keeps no state per caller, and the two DLLs
+share nothing but the settings file, from which the one key read out of the other's section is which
+slot the pad is in. An empty slot is the expensive case of that call, so it is asked again only
+every two seconds. Pressing the opening button (`PadOpenButtons`, View unless set otherwise; two
+names make a chord, which fires on the frame its last button goes down) opens or closes the panel,
+and hides or shows it while the free camera flies, the open key's own three steps. The game's own
+joystick reading sees the same press and runs whatever its controls screen has on the button, which
+is the player's to clear; a half second hold was tried first and gave the game the whole half
+second, and both stick clicks in its place turned out to be on the game's list as well. Open, the
+left stick moves the system cursor, which is the panel's pointer, up and down at a speed in screen
+widths a second and never sideways (sideways walked the pointer off the label the D-pad had put it
+on, and nothing in the panel wants it there), so the hover, the click and the drag all follow the
+stick and nothing in the model knows a pad exists; the D-pad puts the cursor on the centre of the
+next row's label, scrolling the list by one when that row is off the screen, and switches the tab
+sideways, so a press is a step from row to row with the hover as the mark. The triggers move the
+slider under the pointer, or the one under the value row it belongs to, half the track a second
+fully in, written at the drag's own throttle and once more on leaving the row. A presses where the
+pointer is and, held, drags a slider, since the drag polls the pad's button beside the mouse's; B
+takes the Escape key's steps, cancelling a typed value, hiding the panel under the camera, or
+closing it; the right stick scrolls as the wheel does, twelve rows a second fully over with the
+fraction carried between frames; the bumpers page. The search box and typed values still want a
+keyboard, and with the panel closed and the camera off the pad is read and dropped.
+
 **Typing reaches the search box only after a click has landed on it, not the moment the panel
 opens.** The box used to take every character while the panel was up, which meant the key that
 opened the panel was also typed into it: Windows queues a `WM_CHAR` right behind the `WM_KEYDOWN`
@@ -441,6 +466,15 @@ fights the original for the fields.
 Both sites, the pause flag and the camera object pointer must all resolve. A partial resolve is
 not offered as half a feature here: a camera that could roam but never stopped the world moving
 underneath it is not this thing, and neither is a pause with nothing to look through.
+
+**Flying it from a pad.** The camera reads the frame the panel's pad reader took: the left stick
+flies along the view with its deflection as the speed, so a half push glides, the right stick looks
+on both axes at `PadLookSpeed`, the triggers climb and dive, the bumpers step the speed by the
+wheel's own ratio on the press and go on stepping while held, A ends the flight bringing the player
+to the camera (the bound key's meaning) and B ends it leaving them where they were (F4's). The right
+stick's sideways half also reaches the camera as mouse motion, faked by `controller_input` for the
+game's own camera, so while the stick is over the mouse's sideways counts are dropped, or the camera
+turned twice as fast under a pad as under a mouse.
 
 **Flying it.** `W`/`S` forward and back, `A`/`D` strafe, `E`/`Q` up and down, the mouse to look,
 the wheel to change speed. Speed moves by a constant ratio per notch, not a constant amount, which is Blender's fly-mode feel: even control at both ends, where a fixed addition would
@@ -1172,6 +1206,11 @@ logged. Closing the list first and then pressing the row always worked, so this 
 | `NoFog` | `0` | Whether the panel's "No fog" row starts on. Written by that row every time it is flipped, so it records the last choice and is not edited here. |
 | `NewGameStartsAt` | `0` | The level a new game starts at, `1` to `11` in the game's order, `0` for its own first. Only a new game's first load is redirected. Written by the Level selection group's "New game starts at" list. |
 | `PauseFreezesAnimation` | `0` | Whether a pause, the panel open or the free camera flying, also holds the animations on the engine's own draw latch. Written by the "Animations freeze while paused" row. |
+| `PadEnabled` | `1` | Whether a controller drives the panel and the free camera, read through XInput once a frame while either is up. `0` leaves the pad to the game and to `controller_input` alone. |
+| `PadOpenButtons` | `View` | The button that opens or closes the panel on its press, from `A B X Y LB RB LS RS View Menu Up Down Left Right`; two names make a chord. The game's own joystick reading sees the same press and runs whatever its controls screen has on that button, so clear it there. |
+| `PadDeadzone` | `0.24` | The radial deadzone on both sticks, `0` to under `1`; the rest of the travel is rescaled so the first hair past it is a hair. |
+| `PadPointerSpeed` | `0.6` | How fast the left stick moves the panel's pointer up and down with the stick fully over, in screen widths a second, up to `5`. |
+| `PadLookSpeed` | `120` | How fast the right stick turns the free camera with the stick fully over, in degrees a second, up to `720`. |
 | `FreeCameraWorldRuns` | `0` | Whether the world keeps moving under the free camera while it flies, with the player's own input held. Written by the "World runs while flying" row. One or the other of this and the freeze. |
 
 ## Limitations

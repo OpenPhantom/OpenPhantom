@@ -19,6 +19,7 @@
 #include "sim_pause.h"
 #include "freecam_world.h"
 #include "overlay_input.h"
+#include "pad_input.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -193,6 +194,7 @@ _Static_assert(sizeof(SIG_CAMERA_UPDATE) == sizeof(MSK_CAMERA_UPDATE),
 #define FREECAM_MOUSE_DEGREES_PER_COUNT 0.15f   /* degrees of turn per pixel of cursor delta */
 #define FREECAM_PITCH_LIMIT      89.0f    /* degrees; short of vertical to avoid a gimbal flip */
 #define FREECAM_MIN_SPEED        0.5f     /* world units/second */
+#define FREECAM_BUMPER_NOTCHES_PER_S 4.0f /* a held bumper's notches a second, after its press */
 #define FREECAM_MAX_SPEED        200.0f   /* world units/second */
 #define FREECAM_SPEED_PER_NOTCH  1.1f     /* multiplicative, Blender's own fly-mode feel: constant
                                             * ratio per notch reads as even control at both the slow
@@ -266,6 +268,7 @@ static bool    freecam_hotkey_was_down;
 
 static bool freecam_teleport_pending = false;   /* raised by the BOUND key, read on the way out */
 static bool freecam_return_was_down  = false;
+static bool freecam_pad_armed        = false;   /* A and B seen up since the flight began */
 
 
 int32_t cheats_openphantom_freecam_hotkey(void)
@@ -306,6 +309,7 @@ static void end_flight(void)
 static void begin_flight(void *view)
 {
     freecam_teleport_pending = false;
+    freecam_pad_armed        = false;
     freecam_return_was_down  = (GetAsyncKeyState(FREECAM_RETURN_KEY) & 0x8000) != 0;
     freecam_x = *(float *)((uint8_t *)view + CAMERA_ANCHOR_X_OFFSET);
     freecam_y = *(float *)((uint8_t *)view + CAMERA_ANCHOR_Y_OFFSET);
@@ -391,6 +395,26 @@ static void begin_flight(void *view)
  * share a single exit path and neither has to know how the other ends the flight. */
 static bool exit_key_pressed(void)
 {
+    /* The pad: A is the bound key, the player comes here; B is F4, they stay where they were.
+     * Neither counts until both have been seen up since the flight began: the A that switched
+     * the camera on from its row in the panel was still an edge on the frame the flight began,
+     * and ended it at once, with the teleport closing the panel (played 2026-09-16). */
+    {
+        const pad_state_t *pad = pad_input_state();
+
+        if (!freecam_pad_armed) {
+            freecam_pad_armed = pad->present &&
+                                (pad->held & (PAD_BUTTON_A | PAD_BUTTON_B)) == 0;
+        } else if (pad->present && (pad->pressed & PAD_BUTTON_A) != 0) {
+            freecam_teleport_pending = true;
+            own_state.cheats[CHEATS_OWN_FREECAM].on = false;
+            return true;
+        }
+        if (freecam_pad_armed && pad->present && (pad->pressed & PAD_BUTTON_B) != 0) {
+            own_state.cheats[CHEATS_OWN_FREECAM].on = false;
+            return true;
+        }
+    }
     if (freecam_hotkey != 0 && is_game_foreground()) {
         bool hotkey_down = (GetAsyncKeyState(freecam_hotkey) & 0x8000) != 0;
 
@@ -447,6 +471,7 @@ static float flight_seconds(void)
 static void apply_mouse_look(void)
 {
     POINT cursor_now;
+    bool  stick_over;
 
     /* Mouse look: cursor-delta polling rather than enhanced_input's own raw-input thread.
      * Reusing that thread would mean either reaching into another mod's DLL (this project's
@@ -505,8 +530,20 @@ static void apply_mouse_look(void)
             dx = 0;
             dy = 0;
         }
+        /* While the pad's right stick is over, the sideways counts are the stick's own, made
+         * into mouse motion by controller_input for the game's camera, and this camera has
+         * already turned by the stick in apply_flight_keys; counted twice it turned twice as
+         * fast under a pad as under a mouse. The mouse's own counts arrive the same way and
+         * are dropped with them for as long as the stick is over, which is a corner nobody
+         * stands in. The cursor still goes back to its anchor every one of those frames: left
+         * to drift for as long as the stick was held, the frame after it was let go read the
+         * whole drift as one movement and turned the camera by it (played 2026-09-16). */
+        stick_over = pad_input_state()->present && pad_input_state()->right_x != 0.0f;
+        if (stick_over) {
+            dx = 0;
+        }
 
-        if (dx != 0 || dy != 0) {
+        if (dx != 0 || dy != 0 || stick_over) {
             /* Yaw (X) field-tested inverted from the first build and flipped, and stayed
              * flipped, confirmed correct. Pitch (Y) was flipped in that same round on the
              * assumption both axes were backward together; field testing showed that guess
@@ -527,7 +564,7 @@ static void apply_mouse_look(void)
     }
 }
 
-static void apply_wheel_speed(void)
+static void apply_wheel_speed(float dt)
 {
     /* Scroll wheel adjusts fly speed, the same feel Blender's own fly/walk navigation uses.
      * WM_MOUSEWHEEL is observed unconditionally, panel open or closed, because this needs it
@@ -538,11 +575,23 @@ static void apply_wheel_speed(void)
      * current speed is barely-crawling or already fast. wheel_source is NULL if dev_overlay.c
      * never wired it in (its own site did not resolve), and then this simply never fires, the
      * same as every other optional site in this file failing quietly. */
-    if (wheel_source != NULL) {
-        int32_t wheel = wheel_source();
+    {
+        int32_t wheel = (wheel_source != NULL) ? wheel_source() : 0;
+        float   notches = (float)wheel / (float)WHEEL_DELTA;
+        const pad_state_t *pad = pad_input_state();
 
-        if (wheel != 0) {
-            float notches = (float)wheel / (float)WHEEL_DELTA;
+        /* The bumpers are a notch on the press, the same ratio as the wheel's, and go on at
+         * FREECAM_BUMPER_NOTCHES_PER_S while held, since a tap a notch made a long way up a
+         * long way of tapping (played 2026-09-16). */
+        if (pad->present) {
+            float held = FREECAM_BUMPER_NOTCHES_PER_S * dt;
+
+            if (pad->pressed & PAD_BUTTON_RIGHT_SHOULDER) { notches += 1.0f; }
+            if (pad->pressed & PAD_BUTTON_LEFT_SHOULDER)  { notches -= 1.0f; }
+            if (pad->held & PAD_BUTTON_RIGHT_SHOULDER)    { notches += held; }
+            if (pad->held & PAD_BUTTON_LEFT_SHOULDER)     { notches -= held; }
+        }
+        if (notches != 0.0f) {
 
             freecam_speed *= powf(FREECAM_SPEED_PER_NOTCH, notches);
             if (freecam_speed < FREECAM_MIN_SPEED) {
@@ -593,6 +642,27 @@ static void apply_flight_keys(float dt)
         if ((GetAsyncKeyState('A') & 0x8000) != 0) { strafe   -= 1.0f; }
         if ((GetAsyncKeyState('E') & 0x8000) != 0) { vertical += 1.0f; }
         if ((GetAsyncKeyState('Q') & 0x8000) != 0) { vertical -= 1.0f; }
+
+        /* The pad on top of the keys: the left stick along the view with its deflection as
+         * the speed, so a half push glides; the triggers up and down; the right stick turning
+         * at the look rate. Stick up is a look up, as pushing the mouse forward is. */
+        {
+            const pad_state_t *pad = pad_input_state();
+
+            if (pad->present) {
+                forward  += pad->left_y;
+                strafe   += pad->left_x;
+                vertical += pad->trigger_right - pad->trigger_left;
+                freecam_yaw   -= pad->right_x * pad_input_look_speed() * dt;
+                freecam_pitch += pad->right_y * pad_input_look_speed() * dt;
+                if (freecam_pitch > FREECAM_PITCH_LIMIT) {
+                    freecam_pitch = FREECAM_PITCH_LIMIT;
+                }
+                if (freecam_pitch < -FREECAM_PITCH_LIMIT) {
+                    freecam_pitch = -FREECAM_PITCH_LIMIT;
+                }
+            }
+        }
 
         if (forward != 0.0f || strafe != 0.0f || vertical != 0.0f) {
             float yaw_rad   = freecam_yaw * DEG_TO_RAD;
@@ -662,7 +732,7 @@ static void __cdecl hook_camera_update(void)
         float dt = flight_seconds();
 
         apply_mouse_look();
-        apply_wheel_speed();
+        apply_wheel_speed(dt);
         apply_flight_keys(dt);
     }
 

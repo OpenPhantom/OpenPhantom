@@ -36,7 +36,7 @@
  * off the edge of the box with no ellipsis and no wrap, so the reader loses the end of exactly
  * the sentence that tells them how to get out. Each is written as a line plus a continuation
  * indented two spaces instead. */
-#define OVERLAY_FREECAM_LINE_COUNT 11u
+#define OVERLAY_FREECAM_LINE_COUNT 15u
 #define OVERLAY_FREECAM_ROWS_MAX   (OVERLAY_FREECAM_LINE_FIRST + OVERLAY_FREECAM_LINE_COUNT)
 
 /* How many rows the group draws right now: five, or five and the lines. */

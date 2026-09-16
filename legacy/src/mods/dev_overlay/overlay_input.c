@@ -224,6 +224,7 @@ typedef struct overlay_input_state {
     float             drag_written;       /* the last fraction that reached the file */
     uint32_t          drag_apply_ms;      /* this slider's own write interval */
     uint32_t          drag_last_apply_ms;
+    bool              pad_held;           /* the pad's A is down: the left button, for the drag */
 } overlay_input_state_t;
 
 static overlay_input_state_t input_state;
@@ -406,7 +407,7 @@ static void update_drag(void)
     /* The button is polled rather than trusted to arrive as a message: the panel swallows input and
      * a button-up can be delivered to a window that is not this one, which would otherwise leave a
      * handle stuck to the pointer for the rest of the session. */
-    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
+    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0 && !input_state.pad_held) {
         end_drag();
         return;
     }
@@ -810,6 +811,57 @@ bool overlay_input_install(void)
              "is deliberately not written.",
              (unsigned)input_state.site, (unsigned)input_state.modal);
     return true;
+}
+
+void *overlay_input_window(void)
+{
+    return input_state.open ? (void *)input_state.window : NULL;
+}
+
+void overlay_input_pad_press(bool down)
+{
+    if (down == input_state.pad_held) {
+        return;
+    }
+    input_state.pad_held = down;
+    if (!input_state.open) {
+        return;
+    }
+    if (down) {
+        click(input_state.pointer_x, input_state.pointer_y);
+    } else {
+        end_drag();
+    }
+}
+
+void overlay_input_pad_escape(void)
+{
+    if (!input_state.open) {
+        return;
+    }
+    if (overlay_model_is_editing_value()) {
+        overlay_model_value_cancel();
+        overlay_model_rebuild();
+        return;
+    }
+    if (free_camera_holds_panel()) {
+        toggle_hidden();
+        return;
+    }
+    set_open(false);
+}
+
+void overlay_input_pad_toggle_open(void)
+{
+    if (input_state.open && free_camera_holds_panel()) {
+        toggle_hidden();
+        return;
+    }
+    log_info("the overlay was %s from the pad", input_state.open ? "closed" : "opened");
+    set_open(!input_state.open);
+    if (input_state.open) {
+        overlay_model_rebuild();
+    }
 }
 
 bool overlay_input_drag(int32_t *row, float *fraction)

@@ -58,6 +58,9 @@ add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
 # The NPC spawner's compiled scripts are data; the checks are on the data's shape, and the clip
 # filling is refused without the archive, which a test process never has beside it.
 add_unit_test(spawn_scripts dev_overlay dev_overlay/spawn_scripts.c dev_overlay/actor_catalog.c)
+# The pad's deadzone and its hold that fires once; the pad itself is never polled here.
+add_unit_test(pad_input dev_overlay dev_overlay/pad_input.c)
+target_link_libraries(pad_input_test PRIVATE xinput)
 
 # The damper, the mouse bank and the travel angle together: all three are the arithmetic that
 # decides how this feature feels. free_look_math.c is here and free_look.c deliberately is not,
@@ -356,6 +359,9 @@ set(OVERLAY_MODEL_SOURCES
     dev_overlay/cheats_free_camera.c
     dev_overlay/freecam_teleport.c
     dev_overlay/freecam_world.c
+    # The free camera reads the pad's frame; in a test process the pad is never read, so the
+    # frame stays empty and the camera takes nothing from it.
+    dev_overlay/pad_input.c
     dev_overlay/freeze_anim_row.c
     # The start level: its sites resolve nothing in a test process, so its row reads
     # unavailable, which is the case the panel has to show.
@@ -391,7 +397,9 @@ set(OVERLAY_MODEL_SOURCES
     dev_overlay/input_freeze.c
 )
 add_unit_test(overlay_model dev_overlay ${OVERLAY_MODEL_SOURCES})
+target_link_libraries(overlay_model_test PRIVATE xinput)
 add_unit_test(overlay_groups dev_overlay ${OVERLAY_MODEL_SOURCES})
+target_link_libraries(overlay_groups_test PRIVATE xinput)
 
 # The character census reads a live process, so what can be tested without the game is the
 # arithmetic underneath it: the pool slot walk, the radius test, the vertical classification and

@@ -412,6 +412,8 @@ add_engine_fix(dev_overlay
     npc_spawner.c
     npc_census.c
     npc_foreign.c
+    pad_input.c
+    pad_panel.c
     spawn_scripts.c
     actor_loader.c
     overlay_spawn.c
@@ -432,3 +434,5 @@ add_engine_fix(controller_input
     look_counts.c
 )
 target_link_libraries(controller_input PRIVATE xinput)
+# The panel and the free camera read the pad themselves (pad_input.c), through the same API.
+target_link_libraries(dev_overlay PRIVATE xinput)

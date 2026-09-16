@@ -27,6 +27,8 @@
 #include "overlay_model.h"
 #include "freeze_anim_row.h"
 #include "npc_spawner.h"
+#include "pad_input.h"
+#include "pad_panel.h"
 #include "start_level.h"
 #include "start_level_row.h"
 
@@ -94,6 +96,7 @@ static uintptr_t      scene_end_call;      /* the call that is redirected, once 
 
 static void __cdecl hook_scene_end(void)
 {
+    pad_panel_tick();     /* before the panel's own update, so a press lands this frame */
     npc_spawner_tick();   /* the spawned flyers' mark over the player's head, and the log of
                            * every hit a spawned copy takes */
     if (overlay_input_is_open() && !overlay_input_is_hidden()) {
@@ -219,6 +222,7 @@ void dev_overlay_install(void)
      * the group's rows read unavailable when they did not resolve, and with no level loaded
      * either way. */
     (void)npc_spawner_install();
+    pad_input_install();
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "
                     "every cheat row in the panel is unavailable. The panel still opens, and its "

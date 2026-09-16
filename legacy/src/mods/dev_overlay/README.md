@@ -18,18 +18,19 @@ Two tabs under a heading that reads `Cheatmenu`.
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds eleven groups, one per subject a player comes for: **Cheats**, **Free
-  camera** (that cheat with its key and its instructions), **Level selection** (the skip, and
-  the level a new game starts at), **Dismemberment**, **Cheatmenu options** (this panel's own
-  size and key), **In game options extras** (whether this patch's settings appear on the game's
-  own screens), **Enhanced resolution** (the picture), **Fog**, **Enhanced input** (the control
-  scheme), **Window mode** and **Frame rate**. It began as one
-  group with a settings row appended, and the settings outgrew the cheats, so a reader had to
-  scroll past invincibility to reach the draw distance. A second group, Utilities, held every
-  setting for a while; Window mode came out of it first, because its rows answer a single question
-  and half of them are unusable until the game is restarted, which is worth saying in one place
-  and not eleven times, and the rest followed on the same argument until each heading named
-  one thing and Utilities was left holding the panel's own two rows, so it was renamed for them.
+* **OpenPhantom** holds twelve groups, one per subject a player comes for: **Cheats**, **Free
+  camera** (that cheat with its key and its instructions), **Level selection** (the skip, and the
+  level a new game starts at), **NPC spawner** (any actor in the game, in front of you),
+  **Dismemberment**, **Cheatmenu options** (this panel's own size and key), **In game options
+  extras** (whether this patch's settings appear on the game's own screens), **Enhanced resolution**
+  (the picture), **Fog**, **Enhanced input** (the control scheme), **Window mode** and **Frame
+  rate**. It began as one group with a settings row appended, and the settings outgrew the cheats,
+  so a reader had to scroll past invincibility to reach the draw distance. A second group,
+  Utilities, held every setting for a while; Window mode came out of it first, because its rows
+  answer a single question and half of them are unusable until the game is restarted, which is worth
+  saying in one place and not eleven times, and the rest followed on the same argument until each
+  heading named one thing and Utilities was left holding the panel's own two rows, so it was renamed
+  for them.
 
 Everything starts folded. The search box filters by name and opens a group that has matches, and
 clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
@@ -530,6 +531,185 @@ What the player has on arrival is what a new campaign gives plus what the level'
 hands out, not the kit the shipped saves carry from the levels before. Kept as `[dev_overlay]
 NewGameStartsAt`, off as shipped. Played 2026-09-15: Mos Espa picked from the list, quit to
 the front end, New Game, and the level opened with its own movie and title.
+
+### NPC spawner
+
+A group of its own, directly under Level selection, with five rows and a fold: "Spawn NPC (close
+menu to take effect)", a note under it counting the spawns alive against the cap, "NPC to spawn",
+"Spawned NPCs", "Remove spawned NPCs" and "About spawned NPCs", which opens into the lines that say
+what to expect: it appears when the menu closes, three steps ahead and facing you; any actor in the
+game, the level's own first, to stand, follow, attack or help you; any of them can be struck down
+and fades; gone with the level, and a save brings each back as one more of its placement; up to
+sixteen alive at once, each on the next free spot. "NPC to spawn" opens a list of the actor files
+the loaded level's placements use, `ddroid` for `ddroid.baf`, each with how many the level placed of
+it, and then the archive's creatures the level did not load; "Spawned NPCs" opens the four
+behaviours, Stand, Follow, Attack and Help, Stand to start; the choice stays put across kinds and
+levels, since a default that followed the kind changed it under the player's hands. Pick an actor,
+press the spawn, and one more of it stands three units ahead of the player, facing them. The rows
+read unavailable with no level loaded.
+
+Nothing is hooked. A level's actors are placements, one record each in a directory the world record
+carries at `+0x20C` (count at `+0x204`), and `spawn_actor` (`0x00437250`, cdecl: the record, its
+index, a script index or -1 for the record's own) is the one routine that turns a record into a live
+actor. The activation scan calls it for every placement the player comes near (`0x0043722E`) and the
+level scripts call it for their own spawns; the group calls it too. The routine is found from its
+own opening and from that call, and the two have to agree; the world pointer is read out of the
+opening's two operands, which have to agree as well.
+
+What is spawned is a copy. The engine keeps one live actor per record and writes its death
+bookkeeping back into it, so a second actor on the level's own record would take over its live word
+and its spawn state. The chosen placement is copied into a record of the group's own, from a ring of
+thirty-two that skips any record a live actor still points at, with the position moved, the yaw
+turned to face the player, the starting mode set to 0, the class set to 2 and the reveal count
+zeroed; the copy goes in under its source's index, so a save made with spawned actors alive restores
+each as one more actor of its source placement, running the placement's own script, which is the one
+thing a save can say about it. The live words the engine keeps in those records are what the cap
+counts, sixteen alive at once against the engine's pool of 128 for the whole level, and what the
+spacing reads: a new spawn takes the first of a fan of twenty spots ahead of and around the player,
+at three units and then at nearly five, that no live spawn stands within a body's width of, so
+holding the key down lays them out in an arc and not in a heap. The list is by model, one row per
+actor file; of a kind's placements the plainest is the source, one the activation scan spawns and
+the level did not name.
+
+**A copy runs a script of this project's own, never its source's.** A placement's script is the
+level's business: a story stand-in's opens his cutscene (a spawned Obi-Wan started Mos Espa's
+opening scene over again and hung the level), a boss's sends him off to the marks it names (a
+spawned Darth Maul ran its source's script for a day, 2026-09-16, and walked off to where the duel's
+Maul stands), a companion's follows the player. The scripts a copy can run are written in the AI
+language of the project's level editor (`scripts/stand.bais`, `scripts/follow.bais`,
+`scripts/attack.bais`, `scripts/shoot.bais`, `scripts/droideka.bais`, `scripts/still.bais`,
+`scripts/ally.bais`, `scripts/allyshot.bais`), compiled by the editor's compiler into the engine's
+own bytecode record by `tools/compile_spawn_scripts.py`, and carried in `spawn_script_data.h`; the
+patch builds without the editor. Stand plays the stand clip and turns to face the player; Follow
+walks after them, stops within a unit and a half facing them, and goes again once they are three
+units off (two thresholds, since one made a follower stutter on the line while the player walked
+slowly); Attack is
+two records chosen by the model. A model with a swing clip gets the hunter the editor proved in the
+Federation ship, the Tatooine duel's own chase and swing calls with the model's run and two swing
+clips, which runs at the player, swings from its reach and swings again while they stay close; a
+model with a fire clip and no swing (`scripts/shoot.bais`) walks to five units and fires the
+record's first weapon (attack kind 8, the fire op's remap through the placement's weapon slots at
+`+0x8C`), so a bazooka droid fires its rockets and a guard his bolts as the level's own do; an
+archive creature's record and an empty slot get the blaster bolt, shot kind 1. The twin muzzles are
+the one weapon the fire op tests for by the kind it is called with, before the remap, and the level
+scripts choose it, not the records: every destroyer, tripod and hovering droid placement in the
+retail levels carries empty weapon slots and a script that names kind 2 outright (read out of all 22
+levels). So a copy of those three models, `TWIN_MUZZLES` in `spawn_scripts.c`, names kind 2 and
+fires both barrels from the nodes the model marks by usage, as the level's own do. The destroyer
+droid alone has a record of its own under Attack, `scripts/droideka.bais`, the shape of the game's
+"dest" script: it rolls at the player on its roll clip, unfolds within two and a half units, widens
+its cylinder and raises the shield (`extra_func` 2, the fxshield the engine hangs on the body),
+fires the twin muzzles while they stay within seven units, refunds three hit points per hit while
+the shield is up until it is down to 25, and folds and rolls again when they leave. Help is the same
+two records turned the other way (`scripts/ally.bais`, `scripts/allyshot.bais`): a helper follows
+the player as Follow does until the nearest class 2 actor, an enemy or another spawned copy, comes
+within ten units, then a swinger runs at it and swings, chasing with no arrive width so it pushes
+until the bodies touch and swinging from the model's reach plus 0.3, and a shooter stands and fires
+at it from twelve; both come back when none is left in range. A helper is raised as class 1, the
+player's own side, so the other helpers are not its enemies (the target kinds 2 and 4 are the
+nearest class 2) and the enemies' fire is aimed at the player; the pair pass lets class 1 touch
+class 2, and the log shows a helper's swings taking three or six points a hit (played 2026-09-16).
+Its clips are the one model's own, so that record carries no placeholders. The tripod gun is the one
+copy not raised as class 2: the Use key mounts an object of class 4 ahead of the player
+(`Plr_GroundActions`), so a spawned tripod is class 4 and can be taken over like the level's own,
+which puts its AI in standby while it is ridden. It takes a record of its own whatever the row says,
+`scripts/still.bais`, which neither turns nor moves, since it is a thing to mount and fire and one
+that turned or fired on its own got in the way of that; and it alone spawns facing away from the
+player, its back to them, since it is mounted from behind and fired forward. The archive list
+carries it by name, since it has no head or chest node to count as a creature. An archive model the
+levels arm gets the shot kind they arm it with (`MODEL_WEAPONS` in `spawn_scripts.c`, read out of
+all 22 levels: the droid fighter's 13, the Tusken gunner's 17, the bazooka man's 8 and so on), the
+rest the blaster. The reload is the record's fire interval, which the engine draws a random part of
+after each shot and floors at half a second; a bolt keeps it, as the droid fighter's own script
+fires every tick it can, and only the explosive kinds (rocket, tank shell, grenade, thermal
+detonator, energy ball, fireball) are raised to four seconds, since the bazooka man's placement
+carries a short interval and paces its rockets in its own script, which the copy does not run. A
+shooter turns to the player as the fire op does itself, and walks again past six. So a boss or an
+archive creature fights without the level's script and the marks in it. Two numbers follow the model
+as the clips do: the chase speed is the duel's 5.05 for a model with a run clip and Follow's 3.0 for
+one without, which would slide; a model with no walk clip either, a turret of a droid, gets no walk
+at all in Follow and in the shooter, so it turns in place, and the shooter then fires from twelve
+units in place of six. A flyer, a record whose move mode is 2 (a hover) or 4 to 6 (pitching toward
+where it goes; 3 is a walker with no collision, which the levels use for trees, power-ups and the
+droid fighter), moves on its hover clip as the gunboat's own script moves it and needs no walk clip;
+a level's flyer keeps its placement's move mode, an archive one gets the mode the retail levels
+place that model with as a creature (`FLYERS` in `spawn_scripts.c`, read out of all 22 levels; the
+droid fighter is placed flying only as a class 0 ship, and walks), and either spawns 1.8 units above
+the player's feet, about head height. A flyer's height is tracked toward its move destination's z
+(`move_trackZ`), and `move_to`'s destination 3 is the player's feet, so a flyer sent at the player
+comes down to the floor, as the level's own gunboat does when its script sends it at them; a copy's
+scripts send it to destination 0 instead, the placement's authored position, which for a copy is the
+spawner's own ring record, and the spawner keeps that record 1.8 units over the player's feet every
+frame from the scene end hook. Two models with a walk clip are held the same way by name,
+`baronbaz.baf`, the kneeling bazooka man, whose level script kneels him, fires and gets him up, and
+`drdfitr.baf`, the droid fighter, which deploys where it lands; both looked wrong walking after the
+player. The list is `HOLDERS` in `spawn_scripts.c`. The reach is 0.7 units for a model with a sabre
+node, 0.65 with a weapon mount, 0.6 with neither, hands and teeth. All of them poll the death each
+cycle, play the model's own death clip, lie eight seconds and remove the body, the shape the
+editor's hunter proved in the Federation ship, because the engine's own death path does not finish
+for a body no script claims. `spawn_scripts.c` lays the record out as the loader would (the entry
+count at `+0`, the state labels at `+4`, the pool pointer at `+0xC`, the entries from `+0x20` and
+the pool after them) and writes the model's own clips into the pool slots the header marks: the
+stand is clip 0 in every file, the walk is found by name (`walk`, `wlk`, `run`, never a walk back)
+and the death by the clip's usage mark. After the spawn the copy's script pointer (`+0x28`) is
+pointed at that record and its instruction pointer (`+0x2C`) cleared, before the copy's first tick.
+A copy is class 2 because the contact handler hands a hit to `enemy_receiveDamage` for class 2 and
+for no other, so a townsman or a story stand-in could not otherwise be struck, with the two
+exceptions above, the tripod at class 4 and a helper at class 1; the story people keep the hit
+points their level gave them, so Jar Jar and Obi-Wan take everything and the Jawas do not. A source
+with no hit points gets ten. Giving a copy another placement's script, the level's
+everyday townsfolk script with its clips translated by name, was tried before this and taken out:
+the borrowed script greets the player in the townsman's voice and follows them about.
+
+Placements of class 1 to 3 are offered, the engine's own sorting at `+0x34`: 0 is props, ships and
+pods, 1 the story's principals, 2 and 3 the crowds, guards, creatures and droids, 4 a tripod gun and
+13 upward the power-ups. A hosted placement (flag `0x2000`, parked on the player's body) and the
+script anchor `inviso.baf` are left off, and the retail assert's bound of 256 placements is the most
+that is read.
+
+**The archive.** The list runs on past the level's own files into every creature in `big.lab` the
+level did not load, marked "from the archive". `actor_catalog.c` reads the archive once, the way the
+engine's own loader lays it out (a 16 byte head, 16 byte entries, a name table), and for each `.baf`
+keeps the name, the clip count at `+0xC8` of the file header, whether it has a `head` or `chest`
+node, which tells a creature from a ship, a pickup or a door, and whether it carries a `sabre` node
+or the `weapon` mount; the tripod, which has neither node, is carried by name. Nothing is loaded
+until one is first raised. Then `actor_loader.c` asks the engine's own resource layer for the file
+the way the hero code does, `res_Alloc` with the tag the actor loader is registered under
+(`0x42414653`, the bytes `53 46 41 42` the hero code pushes) and the file name, found from the two
+calls in `player_spawnHero` and `player_despawn`, which have to name the same player block; a loaded
+file is kept until the level changes and given back through `res_Free`, as the hero's is. Before the
+spawner touches it the loader checks that what came back is an actor: the model and the clip table
+at `+0xE0` and `+0xE4` must point inside the block whose size sits at `+0xA8`, and the model's node
+count must be sane; the wrong tag once handed back a file's raw bytes, and a body bound to those
+took the level with it. The spawn routine binds the model by the record's index into the level's
+model table, so a foreign record names slot 0 and the loader's file is lent to that slot for the
+length of the one spawn call and put back after; the record itself is the plainest of the level's
+own placements copied for its everyday numbers, with the mode the retail levels fly that model with,
+the weapon they arm it with, a reload just over the engine's floor and the file's stem for a name
+(`npc_foreign.c`).
+
+The point three units ahead is the player's position plus (-sin, cos) of the heading at `+0x2A0`,
+the engine's own forward. It may be inside a wall or another actor, and the engine's push layer
+sorts that out on the first tick as it does for a placement authored too close. A spawned actor is
+the level's from then on: it is culled with the corpses when the pool fills, and it is gone with the
+level.
+
+| Site | Address in retail | What it is |
+|---|---|---|
+| `spawn_actor` | `0x00437250` | its opening, through the second model table load; called, never patched |
+| the activation scan's call | `0x0043722E` | `call spawn_actor` after its three pushes; the target has to be the routine above |
+| `enemy_delete` | `0x00437850` | its opening, and the reveal assert (line `0xF8B`) that has to lie inside its 422 bytes; called with reason 1, a script's remove, for each live spawn when the remove row is pressed |
+| `g_level` | `0x008A0060` | the two operands in the opening, which have to agree |
+| the hero file's load | `0x00447ECF` | `player_spawnHero`'s `res_Alloc` call; the tag, the name table and the call are read out of it |
+| the hero file's release | `0x00448262` | `player_despawn`'s `res_Free` call; it has to name the same player block |
+
+Played 2026-09-16, on the rig: a Tusken, a sithgoon and Maul on Attack in Theed and Mos Espa, run up
+to touching and swinging, each dying on its own clip; the bazooka man and the droid fighter holding
+their ground and firing their own weapons; the hover cannon at head height following and firing; the
+destroyer rolling, unfolding behind its shield and firing both barrels; a tripod spawned back to the
+player, mounted, fired and dismounted; Watto, a Coruscant thug, a Wookiee, Maul, a droid and
+Palpatine from the archive on the Tatooine sand; and Tuskens on Attack against a Maul on Help, with
+the log showing his swings taking three and six points a hit until one fell.
 
 ## The eleven original toggle codes
 

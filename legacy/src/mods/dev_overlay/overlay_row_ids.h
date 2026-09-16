@@ -24,6 +24,7 @@
 #include "overlay_freecam.h"
 #include "overlay_model.h"
 #include "overlay_picture.h"
+#include "overlay_spawn.h"
 #include "overlay_utilities.h"
 #include "overlay_window.h"
 
@@ -124,15 +125,22 @@ _Static_assert(MENU_EXTRAS_FIRST_ID + OVERLAY_MENU_EXTRAS_ROWS_MAX <= LEVELS_FIR
                "the In game options extras rows have grown into the Level selection group's "
                "ids: raise LEVELS_FIRST_ID");
 
-/* The eleven groups on the OpenPhantom tab, every one of them open, the folds open and a full
- * size list: eleven headings and every row each group can draw. This is the number
+/* The NPC spawner group: the spawn, the kind and its list. Its ids are its slots, for the same
+ * reason as the level selection's. */
+#define SPAWN_FIRST_ID 448u
+_Static_assert(LEVELS_FIRST_ID + OVERLAY_LEVELS_ROWS_MAX <= SPAWN_FIRST_ID,
+               "the Level selection rows have grown into the NPC spawner group's ids: raise "
+               "SPAWN_FIRST_ID");
+
+/* The twelve groups on the OpenPhantom tab, every one of them open, the folds open and a full
+ * size list: twelve headings and every row each group can draw. This is the number
  * OVERLAY_ROWS_MAX has to cover, and the Original tab is far smaller. It once counted three
  * groups and left the frame rate group out, seven rows short of what overlay_model_rebuild()
  * builds; the array still held them, so nothing was lost, but the assert was guarding a smaller
  * number than the real one. */
 enum {
-    OPENPHANTOM_TAB_ROWS_MAX = 11u + OVERLAY_CHEATS_ROW_COUNT + OVERLAY_LEVELS_ROWS_MAX +
-                               OVERLAY_FREECAM_ROWS_MAX +
+    OPENPHANTOM_TAB_ROWS_MAX = 12u + OVERLAY_CHEATS_ROW_COUNT + OVERLAY_LEVELS_ROWS_MAX +
+                               OVERLAY_SPAWN_ROWS_MAX + OVERLAY_FREECAM_ROWS_MAX +
                                OVERLAY_DISMEMBER_ROW_COUNT + OVERLAY_MENU_EXTRAS_ROWS_MAX +
                                OVERLAY_UTILITIES_ROW_COUNT + OVERLAY_PICTURE_ROW_COUNT +
                                OVERLAY_FOG_ROW_COUNT + OVERLAY_CONTROLS_ROWS_MAX +

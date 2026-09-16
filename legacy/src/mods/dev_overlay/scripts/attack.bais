@@ -1,0 +1,52 @@
+# title: Attack the player
+# about: Runs at the player and swings from close in, a body's width and a bit, then swings again
+# about: while they stay close, and goes back to the chase: the calls the Tatooine duel's Maul
+# about: makes, with this model's own clips found by name when the copy is raised. Clip 2 stands
+# about: in for the run, 11 and 12 for the two swings, 30 for the death. The damage rows are the
+# about: duel's, 5 and 13; the fourth operand of a swing is the mode to take when it was parried,
+# about: the chase. No block mode and no chk_for_hit: a block left armed by a mode change makes
+# about: him unhurtable, and the poll would suppress the flinch. Both swings hang on the main
+# about: weapon node, since a model with one weapon has no second. Dies with its own death clip
+# about: and fades eight seconds later.
+script "atck":
+    if check_death():
+        set_ai_mode(3)
+        mode_jmp()
+    mode_jmp()
+
+mode "hunt":
+    if range_check(0, 2, 1.3f):
+        set_ai_mode(1)
+        end_cycle()
+    move_speed(5.05f)
+    when move_to(3, 2, 0.6f) completes:
+        end_cycle()
+    end_cycle()
+
+mode "swng":
+    when slash(0, 11, 5, 0, 0) completes:
+        if range_check(0, 2, 1.3f):
+            set_ai_mode(2)
+            end_cycle()
+        set_ai_mode(0)
+        end_cycle()
+    end_cycle()
+
+mode "agin":
+    when slash(0, 12, 13, 0, 0) completes:
+        set_ai_mode(0)
+        end_cycle()
+    end_cycle()
+
+mode "die":
+    when animation(0, 30, 0) completes:
+        start_timer()
+        set_ai_mode(4)
+        end_cycle()
+    end_cycle()
+
+mode "gone":
+    if check_timer(1, 8.0f):
+        ai_killed(0)
+        end_cycle()
+    end_cycle()

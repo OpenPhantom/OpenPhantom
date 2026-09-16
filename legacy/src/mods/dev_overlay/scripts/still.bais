@@ -1,0 +1,25 @@
+# title: Stand still
+# about: The tripod gun's record, whatever the row says: it neither turns nor moves, so it
+# about: keeps the way it was placed for the player to mount and fire. Dies with its own death
+# about: clip and fades eight seconds later, should anything bring it down.
+script "stil":
+    if check_death():
+        set_ai_mode(1)
+        mode_jmp()
+    mode_jmp()
+
+mode "stil":
+    end_cycle()
+
+mode "die":
+    when animation(0, 30, 0) completes:
+        start_timer()
+        set_ai_mode(2)
+        end_cycle()
+    end_cycle()
+
+mode "gone":
+    if check_timer(1, 8.0f):
+        ai_killed(0)
+        end_cycle()
+    end_cycle()

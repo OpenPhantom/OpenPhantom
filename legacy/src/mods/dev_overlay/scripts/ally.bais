@@ -1,0 +1,82 @@
+# title: Help the player, with a swing
+# about: Follows the player as Follow does until an enemy, the nearest class 2 actor (target
+# about: kind 2), is within ten units, then runs at it and swings as Attack does, the parried
+# about: mode being the chase, and goes back to following when none is left within ten; the
+# about: following stops within a unit and a half and starts again past three, as Follow's. The
+# about: clips and numbers are the model's, as in attack.bais: clip 1 the walk, 2 the run, 11
+# about: and 12 the swings, 30 the death; 3.0 the walk, 5.05 the chase. The reach is 1.4, the
+# about: helper's own placeholder: the model's reach plus a little, since two NPC bodies hold
+# about: each other a little further apart than a body is held from the player. The chase
+# about: never arrives (0.1, where Attack's is 0.6): it pushes until the bodies touch, because a
+# about: swing mode stands still, and a helper that swung from where the trigger tripped on the
+# about: way in stood two units off and swung at air (played 2026-09-16). Dies with its own
+# about: death clip and fades eight seconds later.
+script "ally":
+    if check_death():
+        set_ai_mode(4)
+        mode_jmp()
+    mode_jmp()
+
+mode "folw":
+    if range_check(2, 2, 10.0f):
+        set_ai_mode(1)
+        end_cycle()
+    if range_check(0, 2, 1.5f):
+        set_ai_mode(6)
+        end_cycle()
+    move_speed(3.0f)
+    when move_to(3, 1, 1.5f) completes:
+        end_cycle()
+    end_cycle()
+
+mode "hunt":
+    if range_check(2, 2, 1.4f):
+        set_ai_mode(2)
+        end_cycle()
+    if range_check(2, 2, 10.0f):
+        move_speed(5.05f)
+        when move_to(4, 2, 0.1f) completes:
+            end_cycle()
+        end_cycle()
+    set_ai_mode(0)
+    end_cycle()
+
+mode "swng":
+    when slash(2, 11, 5, 1, 0) completes:
+        if range_check(2, 2, 1.4f):
+            set_ai_mode(3)
+            end_cycle()
+        set_ai_mode(1)
+        end_cycle()
+    end_cycle()
+
+mode "agin":
+    when slash(2, 12, 13, 1, 0) completes:
+        set_ai_mode(1)
+        end_cycle()
+    end_cycle()
+
+mode "die":
+    when animation(0, 30, 0) completes:
+        start_timer()
+        set_ai_mode(5)
+        end_cycle()
+    end_cycle()
+
+mode "gone":
+    if check_timer(1, 8.0f):
+        ai_killed(0)
+        end_cycle()
+    end_cycle()
+
+mode "near":
+    if range_check(2, 2, 10.0f):
+        set_ai_mode(1)
+        end_cycle()
+    if range_check(0, 2, 3.0f):
+        move_speed(0.0f)
+        when move_to(3, 0, 0.5f) completes:
+            end_cycle()
+        end_cycle()
+    set_ai_mode(0)
+    end_cycle()

@@ -10,13 +10,17 @@
  * so the game's own toggles and one-shot actions are both empty and this project's tab holds
  * its rows with no site behind them, the state a player sees on an unsupported executable. That
  * is worth pinning down: it is the case where the panel must still open and still be usable.
-
  *
  * Two programs share the sources, the stubs (overlay_stubs.c) and the row positions
  * (overlay_rows.h): this one holds the navigation, the search, the cheats, the free camera and
  * the folds, and overlay_groups.c walks the settings groups by position. The split is by
  * subject, not by tab, so the checks that compare a row against its neighbours still find them
  * in the same file; it was one file until the tenth group put it over the size limit.
+ *
+ * SIZE NOTE: over the 600 line mark since the NPC spawner group joined the walk. The sections
+ * from the cheats down to dismemberment chain, each one checking the row the one before it
+ * ended on, so they stay in one program; the seam, if it grows again, is the search box, whose
+ * three sections share nothing with that walk.
  */
 #include "unittest.h"
 
@@ -154,7 +158,8 @@ static void test_folding(void)
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS,
-             "the OpenPhantom tab holds eleven groups now, cheats, level selection, free camera, "
+             "the OpenPhantom tab holds twelve groups now, cheats, level selection, the NPC "
+             "spawner, free camera, "
              "dismemberment, Cheatmenu options, in game options extras, enhanced resolution, fog, "
              "enhanced input, window and frame rate, and all of them start folded");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
@@ -302,19 +307,72 @@ static void test_levels_group(void)
     ut_check(!overlay_model_activate(LVL_ROW(1)),
              "an unavailable row does not open its list");
     ut_check(overlay_model_row(LVL_ROW(2), &row) && row.kind == OVERLAY_ROW_GROUP &&
+                 strcmp(row.label, "NPC spawner") == 0,
+             "and the NPC spawner heading comes straight after");
+}
+
+static void test_spawn_group(void)
+{
+    ut_section("the NPC spawner group, directly under the level selection");
+    ut_check(overlay_model_row(LVL_ROW(OVERLAY_LEVELS_ENTRY_FIRST), &row) &&
+                 row.kind == OVERLAY_ROW_GROUP && strcmp(row.label, "NPC spawner") == 0,
+             "its heading follows the level selection group's last row, folded");
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_SPAWN);
+    overlay_model_rebuild();
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u,
+             "open, it holds six rows with its lists and fold shut: the spawn, the count under "
+             "it, what is spawned, what it does, the remove and the fold's summary");
+    ut_check(overlay_model_row(SPAWN_ROW(0), &row) && row.kind == OVERLAY_ROW_ACTION &&
+                 strcmp(row.label, "Spawn NPC (close menu to take effect)") == 0 &&
+                 row.value[0] == '\0',
+             "the spawn first, a plain action with no chip, saying when the actor appears");
+    ut_check(!row.available,
+             "unavailable here: the spawn routine resolved nothing and no level is loaded");
+    ut_check(overlay_model_row(SPAWN_ROW(1), &row) && row.kind == OVERLAY_ROW_INFO &&
+                 strcmp(row.label, "    0 of 16 spawned NPCs alive") == 0 && !row.available,
+             "the count second, a note under the spawn, never clickable");
+    ut_check(overlay_model_row(SPAWN_ROW(2), &row) && row.kind == OVERLAY_ROW_ACTION &&
+                 strcmp(row.label, "NPC to spawn") == 0,
+             "what is spawned third, the row that opens the list");
+    ut_check(!row.available && strcmp(row.value, "None") == 0,
+             "unavailable too, with nothing chosen and nothing to choose from");
+    ut_check(!overlay_model_activate(SPAWN_ROW(2)),
+             "an unavailable row does not open its list");
+    ut_check(overlay_model_row(SPAWN_ROW(3), &row) && row.kind == OVERLAY_ROW_ACTION &&
+                 strcmp(row.label, "Spawned NPCs") == 0 && !row.available &&
+                 strcmp(row.value, "Stand") == 0,
+             "the behaviour fourth, an action whose chip names the script in force, stand to "
+             "start");
+    ut_check(overlay_model_row(SPAWN_ROW(4), &row) && row.kind == OVERLAY_ROW_ACTION &&
+                 strcmp(row.label, "Remove spawned NPCs") == 0 && !row.available,
+             "the remove fifth, an action, unavailable with nothing spawned");
+    ut_check(overlay_model_row(SPAWN_ROW(5), &row) && row.kind == OVERLAY_ROW_INFO &&
+                 strcmp(row.label, "+ About spawned NPCs") == 0 && row.available,
+             "the fold sixth, shut, and open to a click with nothing resolved");
+    ut_check(overlay_model_activate(SPAWN_ROW(5)), "the summary row opens it");
+    overlay_model_rebuild();
+    ut_check(overlay_model_row_count() ==
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + OVERLAY_SPAWN_LINE_COUNT,
+             "open, its lines follow the summary");
+    ut_check(overlay_model_row(SPAWN_ROW(6), &row) && row.kind == OVERLAY_ROW_INFO &&
+                 strcmp(row.label, "    The NPC appears when the menu closes,") == 0,
+             "the first line says when the actor appears");
+    ut_check(overlay_model_activate(SPAWN_ROW(5)), "the summary row shuts it again");
+    overlay_model_rebuild();
+    ut_check(overlay_model_row(SPAWN_ROW(6), &row) && row.kind == OVERLAY_ROW_GROUP &&
                  strcmp(row.label, "Free camera") == 0,
-             "and the free camera heading comes straight after");
+             "and the free camera heading comes straight after the shut fold");
 }
 
 static void test_freecam_group(void)
 {
-    ut_section("the free camera group, directly under the level selection");
-    ut_check(overlay_model_row(LVL_ROW(OVERLAY_LEVELS_ENTRY_FIRST), &row) &&
+    ut_section("the free camera group, directly under the NPC spawner");
+    ut_check(overlay_model_row(SPAWN_ROW(OVERLAY_SPAWN_FIXED_ROWS), &row) &&
                  row.kind == OVERLAY_ROW_GROUP && strcmp(row.label, "Free camera") == 0,
-             "its heading follows the level selection group's last row, folded");
+             "its heading follows the NPC spawner group's last row, folded");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u,
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + 5u,
              "open, it holds five rows with its fold shut: the key, the cheat, the two switches "
              "and the fold");
 
@@ -372,7 +430,8 @@ static void test_dismember_group(void)
     ut_section("the dismemberment group, one switch under its own heading");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_DISMEMBER);
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + 1u,
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + 5u +
+                 1u,
              "open, it holds the one row");
     ut_check(overlay_model_row(DIS_ROW(0), &row) && row.kind == OVERLAY_ROW_CHEAT &&
                  strcmp(row.label, "Lightsaber dismemberment") == 0,
@@ -397,7 +456,8 @@ static void test_open_freecam_fold(void)
              "clicking the fold's own summary row is accepted, unlike an ordinary note");
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() ==
-                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u + OVERLAY_FREECAM_LINE_COUNT,
+                 HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + 5u +
+                     OVERLAY_FREECAM_LINE_COUNT,
              "open, the free camera group holds the key, the cheat, the two switches, the fold's "
              "own summary and its eleven lines, with the utilities heading below them");
     ut_check(overlay_model_row(FC_ROW(4), &row) &&
@@ -439,9 +499,10 @@ static void test_close_freecam_fold(void)
     ut_check(overlay_model_activate(FC_ROW(4)),
              "the same summary row closes it back up");
     overlay_model_rebuild();
-    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 5u,
+    ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT + 2u + 6u + 5u,
              "its eleven lines are gone again, back to costing one row like any other");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM);
+    overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_SPAWN);
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_LEVELS);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS + OVERLAY_CHEATS_ROW_COUNT,
@@ -454,7 +515,7 @@ static void test_group_folds_back(void)
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM);
     overlay_model_rebuild();
     ut_check(overlay_model_row_count() == HEADINGS,
-             "folding it again leaves the ten headings alone");
+             "folding it again leaves the twelve headings alone");
 }
 
 static void test_original_actions_group(void)
@@ -492,7 +553,7 @@ static void test_typing_opens_the_hit_group(void)
     ut_section("typing opens the group that has hits, and clearing puts it back");
     overlay_model_reset();
     overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
-    ut_check(row_count_after("") == HEADINGS, "all ten groups folded to start with");
+    ut_check(row_count_after("") == HEADINGS, "all twelve groups folded to start with");
     ut_check(row_count_after("zzzz") == HEADINGS,
              "a search nothing matches leaves them folded rather than opening any of them empty");
     ut_check(row_count_after("") == HEADINGS,
@@ -585,6 +646,11 @@ static void test_labels_and_chips_fit(void)
                                  OVERLAY_MENU_EXTRAS_LINE_COUNT);
     overlay_model_rebuild();
     check_every_row_fits("the OpenPhantom tab with every fold open");
+    /* The spawner's fold sits above all of those, so opening it moves nothing that was just
+       checked and its own lines are the only new rows. */
+    (void)overlay_model_activate(SPAWN_ROW(5));
+    overlay_model_rebuild();
+    check_every_row_fits("the OpenPhantom tab with the spawner's fold open as well");
 }
 
 int main(void)
@@ -599,6 +665,7 @@ int main(void)
     test_edit_outside_capture();
     test_cheats_end();
     test_levels_group();
+    test_spawn_group();
     test_freecam_group();
     test_dismember_group();
     test_open_freecam_fold();

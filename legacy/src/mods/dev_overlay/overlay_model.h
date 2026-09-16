@@ -24,13 +24,14 @@
 #define OVERLAY_LABEL_MAX    48u
 
 /* Every group on the open tab is built at once, headings included, and the OpenPhantom tab holds
- * ten of them. With all ten open, every fold open and a display offering a full size list, that
- * tab passes 128 rows. This was 64 when the tab had four groups, so 27 of the 91 it then had
- * were built and dropped by a bounds test with no log and no way to scroll to what went missing.
- * overlay_row_ids.h asserts this against the parts it is made of, so a group that grows past it
- * stops the build rather than quietly losing its last rows, which is how the third fold's lines
- * raised it to 160. */
-#define OVERLAY_ROWS_MAX     160u
+ * twelve of them. With all twelve open, every fold open and a display offering a full size
+ * list, that tab passes 550 rows. This was 64 when the tab had four groups, so 27 of the 91 it
+ * then had were built and dropped by a bounds test with no log and no way to scroll to what
+ * went missing. overlay_row_ids.h asserts this against the parts it is made of, so a group that
+ * grows past it stops the build and does not quietly lose its last rows, which is how the third
+ * fold's lines raised it to 160, the spawner's list of a level's actor files, 122 in Mos Espa,
+ * to 384, and the same list widened to the archive's creatures to 768. */
+#define OVERLAY_ROWS_MAX     768u
 
 typedef enum overlay_tab {
     OVERLAY_TAB_ORIGINAL = 0,
@@ -47,6 +48,7 @@ typedef enum overlay_group {
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
     OVERLAY_GROUP_OPENPHANTOM,
     OVERLAY_GROUP_OPENPHANTOM_LEVELS,
+    OVERLAY_GROUP_OPENPHANTOM_SPAWN,
     OVERLAY_GROUP_OPENPHANTOM_FREECAM,
     OVERLAY_GROUP_OPENPHANTOM_DISMEMBER,
     OVERLAY_GROUP_OPENPHANTOM_UTILITIES,

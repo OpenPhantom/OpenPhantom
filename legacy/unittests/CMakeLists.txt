@@ -55,6 +55,9 @@ add_unit_test(numeric "")
 add_unit_test(music_volume imuse_fix imuse_fix/music_volume_latch.c)
 add_unit_test(sound_owner sound_lifetime_fix sound_lifetime_fix/sound_lifetime_fix.c)
 add_unit_test(hud_layout hud_ratio_scaling hud_ratio_scaling/hud_layout.c)
+# The NPC spawner's compiled scripts are data; the checks are on the data's shape, and the clip
+# filling is refused without the archive, which a test process never has beside it.
+add_unit_test(spawn_scripts dev_overlay dev_overlay/spawn_scripts.c dev_overlay/actor_catalog.c)
 
 # The damper, the mouse bank and the travel angle together: all three are the arithmetic that
 # decides how this feature feels. free_look_math.c is here and free_look.c deliberately is not,
@@ -359,6 +362,18 @@ set(OVERLAY_MODEL_SOURCES
     dev_overlay/start_level.c
     dev_overlay/start_level_row.c
     dev_overlay/overlay_levels.c
+    # The NPC spawner: its sites resolve nothing in a test process and no level is loaded, so
+    # both of its rows read unavailable and its list is empty, which is the case the panel has
+    # to show.
+    dev_overlay/npc_spawner.c
+    dev_overlay/npc_census.c
+    dev_overlay/npc_foreign.c
+    dev_overlay/spawn_scripts.c
+    dev_overlay/actor_loader.c
+    dev_overlay/overlay_spawn.c
+    # The archive catalogue, the same: there is no big.lab beside a test process, so it reads
+    # nothing and the spawner's list holds no archive entries.
+    dev_overlay/actor_catalog.c
     dev_overlay/cheats_no_fog.c
     # Both jump boost and the free camera ask the same "is there a floor under this" question,
     # so the module that owns it has to be linked beside them. It resolves nothing in a test

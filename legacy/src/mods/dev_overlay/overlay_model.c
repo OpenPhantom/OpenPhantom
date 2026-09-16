@@ -53,6 +53,7 @@
 #include "overlay_menu_extras.h"
 #include "overlay_picture.h"
 #include "overlay_row_ids.h"
+#include "overlay_spawn.h"
 #include "overlay_utilities.h"
 #include "overlay_window.h"
 
@@ -82,6 +83,7 @@ static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
     OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_LEVELS    */
+    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_SPAWN     */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_FREECAM   */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_DISMEMBER */
     OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
@@ -172,6 +174,7 @@ void overlay_model_reset(void)
     model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
     overlay_freecam_reset();             /* the "how to fly" fold, closed like the groups */
     overlay_levels_reset();              /* and the level list */
+    overlay_spawn_reset();               /* and the spawner's list of the level's actors */
     overlay_menu_extras_reset();         /* and the "what this adds" fold, the same */
     overlay_controls_reset();            /* and the "what these do" fold */
     overlay_window_reset();              /* and the window group's size list, same reason */
@@ -186,6 +189,7 @@ void overlay_model_reset(void)
      * scroll past invincibility to reach the draw distance. */
     model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_LEVELS].title = "Level selection";
+    model.groups[OVERLAY_GROUP_OPENPHANTOM_SPAWN].title = "NPC spawner";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_FREECAM].title = "Free camera";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_DISMEMBER].title = "Dismemberment";
     model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Cheatmenu options";
@@ -345,6 +349,8 @@ static uint32_t source_count(overlay_group_t group)
         return overlay_freecam_row_count();   /* five, and the fold's lines while it is open */
     case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
         return overlay_levels_row_count();    /* two, and the list while it is open */
+    case OVERLAY_GROUP_OPENPHANTOM_SPAWN:
+        return overlay_spawn_row_count();     /* two, and the level's actors while open */
     case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
         return OVERLAY_DISMEMBER_ROW_COUNT;
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
@@ -437,6 +443,10 @@ static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
     case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
         out->id = LEVELS_FIRST_ID + id;
         overlay_levels_row(id, out);
+        return;
+    case OVERLAY_GROUP_OPENPHANTOM_SPAWN:
+        out->id = SPAWN_FIRST_ID + id;
+        overlay_spawn_row(id, out);
         return;
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
         out->id = MENU_EXTRAS_FIRST_ID + id;
@@ -588,7 +598,7 @@ bool overlay_model_activate(uint32_t index)
     if (row.kind == OVERLAY_ROW_INFO) {
         /* Only a fold's own summary row is interactive; the lines it reveals when open are
          * notes, not controls, the same as an ordinary INFO row always was, and the group
-         * answers false for those itself. Three groups carry a fold. */
+         * answers false for those itself. Four groups carry a fold. */
         if (row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_FREECAM) {
             return overlay_freecam_toggle(row.id - FREECAM_FIRST_ID);
         }
@@ -597,6 +607,9 @@ bool overlay_model_activate(uint32_t index)
         }
         if (row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_CONTROLS) {
             return overlay_controls_toggle(row.id - CONTROLS_FIRST_ID);
+        }
+        if (row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_SPAWN) {
+            return overlay_spawn_toggle(row.id - SPAWN_FIRST_ID);
         }
         return false;
     }
@@ -633,6 +646,8 @@ bool overlay_model_activate(uint32_t index)
         return overlay_dismember_toggle(row.id - DISMEMBER_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
         return overlay_levels_toggle(row.id - LEVELS_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_SPAWN:
+        return overlay_spawn_toggle(row.id - SPAWN_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
         return overlay_menu_extras_toggle(row.id - MENU_EXTRAS_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:

@@ -409,6 +409,13 @@ add_engine_fix(dev_overlay
     start_level.c
     start_level_row.c
     overlay_levels.c
+    npc_spawner.c
+    npc_census.c
+    npc_foreign.c
+    spawn_scripts.c
+    actor_loader.c
+    overlay_spawn.c
+    actor_catalog.c
     cheats_no_fog.c
     floor_probe.c
 )

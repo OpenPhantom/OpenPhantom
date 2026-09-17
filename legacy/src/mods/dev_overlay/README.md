@@ -137,19 +137,36 @@ and hides or shows it while the free camera flies, the open key's own three step
 joystick reading sees the same press and runs whatever its controls screen has on the button, which
 is the player's to clear; a half second hold was tried first and gave the game the whole half
 second, and both stick clicks in its place turned out to be on the game's list as well. Open, the
-left stick moves the system cursor, which is the panel's pointer, up and down at a speed in screen
-widths a second and never sideways (sideways walked the pointer off the label the D-pad had put it
-on, and nothing in the panel wants it there), so the hover, the click and the drag all follow the
-stick and nothing in the model knows a pad exists; the D-pad puts the cursor on the centre of the
-next row's label, scrolling the list by one when that row is off the screen, and switches the tab
-sideways, so a press is a step from row to row with the hover as the mark. The triggers move the
-slider under the pointer, or the one under the value row it belongs to, half the track a second
-fully in, written at the drag's own throttle and once more on leaving the row. A presses where the
-pointer is and, held, drags a slider, since the drag polls the pad's button beside the mouse's; B
-takes the Escape key's steps, cancelling a typed value, hiding the panel under the camera, or
-closing it; the right stick scrolls as the wheel does, twelve rows a second fully over with the
-fraction carried between frames; the bumpers page. The search box and typed values still want a
-keyboard, and with the panel closed and the camera off the pad is read and dropped.
+left stick moves the system cursor, which is the panel's pointer, at a speed in screen widths a
+second on both axes, a mouse on a stick, so the hover, the click and the drag all follow the stick
+and nothing in the model knows a pad exists (holding the stick still sideways, and then pinning the
+pointer to the label column once the pad was touched, were both tried against the sideways drift the
+right stick puts into the cursor through controller_input, and each cost the mouse more than it gave
+the pad); the D-pad puts the cursor on the centre of the next row's label, scrolling the list by one
+when that row is off the screen, and switches the tab sideways, so a press is a step from row to row
+with the hover as the mark. The triggers move the slider under the pointer, or the one under the
+value row it belongs to, half the track a second fully in, written at the drag's own throttle and
+once more on leaving the row. A presses where the pointer is and, held, drags a slider, since the
+drag polls the pad's button beside the mouse's; B takes the Escape key's steps, cancelling a typed
+value, hiding the panel under the camera, or closing it; the right stick scrolls as the wheel does,
+twelve rows a second fully over with the fraction carried between frames, and while it is over the
+pointer and the hover are hidden, for a third of a second past its release, since the sideways
+motion controller_input fakes from it walked the hover across the rows as they scrolled and a hidden
+pointer cannot hover (a D-pad step shows it again); the bumpers page. The search box and typed
+values still want a keyboard, and with the panel closed and the camera off the pad is read and
+dropped.
+
+**The cursor stays on the panel while the panel is open** (`panel_cage.c`). The panel's pointer is
+the system cursor, and a mouse pushed past the panel's edge, or the sideways motion the right stick
+fakes through `controller_input`, put it on the game's picture, where nothing takes a click and the
+eye has to go looking for it. So once a frame, after the paint, while the panel is shown and the
+game has the focus, a cursor found outside the panel's rectangle on the desktop is put on the
+nearest point inside it and the frame's pointer reads that point. It is a warp on every move, the
+same shape as the engine's own confinement of the pointer to its play area, and not `ClipCursor`:
+that was the first cut, and `enhanced_resolution`'s focus guard holds a `ClipCursor` of its own
+round the whole window and puts it back the moment the cage it reads differs from the window's
+rectangle, so the panel's cage was undone every frame, and the two DLLs share nothing and may not.
+Nothing is held: the moment the panel is hidden or closed, or the focus goes, the cursor is free.
 
 **Typing reaches the search box only after a click has landed on it, not the moment the panel
 opens.** The box used to take every character while the panel was up, which meant the key that
@@ -579,7 +596,7 @@ the loaded level's placements use, `ddroid` for `ddroid.baf`, each with how many
 it, and then the archive's creatures the level did not load; "Spawned NPCs" opens the four
 behaviours, Stand, Follow, Attack and Help, Stand to start; the choice stays put across kinds and
 levels, since a default that followed the kind changed it under the player's hands. Pick an actor,
-press the spawn, and one more of it stands three units ahead of the player, facing them. The rows
+press the spawn, and one more of it stands a few units ahead of the player, facing them. The rows
 read unavailable with no level loaded.
 
 Nothing is hooked. A level's actors are placements, one record each in a directory the world record
@@ -599,11 +616,17 @@ zeroed; the copy goes in under its source's index, so a save made with spawned a
 each as one more actor of its source placement, running the placement's own script, which is the one
 thing a save can say about it. The live words the engine keeps in those records are what the cap
 counts, sixteen alive at once against the engine's pool of 128 for the whole level, and what the
-spacing reads: a new spawn takes the first of a fan of twenty spots ahead of and around the player,
-at three units and then at nearly five, that no live spawn stands within a body's width of, so
-holding the key down lays them out in an arc and not in a heap. The list is by model, one row per
-actor file; of a kind's placements the plainest is the source, one the activation scan spawns and
-the level did not name.
+spacing reads: a new spawn takes the first of twenty-four spots in three files ahead of the player
+that no live spawn stands within half a body's width of, the middle file first, one behind the other
+a body's width apart from two and a half units out, then a file a body's width to the left and one
+to the right, so holding the key down lays them out in close ranks ahead, a block that fits a
+corridor, and not in a heap; when the spawns stand on every spot, followers crowding in front of the
+player do, the one with the most room round it is used, since the engine's push layer sorts two
+bodies close together out on the first tick and a refusal for want of a spot read as the cap. A fan
+around the player was the first shape, and in a tight room its sides and its back put copies in the
+walls; ahead is where the player is looking and the one direction they can see is clear. The list is
+by model, one row per actor file; of a kind's placements the plainest is the source, one the
+activation scan spawns and the level did not name.
 
 **A copy runs a script of this project's own, never its source's.** A placement's script is the
 level's business: a story stand-in's opens his cutscene (a spawned Obi-Wan started Mos Espa's
@@ -722,11 +745,10 @@ own placements copied for its everyday numbers, with the mode the retail levels 
 the weapon they arm it with, a reload just over the engine's floor and the file's stem for a name
 (`npc_foreign.c`).
 
-The point three units ahead is the player's position plus (-sin, cos) of the heading at `+0x2A0`,
-the engine's own forward. It may be inside a wall or another actor, and the engine's push layer
-sorts that out on the first tick as it does for a placement authored too close. A spawned actor is
-the level's from then on: it is culled with the corpses when the pool fills, and it is gone with the
-level.
+The point ahead is the player's position plus (-sin, cos) of the heading at `+0x2A0`, the engine's
+own forward. It may be inside a wall or another actor, and the engine's push layer sorts that out on
+the first tick as it does for a placement authored too close. A spawned actor is the level's from
+then on: it is culled with the corpses when the pool fills, and it is gone with the level.
 
 | Site | Address in retail | What it is |
 |---|---|---|
@@ -1209,7 +1231,7 @@ logged. Closing the list first and then pressing the row always worked, so this 
 | `PadEnabled` | `1` | Whether a controller drives the panel and the free camera, read through XInput once a frame while either is up. `0` leaves the pad to the game and to `controller_input` alone. |
 | `PadOpenButtons` | `View` | The button that opens or closes the panel on its press, from `A B X Y LB RB LS RS View Menu Up Down Left Right`; two names make a chord. The game's own joystick reading sees the same press and runs whatever its controls screen has on that button, so clear it there. |
 | `PadDeadzone` | `0.24` | The radial deadzone on both sticks, `0` to under `1`; the rest of the travel is rescaled so the first hair past it is a hair. |
-| `PadPointerSpeed` | `0.6` | How fast the left stick moves the panel's pointer up and down with the stick fully over, in screen widths a second, up to `5`. |
+| `PadPointerSpeed` | `0.6` | How fast the left stick moves the panel's pointer with the stick fully over, in screen widths a second, up to `5`. |
 | `PadLookSpeed` | `120` | How fast the right stick turns the free camera with the stick fully over, in degrees a second, up to `720`. |
 | `FreeCameraWorldRuns` | `0` | Whether the world keeps moving under the free camera while it flies, with the player's own input held. Written by the "World runs while flying" row. One or the other of this and the freeze. |
 

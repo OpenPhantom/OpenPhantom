@@ -225,6 +225,7 @@ typedef struct overlay_input_state {
     uint32_t          drag_apply_ms;      /* this slider's own write interval */
     uint32_t          drag_last_apply_ms;
     bool              pad_held;           /* the pad's A is down: the left button, for the drag */
+    bool              pointer_hidden;     /* the pad's right stick is over; see the header */
 } overlay_input_state_t;
 
 static overlay_input_state_t input_state;
@@ -816,6 +817,16 @@ bool overlay_input_install(void)
 void *overlay_input_window(void)
 {
     return input_state.open ? (void *)input_state.window : NULL;
+}
+
+void overlay_input_set_pointer_hidden(bool hidden)
+{
+    input_state.pointer_hidden = hidden;
+}
+
+bool overlay_input_pointer_hidden(void)
+{
+    return input_state.pointer_hidden;
 }
 
 void overlay_input_pad_press(bool down)

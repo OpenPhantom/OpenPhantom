@@ -20,7 +20,7 @@ static const char *const SPAWN_INFO_LINES[OVERLAY_SPAWN_LINE_COUNT] = {
     "Spawned NPCs are gone with the level;",
     "  a save brings each back as one more",
     "Up to 16 alive at once; each new one",
-    "  takes the next free spot around you"
+    "  takes the next free spot ahead of you"
 };
 
 /* What a drawn slot is. The list's entries follow the row that opens them, so every row below

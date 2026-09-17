@@ -5,9 +5,9 @@
  * mouse motion, sideways, and Start as Escape). This reads the pad itself, through XInput, once
  * a frame from the hook that draws the panel, and hands it to whichever of the two is up:
  *
- *   panel open:     the left stick glides the pointer up and down and the D-pad steps it row
- *                   by row, A presses where it is (held, it drags a slider), B is Escape, the
- *                   triggers move a slider, the right stick scrolls, the bumpers page.
+ *   panel open:     the left stick glides the pointer and the D-pad steps it row by row, A
+ *                   presses where it is (held, it drags a slider), B is Escape, the triggers
+ *                   move a slider, the right stick scrolls, the bumpers page.
  *   free camera on: the left stick flies along the view, the right stick looks on both axes,
  *                   the triggers go down and up, the bumpers change speed, A ends the flight
  *                   bringing the player here (the bound key's meaning), B ends it leaving them
@@ -53,9 +53,9 @@ typedef struct pad_state {
     bool  present;
     float left_x, left_y;       /* the left stick, right and up positive */
     float right_x, right_y;     /* the right stick */
-    float raw_x;                /* the two sticks' sideways travel before the deadzone, the
-                                 * larger, for a reader that has to notice what another
-                                 * reader with a deadzone of its own will act on */
+    float raw_right_x;          /* the right stick's sideways travel before the deadzone, for
+                                 * a reader that has to notice what another reader with a
+                                 * deadzone of its own will act on */
     float trigger_left;
     float trigger_right;
     uint32_t held;              /* XInput's button bits */

@@ -82,6 +82,14 @@ int32_t overlay_input_take_wheel_delta(void);
  * window is the game's, for the pad to move the cursor in, NULL while the panel is shut. */
 void *overlay_input_window(void);
 void overlay_input_pad_press(bool down);
+
+/* The pointer and the hover hidden, while the pad's right stick is over: its sideways half
+ * reaches the cursor as mouse motion faked by controller_input for the game's camera, so the
+ * pointer wanders while the stick scrolls the list, and a wandering pointer with a hover under
+ * it reads as a choice being made. Hidden it is still there, and the next D-pad step or a
+ * touch of the mouse puts it where it should be and shows it again. */
+void overlay_input_set_pointer_hidden(bool hidden);
+bool overlay_input_pointer_hidden(void);
 void overlay_input_pad_escape(void);
 void overlay_input_pad_toggle_open(void);
 

@@ -28,6 +28,8 @@
 #define ROW_X_FRACTION    0.3f     /* where across a row the D-pad lands, on the label */
 #define REPEAT_AFTER_S    0.4f     /* a held D-pad steps again after this */
 #define REPEAT_EVERY_S    0.1f     /* and then this often */
+#define STICK_NOTICE      0.05f    /* the right stick this far over, before any deadzone, counts */
+#define HIDE_HOLD_S       0.3f     /* the pointer stays hidden this long after the stick centres */
 
 static struct {
     float    scroll_carry;   /* rows not yet scrolled, the fraction of a row carried over */
@@ -37,10 +39,25 @@ static struct {
     uint32_t trigger_last_ms;
     float    dpad_held;      /* how long the D-pad has been down, up or down */
     float    dpad_repeat;    /* time to the next repeated step */
-    bool     pad_owns;       /* the pad has been touched since the panel opened */
-} st = { 0.0f, -1, 0.0f, 0.0f, 0u, 0.0f, 0.0f, false };
+    float    hidden_for;     /* seconds left of hiding the pointer */
+} st = { 0.0f, -1, 0.0f, 0.0f, 0u, 0.0f, 0.0f, 0.0f };
 
-#define SIDEWAYS_NOTICE  0.05f   /* a stick this far over sideways, before any deadzone, counts */
+/* The pointer hidden while the right stick is over, and for a moment after: its sideways half
+ * reaches the cursor as mouse motion faked by controller_input, so the pointer wanders while
+ * the stick scrolls, and a wandering pointer with a hover under it reads as a choice being
+ * made (Chip's own idea, 2026-09-17, after holding the stick still and pinning the pointer had
+ * both cost the mouse more than they gave the pad). A D-pad step shows it again at once, on
+ * the row it lands on; the mouse shows it again the moment the stick has been centred for the
+ * hold. */
+static void hide_pointer_under_stick(const pad_state_t *pad, float dt)
+{
+    if (pad->raw_right_x > STICK_NOTICE || pad->right_y != 0.0f) {
+        st.hidden_for = HIDE_HOLD_S;
+    } else if (st.hidden_for > 0.0f) {
+        st.hidden_for -= dt;
+    }
+    overlay_input_set_pointer_hidden(st.hidden_for > 0.0f);
+}
 
 /* Leaving a slider writes what it was left at, throttle or not. */
 static void flush_trigger(void)
@@ -88,12 +105,13 @@ static void place_pointer(float x, float y)
     overlay_input_update_pointer();
 }
 
-/* The left stick: the pointer moved up and down by a fraction of the screen's width a second,
- * and never sideways. Sideways it walked the pointer off the label the D-pad had put it on,
- * and nothing in the panel wants it there: the tabs are the D-pad's, the sliders are the
- * triggers' (played 2026-09-16). The stick's sideways half is the free camera's strafe, which
- * reads the frame itself. */
-static void glide_pointer(float down)
+/* The left stick: the pointer moved by fractions of the screen's width a second, as fast up
+ * as across, a mouse on a stick. Holding it still sideways, and then pinning it to the label
+ * column once the pad was touched, were both tried against the sideways drift the right stick
+ * puts into the cursor through controller_input; each cost the mouse more than it gave the
+ * pad, since a pinned pointer is a mouse that cannot move (played 2026-09-16 and 2026-09-17).
+ * The D-pad steps are the pad's own way to a row, and land on the column regardless. */
+static void glide_pointer(float across, float down)
 {
     float x;
     float y;
@@ -104,7 +122,7 @@ static void glide_pointer(float down)
         return;
     }
     overlay_input_pointer(&x, &y);
-    place_pointer(x, y + down * screen_w);
+    place_pointer(x + across * screen_w, y + down * screen_w);
 }
 
 /* The D-pad, up or down: the cursor onto the centre of the row above or below the one it is on,
@@ -206,6 +224,8 @@ static void step_rows(const pad_state_t *pad, float dt)
     }
     if (pad->pressed & down) {
         step_row(by);
+        st.hidden_for  = 0.0f;   /* the step puts the pointer where it belongs: shown again */
+        overlay_input_set_pointer_hidden(false);
         st.dpad_held   = 0.0f;
         st.dpad_repeat = REPEAT_AFTER_S;
         return;
@@ -218,37 +238,6 @@ static void step_rows(const pad_state_t *pad, float dt)
     }
 }
 
-/* The pointer's x on the label column, every frame, once the pad has been touched while the
- * panel is open. The sideways half of the right stick reaches the system cursor as mouse
- * motion, faked by controller_input for the game's camera, on that DLL's own thread and at its
- * own rate, and the cursor is this panel's pointer; nothing here can stop that DLL. Putting the
- * pointer back where it was let every bump creep, and clamping only while a stick read as over
- * still let a wiggle through, since the counts land between frames and after the stick reads
- * centred (played 2026-09-16, four times). So the first press or push of the pad hands the
- * panel's sideways to the pad for as long as it stays open: the pointer sits on the column the
- * D-pad uses, whatever the cursor did, and the mouse is free again the next time the panel
- * opens without the pad being touched. */
-static void clamp_pointer_x(const pad_state_t *pad)
-{
-    const layout_t *lay = overlay_layout();
-    float           x;
-    float           y;
-    float           column;
-
-    if (pad->raw_x > SIDEWAYS_NOTICE || pad->left_y != 0.0f || pad->right_y != 0.0f ||
-        pad->pressed != 0u || pad->trigger_left > 0.0f || pad->trigger_right > 0.0f) {
-        st.pad_owns = true;
-    }
-    if (!st.pad_owns) {
-        return;
-    }
-    overlay_input_pointer(&x, &y);
-    column = lay->left + lay->width * ROW_X_FRACTION;
-    if (x != column) {
-        place_pointer(column, y);
-    }
-}
-
 /* The panel from the pad, one frame. */
 static void drive_panel(float dt)
 {
@@ -256,9 +245,9 @@ static void drive_panel(float dt)
     const layout_t    *lay = overlay_layout();
     float              speed = pad_input_pointer_speed();
 
-    clamp_pointer_x(pad);
-    if (pad->left_y != 0.0f) {
-        glide_pointer(-pad->left_y * speed * dt);
+    hide_pointer_under_stick(pad, dt);
+    if (pad->left_x != 0.0f || pad->left_y != 0.0f) {
+        glide_pointer(pad->left_x * speed * dt, -pad->left_y * speed * dt);
     }
     step_rows(pad, dt);
     if (pad->pressed & (PAD_BUTTON_DPAD_LEFT | PAD_BUTTON_DPAD_RIGHT)) {
@@ -325,6 +314,7 @@ void pad_panel_tick(void)
     } else {
         overlay_input_pad_press(false);
         flush_trigger();
-        st.pad_owns = false;
+        st.hidden_for = 0.0f;
+        overlay_input_set_pointer_hidden(false);
     }
 }

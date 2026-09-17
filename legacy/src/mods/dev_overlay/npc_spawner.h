@@ -93,9 +93,11 @@ void npc_spawner_tick(void);
 uint32_t npc_spawner_remove_all(void);
 
 /* Raises one actor of the chosen kind a few units ahead of the player, facing them, on the
- * first spot ahead that none of the earlier spawns still stands on. False when nothing is
- * chosen, no level is loaded, the cap is reached, or the engine's pool had no room even after it
- * culled its corpses; the log says which. */
+ * first spot of three files ahead, a body's width apart, the middle one first, that none of
+ * the earlier spawns still stands on, or on the spot with the most room when they stand on all
+ * of them. False when
+ * nothing is chosen, no level is loaded, the cap is reached, or the engine's pool had no room
+ * even after it culled its corpses; the log says which. */
 bool npc_spawner_spawn(void);
 
 #endif /* DEV_OVERLAY_NPC_SPAWNER_H */

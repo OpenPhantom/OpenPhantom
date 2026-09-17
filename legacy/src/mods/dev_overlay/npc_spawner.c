@@ -192,9 +192,9 @@ _Static_assert(sizeof SIG_SPAWN_CALL == sizeof MSK_SPAWN_CALL, "mask length");
 #define CALL_REL32_OFFSET 11u   /* the call's displacement */
 #define CALL_NEXT_OFFSET  15u   /* the instruction after it, which the displacement is from */
 
-#define SPAWN_AHEAD_UNITS  3.0f
+#define SPAWN_AHEAD_UNITS  2.5f
 #define SPAWN_RING         (2u * NPC_SPAWNER_ALIVE_MAX)
-#define SPAWN_APART_UNITS  1.2f    /* two bodies' cylinders, about; closer and they push apart */
+#define SPOT_TAKEN_UNITS   0.6f    /* a spawn this near a spot stands on it: half a body's width */
 #define ACTOR_POSITION     0xD0u   /* the live actor's position, vec3 */
 #define ACTOR_SCRIPT       0x28u   /* the live actor's script, pScript */
 #define ACTOR_IP           0x2Cu   /* its instruction pointer; 0 restarts the script */
@@ -268,15 +268,29 @@ static void describe_actor(const uint8_t *actor, char *out, uint32_t out_size)
 }
 #define DEGREES_TO_RADIANS (3.14159265f / 180.0f)
 
-/* The spots tried, as a turn off the player's heading and a distance ahead: straight ahead
- * first, then fanning out to either side, then a second, farther row. */
-static const struct { float turn; float distance; } SPOTS[] = {
-    {    0.0f, 3.0f }, {  30.0f, 3.0f }, {  -30.0f, 3.0f }, {  60.0f, 3.0f }, {  -60.0f, 3.0f },
-    {   90.0f, 3.0f }, { -90.0f, 3.0f }, {  120.0f, 3.0f }, { -120.0f, 3.0f }, { 180.0f, 3.0f },
-    {    0.0f, 4.8f }, {  25.0f, 4.8f }, {  -25.0f, 4.8f }, {  50.0f, 4.8f }, {  -50.0f, 4.8f },
-    {   75.0f, 4.8f }, { -75.0f, 4.8f }, {  100.0f, 4.8f }, { -100.0f, 4.8f }, { 180.0f, 4.8f }
-};
-#define SPOT_COUNT (sizeof SPOTS / sizeof SPOTS[0])
+/* The spots tried, ahead of the player along their heading and to its right (negative is the
+ * left): a file straight ahead, one behind the other, then a file a body's width to the left,
+ * then one to the right, eight deep each. A fan around the player was the first shape, and in
+ * a tight room its sides and its back put copies in the walls (played 2026-09-16); ahead is
+ * where the player is looking and is the one direction they can see is clear. The files are
+ * as close as bodies stand, a rank a body's width wide and a step deep, so the block fits a
+ * corridor (played 2026-09-17: at a body and a half across the block was wider than it need
+ * be). Two bodies the engine finds too close it pushes apart on their first tick. */
+#define SPOT_FILE_STEP  1.0f    /* one behind the other, a body's width apart */
+#define SPOT_FILE_APART 1.3f    /* the left and right files off the middle one */
+#define SPOT_FILE_DEPTH 8u      /* copies in each file */
+#define SPOT_FILES      3u      /* the middle, the left, the right, in that order */
+#define SPOT_COUNT      (SPOT_FILE_DEPTH * SPOT_FILES)
+_Static_assert(SPOT_COUNT >= NPC_SPAWNER_ALIVE_MAX, "a spot for every copy the cap allows");
+
+/* Spot i: file i / depth, place i % depth. */
+static void spot(uint32_t i, float *across, float *ahead)
+{
+    static const float FILE_ACROSS[SPOT_FILES] = { 0.0f, -SPOT_FILE_APART, SPOT_FILE_APART };
+
+    *across = FILE_ACROSS[i / SPOT_FILE_DEPTH];
+    *ahead  = SPAWN_AHEAD_UNITS + (float)(i % SPOT_FILE_DEPTH) * SPOT_FILE_STEP;
+}
 
 /* enemy_delete's opening, through the reason rewrite; the call's displacement is masked. */
 static const uint8_t SIG_DELETE_ENTRY[] = {
@@ -376,9 +390,10 @@ bool npc_spawner_install(void)
     resolve_delete();
     (void)actor_loader_install();   /* without it the list is the level's own files alone */
     log_info("npc spawner: spawn_actor at %08X, called from %08X, world pointer at %08X; the "
-             "group lists the loaded level's actor files and raises a copy of a placement %.0f "
-             "units ahead of the player, up to %u alive at once", (unsigned)entry, (unsigned)call,
-             (unsigned)operand_a, (double)SPAWN_AHEAD_UNITS, NPC_SPAWNER_ALIVE_MAX);
+             "group lists the loaded level's actor files and raises a copy of a placement %.1f "
+             "units ahead of the player and on, up to %u alive at once", (unsigned)entry,
+             (unsigned)call, (unsigned)operand_a, (double)SPAWN_AHEAD_UNITS,
+             NPC_SPAWNER_ALIVE_MAX);
     return true;
 }
 
@@ -567,11 +582,12 @@ uint32_t npc_spawner_remove_all(void)
     return removed;
 }
 
-/* Whether a live spawn stands within a body's width of `at`, read from the actor itself. An
- * actor whose position cannot be read is taken as standing there, which refuses a spot and
- * never a spawn. */
-static bool spot_taken(const float *at)
+/* How much room a spot has: the squared distance to the nearest live spawn, read from the
+ * actor itself, and a large number with none alive. An actor whose position cannot be read is
+ * taken as standing on the spot. */
+static float spot_room(const float *at)
 {
+    float    room = 1.0e9f;
     uint32_t i;
 
     for (i = 0; i < SPAWN_RING; ++i) {
@@ -579,39 +595,60 @@ static bool spot_taken(const float *at)
         float          pos[3];
         float          dx;
         float          dy;
+        float          apart;
 
         if (actor == NULL) {
             continue;
         }
         if (!memory_try_read((uintptr_t)actor + ACTOR_POSITION, pos, sizeof pos)) {
-            return true;
+            return 0.0f;
         }
         dx = pos[0] - at[0];
         dy = pos[1] - at[1];
-        if (dx * dx + dy * dy < SPAWN_APART_UNITS * SPAWN_APART_UNITS) {
-            return true;
+        apart = dx * dx + dy * dy;
+        if (apart < room) {
+            room = apart;
         }
     }
-    return false;
+    return room;
 }
 
-/* The first spot of the fan no live spawn stands on, ahead of the player along `heading`;
- * false when every spot is taken. */
-static bool free_spot(const float *standing, float heading, float *position)
+/* The first spot of the files no live spawn stands within half a body's width of, ahead of
+ * the player along `heading`; when every spot has one, the spot with the most room round it, since
+ * the engine's push layer sorts two bodies close together out on the first tick, as it does
+ * for a placement authored too close, and a spawn refused for want of a spot read as the cap
+ * (played 2026-09-17: followers crowding in front of the player stood on the near spots and
+ * the count stopped at nine). */
+static void free_spot(const float *standing, float heading, float *position)
 {
-    uint32_t i;
+    const float radians = heading * DEGREES_TO_RADIANS;
+    const float fwd_x = -sinf(radians);   /* the engine's forward from the heading */
+    const float fwd_y = cosf(radians);
+    const float right_x = cosf(radians);
+    const float right_y = sinf(radians);
+    float       best[3] = { 0.0f, 0.0f, 0.0f };
+    float       best_room = -1.0f;
+    uint32_t    i;
 
     for (i = 0; i < SPOT_COUNT; ++i) {
-        float radians = (heading + SPOTS[i].turn) * DEGREES_TO_RADIANS;
+        float across;
+        float ahead;
+        float room;
 
-        position[0] = standing[0] - sinf(radians) * SPOTS[i].distance;
-        position[1] = standing[1] + cosf(radians) * SPOTS[i].distance;
+        spot(i, &across, &ahead);
+        position[0] = standing[0] + fwd_x * ahead + right_x * across;
+        position[1] = standing[1] + fwd_y * ahead + right_y * across;
         position[2] = standing[2];
-        if (!spot_taken(position)) {
-            return true;
+        room = spot_room(position);
+        if (room >= SPOT_TAKEN_UNITS * SPOT_TAKEN_UNITS) {
+            return;
+        }
+        if (room > best_room) {
+            best_room = room;
+            memcpy(best, position, sizeof best);
         }
     }
-    return false;
+    memcpy(position, best, sizeof best);
 }
 
 /* The record a copy is raised from, and its stem: an archive kind's is written here after the
@@ -773,11 +810,7 @@ bool npc_spawner_spawn(void)
     }
     standing = (const float *)(player + PLAYER_POSITION_OFFSET);
     heading  = *(const float *)(player + PLAYER_HEADING_OFFSET);
-    if (!free_spot(standing, heading, position)) {
-        log_info("npc spawner: every spot around the player has a spawned actor on it already; "
-                 "nothing spawned");
-        return false;
-    }
+    free_spot(standing, heading, position);
     /* Facing the player, but a tripod gun facing away, its back to them: it is mounted from
      * behind and fired forward (played 2026-09-16, one that faced the player wanted turning). */
     facing = (_stricmp(kind.file, TRIPOD_FILE) == 0) ? heading : wrap_degrees(heading + 180.0f);

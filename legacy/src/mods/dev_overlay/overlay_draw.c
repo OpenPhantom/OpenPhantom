@@ -741,7 +741,7 @@ bool overlay_draw_paint(void)
     right = lay.left + lay.width;
 
     overlay_input_pointer(&pointer_x, &pointer_y);
-    hot = overlay_draw_row_at(pointer_x, pointer_y);
+    hot = overlay_input_pointer_hidden() ? -1 : overlay_draw_row_at(pointer_x, pointer_y);
 
     paint_frame(&lay, left, right);
     paint_tabs(&lay, left, right);
@@ -775,7 +775,9 @@ bool overlay_draw_paint(void)
     }
 
     paint_scroll_indicator(&lay, right, first);
-    paint_pointer(&lay, pointer_x, pointer_y);
+    if (!overlay_input_pointer_hidden()) {
+        paint_pointer(&lay, pointer_x, pointer_y);
+    }
     return true;
 }
 

@@ -414,6 +414,7 @@ add_engine_fix(dev_overlay
     npc_foreign.c
     pad_input.c
     pad_panel.c
+    panel_cage.c
     spawn_scripts.c
     actor_loader.c
     overlay_spawn.c

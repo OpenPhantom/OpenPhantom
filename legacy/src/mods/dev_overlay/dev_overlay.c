@@ -29,6 +29,7 @@
 #include "npc_spawner.h"
 #include "pad_input.h"
 #include "pad_panel.h"
+#include "panel_cage.h"
 #include "start_level.h"
 #include "start_level_row.h"
 
@@ -115,6 +116,7 @@ static void __cdecl hook_scene_end(void)
             overlay_model_rebuild();
         }
     }
+    panel_cage_tick();   /* after the paint laid the panel out; releases when it is not shown */
     scene_end_original();
 }
 

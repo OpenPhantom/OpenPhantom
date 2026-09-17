@@ -166,8 +166,8 @@ void pad_input_install(void)
         return;
     }
     log_info("pad: slot %d is read once a frame for the panel and the free camera. Press %s "
-             "to open or close the panel; in it the left stick glides the pointer up and down "
-             "at %.2f screen widths a second and the D-pad steps it row by row, A presses, B is "
+             "to open or close the panel; in it the left stick glides the pointer at %.2f "
+             "screen widths a second and the D-pad steps it row by row, A presses, B is "
              "Escape, the triggers move a slider, the right stick scrolls and the bumpers page; "
              "flying, the sticks fly and look at %.0f degrees a second, the triggers climb and "
              "dive, the bumpers change speed, A brings the player here and B leaves them where "
@@ -226,12 +226,9 @@ static bool read_pad(float dt)
     pad_shape_stick(raw.Gamepad.sThumbRX, raw.Gamepad.sThumbRY, st.deadzone, &st.state.right_x,
                     &st.state.right_y);
     {
-        float lx = (float)raw.Gamepad.sThumbLX / 32767.0f;
         float rx = (float)raw.Gamepad.sThumbRX / 32767.0f;
 
-        if (lx < 0.0f) { lx = -lx; }
-        if (rx < 0.0f) { rx = -rx; }
-        st.state.raw_x = (lx > rx) ? lx : rx;
+        st.state.raw_right_x = (rx < 0.0f) ? -rx : rx;
     }
     st.state.trigger_left  = (float)raw.Gamepad.bLeftTrigger / 255.0f;
     st.state.trigger_right = (float)raw.Gamepad.bRightTrigger / 255.0f;

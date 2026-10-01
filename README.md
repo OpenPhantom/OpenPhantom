@@ -23,7 +23,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 *Free camera, no clip and photo mode.*
 
-<img width="1920" height="1080" alt="Star Wars  Episode 1 The Phantom Menace Screenshot 2026 10 01 - 21 17 55 83" src="https://github.com/user-attachments/assets/be5d87e6-daef-456b-8367-b3e9b092c513" />
+<img width="1920" height="1080" alt="Star Wars  Episode 1 The Phantom Menace Screenshot 2026 10 01 - 21 21 52 11" src="https://github.com/user-attachments/assets/02f6c873-99b4-40aa-b792-3855fdf21075" />
 
 *Multiplayer Mode*
 

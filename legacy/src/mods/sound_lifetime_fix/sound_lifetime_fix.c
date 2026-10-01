@@ -81,12 +81,12 @@ static const uint8_t SIG_PIN_CHANNEL[] = {
     0x00, 0x00, 0x00, 0x00,
     0x89, 0x45, 0xFC, 0x8B, 0x4D, 0xFC, 0x83, 0x79, 0x0C, 0x00, 0x74, 0x27
 };
-static const uint8_t MASK_PIN_CHANNEL[] = {
+static const uint8_t MSK_PIN_CHANNEL[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
-_Static_assert(sizeof SIG_PIN_CHANNEL == sizeof MASK_PIN_CHANNEL,
+_Static_assert(sizeof SIG_PIN_CHANNEL == sizeof MSK_PIN_CHANNEL,
                "the pin channel pattern and its mask are different lengths");
 #define PIN_CHANNEL_PROLOGUE  7u
 #define OFFSET_CHANNEL_BANK   0x0Bu
@@ -104,7 +104,7 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY_DETOUR_MASKED("bapsound_pinChannel", SIG_PIN_CHANNEL, MASK_PIN_CHANNEL,
+    SIGNATURE_ENTRY_DETOUR_MASKED("bapsound_pinChannel", SIG_PIN_CHANNEL, MSK_PIN_CHANNEL,
                                   PIN_CHANNEL_PROLOGUE)
 };
 

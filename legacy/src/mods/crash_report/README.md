@@ -80,6 +80,22 @@ arranged on purpose.
   violation swallowed further out, after which the process hangs instead of dying, is one line
   instead of a report; that line still names the faulting address, what it touched and what it was
   doing, and the registers and stack sweep are given up.
+* **The table names eight sites; the total has a line of its own.** Once eight distinct faulting
+  sites are named, every later fault, a new site or a repeat, is only counted. That count used to
+  be printed inside a real crash report and nowhere else, so a process that survived its faults
+  showed eight site lines and never the total, and a ninth site was invisible for the rest of the
+  process. The total now goes into the log when it first reaches 16, 64, 256 and 1024, and once
+  more as the process ends, a total of zero included, in this shape:
+
+      first-chance access violations so far: N, N of them named above; the table names 8 and
+      counts the rest
+
+  "Named above" is the number of site lines the table printed; the rest of the total is repeats
+  at those sites and faults at sites past the table. A count that jumped past several milestones
+  while a report held the latch is reported once, at the largest. A fault that arrives while a
+  report or another note holds the latch is still counted, where it used to be lost. The
+  process end line needs `DLL_PROCESS_DETACH`, so a process killed from outside or dying hard
+  does not write it; a crash report carries the same total.
 * Only genuinely fatal codes are reported. Breakpoints, C++ throws (`0xE06D7363`) and the
   thread-naming exception are control flow, not crashes.
 * On `EXCEPTION_STACK_OVERFLOW` the report itself needs stack, and it has only the single page
@@ -91,8 +107,10 @@ arranged on purpose.
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. No unit tests: there is no isolated pure logic here; every
-function either talks to the OS or formats a report.
+Built and linked, `/W4 /WX` clean. One unit test, `unittests/crash_report.c`, for the one piece
+of pure logic here: when the running total of first-chance access violations goes into the log.
+Everything else either talks to the OS or formats a report. The total line itself has not been
+seen in a game log yet.
 
 **Accepted in game, on real crashes, none of them induced.** It caught a repeatable fault on
 three machines and produced the report that was used to diagnose it: the exception, the registers,

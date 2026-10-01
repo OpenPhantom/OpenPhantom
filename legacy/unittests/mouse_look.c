@@ -9,13 +9,44 @@
  *
  * Conservation, the property the whole repair rests on, is tested against the delivery itself in
  * mouse_rate.c, because that is where it now lives.
+ *
+ * And the gate those drains ask, which a session's pause menu shuts while the player phases run
+ * on: the phase stamp alone would leave it open, and the raw mouse would turn the view under the
+ * menu.
  */
 #include "unittest.h"
 
+#include "input_gate.h"
 #include "input_slider.h"
 #include "mouse_look.h"
 
+#include "common/session_note.h"
+
 #include <math.h>
+#include <string.h>
+
+/* Runs first: a read before any note is filed would be remembered as a miss for a second, and the
+ * gate would then read "not held" for the whole test. */
+static void test_session_hold_shuts_the_gate(void)
+{
+    session_note_t note;
+
+    memset(&note, 0, sizeof note);
+    note.running    = true;
+    note.input_held = true;
+    ut_check(session_note_publish(&note), "a session with its pause menu up is published");
+
+    input_gate_note_phase_ran();
+    ut_check(!input_gate_is_open(),
+             "the phases ran a moment ago and the gate is still shut: the menu holds the input");
+    ut_check(input_gate_session_holds(), "and the hold is what says so");
+
+    note.input_held = false;
+    ut_check(session_note_publish(&note), "the menu closes and the note says so");
+    input_gate_note_phase_ran();
+    ut_check(input_gate_is_open(), "the gate opens again with the next phase");
+    ut_check(!input_gate_session_holds(), "and nothing holds it any more");
+}
 
 static void test_slider_notches(void)
 {
@@ -92,6 +123,7 @@ static void test_clamp_step(void)
 
 int main(void)
 {
+    test_session_hold_shuts_the_gate();
     test_slider_notches();
     test_clamp_step();
 

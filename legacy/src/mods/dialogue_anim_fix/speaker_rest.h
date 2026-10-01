@@ -23,7 +23,10 @@
  * the hold bit. A walk, a run, a loop or a gesture still in flight is never at its end for
  * longer than a frame, so a moving body is never touched; a first version tested "complete and
  * not looping" and stopped walking characters, because a walk wraps without a loop flag. A body
- * on its death clip is left down.
+ * whose actor is dead is left down whatever its clip is called, and one whose actor is alive but
+ * out of its script, hit, thrown or getting up, is passed over until the script has it back
+ * (rest_rule.h). A version that asked only the clip's name stood corpses back up: brnockdi, the
+ * death of a thrown droid, does not say "die".
  *
  * Not only while the scene lasts. A first version let go of everyone the moment the scene's
  * lock dropped, and the last speaker of every conversation stayed frozen on the look-around the
@@ -33,10 +36,33 @@
 #ifndef SPEAKER_REST_H
 #define SPEAKER_REST_H
 
+#include "rest_rule.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef int32_t (__cdecl *speaker_play_clip_fn_t)(uint32_t body, int32_t clip, int32_t mode);
+
+/* The character behind a body, with the two cells the rest rule asks of it. */
+typedef struct speaker_actor {
+    uintptr_t record;     /* 0 when no character stands behind the body */
+    int32_t   health;
+    int32_t   state;
+} speaker_actor_t;
+
+/* The rest rule for `body`, `death_named` being its clip's name said a death. The character is
+ * found through the body's owner link and checked back through the record's own body pointer; a
+ * body with none behind it goes by the name alone, as before. `actor` receives what was read. */
+rest_verdict_t speaker_rest_body_verdict(uint32_t body, bool death_named, speaker_actor_t *actor);
+
+/* The same for a character record already in hand, with no clip to judge. A record whose cells
+ * no longer read is let go. */
+rest_verdict_t speaker_rest_record_verdict(uintptr_t record, speaker_actor_t *actor);
+
+/* A body this DLL leaves where it is because its actor is dead, rather than move it: logged with
+ * its model, health, state and clip, and counted. `what` says what was not done to it. */
+void speaker_rest_leave_corpse(uint32_t body, const speaker_actor_t *actor, int32_t clip,
+                               const char *what);
 
 /* `play_clip` is bapobj_playClip. */
 void speaker_rest_install(speaker_play_clip_fn_t play_clip);

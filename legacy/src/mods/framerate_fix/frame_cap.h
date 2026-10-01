@@ -19,7 +19,7 @@
  * first test of the key believed it; the shipped configuration had vsync forced off. With it on,
  * a frame is only ever shown at a retrace, and a cap of half the refresh locks to exactly two
  * retraces a frame. Without it, half the refresh tears on every second retrace, which a large
- * object crossing the screen shows as judder. The installer ships it on from 1.4.4.
+ * object crossing the screen shows as judder. The installer ships it on from 2.0.0.
  *
  * Uncapped is smooth as well, but by brute force rather than by pacing: measured at 256 to 310
  * frames a second, so the display always has a recent one to show. It costs a fully loaded core

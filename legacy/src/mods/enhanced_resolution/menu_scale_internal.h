@@ -66,6 +66,10 @@ typedef struct menu_scale_state {
     int32_t   fitted_screen_width;
     int32_t   fitted_screen_height;
 
+    /* The drawn cursor's size as last written, 0 until a write has landed. The cursor cage reads
+     * it through menu_scale_cursor_size, so the two cannot disagree about how big the quad is. */
+    int32_t   cursor_size;
+
     detour_t  menu_open_detour;
     detour_t  pic_draw_detour;
     detour_t  draw_menu_detour;
@@ -133,6 +137,12 @@ bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y
 /* Refits the canvas to the display if it has changed size, then checks the canvas still fits.
  * Called from both menu hooks in place of canvas_still_fits, which it ends with. */
 void menu_scale_follow_display(void);
+
+/* Drops a tracked screen's artwork through the engine's own swmenu_freeBitmaps, so the pictures
+ * are loaded again at whatever ratio the load path was last told. The refit does it to every
+ * tracked screen, and so does the stand down. A screen with no menu, or a build where the site did
+ * not resolve, is left alone. */
+void menu_scale_drop_bitmaps(const void *menu);
 
 /* The three hooks menu_scale.c owns. */
 int32_t __cdecl hook_menu_open(void *menu);

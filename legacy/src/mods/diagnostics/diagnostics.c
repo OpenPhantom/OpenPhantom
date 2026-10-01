@@ -15,6 +15,7 @@
 #include "diag_dialogue_ops.h"
 #include "diag_footsteps.h"
 #include "diag_projectiles.h"
+#include "diag_push_block.h"
 #include "diag_world.h"
 
 #include "common/host_image.h"
@@ -99,6 +100,7 @@ static void load_config(void)
                     diagnostics_state.player_body_watch);
         diagnostics_state.player_body_watch = 0;
     }
+    diagnostics_state.push_block = read_level_max("PushBlock", 1);
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
@@ -144,7 +146,7 @@ static bool any_area_enabled(void)
             diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
             diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0 ||
             diagnostics_state.camera_owner != 0 || diagnostics_state.footsteps != 0 ||
-            diagnostics_state.x87 != 0);
+            diagnostics_state.x87 != 0 || diagnostics_state.push_block != 0);
 }
 
 void diagnostics_install(void)
@@ -177,14 +179,15 @@ void diagnostics_install(void)
     diagnostics_installed = true;
 
     log_info("areas audio=%d music=%d trigger=%d fsm=%d level=%d player=%d dialogue=%d fx=%d "
-             "frame=%d present=%d projectiles=%d cameraOwner=%d footsteps=%d | census=%dms "
-             "max=%d lines/s",
+             "frame=%d present=%d projectiles=%d cameraOwner=%d footsteps=%d push_block=%d | "
+             "census=%dms max=%d lines/s",
              diagnostics_state.audio, diagnostics_state.music, diagnostics_state.trigger,
              diagnostics_state.fsm, diagnostics_state.level, diagnostics_state.player,
              diagnostics_state.dialogue, diagnostics_state.fx, diagnostics_state.frame,
              diagnostics_state.present, diagnostics_state.projectiles,
              diagnostics_state.camera_owner, diagnostics_state.footsteps,
-             diagnostics_state.audio_census_ms, diagnostics_state.max_lines_per_second);
+             diagnostics_state.push_block, diagnostics_state.audio_census_ms,
+             diagnostics_state.max_lines_per_second);
 
     observers += diag_audio_install(diagnostics_state.audio, diagnostics_state.audio_census_ms);
     observers += diag_music_install(diagnostics_state.music);
@@ -207,6 +210,7 @@ void diagnostics_install(void)
                                          diagnostics_state.characters_watch,
                                          diagnostics_state.characters_watch_velocity,
                                          diagnostics_state.player_body_watch);
+    observers += diag_push_block_install(diagnostics_state.push_block);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

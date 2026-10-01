@@ -4,15 +4,22 @@
 ; install time. What sits in dist is already only the pieces these rows install: the patch as it
 ; comes out of its release archive, and 33 files of the 851 in VideoLAN's zip.
 
-; PatchVersion records which release dist\patch was taken from, on the PATCH's own line, 0.4.x. It
-; is not AppVer: the two numbers were merged at 1.5.0 and have been split again at j0nny's asking,
-; so this counts patch releases while AppVer counts installer builds. Nothing derives a URL or a
-; path from either, and the binaries inside dist\patch carry AppVer's line, not this one.
+; PatchVersion records which patch release dist\patch was taken from, and it is the number the
+; binaries inside it carry in their version resources. AppVer follows it by a fixed rule: the
+; first number one higher, the other two the same, so patch 1.0.0 ships in installer 2.0.0.
+; Nothing derives a URL or a path from either.
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "0.4.4"
+#define PatchVersion       "1.0.0"
 #define PatchSrc           "dist\patch"
+
+; The rule above, checked rather than promised. Both numbers are set by hand in two files, and a
+; copy of a version number has gone stale here before.
+#define PatchMajorEnd      Pos(".", PatchVersion)
+#if AppVer != Str(Int(Copy(PatchVersion, 1, PatchMajorEnd - 1)) + 1) + Copy(PatchVersion, PatchMajorEnd)
+  #error AppVer must be PatchVersion with its first number one higher, e.g. 2.0.0 for patch 1.0.0
+#endif
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the
 ; patch, so it is kept apart from it: dist\patch is refreshed wholesale out of a patch release and
@@ -104,6 +111,10 @@ Name: "patch\dismemberment";       Description: "{cm:CompDismember}";   Types: e
 Name: "patch\dev_overlay";         Description: "{cm:CompDevOverlay}";  Types: everything custom
 Name: "patch\diagnostics";         Description: "{cm:CompDiag}";        Types: everything custom
 
+; A mode of its own rather than a repair, so it is offered and "full" leaves it out. Its section in
+; engine_fixes.ini ships with Enabled=1, so ticking it is all a player has to do.
+Name: "patch\multiplayer";         Description: "{cm:CompMultiplayer}"; Types: everything custom
+
 Name: "patch\fmv_player";          Description: "{cm:CompFmvPlayer}";   Types: everything custom
 
 ; Part of the player rather than a choice beside it. Without a decoder the DLL installs, finds
@@ -123,13 +134,19 @@ Source: "{#PatchSrc}\dinput.dll"; DestDir: "{app}"; \
 Source: "{#PatchSrc}\engine_fixes.ini"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
+; What an animation ordinal means on each of the game's 164 characters, read beside the ini by the
+; multiplayer and by the panel's model swap, whose list past the five heroes is this file. Data the
+; release generates and nobody edits, so it is replaced like the ini.
+Source: "{#PatchSrc}\characters.ini"; DestDir: "{app}"; \
+    Components: patch; Flags: ignoreversion
+
 Source: "{#PatchSrc}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
-; The file above came out of the patch archive and describes that archive: the patch and DxWrapper,
-; and where libVLC and FFmpeg come from when they are present. This second file covers what the
-; installer adds beyond the archive. Installed with the patch, because everything it names is
-; installed with the patch or under it.
+; The file above came out of the patch archive and describes that archive: the patch, DxWrapper and
+; the two libraries inside multiplayer.dll, and where libVLC and FFmpeg come from when they are
+; present. This second file covers what the installer adds beyond the archive. Installed with the
+; patch, because everything it names is installed with the patch or under it.
 Source: "dist\THIRD-PARTY-NOTICES-Installer.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
@@ -222,6 +239,15 @@ Source: "{#PatchSrc}\mods\dev_overlay.dll";         DestDir: "{app}\mods"; \
     Components: patch\dev_overlay;         Flags: ignoreversion
 Source: "{#PatchSrc}\mods\diagnostics.dll";         DestDir: "{app}\mods"; \
     Components: patch\diagnostics;         Flags: ignoreversion
+Source: "{#PatchSrc}\mods\multiplayer.dll";         DestDir: "{app}\mods"; \
+    Components: patch\multiplayer;         Flags: ignoreversion
+
+; HACL* and Mbed TLS are compiled into multiplayer.dll, so their licence texts install with it. In
+; the game folder, because THIRD-PARTY-NOTICES.txt names them and says they sit next to it.
+Source: "{#PatchSrc}\hacl-License.txt"; DestDir: "{app}"; \
+    Components: patch\multiplayer; Flags: ignoreversion
+Source: "{#PatchSrc}\mbedtls-License.txt"; DestDir: "{app}"; \
+    Components: patch\multiplayer; Flags: ignoreversion
 
 Source: "{#PatchSrc}\mods\fmv_player.dll";          DestDir: "{app}\mods"; \
     Components: patch\fmv_player;          Flags: ignoreversion
@@ -269,7 +295,7 @@ Source: "{#VlcSrc}\libvlc.dll"; DestDir: "{app}\mods\fmv"; \
 Source: "{#VlcSrc}\libvlccore.dll"; DestDir: "{app}\mods\fmv"; \
     Components: patch\fmv_player\runtime; Flags: ignoreversion
 
-; LGPL, so the licence travels with the binaries.
+; VideoLAN's own licence text, the GPL v2, travels with the binaries.
 Source: "{#VlcSrc}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-License.txt"; \
     Components: patch\fmv_player\runtime; Flags: ignoreversion
 

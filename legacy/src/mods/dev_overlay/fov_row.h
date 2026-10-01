@@ -33,16 +33,21 @@
 
 /* The range the video options slider offers, and the defaults variable_fov uses for its own ends.
  * Read from the file rather than assumed, since somebody who widened the slider there should not
- * find this row refusing what that one accepts. */
+ * find this row refusing what that one accepts.
+ *
+ * They are the two ENDS of the row's track and neither of them is the row's default, however the
+ * names read. What this row shows is BaseFov plus ExtraDegrees, and the value it has with nothing
+ * set is the base, which fov_row_base() below answers; putting the row back to FOV_ROW_MIN_DEFAULT
+ * would set the narrowest picture it allows and call that the default. */
 #define FOV_ROW_MIN_DEFAULT 60.0f
 #define FOV_ROW_MAX_DEFAULT 120.0f
 
-/* One press of the row's own step, in degrees. A whole degree is below what the eye picks up on a
- * single press and ten would cross the useful range in six. */
-#define FOV_ROW_STEP 2.0f
-
 float fov_row_min(void);
 float fov_row_max(void);
+
+/* The width with no offset at all, which is the base variable_fov published for this canvas.
+ * False when it has published none, the same case fov_row_get() answers false for. */
+bool fov_row_base(float *degrees);
 
 /* Clamps to the range above. A value that is not a number comes back as the minimum, which is the
  * narrowest picture and the one closest to what the game shipped with. */

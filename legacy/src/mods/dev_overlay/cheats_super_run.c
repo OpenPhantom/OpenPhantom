@@ -62,11 +62,10 @@ _Static_assert(sizeof SIG_RUN_CAPS == sizeof MSK_RUN_CAPS, "mask length");
 #define RUN_CAP_OPERAND_OFFSET 11u              /* the imm32 of the third push */
 #define RUN_CAP_SHIPPED        3.5f
 
-/* SuperRunScale: 2.0 is twice the run, brisk and still playable; the band's ends are in
- * cheats_openphantom.h with the panel's row, which drags between them: 4.0 is the most the wall
- * probe was reasoned about above, and 1.0 is a row that does nothing, so the floor sits just
+/* SuperRunScale: 2.0 is twice the run, brisk and still playable; the band's ends and that fallback
+ * are in cheats_openphantom.h with the panel's row, which drags between them: 4.0 is the most the
+ * wall probe was reasoned about above, and 1.0 is a row that does nothing, so the floor sits just
  * above it. */
-#define SUPER_RUN_SCALE_DEFAULT 2.0f
 #define SUPER_RUN_SCALE_KEY     "SuperRunScale"
 #define SUPER_RUN_DECIMALS      2
 

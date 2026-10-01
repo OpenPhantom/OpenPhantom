@@ -39,6 +39,22 @@
 #define TRACK_MODE_RELEASE_END       0x02u
 #define TRACK_MODE_LOOP              0x04u
 
+/* The character behind a body. spawn_actor links the body back to the character it made at
+ * +0xA0 (0x004374BE, mov [ecx+0xA0],edx with ecx the body and edx the record). A shot's body
+ * links to its shot record there instead, whose +0x34 is a float, and every other body, the
+ * player's among them, has the link at 0, because the allocator clears the whole object each time
+ * (bapobj_init 0x00412270, rep stosd of 0x44 dwords). So the record's own body pointer, read back
+ * at +0x34, keeps the shot out, and a body allocated again answers for its new owner. State and
+ * health are the cells stand_in.c reads of its candidates, the template name the one it matches a
+ * face by. */
+#define BODY_OWNER_OFFSET            0xA0u
+#define CHARACTER_STATE_OFFSET       0x20u
+#define CHARACTER_TEMPLATE_OFFSET    0x30u
+#define CHARACTER_BODY_OFFSET        0x34u
+#define CHARACTER_HEALTH_OFFSET      0x38u
+#define TEMPLATE_NAME_OFFSET         0x08u    /* the .baf file name, "baronsec.baf" */
+#define TEMPLATE_NAME_SIZE           0x18u
+
 #define PLAY_CLIP_CROSSFADE          4
 #define REST_GRACE_MS                500u    /* the script's own follow-up, when it has one */
 #define WATCH_LIMIT_MS               60000u  /* after their last line */
@@ -53,6 +69,7 @@ static struct {
         DWORD    parked_ms;
     } watched[WATCHED_LIMIT];
     uint32_t rests;
+    uint32_t corpses;       /* bodies left down because their actor was dead, every caller's */
 } rest;
 
 static bool clip_is_death(uint32_t body, int32_t index);
@@ -68,17 +85,100 @@ void speaker_rest_forget_all(void)
     memset(rest.watched, 0, sizeof rest.watched);
 }
 
+static bool actor_read(uintptr_t record, speaker_actor_t *actor)
+{
+    memset(actor, 0, sizeof *actor);
+    if (record == 0 ||
+        !memory_try_read(record + CHARACTER_HEALTH_OFFSET, &actor->health, sizeof actor->health) ||
+        !memory_try_read(record + CHARACTER_STATE_OFFSET, &actor->state, sizeof actor->state)) {
+        return false;
+    }
+    actor->record = record;
+    return true;
+}
+
+rest_verdict_t speaker_rest_record_verdict(uintptr_t record, speaker_actor_t *actor)
+{
+    if (!actor_read(record, actor)) {
+        return REST_NEVER;      /* a record that no longer reads is no character to move */
+    }
+    return rest_verdict(true, actor->health, actor->state, false);
+}
+
+rest_verdict_t speaker_rest_body_verdict(uint32_t body, bool death_named, speaker_actor_t *actor)
+{
+    uint32_t owner = 0;
+    uint32_t owner_body = 0;
+    bool     has_actor;
+
+    has_actor = body != 0 &&
+                memory_try_read((uintptr_t)body + BODY_OWNER_OFFSET, &owner, sizeof owner) &&
+                owner != 0 &&
+                memory_try_read((uintptr_t)owner + CHARACTER_BODY_OFFSET, &owner_body,
+                                sizeof owner_body) &&
+                owner_body == body && actor_read((uintptr_t)owner, actor);
+    if (!has_actor) {
+        memset(actor, 0, sizeof *actor);
+    }
+    return rest_verdict(has_actor, actor->health, actor->state, death_named);
+}
+
+void speaker_rest_leave_corpse(uint32_t body, const speaker_actor_t *actor, int32_t clip,
+                               const char *what)
+{
+    char     name[TEMPLATE_NAME_SIZE + 1];
+    uint32_t template_record = 0;
+
+    memset(name, 0, sizeof name);
+    if (actor->record == 0 ||
+        !memory_try_read(actor->record + CHARACTER_TEMPLATE_OFFSET, &template_record,
+                         sizeof template_record) ||
+        template_record == 0 ||
+        !memory_try_read((uintptr_t)template_record + TEMPLATE_NAME_OFFSET, name,
+                         TEMPLATE_NAME_SIZE)) {
+        memset(name, 0, sizeof name);
+    }
+    ++rest.corpses;
+    log_info("speaker %08X, %s with health %d in state %d, is dead on clip %d: %s (corpse %u)",
+             (unsigned)body, name[0] != '\0' ? name : "a model that does not read",
+             (int)actor->health, (int)actor->state, (int)clip, what, (unsigned)rest.corpses);
+}
+
+/* Out of the watch for good: nothing later puts this body on its stand. */
+static void forget_body(uint32_t body)
+{
+    int i;
+
+    for (i = 0; i < WATCHED_LIMIT; ++i) {
+        if (rest.watched[i].body == body) {
+            rest.watched[i].body = 0;
+        }
+    }
+}
+
 void speaker_rest_note_line_end(uint32_t body, uintptr_t track)
 {
-    int      slot = -1;
-    int      i;
-    int32_t  clip = -1;
-    uint32_t mode = 0;
+    int             slot = -1;
+    int             i;
+    int32_t         clip = -1;
+    uint32_t        mode = 0;
+    speaker_actor_t actor;
+    rest_verdict_t  verdict;
 
     if (rest.play_clip == NULL || body == 0) {
         return;
     }
-    if (track != 0 &&
+    verdict = speaker_rest_body_verdict(body, false, &actor);
+    if (verdict == REST_NEVER) {
+        /* Dead as the voice ends, a death cry or a line the death cut off: no cut, and not
+         * watched, so no later pass puts the corpse on its stand either. */
+        (void)memory_try_read((uintptr_t)body + BODY_BASE_CLIP_OFFSET, &clip, sizeof clip);
+        forget_body(body);
+        speaker_rest_leave_corpse(body, &actor, clip,
+                                  "left down, neither cut to its stand with the voice nor watched");
+        return;
+    }
+    if (verdict == REST_MAY && track != 0 &&
         memory_try_read((uintptr_t)body + BODY_BASE_CLIP_OFFSET, &clip, sizeof clip) &&
         clip != STAND_CLIP &&
         memory_try_read(track + TRACK_MODE_OFFSET, &mode, sizeof mode) &&
@@ -207,8 +307,9 @@ bool speaker_rest_clip_is_stand(uint32_t body, int32_t index)
            (name_has(name, "stnd") || name_has(name, "stand"));
 }
 
-/* A body parked on its death is left there. The names are the models' own: nc2die1, shmdie1,
- * ankdie1, death1 to death3. A scene actor carries no health cell to ask instead. */
+/* A clip named for a death: nc2die1, shmdie1, ankdie1, death1 to death3, the models' own names.
+ * Not every death says so, brnockdi and brntrpdi do not, which is why the actor's own health and
+ * state are asked beside it; the name is what is left for a body with no character behind it. */
 static bool clip_is_death(uint32_t body, int32_t index)
 {
     char     name[KEYFRAME_NAME_SIZE + 1];
@@ -250,6 +351,8 @@ static bool settle(int i, uint32_t speaker, uintptr_t (*body_track)(uint32_t), D
     uint32_t flags = 0;
     uint32_t mode = 0;
     int32_t  stand;
+    bool     death_named;
+    speaker_actor_t actor;
 
     if (now - rest.watched[i].last_line_ms > WATCH_LIMIT_MS) {
         return true;
@@ -268,8 +371,19 @@ static bool settle(int i, uint32_t speaker, uintptr_t (*body_track)(uint32_t), D
     if (now - rest.watched[i].parked_ms < REST_GRACE_MS) {
         return false;
     }
-    if (clip_is_death(body, clip)) {
+    death_named = clip_is_death(body, clip);
+    switch (speaker_rest_body_verdict(body, death_named, &actor)) {
+    case REST_NEVER:
+        if (!death_named) {
+            speaker_rest_leave_corpse(body, &actor, clip, "left down rather than put to its stand");
+        }
         return true;
+    case REST_NOT_NOW:
+        rest.watched[i].parked_clip = -1;   /* timed again once its script has the body back */
+        return false;
+    case REST_MAY:
+    default:
+        break;
     }
     stand = rest_clip_of(body);
     if (clip == stand && (flags & TRACK_FLAG_HELD) == 0) {

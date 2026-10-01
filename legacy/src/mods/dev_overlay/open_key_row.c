@@ -1,8 +1,10 @@
 /* open_key_row.c: see open_key_row.h. */
 #include "open_key_row.h"
 
+#include "chat_key_row.h"
 #include "overlay_key_name.h"
 #include "overlay_input.h"
+#include "overlay_notice.h"
 
 #include "common/ini.h"
 
@@ -60,11 +62,26 @@ int32_t open_key_row_get(void)
 bool open_key_row_set(int32_t virtual_key)
 {
     if (virtual_key != 0 && key_is_refused(virtual_key)) {
+        /* The row goes on showing the key it already has, which is what it would show if the
+         * binding had worked and the key were the same one. The band is the difference. */
+        overlay_notice_say("Refused: the panel drives itself with that key");
+        return false;
+    }
+    /* The chat asks this panel first whether it wants a key, so on a key both claimed the panel
+     * would take it every time and the chat would never open. Refused here as the chat's row
+     * refuses the panel's key; which of the two gives way is the player's choice, made on the
+     * chat's row. */
+    if (virtual_key != 0 && virtual_key == chat_key_row_get()) {
+        overlay_notice_say("Refused: that key opens the chat; change that first");
         return false;
     }
     /* The running panel first, so a player who binds a key can use it immediately even if the file
      * could not be written; the write is what carries it across a restart, and its failure is worth
      * reporting but not worth undoing a binding that already works. */
     overlay_input_set_key(virtual_key);
-    return ini_write_int(DEV_OVERLAY_SECTION, OPEN_KEY_KEY, (int)virtual_key);
+    if (!ini_write_int(DEV_OVERLAY_SECTION, OPEN_KEY_KEY, (int)virtual_key)) {
+        overlay_notice_say("That key works now, but could not be saved to the file");
+        return false;
+    }
+    return true;
 }

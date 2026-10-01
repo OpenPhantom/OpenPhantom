@@ -2,6 +2,7 @@
 #include "overlay_cheats.h"
 
 #include "cheats_openphantom.h"
+#include "overlay_number.h"
 #include "overlay_row_fill.h"
 #include "overlay_row_ids.h"
 #include "view_range_row.h"
@@ -24,7 +25,8 @@ static const uint32_t SLOT_IDS[] = {
     SUPER_RUN_SPEED_ROW_ID,
     SUPER_RUN_TRACK_ROW_ID,
     (uint32_t)CHEATS_OWN_JUMP_BOOST,
-    JUMP_SCALE_ROW_ID
+    JUMP_SCALE_ROW_ID,
+    JUMP_SCALE_TRACK_ROW_ID
 };
 _Static_assert(sizeof SLOT_IDS / sizeof SLOT_IDS[0] == OVERLAY_CHEATS_ROW_COUNT,
                "the cheats group's slot table and its row count disagree");
@@ -42,14 +44,49 @@ static void format_scale(float scale, char *out, size_t size)
     text_format(out, size, "%.2fx", (double)scale);
 }
 
+/* The two tracks' own numbers, in the shape overlay_kit_limits() answers in. A press is a
+ * hundredth, the grid both of them write on and the precision format_scale() shows; the
+ * modifier's press is ten of them. Each standard is named where the cheat that owns it is:
+ * super run's is what SuperRunScale falls back to, and the jump boost's is what
+ * install_jump_boost() seeds the scale with, since that one is held in memory and no key
+ * carries it. */
+static const overlay_number_t SUPER_RUN_NUMBERS = {
+    SUPER_RUN_SCALE_MIN, SUPER_RUN_SCALE_MAX, 0.01f, 0.10f, SUPER_RUN_SCALE_DEFAULT, true
+};
+static const overlay_number_t JUMP_BOOST_NUMBERS = {
+    JUMP_BOOST_SCALE_MIN, JUMP_BOOST_SCALE_MAX, 0.01f, 0.10f, JUMP_BOOST_SCALE_DEFAULT, true
+};
+
+static const overlay_number_t *numbers_for(uint32_t id)
+{
+    if (id == SUPER_RUN_TRACK_ROW_ID) {
+        return &SUPER_RUN_NUMBERS;
+    }
+    if (id == JUMP_SCALE_TRACK_ROW_ID) {
+        return &JUMP_BOOST_NUMBERS;
+    }
+    return NULL;
+}
+
 /* The same hundredths grid the picture group's sliders write on, for the same reason recorded
  * there: a drag that lands between two hundredths shows a number the row cannot be typed back
  * to. */
-static float on_hundredths(float low, float high, float fraction)
+static float on_hundredths(float value)
 {
-    float value = low + fraction * (high - low);
-
     return (float)((int)(value * 100.0f + 0.5f)) / 100.0f;
+}
+
+/* A track row: the handle where the value sits, and the number at the end of the track, which
+ * is the same reading the row above shows and through the same formatter. */
+static void fill_track(const overlay_number_t *n, float value, bool available,
+                       overlay_row_t *out)
+{
+    out->kind = OVERLAY_ROW_SLIDER;
+    overlay_row_label(out->label, "");
+    out->available = available;
+    (void)overlay_number_fraction_of(n, value, &out->fraction);
+    overlay_row_clamp_fraction(out);
+    format_scale(value, out->value, sizeof out->value);
 }
 
 void overlay_cheats_row(uint32_t id, const char *editing_text, overlay_row_t *out)
@@ -78,12 +115,13 @@ void overlay_cheats_row(uint32_t id, const char *editing_text, overlay_row_t *ou
         return;
 
     case SUPER_RUN_TRACK_ROW_ID:
-        out->kind = OVERLAY_ROW_SLIDER;
-        overlay_row_label(out->label, "");
-        out->available = cheats_openphantom_is_available(CHEATS_OWN_SUPER_RUN);
-        out->fraction  = (cheats_openphantom_super_run_scale() - SUPER_RUN_SCALE_MIN) /
-                         (SUPER_RUN_SCALE_MAX - SUPER_RUN_SCALE_MIN);
-        overlay_row_clamp_fraction(out);
+        fill_track(&SUPER_RUN_NUMBERS, cheats_openphantom_super_run_scale(),
+                   cheats_openphantom_is_available(CHEATS_OWN_SUPER_RUN), out);
+        return;
+
+    case JUMP_SCALE_TRACK_ROW_ID:
+        fill_track(&JUMP_BOOST_NUMBERS, cheats_openphantom_jump_boost_scale(),
+                   cheats_openphantom_is_available(CHEATS_OWN_JUMP_BOOST), out);
         return;
 
     default:
@@ -137,17 +175,54 @@ bool overlay_cheats_commit(uint32_t id, const char *text)
     }
 }
 
-bool overlay_cheats_slider_set(uint32_t id, float fraction)
+/* What a handle at `fraction` stands for: the inverse of the reading the track's row takes, and
+ * the one arithmetic both the write and the shown number go through. */
+static bool value_at(uint32_t id, float fraction, float *out)
 {
-    if (id != SUPER_RUN_TRACK_ROW_ID) {
+    const overlay_number_t *n = numbers_for(id);
+
+    if (n == NULL || !overlay_number_value_at(n, fraction, out)) {
         return false;
     }
-    if (fraction < 0.0f) {
-        fraction = 0.0f;
+    *out = on_hundredths(*out);
+    return true;
+}
+
+bool overlay_cheats_slider_set(uint32_t id, float fraction)
+{
+    float value;
+
+    if (!value_at(id, fraction, &value)) {
+        return false;
     }
-    if (fraction > 1.0f) {
-        fraction = 1.0f;
+    if (id == JUMP_SCALE_TRACK_ROW_ID) {
+        /* The one setter here that answers nothing: it clamps and stores, and there is no
+         * file for it to fail to write. Reported as landed, which it did. */
+        cheats_openphantom_jump_boost_set_scale(value);
+        return true;
     }
-    return cheats_openphantom_super_run_set_scale(on_hundredths(SUPER_RUN_SCALE_MIN,
-                                                                SUPER_RUN_SCALE_MAX, fraction));
+    return cheats_openphantom_super_run_set_scale(value);
+}
+
+bool overlay_cheats_slider_value(uint32_t id, float fraction, char *out, size_t size)
+{
+    float value;
+
+    if (out == NULL || size == 0u || !value_at(id, fraction, &value)) {
+        return false;
+    }
+    format_scale(value, out, size);
+    out[size - 1u] = '\0';
+    return true;
+}
+
+bool overlay_cheats_slider_limits(uint32_t id, overlay_number_t *out)
+{
+    const overlay_number_t *n = numbers_for(id);
+
+    if (n == NULL || out == NULL) {
+        return false;
+    }
+    *out = *n;
+    return true;
 }

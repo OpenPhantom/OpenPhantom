@@ -44,6 +44,7 @@ included here or distributed with this project.
 | `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
 | `dev_overlay` | A panel over the running game, opened with F6 or the key below Escape: the game's own cheat codes, the ten this project adds, every OpenPhantom setting on a row, a free camera and a level to start a new game at |
+| `multiplayer` | Co-operative play for up to four players, over the LAN or through a relay, with a lobby in the game's own menu. See its README |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
 | `sound_lifetime_fix` | Stops a pinned voice keeping the address of a local whose function has returned, which crashed a load made with blaster bolts in flight |
 | `camera_handback_fix` | Gives the camera back after a conversation that took it and never returned it |
@@ -70,6 +71,18 @@ That produces `build/dist/`, laid out the way an installation is: `dinput.dll` a
 per feature in `mods/`, and the standalone scripts in `tools/`. Nothing is installed for you, and no
 build output is tracked in this repository.
 
+The first configure downloads one library: Mbed TLS 4.1.1, the release archive from
+`github.com/Mbed-TLS/mbedtls`, for the TLS client in `multiplayer.dll` that fetches the relay's
+key. The configure refuses the archive unless its SHA-256 is the one
+`src/third_party/CMakeLists.txt` names. To configure without the network, unpack that same release
+and name its folder:
+
+```sh
+cmake -S . -B build -A Win32 -DFETCHCONTENT_SOURCE_DIR_MBEDTLS=<folder>
+```
+
+CMake then uses the folder as it is and checks no hash.
+
 ## Installing
 
 1. Copy `build/dist/dinput.dll` next to `WMAIN.EXE`.
@@ -78,7 +91,7 @@ build output is tracked in this repository.
    every DirectInput export to whatever it finds under that name, so the previous occupant keeps
    working.
 2. Copy the DLLs you want from `build/dist/mods/` into `<game>\mods\`.
-3. Copy `dist/engine_fixes.ini` next to `WMAIN.EXE`.
+3. Copy `dist/engine_fixes.ini` and `dist/characters.ini` next to `WMAIN.EXE`.
 4. Start the game.
 
 `build/dist/tools/` is only needed for `fmv_player`, which is the one fix that does nothing until
@@ -134,6 +147,8 @@ README.md
 CONTRIBUTING.md        the coding rules, and why each one exists
 dist/
   engine_fixes.ini     the configuration that ships with a release
+  characters.ini       what each actor's animation ordinals mean, read by the character roster
+                       in common; an actor missing from it falls back to the convention
 src/
   common/              static library, linked into every DLL and every test
   loader/              builds dinput.dll, installed next to WMAIN.EXE
@@ -141,6 +156,7 @@ src/
     variable_fov/      builds mods\variable_fov.dll
     enhanced_input/    builds mods\enhanced_input.dll
     ...                one directory per feature DLL
+  third_party/         code that is not this project's own, for multiplayer.dll and its tests
 unittests/             pure logic, runs without the game
 ```
 
@@ -168,6 +184,17 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 | `text` | One bounded formatter that always terminates, for every label, path and log line |
 | `numeric.h` | The float clamp and the finite test, inline because two of their callers are on the draw path |
 | `engine_types.h` | Binary structures more than one fix needs |
+| `shared_note` | A named record one DLL publishes and another reads through a mapping, with no call between them |
+| `appearance_note` | The model name the local player wears, filed through a shared note for whoever describes the player to another machine |
+| `character_profile` | What each actor's animation ordinals mean, read out of `characters.ini` beside the game, which ships as `dist/characters.ini`, and the fallback chain for a role an actor lacks |
+| `session_note` | Whether a multiplayer session is running in this process and whether it holds the player's input, published by the multiplayer for the DLLs that behave differently then |
+| `npc_spawn_note` | What the developer menu's entity spawner and the multiplayer tell each other, so that a copy one player spawns stands on every machine of a session |
+| `model_wear_note` | Which borrowed model a far player's body wears, asked for by the multiplayer and answered by the developer menu's model swap |
+| `movie_note` | What the movie player and the multiplayer tell each other about a movie, so that in a session the host's movie decides when everybody's ends |
+| `host_settings_note` | The host's draw distance, fog and dismemberment settings, in force on a client's feature DLLs for the length of a session without a byte of its ini changing |
+| `mod_identity` | Whether a DLL in `mods\` is one of this release's own mods and which build of it, read from its version resource and its file header |
+| `language` | Which of the game's five languages a mod draws its own text in: a `Language` key that names one, else the Windows UI language, else English |
+| `memory_guard` | The copy behind `memory`'s trying reads, which refuses a read that faults although Windows runs the game with a compatibility fix that resumes every read fault |
 
 **`src/loader` builds `dinput.dll`**, which sits next to the executable and patches nothing itself.
 Its only job is to load the fixes at the right moment and get out of the way.
@@ -230,7 +257,7 @@ Adding a suite is one line in `unittests/CMakeLists.txt`.
 They cover the arithmetic, which is where the mistakes that are invisible at run time live: field
 of view maths, the HUD layout, the mouse and movement dampers, the fog band, the instruction
 encoder, the menu patcher, the pattern matcher and the detour chain. None of them needs the game
-or a graphics device, so `ctest` runs the lot in about two seconds.
+or a graphics device, so `ctest` runs the lot in well under a minute.
 
 ## How it works
 

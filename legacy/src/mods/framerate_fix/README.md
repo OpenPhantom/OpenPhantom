@@ -20,6 +20,8 @@ survives that recompile, so it does not share a gate with the rest of the camera
 | `RefreshDivisor` | `0` | with `MatchDisplayRefresh` on, which fraction of the screen's rate to cap at: 0 decides by itself, stepping down to a half, a third or a quarter when more than a tenth of a second's frames needed more work than the cap allowed, back up after five clear seconds in a row, and starting at the refresh again when a level opens (read on the world clock detour, so with both `RebaseSimClock` and `MoverSubstepClock` off the fraction is kept across levels); 1 to 4 pins one. Never below 30 a second. A second with fewer than twenty frames or a stall in it decides nothing. On a synchronised display only the refresh and its fractions are even; see **Produced frames against shown frames** |
 | `TargetFps` | `0` | 0 = uncapped (clears the limiter); otherwise 1-1000. This removes the ENGINE's limiter and no other: if the frame rate still sits exactly on the display's refresh, that cap is in the graphics wrapper |
 | `ProcessPriority` | `0` | 0 leaves it alone, 1 above normal, 2 high. The game is single threaded and saturates one core, so a busy background process competes with it directly while the task manager shows a low total. Not shown to repair anything; a precaution |
+| `HighQos` | `1` | asks Windows never to slow this process down or coarsen its timers while its window is behind another (`SetProcessInformation`, `ProcessPowerThrottling`, execution speed and timer resolution held off). Changes nothing about how the game plays, so it is on for a file without the key as well. The state Windows ends up with is logged once a start; see **The frame wait and the background** |
+| `FrameWaitSleep` | `0` | 1 sleeps the bulk of each frame's idle time on a high resolution timer before the engine's own spin, which still ends the wait on the deadline. Needs `PreciseFrameTime=1`, whose detour it runs from. Off: the margin it leaves to the spin is learned in the field and not settled, and one line a minute says how many frames it made late; see **The frame wait and the background** |
 | `CompensateCamera` | `1` | rescale the per-frame dampers `k^(dt*30)` |
 | `CompensateCameraAnchor` | `1` | replace the anchor's per-frame mean with a rate-correct blend. One of the four patches here that rewrite *instructions* and not an operand, and the one with a switch of its own; see **Known limitations** |
 | `CameraTargetPair` | `1` | the camera's two position samples stay two substeps apart while the player rides a mover. The player tick feeds the camera twice a substep on a mover and collapsed the pair, so the camera stepped at 32 Hz through every ride; see **The camera on a ride**. On even for a file that predates the key, which the rules allow for a repair every installation is meant to get |
@@ -58,7 +60,7 @@ reached. An earlier version of this paragraph said the wrapper could not synchro
 was read off its DirectDraw log line, which prints the device parameters before the wrapper's own
 D3D9 layer sets the interval on a copy of them, so it reads IMMEDIATE whatever the key says. With
 `EnableVSync = 1` the frame period at a cap of 72 on a 144 Hz screen locks to 13.888 ms, two
-retraces exactly, where the cap alone gave 13.885. The installer ships it on from 1.4.4.
+retraces exactly, where the cap alone gave 13.885. The installer ships it on from 2.0.0.
 
 Smooth is then two things together and neither alone: a synchronised display, and a cap that is
 the refresh rate or an integer fraction of it. `MatchDisplayRefresh` provides the first cap;
@@ -78,6 +80,55 @@ The instrument caveat that goes with this: the drawn evenness figures below are 
 a steady frame rate. A drawn object correctly moves further on a longer frame, so uncapped, where
 the frame time swings by a factor of three, the same measurement reads 35 to 40 per cent uneven
 with nothing wrong at all.
+
+## The frame wait and the background
+
+The engine waits for its cap in `sys_waitForFrame` by spinning: pump the messages, read the clock,
+compare with the cap, `Sleep(0)`, round again, for the whole idle part of every frame. One core is
+fully loaded while the game has nothing to do. With three instances on one machine, the idling
+instances hold cores, hyperthread siblings and turbo budget the busy one could use. `SpinSleep`
+turns the `Sleep(0)` into `Sleep(1)`, at up to a millisecond of overshoot every round.
+
+`FrameWaitSleep=1` sleeps ahead of the engine's wait instead of inside it. In the existing detour
+on `sys_waitForFrame`, before the engine's loop runs, it takes what is left of the frame's budget
+since the last wait ended and, when that is more than the margin plus a millisecond, sleeps down to
+the margin on a waitable timer created once with `CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`, through
+`MsgWaitForMultipleObjectsEx` with `QS_ALLINPUT` and `MWMO_INPUTAVAILABLE`, so any message ends the
+sleep at once. Then the engine's loop runs exactly as before: it pumps the messages, measures the
+frame and leaves the wait on the deadline, so the frame delta and the cap's own work measurement are
+taken as they always were. Nothing sleeps at a cap above 200 frames a second, where the whole budget
+is five milliseconds, under the worst case the timer was measured at: a millisecond's sleep took
+1.5 ms at the median, 2.3 at the 90th percentile and 7.3 at worst. Nothing sleeps while the game is
+uncapped either.
+
+The margin starts at 2 ms and is then learned: after every 256 sleeps it becomes the 99th
+percentile of their overshoot plus 0.25 ms. A margin that grows past what a frame has left stops
+the sleeping, which is the safe side, and it stays stopped until the process restarts, since
+without sleeps there is nothing to learn a smaller margin from. Two lines a minute, zeros
+included, in this shape:
+
+    the frame wait: N frame(s) slept before the spin, N ms asked in all; the timer overshot by N us
+    at the median, N at the 99th percentile, N at worst; N woken early by a message; N frame(s)
+    left the wait later than the cap allowed
+    the frame wait's margin left to the spin is N us, learned over N window(s) of 256 sleep(s)
+
+The late count is the frames whose sleep ended past the frame's deadline, so the spin had nothing
+left to do and the frame left the wait late. It has to be zero before this can be on by default.
+
+`HighQos=1` is the other half. Windows 11 may treat a process whose window is behind another as
+background work, the treatment called EcoQoS: efficiency cores, a lower clock, and the timer
+resolution it asked for ignored. This holds both off through `SetProcessInformation` with
+`ProcessPowerThrottling`, the execution speed and timer resolution switches in the control mask and
+neither in the state mask. A Windows 10 that knows only the first switch refuses the pair, so the
+first is asked for on its own and the log says the timers are left to Windows. The state is read
+back with `GetProcessInformation` and logged once a start, either way:
+
+    this process's power throttling at start: execution speed held off, timer resolution held off
+
+"left to Windows" means the switch is Windows' to decide, which is what a process without
+`HighQos` has. Both calls are looked up at run time, so an older Windows loses the lines and not
+the DLL. `diagnostics` counts in its frame summary how many frames began on an efficiency core and
+whether the window was in front, which is how to tell whether any of this was happening.
 
 ## Engine locations
 
@@ -189,8 +240,10 @@ Built and linked, `/W4 /WX` clean. Offline verification of every pattern passes 
 checked: EN, DE, the Fix Pack, and both install copies. One unit test per module with no engine
 in it, each named in `unittests/CMakeLists.txt`: `camera_anchor`, `face_latch`, `frame_cap`,
 `framerate_stats`, `sim_clock`, `world_clock`, `mover_blend`, `mover_wraps`, `mover_slots`,
-`mover_evenness`, `object_track` and `rate_independence`. Each covers arithmetic alone and none
-is a claim about the game.
+`mover_evenness`, `object_track`, `rate_independence`, `frame_wait` and `power_throttling`. Each
+covers arithmetic alone and none is a claim about the game. `HighQos` has run in the game.
+`FrameWaitSleep` has been on in the game only at a cap above 200 frames a second, where it does
+not sleep, so its sleep has not been seen in the game yet.
 
 `FaceLatchYield` was tested in the game. At an uncapped rate of about 90 fps the swamp opening
 released the player after 8.9 s, against 9.13 s in a working 30 fps run, so the scene plays at

@@ -5,6 +5,7 @@
 #include "freecam_world.h"
 #include "freeze_anim_row.h"
 #include "overlay_key_name.h"
+#include "overlay_reason.h"
 #include "overlay_row_fill.h"
 
 #include "common/text.h"
@@ -17,7 +18,7 @@ static const char *const FREECAM_INFO_LINES[OVERLAY_FREECAM_LINE_COUNT] = {
     "Mouse to look",
     "E / Q for up and down",
     "Scroll wheel changes speed",
-    "Your Cheatmenu open key or Escape",
+    "Your dev menu open key or Escape",
     "  hides the panel and shows it again",
     "Your teleport key ends the flight",
     "  and brings the player here",
@@ -99,6 +100,7 @@ void overlay_freecam_row(uint32_t slot, bool capturing, overlay_row_t *out)
          * hotkey is how it actually turns back off. */
         if (!out->on && cheats_openphantom_freecam_hotkey() == 0) {
             out->available = false;
+            out->reason = (uint32_t)OVERLAY_REASON_NEEDS_KEY;
         }
         return;
 

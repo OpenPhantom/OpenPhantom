@@ -21,6 +21,11 @@
 
 #define OVERLAY_DISMEMBER_ROW_COUNT 1u
 
+/* What the group's table draws, so the constant above can be checked against it instead of
+ * believed. The rows are a table now (overlay_kit.h), and a table's length is exactly the kind of
+ * thing that stops matching a number written beside it. */
+uint32_t overlay_dismember_row_count(void);
+
 /* Fills everything about the row except `group` and `id`, which belong to the caller's
  * numbering. */
 void overlay_dismember_row(uint32_t slot, overlay_row_t *out);

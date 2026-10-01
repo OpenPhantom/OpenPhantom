@@ -65,6 +65,7 @@
 #include "cell_watchdog.h"
 #include "frame_governor.h"
 #include "draw_table.h"
+#include "fog_owner.h"
 #include "fog_regime.h"
 
 #include "poly_bias.h"
@@ -75,6 +76,7 @@
 #include "common/cinematic_gate.h"
 #include "fog_trace.h"
 #include "spawn_census.h"
+#include "npc_range.h"
 #include "vertex_table.h"
 
 #include "two_sided_faces.h"
@@ -112,8 +114,10 @@ static const uint8_t SIG_VIEW_DISTANCE[] = {
  *   8B 55 F8 / 81 C2 AC000000 / 52    push rec+0xAC
  *   E8 <rel32>                        call within_range 0x428EB3    <- at +0x18
  *
- * Only THIS call site is redirected. within_range has a second caller (0x4332F2, an AI query)
- * that must stay untouched. radius == 0 means "always active" and must not become finite. */
+ * Only THIS call site is redirected. within_range has a second caller, 0x4332F2, the removal
+ * test against the placement's removal radius, which stays untouched; npc_range.h says why the
+ * scale stops short of that radius. radius == 0 means "always active" and must not become
+ * finite. */
 static const uint8_t SIG_ACTIVATION_SCAN[] = {
     0x8B, 0x55, 0xF8, 0x8B, 0x42, 0x28, 0x50,
     0x8B, 0x4D, 0xFC, 0x83, 0xC1, 0x18, 0x51,
@@ -194,12 +198,27 @@ static view_distance_state_t view_state;
 /* ============================================================================================
  * The NPC activation radius
  * ============================================================================================ */
+/* `a` is the placement's position, rec+0xAC, the last push before the call; the removal radius is
+ * rec+0x2C in the same record, 0x80 bytes before it. */
+#define PLACEMENT_POSITION_TO_REMOVAL_RANGE 0x80u
+
+static uint32_t npc_range_capped_tests;
+
 static int32_t __cdecl hook_within_range(const float *a, const float *b, float radius)
 {
-    /* radius == 0 means "always active" in the engine (0x4371D7 compares against 0.0f), the
-     * scaling must not turn that into a finite radius. */
-    if (radius > 0.0f) {
-        radius *= view_state.config.npc_range_scale;
+    float authored = radius;
+    float removal = *(const float *)((const uint8_t *)a - PLACEMENT_POSITION_TO_REMOVAL_RANGE);
+    bool  capped = false;
+
+    /* radius == 0 means "always active" in the engine (0x4371D7 compares against 0.0f) and stays
+     * 0. The scale stops short of the removal radius, or the actor is made and removed on every
+     * substep. */
+    radius = npc_range_scaled(radius, removal, view_state.config.npc_range_scale, &capped);
+    if (capped && npc_range_capped_tests++ == 0u) {
+        log_info("NpcRangeScale reaches a removal radius: a placement with activation radius %.1f "
+                 "and removal radius %.1f wakes at %.1f instead of %.1f (said once)",
+                 (double)authored, (double)removal, (double)radius,
+                 (double)(authored * view_state.config.npc_range_scale));
     }
     return view_state.engine_within_range(a, b, radius);
 }
@@ -317,6 +336,7 @@ void view_distance_fix_install(void)
                                         view_state.config.relocate_draw_table);
     if (!watchdog_ok) {
         view_state.config.view_range_scale = 1.0f;
+        view_state.config.range_pinned     = true;   /* and the settings poll keeps it there */
         view_range_set_scale(1.0f);
     }
 
@@ -370,6 +390,8 @@ void view_distance_fix_shutdown(void)
     /* The capture is a rolling window now, so this is the only place it can be written
      * out: whatever the player was doing last is what it holds. */
     fog_trace_flush("the game is closing");
+    /* The level still up has not been left, so its fog line is written here. */
+    fog_owner_level_ends();
 
     draw_table_restore();
     vertex_table_restore();

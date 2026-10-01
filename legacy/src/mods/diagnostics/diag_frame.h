@@ -24,9 +24,10 @@
  * ==============================================================================================
  * What it costs, because a diagnostic that perturbs what it measures is worthless here
  *
- * The per-frame half is two counter reads, a subtraction and a store into a ring. Nothing is
- * formatted, nothing is logged and nothing is allocated on the frame path unless a hitch has
- * already happened. Everything expensive, the process and system CPU times, the fault counts and
+ * The per-frame half is two counter reads, a subtraction, a store into a ring and, on a machine
+ * with efficiency cores, the number of the processor the game thread is on. Nothing is formatted,
+ * nothing is logged and nothing is allocated on the frame path unless a hitch has already
+ * happened. Everything expensive, the process and system CPU times, the fault counts and
  * the graphics counter, is sampled once a second on a thread of its own at below normal priority,
  * and the frame path only ever reads the values that thread last published. A measurement taken on
  * the render thread would be a measurement of itself.

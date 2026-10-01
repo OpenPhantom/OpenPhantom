@@ -22,8 +22,13 @@
  * not scaled. The cage is CANVAS relative, not screen relative: the engine clamps to
  * `g_menuOriginX + immediate`, and the canvas is what the menus can erase. A cursor allowed
  * outside it stamps itself on every pixel it crosses, because nothing there ever repaints. At the
- * authored canvas this writes the values that shipped. */
-void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height);
+ * authored canvas this writes the values that shipped.
+ *
+ * `cursor_size` is the quad the cursor is drawn as, in pixels, menu_scale_cursor_size(): the
+ * position is its top left corner, so the cage has to stop the quad's own size short of the edge
+ * for the quad to stay on the canvas. */
+void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height,
+                          int32_t cursor_size);
 
 /* The canvas has changed size under an open menu, so the clamp follows it.
  *
@@ -34,23 +39,34 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
  * This one is not optional in the way the loading bar's is. The clamp is what the pointer can
  * reach, so a cage left behind a canvas that has grown leaves every widget in the new area dead:
  * nothing fails, nothing logs, the buttons simply cannot be pointed at. That is the same failure
- * the scale refuses to install into. */
-void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height);
+ * the scale refuses to install into.
+ *
+ * The cursor quad is the third size it follows: the scale draws it larger with the canvas, and a
+ * cage that kept the shipped margin let the larger quad hang past the canvas's far edges. */
+void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height, int32_t cursor_size);
 
 
 /* ---- the arithmetic, exposed because it is the part that can be checked without a display -----
  *
- * The clamp the engine should carry for a canvas of a given size. The engine's own constants are
- * 640-33 and 480-33: the cursor quad is 32 pixels wide and the clamp leaves one more, so that the
- * cursor is still drawn whole at the far edge. Keeping the same margin at every size makes the
- * widened clamp identical to the shipped one at 640x480, so this may default to on.
+ * The clamp the engine should carry for a canvas of a given size and a cursor quad of a given
+ * size. The engine's own constants are 640-33 and 480-33: the cursor quad is 32 pixels wide and
+ * the clamp leaves one more, so that the cursor is still drawn whole at the far edge. The margin
+ * is the quad plus one at every size, which makes the widened clamp identical to the shipped one
+ * at 640x480 with the shipped quad, so this may default to on.
+ *
+ * The quad is not always 32. The menu scale draws it larger with the canvas (menu_scale_refit.c,
+ * 32 times the vertical ratio), and a margin that stayed at 33 let a 64 pixel cursor reach 31
+ * pixels past the canvas's right and bottom edges: the pixels this cage exists to keep it off,
+ * because nothing repaints them. A `cursor_size` below 1 means the shipped 32.
  *
  * Returns false, writing nothing, for a canvas too small to hold a cursor at all, which would be
  * a box the cursor could never be inside. */
-bool pointer_cage_extent(int canvas_width, int canvas_height,
+bool pointer_cage_extent(int canvas_width, int canvas_height, int cursor_size,
                          int *out_clamp_width, int *out_clamp_height);
 
-/* The margin above, so a test states the same number the code does rather than a copy of it. */
-#define POINTER_CAGE_MARGIN 33
+/* The quad the engine ships and the margin its own clamp leaves for it, so a test states the same
+ * numbers the code does rather than a copy of them. */
+#define POINTER_CAGE_SHIPPED_CURSOR 32
+#define POINTER_CAGE_MARGIN         (POINTER_CAGE_SHIPPED_CURSOR + 1)
 
 #endif /* POINTER_CAGE_H */

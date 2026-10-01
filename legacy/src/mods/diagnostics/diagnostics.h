@@ -66,7 +66,11 @@ typedef struct diagnostics_config {
     int  characters_watch_velocity; /* 1 = watch its velocity Z, 0 = its position Z             */
     int  player_body_watch;         /* watch the player's DRAWN body height, not a character */
 
-    int  audio_census_ms;     /* >0: list the occupied sound channels every N ms                */
+    /* Why a push block does or does not move for this machine's player, once a second while it
+     * changes. The single player question under a multiplayer report of crates that do not move. */
+    int  push_block;          /* 1 = the use test, the mode, the push and its gates             */
+
+    int  audio_census_ms;    /* >0: list the occupied sound channels every N ms                */
     int  max_lines_per_second;
     bool also_to_main_log;
 } diagnostics_config_t;

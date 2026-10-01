@@ -2,10 +2,12 @@
  *
  * The reasoning is in the header. Three things a maintainer has to hold on to while changing this:
  *
- *   * Nothing expensive happens on the frame path. Two counter reads and a store. The process
- *     times, the fault counts and the graphics counter are sampled on a thread of their own, and
- *     the frame path reads only what that thread has already published. Moving any of it onto the
- *     frame would make the instrument a cause of what it measures.
+ *   * Nothing expensive happens on the frame path. Two counter reads, the processor number and a
+ *     store. The process times, the fault counts and the graphics counter are sampled on a thread
+ *     of their own, and the frame path reads only what that thread has already published. Moving
+ *     any of it onto the frame would make the instrument a cause of what it measures. The one
+ *     thing that cannot move is the processor number: which core a thread is on is a fact about
+ *     that thread, so the sampler asking it would describe the sampler.
  *   * The ring is written before it is judged. A hitch is reported from the ring after the fact, so
  *     the frames leading up to it are in the dump. A report built at the moment of the hitch would
  *     carry only the hitch.
@@ -22,12 +24,14 @@
  */
 #include "diag_frame.h"
 
+#include "diag_core_class.h"
 #include "diag_log.h"
 
 #include "common/frame_hook.h"
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/platform.h"
 
 #include <windows.h>
 #include <psapi.h>
@@ -137,6 +141,7 @@ typedef struct diag_frame_state {
     double   window_worst;
     uint32_t window_frames;
     uint32_t window_hitches;
+    uint32_t window_efficient;          /* frames that began on an efficiency core             */
     double   window_sum;
 
     machine_sample_t machine;
@@ -388,10 +393,15 @@ static void report_second(float median)
      * percentage of a core is not. Measured on one session: 68 per cent of a core at 165 frames a
      * second is 4.2 ms of CPU on each of them, which against a 6.09 ms frame is most of it. A
      * reader given only the percentage has to do that division in their head, and the whole point
-     * of this line is to be readable at a glance during play. */
+     * of this line is to be readable at a glance during play.
+     *
+     * The core class and the foreground are appended at the END, so a reader written for the
+     * line before them still parses it. Whether this window is in front is asked here, once a
+     * second, on the same thread as the frames it describes. */
     diag_log_write("frame second: %u frames, %.1f fps, median %.2f ms, mean %.2f, worst %.2f, "
                    "%u hitches | cpu %.2f ms/frame (%.1f%% of a core), machine %.1f%%, "
-                   "faults %ld/s, working set %ld MB, gpu %ld%% | %u hitches this session",
+                   "faults %ld/s, working set %ld MB, gpu %ld%% | %u hitches this session; "
+                   "%u of %u frame(s) began on an efficiency core; this window %s",
                    frame_state.window_frames,
                    (frame_state.window_seconds > 0.0)
                        ? (double)frame_state.window_frames / frame_state.window_seconds : 0.0,
@@ -407,13 +417,16 @@ static void report_second(float median)
                    frame_state.machine.faults_per_second,
                    frame_state.machine.working_set_mb,
                    frame_state.machine.gpu_percent,
-                   frame_state.hitches);
+                   frame_state.hitches,
+                   frame_state.window_efficient, frame_state.window_frames,
+                   platform_foreground_is_ours() ? "in front" : "behind");
 
-    frame_state.window_frames  = 0u;
-    frame_state.window_hitches = 0u;
-    frame_state.window_seconds = 0.0;
-    frame_state.window_worst   = 0.0;
-    frame_state.window_sum     = 0.0;
+    frame_state.window_frames    = 0u;
+    frame_state.window_efficient = 0u;
+    frame_state.window_hitches   = 0u;
+    frame_state.window_seconds   = 0.0;
+    frame_state.window_worst     = 0.0;
+    frame_state.window_sum       = 0.0;
 }
 
 static void on_frame_end(void)
@@ -453,6 +466,11 @@ static void on_frame_end(void)
     ++frame_state.written;
 
     ++frame_state.window_frames;
+    /* Asked here, at the frame boundary, on the game thread: the core the thread is on as one
+     * frame hands over to the next is the core the next one begins on. */
+    if (diag_core_class_efficient_now()) {
+        ++frame_state.window_efficient;
+    }
     frame_state.window_seconds += wall_ms / 1000.0;
     frame_state.window_sum     += wall_ms;
     if (wall_ms > frame_state.window_worst) {
@@ -526,6 +544,10 @@ int diag_frame_install(int level, int hitch_percent)
         return 0;
     }
     frame_state.engine_delta = resolve_engine_delta();
+    /* Without the map the count stays at zero, which the frame line cannot tell apart from a
+     * machine that has no efficiency cores, so the line this writes at install is the only place
+     * that difference is said. */
+    (void)diag_core_class_init();
 
     if (!ini_read_string(DIAGNOSTICS_SECTION, "FrameGpuCounter", GPU_COUNTER_DEFAULT,
                          path, sizeof path)) {

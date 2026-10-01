@@ -1,5 +1,13 @@
 /* crash_report.c: exception code, address, module, registers and the engine frames on the stack.
  *
+ * SIZE NOTE: a little over six hundred lines, and most of it is the reasoning beside the code: why
+ * the reporter has two hands, why the registers go out before the module is named, why a
+ * first-chance access violation gets a line rather than a report. The one seam measured is the
+ * first-chance table with its running total, about a hundred and thirty lines, and it was not
+ * taken: it shares the report's latch and the executable memory lookup with the report itself, so
+ * a second file would have to export both, and the latch is the one thing here that must not be
+ * reachable from anywhere else.
+ *
  * ==============================================================================================
  * Why this exists
  *
@@ -63,6 +71,7 @@ typedef struct crash_report_state {
     LONG                            reports;
     LONG                            busy;    /* held across write_report, see its own note */
     LONG                            av_total;      /* every first-chance AV, new or repeated */
+    long                            av_milestone;  /* the last milestone the log was given */
     unsigned                        av_site_count;
     struct {
         uint32_t eip;
@@ -312,8 +321,8 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
 /* ==============================================================================================
  * Why a first-chance access violation is not a crash report.
  *
- * This project reads engine memory through the guarded readers in common/memory.c, and those are
- * SEH: memory_try_read wraps a memcpy in __try and __except and answers false when it faults.
+ * This project reads engine memory through the guarded readers in common/memory.c, and those were
+ * SEH: memory_try_read wrapped a memcpy in __try and __except and answered false when it faulted.
  * Forty seven call sites use them, on per object and per frame paths, because that is what
  * CONTRIBUTING asks for. Every one of those probes that touches an unmapped page raises a real
  * access violation.
@@ -331,10 +340,24 @@ static void report_engine_frames(uintptr_t stack_pointer, unsigned scan_bytes)
  * cannot raise an illegal instruction, a divide by zero or a privileged instruction, so every
  * other fatal code still gets its report at first chance, exactly as it did before.
  *
+ * The reads have since stopped reaching this handler at all. The game runs with a compatibility
+ * fix that resumes every read fault behind the instruction before any __except is asked, so the
+ * guarded reads copy through a stub of their own in common/memory_guard.c, whose vectored handler
+ * turns a fault at that stub into a refusal. Each DLL installs its own when it first reads, which
+ * is after this one installed, and so it runs first. What this still sees of the guarded functions
+ * is the write, which keeps its __try because the fix lets write faults through, and a read in a
+ * DLL whose guard could not start and fell back.
+ *
  * Access violations therefore get one compact line per distinct site and a count for the rest,
  * and the full report for one comes from the unhandled filter, which runs only when nothing else
  * took it. The line is deliberately cheap: no module lookup, because that takes the loader lock
  * and this runs often.
+ *
+ * The count has a line of its own. It used to be printed inside a real crash report and nowhere
+ * else, so a process that survived its faults showed the eight named sites and never the total:
+ * a ninth site, and every fault after it, was invisible for the rest of the process, and a field
+ * log that ended with eight site lines read as eight faults when it was at least nine. The total
+ * now goes out when it first reaches each milestone and once more as the process ends.
  *
  * What this costs. An access violation that something further out swallows, while the process then
  * hangs rather than dying, is now one line instead of a report. That line still names the faulting
@@ -356,27 +379,39 @@ static bool eip_is_in_executable_memory(uintptr_t address)
     return executable_allocation_base(address) != 0;
 }
 
-static void note_first_chance_av(const EXCEPTION_RECORD *record, const CONTEXT *context)
+/* Where the running count is given to the log. Four lines at most for a probe that faults on every
+ * frame, so the total is always there to read and never a flood; the process end adds the last. */
+static const long AV_MILESTONES[] = { 16, 64, 256, 1024 };
+
+long crash_report_av_milestone(long total, long reported)
 {
-    uint32_t eip   = (uint32_t)context->Eip;
-    uint32_t fault = (record->NumberParameters >= 2)
-                   ? (uint32_t)record->ExceptionInformation[1] : 0u;
-    unsigned index;
+    long   due = 0;
+    size_t index;
 
-    /* The same latch write_report holds, so the table cannot be raced and a note cannot land in
-     * the middle of a report. Dropping the note while a report is in progress is correct: the
-     * report is the more important of the two and it says what it is reporting. */
-    if (InterlockedCompareExchange(&crash_state.busy, 1, 0) != 0) {
-        return;
+    for (index = 0; index < sizeof AV_MILESTONES / sizeof AV_MILESTONES[0]; ++index) {
+        if (AV_MILESTONES[index] > reported && AV_MILESTONES[index] <= total) {
+            due = AV_MILESTONES[index];
+        }
     }
+    return due;
+}
 
-    crash_state.av_total++;
+static void log_av_total(void)
+{
+    log_info("first-chance access violations so far: %ld, %u of them named above; the table names "
+             "%u and counts the rest",
+             (long)crash_state.av_total, crash_state.av_site_count, (unsigned)MAX_AV_SITES);
+}
+
+/* A new distinct site gets its line and a known one its hit; the caller holds the latch. */
+static void remember_av_site(const EXCEPTION_RECORD *record, uint32_t eip, uint32_t fault)
+{
+    unsigned index;
 
     for (index = 0; index < crash_state.av_site_count; ++index) {
         if (crash_state.av_sites[index].eip == eip &&
             crash_state.av_sites[index].fault == fault) {
             crash_state.av_sites[index].hits++;   /* seen before: counted, not printed again */
-            InterlockedExchange(&crash_state.busy, 0);
             return;
         }
     }
@@ -397,6 +432,36 @@ static void note_first_chance_av(const EXCEPTION_RECORD *record, const CONTEXT *
         log_info("first-chance AV at %08X, %s %08X, in executable memory and not fatal by "
                  "itself. Named once, then counted.",
                  (unsigned)eip, operation, (unsigned)fault);
+    }
+}
+
+static void note_first_chance_av(const EXCEPTION_RECORD *record, const CONTEXT *context)
+{
+    uint32_t eip   = (uint32_t)context->Eip;
+    uint32_t fault = (record->NumberParameters >= 2)
+                   ? (uint32_t)record->ExceptionInformation[1] : 0u;
+    long     due;
+
+    /* Counted ahead of the latch, so a fault that arrives while a report or another note holds it
+     * still reaches the total. It used to be counted inside, and every such fault was lost from
+     * the one number that was meant to have them all. */
+    InterlockedIncrement(&crash_state.av_total);
+
+    /* The same latch write_report holds, so the table cannot be raced and a note cannot land in
+     * the middle of a report. Dropping the note while a report is in progress is correct: the
+     * report is the more important of the two and it says what it is reporting. */
+    if (InterlockedCompareExchange(&crash_state.busy, 1, 0) != 0) {
+        return;
+    }
+
+    remember_av_site(record, eip, fault);
+
+    /* Asked on every note rather than only on the one that reached a milestone, so a milestone
+     * passed while the latch was held is reported by the next fault that gets in. */
+    due = crash_report_av_milestone((long)crash_state.av_total, crash_state.av_milestone);
+    if (due != 0) {
+        crash_state.av_milestone = due;
+        log_av_total();
     }
 
     InterlockedExchange(&crash_state.busy, 0);
@@ -580,4 +645,15 @@ void crash_report_install(void)
              "%d reports.",
              (crash_state.vectored_handler != NULL) ? "yes" : "NO",
              (unsigned)(uintptr_t)crash_state.previous_filter, MAX_REPORTS);
+}
+
+void crash_report_shutdown(void)
+{
+    /* Reached from DLL_PROCESS_DETACH, which in this process only ever means the process is
+     * ending: the loader never frees a DLL. Every other thread is gone by then, so the latch is
+     * not taken; a thread killed while holding it would otherwise cost this line. */
+    if (!crash_state.installed) {
+        return;
+    }
+    log_av_total();
 }

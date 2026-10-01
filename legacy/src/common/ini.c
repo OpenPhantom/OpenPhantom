@@ -238,6 +238,28 @@ bool ini_read_string(const char *section, const char *key, const char *default_v
     return copied != 0;
 }
 
+size_t ini_read_section(const char *section, char *buffer, size_t buffer_size)
+{
+    DWORD copied;
+
+    if (buffer == NULL || buffer_size < 2u) {
+        return 0u;
+    }
+    copied = GetPrivateProfileSectionA(section, buffer, (DWORD)buffer_size, ini_path());
+    /* The API returns two less than the buffer size exactly when it had to truncate, and the
+     * same number for a section that happens to be that long. Both are treated as empty rather
+     * than as a short answer, because a caller judging a whole section cannot judge half of one
+     * and has no other way to learn it was handed half. */
+    if (copied == 0u || copied >= (DWORD)(buffer_size - 2u)) {
+        buffer[0] = '\0';
+        buffer[1] = '\0';
+        return 0u;
+    }
+    buffer[copied]      = '\0';
+    buffer[copied + 1u] = '\0';
+    return (size_t)copied;
+}
+
 bool ini_write_float(const char *section, const char *key, float value, int decimal_places)
 {
     char format[16];
@@ -266,6 +288,16 @@ bool ini_write_int(const char *section, const char *key, int32_t value)
 
     cache_drop();
     return WritePrivateProfileStringA(section, key, text, ini_path()) != 0;
+}
+
+bool ini_write_string(const char *section, const char *key, const char *value)
+{
+    /* A NULL value is passed straight through, because that is how the profile API is told to
+     * delete a key rather than to write an empty one. The cache goes first, as for the two writers
+     * above: without that, a key read back within INI_RECHECK_MS of this write would come out
+     * of the cache as it was before it. */
+    cache_drop();
+    return WritePrivateProfileStringA(section, key, value, ini_path()) != 0;
 }
 
 uint64_t ini_generation(void)

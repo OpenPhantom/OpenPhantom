@@ -81,6 +81,7 @@
  */
 #include "frame_delta.h"
 #include "frame_cap.h"
+#include "frame_wait.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -185,13 +186,21 @@ static frame_delta_state_t delta_state;
  * A scan for direct calls to this function returns five sites, two in the frame loop, two in the
  * menu loops and one in the debug loop, and none of them is reachable from the substep loop. So the
  * hook runs once per frame in the menus as well as in play, and never with the delta cell holding
- * the substep period instead of the frame period. */
+ * the substep period instead of the frame period.
+ *
+ * The optional sleep of FrameWaitSleep runs here too, ahead of the engine's own wait, and it
+ * returns at once while that is off. It only shortens the spin: the engine's loop still pumps the
+ * messages, reads its clock and leaves the wait on the deadline, so the delta measured below is
+ * measured exactly as before. */
 static void __cdecl hook_wait_for_frame(void)
 {
     wait_for_frame_fn_t original = (wait_for_frame_fn_t)delta_state.wait.original;
     LARGE_INTEGER       now;
     double              seconds;
 
+    if (delta_state.have_previous) {
+        frame_wait_before_spin((int64_t)delta_state.previous.QuadPart);
+    }
     original();
     /* The cap's own measurement of a frame's work starts where this wait ends. */
     frame_cap_wait_ends();
@@ -292,4 +301,9 @@ void frame_delta_install(bool enabled)
              "never reset, so its resolution decays with uptime. This replaces the result and "
              "leaves that timestamp alone.",
              (unsigned)site, (unsigned)address);
+}
+
+bool frame_delta_hooked(void)
+{
+    return delta_state.active;
 }

@@ -128,8 +128,18 @@ audio screen's panel art sits on the **right**, where this screen already has it
   here and left alone.
 * The clamp is 5-170 degrees, deliberately below the engine's own 179: `bapdraw_drawWorld` computes
   `tan((fovDeg + 3)/2)`, which goes negative from 177 and collects **nothing**.
-* Changing `ExtraDegrees` in the ini while the game runs does nothing until the next canvas
-  rebuild. The slider does not have that problem: it calls the rebuild itself.
+* A change to `ExtraDegrees` in the ini while the game runs is picked up by a poll from the frame
+  hook, which asks the file's write time first and reads the key only when it moved. The write
+  time is asked at most once every 30 ms rather than on every frame: the query was measured at
+  11.7 microseconds, paid on every one of up to 240 frames a second for a number a person drags by
+  hand. The one visible price is the developer menu's field of view row, whose drag now previews
+  about 33 times a second instead of once a frame. The log says so on the first look and every
+  8000 looks after it, about every four minutes, in this shape:
+
+      ExtraDegrees is looked for on disk every 30 ms rather than every frame: N look(s), N
+      change(s) taken
+
+  The options screen's own slider does not go through the file: it calls the rebuild itself.
 
 ## Fallback behaviour
 
@@ -147,7 +157,9 @@ honest answer.
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. `unittests/fov_math.c`, 43 checks, all passing, including two
+Built and linked, `/W4 /WX` clean. `unittests/fov_poll.c` pins the 30 ms throttle: the first look,
+the period, the tick count's wrap and the rate at several frame rates. The throttle has not been
+seen in a game log yet. `unittests/fov_math.c`, 43 checks, all passing, including two
 cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000
 degrees, and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded
 3-D menu constant. Offline verification of every pattern passes on both retail builds. **Accepted

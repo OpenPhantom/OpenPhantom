@@ -254,7 +254,12 @@ without one, the duel's among them, rests on clip 0. "Parked" is the
 track's clock pinned at the clip's last frame under the freeze or hold bit, which nothing that
 moves ever has for more than a frame. The half second is for scripts that follow a line with a
 clip of their own. A body on its death clip is left down. The log names every rest with the body
-and the clips.
+and the clips. Every body whose actor is dead is left down too, whatever its clip is called, and
+one whose actor is alive but out of its script (hit, thrown, getting up) is passed over until the
+script has it back, in the rest as in the gesture repeat, the stand-in and the hold, because the
+clip's name alone let the rest stand a thrown droid back up half a second after it died on
+`brnockdi`, in single player as in a session; each corpse so left is logged with its model, health
+and state, counted as `(corpse N)`.
 
 Two things it was not, and why. The first attempt tested "complete and not looping", and a walk
 wraps without a loop flag, so walking characters were stopped; the clock test replaced it. The

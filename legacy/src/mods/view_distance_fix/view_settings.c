@@ -15,12 +15,17 @@
 #include "cell_watchdog.h"
 #include "fog_regime.h"
 #include "frame_governor.h"
+#include "view_host_value.h"
 
+#include "common/host_settings_note.h"
 #include "common/ini.h"
 #include "common/logging.h"
 
+#include <windows.h>
+
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #define VIEW_DISTANCE_SECTION "view_distance_fix"
 
@@ -62,11 +67,10 @@ void view_settings_load(view_distance_config_t *config)
     config->fog_scale           = ini_read_float(VIEW_DISTANCE_SECTION, "FogScale", 0.0f);
     config->fog_settle_seconds  = ini_read_float(VIEW_DISTANCE_SECTION, "FogSettleSeconds", 1.5f);
     /* Which half of the engine draws the fog, and the one fog setting that is read here and never
-     * again. The two implementations differ in device state that this engine only programs from
-     * inside applyLevelFog, which runs at a level load and nowhere else, so a switch made while a
-     * level is up leaves the device and the engine disagreeing and nothing is fogged. Two attempts
-     * at making that safe both failed in the game, so it is not offered live: the panel carries
-     * the two band switches, which are pure arithmetic, and this one waits for a restart. */
+     * again. The two implementations differ in device state, and every attempt to switch back
+     * while a level was up left nothing fogged; why is not known, since every render state commit
+     * re-issues the table mode. So it is not offered live: the panel carries the two band
+     * switches, which are pure arithmetic, and this one waits for a restart. */
     config->fog_implementation  = ini_read_int  (VIEW_DISTANCE_SECTION, "FogImplementation", 2);
     if (config->fog_implementation < 0 || config->fog_implementation > 2) {
         log_warning("FogImplementation=%d is not one of 0, 1 or 2, so 2 is used",
@@ -154,7 +158,10 @@ void view_settings_load(view_distance_config_t *config)
      * the counter still jumps rather than climbs, and this ceiling has been wrong once already on
      * an argument that sounded just as sound. So: one step, to 2.5, not back to 4.0, and it stays
      * here pending its own field test rather than being trusted on the strength of this one. */
-    config->view_range_scale = view_settings_clamp(config->view_range_scale, 1.0f, 2.5f);
+    config->view_range_scale = view_settings_clamp(config->view_range_scale,
+                                                   VIEW_SETTINGS_RANGE_MIN,
+                                                   VIEW_SETTINGS_RANGE_MAX);
+    config->range_pinned     = false;
     config->npc_range_scale  = view_settings_clamp(config->npc_range_scale, 1.0f, 2.0f);
     if (config->fog_scale <= 0.0f) {
         config->fog_scale = config->view_range_scale;
@@ -183,19 +190,204 @@ void view_settings_load(view_distance_config_t *config)
  * thing from a per-object syscall. */
 #define SCALE_POLL_FRAMES 60u
 
-/* Re-reads the setting and adopts it when it has changed. Assigning the config value is not enough
- * on its own: effective_view_scale is what the range hook actually multiplies by, and the watchdog
- * only ever lowers it, so a raise has to reset it. Lowering the setting resets it too, which hands
- * the watchdog a fresh start rather than leaving it braked from a scale that is no longer set. */
+/* ============================================================================================ */
+/* A multiplayer host's values.
+ *
+ * In a session the host's draw distance, fog band and authored band are the ones in force on
+ * every machine, and a client takes them from memory: common/host_settings_note, published by the
+ * multiplayer DLL, which this DLL may not call. The ini is never written with them, so this
+ * machine's own values are simply there again when the record says the session is over, or when
+ * there is no record at all, which is what single player has. Source hands its clients a
+ * replicated console variable the same way.
+ *
+ * The own values are kept apart from the configuration record the hooks read, because while the
+ * host's are in force that record holds the host's, and a key missing from the ini has to fall
+ * back to this machine's own and not to the host's. */
+
+#define RANGE_BIT    (1u << HOST_SETTING_VIEW_RANGE_SCALE)
+#define BAND_BIT     (1u << HOST_SETTING_FOG_BAND_SCALE)
+#define AUTHORED_BIT (1u << HOST_SETTING_AUTHORED_FOG_BAND)
+
+typedef struct host_values {
+    bool     own_known;
+    float    own_range;
+    float    own_band;
+    bool     own_authored;
+    uint16_t in_force;          /* the host_setting_id_t bits the last poll took from the host */
+    uint8_t  generation;        /* the generation of the record they came from */
+    float    band_in_force;     /* what the last poll left in force, for the acknowledgement */
+    bool     authored_in_force;
+    bool     pin_said;
+    bool     filed_once;        /* the acknowledgement, as last filed */
+    uint16_t filed_in_force;
+    uint8_t  filed_generation;
+    float    filed_scale;
+    uint32_t answers;
+    bool     refusal_warned;
+} host_values_t;
+
+static host_values_t host;
+
+/* What the host names for this DLL's three keys. Each is false while no session runs, while the
+ * host did not name it, and on a machine whose multiplayer is not loaded. */
+typedef struct host_said {
+    bool    range_named;
+    bool    band_named;
+    bool    authored_named;
+    float   range;
+    float   band;
+    float   authored;
+    uint8_t generation;
+} host_said_t;
+
+static host_said_t ask_the_host(void)
+{
+    host_said_t     said;
+    host_settings_t record;
+    uint32_t        now = GetTickCount();
+
+    memset(&said, 0, sizeof said);
+    said.range_named    = host_settings_value(HOST_SETTING_VIEW_RANGE_SCALE, &said.range, now);
+    said.band_named     = host_settings_value(HOST_SETTING_FOG_BAND_SCALE, &said.band, now);
+    said.authored_named = host_settings_value(HOST_SETTING_AUTHORED_FOG_BAND, &said.authored,
+                                              now);
+    if ((said.range_named || said.band_named || said.authored_named) &&
+        host_settings_read(&record)) {
+        said.generation = record.generation;
+    }
+    return said;
+}
+
+static void hand_over(unsigned bit, bool from_host)
+{
+    host.in_force = (uint16_t)(from_host ? (host.in_force | bit) : (host.in_force & ~bit));
+}
+
+/* Said once per change of hands, whichever way, with this machine's own value beside the host's
+ * and the word that the file was not touched. */
+static void say_the_hand(const char *what, bool from_host, bool was_host, float value, float own)
+{
+    if (from_host == was_host) {
+        return;
+    }
+    if (from_host) {
+        log_info("the host's %s %.2f is used for this session; this machine's own %.2f stays in "
+                 "engine_fixes.ini", what, (double)value, (double)own);
+    } else {
+        log_info("the host's %s no longer applies: back to this machine's own %.2f from "
+                 "engine_fixes.ini", what, (double)own);
+    }
+}
+
+static void poll_authored(view_distance_config_t *config, const host_said_t *said)
+{
+    bool from_host = false;
+    bool was_host  = (host.in_force & AUTHORED_BIT) != 0u;
+    bool authored;
+
+    host.own_authored = ini_read_bool(VIEW_DISTANCE_SECTION, "AuthoredFogBand", host.own_authored);
+    authored = view_host_pick_authored(said->authored_named, said->authored, host.own_authored,
+                                       &from_host);
+    if (from_host != was_host) {
+        if (from_host) {
+            log_info("the host's authored fog band (%s) is used for this session; this machine's "
+                     "own (%s) stays in engine_fixes.ini", authored ? "on" : "off",
+                     host.own_authored ? "on" : "off");
+        } else {
+            log_info("the host's authored fog band no longer applies: back to this machine's own "
+                     "(%s) from engine_fixes.ini", authored ? "on" : "off");
+        }
+    }
+    hand_over(AUTHORED_BIT, from_host);
+    host.authored_in_force = authored;
+    if (authored != config->authored_fog) {
+        config->authored_fog = authored;
+        fog_regime_set_authored_band(authored);
+    }
+}
+
+/* How near the band sits, read on the same schedule so it can be tuned with the game up. That is
+ * the whole point of polling this one: the right number is a matter of looking at it, and a
+ * restart between each try makes that a long evening. */
+static void poll_fog_band(view_distance_config_t *config, const host_said_t *said)
+{
+    view_choice_t band;
+    float         own;
+
+    host.own_band = ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale", host.own_band);
+    own  = view_host_pick_fog_band(false, 0.0f, host.own_band).value;
+    band = view_host_pick_fog_band(said->band_named, said->band, host.own_band);
+    say_the_hand("fog band", band.from_host, (host.in_force & BAND_BIT) != 0u, band.value, own);
+    hand_over(BAND_BIT, band.from_host);
+    host.band_in_force = band.value;
+    if (band.value != config->fog_band_scale) {
+        config->fog_band_scale = band.value;
+        fog_regime_set_band_scale(band.value);
+    }
+}
+
+/* Adopts the draw distance when it has changed. Assigning the config value is not enough on its
+ * own: effective_view_scale is what the range hook actually multiplies by, and the watchdog only
+ * ever lowers it, so a raise has to reset it. Lowering resets it too, which hands the watchdog a
+ * fresh start rather than leaving it braked from a scale that is no longer set. The host's value
+ * goes the same way, so the governor and the watchdog treat it as the target, and a slow machine
+ * still lowers what it cannot afford. */
+static void poll_range(view_distance_config_t *config, float *effective_view_scale,
+                       const host_said_t *said)
+{
+    bool          was_host = (host.in_force & RANGE_BIT) != 0u;
+    view_choice_t range;
+    float         own;
+
+    host.own_range = ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale", host.own_range);
+    own   = view_host_pick_range(false, false, 0.0f, host.own_range).value;
+    range = view_host_pick_range(config->range_pinned, said->range_named, said->range,
+                                 host.own_range);
+    say_the_hand("draw distance", range.from_host, was_host, range.value, own);
+    hand_over(RANGE_BIT, range.from_host);
+    if (config->range_pinned && !host.pin_said && (said->range_named || own != range.value)) {
+        host.pin_said = true;
+        log_info("the draw distance stays at %.2f, because no cell watchdog is installed to catch "
+                 "an overflow: this machine's own %.2f is not taken, and neither is a host's",
+                 (double)range.value, (double)own);
+    }
+    if (range.value == config->view_range_scale) {
+        return;
+    }
+    if (range.from_host && was_host) {
+        log_info("the host's draw distance moved, %.2f -> %.2f, adopting it for this session",
+                 (double)config->view_range_scale, (double)range.value);
+    } else if (!range.from_host && !was_host) {
+        log_info("ViewRangeScale changed on disk, %.2f -> %.2f, adopting it",
+                 (double)config->view_range_scale, (double)range.value);
+    }
+    config->view_range_scale = range.value;
+    *effective_view_scale    = range.value;
+    /* Both watchdogs start again from here. The reader has just said what they want, and either of
+     * them still braked from a setting nobody is asking for any more would quietly ignore it. */
+    cell_watchdog_reset_ceiling();
+    frame_governor_reset(range.value);
+}
+
+/* Re-reads the keys that can change while the game runs and adopts what has changed. */
 void view_settings_poll(view_distance_config_t *config, float *effective_view_scale)
 {
     static uint32_t frames;
-    float           requested;
+    host_said_t     said;
 
     if (++frames < SCALE_POLL_FRAMES) {
         return;
     }
     frames = 0;
+
+    /* This machine's own values, the first time: what the install read, before any host's value
+     * could have taken their place in the record. */
+    if (!host.own_known) {
+        host.own_known    = true;
+        host.own_range    = config->view_range_scale;
+        host.own_band     = config->fog_band_scale;
+        host.own_authored = config->authored_fog;
+    }
 
     /* The automation's own switch, read on the same schedule and for the same reason: the overlay
      * writes it to the ini and this is where a running game notices. */
@@ -236,46 +428,13 @@ void view_settings_poll(view_distance_config_t *config, float *effective_view_sc
         }
     }
 
-    /* And which fog band to compute, on the same schedule and through the same channel. */
-    {
-        bool authored = ini_read_bool(VIEW_DISTANCE_SECTION, "AuthoredFogBand",
-                                      config->authored_fog);
-
-        if (authored != config->authored_fog) {
-            config->authored_fog = authored;
-            fog_regime_set_authored_band(authored);
-        }
-    }
-
-    /* How near the band sits, read on the same schedule so it can be tuned with the game up.
-     * That is the whole point of polling this one: the right number is a matter of looking at it,
-     * and a restart between each try makes that a long evening. */
-    {
-        float scale = view_settings_clamp(ini_read_float(VIEW_DISTANCE_SECTION, "FogBandScale",
-                                                         config->fog_band_scale),
-                                          0.25f, 1.0f);
-
-        if (scale != config->fog_band_scale) {
-            config->fog_band_scale = scale;
-            fog_regime_set_band_scale(scale);
-        }
-    }
-
-    requested = view_settings_clamp(ini_read_float(VIEW_DISTANCE_SECTION, "ViewRangeScale",
-                                                   config->view_range_scale),
-                                    1.0f, 2.5f);
-    if (requested == config->view_range_scale) {
-        return;
-    }
-
-    log_info("ViewRangeScale changed on disk, %.2f -> %.2f, adopting it",
-             (double)config->view_range_scale, (double)requested);
-    config->view_range_scale = requested;
-    *effective_view_scale = requested;
-    /* Both watchdogs start again from here. The reader has just said what they want, and either of
-     * them still braked from a setting nobody is asking for any more would quietly ignore it. */
-    cell_watchdog_reset_ceiling();
-    frame_governor_reset(requested);
+    /* Which fog band to compute, how near it sits and the draw distance, on the same schedule and
+     * through the same channel, each the host's while a session's host names it. */
+    said = ask_the_host();
+    host.generation = said.generation;
+    poll_authored(config, &said);
+    poll_fog_band(config, &said);
+    poll_range(config, effective_view_scale, &said);
 }
 
 /* The draw distance actually in force, published for the panel to show.
@@ -289,14 +448,58 @@ void view_settings_poll(view_distance_config_t *config, float *effective_view_sc
  * Through the ini because that is the channel these two DLLs already share and neither owns. It is
  * written only when the value actually changes, which is a step of the governor every ten seconds
  * at worst and an alarm from the watchdog, so this is not a file write per frame. The key is
- * output only: nothing reads it back into the engine. */
+ * output only: nothing reads it back into the engine.
+ *
+ * Not while a session's host decides the draw distance: the number would be the host's, written
+ * into this machine's file. The acknowledgement below carries it instead, and the first value after
+ * the session goes to the ini whatever it is, since the cache would otherwise take an equal one for
+ * the one already on disk. The decision is view_host_writes_effective, where a test holds it. */
+
+/* The acknowledgement the multiplayer's report reads, host_taken_view_distance_fix: which of the
+ * host's values this DLL applies and the draw distance in force after this machine's governor and
+ * watchdog. Filed here because this is where that number is known every frame, and only when it
+ * says something new: another hand, another generation, or a scale that moved by what it shows. A
+ * refused filing is warned about once and not tried again until something changes, so a channel
+ * that cannot open costs no system call per frame. */
+static void acknowledge(float scale)
+{
+    host_settings_taken_t taken;
+    bool                  same;
+
+    if (!host.filed_once && host.in_force == 0u) {
+        return;   /* nothing of a host's has been in force here: single player, or a host */
+    }
+    same = host.filed_once && host.in_force == host.filed_in_force &&
+           host.generation == host.filed_generation &&
+           (host.in_force == 0u || view_host_shows_the_same(scale, host.filed_scale));
+    if (same) {
+        return;
+    }
+    memset(&taken, 0, sizeof taken);
+    taken.in_force   = host.in_force;
+    taken.generation = host.generation;
+    taken.effective[HOST_SETTING_VIEW_RANGE_SCALE]  = scale;
+    taken.effective[HOST_SETTING_FOG_BAND_SCALE]    = host.band_in_force;
+    taken.effective[HOST_SETTING_AUTHORED_FOG_BAND] = host.authored_in_force ? 1.0f : 0.0f;
+    taken.published  = ++host.answers;
+    if (!host_settings_publish_taken(VIEW_DISTANCE_SECTION, &taken) && !host.refusal_warned) {
+        host.refusal_warned = true;
+        log_warning("the acknowledgement of the host's settings could not be filed as "
+                    "host_taken_%s, so the multiplayer's report will say no note answered",
+                    VIEW_DISTANCE_SECTION);
+    }
+    host.filed_once       = true;
+    host.filed_in_force   = host.in_force;
+    host.filed_generation = host.generation;
+    host.filed_scale      = scale;
+}
+
 void view_settings_publish_effective_scale(float scale)
 {
     static float published = -1.0f;
 
-    if (published >= 0.0f && scale > published - 0.005f && scale < published + 0.005f) {
-        return;
+    acknowledge(scale);
+    if (view_host_writes_effective((host.in_force & RANGE_BIT) != 0u, scale, &published)) {
+        (void)ini_write_float(VIEW_DISTANCE_SECTION, "EffectiveViewRange", scale, 2);
     }
-    published = scale;
-    (void)ini_write_float(VIEW_DISTANCE_SECTION, "EffectiveViewRange", scale, 2);
 }

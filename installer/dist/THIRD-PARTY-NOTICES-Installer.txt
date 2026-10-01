@@ -4,17 +4,19 @@ OpenPhantom installer
 
 Read this together with THIRD-PARTY-NOTICES.txt beside it. That file came out
 of the OpenPhantom patch archive and describes what is in that archive: the
-patch itself and DxWrapper. This file describes everything else the installer
-put on your machine.
+patch itself, DxWrapper, and HACL* and Mbed TLS inside mods\multiplayer.dll.
+This file describes everything else the installer put on your machine.
 
 
 -------------------------------------------------------------------------------
 1. What the other file covers
 -------------------------------------------------------------------------------
 
-  THIRD-PARTY-NOTICES.txt names the patch and DxWrapper, and says of libVLC
-  and FFmpeg that neither is in the patch archive. Both are on this machine
-  because this installer carried them, so they are described below.
+  THIRD-PARTY-NOTICES.txt names the patch, DxWrapper, and HACL* and Mbed TLS,
+  the two libraries compiled into mods\multiplayer.dll, whose licence texts are
+  hacl-License.txt and mbedtls-License.txt beside it. It says of libVLC and
+  FFmpeg that neither is in the patch archive. Both are on this machine because
+  this installer carried them, so they are described below.
 
 
 -------------------------------------------------------------------------------

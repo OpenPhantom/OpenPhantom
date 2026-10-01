@@ -33,6 +33,8 @@ typedef struct actor_catalog_entry {
     char           name[ACTOR_CATALOG_NAME_MAX];
     uint32_t       clips;      /* the header's clip count, +0xC8 */
     bool           has_body;   /* a node named "head" or "chest": a creature, not a prop */
+    bool           has_mount;  /* nodes named "turret" and "target": the gun the player can
+                                * mount aims by the first and seats him by the second */
     actor_weapon_t weapon;
 } actor_catalog_entry_t;
 

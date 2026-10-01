@@ -52,9 +52,6 @@
  * back after the turn and 0x0044BB45 `fld [pPlayer+0x2A0]` reads it live; enhanced_input keeps
  * the same number. The engine's forward from it is (-sin, cos). The NPC spawner reads it. */
 #define PLAYER_HEADING_OFFSET 0x2A0u
-#define JUMP_BOOST_SCALE_DEFAULT 1.3f
-#define JUMP_BOOST_SCALE_MIN     0.5f
-#define JUMP_BOOST_SCALE_MAX     5.0f
 typedef void (__cdecl *use_ammo_fn_t)(int32_t weapon_id, int32_t amount);
 typedef void (__cdecl *damage_fn_t)(int32_t amount);
 typedef void (__cdecl *camera_update_fn_t)(void);

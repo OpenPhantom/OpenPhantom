@@ -29,7 +29,7 @@ order of thing from a per-object syscall.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `Enabled` | `1` | | |
-| `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below |
+| `ViewRangeScale` | `1.0` | 1.0-2.5 | either watchdog may lower this; see the cost below. In a multiplayer session a client uses the host's value, and the host's `FogBandScale` and `AuthoredFogBand`, from memory (`common/host_settings_note`); the ini is not written and its own values apply again after the session |
 | `FrameBackoff` | `1` | | lower the view distance when it costs too much frame time, and give it back when it does not. Does nothing at scale 1.0 |
 | `StrictViewRange` | `0` | | hold the draw distance at exactly `ViewRangeScale` and let nothing move it: the governor, the two raises and the cell watchdog are all declined. The watchdog keeps measuring and warning, it just cannot act. See the key's comment in the ini before leaving it on |
 | `BackoffFps` | `0` | | the rate below which it backs off; `0` = 50 while `framerate_fix` follows the display (its cap steps by itself, so there is no fixed number to take a fraction of), otherwise three quarters of `TargetFps`, or 50 uncapped |
@@ -39,7 +39,7 @@ order of thing from a per-object syscall.
 | `FogScale` | `0.0` | 0 or 1.0-4.0 | 0 follows `ViewRangeScale` |
 | `FogBandScale` | `1.00` | 0.25-1.0 | how near the band sits as a share of where every term above put it; the only one that can bring the fog in. 1.0 is the computed limit, where the fog is guaranteed to hide the edge; anything below is taste inside it. Polled while running |
 | `LevelOpenSeconds` | `0` | 0-30 | how long a level opens with the fog off and the draw distance raised; `0`, the default, leaves the engine's own behaviour alone |
-| `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it |
+| `EffectiveViewRange` | | | written by the game, never read: the draw distance actually in force after the governor and the watchdog have had their say. The dev menu's note reads it. Not written on a client in a multiplayer session while the host decides the draw distance; the number then goes to the multiplayer in the acknowledgement `host_taken_view_distance_fix`, and the first value after the session goes to the ini |
 | `LevelOpenViewRange` | `2.5` | 1.0-2.5 | the draw distance held during that window; it only ever raises |
 | `LevelOpenFogStart` | `0.0` | 0-4000 | the fog band to hold during that window, in world units. Both `0` leave the window using its own numbers. Read only while `LevelOpenSeconds` is non zero |
 | `LevelOpenFogEnd` | `0.0` | 0-4000 | the other end of it. Must be past the start, or the engine paints the whole world in the fog colour instead of showing less of it |
@@ -73,6 +73,8 @@ every measurement in the shipped ini lives:
 |---|---|---|
 | `bapmat_viewDistance` | `0x40E42A` | detoured; only the return value is scaled |
 | `baplight_applyLevelFog` | `0x41F14A` | detoured; `world+0x218` and `+0x21C` are written |
+| its four calls into std3D | `0x41F1A8`, `0x41F1C4`, `0x41F1DC`, `0x41F1E4` | read only, behind the detour's six bytes: the targets `std3D_setFogColor`, `std3D_setFogRange`, `std3D_getRenderFlags` and `std3D_setRenderFlags` are each proved by their own bytes; the colour cells and the band cells are read, the last three are called for the band push |
+| the substep counter increment | `0x4757DB` | read only; `g_tickCounter` from the operand, for the fog's one substep of grace |
 | `bapdraw_setFrameState` | `0x401DFE` | read only; `g_level` taken from two operands, cross-checked |
 | table-fog capability query | `0x487B30` | 3 bytes -> `xor eax,eax ; ret` |
 | `FOGTABLEMODE` (state machine) | `0x4884B8` | `push 3` -> `push 0` (`D3DFOG_NONE`) |
@@ -287,24 +289,60 @@ camera moves. And the band needs **no conversion at all**, so everything below t
 world units keeps doing so.
 
 **It is chosen once, at startup, and this was learned the hard way.** `1` and `2` differ in device
-state, and the only place this engine programs the device's fog is inside `baplight_applyLevelFog`,
-which runs at a level load. Reverting the three writes changes only the byte that function will
-push *next time*, so a switch made while a level is up leaves the engine computing a per-vertex
-factor the device has been told to ignore, and nothing is fogged at all. Three fixes
-were tried in the game and none worked: reverting the writes alone, also handing back an
+state, and a switch made while a level is up left nothing fogged every time it was tried. Three
+fixes were tried in the game and none worked: reverting the writes alone, also handing back an
 identity projection, and on top of that calling `applyLevelFog`'s original by hand to reprogram the
-device. Tested by a person each time, no fog each time. What remains unexplained is why the third
-did not work, since it is what a level load does; the honest reading is that something else in the
-device or wrapper state is also one-way, and it was not worth more attempts to find out. So the
-setting waits for a restart, and the dev menu carries only the band terms, which are arithmetic.
+device. Tested by a person each time, no fog each time. Why is not known. It is not that the device
+only hears the fog at a level load: every render state commit re-issues `FOGTABLEMODE` and the band,
+and every `std3D_setRenderFlags` runs one, from the level's fog apply, from the effects' fog and
+from a display-mode change; the per-face switch does the same whenever a face turns the fog bit back
+on. The honest reading is that something else in the device or wrapper state is one-way, and it was
+not worth more attempts to find out. So the setting waits for a restart, and the dev menu carries
+only the band terms, which are arithmetic.
 
 One thing it costs: with the ramp the engine re-read `world+0x218/+0x21C` every frame, so writing
-those two floats was enough for anyone. On the device path they only reach `FOGSTART`/`FOGEND`
-through `applyLevelFog`, so every writer has to be pushed. There are two: this file, and the
-developer overlay's no-fog cheat, which holds the band out past everything drawn. The frame tick
-pushes **their** value when it sees one that is not ours, and treats "settled" as meaning both
-that our band has not moved and that the device is showing it. Without that second half the fog
-could be switched off and never back on.
+those two floats was enough for anyone. On the device path the record's band reaches the device's
+two band cells only through `applyLevelFog`, and `FOGSTART`/`FOGEND` go out from those cells, so
+every writer of the record has to be pushed. There are two: this file, and the developer overlay's
+no-fog cheat, which holds the band out past everything drawn. The frame tick pushes **their** value
+when it sees one that is not ours, and treats "settled" as meaning both that our band has not moved
+and that the device's band cells show it. Without that second half the fog could be switched off
+and never back on. The cells are read rather than a copy of what was last pushed: a savegame puts
+its own band back into them, and a copy would never hear of it.
+
+### Whose fog it is: the effects' colour, and the band push
+
+A third writer does not go through the record at all. The engine's effects write the device's fog
+directly: the gas room in the Federation ship sets a pale green colour (`fx_rampFog`, the director's
+command 11), moves the band's start substep by substep while its ramp runs, and at the end calls
+`applyLevelFog` through its restore. Pushing through `applyLevelFog` writes the level's colour as
+well as the band, so every push while the room was green put the level's colour back, and the green
+was gone in the first frame this file's band moved. The field of view and the cut edge move it, so
+this happened on every machine sooner or later, single player included.
+
+**The owner is the colour.** Only `std3D_setFogColor` writes the device's three colour cells, and no
+shipped level has the room's green as its own colour, so while the device's colour is not the
+level's (`world+0x214`) the effects hold the fog and this file pushes nothing. The eased band keeps
+running and keeps being written into the record, so the room's restore, which runs `applyLevelFog`,
+puts this file's current band on the device with the level's colour and nothing has to catch up.
+
+**One substep of grace.** The room sets its band (commands 6 and 7) one substep before its colour,
+and the band's end has no copy anywhere to be restored from. So a band in the device's cells that is
+neither this file's last push nor the one `applyLevelFog` last gave it is left alone for one engine
+substep, counted on the engine's own substep counter. If no colour follows, this file's band goes
+over it as before. The scripts that open GUNGA and RACE set only a band; it now survives exactly
+that one substep, where before it survived until this file's own band next moved.
+
+**The push is the band alone.** `std3D_setFogRange` only writes the two cells, so the push brackets
+it the way the engine's own ramp does: the render flags without the fog bit, committed, the band,
+then the flags as they were, committed again. The colour is never written. Where those three
+functions do not bind, the push falls back to `applyLevelFog`'s original, and then only while the
+device's colour is the level's.
+
+**The no-fog cheat does nothing inside a green room.** Letting it through would lose the room's
+band, whose end the effects keep no copy of, and the background, which is cleared to the fog colour,
+would stay green. Once the room's restore has run, the cheat's band is on the device with the
+level's colour and the cheat works as before.
 
 ### What a level opens with, and what the band follows
 
@@ -510,6 +548,9 @@ scene, not about seeing further than that ceiling.**
 
 ## Known limitations
 
+* `NpcRangeScale` stops short of each placement's removal radius (0.89 of it, never below the
+  authored activation radius); past that radius the engine would make and remove the actor on every
+  substep. At 1.5 that caps 1364 of 2250 placements.
 * `NpcRangeScale` changes gameplay: an actor created earlier thinks earlier. 1127 of 1315 scannable
   placements activate inside the visible picture already, so this is the knob that removes pop-in,
   and the reason its cap is 2.0 against a 128-slot character pool.
@@ -539,6 +580,8 @@ scene, not about seeing further than that ceiling.**
   `bapCell+0x03` override entirely and the draw distance will not follow it. That is the engine's
   own behaviour and it matters most during a cutscene, where the camera routinely leaves the
   player behind. The fog eases towards the new value when the **player** walks into it.
+* **The no-fog cheat does nothing while the effects hold the fog**, in the Federation ship's gas
+  room above all, and acts again once the room's restore has run. See "Whose fog it is" above.
 * **`fx_rampFog` no longer draws anything in this regime, and that predates this change.** The
   cutscene tint and the fade to black (`0x0043906E`) walk the **device's** fog start `[0x866FA8]`,
   which only table fog reads. With `FogImplementation=1` the fog is computed from `world+0x218/+0x21C`
@@ -559,6 +602,16 @@ pointer never moves inside the model draw. Off as shipped.
 Each patch installs independently and says so. If `gather_append` does not match, the watchdog is
 off and the scale is pinned to 1.0. If the camera cannot be observed, the radius cap assumes the
 authored 63 degrees and the fog assumes 60 degrees, giving exactly the authored band. Both say so.
+
+The pin holds for the whole run, in single player as well. While the cell watchdog is missing, the
+poll that adopts a changed `ViewRangeScale` once a second takes no other value: not the one in the
+ini, not one the developer menu's row writes later, and not a multiplayer host's. Nothing could
+catch a draw table overflow, so a longer draw distance is not taken from anybody. It says so once,
+the first time the ini asks for more or a host names a draw distance:
+
+```
+[view_distance_fix] the draw distance stays at 1.00, because no cell watchdog is installed to catch an overflow: this machine's own 2.50 is not taken, and neither is a host's
+```
 
 If `level_pointer` does not resolve, or there is no per-frame hook, there is **no fog tick**: the
 band is still computed and written once per level, so a field-of-view change taken mid-session
@@ -614,6 +667,52 @@ The lines to look for are:
 The last one appears once per level load and is the one to read the numbers off. Its absence, or a
 "the fog regime is NOT changed" / "no per-frame fog tick" warning next to it, means that part
 declined.
+
+### The fog's owner, added later
+
+Built and linked, `/W4 /WX` clean, and played: in a session of four in the Federation ship's gas
+room every player's game kept the room's green, and the level's line read
+`the colour differed across this module's own push 0 time(s)`. `fog_owner_test` covers the rule
+and the push:
+the gas room's green is the own colour of none of the eleven levels; a band the effects set without
+their colour is honoured for exactly one substep and again each time it comes back; the band push
+calls get, set without the fog bit, the band, set as before, and never the colour; and the gas room
+is played frame by frame, a wandering band against the room's 6, 7, 11, the twenty second ramp, 12
+and the restore, once with the tick as it was, which pushes on green and loses the colour and the
+room's band end, and once as it is now, which pushes nothing until the restore and keeps both. The
+lines to look for:
+
+```
+[view_distance_fix] the fog's substep of grace counts the engine's substeps at 004B8860, read out of the increment at 004757DB
+[view_distance_fix] the fog's device writes are bound: std3D_setFogRange at 00487AC0, std3D_getRenderFlags at 00487A10 and std3D_setRenderFlags at 00487A20, read out of applyLevelFog's own calls at 0041F1C4, 0041F1DC and 0041F1E4; the device colour is read at 006FC988, 00854E50 and 006FC980
+[view_distance_fix] the fog belongs to the effects now: the device colour AAFFAA is not this level's 000000, so the band they set (start 10.00 end 16.00) is left on the device
+[view_distance_fix] the fog is this level's again after N frame(s): the engine applied it, and the band ....
+[view_distance_fix]   the fog's owner (view_distance_fix): F frame(s) with the effects' fog, H band push(es) held back for them, G band(s) they set without their colour honoured for a substep, M band push(es) made, O of them over a band the effects had written; the colour differed across this module's own push 0 time(s) (must be 0)
+```
+
+The last is written for every level left and when the game closes. A warning in place of the second
+names why the push fell back to `applyLevelFog`; a warning that the device colour is NOT read means
+the old behaviour, green lost included.
+
+### A multiplayer host's values, added later
+
+Built and linked, `/W4 /WX` clean; **not yet played**. In a session a client runs the host's
+`ViewRangeScale`, `FogBandScale` and `AuthoredFogBand` in place of its own, from memory, and its
+own ini is not written (see the table above). `view_host_value_test` covers the choice: the host's
+value while the host names one inside this DLL's clamp and this machine's own otherwise, a host's
+value past the clamp or not a number refused, the draw distance held at 1.0 without a cell
+watchdog whoever asks, and `EffectiveViewRange` left unwritten while the host's draw distance is in
+force, the first value after the session written whatever it is. It also holds the table the
+multiplayer checks a host's values against to this DLL's clamps and defaults and to the developer
+menu's rows. The lines to look for on a client:
+
+```
+[view_distance_fix] the host's draw distance 1.75 is used for this session; this machine's own 2.50 stays in engine_fixes.ini
+[view_distance_fix] the host's draw distance no longer applies: back to this machine's own 2.50 from engine_fixes.ini
+```
+
+The fog band has lines of the same shape, and the authored band names its two states `on` and
+`off`.
 
 ### `RelocateVertexCache`, added later
 

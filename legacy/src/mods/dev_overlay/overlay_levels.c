@@ -26,6 +26,14 @@ static void level_name(int level, char *out, uint32_t out_size)
     }
 }
 
+/* Level one is written as 0, the game's own new game, so a file that has never been written to
+ * already names it. Both the row that lights and the row that picks go through this, so what is
+ * stored and what is compared cannot be two spellings of one level. */
+static int as_written(int level)
+{
+    return level == 1 ? 0 : level;
+}
+
 uint32_t overlay_levels_row_count(void)
 {
     return OVERLAY_LEVELS_ENTRY_FIRST + (list_open ? OVERLAY_LEVELS_ENTRY_COUNT : 0u);
@@ -69,11 +77,12 @@ void overlay_levels_row(uint32_t slot, overlay_row_t *out)
             char name[OVERLAY_LABEL_MAX];
             char line[OVERLAY_LABEL_MAX];
 
-            /* Lit for the chosen level; the first is lit for 0 as well, since a new game that
-             * starts at level one is the game's own new game. */
-            out->kind = OVERLAY_ROW_CHEAT;
+            /* Marked for the chosen level, read the way the picking below writes it. One entry
+             * of a list rather than a switch: what a new game starts at is one of these, and a
+             * green ON beside the other seventeen said each of them was a setting of its own. */
+            out->kind = OVERLAY_ROW_CHOICE;
             out->available = start_level_is_available();
-            out->on = (chosen == level) || (chosen == 0 && level == 1);
+            out->on = as_written(chosen) == as_written(level);
             level_name(level, name, sizeof name);
             text_format(line, sizeof line, "    %2d  %s", level, name);
             overlay_row_label(out->label, line);
@@ -96,12 +105,11 @@ bool overlay_levels_toggle(uint32_t slot)
     default:
         if (list_open && slot >= OVERLAY_LEVELS_ENTRY_FIRST &&
             slot < OVERLAY_LEVELS_ENTRY_FIRST + OVERLAY_LEVELS_ENTRY_COUNT) {
-            /* Picking closes the list, so the choice reads back on the row above at once. Level
-             * one is written as 0, the game's own first level, so the file says off. */
+            /* Picking closes the list, so the choice reads back on the row above at once. */
             int level = (int)(slot - OVERLAY_LEVELS_ENTRY_FIRST) + 1;
 
             list_open = false;
-            return start_level_row_set(level == 1 ? 0 : level);
+            return start_level_row_set(as_written(level));
         }
         return false;
     }

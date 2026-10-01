@@ -36,10 +36,6 @@
  * things, and this one has moved four times while the maximum has not moved at all. */
 #define FOG_BAND_DEFAULT 1.0f
 
-/* One press of the row's own step. Smaller than the draw distance row's, because the whole useful
- * range here is narrower than that row's single step. */
-#define FOG_BAND_STEP 0.05f
-
 /* Clamps to the accepted range. A value that is not a number comes back as the shipped default,
  * not as either end: an unreadable file should leave the game where a fresh installation would be,
  * whereas falling back to 0.25 would wrap the player in fog because a file could not be parsed and

@@ -27,6 +27,11 @@ void input_gate_note_phase_ran(void);
  * swing the view by everything the hand did during a cutscene the moment the cutscene ended. */
 bool input_gate_is_open(void);
 
+/* Whether a session's pause menu holds this player's input, said by the multiplayer through the
+ * session note. The world keeps running under that menu and so do the player phases, so the phase
+ * stamp alone would leave the gate open. Says one line when a hold begins and one when it ends. */
+bool input_gate_session_holds(void);
+
 /* Says once, the first time the gate is found shut, that input is being held back. Kept apart
  * from the test so a caller can ask as often as it likes without deciding when to log. */
 void input_gate_note_closed(void);

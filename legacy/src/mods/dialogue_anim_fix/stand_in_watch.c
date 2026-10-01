@@ -84,6 +84,30 @@ static bool anchor_speaking(void)
     return watch.anchor != 0 && *watch.speaker_lock == watch.anchor;
 }
 
+/* Whether the face may be moved now: its actor alive and in its script. One alive and out of it,
+ * hit or thrown, is only passed over; a dead one is let go at the top of the frame. */
+static bool face_acting(void)
+{
+    speaker_actor_t actor;
+
+    return speaker_rest_record_verdict(watch.record, &actor) == REST_MAY;
+}
+
+/* The watch's own way out, taken the frame the face's actor is found dead. */
+static bool let_go_of_a_dead_face(void)
+{
+    speaker_actor_t actor;
+    int32_t         clip = -1;
+
+    if (speaker_rest_record_verdict(watch.record, &actor) != REST_NEVER) {
+        return false;
+    }
+    (void)memory_try_read((uintptr_t)watch.body + BODY_BASE_CLIP_OFFSET, &clip, sizeof clip);
+    speaker_rest_leave_corpse(watch.body, &actor, clip, "the stand-in watch lets go of it");
+    stand_in_watch_forget();
+    return true;
+}
+
 static bool seen_voiced(int32_t clip)
 {
     int i;
@@ -104,7 +128,7 @@ static void nudge(void)
     int32_t   clip = -1;
     int32_t   latch = -1;
 
-    if (track == 0 ||
+    if (track == 0 || !face_acting() ||
         !memory_try_read((uintptr_t)body + BODY_BASE_CLIP_OFFSET, &clip, sizeof clip) ||
         !memory_try_read(watch.record + CHARACTER_CLIP_LATCH_OFFSET, &latch, sizeof latch)) {
         return;
@@ -204,7 +228,7 @@ static void follow_latch(void)
     }
     if (!seen_voiced(latch) || watch.stand_clip < 0 ||
         !memory_try_read((uintptr_t)watch.body + BODY_BASE_CLIP_OFFSET, &clip, sizeof clip) ||
-        clip != latch) {
+        clip != latch || !face_acting()) {
         return;
     }
     /* The stand with its own flags less the play-once bit, so it wraps and the script sits
@@ -232,7 +256,7 @@ static void cut_with_voice(void)
         !memory_try_read((uintptr_t)watch.body + BODY_BASE_CLIP_OFFSET, &clip, sizeof clip) ||
         clip != watch.cut_clip ||
         !memory_try_read(track + TRACK_COMPLETE_OFFSET, &complete, sizeof complete) ||
-        complete != 0) {
+        complete != 0 || !face_acting()) {
         return;
     }
     *(volatile int32_t *)(track + TRACK_COMPLETE_OFFSET) = 1;
@@ -250,6 +274,9 @@ static void on_frame(void)
     }
     if (GetTickCount() - watch.last_line_ms > WATCH_LIMIT_MS) {
         stand_in_watch_forget();
+        return;
+    }
+    if (let_go_of_a_dead_face()) {
         return;
     }
     if (watch.pending) {

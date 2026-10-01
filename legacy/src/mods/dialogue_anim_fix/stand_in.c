@@ -1,5 +1,6 @@
 /* stand_in.c: see stand_in.h. */
 #include "stand_in.h"
+#include "speaker_rest.h"
 #include "stand_in_watch.h"
 
 #include "common/logging.h"
@@ -75,6 +76,10 @@ static const uint8_t SIG_PLAY_CLIP[] = {
     0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00, 0x00,
     0x8B, 0x4D, 0xF0, 0x83, 0x79, 0x14, 0x00, 0x75, 0x1B
 };
+/* Six is push ebp, mov ebp esp, sub esp 0x10, the first instruction boundary past the five a
+ * branch needs. Nothing here hulls this head. multiplayer does, on six, and a search that did not
+ * know the prologue would find nothing on the day that hull is in place first. */
+#define PLAY_CLIP_PROLOGUE 6u
 
 /* The pool: a six dword header and then the slots, each a link word and a character record.
  * The link word reads -1 in a free slot. The same layout diagnostics/character_scan.h has. */
@@ -87,16 +92,14 @@ static const uint8_t SIG_PLAY_CLIP[] = {
 #define POOL_ELEMENT_SIZE_MAX         0x1000u
 #define POOL_CAPACITY_MAX             4096u
 
-/* The character record, the offsets the rest of this DLL reads. The anchor bit is the one the
- * spawner sets for the inviso.baf template and the tick tests to skip the body. */
+/* The character record, the offsets the rest of this DLL reads; its state and health are asked
+ * through speaker_rest.h. The anchor bit is the one the spawner sets for the inviso.baf template
+ * and the tick tests to skip the body. */
 #define CHARACTER_FLAGS_OFFSET        0x14u
-#define CHARACTER_STATE_OFFSET        0x20u
 #define CHARACTER_TEMPLATE_OFFSET     0x30u
 #define CHARACTER_BODY_OFFSET         0x34u
-#define CHARACTER_HEALTH_OFFSET       0x38u
 #define CHARACTER_POSITION_OFFSET     0xD0u
 #define CHARACTER_FLAG_ANCHOR         0x10000000u
-#define CHARACTER_STATE_ACTIVE        1
 #define TEMPLATE_NAME_OFFSET          0x08u    /* the .baf file name, "quiweap.baf" */
 #define TEMPLATE_NAME_SIZE            0x18u
 
@@ -132,7 +135,7 @@ enum {
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("DLG_Find", SIG_DLG_FIND, MSK_DLG_FIND),
     SIGNATURE_ENTRY_MASKED("character_pool", SIG_CHARACTER_POOL, MSK_CHARACTER_POOL),
-    SIGNATURE_ENTRY("bapobj_playClip", SIG_PLAY_CLIP)
+    SIGNATURE_ENTRY_DETOUR("bapobj_playClip", SIG_PLAY_CLIP, PLAY_CLIP_PROLOGUE)
 };
 
 typedef uint32_t (__cdecl *dlg_find_fn_t)(int32_t line);
@@ -169,8 +172,7 @@ static const char *face_of_line(int32_t line, char key[DLG_KEY_SIZE + 1])
 static bool candidate(uintptr_t character, const char *face, const float from[3],
                       float *distance, uintptr_t *record_out, uint32_t *body_out)
 {
-    int32_t   state = 0;
-    int32_t   health = 0;
+    speaker_actor_t actor;
     uint32_t  template_record = 0;
     uint32_t  body = 0;
     uint32_t  mode = 0;
@@ -179,10 +181,8 @@ static bool candidate(uintptr_t character, const char *face, const float from[3]
     char      name[TEMPLATE_NAME_SIZE + 1] = {0};
     float     dx, dy, dz;
 
-    if (!memory_try_read(character + CHARACTER_STATE_OFFSET, &state, sizeof state) ||
-        state != CHARACTER_STATE_ACTIVE ||
-        !memory_try_read(character + CHARACTER_HEALTH_OFFSET, &health, sizeof health) ||
-        health <= 0 ||
+    /* Alive and in its script, the one rule every body this DLL moves is held to. */
+    if (speaker_rest_record_verdict(character, &actor) != REST_MAY ||
         !memory_try_read(character + CHARACTER_TEMPLATE_OFFSET, &template_record,
                          sizeof template_record) ||
         template_record == 0 ||

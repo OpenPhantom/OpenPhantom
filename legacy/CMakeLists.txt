@@ -33,14 +33,16 @@ enable_language(RC)
 # things that are otherwise independent, so AppVer keeps its own copy and the two move together by
 # hand.
 #
-# The tags keep the prefixes they always had: this is v0.4.4 for the patch and i1.4.4 for the
-# installer, continuing v0.2.0..v0.4.0 and i1.0..i1.4. The one release made under the merged number,
+# The tags keep the prefixes they always had: this is v1.0.0 for the patch and i2.0.0 for the
+# installer. The installer's first number is always one above the patch's and the other two are the
+# same, so patch 1.0.1 ships in installer 2.0.1. Before 1.0.0 the lines ran v0.2.0..v0.4.3 and
+# i1.0..i1.4.3. The one release made under the merged number,
 # v1.5.0 and i1.5.0, is renamed on GitHub into the two lines as v0.4.1 and i1.4.1, so the sequence
 # has no gap. That rename is presentational and nothing was rebuilt, so the binaries inside it still
 # report 1.5.0.
-set(OPENPHANTOM_VERSION_MAJOR 0)
-set(OPENPHANTOM_VERSION_MINOR 4)
-set(OPENPHANTOM_VERSION_PATCH 4)
+set(OPENPHANTOM_VERSION_MAJOR 1)
+set(OPENPHANTOM_VERSION_MINOR 0)
+set(OPENPHANTOM_VERSION_PATCH 0)
 set(OPENPHANTOM_VERSION
     "${OPENPHANTOM_VERSION_MAJOR}.${OPENPHANTOM_VERSION_MINOR}.${OPENPHANTOM_VERSION_PATCH}")
 
@@ -127,6 +129,8 @@ enable_testing()
 
 add_subdirectory(src/common)
 add_subdirectory(src/loader)
+# The published cryptography the multiplayer's relay transport links, before the mods that link it.
+add_subdirectory(src/third_party)
 add_subdirectory(src/mods)
 add_subdirectory(src/convert)
 add_subdirectory(unittests)

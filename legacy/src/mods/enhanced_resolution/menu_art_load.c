@@ -292,13 +292,22 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
 
 void menu_art_load_set_ratio(float ratio_x, float ratio_y)
 {
-    if (!load_state.armed) {
-        return;
-    }
+    /* Recorded unarmed too. Nothing is replicated while the redirect is not armed, so the number
+     * has no effect there, and a ratio that only moved while armed is one a caller cannot check. */
     load_state.ratio_x = ratio_x;
     load_state.ratio_y = ratio_y;
 
     /* Said again for the new size, because the first one is the line a reader looks for when the
      * artwork comes out the wrong size and it would otherwise name a ratio no longer in use. */
     load_state.reported = false;
+}
+
+void menu_art_load_ratio(float *out_ratio_x, float *out_ratio_y)
+{
+    if (out_ratio_x != NULL) {
+        *out_ratio_x = load_state.ratio_x;
+    }
+    if (out_ratio_y != NULL) {
+        *out_ratio_y = load_state.ratio_y;
+    }
 }

@@ -15,6 +15,7 @@
 #define DEV_OVERLAY_OVERLAY_CONTROLS_H
 
 #include "overlay_model.h"
+#include "overlay_number.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -54,5 +55,14 @@ bool overlay_controls_commit(uint32_t slot, const char *text);
  * write. Never at the full rate: its effect is felt on the next turn of the mouse, not seen
  * under the hand the way the field of view is. */
 bool overlay_controls_slider_set(uint32_t slot, float fraction);
+
+/* What the row above that track reads with the handle at `fraction`; see overlay_kit.h. */
+bool overlay_controls_slider_value(uint32_t slot, float fraction, char *out, size_t size);
+
+/* The numbers behind that track: its two ends, the two press sizes and the standard. The
+ * group holds no table, so it states them here in the same shape overlay_kit_limits()
+ * answers in, and the sideways keys and Default reach this row through the same arithmetic
+ * as every row that is in one. False for any other slot. */
+bool overlay_controls_slider_limits(uint32_t slot, overlay_number_t *out);
 
 #endif /* DEV_OVERLAY_OVERLAY_CONTROLS_H */

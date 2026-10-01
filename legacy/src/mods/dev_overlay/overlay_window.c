@@ -1,6 +1,7 @@
 #include "overlay_window.h"
 
 #include "overlay_key_name.h"
+#include "overlay_notice.h"
 
 #include "common/ini.h"
 #include "common/text.h"
@@ -220,6 +221,14 @@ static bool restart_is_pending(void)
     return device_is_windowed() != (current_mode() != MODE_AUTHENTIC);
 }
 
+/* No size in the file means the window matches the game's own. Two rows read it, the "auto" entry
+ * of the list and the chip on the row that opens the list, and they were two spellings of it a
+ * hundred and twenty lines apart under a comment claiming they were one test. */
+static bool size_is_automatic(int32_t width, int32_t height)
+{
+    return !(width > 0 && height > 0);
+}
+
 /* One entry of the open size list. True when `slot` was one. */
 static bool size_entry_row(uint32_t slot, overlay_row_t *out)
 {
@@ -233,7 +242,7 @@ static bool size_entry_row(uint32_t slot, overlay_row_t *out)
     chosen_width  = ini_read_int(RESOLUTION_SECTION, "WindowedWidth", 0);
     chosen_height = ini_read_int(RESOLUTION_SECTION, "WindowedHeight", 0);
 
-    out->kind      = OVERLAY_ROW_CHEAT;
+    out->kind      = OVERLAY_ROW_CHOICE;
     out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
     out->value[0]  = 0;
 
@@ -253,9 +262,14 @@ static bool size_entry_row(uint32_t slot, overlay_row_t *out)
     return true;
 }
 
-/* The five shapes. True when `slot` was one of them. */
+/* The five shapes, one of which the window is in. True when `slot` was one of them.
+ *
+ * A choice and not five switches. They were five switches, and four of them read OFF beside one
+ * reading ON, which says the window has five independent settings of which one happens to be on;
+ * it has one setting with five values. The mark says that, and a press moves it. */
 static bool mode_row(uint32_t slot, overlay_row_t *out)
 {
+    out->kind = OVERLAY_ROW_CHOICE;
     switch ((window_slot_t)slot) {
     case WINDOW_MODE_ROW_AUTHENTIC:
         copy_label(out->label, "Fullscreen (restart to take effect)");
@@ -294,6 +308,9 @@ static bool mode_row(uint32_t slot, overlay_row_t *out)
         return true;
 
     default:
+        /* Not a shape row after all. The kind is put back where the caller left it, because the
+         * caller goes on to fill an ordinary row with the same struct. */
+        out->kind = OVERLAY_ROW_CHEAT;
         return false;
     }
 }
@@ -441,6 +458,21 @@ bool overlay_window_row_is_key(uint32_t slot)
            slot == (uint32_t)WINDOW_ROW_FULLSCREEN_KEY;
 }
 
+/* Every setting here lives in the file and nowhere else, so a write that did not land leaves the
+ * row showing what it showed, which is exactly the picture pressing the value already set gives.
+ * The sentence is the difference, said once instead of at the five writes, where four had none. */
+#define NOT_SAVED_SHAPE "The window shape could not be saved to the settings file"
+#define NOT_SAVED_KEY   "That key could not be saved to the settings file"
+
+static bool put_int(const char *key, int32_t value, const char *complaint)
+{
+    if (ini_write_int(RESOLUTION_SECTION, key, value)) {
+        return true;
+    }
+    overlay_notice_say(complaint);
+    return false;
+}
+
 /* The mode and the device are written together, because there is only one device setting that
  * works for each mode and letting them drift apart is the whole reason the row for it is gone.
  *
@@ -452,10 +484,9 @@ bool overlay_window_row_is_key(uint32_t slot)
  * is live. That is why the fullscreen row says so on its face. */
 static bool write_mode(int32_t mode)
 {
-    bool ok = ini_write_int(RESOLUTION_SECTION, "WindowMode", mode);
+    bool ok = put_int("WindowMode", mode, NOT_SAVED_SHAPE);
 
-    return ini_write_int(RESOLUTION_SECTION, "WindowedPresent",
-                         (mode == MODE_AUTHENTIC) ? 0 : 1) && ok;
+    return put_int("WindowedPresent", (mode == MODE_AUTHENTIC) ? 0 : 1, NOT_SAVED_SHAPE) && ok;
 }
 
 bool overlay_window_toggle(uint32_t slot)
@@ -470,11 +501,11 @@ bool overlay_window_toggle(uint32_t slot)
         /* Zero on both axes is what the rest of this feature already reads as auto, so returning to
          * it is writing the numbers a fresh install has rather than a state of its own. */
         if (entry == 0u) {
-            return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", 0) &&
-                   ini_write_int(RESOLUTION_SECTION, "WindowedHeight", 0);
+            return put_int("WindowedWidth", 0, NOT_SAVED_SHAPE) &&
+                   put_int("WindowedHeight", 0, NOT_SAVED_SHAPE);
         }
-        return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", size_list[entry - 1u].width) &&
-               ini_write_int(RESOLUTION_SECTION, "WindowedHeight", size_list[entry - 1u].height);
+        return put_int("WindowedWidth", size_list[entry - 1u].width, NOT_SAVED_SHAPE) &&
+               put_int("WindowedHeight", size_list[entry - 1u].height, NOT_SAVED_SHAPE);
     }
     slot = slot_without_list(slot);
 
@@ -523,8 +554,9 @@ bool overlay_window_toggle(uint32_t slot)
         return true;
 
     case WINDOW_ROW_FILL:
-        return ini_write_int(RESOLUTION_SECTION, "WindowedFill",
-                             ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true) ? 0 : 1);
+        return put_int("WindowedFill",
+                       ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true) ? 0 : 1,
+                       NOT_SAVED_SHAPE);
 
     default:
         return false;
@@ -559,8 +591,9 @@ bool overlay_window_bind(uint32_t slot, int32_t virtual_key)
     if (!overlay_window_row_is_key(slot)) {
         return false;
     }
+    /* The file is the whole binding: the DLL that owns the window reads both keys out of it. */
     if (slot == (uint32_t)WINDOW_ROW_FULLSCREEN_KEY) {
-        return ini_write_int(RESOLUTION_SECTION, "FullscreenToggleKey", virtual_key);
+        return put_int("FullscreenToggleKey", virtual_key, NOT_SAVED_KEY);
     }
-    return ini_write_int(RESOLUTION_SECTION, "PointerReleaseKey", virtual_key);
+    return put_int("PointerReleaseKey", virtual_key, NOT_SAVED_KEY);
 }

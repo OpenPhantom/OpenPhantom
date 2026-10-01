@@ -1,6 +1,7 @@
 /* view_range_live_row.c: see view_range_live_row.h. */
 #include "view_range_live_row.h"
 
+#include "overlay_host_value.h"
 #include "view_range_row.h"
 
 #include "common/ini.h"
@@ -18,6 +19,13 @@ bool view_range_live_row_get(char *out, size_t size)
 
     if (out == NULL || size == 0u) {
         return false;
+    }
+    /* A client of a running session whose host's draw distance is the target: view_distance_fix
+     * does not write the key then, because the ini is the player's own and the host's value is
+     * only for the session, so what it applied is read from the record it files instead. */
+    if (overlay_host_view_range_in_force(&value)) {
+        text_format(out, size, "%.2fx", (double)value);
+        return true;
     }
     if (!ini_read_string(VIEW_DISTANCE_SECTION, LIVE_KEY, "", buffer, sizeof(buffer)) ||
         buffer[0] == '\0') {

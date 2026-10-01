@@ -5,6 +5,7 @@
 #include "strafe_walk.h"
 
 #include "common/logging.h"
+#include "common/session_note.h"
 #include "common/stick.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -300,5 +301,8 @@ float pad_stick_y(void)
 
 bool pad_stick_wants_run(void)
 {
-    return pad_state.active && pad_state.running;
+    /* Not while a session's pause menu holds the input: with pad_run in front of the multiplayer's
+     * reader a pushed stick would still answer Run. */
+    return pad_state.active && pad_state.running &&
+           !session_note_input_held((uint32_t)GetTickCount());
 }

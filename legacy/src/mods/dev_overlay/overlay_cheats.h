@@ -1,7 +1,7 @@
 /* overlay_cheats.h: the panel's first OpenPhantom group, the cheats, as rows.
  *
- * The toggles, whose ids are their cheats_own_id_t, and the three rows that are not toggles:
- * super run's speed with its slider track, and the jump boost scale. The drawn order is a slot
+ * The toggles, whose ids are their cheats_own_id_t, and the four rows that are not toggles: super
+ * run's speed and the jump boost scale, each with a track of its own. The drawn order is a slot
  * table here, so each typed row sits directly under its toggle. The level skip was the tail of
  * this group until the Level selection group took it. The ids and the reasoning behind each are
  * in overlay_row_ids.h; this file is what each id looks like on screen and what a click, a typed
@@ -17,6 +17,7 @@
 #define DEV_OVERLAY_OVERLAY_CHEATS_H
 
 #include "overlay_model.h"
+#include "overlay_number.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,8 +36,17 @@ bool overlay_cheats_toggle(uint32_t id);
  * text is not a positive number, which leaves the value alone instead of writing a floor. */
 bool overlay_cheats_commit(uint32_t id, const char *text);
 
-/* Drags super run's track to `fraction`, 0 to 1, on a hundredths grid. False for any other id
- * or when the write did not land. */
+/* Drags one of the two tracks to `fraction`, 0 to 1, on a hundredths grid. False for any other
+ * id or when the write did not land. */
 bool overlay_cheats_slider_set(uint32_t id, float fraction);
+
+/* What the row above that track reads with the handle at `fraction`; see overlay_kit.h. */
+bool overlay_cheats_slider_value(uint32_t id, float fraction, char *out, size_t size);
+
+/* The numbers behind one of the two tracks: its ends, the two press sizes and the standard. The
+ * group holds no table, so it states them in the same shape overlay_kit_limits() answers in, and
+ * the sideways keys and Default reach these rows through the same arithmetic as every row that
+ * is in one. False for any other id. */
+bool overlay_cheats_slider_limits(uint32_t id, overlay_number_t *out);
 
 #endif /* DEV_OVERLAY_OVERLAY_CHEATS_H */

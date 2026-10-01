@@ -1,6 +1,8 @@
 /* overlay_framerate.c: see overlay_framerate.h. */
 #include "overlay_framerate.h"
 
+#include "overlay_reason.h"
+
 #include "common/ini.h"
 #include "common/text.h"
 
@@ -137,8 +139,11 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
         out->on   = match_enabled();
         refresh   = display_refresh_hz();
         if (refresh > 0) {
+            /* Without "(recommended)", which cost fourteen of the forty-eight characters a row
+             * has for its name and its chip together, and the chip on this row is a word in a
+             * session. The three note lines below the group say which limits are smooth. */
             text_format(out->label, sizeof out->label,
-                            "Match the screen, %d a second (recommended)", refresh);
+                            "Match the screen, %d a second", refresh);
         } else {
             /* Named rather than hidden: the row still writes the setting, and framerate_fix falls
              * back to the typed limit and says so in the log. */
@@ -154,6 +159,9 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
          * following is not a setting. */
         out->kind      = OVERLAY_ROW_ACTION;
         out->available = match_enabled();
+        if (!out->available) {
+            out->reason = (uint32_t)OVERLAY_REASON_NEEDS_ROW;   /* the match row above it */
+        }
         text_format(out->label, sizeof out->label,
                         "  Fraction of the screen's rate");
         divisor_text(out->value, sizeof out->value);
@@ -167,6 +175,9 @@ void overlay_framerate_row(uint32_t slot, const char *editing_text, overlay_row_
          * refuses to start an edit on it, so there is no way to type into a number nothing
          * reads. */
         out->available = !match_enabled();
+        if (!out->available) {
+            out->reason = (uint32_t)OVERLAY_REASON_NEEDS_ROW;   /* the match row, again */
+        }
         text_format(out->label, sizeof out->label, "Frame rate limit");
         if (editing_text != NULL) {
             /* The trailing underscore is the caret every other typed row in the panel shows. */

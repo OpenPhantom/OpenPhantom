@@ -28,9 +28,10 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |
 | `Dialogue` | `0` | 1 spoken lines and voice files, and the script side of them: every Statement opcode, each change of a Dialog Box opcode's actor, line or answer with a visit count, each change of a Check For opcode's answer in its dialogue modes, and the player's body clips on each change, base and overlay layer, with the base track's complete flag and what the record driving the body, if any, asks for |
 | `Fx` | `0` | 1 emitters on/off/destroyed, 2 plus every decal **stamped**, 3 plus every decal **drawn** |
-| `Frame` | `0` | 1 one frame-time summary a second, 2 plus the frames around every hitch. A hitch is both a percentage past the median of the last 64 frames and at least two milliseconds past it; without that floor the instrument reports scheduler noise as hitches and, because each dump writes from inside the frame callback, stretches the frames it measures |
+| `Frame` | `0` | 1 one frame-time summary a second, 2 plus the frames around every hitch. A hitch is both a percentage past the median of the last 64 frames and at least two milliseconds past it; without that floor the instrument reports scheduler noise as hitches and, because each dump writes from inside the frame callback, stretches the frames it measures. The summary ends with how many of the second's frames began on an efficiency core and whether this window was in front; see **Which core, and which window** |
 | `FrameHitchPercent` | `0` | how far past the median counts as a hitch. 0 uses the built-in default |
 | `FrameGpuCounter` | the graphics counter path | the performance counter the graphics load is read from. Windows localises these names, which is the only reason this is a setting |
+| `PushBlock` | `0` | 1 why a push block does or does not move for this machine's player: the USE test, the mode entry and tick with their move bits, the push and which of its gates refused it. One line in the diagnostics log, at most once a second while it changes |
 | `Present` | `0` | 1 names which output path is live, 2 also times the flip and says whether it blocks in the driver or spins |
 | `Projectiles` | `0` | 1 counts the engine's own ballistic-physics list every 30 frames, and past 10 live entries also names the first few by position, so a pileup reads as stacked or spread at a glance |
 | `CameraOwner` | `0` | 1 reports every take and release of the engine's scripted-camera flag with the caller that asked and a running depth. Seven places set that flag and six clear it, so a take with no release is possible, and it strands the camera on a forced region until the level reloads. This is the census that found the fault `camera_handback_fix` repairs. The callers are found by scanning the code section for direct calls to the two functions at install, and the retail names are attached only where the scan found a call at the address they were written for, so a different build still names every caller as found or not found. The two run together now: they share three functions and each declares them as detour targets, and the one of the three too short to anchor on once detoured is found behind its neighbour |
@@ -261,10 +262,30 @@ result into a stack frame the caller had already left. It is now a static: a lat
 a cell whose only reader has already reported the failure, rather than into whatever the game put
 there next.
 
+## Which core, and which window
+
+The frame summary ends with two fields, appended after everything a reader of the older line
+parses, so that reader still works. The tail reads, in this shape:
+
+    ... | N hitches this session; N of N frame(s) began on an efficiency core; this window behind
+
+Windows 11 may treat a process whose window is behind another as background work and run it on
+efficiency cores at a lower clock, and with several instances of the game on one machine only one
+window can be in front. The count is taken on the game thread at every frame boundary with
+`GetCurrentProcessorNumberEx`, against a map of the machine's processors read once at install
+from `GetSystemCpuSetInformation`: an efficiency core is a logical processor whose efficiency
+class is below the highest class on the machine, so a machine without the distinction has none
+and the count stays at zero. The map is logged at install; on a Windows older than 10 it cannot be
+read, the count stays at zero for that reason instead, and the install line says so. Whether this
+window is in front is asked once a second on the same thread, and means the foreground window
+belongs to this process. `framerate_fix`'s `HighQos` asks Windows not to do the throttling this
+measures, and logs the state Windows ends up with.
+
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes for every observer pattern on both
-retail builds.
+retail builds. `unittests/diag_core_class.c` pins the processor map; the two new fields of the
+frame summary have not been seen in a game log yet.
 
 **The audio observers are accepted in game.** They were used to find a live defect: the channel
 release observer reported three voices holding an owner handle that pointed into the calling

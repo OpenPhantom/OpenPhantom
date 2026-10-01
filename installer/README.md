@@ -9,7 +9,7 @@ player's own disc and then whichever parts of the OpenPhantom patch were ticked.
 | Input | the original PC disc, or a mounted image of it |
 | Output | `output/OpenPhantom_Installer.exe` |
 | Carries | everything it installs: the extractor, the patch, libVLC, FFmpeg, DSOAL, dxwrapper and the saved games. No game data |
-| Fetches | nothing, during installation or afterwards |
+| Fetches | nothing, during installation or afterwards. Only the multiplayer, in a public session, talks to its relay |
 
 **You need your own copy of the game.** No game data, no executable and no patched binary is included
 here or distributed with this project.
@@ -36,10 +36,10 @@ Three tiers. Part of the patch and not unpickable: the graphics wrapper, the two
 crash reporter and the three audio repairs. Recommended, so a full installation takes them:
 resolution, frame rate, field of view, HUD scaling, decals, view distance, the ground clip repair,
 the conversation animation repair and the camera handback repair. Offered but not ticked: large
-textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics, a
-set of finished saved games, and a starting controller layout and display mode. The tiers are the
-`Types:` column of each row in `src/openphantom_patch.iss`, which is the list to trust over this
-paragraph.
+textures, input, sound, the movie player, dismemberment, the developer overlay, the diagnostics,
+the multiplayer, a set of finished saved games, and a starting controller layout and display mode.
+The tiers are the `Types:` column of each row in `src/openphantom_patch.iss`, which is the list to
+trust over this paragraph.
 
 What each fix does is in [`legacy/README.md`](../legacy/README.md), and each has a `README.md` beside
 its own source. This directory does not repeat those.
@@ -52,8 +52,9 @@ whenever the resolution patch is installed.
 
 ## Version numbers
 
-This installer is numbered `1.4.x` and the patch it carries is numbered `0.4.x`. They are two
-different numbers on purpose, and both are set by hand:
+The installer and the patch it carries have a number each, and the installer's follows the
+patch's: its first number is one higher and the other two are the same. Patch `1.0.0` ships in
+installer `2.0.0`, and patch `1.0.1` would ship in installer `2.0.1`. Both are set by hand:
 
 | where | what it holds |
 |---|---|
@@ -62,21 +63,20 @@ different numbers on purpose, and both are set by hand:
 | `PatchVersion` in `src/openphantom_patch.iss` | which patch release `dist/patch` was taken from |
 | `OPENPHANTOM_VERSION` in `legacy/CMakeLists.txt` | the patch's number: every DLL's version resource, and the log header |
 
-The values are in those files and not repeated here, where a copy went stale twice.
-
-**The last digit of the installer counts installer builds.** Build a new one, add one. It is not a
-judgement about how much changed. An earlier rule here tried to be that.
+The values are in those files and not repeated here, where a copy went stale twice. The script
+checks the rule when it is compiled and stops when `AppVer` and `PatchVersion` break it.
 
 **The binaries carry the patch's number.** The DLLs are the patch, so their version resources and
 the first line of `engine_fixes.log` read the patch's number, while the installer that delivered
 them reads its own. Two numbers on one machine is the cost of two lines, so both are written down
 here.
 
-**One release was published with the two merged**, as `v1.5.0` and `i1.5.0`. The lines are separate
-again, so that release is renamed on GitHub to `v0.4.1` and `i1.4.1`, which puts it where it belongs
-in both sequences and leaves no gap. The rename is presentational: the installer in that release was
-not rebuilt and still reports `1.5.0` in its own properties, because re-cutting it would change
-every hash and the file is already referenced from ModDB and PCGW.
+**Earlier releases were numbered on two lines of their own**, `1.4.x` for the installer and
+`0.4.x` for the patch, and one was published with the two merged, as `v1.5.0` and `i1.5.0`. That
+release is renamed on GitHub to `v0.4.1` and `i1.4.1`. The rename is presentational: the installer
+in that release was not rebuilt and still reports `1.5.0` in its own properties, because re-cutting
+it would change every hash and the file is already referenced from ModDB and PCGW. `2.0.0` sits
+above all of them in Add/Remove Programs.
 
 Nothing in the script compares versions. An existing installation is found by `AppId` and the player
 is asked what to do with it, so no number decides whether an install is allowed, and the renumbering
@@ -93,13 +93,25 @@ ISCC openphantom_installer.iss
 `-A Win32` is not optional; the game is 32 bit and so is everything this project ships. The result is
 `output/OpenPhantom_Installer.exe`, and no build output is tracked here.
 
-Built with Inno Setup 6.6. Nothing here needs a recent feature any more now that the download
+A release is signed. With the signing service connected, so the certificate is in the personal store
+with its key, this replaces the last line above:
+
+```sh
+powershell -ExecutionPolicy Bypass -File sign_installer.ps1 -Certificate <file.cer or thumbprint>
+```
+
+Inno then signs the uninstaller before embedding it, and Setup after that, and the script refuses to
+finish unless the result verifies, was signed by that certificate and carries a timestamp. A plain
+`ISCC` build still works and says in its output that it is not signed.
+
+Built with Inno Setup 7.0. Nothing here needs a recent feature any more now that the download
 and archive-extraction flags are gone, but that is the version it is compiled and tested with.
 
 ## Structure
 
 ```
 openphantom_installer.iss  the entry point: the disc, the registry, the shortcuts, the wizard
+sign_installer.ps1         builds the same script signed, and checks the signature
 dist/                      everything the installer carries; nothing is downloaded at install time
   patch/                   the OpenPhantom patch, unpacked from its release archive
   dxwrapper/               DirectDraw-to-Direct3D translation (ini edited, see the notices)
@@ -140,16 +152,16 @@ if the file is rebuilt from theirs.
 
 ## Testing status
 
-Checked without installing anything: the script compiles with no warnings under Inno Setup 6.6,
+Checked without installing anything: the script compiles with no warnings under Inno Setup 7.0,
 every component named by a file row is declared, every file row has a file and every file in
 `dist/patch/mods` has a row, and both languages carry every message. The extractor is verified
 against a retail pressing, where `BIG.Z` produces a `big.lab` of 120,859,357 bytes, byte identical
 to a known good copy, and it imports nothing but `KERNEL32.dll`, so it runs on a machine that has
 no Visual C++ runtime installed.
 
-**Installed from and played.** The build that carries patch 0.4.4 was installed in full into a
-fresh folder and the game played from it: the log shows every DLL loading and arming, the
-subtitles resolving all twelve of their sites, the music heartbeat never stalling, and the panel
+**Installed from and played.** A pre-release build, one without the multiplayer, was installed in
+full into a fresh folder and the game played from it: the log shows every DLL loading and arming,
+the subtitles resolving all twelve of their sites, the music heartbeat never stalling, and the panel
 opening. Earlier builds of this same script were also installed with the network disconnected, on
 a different target folder, and completed without pausing for anything; that is the claim the
 offline form exists to support and nothing in the script has since touched a network.

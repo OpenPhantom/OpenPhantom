@@ -10,6 +10,8 @@
 #ifndef VIDEO_OVERLAY_H
 #define VIDEO_OVERLAY_H
 
+#include "movie_rule.h"
+
 #include <stdbool.h>
 #include <stddef.h>   /* wchar_t */
 
@@ -22,6 +24,11 @@
  * answer below. */
 bool video_overlay_start_async_init(void);
 
+/* The window class alone, without libVLC: for an installation with no converted movies, whose
+ * only window is the black wait of a client held for its host. False when it could not be
+ * registered. */
+bool video_overlay_register(void);
+
 /* Non-blocking. True only once libVLC has finished loading in the background AND succeeded. A
  * caller that sees false has nothing to play through for this one movie and should use the
  * original path; the next movie asks again. */
@@ -33,11 +40,22 @@ bool video_overlay_is_still_loading(void);
 
 /* Finds the game's own top-level window, creates a borderless popup owned by it and sized to its
  * current client rect, plays `file_path` into that window through libVLC, and blocks until
- * playback ends, Escape is pressed, or libVLC never starts.
+ * playback ends by a way out `loop` allows, the host ends it, or libVLC never starts.
+ *
+ * A movie held for the host whose file ends first is not over yet: the same window turns black
+ * with `loop->wait_text` and stays until the host's world moves or the session lets the player
+ * go. After a held movie the game window's queued keys are dropped along with its mouse traffic.
  *
  * False on any failure, with the reason logged, in which case nothing is left on screen and the
  * caller is expected to fall back to the original playback path. */
-bool video_overlay_play_blocking(const wchar_t *file_path);
+bool video_overlay_play_blocking(const wchar_t *file_path, movie_loop_t *loop);
+
+/* The same black wait after a movie the retail player played, for a held client whose movie ended
+ * before the host's. Asks `loop->poll` first and puts nothing on screen when the host is already
+ * done or the session has let the player go; otherwise a surface of its own shows the line until
+ * one of the two happens, and the game window's keys are dropped afterwards. False when no window
+ * of the game was found, in which case nothing waits. */
+bool video_overlay_hold_for_host(movie_loop_t *loop);
 
 /* Which window libVLC DRAWS INTO. The default is "popup" on Windows and "child" under Wine, and
  * neither needs setting: the ini is here to override a machine that disagrees.

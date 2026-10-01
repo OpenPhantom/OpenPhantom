@@ -190,9 +190,8 @@ void fog_regime_set_authored_band(bool authored);
  * band where it was rather than collapsing it onto the camera.
  *
  * There is deliberately no live switch for the fog DELIVERY beside it. See consider_pixel_fog():
- * going from the device back to the engine's ramp needs the device reprogrammed, and this engine
- * only programs it from inside applyLevelFog, which runs at a level load. That is chosen once,
- * from FogImplementation. */
+ * going from the device back to the engine's ramp was tried in the game three ways and never
+ * brought the fog back, for a reason not known. That is chosen once, from FogImplementation. */
 void fog_regime_set_band_scale(float scale);
 
 /* True while a level is still opening: the window the fog spends switched off, so that the band

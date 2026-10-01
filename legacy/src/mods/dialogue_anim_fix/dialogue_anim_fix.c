@@ -114,6 +114,7 @@
 #include "scene_scope.h"
 #include "idle_clip.h"
 #include "speaker_gesture.h"
+#include "speaker_rest.h"
 #include "stand_in.h"
 
 #include "common/detour.h"
@@ -267,6 +268,10 @@ static const uint8_t MSK_SPEAK_SINGLE[] = {
 _Static_assert(sizeof SIG_SPEAK_SINGLE == sizeof MSK_SPEAK_SINGLE,
                "the Dialog_SpeakSingle pattern and its mask are different lengths");
 #define SPEAK_SINGLE_PROLOGUE              6u      /* push ebp / mov ebp,esp / sub esp,0xC */
+/* anim_recheck is called, never hulled here, but framerate_fix hulls the same head on six for the
+ * facing latch: push ebp, mov ebp esp, mov eax [ebp+8]. The prologue lets the search step over
+ * that. */
+#define ANIM_RECHECK_PROLOGUE              6u
 #define SPEAK_SINGLE_SPEAKER_READ_OPERAND  0x1Eu
 #define SPEAK_SINGLE_SPEAKER_WRITE_OPERAND 0x3Fu
 #define SPEAK_SINGLE_ACTIVE_OPERAND        0x7Au
@@ -285,15 +290,12 @@ static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR_MASKED("dialog_box_start", SIG_DIALOG_BOX_START, MSK_DIALOG_BOX_START,
                                   DIALOG_BOX_START_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR("dialog_statement", SIG_DIALOG_STATEMENT, DIALOG_STATEMENT_PROLOGUE),
-    SIGNATURE_ENTRY("anim_recheck",       SIG_ANIM_RECHECK),
+    SIGNATURE_ENTRY_DETOUR("anim_recheck", SIG_ANIM_RECHECK, ANIM_RECHECK_PROLOGUE),
     SIGNATURE_ENTRY_DETOUR_MASKED("speak_single", SIG_SPEAK_SINGLE, MSK_SPEAK_SINGLE,
                                   SPEAK_SINGLE_PROLOGUE)
 };
 
 #define ACTOR_OWN_BODY_OFFSET       0x34u    /* actor record -> its own body pointer */
-#define ACTOR_HEALTH_OFFSET         0x38u    /* int, the spawn path's local_8[0xe]; below 1 is
-                                              * dead, and the diagnostics census reads the same
-                                              * cell */
 #define ACTOR_ANIM_TARGET_OFFSET    0x1C0u   /* the id last requested for the primary anim */
 #define ACTOR_ANIM_CURRENT_OFFSET   0x1BCu   /* the id FUN_0042E3AD believes is already playing */
 #define ANIM_ID_NONE                   -1    /* never a real id, forces a clean retrigger on
@@ -576,9 +578,11 @@ static void on_frame_correct_stale_speakers(void)
     }
 
     for (i = 0; i < fix_state.tracked_count; ++i) {
-        int32_t  actor = fix_state.tracked_actors[i];
-        uint32_t body = 0;
-        int32_t  wanted = 0;
+        int32_t         actor = fix_state.tracked_actors[i];
+        uint32_t        body = 0;
+        int32_t         wanted = 0;
+        speaker_actor_t who;
+        rest_verdict_t  verdict;
 
         if (!memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
             !memory_try_read((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET, &wanted,
@@ -601,15 +605,12 @@ static void on_frame_correct_stale_speakers(void)
         }
         if (fix_state.spoken_id[i] != ANIM_ID_NONE) {
             /* their line ended this frame */
-            int32_t health = 0;
-
-            (void)memory_try_read((uintptr_t)actor + ACTOR_HEALTH_OFFSET, &health,
-                                  sizeof(health));
             if (wanted == fix_state.spoken_id[i] && wanted != fix_state.scope->rest_anim &&
-                health > 0) {
+                speaker_rest_record_verdict((uintptr_t)actor, &who) == REST_MAY) {
                 /* A death cry goes through the same say path as a line, with the die clip
                  * asked for throughout, and the jail prisoner was stood back up out of his
-                 * own death by a hold that did not look. A dead actor is never held. */
+                 * own death by a hold that did not look. A dead actor is never held, and nor
+                 * is one out of its script: the rule every body this DLL moves is held to. */
                 begin_hold(i, actor, wanted);
             }
             fix_state.spoken_id[i] = ANIM_ID_NONE;
@@ -624,6 +625,19 @@ static void on_frame_correct_stale_speakers(void)
             log_info("dialogue_anim_fix: actor %08X's script moved on to animation %d, the hold "
                      "on %d is released", (unsigned)actor, wanted, fix_state.held_id[i]);
             fix_state.held_id[i] = ANIM_ID_NONE;
+            continue;
+        }
+        /* A death that changes neither the clip asked for nor the clip on the body passes the
+         * test above and the one below, and the replay below would stand the corpse back up. An
+         * actor alive and out of its script is left to the engine arm that holds its body. */
+        verdict = speaker_rest_record_verdict((uintptr_t)actor, &who);
+        if (verdict == REST_NEVER) {
+            speaker_rest_leave_corpse(body, &who, body_current_clip(actor),
+                                      "the hold on its line's clip is released");
+            fix_state.held_id[i] = ANIM_ID_NONE;
+            continue;
+        }
+        if (verdict == REST_NOT_NOW) {
             continue;
         }
         if (body_current_clip(actor) != fix_state.scope->rest_anim) {

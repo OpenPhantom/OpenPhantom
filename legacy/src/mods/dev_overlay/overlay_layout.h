@@ -51,8 +51,25 @@ typedef struct layout {
     float tab_h;
     float search_top;
     float search_h;
+
+    /* The refusal band, directly ABOVE THE FOOTER, and it is ZERO high while nothing stands
+     * there. Its height is here rather than in the painter for the same reason the footer's is:
+     * the hit test counts rows from `rows_top` by `row_h`, so a band drawn without being taken
+     * off the rows puts what is drawn and what can be clicked a band apart. See overlay_notice.h
+     * for why it never goes away on its own, and NOTICE_H in overlay_layout.c for why it is down
+     * here: appearing, it takes the last row that fits and moves none of the rows above it. */
+    float notice_top;
+    float notice_h;
+
     float rows_top;
     float row_h;
+
+    /* The band along the bottom, which says what the keys do and what the open tab holds. It is a
+     * band like the title, so its height comes off the rows HERE and not where it is drawn: the
+     * hit test divides by the row height from `rows_top` down, and a band taken off only in the
+     * painter leaves the last row drawn a row away from where it can be clicked. */
+    float foot_h;
+    float foot_top;        /* panel relative; foot_top + foot_h is the bottom edge          */
 
     /* How many rows are actually drawn, which is not how many the tab has. Enough rows, a large
      * DevMenuSize or a short screen and the list is taller than the display; the panel used to be
@@ -77,5 +94,14 @@ void overlay_layout_build(float text_height, float content_width, uint32_t row_c
                           const float *tab_widths, float screen_width, float screen_height);
 
 const layout_t *overlay_layout(void);
+
+/* Scrolls the list by however far the selected row has left the window, and does nothing when
+ * there is no selection or it is already on screen.
+ *
+ * One rule, two callers, because there are two ways for a selection to leave the window and they
+ * would otherwise be two spellings of it: the keys move the selection past the edge of the list,
+ * and the build shrinks the list under a selection that has not moved at all (a refusal band
+ * appearing takes the last row that fits). overlay_layout_build() calls it itself on a shrink. */
+void overlay_layout_reveal_selection(void);
 
 #endif /* OVERLAY_LAYOUT_H */

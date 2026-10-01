@@ -165,6 +165,13 @@ bool cheats_openphantom_is_on(cheats_own_id_t id);
  * or if they never do; the setter clamps into a fixed sane range rather than trusting whatever a
  * player typed, since this feeds straight into a real physics quantity rather than merely
  * stored. */
+#define JUMP_BOOST_SCALE_MIN     0.5f
+#define JUMP_BOOST_SCALE_MAX     5.0f
+/* What install_jump_boost() seeds the scale with, and so what this row reads on every start: the
+ * scale is held in memory and no key carries it, unlike every other number the panel edits. Here
+ * with the band rather than in cheats_internal.h because the panel's own row drags between the
+ * three and cannot see that file. */
+#define JUMP_BOOST_SCALE_DEFAULT 1.3f
 float cheats_openphantom_jump_boost_scale(void);
 void cheats_openphantom_jump_boost_set_scale(float scale);
 
@@ -173,6 +180,8 @@ void cheats_openphantom_jump_boost_set_scale(float scale);
  * panel's track changes the speed while it runs. False when the file could not be written. */
 #define SUPER_RUN_SCALE_MIN 1.1f
 #define SUPER_RUN_SCALE_MAX 4.0f
+/* What the key falls back to, and what Default puts the panel's row back to. */
+#define SUPER_RUN_SCALE_DEFAULT 2.0f
 float cheats_openphantom_super_run_scale(void);
 bool  cheats_openphantom_super_run_set_scale(float scale);
 
@@ -206,7 +215,7 @@ void cheats_openphantom_suspend_jump_boost(void);
 void cheats_openphantom_resume_jump_boost(void);
 
 /* Notches scrolled since the last take, positive away from the player, the exact contract
- * overlay_input_take_wheel_delta() keeps. A function pointer rather than calling that function by
+ * input_owner_take_wheel() keeps. A function pointer rather than calling that function by
  * name: the wheel is only observable through window messages, which is overlay_input.c's own
  * domain and not something this file can poll for itself the way it already does for keys and the
  * cursor, but linking straight to that file would drag its whole message-hook subsystem into

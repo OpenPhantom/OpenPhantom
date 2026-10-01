@@ -20,6 +20,7 @@
 #include "spawn_scripts.h"
 
 #include "actor_catalog.h"
+#include "entity_offer.h"
 #include "spawn_script_data.h"
 
 #include "common/text.h"
@@ -311,11 +312,14 @@ static const char *role_word(spawn_slot_role_t role)
  * for one with a fire clip or twin muzzles and no swing, and the melee record again for one
  * with none of those, which shoves. The tripod gun stands still whatever the row says, never
  * turning: it is a thing the player mounts and fires, and one that turned or fired on its own
- * got in the way of that (played 2026-09-16). */
+ * got in the way of that (played 2026-09-16). A pickup stands still as well: it has no one to
+ * face, follow or fight, and the engine removes it itself when the player takes it up. Both are
+ * functions of the file name, so no behaviour number is added and every machine agrees. */
 static uint32_t record_for(spawn_behaviour_t which, const char *actor_file,
                            const actor_clip_t *clips, uint32_t count)
 {
-    if (actor_file != NULL && _stricmp(actor_file, "tripod.baf") == 0) {
+    if (actor_file != NULL && (_stricmp(actor_file, "tripod.baf") == 0 ||
+                               entity_offer_pickup_class(actor_file) != 0)) {
         return SPAWN_RECORD_STILL;
     }
     switch (which) {

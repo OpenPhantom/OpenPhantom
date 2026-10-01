@@ -60,9 +60,15 @@
  * traffic, input, timers and paints alike, out of its window procedure while the movie plays,
  * worth having on its own terms and is what it is documented as now.
  * ============================================================================================== */
+/* SIZE NOTE: a little over 600 lines since the game is handed back from two places, a movie and a
+ * wait for the host. The excess is the design history above, which no other file carries. The
+ * next seam is the surface choice, effective_mode with monitor_rect_of and create_surface, about
+ * 130 lines that decide which window a movie is drawn into and nothing else. */
 #include "video_overlay.h"
 
 #include "menu_cursor_cells.h"
+#include "movie_close.h"
+#include "movie_wait.h"
 #include "vlc_playback.h"
 
 #include "common/logging.h"
@@ -110,6 +116,16 @@ static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wp
          * retail path hides the cursor for the length of a movie and this did not. */
         SetCursor(NULL);
         return TRUE;
+    }
+    if (message == WM_PAINT && movie_wait_text() != NULL) {
+        /* The black wait for the host, the one time this window draws anything itself: libVLC
+         * has let go of it by then, and the line has to survive being covered and uncovered. */
+        PAINTSTRUCT paint;
+        HDC         paint_dc = BeginPaint(window, &paint);
+
+        movie_wait_paint(window, paint_dc, movie_wait_text());
+        EndPaint(window, &paint);
+        return 0;
     }
     return DefWindowProcW(window, message, wparam, lparam);
 }
@@ -221,6 +237,11 @@ static bool register_overlay_class_once(void)
     }
     overlay_state.class_registered = true;
     return true;
+}
+
+bool video_overlay_register(void)
+{
+    return register_overlay_class_once();
 }
 
 bool video_overlay_start_async_init(void)
@@ -453,46 +474,16 @@ static HWND create_surface(HWND game_window)
                            game_window, NULL, own_module(), NULL);
 }
 
-bool video_overlay_play_blocking(const wchar_t *file_path)
+/* What the game gets back after a movie or a wait for the host: its window's queued mouse
+ * traffic dropped, after a held movie its keys as well, the drawn menu cursor recentred, and the
+ * foreground and the cursor reasserted. */
+static void hand_back_to_the_game(HWND game_window, bool held)
 {
-    HWND  game_window;
-    HWND  overlay_window;
-    HWND  render_window;
-    bool  played;
-
-    if (file_path == NULL) {
-        return false;
-    }
-
-    game_window = find_game_window();
-    if (game_window == NULL) {
-        return false;
-    }
-
-    overlay_window = create_surface(game_window);
-    if (overlay_window == NULL && effective_mode(game_window) != SURFACE_GAME) {
-        log_error("the overlay window could not be created (error %u)", (unsigned)GetLastError());
-        return false;
-    }
-    render_window = (overlay_window != NULL) ? overlay_window : game_window;
-
-    if (overlay_window != NULL) {
-        ShowWindow(overlay_window, SW_SHOW);
-        fill_black_once(overlay_window);
-        UpdateWindow(overlay_window);
-    }
-
-    played = vlc_playback_play_blocking(render_window, file_path, game_window);
-
-    if (overlay_window != NULL) {
-        DestroyWindow(overlay_window);
-    }
-
-    /* The pump above is scoped to the overlay, so the game window's own mouse messages were never
-     * touched while the movie ran: they simply queued up. Left alone, that whole backlog would be
-     * delivered to the engine's accumulator the moment the normal pump resumes, adding a burst of
-     * stale deltas AFTER the deliberate recentring below. Draining it first leaves that write
-     * the last thing to touch the drawn cursor before the player's own next real move.
+    /* The pump of a movie is scoped to the overlay, so the game window's own mouse messages were
+     * never touched while the movie ran: they simply queued up. Left alone, that whole backlog
+     * would be delivered to the engine's accumulator the moment the normal pump resumes, adding a
+     * burst of stale deltas AFTER the deliberate recentring below. Draining it first leaves that
+     * write the last thing to touch the drawn cursor before the player's own next real move.
      *
      * Only the mouse range is drained, and only for the game's window. What is lost is the pointer
      * travel that happened while a full-screen movie covered the picture, which is not information
@@ -500,6 +491,17 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
     {
         MSG stale;
         while (PeekMessageW(&stale, game_window, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
+            /* discarded on purpose */
+        }
+    }
+    /* The keys of a held movie go the same way. Escape, and the controller's Start, which arrives
+     * as Escape, were pressed at a movie that was the host's to end, and an Escape left in the
+     * queue reaches the game's own key hook the moment its pump resumes, where by the code it
+     * asks for the pause menu; that is read from the code and has not been seen in the field.
+     * Outside a held movie the keys are left alone, as they always were. */
+    if (held) {
+        MSG stale;
+        while (PeekMessageW(&stale, game_window, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE)) {
             /* discarded on purpose */
         }
     }
@@ -524,6 +526,91 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
      * WM_SETCURSOR. */
     SetForegroundWindow(game_window);
     SetCursor(NULL);
+}
 
+bool video_overlay_hold_for_host(movie_loop_t *loop)
+{
+    HWND            game_window;
+    HWND            overlay_window;
+    movie_verdict_t first;
+
+    if (loop == NULL || loop->poll == NULL) {
+        return false;
+    }
+    /* Asked before any window goes up, so a host that finished first costs no black flash, and
+     * after the session's timer has had its turn, so the gate it reads can have moved. */
+    vlc_playback_pump_timers(NULL, loop);
+    first = loop->poll();
+    if (first == MOVIE_VERDICT_HOST_DONE) {
+        loop->end = MOVIE_END_HOST;
+        return true;
+    }
+    if (first != MOVIE_VERDICT_GO_ON) {
+        return true;
+    }
+    game_window = find_game_window();
+    if (game_window == NULL) {
+        return false;
+    }
+    overlay_window = register_overlay_class_once() ? create_surface(game_window) : NULL;
+    if (overlay_window != NULL) {
+        ShowWindow(overlay_window, SW_SHOW);
+    }
+    movie_wait_hold(overlay_window, overlay_window != NULL ? overlay_window : game_window,
+                    game_window, loop);
+    if (overlay_window != NULL) {
+        DestroyWindow(overlay_window);
+    }
+    (void)movie_close_pass_on();   /* a close asked for during the wait, once, now */
+    hand_back_to_the_game(game_window, true);
+    return true;
+}
+
+bool video_overlay_play_blocking(const wchar_t *file_path, movie_loop_t *loop)
+{
+    HWND  game_window;
+    HWND  overlay_window;
+    HWND  render_window;
+    bool  played;
+
+    if (file_path == NULL || loop == NULL) {
+        return false;
+    }
+
+    game_window = find_game_window();
+    if (game_window == NULL) {
+        return false;
+    }
+
+    overlay_window = create_surface(game_window);
+    if (overlay_window == NULL && effective_mode(game_window) != SURFACE_GAME) {
+        log_error("the overlay window could not be created (error %u)", (unsigned)GetLastError());
+        return false;
+    }
+    render_window = (overlay_window != NULL) ? overlay_window : game_window;
+
+    if (overlay_window != NULL) {
+        ShowWindow(overlay_window, SW_SHOW);
+        fill_black_once(overlay_window);
+        UpdateWindow(overlay_window);
+    }
+
+    played = vlc_playback_play_blocking(render_window, file_path, game_window, loop);
+
+    /* A held movie whose file ended first is not over: it is the host's, and this side waits for
+     * the host in the same window, turned black. */
+    if (played && loop->held_for_host && loop->poll != NULL && loop->end == MOVIE_END_NATURAL) {
+        movie_wait_hold(overlay_window, render_window, game_window, loop);
+    }
+
+    if (overlay_window != NULL) {
+        DestroyWindow(overlay_window);
+    }
+
+    /* A close asked for in a session is passed on once, now that the movie and its wait are over
+     * and before the game has its window back; outside a session there is never one to pass on,
+     * because the close box has already ended the movie and gone back on the queue. */
+    (void)movie_close_pass_on();
+    hand_back_to_the_game(game_window, loop->held_for_host);
     return played;
 }

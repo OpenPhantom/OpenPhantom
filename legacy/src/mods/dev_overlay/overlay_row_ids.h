@@ -23,6 +23,8 @@
 #include "overlay_menu_extras.h"
 #include "overlay_freecam.h"
 #include "overlay_model.h"
+#include "overlay_modelswap.h"
+#include "overlay_multiplayer.h"
 #include "overlay_picture.h"
 #include "overlay_spawn.h"
 #include "overlay_utilities.h"
@@ -49,14 +51,17 @@ _Static_assert((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u == (uint32_t)CHEATS_OWN_FREE
 #define JUMP_SCALE_ROW_ID       ((uint32_t)CHEATS_OWN_JUMP_BOOST + 1u)
 #define SUPER_RUN_SPEED_ROW_ID  ((uint32_t)CHEATS_OWN_COUNT)
 #define SUPER_RUN_TRACK_ROW_ID  ((uint32_t)CHEATS_OWN_COUNT + 1u)
+#define JUMP_SCALE_TRACK_ROW_ID ((uint32_t)CHEATS_OWN_COUNT + 2u)
 
 /* The rows the cheats group draws: every cheat but free camera, super run's speed and its
- * track, and the jump boost scale. The level skip was the tail of this group until the Level
- * selection group took it. The two slots named are the ones the tests are written against. */
-#define OVERLAY_CHEATS_ROW_COUNT            12u
+ * track, and the jump boost scale and its own. The level skip was the tail of this group until
+ * the Level selection group took it. The two slots named are the ones the tests are written
+ * against. The jump boost's track is the last row of the group, so adding it moved no slot that
+ * anything addresses; session_lock.c names no slot of this group at all. */
+#define OVERLAY_CHEATS_ROW_COUNT            13u
 #define OVERLAY_CHEATS_SUPER_RUN_SPEED_SLOT 8u
 #define OVERLAY_CHEATS_JUMP_SCALE_SLOT      11u
-_Static_assert(SUPER_RUN_TRACK_ROW_ID + 1u == OVERLAY_CHEATS_ROW_COUNT,
+_Static_assert(JUMP_SCALE_TRACK_ROW_ID + 1u == OVERLAY_CHEATS_ROW_COUNT,
                "the cheats group's highest id and its row count disagree");
 
 /* The utilities group's own ids, numbered from a base clear of every id the cheats group above
@@ -85,7 +90,7 @@ _Static_assert(FRAMERATE_FIRST_ID + OVERLAY_FRAMERATE_ROW_COUNT <= CONTROLS_FIRS
                "the Frame rate rows have grown into the Enhanced input group's ids: raise "
                "CONTROLS_FIRST_ID");
 
-/* The picture's group, Enhanced resolution. */
+/* The picture's group, drawn under the heading Engine. */
 #define PICTURE_FIRST_ID 256u
 _Static_assert(CONTROLS_FIRST_ID + OVERLAY_CONTROLS_ROWS_MAX <= PICTURE_FIRST_ID,
                "the Enhanced input rows have grown into the Enhanced resolution group's ids: "
@@ -125,26 +130,49 @@ _Static_assert(MENU_EXTRAS_FIRST_ID + OVERLAY_MENU_EXTRAS_ROWS_MAX <= LEVELS_FIR
                "the In game options extras rows have grown into the Level selection group's "
                "ids: raise LEVELS_FIRST_ID");
 
-/* The NPC spawner group: the spawn, the kind and its list. Its ids are its slots, for the same
- * reason as the level selection's. */
+/* The entity spawner group: the spawn, the placement and its two keys, the kind and its list. Its
+ * ids are its slots, for the same reason as the level selection's; the two key rows sit above
+ * everything that opens, so their ids never move. */
 #define SPAWN_FIRST_ID 448u
 _Static_assert(LEVELS_FIRST_ID + OVERLAY_LEVELS_ROWS_MAX <= SPAWN_FIRST_ID,
                "the Level selection rows have grown into the NPC spawner group's ids: raise "
                "SPAWN_FIRST_ID");
 
-/* The twelve groups on the OpenPhantom tab, every one of them open, the folds open and a full
- * size list: twelve headings and every row each group can draw. This is the number
- * OVERLAY_ROWS_MAX has to cover, and the Original tab is far smaller. It once counted three
- * groups and left the frame rate group out, seven rows short of what overlay_model_rebuild()
- * builds; the array still held them, so nothing was lost, but the assert was guarding a smaller
- * number than the real one. */
+/* The model swap's rows, after the spawner's, which is the last of the older bases. */
+#define MODELSWAP_FIRST_ID 1024u
+_Static_assert(SPAWN_FIRST_ID + OVERLAY_SPAWN_ROWS_MAX <= MODELSWAP_FIRST_ID,
+               "the NPC spawner rows have grown into the model swap group's ids: raise "
+               "MODELSWAP_FIRST_ID");
+
+/* The multiplayer group, the chat's key. The next free block after the model swap's, because a
+ * group takes the next free block when it arrives. The key capture in overlay_edit.c tests its
+ * arms from the highest base down and the model swap's arm binds nothing, so this group needs an
+ * arm of its own above that one or its key is dropped without a word. */
+#define MULTIPLAYER_FIRST_ID 1344u
+_Static_assert(MODELSWAP_FIRST_ID + OVERLAY_MODELSWAP_ROWS_MAX <= MULTIPLAYER_FIRST_ID,
+               "the model swap rows have grown into the Multiplayer group's ids: raise "
+               "MULTIPLAYER_FIRST_ID");
+
+/* Every source on the OpenPhantom tab, all of them open, the folds open and a full size list:
+ * twelve headings, every row each source can draw, and one note per heading for the sentence a
+ * session writes under the rows it takes. This is the number OVERLAY_ROWS_MAX has to cover, and
+ * the Original tab is far smaller. It once counted three groups and left the frame rate group
+ * out, seven rows short of what overlay_model_rebuild() builds; the array still held them, so
+ * nothing was lost, but the assert was guarding a smaller number than the real one.
+ *
+ * Fourteen sources draw here and twelve of them have a heading, because two are drawn inside
+ * another group's body; the headings are what a player counts and the sources are what this
+ * arithmetic counts, and it counts one heading and one note for every source to stay on the safe
+ * side of both. */
 enum {
-    OPENPHANTOM_TAB_ROWS_MAX = 12u + OVERLAY_CHEATS_ROW_COUNT + OVERLAY_LEVELS_ROWS_MAX +
+    OPENPHANTOM_TAB_ROWS_MAX = 14u + 14u + OVERLAY_MODELSWAP_ROWS_MAX +
+                               OVERLAY_CHEATS_ROW_COUNT + OVERLAY_LEVELS_ROWS_MAX +
                                OVERLAY_SPAWN_ROWS_MAX + OVERLAY_FREECAM_ROWS_MAX +
                                OVERLAY_DISMEMBER_ROW_COUNT + OVERLAY_MENU_EXTRAS_ROWS_MAX +
                                OVERLAY_UTILITIES_ROW_COUNT + OVERLAY_PICTURE_ROW_COUNT +
                                OVERLAY_FOG_ROW_COUNT + OVERLAY_CONTROLS_ROWS_MAX +
-                               OVERLAY_WINDOW_ROWS_MAX + OVERLAY_FRAMERATE_ROW_COUNT
+                               OVERLAY_WINDOW_ROWS_MAX + OVERLAY_FRAMERATE_ROW_COUNT +
+                               OVERLAY_MULTIPLAYER_ROW_COUNT
 };
 
 _Static_assert(OVERLAY_ROWS_MAX >= OPENPHANTOM_TAB_ROWS_MAX,

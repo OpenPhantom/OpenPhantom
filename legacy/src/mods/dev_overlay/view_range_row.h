@@ -27,9 +27,6 @@
 #define VIEW_RANGE_MIN 1.0f
 #define VIEW_RANGE_MAX 2.5f
 
-/* One press of the row's own step, in scale units. */
-#define VIEW_RANGE_STEP 0.1f
-
 /* Clamps to the accepted range. A value that is not a number comes back as the minimum, because
  * the alternative is writing a NaN into a file the game reads on every start. */
 float view_range_row_clamp(float scale);

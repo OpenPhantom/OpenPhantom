@@ -29,6 +29,9 @@
  *   is re-evaluated from the top of the mode every tick, so a flag the script waits on is
  *   still seen, and a line arriving finds the body parked and plays the gesture itself. Only
  *   clips seen voiced, only that face, only for a minute after its last line.
+ *
+ * All three only while the face's actor lives in its script, the rule of rest_rule.h: one alive
+ * and out of it, hit or thrown, is passed over, and one found dead is let go for good.
  */
 #ifndef STAND_IN_WATCH_H
 #define STAND_IN_WATCH_H

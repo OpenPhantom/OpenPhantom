@@ -1,9 +1,14 @@
 /* overlay_model.c: the panel's state and the list of rows that follows from it.
  *
- * The Original tab holds two groups and the OpenPhantom tab ten, and the structure carries more,
- * on purpose: the diagnostics and the developer tools that will hang off this panel are groups
- * beside the cheats, not a second panel, and a shape that already folds and searches them costs
- * nothing now.
+ * The Original tab shows two headings and the OpenPhantom tab twelve, and the structure carries
+ * more, on purpose: the diagnostics and the developer tools that will hang off this panel are
+ * groups beside the cheats, not a second panel, and a shape that already folds and searches them
+ * costs nothing now.
+ *
+ * A heading and a source of rows are not the same thing here, and which headings there are, in
+ * what order, and which sources stand under each is overlay_headings.c's. This file asks it once
+ * per rebuild and keeps what the player changes: which heading is folded, what is searched and
+ * which row the keyboard is on.
  *
  * SIZE NOTE. This file is over the six hundred line mark. It was already over before the draw
  * distance row was added to it, and adding that row is what turned an inherited overage into one
@@ -34,11 +39,34 @@
  * state a row needs (which fold is open, what is being typed, whether a key is being captured)
  * instead of the rows reading it here.
  *
- * The seam, if it grows again, is the editing state machine: the typed value and hotkey capture
- * reached through overlay_model_value_*() and overlay_model_capture_hotkey(). Every group goes
- * through it, which is the shape of something that wants to be its own file.
+ * The fourth and fifth seams were taken together when the panel learned to remember where it was
+ * left, to say why a row cannot be used and to be driven from a keyboard, and the three of those
+ * put this file 250 lines past the hard limit. The first was the one this note had named for
+ * years and never taken: the editing state machine, the typed value and the key capture, which
+ * every group goes through and none of this file's navigation touches, now overlay_edit.c. The
+ * second was the dispatch that asks each group how many rows it has and what one of them looks
+ * like, about 170 lines of switch that held no state at all, now overlay_row_source.c.
+ *
+ * The sixth seam was the group structure, taken when a twelfth heading was due and this file stood
+ * within fifteen lines of the hard limit: the three tables that say which tab a source belongs to,
+ * which heading it is drawn under and in what order, with the walk over them and the titles, now
+ * overlay_headings.c. They were read once per rebuild and decided nothing else.
+ *
+ * The seam, if it grows again, is the word on a folded heading: the summary gathered while the rows
+ * are counted and the rule that turns it into "2 on", a name or a reason. It reads the rows handed
+ * to it and nothing of this file's state.
  */
 #include "overlay_model.h"
+
+#include "overlay_choice.h"
+#include "overlay_edit.h"
+#include "overlay_headings.h"
+#include "overlay_notice.h"
+#include "overlay_row_source.h"
+#include "overlay_reason.h"
+#include "overlay_row_fill.h"
+#include "overlay_slider.h"
+#include "session_lock.h"
 
 #include "common/logging.h"
 #include "common/text.h"
@@ -46,6 +74,7 @@
 #include "overlay_cheats.h"
 #include "overlay_controls.h"
 #include "overlay_dismember.h"
+#include "overlay_modelswap.h"
 #include "overlay_fog.h"
 #include "overlay_framerate.h"
 #include "overlay_freecam.h"
@@ -70,30 +99,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* One entry per group. Which tab a group belongs to is fixed by GROUP_TAB below, not stored here:
- * a group cannot change tabs at runtime, so there is nothing to keep in sync by getting it
- * wrong. */
+/* One entry per group, and all a group keeps is whether the player folded it. Its tab, its place
+ * in the drawn order and its title are overlay_headings.c's: a group cannot change any of those at
+ * runtime, so there is nothing to keep in sync by storing them here. */
 typedef struct group_state {
-    const char *title;
-    bool        expanded;
+    bool expanded;
 } group_state_t;
-
-static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
-    OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_TOGGLES */
-    OVERLAY_TAB_ORIGINAL,      /* OVERLAY_GROUP_ORIGINAL_ACTIONS */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM      */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_LEVELS    */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_SPAWN     */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_FREECAM   */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_DISMEMBER */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_UTILITIES */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_PICTURE   */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_FOG       */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_CONTROLS  */
-    OVERLAY_TAB_OPENPHANTOM,   /* OVERLAY_GROUP_OPENPHANTOM_WINDOW    */
-    OVERLAY_TAB_OPENPHANTOM    /* OVERLAY_GROUP_OPENPHANTOM_FRAMERATE */
-};
 
 typedef struct overlay_model_state {
     overlay_tab_t tab;
@@ -101,15 +112,11 @@ typedef struct overlay_model_state {
     group_state_t groups[OVERLAY_GROUP_COUNT];
     overlay_row_t rows[OVERLAY_ROWS_MAX];
     uint32_t      row_count;
-    bool          capturing_hotkey;   /* a hotkey row is waiting for a keypress */
-    uint32_t      capturing_hotkey_row;   /* which one; two rows here bind a key */
-    bool          editing_value;           /* a value row is waiting for typed digits */
-    uint32_t      editing_value_row;       /* which one, an id in the OpenPhantom group */
-    char          value_edit_buf[7];  /* what has been typed so far; six usable characters plus
-                                             * the terminator, which is longer than any value this
-                                             * panel accepts. The display appends its own cursor to
-                                             * make "<buf>_" (see source_row() below), and the row's
-                                             * own value[16] holds that with room to spare */
+    uint32_t      heading_count;    /* how many of them are bands, for the footer's tally */
+    int32_t       selected;           /* the row the keyboard is on, or -1 for none */
+    /* What is being typed into and which key row is waiting is overlay_edit.c's, along with the
+     * two functions that finish either of them. None of it is navigation, every group goes
+     * through it, and this file was over its limit. */
 } overlay_model_state_t;
 
 static overlay_model_state_t model;
@@ -164,41 +171,35 @@ static void copy_label(char *out, const char *text)
 
 /* ============================================================================================ */
 
+void overlay_model_forget_edits(void)
+{
+    overlay_edit_forget();
+    /* The refusal band as well, here rather than beside the close in overlay_input.c: there are
+     * four ways to close the panel and this is the only call all four make. It sat at one of
+     * them, and a sentence about a keypress from the last visit stood over the rows on the next
+     * opening. */
+    overlay_notice_forget();
+}
+
 void overlay_model_reset(void)
 {
     uint32_t i;
 
-    model.tab = OVERLAY_TAB_ORIGINAL;
+    /* This patch's own tab, not the shipped console's. The panel is opened for the free
+     * camera, the spawner and the settings far more often than for a retail code, and the
+     * wrong first tab cost one click every time the game started. */
+    model.tab = OVERLAY_TAB_OPENPHANTOM;
     model.search[0] = '\0';
     model.row_count = 0;
-    model.capturing_hotkey = false;   /* leaving the panel open mid-capture must not strand it */
+    model.selected = -1;
+    overlay_model_forget_edits();
     overlay_freecam_reset();             /* the "how to fly" fold, closed like the groups */
     overlay_levels_reset();              /* and the level list */
     overlay_spawn_reset();               /* and the spawner's list of the level's actors */
     overlay_menu_extras_reset();         /* and the "what this adds" fold, the same */
     overlay_controls_reset();            /* and the "what these do" fold */
     overlay_window_reset();              /* and the window group's size list, same reason */
-    model.editing_value = false;   /* same reasoning as capturing_hotkey just above */
-    model.value_edit_buf[0] = '\0';
 
-    model.groups[OVERLAY_GROUP_ORIGINAL_TOGGLES].title = "Original cheats";
-    model.groups[OVERLAY_GROUP_ORIGINAL_ACTIONS].title = "Original cheats (one-time effects)";
-    /* Split by what a row does rather than by what reads it, following the retail half of this
-     * panel, which already separates its own toggles from its one-time effects. The tab began as
-     * five cheats with a settings row appended and settings kept arriving, until a reader had to
-     * scroll past invincibility to reach the draw distance. */
-    model.groups[OVERLAY_GROUP_OPENPHANTOM].title = "Cheats";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_LEVELS].title = "Level selection";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_SPAWN].title = "NPC spawner";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_FREECAM].title = "Free camera";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_DISMEMBER].title = "Dismemberment";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_UTILITIES].title = "Cheatmenu options";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS].title = "In game options extras";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_PICTURE].title = "Enhanced resolution";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_FOG].title = "Fog";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_CONTROLS].title = "Enhanced input";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_WINDOW].title = "Window mode";
-    model.groups[OVERLAY_GROUP_OPENPHANTOM_FRAMERATE].title = "Frame rate";
     for (i = 0; i < (uint32_t)OVERLAY_GROUP_COUNT; ++i) {
         model.groups[i].expanded = false;      /* everything starts folded, as asked */
     }
@@ -221,9 +222,13 @@ void overlay_model_scroll_by(int32_t rows)
     }
 }
 
+/* Back to the top, which is what every change that replaces the list asks for: a tab change and
+ * every keystroke in the search box. The keyboard's selection goes with it, because an index into
+ * a list that has just been replaced names a row nobody chose. */
 static void scroll_home(void)
 {
     scroll_want = 0;
+    model.selected = -1;
 }
 
 uint32_t overlay_model_scroll(uint32_t visible)
@@ -238,6 +243,51 @@ uint32_t overlay_model_scroll(uint32_t visible)
         scroll_want = (int32_t)most;      /* the list shrank, or it was never that long */
     }
     return (uint32_t)scroll_want;
+}
+
+/* The selection, read and written the same way the scroll is: stored as a request and reconciled
+ * with the row count where it is read, because the count moves under it with every keystroke in
+ * the search box and every fold. */
+int32_t overlay_model_selected(void)
+{
+    const uint32_t count = overlay_model_row_count();
+
+    if (model.selected < 0 || count == 0u) {
+        return -1;
+    }
+    if ((uint32_t)model.selected >= count) {
+        return (int32_t)(count - 1u);
+    }
+    return model.selected;
+}
+
+void overlay_model_set_selected(int32_t index)
+{
+    const uint32_t count = overlay_model_row_count();
+
+    if (index < 0 || count == 0u) {
+        model.selected = -1;
+        return;
+    }
+    model.selected = ((uint32_t)index >= count) ? (int32_t)(count - 1u) : index;
+}
+
+void overlay_model_move_selection(int32_t rows, uint32_t from)
+{
+    const int32_t at = overlay_model_selected();
+    int32_t       want;
+
+    /* From nothing the first press lands on the row the player is looking at rather than at the
+     * top of a list they may have scrolled a long way down. */
+    if (at < 0) {
+        overlay_model_set_selected((int32_t)from);
+        return;
+    }
+    /* Held at the top rather than cleared. A negative index CLEARS the selection, which is what a
+     * hand on the mouse asks for, and an arrow held down at the first row is not asking for that:
+     * it would take the current row away and the next press would put it back somewhere else. */
+    want = at + rows;
+    overlay_model_set_selected((want < 0) ? 0 : want);
 }
 
 void overlay_model_set_tab(overlay_tab_t tab)
@@ -298,7 +348,12 @@ void overlay_model_search_backspace(void)
 void overlay_model_toggle_group(uint32_t group)
 {
     if (group < (uint32_t)OVERLAY_GROUP_COUNT) {
-        model.groups[group].expanded = !model.groups[group].expanded;
+        /* A source drawn under another heading has no fold of its own; folding it means folding
+         * the heading its rows are under, which is the only thing on screen that could have been
+         * clicked. */
+        const overlay_group_t heading = overlay_headings_drawn_under((overlay_group_t)group);
+
+        model.groups[heading].expanded = !model.groups[heading].expanded;
     }
 }
 
@@ -309,6 +364,9 @@ static void append_row(const overlay_row_t *row)
     static bool reported_full;
 
     if (model.row_count < OVERLAY_ROWS_MAX) {
+        if (row->kind == OVERLAY_ROW_GROUP) {
+            ++model.heading_count;   /* counted where a band is put in, and nowhere else */
+        }
         model.rows[model.row_count++] = *row;
         return;
     }
@@ -324,231 +382,209 @@ static void append_row(const overlay_row_t *row)
     }
 }
 
-/* How many rows a group's source holds, and what one of them looks like. The six sources differ
- * in everything except this shape, so the rest of the file does not care which group is open. */
-static uint32_t source_count(overlay_group_t group)
+/* What a heading knows about the rows under it, gathered while they are counted for the search so
+ * that they are built once rather than twice. */
+typedef struct group_summary {
+    uint32_t matches;    /* rows the search found, which is what decides the fold */
+    uint32_t cheats;     /* rows that are switches */
+    uint32_t on;         /* and how many of those are on right now */
+    uint32_t actable;    /* rows a player can act on at all */
+    uint32_t taken;      /* and how many of those a session has taken away */
+    uint32_t reason;     /* the reason the first taken row gave */
+    uint32_t picked;     /* rows that are the chosen entry of a choice */
+    char     pick[16];   /* and the last of their names, sized like a row's own value */
+} group_summary_t;
+
+static void summarise(group_summary_t *sum, const overlay_row_t *row, bool taken)
 {
-    switch (group) {
-    case OVERLAY_GROUP_ORIGINAL_TOGGLES:
-        return cheats_original_count();
-    case OVERLAY_GROUP_ORIGINAL_ACTIONS:
-        return (uint32_t)CHEATS_ACTION_COUNT;
-    case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
-        return OVERLAY_UTILITIES_ROW_COUNT;
-    case OVERLAY_GROUP_OPENPHANTOM_PICTURE:
-        return OVERLAY_PICTURE_ROW_COUNT;
-    case OVERLAY_GROUP_OPENPHANTOM_FOG:
-        return OVERLAY_FOG_ROW_COUNT;
-    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
-        return overlay_controls_row_count();   /* eight, and the fold's lines while open */
-    case OVERLAY_GROUP_OPENPHANTOM_WINDOW:
-        return overlay_window_row_count();
-    case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
-        return OVERLAY_FRAMERATE_ROW_COUNT;
-    case OVERLAY_GROUP_OPENPHANTOM_FREECAM:
-        return overlay_freecam_row_count();   /* five, and the fold's lines while it is open */
-    case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
-        return overlay_levels_row_count();    /* two, and the list while it is open */
-    case OVERLAY_GROUP_OPENPHANTOM_SPAWN:
-        return overlay_spawn_row_count();     /* two, and the level's actors while open */
-    case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
-        return OVERLAY_DISMEMBER_ROW_COUNT;
-    case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
-        return overlay_menu_extras_row_count();   /* two, and the fold's lines while open */
-    case OVERLAY_GROUP_OPENPHANTOM:
-    default:
-        /* Every cheat but free camera and the jump-boost scale; the numbering is in
-         * overlay_row_ids.h. */
-        return OVERLAY_CHEATS_ROW_COUNT;
+    if (row->kind == OVERLAY_ROW_CHEAT) {
+        ++sum->cheats;
+        if (row->on) {
+            ++sum->on;
+        }
+    }
+    /* A choice has no switch to count, so what it contributes is the entry it settled on. */
+    if (overlay_choice_chosen_name(row, sum->pick, sizeof sum->pick)) {
+        ++sum->picked;
+    }
+    if (!overlay_row_kind_is_acted_on(row->kind)) {
+        return;
+    }
+    ++sum->actable;
+    if (taken) {
+        if (sum->taken == 0u) {
+            sum->reason = row->reason;
+        }
+        ++sum->taken;
     }
 }
 
-static void source_row(overlay_group_t group, uint32_t id, overlay_row_t *out)
+/* The word on a folded heading, so a list of twelve bands answers what is on without any of them
+ * being opened. A folded group used to look the same whether nothing or six cheats under it were
+ * on, and the field for this has been on the row since it was written.
+ *
+ * It is worked out from the rows themselves rather than asked of each group, so a group that
+ * grows a switch is counted without being changed for it and no group can answer differently from
+ * what it draws. The price is that the word is a count and not a name.
+ *
+ * SWITCHES are counted and choices are not: the count would be the same however a choice stood,
+ * and "1 on" beside a heading says something is switched on under it. That left three headings
+ * saying nothing at all the day their switches became lists, so a heading with NO switches and
+ * exactly one chosen entry under it carries that entry's name instead. Two chosen entries cannot
+ * be one word and none has no word, so both of those read empty.
+ *
+ * Answers whether the word says something under the heading is ON, which the drawing colours by.
+ * It used to work that out by spelling the finished text back apart, letter by letter ("O" then
+ * "N", or a leading digit), which is a second predicate for a state this function already knows
+ * and which breaks the first time a band says anything else. */
+static bool heading_chip(char *out, size_t size, const group_summary_t *sum)
 {
-    out->group = (uint32_t)group;
-    out->id = id;
-    out->expanded = false;
-    out->pending = false;      /* only the actions group's own play-as rows ever set this */
-    out->value[0] = '\0';      /* only graphics detail, among all the actions, ever sets this */
-    out->fraction = 0.0f;      /* only a SLIDER row ever sets this */
+    out[0] = '\0';
+    if (sum->taken > 0u && sum->taken == sum->actable) {
+        text_format(out, size, "%s", overlay_reason_word(sum->reason));
+        return false;       /* a reason, not a state: the whole group is out of reach */
+    }
+    if (sum->cheats == 1u) {
+        text_format(out, size, "%s", sum->on > 0u ? "ON" : "OFF");
+        return sum->on > 0u;
+    }
+    if (sum->on > 0u) {
+        text_format(out, size, "%u on", sum->on);
+        return true;
+    }
+    /* Not lit: an entry that was chosen is not a switch that is on. */
+    if (sum->cheats == 0u && sum->picked == 1u) {
+        text_format(out, size, "%s", sum->pick);
+        return false;
+    }
+    return false;
+}
 
-    switch (group) {
-    case OVERLAY_GROUP_ORIGINAL_TOGGLES:
-        out->kind = OVERLAY_ROW_CHEAT;
-        cheats_original_label(id, out->label, sizeof out->label);   /* what it does, and the code */
-        out->on = cheats_original_is_on(id);
-        out->available = true;         /* a row only exists here once its table resolved */
-        return;
-    case OVERLAY_GROUP_ORIGINAL_ACTIONS:
-        out->kind = OVERLAY_ROW_ACTION;
-        copy_label(out->label, cheats_original_actions_name((cheats_action_id_t)id));
-        out->on = false;               /* meaningless for an action; never read by the drawer */
-        out->available = cheats_original_actions_is_available((cheats_action_id_t)id);
-        out->pending = cheats_original_actions_is_pending((cheats_action_id_t)id);
-        /* Read live on every rebuild, not cached from the press that set it: the retail console can
-         * also cycle this, and a chip showing a level nobody is at any more would be lying about
-         * the one thing this row exists to show. */
-        if ((cheats_action_id_t)id == CHEATS_ACTION_GRAPHICS_DETAIL) {
-            int32_t level = cheats_original_actions_graphics_level();
+/* A note under the row above it. An info line is this panel's own way of attaching one, so this
+ * needs no new row kind and no group has to count it: it is appended past the source's own rows
+ * and nothing indexes it. */
+static void append_note(const char *text, overlay_group_t group, uint32_t id)
+{
+    overlay_row_t note;
 
-            if (level > 0) {
-                text_format(out->value, sizeof out->value, "%d", (int)level);
+    overlay_row_defaults(&note);
+    note.kind = OVERLAY_ROW_INFO;
+    copy_label(note.label, text);
+    note.group = (uint32_t)group;
+    note.id = id;
+    append_row(&note);
+}
+
+/* Why a row is not available, written out once per heading for each reason whose chip word cannot
+ * carry it on its own. Answers the reasons already written, so the second row with the same
+ * reason adds nothing. The session is not decided here: the lock owns those words and writes them
+ * itself, below. */
+static uint32_t say_why(const overlay_row_t *leaf, overlay_group_t body, uint32_t said)
+{
+    const char *sentence;
+    uint32_t    bit;
+
+    if (leaf->available || leaf->reason >= (uint32_t)OVERLAY_REASON_COUNT) {
+        return said;
+    }
+    bit = 1u << leaf->reason;
+    if ((said & bit) != 0u) {
+        return said;
+    }
+    sentence = overlay_reason_sentence(leaf->reason);
+    if (sentence == NULL) {
+        return said;
+    }
+    append_note(sentence, body, leaf->id);
+    return said | bit;
+}
+
+/* One heading, its own rows and the rows of anything drawn under it, and the notes that say why
+ * a row cannot be used. Pulled out of overlay_model_rebuild() because a tab holds several of
+ * these and each is otherwise identical: build the heading, count its own hits, decide its own
+ * fold. */
+static void append_group(overlay_group_t heading)
+{
+    overlay_group_t bodies[OVERLAY_GROUP_COUNT];
+    uint32_t        counts[OVERLAY_GROUP_COUNT];
+    const uint32_t  body_count =
+        overlay_headings_bodies(heading, bodies, (uint32_t)OVERLAY_GROUP_COUNT);
+    const bool      searching = model.search[0] != '\0';
+    group_summary_t sum;
+    overlay_row_t   row;
+    uint32_t        said = 0;          /* the reasons already written under this heading */
+    bool            said_session = false;
+    uint32_t        b;
+    uint32_t        i;
+
+    memset(&sum, 0, sizeof sum);
+    for (b = 0; b < body_count; ++b) {
+        /* Once per rebuild: a source may count a level's actors or a display's modes to answer,
+         * and the loops below both read the number rather than asking again. */
+        counts[b] = overlay_row_source_count(bodies[b]);
+        for (i = 0; i < counts[b]; ++i) {
+            bool taken;
+
+            overlay_row_source_fill(bodies[b], i, &row);
+            if (overlay_model_matches(row.label, model.search)) {
+                ++sum.matches;
             }
-        }
-        return;
-    case OVERLAY_GROUP_OPENPHANTOM_UTILITIES: {
-        /* A slot here IS its position in the list, with none of the arithmetic the cheats group
-         * below needs: nothing in this group is positioned relative to a cheat enum and nothing in
-         * it folds. The id carries the base so it cannot be confused with a cheats-group id; see
-         * UTILITIES_FIRST_ID. */
-        const char *editing = NULL;
-        bool        capturing = false;
-
-        out->id = UTILITIES_FIRST_ID + id;
-        if (model.editing_value && model.editing_value_row == out->id) {
-            editing = model.value_edit_buf;
-        }
-        if (model.capturing_hotkey && model.capturing_hotkey_row == out->id) {
-            capturing = true;
-        }
-        overlay_utilities_row(id, editing, capturing, out);
-        return;
-    }
-    case OVERLAY_GROUP_OPENPHANTOM_PICTURE: {
-        /* The same shape as the utilities: a slot is its position, the id carries a base, and
-         * only the typed rows need to know what is being typed. No key rows here. */
-        const char *editing = NULL;
-
-        out->id = PICTURE_FIRST_ID + id;
-        if (model.editing_value && model.editing_value_row == out->id) {
-            editing = model.value_edit_buf;
-        }
-        overlay_picture_row(id, editing, out);
-        return;
-    }
-    case OVERLAY_GROUP_OPENPHANTOM_FOG: {
-        const char *editing = NULL;
-
-        out->id = FOG_FIRST_ID + id;
-        if (model.editing_value && model.editing_value_row == out->id) {
-            editing = model.value_edit_buf;
-        }
-        overlay_fog_row(id, editing, out);
-        return;
-    }
-    case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
-        out->id = DISMEMBER_FIRST_ID + id;
-        overlay_dismember_row(id, out);
-        return;
-    case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
-        out->id = LEVELS_FIRST_ID + id;
-        overlay_levels_row(id, out);
-        return;
-    case OVERLAY_GROUP_OPENPHANTOM_SPAWN:
-        out->id = SPAWN_FIRST_ID + id;
-        overlay_spawn_row(id, out);
-        return;
-    case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
-        out->id = MENU_EXTRAS_FIRST_ID + id;
-        overlay_menu_extras_row(id, out);
-        return;
-    case OVERLAY_GROUP_OPENPHANTOM_FREECAM:
-        /* The key row is the one capture this group holds; the fold's state is the group's own. */
-        out->id = FREECAM_FIRST_ID + id;
-        overlay_freecam_row(id, model.capturing_hotkey && model.capturing_hotkey_row == out->id,
-                            out);
-        return;
-    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS: {
-        const char *editing = NULL;
-
-        out->id = CONTROLS_FIRST_ID + id;
-        if (model.editing_value && model.editing_value_row == out->id) {
-            editing = model.value_edit_buf;
-        }
-        overlay_controls_row(id, editing, out);
-        return;
-    }
-    case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE: {
-        /* Same shape again: the id carries a base so no two groups' ids can be confused. */
-        const char *editing = NULL;
-
-        out->id = FRAMERATE_FIRST_ID + id;
-        if (model.editing_value && model.editing_value_row == out->id) {
-            editing = model.value_edit_buf;
-        }
-        overlay_framerate_row(id, editing, out);
-        return;
-    }
-    case OVERLAY_GROUP_OPENPHANTOM_WINDOW: {
-        /* The same shape as the group above, and for the same reason: a slot here is its own
-         * position and the id carries a base so the two groups' ids cannot be confused. */
-        const char *editing = NULL;
-        bool        capturing = false;
-
-        out->id = WINDOW_FIRST_ID + id;
-        if (model.editing_value && model.editing_value_row == out->id) {
-            editing = model.value_edit_buf;
-        }
-        if (model.capturing_hotkey && model.capturing_hotkey_row == out->id) {
-            capturing = true;
-        }
-        overlay_window_row(id, editing, capturing, out);
-        return;
-    }
-    case OVERLAY_GROUP_OPENPHANTOM:
-    default:
-        /* The group's own order, slot to id, so a typed row sits under its toggle. */
-        out->id = overlay_cheats_id_at(id);
-        overlay_cheats_row(out->id, (model.editing_value && model.editing_value_row == out->id)
-                                        ? model.value_edit_buf : NULL, out);
-        return;
-    }
-}
-
-/* One group's own heading plus, if it is expanded, its matching children. Pulled out of
- * overlay_model_rebuild() because the current tab can hold more than one of these now, and each
- * is otherwise identical: build its heading, count its own hits, decide its own fold. */
-static void append_group(overlay_group_t group)
-{
-    const uint32_t count = source_count(group);
-    const bool     searching = model.search[0] != '\0';
-    overlay_row_t  row;
-    uint32_t       matches = 0;
-    uint32_t       i;
-
-    for (i = 0; i < count; ++i) {
-        source_row(group, i, &row);
-        if (overlay_model_matches(row.label, model.search)) {
-            ++matches;
+            taken = session_lock_take((uint32_t)bodies[b], i, &row);
+            summarise(&sum, &row, taken);
         }
     }
 
     /* A search opens the group that has hits, without disturbing the fold the user chose: clearing
      * the box puts it back exactly as it was. */
     row.kind = OVERLAY_ROW_GROUP;
-    copy_label(row.label, model.groups[group].title);
-    row.expanded = model.groups[group].expanded || (searching && matches > 0u);
-    row.on = false;
+    copy_label(row.label, overlay_headings_title(heading));
+    row.expanded = model.groups[heading].expanded || (searching && sum.matches > 0u);
     row.available = true;
     row.pending = false;    /* the loop above may have left these set from the last child scanned */
     row.fraction = 0.0f;
-    row.value[0] = '\0';
-    row.group = (uint32_t)group;
-    row.id = (uint32_t)group;
+    row.chosen = 0u;
+    row.host_value = false;
+    row.reason = (uint32_t)OVERLAY_REASON_NONE;
+    /* A heading's `on` is what its own word claims, so the drawing colours by a state rather than
+     * by reading the text back. */
+    row.on = heading_chip(row.value, sizeof row.value, &sum);
+    row.group = (uint32_t)heading;
+    row.id = (uint32_t)heading;
     append_row(&row);
 
     if (!row.expanded) {
         return;
     }
 
-    for (i = 0; i < count; ++i) {
-        overlay_row_t leaf;
+    for (b = 0; b < body_count; ++b) {
+        for (i = 0; i < counts[b]; ++i) {
+            overlay_row_t leaf;
+            bool          taken;
 
-        source_row(group, i, &leaf);
-        if (!overlay_model_matches(leaf.label, model.search)) {
-            continue;
+            overlay_row_source_fill(bodies[b], i, &leaf);
+            if (!overlay_model_matches(leaf.label, model.search)) {
+                continue;
+            }
+            /* A row a running session cannot survive is greyed here rather than in each group's
+             * own source: the reason is one sentence for all of them and belongs in one place
+             * (session_lock.c), and a group that grows a row gets the same treatment without
+             * being changed for it. */
+            taken = session_lock_take((uint32_t)bodies[b], i, &leaf);
+            append_row(&leaf);
+            said = say_why(&leaf, bodies[b], said);
+            /* And the lock's own sentence, under the FIRST row it took rather than at the end of
+             * the group. At the end it stood sixteen rows below the row it explained, which is
+             * further than anybody reads for it. */
+            if (taken && !said_session && session_lock_holds_group((uint32_t)bodies[b])) {
+                const char *word = session_lock_word((uint32_t)bodies[b]);
+
+                said_session = true;
+                /* NULL for a group that says it itself; see session_lock.h. */
+                if (word != NULL) {
+                    append_note(word, bodies[b], counts[b]);
+                }
+            }
         }
-        append_row(&leaf);
     }
 }
 
@@ -557,10 +593,16 @@ void overlay_model_rebuild(void)
     uint32_t g;
 
     overlay_freecam_sync();   /* the fold follows the camera's own on/off, hotkey path included */
+    session_lock_refresh();   /* one reading of the multiplayer's note for this whole picture */
     model.row_count = 0;
-    for (g = 0; g < (uint32_t)OVERLAY_GROUP_COUNT; ++g) {
-        if (GROUP_TAB[g] == model.tab) {
-            append_group((overlay_group_t)g);
+    model.heading_count = 0;
+    /* Headings in the order they are drawn, and only the headings: a source with no heading of
+     * its own is built by the one it is drawn under. */
+    for (g = 0; g < overlay_headings_count(); ++g) {
+        const overlay_group_t heading = overlay_headings_at(g);
+
+        if (overlay_headings_tab(heading) == model.tab) {
+            append_group(heading);
         }
     }
 }
@@ -568,6 +610,11 @@ void overlay_model_rebuild(void)
 uint32_t overlay_model_row_count(void)
 {
     return model.row_count;
+}
+
+uint32_t overlay_model_heading_count(void)
+{
+    return model.heading_count;
 }
 
 bool overlay_model_row(uint32_t index, overlay_row_t *out)
@@ -614,22 +661,29 @@ bool overlay_model_activate(uint32_t index)
         return false;
     }
     if (row.kind == OVERLAY_ROW_HOTKEY) {
-        /* Starts a capture; does not bind anything itself. overlay_input.c routes the next
-         * key-down to overlay_model_capture_hotkey() while this is true, rather than that key
-         * reaching its usual handling. The row is remembered because there is more than one that
-         * binds a key, and the capture has to land on the one that was clicked. */
-        model.capturing_hotkey = true;
-        model.capturing_hotkey_row = row.id;
+        overlay_edit_start_capture(row.id);
         return true;
     }
     if (row.kind == OVERLAY_ROW_VALUE) {
-        /* Starts a fresh typed value, discarding anything left over from a previous edit that was
-         * never committed, the same "click it again to redo it" shape the hotkey row above has.
-         * Does not touch the stored value itself; only overlay_model_value_commit() does. */
-        model.editing_value = true;
-        model.editing_value_row = row.id;
-        model.value_edit_buf[0] = '\0';
+        overlay_edit_start_value(row.id);
+        /* The row being typed into is the current row, whichever way the edit was
+         * started. A click starts one and clears the selection the pointer took in the
+         * same breath, so without this the sideways keys had nothing to act on in exactly
+         * the state a player reaches by clicking the number they mean to change. */
+        overlay_model_set_selected((int32_t)index);
         return true;
+    }
+    if (row.kind == OVERLAY_ROW_SLIDER) {
+        /* The Default drawn at the end of the track. A track is dragged and not pressed,
+         * so this is the only thing a press on that row can mean, and Return needs no rule
+         * of its own for it: it acts on the row it is on, as everywhere else here. A track
+         * whose row named no standard answers false and stays where it is.
+         *
+         * This is the one call out of this file into overlay_slider.c, which calls back
+         * into it. It is here rather than in the two callers, Return and the click,
+         * because acting on a row is this function, and the same rule written twice beside
+         * it is the pair that comes apart. */
+        return overlay_slider_to_standard((int32_t)index);
     }
     switch ((overlay_group_t)row.group) {
     case OVERLAY_GROUP_OPENPHANTOM_UTILITIES:
@@ -644,6 +698,8 @@ bool overlay_model_activate(uint32_t index)
         return overlay_freecam_toggle(row.id - FREECAM_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_DISMEMBER:
         return overlay_dismember_toggle(row.id - DISMEMBER_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_MODELSWAP:
+        return overlay_modelswap_toggle(row.id - MODELSWAP_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_LEVELS:
         return overlay_levels_toggle(row.id - LEVELS_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_SPAWN:
@@ -656,6 +712,8 @@ bool overlay_model_activate(uint32_t index)
         return overlay_window_toggle(row.id - WINDOW_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
         return overlay_framerate_toggle(row.id - FRAMERATE_FIRST_ID);
+    case OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER:
+        return false;    /* its one row binds a key, and that was taken above */
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
         return true;
@@ -668,165 +726,45 @@ bool overlay_model_activate(uint32_t index)
     }
 }
 
-bool overlay_model_is_capturing_hotkey(void)
+/* The one test in front of every question about a track: it is a track, and it can be used. It
+ * was written out four times, once per question, and the fourth was the one that would have
+ * forgotten the availability half. Which group owns the track is overlay_row_source.c's, the way
+ * every other per-group difference in this panel is. */
+static bool a_usable_track(uint32_t index, overlay_row_t *out)
 {
-    return model.capturing_hotkey;
-}
-
-void overlay_model_capture_hotkey(int32_t virtual_key)
-{
-    uint32_t row;
-
-    if (!model.capturing_hotkey) {
-        return;
-    }
-    row = model.capturing_hotkey_row;
-    model.capturing_hotkey = false;
-    /* Tested from the HIGHEST base downwards. These are open-ended ranges, so asking about
-     * Utilities first would answer yes for a Window row as well and bind the wrong setting. */
-    if (row >= LEVELS_FIRST_ID) {
-        return;     /* nothing there binds a key */
-    }
-    if (row >= FREECAM_FIRST_ID) {
-        cheats_openphantom_freecam_set_hotkey(virtual_key);
-        return;
-    }
-    if (row >= WINDOW_FIRST_ID) {
-        (void)overlay_window_bind(row - WINDOW_FIRST_ID, virtual_key);
-        return;
-    }
-    if (row >= UTILITIES_FIRST_ID) {
-        /* A refusal leaves the binding alone and the row shows the key it still has, which is the
-         * same shape the value rows use for text that is not a number. The refused keys are the
-         * ones that would leave the panel unopenable or unusable; see open_key_row.c. */
-        (void)overlay_utilities_bind(row - UTILITIES_FIRST_ID, virtual_key);
-    }
-}
-
-bool overlay_model_is_editing_value(void)
-{
-    return model.editing_value;
-}
-
-void overlay_model_value_append(char digit)
-{
-    size_t length;
-
-    if (!model.editing_value) {
-        return;
-    }
-    /* Only what a positive decimal number can contain, and only one point. Anything else is
-     * refused outright rather than accepted and left to fail atof() later, the same "do not accept
-     * what cannot mean anything" reasoning overlay_model_search_append() above applies to its own,
-     * much wider, set of allowed characters. */
-    if (digit != '.' && (digit < '0' || digit > '9')) {
-        return;
-    }
-    if (digit == '.' && strchr(model.value_edit_buf, '.') != NULL) {
-        return;
-    }
-    length = strlen(model.value_edit_buf);
-    if (length + 1u >= sizeof model.value_edit_buf) {
-        return;
-    }
-    model.value_edit_buf[length] = digit;
-    model.value_edit_buf[length + 1u] = '\0';
-}
-
-void overlay_model_value_backspace(void)
-{
-    size_t length;
-
-    if (!model.editing_value) {
-        return;
-    }
-    length = strlen(model.value_edit_buf);
-    if (length > 0u) {
-        model.value_edit_buf[length - 1u] = '\0';
-    }
-}
-
-void overlay_model_value_commit(void)
-{
-    uint32_t row;
-
-    if (!model.editing_value) {
-        return;
-    }
-    row = model.editing_value_row;
-    model.editing_value = false;
-    if (model.value_edit_buf[0] == 0) {
-        return;      /* nothing was typed, leave whatever value was already set alone */
-    }
-
-    /* Highest base first, for the reason given at the matching test in the hotkey path. */
-    if (row >= LEVELS_FIRST_ID) {
-        return;     /* nothing there is typed into */
-    }
-    if (row >= FOG_FIRST_ID) {
-        (void)overlay_fog_commit(row - FOG_FIRST_ID, model.value_edit_buf);
-        return;
-    }
-    if (row >= PICTURE_FIRST_ID) {
-        (void)overlay_picture_commit(row - PICTURE_FIRST_ID, model.value_edit_buf);
-        return;
-    }
-    if (row >= CONTROLS_FIRST_ID) {
-        (void)overlay_controls_commit(row - CONTROLS_FIRST_ID, model.value_edit_buf);
-        return;
-    }
-    if (row >= FRAMERATE_FIRST_ID) {
-        /* A refused limit leaves the setting alone and the row shows it unchanged, which is the
-         * same contract every other typed row here has. */
-        (void)overlay_framerate_accept_value(row - FRAMERATE_FIRST_ID, model.value_edit_buf);
-        return;
-    }
-    if (row >= WINDOW_FIRST_ID) {
-        (void)overlay_window_commit(row - WINDOW_FIRST_ID, model.value_edit_buf);
-        return;
-    }
-    if (row >= UTILITIES_FIRST_ID) {
-        /* Every typed row in that group, parsed and written by the group itself. A refusal leaves
-         * the setting alone, and the row then shows it unchanged. */
-        (void)overlay_utilities_commit(row - UTILITIES_FIRST_ID, model.value_edit_buf);
-        return;
-    }
-
-    /* The cheats group's two typed rows, the jump boost scale and the super run speed; a refused
-     * parse leaves the value alone, the group says why. */
-    (void)overlay_cheats_commit(row, model.value_edit_buf);
-}
-
-void overlay_model_value_cancel(void)
-{
-    model.editing_value = false;
+    return overlay_model_row(index, out) && out->kind == OVERLAY_ROW_SLIDER && out->available;
 }
 
 bool overlay_model_slider_set(uint32_t index, float fraction)
 {
     overlay_row_t row;
 
-    if (!overlay_model_row(index, &row) || row.kind != OVERLAY_ROW_SLIDER || !row.available) {
-        return false;
-    }
-    switch ((overlay_group_t)row.group) {
-    case OVERLAY_GROUP_OPENPHANTOM_PICTURE:
-        return overlay_picture_slider_set(row.id - PICTURE_FIRST_ID, fraction);
-    case OVERLAY_GROUP_OPENPHANTOM_FOG:
-        return overlay_fog_slider_set(row.id - FOG_FIRST_ID, fraction);
-    case OVERLAY_GROUP_OPENPHANTOM_CONTROLS:
-        return overlay_controls_slider_set(row.id - CONTROLS_FIRST_ID, fraction);
-    case OVERLAY_GROUP_OPENPHANTOM:
-        return overlay_cheats_slider_set(row.id, fraction);
-    default:
-        return false;              /* nothing else offers one */
-    }
+    return a_usable_track(index, &row) && overlay_row_source_slider_set(&row, fraction);
+}
+
+bool overlay_model_slider_value(uint32_t index, float fraction, char *out, size_t size)
+{
+    overlay_row_t row;
+
+    return out != NULL && size != 0u && a_usable_track(index, &row) &&
+           overlay_row_source_slider_value(&row, fraction, out, size);
+}
+
+bool overlay_model_slider_limits(uint32_t index, overlay_number_t *out)
+{
+    overlay_row_t row;
+
+    return out != NULL && a_usable_track(index, &row) &&
+           overlay_row_source_slider_limits(&row, out);
 }
 
 bool overlay_model_slider_wants_full_rate(uint32_t index)
 {
     overlay_row_t row;
 
+    /* Not through a_usable_track(): this one asked nothing about availability before and asking
+     * now would change which rate an unavailable row's drag writes at, which is a question no
+     * unavailable row ever gets to. */
     if (!overlay_model_row(index, &row) || row.kind != OVERLAY_ROW_SLIDER ||
         row.group != (uint32_t)OVERLAY_GROUP_OPENPHANTOM_PICTURE) {
         return false;              /* the field of view is the one, and it is in that group */

@@ -73,17 +73,20 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
     int32_t origin_y   = 0;
     float   previous_x = scale_state.ratio_x;
     float   previous_y = scale_state.ratio_y;
+    float   art_x      = 1.0f;
+    float   art_y      = 1.0f;
+    size_t  dropped    = 0;
 
     if (scale_state.stood_down) {
         return;
     }
     scale_state.stood_down = true;
 
-    log_warning("the menu artwork is %dx%d but the game is running at %dx%d, so the menus are NOT "
+    log_warning("the menu canvas is %dx%d but the game is running at %dx%d, so the menus are NOT "
                 "scaled. Drawing a canvas larger than the screen writes past the end of the frame "
-                "buffer and crashes. Delete the converted artwork and the patch will size the "
-                "menus from the display itself, or set the game back to the size that artwork was "
-                "made for",
+                "buffer and crashes. A canvas set by MenuScale wants a smaller MenuScale, or 0 for "
+                "one taken from the display; one read from converted artwork wants that artwork "
+                "deleted, or the game set back to the size it was made for",
                 (int)scale_state.canvas_width, (int)scale_state.canvas_height,
                 (int)screen_width, (int)screen_height);
 
@@ -99,12 +102,22 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
     }
     menu_scale_apply_trimmings(false);
 
+    /* The artwork goes back with the canvas. The load path replicates every picture to the ratio
+     * it was last told, and until this line only the refit ever told it: a canvas given up here
+     * left it at the old ratio, so every picture loaded afterwards came in several times its size
+     * and was drawn against the 640x480 clip as its own top left corner, enlarged. MenuScale=3 on
+     * a 1080 line display did that to every menu from the first one on. What was already loaded
+     * bigger is dropped with the screens below, the same way the refit drops it. */
+    menu_art_load_ratio(&art_x, &art_y);
+    menu_art_load_set_ratio(1.0f, 1.0f);
+
     if (menu_scale_sites[SITE_SET_WIDGET_IMAGE].address != 0) {
         (void)patch_write_u8(menu_scale_sites[SITE_SET_WIDGET_IMAGE].address +
                                  SET_WIDGET_IMAGE_COMPRESS, 1);
     }
 
-    pointer_cage_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
+    pointer_cage_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT,
+                        menu_scale_cursor_size());
     menu_island_clip_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
     (void)menu_loading_bar_resize(MENU_SCALE_CANVAS_WIDTH, MENU_SCALE_CANVAS_HEIGHT);
 
@@ -144,12 +157,18 @@ static void menu_scale_stand_down(int32_t screen_width, int32_t screen_height)
                     rect[3] = unscaled_coordinate(rect[3], previous_y);
                 }
             }
+            menu_scale_drop_bitmaps(tracked->menu);
+            ++dropped;
             free(tracked->shadow);
             tracked->shadow = NULL;
             tracked->menu   = NULL;
         }
         scale_state.scaled_menu_count = 0;
     }
+
+    log_info("  the menu artwork is loaded at its own size again (it was being replicated %.3f "
+             "by %.3f), and %u screen(s) already laid out dropped their pictures so the engine "
+             "loads them again at that size", (double)art_x, (double)art_y, (unsigned)dropped);
 
     /* The origin, g_menuScale and g_menuTextScale, all four derived the way the engine derives
      * them. Waiting for the engine to do it is not an option: its own block runs on a mode change

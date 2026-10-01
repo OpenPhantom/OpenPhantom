@@ -52,10 +52,12 @@
 #include "face_latch.h"
 #include "frame_cap.h"
 #include "frame_delta.h"
+#include "frame_wait.h"
 #include "framerate_stats.h"
 #include "mover_interpolation.h"
 #include "object_interpolation.h"
 #include "particle_clock.h"
+#include "power_throttling.h"
 #include "sim_clock.h"
 
 #include "common/frame_hook.h"
@@ -247,6 +249,8 @@ typedef struct framerate_config {
     int   interpolate_riders;
     float rider_travel_limit;
     int   process_priority;      /* 0 = leave it alone, 1 = above normal, 2 = high */
+    bool  high_qos;              /* Windows may not throttle this process behind another window */
+    bool  frame_wait_sleep;      /* sleep ahead of the engine's spin, see frame_wait.h */
     int   stats_frame_interval;
     int   stats_player_frames;
 } framerate_config_t;
@@ -294,6 +298,10 @@ static void load_config(void)
     config->face_latch_yield       = ini_read_int (FRAMERATE_SECTION, "FaceLatchYield", 16);
     config->precise_frame_time     = ini_read_bool(FRAMERATE_SECTION, "PreciseFrameTime", true);
     config->process_priority       = ini_read_int (FRAMERATE_SECTION, "ProcessPriority", 0);
+    /* On for a file without the key: it changes nothing about how the game plays, only whether
+     * Windows may treat the game as background work while its window is behind another. */
+    config->high_qos               = ini_read_bool(FRAMERATE_SECTION, "HighQos", true);
+    config->frame_wait_sleep       = ini_read_bool(FRAMERATE_SECTION, "FrameWaitSleep", false);
     config->interpolate_particles  =
         ini_read_bool(FRAMERATE_SECTION, "InterpolateParticles", true);
     config->rebase_sim_clock       = ini_read_bool(FRAMERATE_SECTION, "RebaseSimClock", true);
@@ -741,6 +749,7 @@ void framerate_fix_install(void)
     /* Before any patching, because it touches no engine memory and a failure here must not
      * leave a half patched image behind. */
     apply_process_priority();
+    power_throttling_apply(framerate_state.config.high_qos);
 
     signature_resolve_table(sites, SITE_COUNT);
 
@@ -773,6 +782,8 @@ void framerate_fix_install(void)
      * publish a value derived from the substep alpha and the alpha is only as good as the period
      * the wait measured. */
     frame_delta_install(framerate_state.config.precise_frame_time);
+    /* After the delta, whose detour on the wait is the one the sleep runs from. */
+    frame_wait_install(framerate_state.config.frame_wait_sleep, frame_delta_hooked());
     particle_clock_install(framerate_state.config.interpolate_particles);
     sim_clock_install(framerate_state.config.rebase_sim_clock,
                       framerate_state.config.mover_substep_clock);

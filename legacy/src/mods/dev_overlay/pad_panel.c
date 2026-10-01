@@ -13,8 +13,11 @@
 #include "cheats_openphantom.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
+#include "overlay_keys.h"
+#include "overlay_notice.h"
 #include "overlay_layout.h"
 #include "overlay_model.h"
+#include "overlay_slider.h"
 #include "pad_input.h"
 
 #include <windows.h>
@@ -23,8 +26,6 @@
 
 #define SCROLL_ROWS_PER_S 12.0f    /* the right stick fully over scrolls this many rows a second */
 #define TRIGGER_PER_S     0.5f     /* a trigger fully in moves a slider this far a second */
-#define TRIGGER_WRITE_MS  250u     /* the drag's own write throttle; the file is the cost */
-#define TRIGGER_WRITE_FULL_MS 33u
 #define ROW_X_FRACTION    0.3f     /* where across a row the D-pad lands, on the label */
 #define REPEAT_AFTER_S    0.4f     /* a held D-pad steps again after this */
 #define REPEAT_EVERY_S    0.1f     /* and then this often */
@@ -33,14 +34,14 @@
 
 static struct {
     float    scroll_carry;   /* rows not yet scrolled, the fraction of a row carried over */
-    int32_t  trigger_row;    /* the slider the triggers are moving, -1 for none */
-    float    trigger_fraction;
-    float    trigger_written;
-    uint32_t trigger_last_ms;
     float    dpad_held;      /* how long the D-pad has been down, up or down */
     float    dpad_repeat;    /* time to the next repeated step */
     float    hidden_for;     /* seconds left of hiding the pointer */
-} st = { 0.0f, -1, 0.0f, 0.0f, 0u, 0.0f, 0.0f, 0.0f };
+} st = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+/* Which track the triggers are on, where the hand has it and what the file last got is
+ * overlay_slider.c's, together with the throttle: the mouse's drag kept the same four things
+ * beside the same two interval numbers, and two copies of one state are two answers. */
 
 /* The pointer hidden while the right stick is over, and for a moment after: its sideways half
  * reaches the cursor as mouse motion faked by controller_input, so the pointer wanders while
@@ -62,11 +63,7 @@ static void hide_pointer_under_stick(const pad_state_t *pad, float dt)
 /* Leaving a slider writes what it was left at, throttle or not. */
 static void flush_trigger(void)
 {
-    if (st.trigger_row >= 0 && st.trigger_fraction != st.trigger_written) {
-        (void)overlay_model_slider_set((uint32_t)st.trigger_row, st.trigger_fraction);
-        overlay_model_rebuild();
-    }
-    st.trigger_row = -1;
+    overlay_slider_let_go(OVERLAY_SLIDER_TRIGGER);
 }
 
 /* The system cursor put at a point of the picture, in the panel's own units, and kept inside
@@ -161,15 +158,16 @@ static void step_row(int32_t by)
 
 /* The triggers: the slider on the row under the pointer, or the one under a value row, moved
  * by how far the triggers are in, right raising and left lowering. The handle follows every
- * frame; the file is written at the drag's own rate and once more when the triggers let go. */
+ * frame; the file is written at the drag's own rate and once more when the triggers let go.
+ * They take the track only while they are in, and give it back the moment they come out or
+ * the pointer leaves the row. */
 static void trigger_slider(float amount, float dt)
 {
     overlay_row_t row;
     float         x;
     float         y;
+    float         fraction = 0.0f;
     int32_t       index;
-    uint32_t      now;
-    uint32_t      every;
 
     memset(&row, 0, sizeof row);
     overlay_input_pointer(&x, &y);
@@ -183,31 +181,33 @@ static void trigger_slider(float amount, float dt)
         row.kind != OVERLAY_ROW_SLIDER) {
         index = -1;
     }
-    if (index != st.trigger_row) {
+    /* Only while they are pushed in. This took the track under the pointer every frame, pushed
+     * in or not, and this function runs every frame a pad is plugged in. Every track the pointer
+     * crossed was therefore held by a hand that was not touching it, and the panel's own pointer,
+     * its sideways keys and its Default button were each refused the track they were pointing at:
+     * no slider in the panel could be moved by anything at all (field, 2026-09-24).
+     *
+     * A hand commands only the hold it has: a track the pointer is dragging is not taken from it
+     * here, and letting go asks for the triggers' own hold and not for whatever is held. Without
+     * that, a mouse drag whose hand wandered off its row would be ended by the triggers noticing
+     * a different row under the pointer. */
+    if (amount == 0.0f || index != overlay_slider_row(OVERLAY_SLIDER_TRIGGER)) {
         flush_trigger();
-        st.trigger_row = index;
-        if (index >= 0) {
-            st.trigger_fraction = row.fraction;
-            st.trigger_written  = row.fraction;
+    }
+    if (amount == 0.0f || index < 0) {
+        return;
+    }
+    if (overlay_slider_row(OVERLAY_SLIDER_TRIGGER) != index) {
+        overlay_slider_take(OVERLAY_SLIDER_TRIGGER, index, row.fraction);
+        if (overlay_slider_row(OVERLAY_SLIDER_TRIGGER) != index) {
+            return;   /* another hand is driving that track */
         }
     }
-    if (index < 0 || amount == 0.0f) {
+    if (!overlay_slider_held(NULL, &fraction)) {
         return;
     }
-    st.trigger_fraction += amount * TRIGGER_PER_S * dt;
-    if (st.trigger_fraction < 0.0f) { st.trigger_fraction = 0.0f; }
-    if (st.trigger_fraction > 1.0f) { st.trigger_fraction = 1.0f; }
-    now   = (uint32_t)GetTickCount();
-    every = overlay_model_slider_wants_full_rate((uint32_t)index) ? TRIGGER_WRITE_FULL_MS
-                                                                   : TRIGGER_WRITE_MS;
-    if (now - st.trigger_last_ms < every) {
-        return;
-    }
-    st.trigger_last_ms = now;
-    if (overlay_model_slider_set((uint32_t)index, st.trigger_fraction)) {
-        st.trigger_written = st.trigger_fraction;
-        overlay_model_rebuild();
-    }
+    overlay_slider_move(OVERLAY_SLIDER_TRIGGER, fraction + amount * TRIGGER_PER_S * dt,
+                        (uint32_t)GetTickCount());
 }
 
 /* The D-pad up or down, on the press and then again while held: after REPEAT_AFTER_S, every
@@ -251,9 +251,26 @@ static void drive_panel(float dt)
     }
     step_rows(pad, dt);
     if (pad->pressed & (PAD_BUTTON_DPAD_LEFT | PAD_BUTTON_DPAD_RIGHT)) {
-        /* The other tab; there are two, so left and right are the same step. */
-        overlay_model_set_tab((overlay_model_tab() == OVERLAY_TAB_ORIGINAL)
-                                  ? OVERLAY_TAB_OPENPHANTOM : OVERLAY_TAB_ORIGINAL);
+        /* The same rule the keyboard's sideways keys follow, asked of the row under the
+         * pointer, which is how this file addresses a row everywhere else: a heading folds,
+         * a row of words walks them, a number changes by one press, and anything else is
+         * the other tab. It used to be the tab unconditionally, which would have left the
+         * pad with no way to fold a heading and the two halves of one rule drifting apart
+         * in two files.
+         *
+         * Always the fine step: a pad has no modifier to hold, and the triggers are its own
+         * way to cross a track quickly. There are two tabs, so left and right are the same
+         * step between them. */
+        float x;
+        float y;
+
+        overlay_input_pointer(&x, &y);
+        overlay_notice_act();      /* the pad's own door; see overlay_notice.h */
+        if (!overlay_keys_sideways(overlay_draw_row_at(x, y),
+                                   (pad->pressed & PAD_BUTTON_DPAD_LEFT) ? -1 : 1, false)) {
+            overlay_model_set_tab((overlay_model_tab() == OVERLAY_TAB_ORIGINAL)
+                                      ? OVERLAY_TAB_OPENPHANTOM : OVERLAY_TAB_ORIGINAL);
+        }
         overlay_model_rebuild();
     }
     if (pad->pressed & PAD_BUTTON_A) {

@@ -100,6 +100,8 @@
  * ============================================================================================== */
 #include "cheats_original_actions.h"
 
+#include "overlay_reason.h"
+
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
@@ -186,6 +188,10 @@ typedef void (__cdecl *call2_fn_t)(int32_t, int32_t);
 
 typedef struct action_slot {
     bool     available;
+    /* Set by the three resolve functions that succeed and still refuse to offer their row. It is
+     * not the opposite of `available`: a row that never resolved is also unavailable and is not
+     * held back, and the two look the same to a player until each says which it is. */
+    uint32_t held_back;
     char     label[64];
 } action_slot_t;
 
@@ -385,6 +391,7 @@ static void resolve_credits(void)
 {
     if (read_data_pointer(OP_CREDITS_VAR, &st.credits_var)) {
         set_label(CHEATS_ACTION_VIEW_CREDITS, "View credits (gurshick)");
+        st.slots[CHEATS_ACTION_VIEW_CREDITS].held_back = (uint32_t)OVERLAY_REASON_HELD_MISBEHAVES;
         log_info("view credits resolved but is held back as n/a: field-confirmed misbehaviour when "
                  "triggered from this panel. See the comment above resolve_credits().");
     } else {
@@ -416,6 +423,7 @@ static void resolve_wavering_graphics(void)
     st.wavering_off = (call1_fn_t)off_target;
     st.wavering_on = (call1_fn_t)on_target;
     set_label(CHEATS_ACTION_WAVERING_GRAPHICS, "Wavering graphics (drop a beat)");
+    st.slots[CHEATS_ACTION_WAVERING_GRAPHICS].held_back = (uint32_t)OVERLAY_REASON_HELD_NO_EFFECT;
     /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
     log_info("wavering graphics resolved (flag and both apply calls all valid) but is held back as "
              "n/a rather than offered: no confirmed visible effect. See the comment above "
@@ -444,6 +452,7 @@ static void resolve_debug_mode(void)
         return;
     }
     /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
+    st.slots[CHEATS_ACTION_DEBUG_MODE].held_back = (uint32_t)OVERLAY_REASON_HELD_BREAKS_MENU;
     if (read_code_text(OP_DEBUG_CODE_TEXT, text, sizeof text)) {
         text_format(label, sizeof label, "Debug mode (%s)", text);
         set_label(CHEATS_ACTION_DEBUG_MODE, label);
@@ -572,6 +581,14 @@ const char *cheats_original_actions_name(cheats_action_id_t id)
         return NULL;
     }
     return st.slots[id].label;
+}
+
+uint32_t cheats_original_actions_reason(cheats_action_id_t id)
+{
+    if ((unsigned)id >= (unsigned)CHEATS_ACTION_COUNT) {
+        return (uint32_t)OVERLAY_REASON_NONE;
+    }
+    return st.slots[id].held_back;
 }
 
 bool cheats_original_actions_is_available(cheats_action_id_t id)

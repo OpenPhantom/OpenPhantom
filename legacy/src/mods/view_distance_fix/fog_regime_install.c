@@ -22,6 +22,7 @@
 #include "fog_regime_internal.h"
 
 #include "fog_band.h"
+#include "fog_owner.h"
 #include "fog_trace.h"
 #include "view_distance_fix.h"
 
@@ -89,7 +90,8 @@ static const uint8_t SIG_FOG_TABLE_CAP[] = {
 /* The two writers of FOGTABLEMODE, both `6A 03 6A 23` = push D3DFOG_LINEAR, push 0x23. The first
  * is the per-primitive state machine at 0x004884B8, which re-issues the five fog states whenever
  * the fog bit moves; the second is the whole-state commit at 0x00489B5B, which re-issues all
- * thirty-four states on every level load and after every display-mode change. Patching only one of
+ * thirty-four states every time the render flags are set, and the level's fog apply, the effects'
+ * fog and a display-mode change all set them. Patching only one of
  * them leaves the other to put the table back. Both anchors start AFTER the `push 3`, and both
  * wildcard the device-pointer operands so the pattern carries no absolute address. */
 static const uint8_t SIG_FOG_TABLE_MODE_DELTA[] = {
@@ -389,20 +391,20 @@ void consider_pixel_fog(uint32_t caps)
     fog_state.pixel_fog_active = true;
     fog_state.projection_device = device;
 
-    /* One way, so there is no switch back. Going the other way needs the device reprogrammed,
-     * because this engine only ever sets FOGTABLEMODE from inside applyLevelFog and that runs at
-     * a level load. Reverting the three writes changes only what the NEXT load will push, so the
-     * engine goes back to computing a per-vertex factor while the device is still told to ignore
-     * it, and nothing is fogged. Reverting the writes, handing the identity projection back, and
-     * calling applyLevelFog's original by hand were all tried in the game and none of them brought
-     * the fog back. So the delivery is chosen once, at startup, from FogImplementation, and what
-     * the panel offers is the band. */
+    /* One way, so there is no switch back. Going the other way was tried in the game three times:
+     * reverting the three writes, handing the identity projection back as well, and calling
+     * applyLevelFog's original by hand on top. None of them brought the fog back, and why is not
+     * known. It is not that the device hears FOGTABLEMODE only at a level load: every render state
+     * commit issues it, and the per face switch does whenever a face turns the fog bit back on. So
+     * the delivery is chosen once, at startup, from FogImplementation, and what the panel offers
+     * is the band. */
     log_info("pixel fog active: the device measures eye-space w, the band goes to it in world "
              "units unconverted, and the engine's own per-vertex ramp is switched back off. No "
              "8-bit fog factor and no interpolation of it across polygons.");
 
-    /* The band only reaches the device through applyLevelFog, and that has already run for this
-     * level. Push what we hold now, or the first level entered this way keeps the authored band. */
+    /* The level's own apply has already put the band into the device's cells, but its commit went
+     * out with the table mode still patched to none. Push now, so the band and the restored table
+     * mode reach the device together rather than with whichever commit happens to come next. */
     push_band_to_device();
 }
 
@@ -594,6 +596,9 @@ static void install_level_fog(void)
                   "coupled to anything", (unsigned)site);
         return;
     }
+    /* The device writes the band push uses, read out of the same function's own calls behind the
+     * six bytes the detour took. */
+    fog_owner_bind(site);
 
     log_info("fog band coupled at %08X: the authored band is scaled by "
              "(cut-%.2f)*cos(hFOV/2) measured against the same expression at the authored "

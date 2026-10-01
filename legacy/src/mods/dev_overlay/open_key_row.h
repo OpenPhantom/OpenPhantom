@@ -26,7 +26,8 @@
 int32_t open_key_row_get(void);
 
 /* Binds it, both in the running panel and in the ini. 0 restores the default. Refuses a key that
- * would leave the panel unopenable or unusable, and answers false: see the source for which. */
+ * would leave the panel unopenable or unusable, and the key that opens the multiplayer chat, and
+ * answers false: see the source for which. */
 bool open_key_row_set(int32_t virtual_key);
 
 #endif /* DEV_OVERLAY_OPEN_KEY_ROW_H */

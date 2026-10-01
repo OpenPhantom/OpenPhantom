@@ -32,6 +32,17 @@ uint32_t cheats_original_count(void);
  * string belongs to the image and outlives everything here. */
 const char *cheats_original_name(uint32_t index);
 
+/* The eleven codes this file knows, as text, compiled in rather than read from the image.
+ *
+ * cheats_original_name() answers out of the EXECUTABLE and therefore answers nothing at all
+ * in a test process. This is the tree's own written-down copy of the same eleven, the one
+ * cheats_original_label() matches a resolved name against, and it is readable anywhere. It
+ * is how a test can ask whether a code named somewhere else in the tree is a code the game
+ * actually has: session_lock.c names three of them and nothing held those three against
+ * anything. NULL past the end. */
+uint32_t    cheats_original_known_count(void);
+const char *cheats_original_known_code(uint32_t index);
+
 /* What the code does, then the code in brackets, the way the one-shot group already names its
  * rows: "Disable cheats (turntables)". The game's own table holds only the codes, and a row that
  * says "perfection" tells nobody it is auto-fire. A code this file does not know is written on its

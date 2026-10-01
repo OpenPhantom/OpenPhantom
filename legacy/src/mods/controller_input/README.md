@@ -330,7 +330,7 @@ the narrower reason described above, and the right stick was confirmed behaving 
 the run that proved the other fix.
 
 The diagonal correction and the `LookSensitivity` range check are built, unit tested and
-**played**, with a pad, in the 0.4.4 build. The look turns more slowly on a diagonal than it used
+**played**, with a pad, in a pre-release build of 1.0.0. The look turns more slowly on a diagonal than it used
 to, by up to 41 percent at the corner, and a straight push up, down, left or right is unchanged to
 the last decimal.
 

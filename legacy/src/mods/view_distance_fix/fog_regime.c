@@ -19,6 +19,7 @@
 
 #include "cell_watchdog.h"
 #include "fog_band.h"
+#include "fog_owner.h"
 #include "fog_trace.h"
 #include "view_distance_fix.h"
 
@@ -184,26 +185,43 @@ static void target_now(fog_regime_band_t *out)
 /* ==============================================================================================
  * C, the level record
  * ============================================================================================ */
-/* With the per-vertex ramp the engine re-reads the band from the world record every frame, so
- * writing those two floats was enough. The device path does not: FOGSTART and FOGEND only move when
- * applyLevelFog runs. That function is already detoured here, so its original is called directly,
- * which reprograms the device from the fields just written and re-enters nothing. */
+/* One push of the band the record holds, when the device is this module's to write. The two
+ * places that write the device both come through here and nowhere else.
+ *
+ * The per-vertex ramp re-reads the band from the record every frame; the device path does not.
+ * FOGSTART and FOGEND go out from two cells on every render state commit, and the record's band
+ * reaches those cells only through applyLevelFog, which writes the level's colour with it. So the
+ * band is pushed, and fog_owner.c decides whether it may be: not while the effects' colour is on
+ * the device, and not in the one substep after they set a band of their own. It writes the band
+ * cells and commits, never the colour; applyLevelFog's original is the push only where those
+ * writes did not bind.
+ *
+ * The commit reads the device pointer without looking at it, hence the device check. */
+static void push_record_band(void)
+{
+    const float      *live;
+    fog_regime_band_t band;
+
+    if (!fog_state.pixel_fog_active || fog_state.level == NULL || fog_regime_device() == NULL) {
+        return;
+    }
+    live       = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+    band.start = live[0];
+    band.end   = live[1];
+    if (fog_owner_push(fog_state.level, &band, &fog_state.device_band,
+                       (fog_apply_fn_t)fog_state.apply_detour.original)) {
+        fog_state.device_band = band;
+    }
+}
+
 void push_band_to_device(void)
 {
-    apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
-
     /* Not while the detour below is running. That function ends by calling the original itself, so
      * pushing here as well would reprogram the device twice for one engine call. */
     if (fog_state.inside_apply) {
         return;
     }
-    if (fog_state.pixel_fog_active && original != NULL && fog_state.level != NULL) {
-        const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
-
-        original(fog_state.level);
-        fog_state.device_band.start = live[0];
-        fog_state.device_band.end   = live[1];
-    }
+    push_record_band();
 }
 
 static void write_band(const fog_regime_band_t *band)
@@ -292,6 +310,8 @@ static bool remember_level(void *level)
     if (level == fog_state.level_without_fog) {
         return false;
     }
+    /* Whatever this record turns out to be, the level before it is left. */
+    fog_owner_level_ends();
 
     if (!memory_is_readable_range((uintptr_t)level, WORLD_PROBE_SIZE)) {
         /* Forget the previous level too: the per-frame tick must not keep writing through a
@@ -349,6 +369,7 @@ static bool remember_level(void *level)
     /* And the opening window starts here, which is the one place that knows a level is new. */
     fog_state.open_left = fog_state.config.open_seconds;
     fog_trace_begin();
+    fog_owner_level_begins();
     return true;
 }
 
@@ -391,6 +412,15 @@ void __cdecl hook_apply_fog(void *level)
 
     fog_state.inside_apply = false;
     original(level);
+
+    /* The original has just given the device the record's band, ours or the cheat's, with the
+     * level's colour. That is a band this module stands behind, not one the effects set. */
+    if (level == fog_state.level) {
+        const float *live = (const float *)((const char *)level + WORLD_FOG_START);
+
+        fog_state.device_band.start = live[0];
+        fog_state.device_band.end   = live[1];
+    }
 }
 
 /* report_device_fog_caps and consider_pixel_fog are defined in fog_regime_install.c and declared
@@ -401,25 +431,27 @@ void __cdecl hook_apply_fog(void *level)
  * that.
  *
  * On the per-vertex path standing aside was enough, because the engine re-read these two fields
- * every frame and whatever was in them took effect. The device path does not: the band only
- * reaches FOGSTART and FOGEND through applyLevelFog. So a writer who is not us would be writing
- * into a record nobody reads, and their fog would never change. Pushing their value, not ours,
- * keeps that promise. */
-static void stand_aside_for_the_other_writer(void)
+ * every frame and whatever was in them took effect. The device path does not: the record's band
+ * reaches the device's band cells only through applyLevelFog. So a writer who is not us would be
+ * writing into a record nobody reads, and their fog would never change. Pushing their value, not
+ * ours, keeps that promise.
+ *
+ * Not while the effects hold the device. The cheat does nothing inside a green room: letting it
+ * through would lose the room's band, whose end the effects keep no copy of, and the background,
+ * which is cleared to the fog colour, would stay green. The room's restore runs applyLevelFog,
+ * which puts the cheat's band on the device with the level's colour. */
+static void stand_aside_for_the_other_writer(fog_holder_t holder)
 {
-    const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+    const float      *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+    fog_regime_band_t theirs;
 
     fog_trace_aside('f', live[0], live[1]);
 
-    if (fog_state.pixel_fog_active &&
-        (live[0] != fog_state.device_band.start || live[1] != fog_state.device_band.end)) {
-        apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
-
-        if (original != NULL) {
-            original(fog_state.level);
-            fog_state.device_band.start = live[0];
-            fog_state.device_band.end   = live[1];
-        }
+    theirs.start = live[0];
+    theirs.end   = live[1];
+    if (!fog_owner_band_settled(&theirs, &theirs, fog_state.pixel_fog_active, holder,
+                                fog_owner_device_shows(&theirs, &fog_state.device_band))) {
+        push_record_band();
     }
 }
 
@@ -482,6 +514,7 @@ void fog_regime_on_frame(void)
     fog_regime_band_t target;
     float             seconds;
     bool              settled;
+    fog_holder_t      holder;
 
     if (!fog_state.tick_active || fog_state.level == NULL) {
         return;
@@ -492,6 +525,8 @@ void fog_regime_on_frame(void)
         fog_trace_aside('p', 0.0f, 0.0f);
         return;
     }
+    /* Whose fog the device shows, looked at once a frame before anything decides to write. */
+    holder = fog_owner_observe(fog_state.level, &fog_state.device_band, &fog_state.current);
     /* And the record still has to hold what we last put there. Two things ride on this. A level
      * loaded into the address the previous one had would otherwise be ticked with the previous
      * level's remembered band for however many frames pass before the fog apply reaches us. And
@@ -499,7 +534,7 @@ void fog_regime_on_frame(void)
      * future patch might, gets to keep its value instead of being overwritten sixty times a
      * second by ours. */
     if (!the_band_is_still_ours(fog_state.level)) {
-        stand_aside_for_the_other_writer();
+        stand_aside_for_the_other_writer(holder);
         return;
     }
 
@@ -533,15 +568,19 @@ void fog_regime_on_frame(void)
                                               fog_state.config.settle_seconds);
 
     /* Settled means OUR band has not moved AND the device is showing it. The second half matters
-     * only on the device path, and it lets fog come back after another feature has held
-     * the band: the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping
-     * sees nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the
-     * fog can be switched off and never on again. */
-    settled = fog_state.current.start == fog_state.written.start &&
-              fog_state.current.end == fog_state.written.end &&
-              (!fog_state.pixel_fog_active ||
-               (fog_state.device_band.start == fog_state.current.start &&
-                fog_state.device_band.end == fog_state.current.end));
+     * only on the device path, and it lets fog come back after another writer has held the band:
+     * the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping sees
+     * nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the fog
+     * can be switched off and never on again.
+     *
+     * "Showing it" is read from the device's band cells, not from what this module remembers
+     * pushing: a savegame puts its own band back into those cells and this module's copy never
+     * hears of it. While the effects hold the device the second half is not asked; a band that
+     * moves then is written into the record and its push is held back. */
+    settled = fog_owner_band_settled(&fog_state.current, &fog_state.written,
+                                     fog_state.pixel_fog_active, holder,
+                                     fog_owner_device_shows(&fog_state.current,
+                                                            &fog_state.device_band));
 
     fog_trace_sample(fog_state.horizontal_fov_degrees, fog_state.reference_cut,
                      fog_state.live_cut, fog_state.settled_live_cut, fog_state.cut_observed,

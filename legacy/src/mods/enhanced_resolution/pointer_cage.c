@@ -71,7 +71,8 @@
  *
  * So the whole repair is the four immediates:
  *
- *     the four immediates 0x25F/0x1BF  ->  canvas width - 33 and canvas height - 33
+ *     the four immediates 0x25F/0x1BF  ->  canvas width and height, less the drawn cursor quad
+ *                                          and one: 33 at the shipped 32 pixel quad
  *
  * The two origin operands are read back before anything is written, as proof that the block is
  * the one the listing describes, and are never written to. An earlier version repointed them at
@@ -124,21 +125,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The cursor quad is 32 pixels and the engine's own clamp leaves one more, which is where 33 comes
- * from: 0x25F is 640-33 and 0x1BF is 480-33. Keeping the engine's own margin means the cursor is
- * still fully drawn at the far edge of any mode. The number itself lives in the header, so a test
- * can state it rather than copy it. */
-#define CURSOR_MARGIN POINTER_CAGE_MARGIN
-
 /* The two clamps the retail block ships with, kept as named constants because they appear both in
  * the pattern and in the rollback. */
 #define SHIPPED_CAGE_WIDTH  0x25F
 #define SHIPPED_CAGE_HEIGHT 0x1BF
-
-/* Below this the arithmetic would produce a cage of zero or negative extent. No display mode this
- * engine will accept is anywhere near it; the test exists so that a garbage width read during a
- * mode change cannot write a cage nothing can move inside. */
-#define MIN_USABLE_EXTENT (CURSOR_MARGIN + 1)
 
 /* --- 0x00460C04  swrle_windowProc: the drawn cursor's clamp ----------------------------------- *
  *
@@ -253,6 +243,7 @@ typedef struct pointer_cage_state {
 
     int32_t applied_width;
     int32_t applied_height;
+    int32_t applied_cursor;
 
     bool warned_implausible;
 
@@ -261,15 +252,32 @@ typedef struct pointer_cage_state {
 static pointer_cage_state_t cage_state;
 
 /* ============================================================================================ */
-bool pointer_cage_extent(int mode_width, int mode_height,
+/* The size the quad is really drawn at: what the caller says, or the shipped 32 for nothing.
+ *
+ * The cursor quad is 32 pixels and the engine's own clamp leaves one more, which is where 33 comes
+ * from: 0x25F is 640-33 and 0x1BF is 480-33. The margin is the quad plus one at every size, so the
+ * cursor is still fully drawn at the far edge of the canvas whatever size the quad is drawn at.
+ * Both numbers live in the header, so a test can state them rather than copy them. */
+static int32_t drawn_cursor(int32_t cursor_size)
+{
+    return (cursor_size > 0) ? cursor_size : (int32_t)POINTER_CAGE_SHIPPED_CURSOR;
+}
+
+bool pointer_cage_extent(int mode_width, int mode_height, int cursor_size,
                          int *out_clamp_width, int *out_clamp_height)
 {
-    if (mode_width < MIN_USABLE_EXTENT || mode_height < MIN_USABLE_EXTENT) {
+    /* The quad and one pixel more, the engine's own margin at the engine's own size. */
+    const int margin = (int)drawn_cursor((int32_t)cursor_size) + 1;
+
+    /* A cage of zero or negative extent is refused. No display mode this engine will accept is
+     * anywhere near it; the test exists so that a garbage width read during a mode change cannot
+     * write a cage nothing can move inside. */
+    if (mode_width <= margin || mode_height <= margin) {
         return false;
     }
 
-    *out_clamp_width  = mode_width  - CURSOR_MARGIN;
-    *out_clamp_height = mode_height - CURSOR_MARGIN;
+    *out_clamp_width  = mode_width  - margin;
+    *out_clamp_height = mode_height - margin;
     return true;
 }
 
@@ -315,7 +323,7 @@ static bool cage_offsets_are_sane(uintptr_t site)
 /* Four immediates, written as one: a refusal part way through puts the ones already written back
  * to what they held, so a cage is never half one size and half another, and the caller's "nothing
  * has been changed" is true. */
-static bool write_clamps(int32_t width, int32_t height)
+static bool write_clamps(int32_t width, int32_t height, int32_t cursor)
 {
     int       clamp_width = 0;
     int       clamp_height = 0;
@@ -324,7 +332,8 @@ static bool write_clamps(int32_t width, int32_t height)
     uint32_t  after[4];
     size_t    written = 0;
 
-    if (!pointer_cage_extent((int)width, (int)height, &clamp_width, &clamp_height)) {
+    if (!pointer_cage_extent((int)width, (int)height, (int)cursor, &clamp_width,
+                             &clamp_height)) {
         return false;
     }
     immediate[0] = cage_state.width_immediates[0];
@@ -350,11 +359,12 @@ static bool write_clamps(int32_t width, int32_t height)
 
     cage_state.applied_width  = width;
     cage_state.applied_height = height;
+    cage_state.applied_cursor = drawn_cursor(cursor);
     return true;
 }
 
 /* ============================================================================================ */
-static bool install_cage(uintptr_t site, int32_t width, int32_t height)
+static bool install_cage(uintptr_t site, int32_t width, int32_t height, int32_t cursor)
 {
     /* Read, not written. The two origin operands name the cells the engine itself maintains, and
      * reading them back is the last check that this block is the one the listing describes before
@@ -375,9 +385,9 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
         return false;
     }
 
-    /* All of it. The cage becomes [origin, origin + canvas - 33]: larger than it shipped,
-     * still anchored at the menu origin, and every widget still reachable. */
-    if (!write_clamps(width, height)) {
+    /* All of it. The cage becomes [origin, origin + canvas - quad - 1]: larger than it
+     * shipped, still anchored at the menu origin, and every widget still reachable. */
+    if (!write_clamps(width, height, cursor)) {
         log_error("the menu cursor clamp could not be widened, nothing has been changed and the "
                   "cursor still moves in a 640x480 island");
         return false;
@@ -392,9 +402,12 @@ static bool install_cage(uintptr_t site, int32_t width, int32_t height)
     return true;
 }
 
-void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height)
+void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_height,
+                          int32_t cursor_size)
 {
     uintptr_t site;
+    int       clamp_width  = 0;
+    int       clamp_height = 0;
 
     if (cage_state.installed) {
         return;
@@ -441,36 +454,44 @@ void pointer_cage_install(bool enabled, int32_t canvas_width, int32_t canvas_hei
     if (!cage_offsets_are_sane(site)) {
         return;
     }
-    if (!install_cage(site, canvas_width, canvas_height)) {
+    if (!install_cage(site, canvas_width, canvas_height, cursor_size)) {
         return;
     }
+    (void)pointer_cage_extent((int)canvas_width, (int)canvas_height, (int)cursor_size,
+                              &clamp_width, &clamp_height);
 
-    if (canvas_width == MENU_SCALE_CANVAS_WIDTH) {
+    if (canvas_width == MENU_SCALE_CANVAS_WIDTH &&
+        cage_state.applied_cursor == (int32_t)POINTER_CAGE_SHIPPED_CURSOR) {
         log_info("the menu cursor clamp is the canvas, 607x447 from the menu origin, the values "
                  "the engine shipped (patched at %08X, same numbers). It becomes larger only when "
                  "MenuScale does.", (unsigned)site);
     } else {
-        log_info("the drawn menu cursor may now travel %dx%d from the menu origin, following the "
-                 "%dx%d canvas the menus are drawn on (patched at %08X). It is deliberately NOT "
+        log_info("the drawn menu cursor may now travel %dx%d from the menu origin: the %dx%d "
+                 "canvas the menus are drawn on, less the %d pixel cursor quad and one, so the "
+                 "whole quad stays on the canvas (patched at %08X). It is deliberately NOT "
                  "allowed outside it: nothing repaints out there, so a cursor crossing it would "
                  "stamp a copy of itself on every pixel until the screen closed.",
-                 (int)(canvas_width - CURSOR_MARGIN), (int)(canvas_height - CURSOR_MARGIN),
-                 (int)canvas_width, (int)canvas_height, (unsigned)site);
+                 clamp_width, clamp_height, (int)canvas_width, (int)canvas_height,
+                 (int)cage_state.applied_cursor, (unsigned)site);
     }
 }
 
-void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height)
+void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height, int32_t cursor_size)
 {
+    int clamp_width  = 0;
+    int clamp_height = 0;
+
     if (!cage_state.active) {
         return;                    /* never installed, or declined: there is nothing to move */
     }
     if (canvas_width  < MENU_SCALE_CANVAS_WIDTH)  { canvas_width  = MENU_SCALE_CANVAS_WIDTH;  }
     if (canvas_height < MENU_SCALE_CANVAS_HEIGHT) { canvas_height = MENU_SCALE_CANVAS_HEIGHT; }
 
-    if (canvas_width == cage_state.applied_width && canvas_height == cage_state.applied_height) {
+    if (canvas_width == cage_state.applied_width && canvas_height == cage_state.applied_height &&
+        drawn_cursor(cursor_size) == cage_state.applied_cursor) {
         return;
     }
-    if (!write_clamps(canvas_width, canvas_height)) {
+    if (!write_clamps(canvas_width, canvas_height, cursor_size)) {
         log_warning("the menu cursor clamp could not be refitted to the %dx%d canvas, so it keeps "
                     "the %dx%d one. Widgets outside the smaller of the two cannot be reached with "
                     "the pointer",
@@ -478,9 +499,11 @@ void pointer_cage_resize(int32_t canvas_width, int32_t canvas_height)
                     (int)cage_state.applied_width, (int)cage_state.applied_height);
         return;
     }
+    (void)pointer_cage_extent((int)canvas_width, (int)canvas_height, (int)cursor_size,
+                              &clamp_width, &clamp_height);
     log_info("the drawn menu cursor may now travel %dx%d from the menu origin, following the "
-             "canvas to %dx%d", (int)(canvas_width - CURSOR_MARGIN),
-             (int)(canvas_height - CURSOR_MARGIN), (int)canvas_width, (int)canvas_height);
+             "canvas to %dx%d less the %d pixel cursor quad and one", clamp_width, clamp_height,
+             (int)canvas_width, (int)canvas_height, (int)cage_state.applied_cursor);
 }
 
 

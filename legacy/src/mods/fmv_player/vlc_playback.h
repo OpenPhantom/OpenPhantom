@@ -15,6 +15,8 @@
 #ifndef VLC_PLAYBACK_H
 #define VLC_PLAYBACK_H
 
+#include "movie_rule.h"
+
 #include <windows.h>
 
 #include <stdbool.h>
@@ -102,9 +104,11 @@ bool vlc_playback_is_still_loading(void);
  * the one message that BEGINS a close, the close box as WM_NCLBUTTONDOWN/HTCLOSE, which is then
  * removed and immediately re-posted, so the request survives to be honoured by the engine's own
  * window procedure once this returns. Alt+F4 was handled here too and is not any more; see
- * vlc_playback.c for what went wrong with it. The engine discards WM_CLOSE at all times, so this
- * does not make the close box close the game during a movie; it keeps the loop from eating a
- * request on the way past, and ends the movie. WM_QUIT needs no handling here: it is a thread
+ * movie_close.c for what went wrong with it. The engine's own window procedure discards
+ * WM_CLOSE; enhanced_resolution answers it with a shutdown once it gives the window a frame with
+ * a close box. Either way the loop does not eat a request on the way past: outside a session it
+ * ends the movie and goes back at once, in a session it ends nothing and is passed on once the
+ * movie is over (movie_close.c). WM_QUIT needs no handling here: it is a thread
  * message with no window, a scoped peek never retrieves it, and it stays queued for the game's own
  * pump.
  *
@@ -115,7 +119,29 @@ bool vlc_playback_is_still_loading(void);
  * call itself and never appears in the MSG at all. So an Alt-Tab during a movie does reach the
  * engine's window procedure, re-entrantly, on the thread that is parked here, and no peek filter
  * of any shape changes that. The reason this design holds is that the overlay is in-process, so
- * Windows raises no WM_ACTIVATEAPP for it becoming topmost; that is one reason, not two. */
-bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window);
+ * Windows raises no WM_ACTIVATEAPP for it becoming topmost; that is one reason, not two.
+ *
+ * `loop` says which of those ways out end the movie, and what the loop does besides. Outside a
+ * multiplayer session every one of them does, as it always has, and nothing else happens. In a
+ * session the loop also dispatches the session's thread timer, which would otherwise not run for
+ * the length of the movie; the host's movie is not ended by a lost foreground or the close box;
+ * and a movie held for the host is ended by none of the three, each one refused being counted,
+ * but by `loop->poll` saying the host is done, asked every turn after the turn has pumped. A close
+ * request refused in a session is remembered (movie_close.c) and passed on once the movie is over.
+ * `loop->end` comes back as the reason the loop stopped. */
+bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window,
+                                movie_loop_t *loop);
+
+/* The black wait of a held client whose movie ended before the host's: the same pump over
+ * `window`, with no player, until `loop->poll` says the host is done (MOVIE_END_HOST) or that
+ * the session let the player go (MOVIE_END_ALONE). Escape, a lost foreground and the close box
+ * are counted and end nothing, because the movie they would end is the host's. */
+void vlc_playback_hold_blocking(HWND window, HWND game_window, movie_loop_t *loop);
+
+/* The thread timers of one turn, when `loop` pumps the session: every timer with no window, and
+ * `window`'s own, dispatched; a due tick of any other window taken and dropped. Each timer with no
+ * window is counted into `loop->counts.thread_timers`. For the one question a wait asks before
+ * its loop has turned, so that it, too, is asked after a pump. */
+void vlc_playback_pump_timers(HWND window, movie_loop_t *loop);
 
 #endif /* VLC_PLAYBACK_H */

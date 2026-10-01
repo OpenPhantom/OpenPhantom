@@ -50,6 +50,11 @@ static const uint8_t SIG_PROBE_FLOOR[] = {
 
 #define PROBE_FLOOR_PROLOGUE 7u     /* push ebp / mov ebp,esp / sub esp,0x7C / push edi */
 #define GROUND_CONTACT_SIZE 0x88u
+/* Whether the floor the probe found belongs to a mover, a dword beside the distance. The engine's
+ * own respawn reads the same word and for the same reason: no line probe can see a mover, so a
+ * point that is only standable because a platform happens to be under it right now is not a place
+ * to put anything. */
+#define GROUND_ON_MOVER_OFFSET 0x18u
 #define PROBE_NO_FLOOR      3.0e38f   /* the engine seeds dist to 3.4e38 for "nothing found" */
 
 typedef void (__cdecl *probe_floor_fn_t)(const float *pos, void *out);
@@ -57,39 +62,73 @@ typedef void (__cdecl *probe_floor_fn_t)(const float *pos, void *out);
 static probe_floor_fn_t probe_floor;
 static bool             probe_floor_resolved;
 
-floor_probe_result_t floor_probe_below(const float *position, float *out_drop)
+/* Resolved lazily rather than at install time: every caller only ever asks while something of
+ * theirs is actually in use, so an executable that never opens the panel never pays for it. */
+static void floor_probe_resolve(void)
+{
+    if (probe_floor_resolved) {
+        return;
+    }
+    probe_floor_resolved = true;
+    probe_floor = (probe_floor_fn_t)(uintptr_t)signature_find_detour_target(
+        SIG_PROBE_FLOOR, NULL, sizeof SIG_PROBE_FLOOR, PROBE_FLOOR_PROLOGUE);
+    log_info("the floor probe %s", (probe_floor != NULL)
+                 ? "resolved: falls, teleports and spawn spots can all be asked about"
+                 : "did NOT resolve, so every caller keeps its old behaviour");
+}
+
+/* The one read of the block, shared by the two ways of asking. `dist` is the engine's own signed
+ * height of the floor over the probed point and `on_mover` the flag beside it; the callers below
+ * differ only in what they make of them. */
+static floor_probe_result_t probe_once(const float *position, float *dist, bool *on_mover)
 {
     unsigned char ground[GROUND_CONTACT_SIZE];
-    float         dist;
+    uint32_t      mover = 0u;
 
-    /* Resolved lazily rather than at install time: both callers only ever ask while a cheat of
-     * theirs is actually in use, so an executable that never opens the panel never pays for it. */
-    if (!probe_floor_resolved) {
-        probe_floor_resolved = true;
-        probe_floor = (probe_floor_fn_t)(uintptr_t)signature_find_detour_target(
-            SIG_PROBE_FLOOR, NULL, sizeof SIG_PROBE_FLOOR, PROBE_FLOOR_PROLOGUE);
-        log_info("the floor probe %s", (probe_floor != NULL)
-                     ? "resolved: falls and teleports can both be asked about"
-                     : "did NOT resolve, so both callers keep their old behaviour");
-    }
     if (probe_floor == NULL || position == NULL) {
         return FLOOR_PROBE_UNAVAILABLE;
     }
-
     memset(ground, 0, sizeof ground);
     probe_floor(position, ground);
-    memcpy(&dist, ground, sizeof dist);
+    memcpy(dist, ground, sizeof *dist);
+    memcpy(&mover, ground + GROUND_ON_MOVER_OFFSET, sizeof mover);
 
     /* Not compared with 3.4e38 exactly: a sentinel that is merely enormous, or a NaN out of a
      * position that has already gone bad, both have to read as "nothing to land on". */
-    if (dist > PROBE_NO_FLOOR || dist < -PROBE_NO_FLOOR || dist != dist) {
+    if (*dist > PROBE_NO_FLOOR || *dist < -PROBE_NO_FLOOR || *dist != *dist) {
         return FLOOR_PROBE_NONE;
     }
+    if (on_mover != NULL) {
+        *on_mover = mover != 0u;
+    }
+    return FLOOR_PROBE_FOUND;
+}
 
-    if (out_drop != NULL) {
+floor_probe_result_t floor_probe_offset(const float *position, float *out_offset,
+                                        bool *out_on_mover)
+{
+    float                dist = 0.0f;
+    floor_probe_result_t result;
+
+    floor_probe_resolve();
+    result = probe_once(position, &dist, out_on_mover);
+    if (result == FLOOR_PROBE_FOUND && out_offset != NULL) {
+        *out_offset = dist;   /* the engine's own sign: add it to the point to stand on it */
+    }
+    return result;
+}
+
+floor_probe_result_t floor_probe_below(const float *position, float *out_drop)
+{
+    float                dist = 0.0f;
+    floor_probe_result_t result;
+
+    floor_probe_resolve();
+    result = probe_once(position, &dist, NULL);
+    if (result == FLOOR_PROBE_FOUND && out_drop != NULL) {
         /* Signed the other way round for the caller: they asked how far DOWN it is. A positive
          * dist means the floor is above the point, which is not a drop at all, so it reads zero. */
         *out_drop = (dist < 0.0f) ? -dist : 0.0f;
     }
-    return FLOOR_PROBE_FOUND;
+    return result;
 }

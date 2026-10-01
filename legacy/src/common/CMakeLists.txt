@@ -12,6 +12,7 @@ add_library(engine_fixes_common STATIC
     logging.c
     ini.c
     memory.c
+    memory_guard.c
     patch.c
     detour.c
     signature.c
@@ -22,6 +23,16 @@ add_library(engine_fixes_common STATIC
     stick.c
     text.c
     screen_fill.c
+    shared_note.c
+    appearance_note.c
+    session_note.c
+    npc_spawn_note.c
+    model_wear_note.c
+    movie_note.c
+    host_settings_note.c
+    language.c
+    character_profile.c
+    mod_identity.c
 )
 
 target_include_directories(engine_fixes_common PUBLIC

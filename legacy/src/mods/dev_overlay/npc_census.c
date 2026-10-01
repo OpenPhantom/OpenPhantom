@@ -1,6 +1,9 @@
 /* npc_census.c: see npc_census.h. */
 #include "npc_census.h"
 
+#include "entity_names.h"
+#include "entity_offer.h"
+
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/text.h"
@@ -82,14 +85,106 @@ static uint32_t plainness(const uint8_t *record)
     return points;
 }
 
+/* Whether a placement's kind is one the level offers as its own. Its file must have a clip, read
+ * off the model the level loaded, which is the one the spawn would bind; and it must not be a file
+ * that stands on a shelf of its own, a pickup or the gun, which the archive offers there so that
+ * one file is never offered twice. Counted either way, for the line below. */
+static bool offered_as_level_kind(const uint8_t *level, const uint8_t *record, const char *file,
+                                  uint32_t *no_clips, uint32_t *own_shelf)
+{
+    uint32_t       models = 0;
+    uint32_t       model  = 0;
+    uint32_t       clips  = 0;
+    int32_t        model_index;
+    entity_facts_t facts;
+    entity_offer_t offer;
+
+    memcpy(&model_index, record + PLACE_MODEL_INDEX, sizeof model_index);
+    if (!memory_try_read((uintptr_t)level + WORLD_MODELS, &models, sizeof models) ||
+        !memory_try_read((uintptr_t)models + 4u * (uint32_t)model_index, &model, sizeof model) ||
+        !memory_try_read((uintptr_t)model + ACTOR_FILE_CLIPS, &clips, sizeof clips) ||
+        clips == 0u) {
+        ++*no_clips;
+        return false;
+    }
+    entity_offer_row_facts(entity_offer_row(file), &facts);
+    offer = entity_offer_judge(file, &facts);
+    if (offer.verdict == ENTITY_OFFERED &&
+        (offer.section == ENTITY_SECTION_PICKUPS || offer.section == ENTITY_SECTION_GUNS)) {
+        ++*own_shelf;
+        return false;
+    }
+    return true;
+}
+
+/* The words a kind's row starts with: the name a person reads, or the stem. */
+static const char *display_of(const npc_spawner_kind_t *kind)
+{
+    const char *name = entity_name_of(kind->file);
+
+    return name != NULL ? name : kind->name;
+}
+
+/* The kinds by the name a person reads, carrying their parallel columns with them. At most a few
+ * dozen kinds, once a level. */
+static void sort_by_name(uint32_t *seen)
+{
+    uint32_t i;
+
+    for (i = 1; i < census.count; ++i) {
+        npc_spawner_kind_t kind   = census.kind[i];
+        uint32_t           source = census.source[i];
+        uint32_t           plain  = census.plain[i];
+        int32_t            model  = census.model[i];
+        uint32_t           mask   = seen[i];
+        uint32_t           j      = i;
+
+        while (j > 0 && _stricmp(display_of(&census.kind[j - 1u]), display_of(&kind)) > 0) {
+            census.kind[j]   = census.kind[j - 1u];
+            census.source[j] = census.source[j - 1u];
+            census.plain[j]  = census.plain[j - 1u];
+            census.model[j]  = census.model[j - 1u];
+            seen[j]          = seen[j - 1u];
+            --j;
+        }
+        census.kind[j]   = kind;
+        census.source[j] = source;
+        census.plain[j]  = plain;
+        census.model[j]  = model;
+        seen[j]          = mask;
+    }
+}
+
+/* The generated class table held against the level in memory: two readings of the same placements,
+ * one from the files on the disk and one from the world record. A kind the level raises under a
+ * class the table does not list is a kind one of the two reads wrongly. */
+static void check_the_table(const uint32_t *seen)
+{
+    uint32_t agree = 0;
+    uint32_t k;
+
+    for (k = 0; k < census.count; ++k) {
+        if ((seen[k] & ~entity_offer_classes(census.kind[k].file)) == 0u) {
+            ++agree;
+        }
+    }
+    log_info("npc spawner: the class table agrees with this level on %u of its %u kinds, and "
+             "%u differ", agree, census.count, census.count - agree);
+}
+
 void npc_census_count(const uint8_t *level)
 {
     int32_t  placements = 0;
     uint32_t left_off = 0;
+    uint32_t no_clips = 0;
+    uint32_t own_shelf = 0;
+    uint32_t seen[NPC_SPAWNER_KINDS_MAX];
     uint32_t i;
 
     memset(&census, 0, sizeof census);
+    memset(seen, 0, sizeof seen);
     census.chosen = -1;
+    census.donor  = NPC_SPAWN_NO_SOURCE;
     census.level  = level;
     if (level == NULL ||
         !memory_try_read((uintptr_t)level + WORLD_PLACEMENT_COUNT, &placements,
@@ -108,15 +203,19 @@ void npc_census_count(const uint8_t *level)
         char     stem[NPC_SPAWNER_NAME_MAX];
         char     file[NPC_SPAWNER_FILE_MAX];
         int32_t  model_index;
+        int32_t  class_id;
         uint32_t k;
 
-        if (!npc_census_read_placement(level, i, record, stem, sizeof stem, file, sizeof file)) {
+        if (!npc_census_read_placement(level, i, record, stem, sizeof stem, file, sizeof file) ||
+            !offered_as_level_kind(level, record, file, &no_clips, &own_shelf)) {
             continue;
         }
         memcpy(&model_index, record + PLACE_MODEL_INDEX, sizeof model_index);
+        memcpy(&class_id, record + PLACE_CLASS, sizeof class_id);
         for (k = 0; k < census.count; ++k) {
             if (census.model[k] == model_index) {
                 census.kind[k].placements++;
+                seen[k] |= 1u << (uint32_t)class_id;
                 /* The copy is taken from the plainest placement of the kind: one the activation
                  * scan spawns itself and the level did not trouble to name. The named ones
                  * ("tomo", "igotyazzz", "beast") and the script-spawned ones carry the level's
@@ -138,6 +237,7 @@ void npc_census_count(const uint8_t *level)
         census.model[k]  = model_index;
         census.source[k] = i;
         census.plain[k]  = plainness(record);
+        seen[k]          = 1u << (uint32_t)class_id;
         census.kind[k].placements = 1;
         text_format(census.kind[k].name, sizeof census.kind[k].name, "%s", stem);
         text_format(census.kind[k].file, sizeof census.kind[k].file, "%s", file);
@@ -147,6 +247,10 @@ void npc_census_count(const uint8_t *level)
         log_warning("npc spawner: the level uses %u more actor files than the %u the list holds, "
                     "so those are not offered", left_off, NPC_SPAWNER_KINDS_MAX);
     }
-    log_info("npc spawner: the level at %08X has %d placements using %u actor files",
-             (unsigned)(uintptr_t)level, placements, census.count);
+    census.donor = census.count != 0 ? census.source[0] : NPC_SPAWN_NO_SOURCE;
+    check_the_table(seen);
+    sort_by_name(seen);
+    log_info("npc spawner: the level at %08X has %d placements using %u actor files (%u "
+             "placement(s) left to their own shelf, %u of a file without a clip)",
+             (unsigned)(uintptr_t)level, placements, census.count, own_shelf, no_clips);
 }

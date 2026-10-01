@@ -48,6 +48,12 @@ void menu_scale_canvas(int32_t *out_width, int32_t *out_height)
     }
 }
 
+int32_t menu_scale_cursor_size(void)
+{
+    return (scale_state.cursor_size > 0) ? scale_state.cursor_size
+                                         : (int32_t)DRAW_CURSOR_SHIPPED;
+}
+
 /* Rounds a canvas coordinate to the scaled one. Half away from zero, and the sign is handled
  * explicitly because the pause panel parks rows at large positive x and the engine is free to use
  * negative coordinates for a widget scrolled off the left.

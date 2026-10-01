@@ -17,21 +17,23 @@
 #ifndef OVERLAY_MODEL_H
 #define OVERLAY_MODEL_H
 
+#include "overlay_number.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
 #define OVERLAY_SEARCH_MAX   32u
 #define OVERLAY_LABEL_MAX    48u
 
-/* Every group on the open tab is built at once, headings included, and the OpenPhantom tab holds
- * twelve of them. With all twelve open, every fold open and a display offering a full size
+/* Every group on the open tab is built at once, headings included, and the OpenPhantom tab shows
+ * twelve headings. With all of them open, every fold open and a display offering a full size
  * list, that tab passes 550 rows. This was 64 when the tab had four groups, so 27 of the 91 it
  * then had were built and dropped by a bounds test with no log and no way to scroll to what
  * went missing. overlay_row_ids.h asserts this against the parts it is made of, so a group that
  * grows past it stops the build and does not quietly lose its last rows, which is how the third
  * fold's lines raised it to 160, the spawner's list of a level's actor files, 122 in Mos Espa,
  * to 384, and the same list widened to the archive's creatures to 768. */
-#define OVERLAY_ROWS_MAX     768u
+#define OVERLAY_ROWS_MAX     1152u
 
 typedef enum overlay_tab {
     OVERLAY_TAB_ORIGINAL = 0,
@@ -42,7 +44,17 @@ typedef enum overlay_tab {
 /* One entry per group, and a group belongs to exactly one tab. The Original tab holds two: the
  * eleven codes that are real toggles, and the sixteen that run once. Splitting them is what lets a
  * fire-once row and a switched row sit in the same tab without either pretending to be the
- * other. */
+ * other.
+ *
+ * A group here is a SOURCE of rows, not necessarily a heading on screen. Two of them are drawn
+ * inside another group's body rather than under a heading of their own, so the OpenPhantom tab
+ * reads as twelve subjects while the row ids, the slot numbers and the session lock's lists all
+ * stay exactly where they were. overlay_headings.c holds the drawn order and says which those two
+ * are.
+ *
+ * A new group goes at the END, before the count, whatever its place on screen: a row id and the
+ * session lock's lists are derived from these numbers, and one moved hands a player, in the
+ * middle of a session, a row the session takes. Where it is drawn is overlay_headings.c's. */
 typedef enum overlay_group {
     OVERLAY_GROUP_ORIGINAL_TOGGLES = 0,
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
@@ -51,6 +63,7 @@ typedef enum overlay_group {
     OVERLAY_GROUP_OPENPHANTOM_SPAWN,
     OVERLAY_GROUP_OPENPHANTOM_FREECAM,
     OVERLAY_GROUP_OPENPHANTOM_DISMEMBER,
+    OVERLAY_GROUP_OPENPHANTOM_MODELSWAP,
     OVERLAY_GROUP_OPENPHANTOM_UTILITIES,
     OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS,
     OVERLAY_GROUP_OPENPHANTOM_PICTURE,
@@ -58,11 +71,12 @@ typedef enum overlay_group {
     OVERLAY_GROUP_OPENPHANTOM_CONTROLS,
     OVERLAY_GROUP_OPENPHANTOM_WINDOW,
     OVERLAY_GROUP_OPENPHANTOM_FRAMERATE,
+    OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER,
     OVERLAY_GROUP_COUNT
 } overlay_group_t;
 
 typedef enum overlay_row_kind {
-    OVERLAY_ROW_GROUP = 0,      /* a foldable heading */
+    OVERLAY_ROW_GROUP = 0,      /* a foldable heading, with what is under it in its chip */
     OVERLAY_ROW_CHEAT,          /* something that can be switched, shown ON / OFF */
     OVERLAY_ROW_ACTION,         /* something that runs once, shown as a plain button */
     OVERLAY_ROW_HOTKEY,         /* a key binding, shown as a button that captures the next
@@ -71,13 +85,37 @@ typedef enum overlay_row_kind {
                                   * click; see overlay_model_is_editing_value() */
     OVERLAY_ROW_INFO,           /* plain text, no chip, not clickable, a note attached to the row
                                   * above it rather than a cheat of its own */
-    OVERLAY_ROW_SLIDER          /* just a track, on its own line under the value row it
+    OVERLAY_ROW_SLIDER,         /* just a track, on its own line under the value row it
                                   * belongs to. It gets a line of its own rather than sharing one so
                                   * that it can run the width of the panel: a track squeezed into
                                   * the gap between a name and its chip is both hard to hit and
                                   * close enough to the text to read as though it were striking it
                                   * through. `fraction` is where the handle sits. */
+    OVERLAY_ROW_CHOICE,         /* one entry of a list, where exactly one is the chosen one. It
+                                  * carries a MARK left of its name and no chip: a chip reading ON
+                                  * says the entry is switched on, which is the wrong claim to make
+                                  * about a list. `on` is true on the chosen entry and no other. */
+    OVERLAY_ROW_SEGMENT         /* a short choice drawn whole, as a row of words where the chip
+                                  * would be, the chosen one filled. `chosen` is which of them, and
+                                  * the words come from the row's own source rather than from
+                                  * `value`: four of them do not fit sixteen characters. It carries
+                                  * no chip, because a chip beside the words would be the same
+                                  * state spelled twice. */
 } overlay_row_kind_t;
+
+/* Whether a player can act on a row of this kind at all: press it, switch it, type into it or
+ * drag it. The panel's own summary counts by it and session_lock.c decides by it, and it used to
+ * be two lists in those two files whose comments both claimed to be complete: the lock had the
+ * slider on it and the model did not.
+ *
+ * Written as what is NOT acted on, so a kind added later counts as acted on until somebody says
+ * otherwise. The cost of being wrong is not symmetric, the same way session_lock.h has it: a row
+ * locked that did not need to be is a setting somebody cannot reach while they play together, and
+ * a row left open that needed locking ends the session at the next level. */
+static inline bool overlay_row_kind_is_acted_on(overlay_row_kind_t kind)
+{
+    return kind != OVERLAY_ROW_GROUP && kind != OVERLAY_ROW_INFO;
+}
 
 typedef struct overlay_row {
     overlay_row_kind_t kind;
@@ -89,30 +127,96 @@ typedef struct overlay_row {
     bool               pending;     /* actions only: queued to run when the panel closes, not yet
                                       * run; see cheats_original_actions.h for why the four
                                       * play-as codes work this way and no other action does */
+    /* Notes only: this note is a REFUSAL and is drawn in the warning colour rather than the dim
+     * grey every other note has. The entity spawner's "Refused: no room in front of you" is the
+     * one that sets it: it describes a state of the world and stays where it is, which is why it
+     * is a row and not the band above the footer (overlay_notice.h). Left false everywhere
+     * else, so a count, a reading or an explanation stays grey. */
+    bool               warn;
     /* Sixteen, not eight. Eight fitted "2.50x" and every state word, and then the dev menu
      * size row began reporting "auto 1.33x" and a player read "auto 1.", a truncation with no
      * ellipsis, in the one place a number was the whole point of the row. Nothing here is a fixed
      * width in the file format sense, so the cost of the slack is a few bytes per row. */
     char               value[16];   /* actions: only for the one that has a number worth showing on
                                       * its own chip instead of RUN. hotkeys: the bound key's short
-                                      * name, "..." while capturing, or empty when unbound. Empty
-                                      * otherwise. */
+                                      * name, "..." while capturing, or empty when unbound. groups:
+                                      * what is under the heading in one word, "2 on" or "ON" or
+                                      * the reason a session has taken the whole of it, so a folded
+                                      * band answers for itself; empty when there is nothing to
+                                      * say. Empty otherwise. */
     uint32_t           group;       /* an overlay_group_t value, groups included */
     uint32_t           id;          /* index within that group's own source */
+    /* Why the row is not available, an overlay_reason_t value. Read only when `available` is
+     * false; whoever takes the row away sets it, and overlay_reason.c turns it into the word in
+     * the chip. Left at OVERLAY_REASON_NONE the row reads `n/a`, which is what an unresolved site
+     * has always said. The type is plain here so that overlay_model.h stays free of it: every
+     * group source includes the one and the model includes the other. */
+    uint32_t           reason;
+
+    /* True when `value` holds the HOST's value of the setting this row edits, in the words its
+     * chip shows, "host 1.50x" or "host ON". Set only on a client of a running session whose host
+     * named that setting, which is when the session has taken the row: the chip of a taken row
+     * then reads the host's value instead of the word `session`, because the host's value is what
+     * this machine runs and the one in its own ini is not. False everywhere else, and there the
+     * row reads as it always did. */
+    bool               host_value;
 
     /* Where a SLIDER row's handle sits: 0 at the row's minimum and 1 at its maximum. Read only for
      * that kind. */
     float              fraction;
+
+    /* Which segment of a SEGMENT row is the chosen one. Read only for that kind.
+     *
+     * An index and not the word, because the words belong to the source: `value` holds sixteen
+     * characters and the one row with segments today needs twenty four for its four. The source
+     * answers both, through overlay_choice.h, so the row and the drawing cannot end up holding two
+     * lists of one choice. */
+    uint32_t           chosen;
 } overlay_row_t;
 
-/* Forgets the typed text and folds every group. Called when the panel closes, so that opening it
- * again is always the same picture rather than wherever the last session was left. */
+/* Puts the panel back to the picture it has when the game starts: the Original tab, nothing
+ * typed, every group folded, every list and fold shut, and no edit in progress. Called once, when
+ * the panel is installed.
+ *
+ * It is NOT called when the panel closes any more, and that is the whole of the navigation
+ * memory. Closing forgets what is half done (below) and keeps where the player was, so a setting
+ * that has to be looked at in the game costs one keypress each way instead of four. Nothing that
+ * is kept can outlive what it describes: every group counts its own rows again on each rebuild,
+ * every row reads its state from the engine, and the scroll is clamped where it is read, so a
+ * level change or a session beginning between two openings cannot leave any of it stale. What a
+ * session takes away is decided on the rebuild as well, so a remembered fold shows the rows and
+ * the lock still greys them. */
 void overlay_model_reset(void);
+
+/* Ends whatever was half finished: a hotkey row waiting for a keypress, a number being typed into,
+ * and the refusal band. Called every time the panel closes, because a capture that survived it
+ * would swallow the next key the player pressed in the game, a half typed number would come back
+ * with digits in it that belong to a minute ago, and a standing refusal would answer a keystroke
+ * from before the close. */
+void overlay_model_forget_edits(void);
 
 /* Drags a slider row to `fraction`, 0 to 1, clamped. False when the row is not a slider or the
  * write failed, which the caller shows by leaving the handle where it was rather than reporting a
  * value the game is not in. */
 bool overlay_model_slider_set(uint32_t index, float fraction);
+
+/* What the row ABOVE the slider at `index` reads with the handle at `fraction`, the inverse of
+ * the reading that row takes to place the handle in the first place. Written by the row's own
+ * group, through the one arithmetic overlay_model_slider_set() writes with.
+ *
+ * While a track is held, the handle comes from the hand and the file is only written four times a
+ * second, so the number beside it has to come from the same fraction the handle does or the two
+ * are two spellings of one drag. False when the row is no slider, is not available, or its group
+ * has nothing to show. */
+bool overlay_model_slider_value(uint32_t index, float fraction, char *out, size_t size);
+
+/* The numbers behind the track at `index`: its two ends, the size of one sideways press and
+ * of one with the modifier held, and what Default puts back. False for a row that is no track
+ * or cannot be used, and `has_standard` is false for a track that has no Default at all.
+ *
+ * It is the one place the keys and Default read a row's numbers from, so the step a key takes
+ * and the grid a drag rounds to are the same number and not two that agree today. */
+bool overlay_model_slider_limits(uint32_t index, overlay_number_t *out);
 
 /* Whether a drag on the slider at `index` writes at the full rate; see the utilities page. */
 bool overlay_model_slider_wants_full_rate(uint32_t index);
@@ -137,6 +241,14 @@ void overlay_model_rebuild(void);
 
 uint32_t overlay_model_row_count(void);
 
+/* How many of those rows are headings, for the tally the footer shows.
+ *
+ * Counted while the list is built, not worked out from the group tables. The number a player is
+ * told has to be the number of bands in front of them, and those are not the same thing: two
+ * sources are drawn under another group's heading, and a count from the enum would be right today
+ * and wrong on the first change to either. */
+uint32_t overlay_model_heading_count(void);
+
 /* Which row is drawn first, so a list taller than the screen can still be reached.
  *
  * `visible` is what the layout worked out fits. The answer is clamped against it on every ask
@@ -153,6 +265,25 @@ uint32_t overlay_model_scroll(uint32_t visible);
  * known. */
 void overlay_model_scroll_by(int32_t rows);
 
+/* The row the keyboard is on, or -1 for none.
+ *
+ * The pad has stepped from row to row since it was added and the keyboard could only scroll, so a
+ * machine with no mouse and no pad could open this panel and change nothing in it. The selection
+ * is the keyboard's pointer: the arrows move it, Return acts on it, and it is drawn with the same
+ * highlight the mouse gives the row under it. Moving the mouse clears it again, so the panel never
+ * shows two rows as the current one.
+ *
+ * Clamped against the row count where it is read, the same way the scroll is, because the count
+ * moves with every keystroke in the search box and every fold. */
+int32_t overlay_model_selected(void);
+
+/* Puts the selection on `index`, clamped into the list; a negative index clears it. */
+void overlay_model_set_selected(int32_t index);
+
+/* Moves the selection by `rows`. From no selection it starts at `from`, which the caller passes
+ * as the first row on screen so that the first arrow press lands where the player is looking. */
+void overlay_model_move_selection(int32_t rows, uint32_t from);
+
 /* Copies one row out. False for an index past the end, and then `out` is untouched. */
 bool overlay_model_row(uint32_t index, overlay_row_t *out);
 
@@ -165,7 +296,11 @@ bool overlay_model_activate(uint32_t index);
  * on its own. True when `needle` is empty. */
 bool overlay_model_matches(const char *label, const char *needle);
 
-/* Whether a hotkey row is waiting for its next keypress. While true, overlay_input.c routes the
+/* The five below and the two above them act on the one row that is mid-something, and they live
+ * in overlay_edit.c beside that state rather than here: at most one row of this panel is ever
+ * being typed into or waiting for a key, and both of those are ended by starting the other.
+ *
+ * Whether a hotkey row is waiting for its next keypress. While true, overlay_input.c routes the
  * very next key-down here instead of its usual handling (Escape, typing, and so on), including
  * Escape itself and system key combinations; the capture is unconditional by design, so binding
  * is predictable rather than needing its own list of exceptions. */

@@ -93,26 +93,42 @@ uintptr_t signature_find_unique(const uint8_t *bytes, const uint8_t *mask, size_
 }
 
 #define JMP_REL32_OPCODE 0xE9u
-#define MAX_TAIL_CANDIDATES 8
+
+/* How many tail hits this sifts before it gives up.
+ *
+ * It was eight, and eight is below what the shipped image holds for the tail of a short function.
+ * The camera take a scene asks for is a load, a store and a return, and that tail stands 24 times;
+ * the savegame load by name 31 times; the enemy use latch 27. At each of those exactly one
+ * candidate carries the authored prologue or a branch, so the head test below decides them, but
+ * the search gave up before the test ran and the site counted as unresolved. Sixty four is twice
+ * the largest tail count measured over this tree's detour targets. It costs one masked compare of
+ * a prologue per candidate, once, at install time, and 256 bytes of stack; a tail that stands more
+ * often than that is a pattern to cut longer, not to sift further. */
+#define MAX_TAIL_CANDIDATES 64
 
 /* Stage 2 of the detour-target rule: the site may already carry somebody's `jmp rel32`, so the
- * prologue cannot be part of the search. Anchor on the tail and prove the head. */
+ * prologue cannot be part of the search. Anchor on the tail and prove the head.
+ *
+ * The candidates come from the buffer search directly rather than from signature_count_matches,
+ * because that one stages its addresses in an array of its own whose bound is the eight the header
+ * publishes; asking it for more would leave the candidates past the eighth unwritten. */
 static uintptr_t find_by_tail(const uint8_t *bytes, const uint8_t *mask, size_t size,
                               size_t prologue_size)
 {
-    uintptr_t candidates[MAX_TAIL_CANDIDATES];
-    uintptr_t accepted = 0;
-    size_t    accepted_count = 0;
-    size_t    hits;
-    size_t    index;
+    const uint8_t *text = (const uint8_t *)host_image_text();
+    size_t         offsets[MAX_TAIL_CANDIDATES];
+    uintptr_t      accepted = 0;
+    size_t         accepted_count = 0;
+    size_t         hits;
+    size_t         index;
 
-    if (prologue_size == 0 || prologue_size >= size) {
+    if (text == NULL || prologue_size == 0 || prologue_size >= size) {
         return 0;
     }
 
-    hits = signature_count_matches(bytes + prologue_size,
-                                   (mask != NULL) ? mask + prologue_size : NULL,
-                                   size - prologue_size, candidates, MAX_TAIL_CANDIDATES);
+    hits = signature_count_in_buffer(text, host_image_text_size(), bytes + prologue_size,
+                                     (mask != NULL) ? mask + prologue_size : NULL,
+                                     size - prologue_size, offsets, MAX_TAIL_CANDIDATES);
     if (hits == 0) {
         return 0;                    /* the table's own "0 matches" line covers this */
     }
@@ -124,11 +140,14 @@ static uintptr_t find_by_tail(const uint8_t *bytes, const uint8_t *mask, size_t 
     }
 
     for (index = 0; index < hits; ++index) {
-        uintptr_t start = candidates[index] - prologue_size;
+        uintptr_t start;
 
-        if (start < host_image_text()) {
+        /* The tail can sit at the very front of the section, where there is no room for a
+         * prologue in front of it. That is a rejected candidate, not an underflow. */
+        if (offsets[index] < prologue_size) {
             continue;
         }
+        start = (uintptr_t)(text + offsets[index] - prologue_size);
         /* Either the prologue is still the authored one, mask honoured, or somebody has already
          * branched away from it. Anything else is a coincidental match and is discarded. */
         if (!matches_at((const uint8_t *)start, bytes, mask, prologue_size) &&
@@ -246,6 +265,65 @@ size_t signature_resolve_table(signature_t *table, size_t count)
     }
 
     return resolved;
+}
+
+/* The window a site is judged through. Big enough for every pattern in this tree with room to
+ * spare; a site declaring more than this is refused rather than read into a shorter buffer. */
+#define MAX_OPERAND_WINDOW 256u
+
+static bool window_is_inside_text(uintptr_t address, size_t size)
+{
+    uintptr_t text = host_image_text();
+
+    if (text == 0 || size > host_image_text_size()) {
+        return false;
+    }
+    return address >= text && address <= (text + host_image_text_size() - size);
+}
+
+bool signature_read_address_operand(const signature_t *site, size_t offset, uintptr_t *address)
+{
+    uint8_t  window[MAX_OPERAND_WINDOW];
+    uint32_t operand = 0;
+    size_t   span;
+
+    if (site == NULL || address == NULL || site->bytes == NULL || site->address == 0 ||
+        site->size == 0 || offset > sizeof(window)) {
+        return false;
+    }
+
+    /* The pattern window is what decides whether the site is still itself. The operand does not
+     * have to sit inside it: an anchor may match a head and name an address that comes later, so
+     * the copy that is read has to reach whichever of the two ends further. */
+    span = (offset + sizeof(operand) > site->size) ? (offset + sizeof(operand)) : site->size;
+    if (span > sizeof(window) || !window_is_inside_text(site->address, span)) {
+        return false;
+    }
+
+    memcpy(window, (const void *)site->address, span);
+    if (matches_at(window, site->bytes, site->mask, site->size)) {
+        memcpy(&operand, window + offset, sizeof(operand));
+        *address = (uintptr_t)operand;
+        return true;
+    }
+
+    if (!host_image_read_original(site->address, window, span)) {
+        log_warning("  site %s no longer matches its own pattern and the executable on disk could "
+                    "not be read, so the operand at +%u is refused",
+                    site->name, (unsigned)offset);
+        return false;
+    }
+    if (!matches_at(window, site->bytes, site->mask, site->size)) {
+        log_warning("  site %s does not match its own pattern on disk either, so the operand at "
+                    "+%u is refused", site->name, (unsigned)offset);
+        return false;
+    }
+
+    memcpy(&operand, window + offset, sizeof(operand));
+    *address = (uintptr_t)operand + (uintptr_t)host_image_relocation_delta();
+    log_info("  site %s carries foreign bytes, so its operand at +%u was read from the executable "
+             "on disk instead of from memory", site->name, (unsigned)offset);
+    return true;
 }
 
 size_t signature_count_dword(uint32_t value)

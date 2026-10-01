@@ -231,10 +231,20 @@ static const struct {
     { "oldcode",            "Debug mode"             },
 };
 
+uint32_t cheats_original_known_count(void)
+{
+    return (uint32_t)(sizeof DESCRIPTIONS / sizeof DESCRIPTIONS[0]);
+}
+
+const char *cheats_original_known_code(uint32_t index)
+{
+    return (index < cheats_original_known_count()) ? DESCRIPTIONS[index].code : NULL;
+}
+
 void cheats_original_label(uint32_t index, char *out, size_t size)
 {
     const char *code = cheats_original_name(index);
-    size_t      i;
+    uint32_t    i;
 
     if (out == NULL || size == 0u) {
         return;
@@ -243,8 +253,8 @@ void cheats_original_label(uint32_t index, char *out, size_t size)
         out[0] = '\0';
         return;
     }
-    for (i = 0; i < sizeof DESCRIPTIONS / sizeof DESCRIPTIONS[0]; ++i) {
-        if (strcmp(code, DESCRIPTIONS[i].code) == 0) {
+    for (i = 0; i < cheats_original_known_count(); ++i) {
+        if (strcmp(code, cheats_original_known_code(i)) == 0) {
             text_format(out, size, "%s (%s)", DESCRIPTIONS[i].what, code);
             return;
         }

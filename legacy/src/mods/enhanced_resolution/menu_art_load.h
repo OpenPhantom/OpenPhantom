@@ -54,8 +54,14 @@ bool menu_art_load_install(float ratio_x, float ratio_y);
 /* The canvas has changed size, so the next picture to load is replicated by these instead.
  *
  * Only the ratio moves. Pictures already loaded are not touched and cannot be from here: they
- * belong to the engine's cache, and dropping that is the caller's half of the change. */
+ * belong to the engine's cache, and dropping that is the caller's half of the change. The ratio
+ * is recorded whether or not the redirect is armed, so what menu_art_load_ratio answers is always
+ * the last canvas anybody set. */
 void menu_art_load_set_ratio(float ratio_x, float ratio_y);
+
+/* The ratio the next picture to load will be replicated by. The refit and the stand down both
+ * have to leave it at the canvas in force; this is how either is seen, in the log and in a test. */
+void menu_art_load_ratio(float *out_ratio_x, float *out_ratio_y);
 
 /* The canvas the DISPLAY can hold, as a multiple of the authored 640x480.
  *

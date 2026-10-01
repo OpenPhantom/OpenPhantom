@@ -138,6 +138,12 @@ bool menu_scale_install(float configured_ratio, bool cursor_cage_widens);
  * is sized from this, because the canvas is exactly the region the menus can repaint. */
 void menu_scale_canvas(int32_t *out_width, int32_t *out_height);
 
+/* The size the drawn menu cursor is drawn at, in pixels: what this feature last wrote into
+ * swpic_drawCursor's two immediates, or the shipped 32 while it has written nothing. The cursor
+ * cage is sized from it as well as from the canvas, because the cage stops the quad's top left
+ * corner and the quad hangs its own size beyond that. */
+int32_t menu_scale_cursor_size(void);
+
 /* font3d_queryFont's answer from beneath this module's hook: what the engine, and any DLL that
  * detoured the function before this one, say the line height is, with none of the scaling the hook
  * adds. `*out_hooked` is false, and the answer 0, while the hook is not installed; the caller then

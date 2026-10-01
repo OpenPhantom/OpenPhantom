@@ -230,6 +230,7 @@ void menu_scale_apply_trimmings(bool verbose)
 
         if (patch_write_u8(site + DRAW_CURSOR_WIDTH,  (uint8_t)size) == PATCH_RESULT_OK &&
             patch_write_u8(site + DRAW_CURSOR_HEIGHT, (uint8_t)size) == PATCH_RESULT_OK) {
+            scale_state.cursor_size = size;
             if (verbose) {
                 log_info("the drawn menu pointer is %d pixels instead of %d%s", (int)size,
                          DRAW_CURSOR_SHIPPED,
@@ -318,7 +319,7 @@ bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y
 /* The engine's own bitmap cache, dropped so the pictures are loaded again at the new canvas. Every
  * slot it clears is refilled by name on the next draw, and the load hook resamples each one on the
  * way through. */
-static void drop_bitmaps(const void *menu)
+void menu_scale_drop_bitmaps(const void *menu)
 {
     free_bitmaps_fn_t free_bitmaps =
         (free_bitmaps_fn_t)menu_scale_sites[SITE_FREE_BITMAPS].address;
@@ -400,7 +401,7 @@ static void refit_menu(scaled_menu_t *tracked, float previous_x, float previous_
     }
 
     reset_list_boxes(tracked->menu, widgets, tracked->widgets);
-    drop_bitmaps(tracked->menu);
+    menu_scale_drop_bitmaps(tracked->menu);
 }
 
 static void refit(float ratio_x, float ratio_y, int32_t screen_width, int32_t screen_height)
@@ -434,7 +435,8 @@ static void refit(float ratio_x, float ratio_y, int32_t screen_width, int32_t sc
     /* The three that were sized from the canvas when they were installed. The cage matters most:
      * it is the reason the scale refuses to install without it, because a canvas larger than the
      * cage leaves every widget outside the cage unreachable. */
-    pointer_cage_resize(scale_state.canvas_width, scale_state.canvas_height);
+    pointer_cage_resize(scale_state.canvas_width, scale_state.canvas_height,
+                        menu_scale_cursor_size());
     menu_island_clip_resize(scale_state.canvas_width, scale_state.canvas_height);
     (void)menu_loading_bar_resize(scale_state.canvas_width, scale_state.canvas_height);
 

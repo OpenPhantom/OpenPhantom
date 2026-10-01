@@ -77,7 +77,7 @@ the mode table that the aspect gate anchors.
 | `control_captureMouse` | `0x46A155` | detoured, 8-byte prologue, the re-anchor on activation, and the operand its `call` carries yields the engine's window handle |
 | `stdControl_setFocus` | `0x48D719` | **called, never patched**. Acquire/Unacquire on the DirectInput keyboard and mouse |
 | `stdControl_resync` | `0x48D1CF` | **called, never patched**, drains both device buffers, releasing everything held |
-| `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten from `0x25F`/`0x1BF` to canvas width minus 33 and canvas height minus 33, **only** when `WidenMenuCursorArea=1`. The block's two origin operands are read back as proof the block is the right one and are **never written**; an earlier version repointed them at zero cells to make the clamp screen relative, which is the fault above. Four separate writes with no rollback, and every value computed absolutely from the canvas, so a partial write is repaired by resizing again. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
+| `swrle_windowProc`, the cursor clamp | `0x460C04`..`0x460C7C` | four immediates rewritten from `0x25F`/`0x1BF` to the canvas width and height less the drawn cursor quad and one (33 at the shipped 32 pixel quad), **only** when `WidenMenuCursorArea=1`. The block's two origin operands are read back as proof the block is the right one and are **never written**; an earlier version repointed them at zero cells to make the clamp screen relative, which is the fault above. Four separate writes with no rollback, and every value computed absolutely from the canvas, so a partial write is repaired by resizing again. 121-byte masked signature; in `obi.exe` it resolves at `0x460BA4` |
 | the DirectDraw enumeration callback | `0x4928FC` | detoured, 6-byte prologue, **only** when `FilterModeEnumeration=1`. Address free: the mode counter, the 64 cap, the 0x54 stride and the table base are all read out of the matched operands and checked before use |
 | `swmenu_render`, the widget-pass bracket | `0x45DC6F`..`0x45DCB9` | **read, never patched**: address-free masked pattern over `inc g_tickCounter / mov [flag],1 / cmp [parent],1`; the flag cell is read out of the `C7 05` operand and cross-checked against the closing `mov [flag],0` at +0x41. The gate for the island clamp. In `obi.exe` it resolves at `0x45DC0F`, with the flag cell at `0x008BFB40` instead of `0x008BFBA0` |
 | `texture_drawSprite` | `0x0042963B` | detoured, 9-byte prologue, **only** when `ClampMenuSpritesToIsland=1`; chains with `hud_ratio_scaling`'s detour on the same function in either load order |
@@ -275,6 +275,13 @@ Blending a channel value of 1 against an adjacent transparent 0 at half weight g
 vertical pass then gives 0: a dark but opaque pixel becomes transparent, punching holes in dark
 artwork. Interpolating the other way haloes every transparent edge. Replication cannot do either,
 because every pixel drawn is one that was already in the picture.
+
+**A canvas that does not fit takes the artwork with it.** `MenuScale=3` asks for a 1920x1440
+canvas, which a 1080 line display cannot hold, so the scale stands down to 640x480 on the first
+menu. The replication is told so in the same step and the screens already laid out drop their
+pictures; before that it kept enlarging every picture for the canvas just given up, and each one
+was drawn against the 640x480 clip as its own top left corner. The log says `the menu artwork is
+loaded at its own size again` under the stand down's warning.
 
 **Upward only.** Below a ratio of 1 the interval for a destination pixel is shorter than one source
 pixel and may contain none, so pixels are dropped: a one pixel border comes out dashed, not
@@ -778,8 +785,11 @@ screen the pointer cannot be moved out of. The cursor coordinates are absolute s
 while the hit test adds the origin to the **widget**, so widening the clamp needs no coordinate
 work at all: a cursor outside the island hits nothing, as it does today.
 
-**The install is one step.** Only the four clamp immediates are written, to canvas width minus 33
-and canvas height minus 33. The block's two origin operands are read back first, as proof that the
+**The install is one step.** Only the four clamp immediates are written, to the canvas width and
+height less the drawn cursor quad and one more pixel: 33 at the shipped 32 pixel quad, and more
+when `MenuScale` draws the quad larger, since the cursor's position is the quad's top left corner
+and a margin left at 33 let a 64 pixel quad hang 31 pixels past the canvas onto pixels nothing
+repaints. The block's two origin operands are read back first, as proof that the
 block is the one the listing describes, and are never written. The four are four separate
 `patch_write_u32` calls with no rollback between them, so a failure part way through leaves the two
 width immediates written and the two height ones not. Every value is computed absolutely from the
@@ -800,7 +810,8 @@ claim the engine was not recognised.
 
 The cage follows the canvas, not the display mode. When `MenuScale` refits the canvas to a new
 display, from its own once-per-frame watch on the engine's screen cells, it calls
-`pointer_cage_resize` with the new size, and it calls it with 640x480 when the scale stands down.
+`pointer_cage_resize` with the new size and the new quad, and it calls it with 640x480 and the
+shipped quad when the scale stands down.
 That is a poll and **not** a detour on the engine's mode-change broadcast: the loading screen calls
 `swmenu_setSuppressModeSwitch`, and `enterMenuMode` then returns *before* that broadcast. The clamp
 is recomputed absolutely from the canvas width and height, never by adding a delta, so repeating it

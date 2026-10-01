@@ -69,6 +69,10 @@ static const uint8_t SIG_PLAY_CLIP[] = {
     0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00, 0x00,
     0x8B, 0x4D, 0xF0, 0x83, 0x79, 0x14, 0x00, 0x75, 0x1B
 };
+/* Six is push ebp, mov ebp esp, sub esp 0x10, the first instruction boundary past the five a
+ * branch needs. Nothing here hulls this head. multiplayer does, on six, and a search that did not
+ * know the prologue would find nothing on the day that hull is in place first. */
+#define PLAY_CLIP_PROLOGUE 6u
 #define PLAY_CLIP_CROSSFADE 4
 
 /* --- bapsound_pinChannel 0x00417826, for the channel bank, read, never detoured ------------- *
@@ -87,6 +91,11 @@ static const uint8_t MSK_PIN_CHANNEL[] = {
 };
 _Static_assert(sizeof SIG_PIN_CHANNEL == sizeof MSK_PIN_CHANNEL,
                "the pin channel pattern and its mask are different lengths");
+/* Seven is push ebp, mov ebp esp, push ecx, mov eax [ebp+8], the first instruction boundary past
+ * the five a branch needs. Nothing here hulls this head. sound_lifetime_fix does, on seven, and a
+ * search that did not know the prologue would find nothing on the day that hull is in place first.
+ * The bank operand at +0x0B lies past it. */
+#define PIN_CHANNEL_PROLOGUE       7u
 #define PIN_CHANNEL_BANK_OPERAND   0x0Bu
 #define CHANNEL_STRIDE             0x80u
 #define CHANNEL_COUNT              12
@@ -145,8 +154,9 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_MASKED("Dialog_Render", SIG_DIALOG_RENDER, MSK_DIALOG_RENDER),
-    SIGNATURE_ENTRY("bapobj_playClip", SIG_PLAY_CLIP),
-    SIGNATURE_ENTRY_MASKED("bapsound_pinChannel", SIG_PIN_CHANNEL, MSK_PIN_CHANNEL)
+    SIGNATURE_ENTRY_DETOUR("bapobj_playClip", SIG_PLAY_CLIP, PLAY_CLIP_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("bapsound_pinChannel", SIG_PIN_CHANNEL, MSK_PIN_CHANNEL,
+                                  PIN_CHANNEL_PROLOGUE)
 };
 
 typedef int32_t (__cdecl *play_clip_fn_t)(uint32_t body, int32_t clip, int32_t mode);
@@ -166,6 +176,7 @@ static struct {
     int32_t  line_clip;
     uint32_t line_replays;
     float    line_held_seconds;  /* the voice left when a pass was first declined, 0 if none */
+    bool     line_dead;          /* the speaker's actor was found dead on this line */
     uint32_t lines;
 } gesture;
 
@@ -280,6 +291,22 @@ static bool replay_fits(uintptr_t track)
     return false;
 }
 
+/* Whether the speaker's actor lives in its script. A death cry is a line spoken on the death
+ * clip, and that clip started over stands the body up to fall a second time, so a dead speaker's
+ * clip is not put on again, and that is said once a line. */
+static bool speaker_may_replay(uint32_t body, int32_t clip)
+{
+    speaker_actor_t actor;
+    rest_verdict_t  verdict = speaker_rest_body_verdict(body, false, &actor);
+
+    if (verdict == REST_NEVER && !gesture.line_dead) {
+        gesture.line_dead = true;
+        speaker_rest_leave_corpse(body, &actor, clip,
+                                  "its clip is not started again for the rest of the line");
+    }
+    return verdict == REST_MAY;
+}
+
 /* The base clip put on again with the mode word the pass before it had. */
 static void replay_base_clip(uint32_t body, int32_t clip)
 {
@@ -312,10 +339,11 @@ static void end_line(void)
     gesture.line_speaker      = 0;
     gesture.line_replays      = 0;
     gesture.line_held_seconds = 0.0f;
+    gesture.line_dead         = false;
 }
 
 /* Once a frame. The current speaker's body while the voice is still playing: a clip that has
- * played through is started again. */
+ * played through is started again, while the speaker's actor lives in its script. */
 static void on_frame_repeat_gesture(void)
 {
     uint32_t body = *gesture.speaker_lock;
@@ -332,7 +360,8 @@ static void on_frame_repeat_gesture(void)
         gesture.line_speaker = body;
     }
     gesture.line_clip = clip;
-    if (gesture.repeat && base_clip_complete(body) && replay_fits(base_track(body))) {
+    if (gesture.repeat && base_clip_complete(body) && replay_fits(base_track(body)) &&
+        speaker_may_replay(body, clip)) {
         replay_base_clip(body, clip);
         ++gesture.line_replays;
     }
@@ -378,6 +407,7 @@ void speaker_gesture_level_changed(void)
     gesture.line_speaker      = 0;
     gesture.line_replays      = 0;
     gesture.line_held_seconds = 0.0f;
+    gesture.line_dead         = false;
     speaker_rest_forget_all();
 }
 
@@ -417,15 +447,17 @@ bool speaker_gesture_install(const volatile uint32_t *speaker_lock, bool repeat,
     if (repeat) {
         log_info("a speaker keeps animating for the whole of their line: a clip that has played "
                  "through on the speaker's body is started again while the voice has at least "
-                 "the clip's length still to play (bark channel %08X, bapobj_playClip %08X, "
-                 "channel bank %08X)", (unsigned)bark, (unsigned)sites[SITE_PLAY_CLIP].address,
-                 (unsigned)gesture.channel_bank);
+                 "the clip's length still to play and the speaker's actor lives in its script "
+                 "(bark channel %08X, bapobj_playClip %08X, channel bank %08X)", (unsigned)bark,
+                 (unsigned)sites[SITE_PLAY_CLIP].address, (unsigned)gesture.channel_bank);
     }
     if (rest) {
         speaker_rest_install((speaker_play_clip_fn_t)gesture.play_clip);
         log_info("a speaker the engine has parked on a clip's last frame after their line goes "
                  "to their stand, clip 0 with its own flags, half a second later, as the engine "
-                 "does after a menu line");
+                 "does after a menu line, while their actor lives in its script (health above "
+                 "zero, state 1); a speaker whose actor is dead is left down whatever its clip "
+                 "is called, and each one so left is logged as a corpse");
     }
     return true;
 }

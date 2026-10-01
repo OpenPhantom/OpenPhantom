@@ -172,7 +172,11 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("player_phase_table",   SIG_PLAYER_PHASE_TABLE),
-    SIGNATURE_ENTRY_MASKED("player_save_head", SIG_PLAYER_SAVE_HEAD, MSK_PLAYER_SAVE_HEAD),
+    /* Nine is push ebp, mov ebp esp, push ecx, mov eax [abs], the first instruction
+     * boundary past five. multiplayer hulls this same head on nine, so without a
+     * prologue here the day it loads first this site finds nothing. */
+    SIGNATURE_ENTRY_DETOUR_MASKED("player_save_head", SIG_PLAYER_SAVE_HEAD,
+                                  MSK_PLAYER_SAVE_HEAD, 9u),
     SIGNATURE_ENTRY("player_mouse_axis",    SIG_PLAYER_MOUSE_AXIS),
     SIGNATURE_ENTRY("player_keyboard_axis", SIG_PLAYER_KEYBOARD_AXIS),
     SIGNATURE_ENTRY("set_node_yaw",         SIG_SET_NODE_YAW)

@@ -58,6 +58,7 @@
 
 #include "fov_math.h"
 #include "fov_menu.h"
+#include "fov_poll.h"
 #include "fov_strings.h"
 
 #include "common/detour.h"
@@ -393,13 +394,16 @@ void variable_fov_set_extra_degrees(float degrees)
  * the file back, so a value written by anything else, the developer overlay's own row being the
  * reason this exists, did nothing until the next launch.
  *
- * Every frame, and reading the file every frame is exactly what it does not do. Parsing a ninety
- * kilobyte ini sixty times a second to answer "has anything changed" would cost more than the
- * feature is worth, so ini_generation() is asked first: one attribute query, no parse, and the
- * read below only happens on a frame where the file has actually been written.
+ * Polled from the frame hook, and reading the file on every frame is exactly what it does not do.
+ * Parsing a ninety kilobyte ini sixty times a second to answer "has anything changed" would cost
+ * more than the feature is worth, so ini_generation() is asked first: one attribute query, no
+ * parse, and the read below only happens when the file has actually been written.
  *
- * A frame rather than a second because a slider being dragged in the developer overlay writes this
- * key as it moves, and a second of latency there is not a slider, it is a series of jumps.
+ * Even that query is not asked on every frame. It was, and at 240 frames a second that was 240
+ * attribute queries a second, measured at 11.7 microseconds each, for a number a person
+ * drags by hand. fov_poll.h throttles it to one look every 30 ms. Not a second, because a slider
+ * being dragged in the developer overlay writes this key as it moves, and a second of latency there
+ * is not a slider, it is a series of jumps; at 30 ms the drag previews about 33 times a second.
  *
  * The comparison is against the value in force rather than against the last value read, so the
  * video options slider moving the number and this poll seeing it agree instead of taking turns.
@@ -437,15 +441,31 @@ static void publish_base_fov(void)
     (void)ini_write_float(FOV_SECTION, "BaseFov", base, 1);
 }
 
+/* The poll's own line, on the first look and then every this many, about four minutes at one look
+ * every 30 ms: enough to show the throttle is live and what it cost, a handful of lines a
+ * session. */
+#define POLL_REPORT_LOOKS 8000u
+
 static void poll_extra_degrees(void)
 {
-    static uint64_t seen_generation;
-    uint64_t        generation = ini_generation();
-    float           wanted;
-    float           held;
+    static uint64_t   seen_generation;
+    static fov_poll_t poll;
+    uint64_t          generation;
+    float             wanted;
+    float             held;
 
     publish_base_fov();
 
+    if (!fov_poll_due(&poll, GetTickCount(), FOV_POLL_PERIOD_MS)) {
+        return;
+    }
+    if (poll.looks == 1u || (poll.looks % POLL_REPORT_LOOKS) == 0u) {
+        log_info("ExtraDegrees is looked for on disk every %u ms rather than every frame: %u "
+                 "look(s), %u change(s) taken",
+                 FOV_POLL_PERIOD_MS, poll.looks, poll.taken);
+    }
+
+    generation = ini_generation();
     if (generation == seen_generation) {
         /* the file has not been written since the last look */
         return;
@@ -459,6 +479,7 @@ static void poll_extra_degrees(void)
     }
 
     apply_extra_degrees(wanted);
+    ++poll.taken;
     log_info("ExtraDegrees changed on disk, %.1f to %.1f. The picture is now %.1f degrees across.",
              (double)held, (double)fov_state.config.extra_degrees,
              (double)variable_fov_horizontal_degrees());

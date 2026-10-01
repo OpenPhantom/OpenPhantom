@@ -40,3 +40,11 @@ void overlay_input_set_key(int32_t virtual_key)
 {
     (void)virtual_key;
 }
+
+/* Reached by the key rows of the placement mode and of the chat, which refuse the key that opens
+ * the panel. With no message hook in a test process no key opens it, so every key is free here. */
+bool overlay_input_opens_on(int32_t virtual_key)
+{
+    (void)virtual_key;
+    return false;
+}

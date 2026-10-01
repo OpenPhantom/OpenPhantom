@@ -9,6 +9,8 @@
  */
 #include "vlc_playback.h"
 
+#include "movie_close.h"
+#include "movie_rule.h"
 #include "vlc_runtime.h"
 
 
@@ -68,84 +70,49 @@ static bool escape_pressed_now(bool *was_down)
  * there is one test here again and no Wine-only path at all. */
 
 
-/* True for the posted message that BEGINS a close by mouse, as opposed to WM_QUIT, the message a
- * close has already turned into.
- *
- * The close box arrives as WM_NCLBUTTONDOWN on hit-test area HTCLOSE, and it is not a close yet:
- * DefWindowProc is what turns it into WM_SYSCOMMAND, then WM_CLOSE, then eventually
- * PostQuitMessage. The overlay never takes activation, so the focus window during a movie is the
- * game's, so it is addressed to exactly the window whose messages this loop drops, which means
- * DefWindowProc never runs and no WM_QUIT is ever produced. Handling only WM_QUIT would preserve a
- * quit somebody else raised and lose every quit the player raises, which is the wrong half.
- *
- * Alt+F4 is NOT handled here, and could not usefully be. WM_SYSKEYDOWN with VK_F4 used to be in
- * the range list below and could never fire: a filtered peek returns the FIRST message in its
- * range, Alt+F4 queues VK_MENU before VK_F4, and holding Alt autorepeats more behind it, so the F4
- * was never examined. An external audit found that and was right about the code.
- *
- * It was wrong about the consequence. The game IGNORES WM_CLOSE at all times: its window
- * procedure at 0x0049905E takes case 0x10 in the switch, sets the result to zero and breaks, so
- * DefWindowProcA never runs and the default destroy never happens, and the chained handlers
- * never see it either. Only WM_DESTROY calls PostQuitMessage, raised by the game's own quit
- * path. Confirmed in play: Alt+F4 does nothing during ordinary gameplay with no movie involved.
- *
- * So there was no close being lost here to restore. Detecting the combination properly was tried,
- * and it ended the movie and then posted a close the engine discarded. Making Alt+F4 genuinely
- * close the game would override a decision the engine took for itself, which is a behaviour change
- * rather than a repair and does not belong in the movie player. */
-static bool is_close_request(const MSG *message)
-{
-    return message->message == WM_NCLBUTTONDOWN && message->wParam == HTCLOSE;
-}
+/* How many timer messages one turn takes at most. The session's timer runs every thirty
+ * milliseconds and a turn lasts about one, so one is the usual count; the bound only keeps a timer
+ * that is always due from holding the turn. */
+#define THREAD_TIMERS_PER_TURN 8u
 
-/* Does the player want out? Answered by LOOKING at the game window's queue without emptying it.
+/* The session's thread timer, while a multiplayer session runs. It is a timer with no window, so
+ * the overlay-scoped peek below never takes it, and without this the session is not serviced for
+ * the length of the movie: a movie longer than the session's timeout ends the session. The retail
+ * player's own pump dispatches every message of the thread, this one included.
  *
- * This used to be answered on the way past, by peeking the whole thread queue with PM_REMOVE and
- * dropping whatever belonged to the game window. That is what the peek below deliberately no
- * longer does, and the reason is worth keeping: PM_REMOVE takes a message off the queue whether or
- * not it is then dispatched, so retrieving the game window's posted traffic and declining to
- * dispatch it did not DEFER that traffic, it DISCARDED it. Every WM_MOUSEMOVE the player made
- * during a movie was thrown away rather than delivered late, and the engine came out of each movie
- * having silently missed all of it.
+ * Only a timer with no window, the session's, and the overlay's own are dispatched. A due tick of
+ * any other window of the thread is taken and dropped, because it cannot be left: a filtered peek
+ * returns the first due timer of its range, and a foreign tick left in place is returned again on
+ * every turn with the thread timer behind it never reached. Measured with a window timer and a
+ * thread timer both at ten milliseconds: taken and dropped, the thread timer ran 30 times in half
+ * a second; left in place, once. A peek scoped to (HWND)-1 returns no thread timer at all.
+ * Dropping a tick loses nothing a timer does not lose anyway, since its next one comes at its next
+ * interval, and the engine sets no timer of its own.
  *
- * PM_NOREMOVE answers the same question without that cost: the close request is recognised where
- * it lies, and only IT is then removed and re-posted, so the game's own pump finds it once this
- * call returns. Everything else stays exactly where it was, in order.
- *
- * The range filter keeps this cheap: the request is one non-client mouse message, so nothing else
- * is even looked at. The table has one row now that the keyboard range is gone. */
-static bool close_was_requested(HWND game_window)
+ * A timer with no window is not necessarily the session's. The Miles sound library sets one of its
+ * own on one of its driver paths, and a timer procedure of that kind runs here as the retail
+ * player's pump would run it. So the count is of thread timers: nought means the session was not
+ * pumped, and more than nought does not prove that it was; the multiplayer's own report says that,
+ * as its timer pump count. */
+void vlc_playback_pump_timers(HWND window, movie_loop_t *loop)
 {
-    static const struct { UINT first; UINT last; } ranges[] = {
-        { WM_NCLBUTTONDOWN,  WM_NCLBUTTONDOWN  }
-    };
-    MSG    message;
-    size_t index;
+    MSG      message;
+    unsigned taken;
 
-    if (game_window == NULL) {
-        return false;
+    if (loop == NULL || !loop->exits.pump_session) {
+        return;
     }
-    for (index = 0; index < ARRAYSIZE(ranges); ++index) {
-        if (!PeekMessageW(&message, game_window, ranges[index].first, ranges[index].last,
-                          PM_NOREMOVE)) {
-            continue;
+    for (taken = 0; taken < THREAD_TIMERS_PER_TURN; ++taken) {
+        if (!PeekMessageW(&message, NULL, WM_TIMER, WM_TIMER, PM_REMOVE)) {
+            return;
         }
-        if (!is_close_request(&message)) {
-            continue;
+        if (message.hwnd == NULL) {
+            ++loop->counts.thread_timers;
+            DispatchMessageW(&message);
+        } else if (message.hwnd == window) {
+            DispatchMessageW(&message);
         }
-        /* Take this one and put it straight back. Removing it first stops this returning true
-         * again on the next turn before the game's pump has had a chance to run; re-posting it
-         * unchanged lets the request survive to be honoured a moment later, by the engine's own
-         * window procedure, on a thread that is no longer parked inside a movie. */
-        if (PeekMessageW(&message, game_window, ranges[index].first, ranges[index].last,
-                         PM_REMOVE)) {
-            PostMessageW(message.hwnd, message.message, message.wParam, message.lParam);
-        }
-        log_info("the player asked to close the game during playback, ending the movie and "
-                 "passing the request on");
-        return true;
     }
-    return false;
 }
 
 /* One turn of the message pump. Returns false when the player wants out, which ends playback rather
@@ -153,20 +120,21 @@ static bool close_was_requested(HWND game_window)
  *
  * The peek is scoped to `window`, the overlay's own handle, and not NULL. An unscoped peek runs
  * the whole thread queue, and this loop runs in-process on the game's own thread, so the game
- * window's posted traffic is on that same queue. See close_was_requested() above for what taking
- * it and not dispatching it actually did.
+ * window's posted traffic is on that same queue. See movie_close.c for what taking it and not
+ * dispatching it actually did.
  *
  * One consequence of the scoping, stated rather than discovered later: a filtered peek does not
  * retrieve thread messages either, and WM_QUIT is a thread message with no window. It therefore
  * stays on the queue for the game's own pump, which is the right place for it and the reason this
  * function no longer has a WM_QUIT branch. */
-static bool pump_once(HWND window, HWND game_window)
+static bool pump_once(HWND window, HWND game_window, movie_loop_t *loop)
 {
     MSG message;
 
-    if (close_was_requested(game_window)) {
+    if (movie_close_requested(game_window, loop)) {
         return false;
     }
+    vlc_playback_pump_timers(window, loop);
 
     if (!PeekMessageW(&message, window, 0, 0, PM_REMOVE)) {
         Sleep(1);
@@ -208,16 +176,62 @@ static void apply_scaling(libvlc_media_player_t *player, HWND window)
     vlc_runtime_api()->video_set_aspect_ratio(player, aspect);
 }
 
-bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window)
+/* The question a held movie asks every turn, after the turn has pumped: a gate is filed from the
+ * session's timer, and asking before that timer has had its turn would read a gate that could not
+ * have moved. True when the host is done, which ends the movie as the host's; an answer that lets
+ * the player go turns the loop into this side's own movie. */
+static bool host_decides(movie_loop_t *loop)
+{
+    movie_verdict_t verdict;
+
+    if (loop->poll == NULL) {
+        return false;
+    }
+    verdict = loop->poll();
+    if (verdict == MOVIE_VERDICT_HOST_DONE) {
+        loop->end = MOVIE_END_HOST;
+        return true;
+    }
+    if (verdict != MOVIE_VERDICT_GO_ON) {
+        movie_rule_let_go(loop);
+    }
+    return false;
+}
+
+/* False when the foreground is lost and that ends the movie. A loss that ends nothing is counted
+ * once, on its edge. The line keeps the words it has always had, although the retail player ends
+ * no movie on a lost foreground, because a comparison against older field logs knows the end by
+ * them, and on a held client they are the failure the run is read for. */
+static bool foreground_holds(movie_loop_t *loop, bool *was_foreground)
+{
+    bool foreground = platform_foreground_is_ours();
+
+    if (!foreground && loop->exits.focus_ends) {
+        log_info("the game lost the foreground during playback, ending the movie the way "
+                 "the engine's own player does");
+        loop->end = MOVIE_END_FOCUS;
+        return false;
+    }
+    if (!foreground && *was_foreground) {
+        ++loop->counts.focus_losses_refused;
+    }
+    *was_foreground = foreground;
+    return true;
+}
+
+bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window,
+                                movie_loop_t *loop)
 {
     char                   utf8_path[MAX_PATH * 3];   /* worst-case UTF-8 expansion of MAX_PATH */
     libvlc_media_t        *media;
     libvlc_media_player_t *player;
     bool                   started = false;
     bool                   escape_was_down;
+    bool                   was_foreground = true;
     DWORD                  start_deadline;
 
-    if (vlc_runtime_api()->instance == NULL || window == NULL || file_path == NULL) {
+    if (vlc_runtime_api()->instance == NULL || window == NULL || file_path == NULL ||
+        loop == NULL) {
         log_error("playback was asked for without an instance, a window or a file");
         return false;
     }
@@ -256,23 +270,29 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game
 
     for (;;) {
         if (escape_pressed_now(&escape_was_down)) {
-            log_info("Escape ended playback");
-            break;
+            if (loop->exits.escape_ends) {
+                log_info("Escape ended playback");
+                loop->end = MOVIE_END_ESCAPE;
+                break;
+            }
+            ++loop->counts.escapes_refused;
         }
 
         if (started) {
             if (!vlc_runtime_api()->player_is_playing(player)) {
+                loop->end = MOVIE_END_NATURAL;
                 break;   /* stopped on its own: the end of the file, or a rare error */
             }
-            /* Losing the foreground ends the movie, as the engine's own movie window procedure
-             * does on WM_ACTIVATE. Retail does not leave a cutscene running behind
-             * somebody else's window, and a movie that carried on playing inaudibly under another
-             * program was one of the things that made this feel like a separate application. The
-             * test is only applied once playback is under way, because the foreground has not
-             * necessarily settled in the moment the overlay appears. */
-            if (!platform_foreground_is_ours()) {
-                log_info("the game lost the foreground during playback, ending the movie the way "
-                         "the engine's own player does");
+            /* Losing the foreground ends the movie outside a session. The retail player does
+             * not: it ends a movie at its own end or on a key and on nothing else. This player
+             * does it by its own choice, because a movie that carried on playing inaudibly under
+             * another program was one of the things that made it feel like a separate
+             * application, and it is what every installation has been tested with. In a session
+             * a lost foreground ends nothing and is counted, since a click into a fellow player's
+             * window would otherwise end everybody's movie. The test is only applied once
+             * playback is under way, because the foreground has not necessarily settled in the
+             * moment the overlay appears. */
+            if (!foreground_holds(loop, &was_foreground)) {
                 break;
             }
         } else if (vlc_runtime_api()->player_is_playing(player)) {
@@ -285,7 +305,11 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game
             return false;
         }
 
-        if (!pump_once(window, game_window)) {
+        if (!pump_once(window, game_window, loop)) {
+            loop->end = MOVIE_END_CLOSE;
+            break;
+        }
+        if (host_decides(loop)) {
             break;
         }
     }
@@ -293,5 +317,40 @@ bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game
     vlc_runtime_api()->player_stop(player);
     vlc_runtime_api()->player_release(player);
     return true;
+}
+
+void vlc_playback_hold_blocking(HWND window, HWND game_window, movie_loop_t *loop)
+{
+    bool escape_was_down;
+    bool was_foreground = platform_foreground_is_ours();
+
+    if (window == NULL || loop == NULL) {
+        return;
+    }
+    escape_was_down = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+    for (;;) {
+        movie_verdict_t verdict;
+        bool            foreground;
+
+        /* Pumped first and asked second, as in the movie's own loop above. */
+        (void)pump_once(window, game_window, loop);   /* a close request is remembered there */
+        verdict = loop->poll != NULL ? loop->poll() : MOVIE_VERDICT_NOT_RUNNING;
+        if (verdict == MOVIE_VERDICT_HOST_DONE) {
+            loop->end = MOVIE_END_HOST;
+            return;
+        }
+        if (verdict != MOVIE_VERDICT_GO_ON) {
+            loop->end = MOVIE_END_ALONE;
+            return;
+        }
+        if (escape_pressed_now(&escape_was_down)) {
+            ++loop->counts.escapes_refused;
+        }
+        foreground = platform_foreground_is_ours();
+        if (!foreground && was_foreground) {
+            ++loop->counts.focus_losses_refused;
+        }
+        was_foreground = foreground;
+    }
 }
 

@@ -1,4 +1,5 @@
-/* npc_census.h: what a loaded level offers the NPC spawner, counted out of its own directory.
+/* npc_census.h: what a loaded level offers the entity spawner, counted out of its own
+ * directory.
  *
  * Taken out of npc_spawner.c at the seam its size note named: what a level offers is a
  * different question from how one of it is raised. This reads the level's placement directory
@@ -32,7 +33,8 @@
 #define PLACE_TURN_RATE    0x18u
 #define PLACE_FOV          0x1Cu
 #define PLACE_START_YAW    0x24u
-#define PLACE_RANGE        0x28u   /* 0 is never despawned for distance */
+#define PLACE_ACTIVATION_RANGE 0x28u /* how near the player comes before the scan raises it */
+#define PLACE_DESPAWN_RANGE 0x2Cu    /* how far the player goes before it is removed; 0 never */
 #define PLACE_CLASS        0x34u
 #define PLACE_FIRE_INTERVAL 0x38u  /* f32 seconds; a shooter rearms after a random part of it */
 #define PLACE_MIN_DIFFICULTY 0x3Cu
@@ -69,9 +71,11 @@
 #define CLASS_OFFERED_LOW  1
 #define CLASS_OFFERED_HIGH 3
 
-/* The actor file header the model table points at: its name at +8, 0x18 bytes. */
+/* The actor file header the model table points at: its name at +8, 0x18 bytes, and its clip count
+ * at +0xC8, the word the play asserts `track <= pBapObj->pActor->numTracks` against. */
 #define ACTOR_FILE_NAME        0x08u
 #define ACTOR_FILE_NAME_LENGTH 0x18u
+#define ACTOR_FILE_CLIPS       0xC8u
 
 /* The engine's own assert bounds the directory at 256 (0x0043790E); a count past it is not a
  * level this file understands. */
@@ -85,6 +89,9 @@ typedef struct npc_census {
     uint32_t           plain[NPC_SPAWNER_KINDS_MAX];    /* how plain that placement is */
     int32_t            model[NPC_SPAWNER_KINDS_MAX];    /* its model index, the key */
     int32_t            chosen;
+    uint32_t           donor;   /* the placement an archive kind borrows its everyday numbers
+                                 * from: the source of the first kind counted, in the level's own
+                                 * order, which the list's sort by name does not change */
 } npc_census_t;
 
 /* One placement's record and the name of its actor file, read without trusting either pointer.
@@ -94,7 +101,10 @@ typedef struct npc_census {
 bool npc_census_read_placement(const uint8_t *level, uint32_t index, uint8_t *record,
                                char *stem, uint32_t stem_size, char *file, uint32_t file_size);
 
-/* Counts `level` afresh, or empties the census for NULL. */
+/* Counts `level` afresh, or empties the census for NULL. A placement whose file has no clip, or
+ * whose file stands on a shelf of its own (a pickup or the gun, entity_offer.h), is left out: the
+ * first could not be raised safely and the second is offered from the archive on its shelf. The
+ * kinds are sorted by the name a person reads. */
 void npc_census_count(const uint8_t *level);
 
 /* The census as it stands. Never NULL. */

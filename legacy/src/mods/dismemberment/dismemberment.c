@@ -64,17 +64,21 @@
  * evidence above, not code. The six gates cannot be reviewed without it, and it has to stand at
  * the site. The node walk and the body-part mask test took the seam to limb_nodes.c when this
  * file came within twenty lines of the limit; the flight of the severed piece went to
- * limb_flight.c before that.
+ * limb_flight.c before that. The next seam is the run-time switch at the end: the poll of the
+ * mode, a multiplayer host's mode in place of the own and its acknowledgement, which touch no
+ * engine site and need only the configuration and the flight's switch.
  */
 #include "dismemberment.h"
 
 #include "limb_nodes.h"
 
 #include "limb_flight.h"
+#include "limb_mode_pick.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
 #include "common/host_image.h"
+#include "common/host_settings_note.h"
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
@@ -87,6 +91,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define DISMEMBERMENT_SECTION "dismemberment"
 
@@ -158,6 +163,11 @@ static const uint8_t MSK_SEND_MESSAGE[] = {
 _Static_assert(sizeof SIG_SEND_MESSAGE == sizeof MSK_SEND_MESSAGE,
                "the send message pattern and its mask are different lengths");
 #define SEND_MESSAGE_SELF_OPERAND  0x07u
+/* Six is push ebp, mov ebp esp, mov eax [ebp+8], the boundary before the store the operand above
+ * belongs to. Nothing here hulls this head; multiplayer does, on six, for the contact it relays,
+ * and a search that did not know the prologue would find nothing once that hull is in. The
+ * operand at +7 lies past it and is never written over. */
+#define SEND_MESSAGE_PROLOGUE      6u
 #define SEND_MESSAGE_OTHER_OPERAND 0x10u
 #define SEND_MESSAGE_CODE_OPERAND  0x19u
 #define SEND_MESSAGE_A_OPERAND     0x21u
@@ -251,7 +261,8 @@ static signature_t sites[SITE_COUNT] = {
      * would have left this one searching for a prologue that is now a jump. */
     SIGNATURE_ENTRY_DETOUR("death_gate", SIG_DEATH_GATE, DEATH_GATE_PROLOGUE_SIZE),
     SIGNATURE_ENTRY("detach_hide_call", SIG_DETACH_HIDE_CALL),
-    SIGNATURE_ENTRY_MASKED("send_message",     SIG_SEND_MESSAGE,     MSK_SEND_MESSAGE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("send_message", SIG_SEND_MESSAGE, MSK_SEND_MESSAGE,
+                                  SEND_MESSAGE_PROLOGUE),
     SIGNATURE_ENTRY_MASKED("node_post_first",  SIG_NODE_POST_FIRST,  MSK_NODE_POST),
     SIGNATURE_ENTRY_MASKED("node_post_second", SIG_NODE_POST_SECOND, MSK_NODE_POST)
 };
@@ -291,6 +302,17 @@ typedef struct dismemberment_state {
 
     uint32_t          sever_count;
     int               hide_log_count;
+
+    /* A multiplayer host's mode, which a client runs in place of its own for a session without
+     * the ini changing: this machine's own as the ini last gave it, whose hand the running mode is,
+     * and the acknowledgement the multiplayer's report reads, as last filed. */
+    int               own_mode;
+    bool              mode_from_host;
+    bool              answer_filed;
+    bool              answer_from_host;
+    int               answer_mode;
+    uint32_t          answers;
+    bool              answer_warned;
 } dismemberment_state_t;
 
 static dismemberment_state_t limb_state;
@@ -311,10 +333,11 @@ static void load_config(void)
      * limb on the killing blow changes how the game plays rather than repairing it, and this
      * project's rule for that class is a switch with a default that leaves the game alone. */
     mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)LIMB_MODE_OFF);
-    if (mode < (int)LIMB_MODE_OFF || mode > (int)LIMB_MODE_ON_DEATH) {
+    if (!limb_mode_is_known(mode)) {
         mode = (int)LIMB_MODE_OFF;
     }
-    config->mode = (limb_mode_t)mode;
+    config->mode         = (limb_mode_t)mode;
+    limb_state.own_mode  = mode;
 
     config->spin_scale     = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SpinScale",
                                                           0.35f), 0.0f, 2.0f);
@@ -704,10 +727,69 @@ static void install_mesh_index_fix(void)
  * and the flight constants are only written when the answer actually changes. */
 #define POLL_INTERVAL_FRAMES 60u
 
+/* The acknowledgement the multiplayer's report reads, host_taken_dismemberment: whether the mode
+ * running is the host's, and which one. Filed on a change of hand, or of the mode while it is the
+ * host's, and never on a machine where no host's mode was ever in force. A refused filing is warned
+ * about once and not tried again until something changes. */
+static void acknowledge_mode(void)
+{
+    host_settings_taken_t taken;
+    host_settings_t       record;
+
+    if (!limb_state.answer_filed && !limb_state.mode_from_host) {
+        return;
+    }
+    if (limb_state.answer_filed && limb_state.answer_from_host == limb_state.mode_from_host &&
+        (!limb_state.mode_from_host || limb_state.answer_mode == (int)limb_state.config.mode)) {
+        return;
+    }
+    memset(&taken, 0, sizeof taken);
+    if (limb_state.mode_from_host) {
+        taken.in_force = (uint16_t)(1u << HOST_SETTING_DISMEMBERMENT_MODE);
+        taken.effective[HOST_SETTING_DISMEMBERMENT_MODE] = (float)limb_state.config.mode;
+        if (host_settings_read(&record)) {
+            taken.generation = record.generation;
+        }
+    }
+    taken.published = ++limb_state.answers;
+    if (!host_settings_publish_taken(DISMEMBERMENT_SECTION, &taken) &&
+        !limb_state.answer_warned) {
+        limb_state.answer_warned = true;
+        log_warning("the acknowledgement of the host's settings could not be filed as "
+                    "host_taken_%s, so the multiplayer's report will say no note answered",
+                    DISMEMBERMENT_SECTION);
+    }
+    limb_state.answer_filed     = true;
+    limb_state.answer_from_host = limb_state.mode_from_host;
+    limb_state.answer_mode      = (int)limb_state.config.mode;
+}
+
+/* Said once per change of hand, whichever way, with this machine's own mode beside the host's and
+ * the word that the file was not touched. */
+static void say_the_hand(const limb_mode_choice_t *choice)
+{
+    if (choice->from_host == limb_state.mode_from_host) {
+        return;
+    }
+    if (choice->from_host) {
+        log_info("the host's dismemberment Mode %d is used for this session; this machine's own "
+                 "%d stays in engine_fixes.ini", choice->mode, choice->own);
+    } else {
+        log_info("the host's dismemberment Mode no longer applies: back to this machine's own %d "
+                 "from engine_fixes.ini", choice->own);
+    }
+}
+
+/* In a multiplayer session a client runs the host's mode in place of its own, read from the record
+ * the multiplayer publishes and never written to the ini; the own mode is there again when the
+ * session is over. */
 static void poll_mode(void)
 {
-    static uint32_t countdown;
-    int             mode;
+    static uint32_t    countdown;
+    float              host_value = 0.0f;
+    bool               host_named;
+    bool               was_host;
+    limb_mode_choice_t choice;
 
     if (countdown != 0u) {
         countdown--;
@@ -715,18 +797,29 @@ static void poll_mode(void)
     }
     countdown = POLL_INTERVAL_FRAMES;
 
-    mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)limb_state.config.mode);
-    if (mode < (int)LIMB_MODE_OFF || mode > (int)LIMB_MODE_ON_DEATH ||
-        mode == (int)limb_state.config.mode) {
-        return;
+    host_named = host_settings_value(HOST_SETTING_DISMEMBERMENT_MODE, &host_value,
+                                     GetTickCount());
+    choice = limb_mode_pick(host_named, host_value,
+                            ini_read_int(DISMEMBERMENT_SECTION, "Mode", limb_state.own_mode),
+                            limb_state.own_mode);
+    limb_state.own_mode = choice.own;
+    say_the_hand(&choice);
+    was_host                  = limb_state.mode_from_host;
+    limb_state.mode_from_host = choice.from_host;
+    if (choice.mode != (int)limb_state.config.mode) {
+        limb_state.config.mode = (limb_mode_t)choice.mode;
+
+        /* Said before the flight constants are moved, so the log reads in the order the reader
+         * thinks in: the setting changed, and here is what changed because of it. */
+        if (choice.from_host && was_host) {
+            log_info("the host's dismemberment Mode is now %d for this session", choice.mode);
+        } else if (!choice.from_host && !was_host) {
+            log_info("Mode is now %d, read from the settings file while the game runs",
+                     choice.mode);
+        }
+        limb_flight_set_active(choice.mode != (int)LIMB_MODE_OFF);
     }
-
-    limb_state.config.mode = (limb_mode_t)mode;
-
-    /* Said before the flight constants are moved, so the log reads in the order the reader thinks
-     * in: the setting changed, and here is what changed because of it. */
-    log_info("Mode is now %d, read from the settings file while the game runs", mode);
-    limb_flight_set_active(mode != (int)LIMB_MODE_OFF);
+    acknowledge_mode();
 }
 
 void dismemberment_install(void)

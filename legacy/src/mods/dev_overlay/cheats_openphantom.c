@@ -84,6 +84,8 @@
  * and the console's own "kill me now" both go elsewhere and are not blocked here.
  * ============================================================================================ */
 #include "cheats_openphantom.h"
+
+#include "local_look.h"
 #include "cheats_internal.h"
 
 #include "sim_pause.h"
@@ -527,6 +529,16 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
         } else if (id == CHEATS_OWN_NOCLIP) {
             own_state.cheats[CHEATS_OWN_FREECAM].on = false;
         }
+    }
+    /* And what the player now looks like, for a second machine. The two scales are drawn by a
+     * factor composed into the player's own matrix every frame, which nothing outside this
+     * process can see; local_look says it, the multiplayer's appearance carries it, and the far
+     * body is built at the same size. Said here rather than in the draw hook because this is the
+     * one place the state changes, and the draw hook runs sixty times a second. */
+    if (id == CHEATS_OWN_GIANT_PLAYER || id == CHEATS_OWN_TINY_PLAYER) {
+        local_look_set_scale(own_state.cheats[CHEATS_OWN_GIANT_PLAYER].on ? GIANT_PLAYER_SCALE
+                             : own_state.cheats[CHEATS_OWN_TINY_PLAYER].on ? TINY_PLAYER_SCALE
+                             : 1.0f);
     }
     return own_state.cheats[id].on;
 }

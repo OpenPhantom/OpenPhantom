@@ -12,6 +12,8 @@
  * reading decision and whoever changes it should have to change one list. */
 typedef enum utilities_slot {
     UTILITIES_DEV_MENU_SIZE = 0,
+    /* The chat's key stood after this one until it moved to a heading of its own. It was the last
+     * slot, so taking it out moved no slot and no id above it. */
     UTILITIES_OPEN_KEY
 } utilities_slot_t;
 
@@ -30,7 +32,7 @@ void overlay_utilities_row(uint32_t slot, const char *editing_text, bool capturi
     switch ((utilities_slot_t)slot) {
     case UTILITIES_DEV_MENU_SIZE:
         out->kind = OVERLAY_ROW_VALUE;
-        overlay_row_label(out->label, "Cheatmenu size (0.33 to 4.0)");
+        overlay_row_label(out->label, "Dev menu size (0.33 to 4.0)");
         overlay_row_typed(out, editing_text, dev_menu_size_row_format, dev_menu_size_row_get());
         return;
 
@@ -72,7 +74,7 @@ bool overlay_utilities_row_is_key(uint32_t slot)
 bool overlay_utilities_toggle(uint32_t slot)
 {
     (void)slot;
-    return false;    /* neither row is a switch: one is typed, the other binds a key */
+    return false;    /* no row here is a switch: one is typed, the other binds a key */
 }
 
 bool overlay_utilities_commit(uint32_t slot, const char *text)

@@ -652,7 +652,7 @@ static void install_menu_group(void)
      * The two are otherwise unrelated: this one is about the cursor the MENUS draw and
      * is useful whether or not the window is ever moved. */
     pointer_cage_install(resolution_state.config.widen_menu_cursor_area,
-                         canvas_width, canvas_height);
+                         canvas_width, canvas_height, menu_scale_cursor_size());
 
     /* Same ordering constraint again, and the same reason: the loading bar is drawn by
      * hand off the menu origin rather than as widgets, so it is sized from the canvas

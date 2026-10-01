@@ -13,32 +13,162 @@ the executable in front of it. The addresses are beside each cheat below.
 
 ## What it looks like
 
-Two tabs under a heading that reads `Cheatmenu`.
+Two tabs under a heading that reads `Dev menu`. It was `Cheatmenu` while the cheats were all it
+held; it holds the spawner, the free camera, the picture, the controls and this patch's own
+settings now, and a player looking for any of those was looking under the wrong word.
 
 * **Original** holds two groups: the eleven codes the shipped console can switch on and off, and
   the sixteen it can only run once, typed in retail one backspace and one line of text at a
   time. Here they are both just rows in the same tab.
-* **OpenPhantom** holds twelve groups, one per subject a player comes for: **Cheats**, **Free
-  camera** (that cheat with its key and its instructions), **Level selection** (the skip, and the
-  level a new game starts at), **NPC spawner** (any actor in the game, in front of you),
-  **Dismemberment**, **Cheatmenu options** (this panel's own size and key), **In game options
-  extras** (whether this patch's settings appear on the game's own screens), **Enhanced resolution**
-  (the picture), **Fog**, **Enhanced input** (the control scheme), **Window mode** and **Frame
-  rate**. It began as one group with a settings row appended, and the settings outgrew the cheats,
-  so a reader had to scroll past invincibility to reach the draw distance. A second group,
-  Utilities, held every setting for a while; Window mode came out of it first, because its rows
-  answer a single question and half of them are unusable until the game is restarted, which is worth
-  saying in one place and not eleven times, and the rest followed on the same argument until each
-  heading named one thing and Utilities was left holding the panel's own two rows, so it was renamed
-  for them.
+* **OpenPhantom** shows twelve headings, each named for what is under it rather than for the DLL
+  that reads it, in the order they are wanted: **Cheats**, **Free camera** (that cheat with its key
+  and its instructions), **Entity spawner** (any actor in the game, in front of you or where the
+  mouse puts it), **Appearance** (who the player looks like), **Level selection** (the skip, and the
+  level a new game starts at), **Engine** (the draw distance, the field of view, the fog and the
+  subtitle size), **Controls** (the control scheme), **Multiplayer** (the key that opens the
+  multiplayer chat), **Window**, **Frame rate**, **Menus** (this panel's own size and key, and
+  whether this patch's settings appear on the game's own screens) and **Dismemberment**. The three
+  at the top are the three used while standing in a level, which is where the panel is opened from.
 
-Everything starts folded. The search box filters by name and opens a group that has matches, and
-clearing it puts the fold back the way you left it. A switchable row shows its state as `ON` or
+  **Engine** names how the engine draws the world, and no DLL: three of them read the rows under
+  it. Inside, the group keeps its name, the picture, because its slots and its row ids are written
+  against it; the heading changes nothing a player has set or a session locks. **Multiplayer** is
+  a heading of its own for its one row, the chat's key, and it stands directly under **Controls**,
+  where a player looks for a key; **Menus**, where the row would otherwise belong, says neither
+  chat nor key and starts folded near the bottom.
+
+  It began as one group with a settings row appended, and the settings outgrew the cheats, so a
+  reader had to scroll past invincibility to reach the draw distance. A second group, Utilities,
+  held every setting for a while; the window rows came out of it first, because they answer a
+  single question and half of them are unusable until the game is restarted, which is worth saying
+  in one place and not eleven times, and the rest followed on the same argument.
+
+  Three of those headings were the DLL and not the subject: `Enhanced resolution` held no
+  resolution at all, `Enhanced input` held the control scheme and `In game options extras` held
+  one question about the game's own screens. A player looking for the field of view looks under
+  the picture. Two sources lost their heading in the same change and are drawn under another
+  one instead: the fog under **Engine**, because the fog row that follows the draw distance
+  points at a number in that group, and the game's own screens under **Menus**, because both
+  answer where the settings of this patch appear. They are still their own sources, with their own
+  slot numbers, and `session_lock.c` still decides by those numbers; a row moved between sources
+  would have changed what a session takes away, and `unittests/overlay_session.c` is the guard
+  against that, checking the taken rows by name.
+
+The panel opens on **OpenPhantom** when the game starts, because that is the tab it is opened for:
+the free camera, the spawner and the settings are wanted far more often than a retail code.
+Everything starts folded the first time, and after that the panel opens where it was left: the
+tab, the folds, the search text, the scroll and the open lists all survive closing it, so a
+setting that has to be looked at in the game costs one keypress each way instead of four. What
+does NOT survive is what was half done, a key capture waiting or a number half typed, because
+either would reach into the game. A folded heading carries a short word on the right saying what
+is under it, `2 on`, `ON`, the name of a chosen entry, or `session` when a running session has
+taken the whole group, so a list of twelve bands answers most questions without being opened.
+
+The word is worked out from the rows and not asked of each group, which is what keeps it from
+disagreeing with what the group draws. SWITCHES are counted: a list counts none of its entries,
+because one of them is always the chosen one and `1 on` beside a heading would say something
+under it had been switched on. That is why **Window** reads `ON` and not `2 on`; the word answers
+for its one real switch, the stretch. A heading with NO switches under it and exactly one chosen
+entry carries that entry's own name instead, cut to fifteen characters with two dots if it is
+longer: **Appearance** reads the model being worn, **Entity spawner** reads the behaviour its
+copies are given, `Stand` or `Follow` or `Attack` or `Help`. Two chosen entries under one heading
+cannot be said in one word and none has no word, so both of those read empty; the spawner's band
+therefore goes quiet while its list of kinds is open, which is the rule and not an oversight. The
+search box filters by name and opens a group that has matches, and clearing it puts the fold back
+the way you left it. A switchable row shows its state as `ON` or
 `OFF` in a chip; a row that only runs once shows `RUN` instead, in the same shape but never green;
-green would say "this is on right now", which a fire-once row never is. Either kind shows `n/a`
-with no chip when the engine site behind it never resolved, or, for the two rows this can pin the
-difficulty, see below, when running it now would be unsafe and not merely unresolved. The
+green would say "this is on right now", which a fire-once row never is.
+
+**A choice is not a switch, and is not drawn as one.** Five window shapes, a roster of models,
+eleven levels and the list of what to spawn are each one setting with several values, and each
+was drawn as one chip per entry: four rows reading `OFF` beside one reading `ON` says the window
+has five settings that happen to be off. An entry of a list carries a small filled mark to the
+left of its name instead, an outline when it is not the chosen one, and no chip at all. The mark
+sits in the indent every row already has, so nothing on the row moved for it. It is not green:
+green is this panel's word for a switch that is on.
+
+A choice short enough to be shown whole stands on its own row instead, as a strip of words where
+the chip would be, the chosen one filled. There is one of those: the behaviour of a spawned
+entity, `Stand`, `Follow`, `Attack`, `Help`. Its name and its four words come to about 35 of the
+41 text heights the panel leaves for them, so there are six or seven characters of real room; the
+unit test holds the pair at 45 characters of its own 48, which is the same measurement taken
+conservatively and fails on any change to the four words rather than only on an overflow. Clicking a
+word picks it, and Left and Right walk them while the keyboard is on that row; at either end the
+arrow means what it means everywhere else in the panel, which is the tab, so holding one down still
+leaves the row. Either kind shows a reason in place of its chip when it cannot be used, and `n/a` is
+only one of them: `n/a` is the engine site that never resolved, `session` is a running multiplayer
+session, `needs key` is a binding that has to be made first, `needs row` is another row in the same
+group that decides this one, and `held back` is one of the three shipped codes that resolve, run and
+are deliberately not offered. There is one more, `see why`: the entity spawner works out its own
+reason for the whole group and writes it as a sentence a few rows up, and the word on the row points
+at that sentence rather than repeating it, because it is longer than a chip and it changes with the
+world. The sentence behind the other kinds is written once, on the row directly under the first row
+that gives that reason. The
 pointer is the game's own cursor.
+
+**On a client of a multiplayer session four taken rows read the host's value instead.** The host
+decides the draw distance, the fog thickness, whether the fog follows the draw distance and
+lightsaber dismemberment for everybody, and a client runs the host's values for the session without
+its own ini changing. Those rows are taken like every other row a session takes, greyed and not
+pressable, but their chip reads `host 1.50x`, `host 0.50x`, `host OFF` or `host ON` rather than
+`session`, because the host's value is what that machine is running and the number in its own ini
+is not. A setting the host did not name reads `session` as before. The two switches under the draw
+distance, the frame rate rows and the game's own codes have no host value; they are this machine's
+own and read `session`. On the host itself, and outside a session, nothing changes. The values come
+from the record the multiplayer files for the session (`common/host_settings_note`), and the panel
+asks for it only while its session note says this machine is a client. The folded heading over
+those rows counts the host's switches as well: with the host's fog not following the draw distance,
+**Engine** reads one switch fewer on the client than the client's own file has on, because the
+word on a heading says what is running under it.
+
+**When the panel turns something down it says so**, in a band directly above the footer, in
+amber. A number outside its ends, a key the panel needs for itself, a settings file that could not
+be written: each of those used to leave the row showing exactly what it shows when the change
+worked and the value happened to be the same, so there was no way to tell a refusal from a no-op
+by looking. The band holds one sentence, the last one, and it is **not there at all** when there
+is nothing to say: it costs no height, and the rows sit where they always sat.
+
+It never goes away on a clock, and that is deliberate. While it stands it costs one band of
+height: it takes the last row that fits, or makes the panel taller by its own height, and no row
+above it moves. A band that expired by itself would turn the place it held back into a row, or
+into the footer, while the pointer stood still, and a click aimed at the band would land on
+whatever took its place. It goes on the next click, key or pad press, which is a moment the
+player is already acting. The entity spawner's own refusal, such as "Refused: 16 are alive, the
+most at once", stays a row in its group, because it describes a state of the world rather than
+an answer to a keystroke; it is amber now too, and every other note stays grey.
+
+One sentence in the band is not a refusal: after the chat's key is bound it says `Saved: in a
+session it works within a second`. It is put up as a confirmation and drawn in the ordinary text
+colour, not in amber, because in the colour of a refusal a sentence that says the key was saved
+reads as one that says it was not. Not in green either: green in this panel says a switch is on.
+It goes the same way a refusal goes, on the next action.
+
+**The keyboard's row and the pointer's row are two pictures.** Both are filled, which is what says
+"this row is current"; the keyboard's carries a thin accent frame around it as well, which is what
+says which hand put it there. Moving the mouse still clears the selection, so the two never both
+exist; what this answers is the question a player has after touching the mouse and then reaching
+for Return. The frame is round the whole row rather than a bar down its left edge, because that
+bar is already the heading's, in the same place and the same colour.
+
+Along the bottom is a band that says what the keys do, `[Up/Down] move`,
+`[Left/Right] fold, set, tab` (a heading folds, a number changes, a row of words walks
+them, and anything else is the tab),
+`[Return] act` and `[Esc] close`, and on its right either how
+much the open tab holds (`12 groups - 79 rows`) or, while a multiplayer session runs,
+`session - host` or `session - client`. That is the whole of what the panel can say about a
+session: the note the multiplayer publishes carries whether one runs and who hosts it, and no
+count of the players, so the band names none. Nothing of it reaches the log. On a panel too
+narrow to hold the whole line it drops the grey words first and the tally second, and never
+makes the panel wider: the panel is as wide as its longest row needs, and that is the
+measurement everything else here is fitted into. `Esc closes` used to stand on the right of
+the title band and has gone from there, because one sentence in two places is the pair that
+drifts apart.
+
+While a key row waits for its key (its chip reads `...`), the keys on that line stand down and the
+band says `press a key` instead, with the tally beside it where it fits. Every key the caps name
+would be taken as the binding in that moment, Escape included, so `[Esc] close` would have been
+wrong for exactly as long as it stood there. A refused key leaves the old binding and says why in
+the band above.
 
 ## How it draws, and why there is no window
 
@@ -110,6 +240,14 @@ player notices that opening the overlay mid fight. So the simulation is now held
 engine's own flag. `sys_frame` gates its own substep loop on it and the retail pause menu sets the
 same one, so nothing here is invented and nothing had to be hooked; `render_frameEnd` runs below
 that gate. The picture keeps being drawn.
+
+**Except in a multiplayer session, where the hold is not taken at all.** The world a session stands
+in belongs to everyone standing in it, and one player opening the panel may not stop it for the
+rest. It also made a feature look broken: the entity spawner hands its wish to the multiplayer,
+which reads it in a substep, and a held simulation runs none, so nothing whatever happened until the
+panel was closed again. The panel asks `session_lock` on the way in, the answer is the same sticky
+reading of the session note that the locked rows use, and the player is still held by the input
+freeze while the world carries on around them.
 
 **Sound and music keep playing behind the panel, deliberately.** The retail pause menu also
 silences audio by broadcasting task command 8 on the way in and 9 on the way out. That pair is not
@@ -183,7 +321,7 @@ NPCs**, **One-shot NPCs (your damage)**, **Giant player**, **Tiny player**, **No
 run**, **Jump boost** and **Free camera**. They need fewer engine sites than that, because
 several pairs are two answers to one question and share a single detour.
 
-**No fog was a ninth and now heads the Fog group.** It is still the same code in
+**No fog was a ninth and now heads the fog rows, under the picture.** It is still the same code in
 `cheats_no_fog.c` and still writes the same `NoFog` key; only the row moved. A player looking for
 it is looking at the fog, and the fog thickness and fog follow rows below it are the rest of that
 answer: this one removes the fog, the second says how thick it is, and the third says what it is
@@ -430,7 +568,7 @@ The speed is the row directly under the toggle, `Super run speed (1.1 to 4.0x)`,
 on the track beneath it, the same shape as the draw distance. A drag writes `SuperRunScale` on a
 hundredths grid and, while the cheat is on, rewrites the run cap at once, so the speed follows
 the hand; the row and its track are unavailable with the toggle, since a number nothing is hooked
-to would be a lie.
+to would be a lie. Its `Default` is 2.0, what the key falls back to with nothing written.
 
 What a faster run does and does not change: the run clip plays at its authored rate, so above
 about 1.5x the feet visibly slide, the same gait note enhanced_input's pad stick makes; the turn
@@ -454,7 +592,11 @@ Each hook calls the original **first and unconditionally**. This is a boost, not
 reimplementation. The jump happens as retail built it, guard check and all, and
 only once it has decided to jump and written its own vertical velocity does the cheat scale what
 is now sitting at `+0xB4`, whichever path the original took, the fallback constant or the
-per-character table value. The multiplier is a number you can type on the cheat's own row.
+per-character table value. The multiplier is a number you can type on the cheat's own row,
+with a track of its own on the line under it, the same shape super run and the draw distance
+have. Its `Default` is 1.3, what `install_jump_boost()` seeds the scale with; unlike every
+other number this panel edits that one is held in memory and no key carries it, so it reads
+1.3 again on every start whatever it was left at.
 
 **A higher jump is a longer fall.** While the cheat is on it also suppresses three things
 retail's own ground-contact code does to a long fall, none of which is a cheat of its own and
@@ -533,7 +675,7 @@ shipped, applied on every frame of a flight so it takes mid flight too, and rele
 flight.
 
 **Hiding the panel.** While the camera is flying the panel cannot be closed, because it is what
-holds the game still under the camera (see below). The Cheatmenu's open key and Escape hide it
+holds the game still under the camera (see below). The dev menu's open key and Escape hide it
 instead, so the picture is the camera's alone, and the same keys bring it back; it comes back by
 itself when the flight ends. Hidden is only not drawn: the freeze, the pause and the keys the panel
 swallows are all still there, so hiding is safe where closing is not.
@@ -555,7 +697,7 @@ is the point: the other writer it collides with is not something every machine h
 A group of its own, directly under the cheats, holding the two rows about which level is
 played: "Skip to next level (debug)", which was the tail of the cheats, and "New game starts
 at", whose chip shows the choice as the number and the level's file stem, `6 espa`, and whose
-press opens a list of the eleven levels in the game's order, the chosen one lit, closing on a
+press opens a list of the eleven levels in the game's order, the chosen one marked, closing on a
 pick, the same shape as the window group's size list. Picking level one writes the setting
 as `0`, the game's own new game. It exists for modding: a save game carries the level it was
 made in, so a modded level file cannot be entered from a save of the unmodded game, and the
@@ -583,23 +725,129 @@ hands out, not the kit the shipped saves carry from the levels before. Kept as `
 NewGameStartsAt`, off as shipped. Played 2026-09-15: Mos Espa picked from the list, quit to
 the front end, New Game, and the level opened with its own movie and title.
 
-### NPC spawner
+### Entity spawner
 
-A group of its own, directly under Level selection, with five rows and a fold: "Spawn NPC (close
-menu to take effect)", a note under it counting the spawns alive against the cap, "NPC to spawn",
-"Spawned NPCs", "Remove spawned NPCs" and "About spawned NPCs", which opens into the lines that say
-what to expect: it appears when the menu closes, three steps ahead and facing you; any actor in the
-game, the level's own first, to stand, follow, attack or help you; any of them can be struck down
-and fades; gone with the level, and a save brings each back as one more of its placement; up to
-sixteen alive at once, each on the next free spot. "NPC to spawn" opens a list of the actor files
-the loaded level's placements use, `ddroid` for `ddroid.baf`, each with how many the level placed of
-it, and then the archive's creatures the level did not load; "Spawned NPCs" opens the four
-behaviours, Stand, Follow, Attack and Help, Stand to start; the choice stays put across kinds and
-levels, since a default that followed the kind changed it under the player's hands. Pick an actor,
-press the spawn, and one more of it stands a few units ahead of the player, facing them. The rows
-read unavailable with no level loaded.
+A group of its own, directly under Level selection, called "Entity spawner" in the panel. In the
+source, on the wire and in the log it is still the NPC spawner: its files are `npc_spawn*`, its log
+lines begin `npc spawner:`, so a field log compares against every older one.
 
-Nothing is hooked. A level's actors are placements, one record each in a directory the world record
+Eight rows and a fold: a note counting the spawns alive against the cap; "Place with the mouse",
+with the entity it would place on its chip; the two keys of that mode, "Key: place with the mouse"
+and "Key: turn to face you"; "Entity to spawn", which opens the list; "Spawned entities", which
+carries the four behaviours on the row itself, Stand, Follow, Attack and Help, the chosen one
+filled; a note under it reading "Attack fights you; Help fights for you"; the remove; and "About
+spawned entities".
+
+**The mouse is the only way in.** No row puts a copy a few steps ahead of the player: a copy goes
+down where the pointer puts it and nowhere else, on a spot the player can see and the mode has
+probed.
+
+The behaviours were a list of four rows that opened, each with a sentence saying what it does.
+Four words fit beside the name with room to spare, so the choice is shown whole and there is
+nothing to open. Two of the four sentences said what their own word says, Follow and Attack. The
+other two did not: Attack and Help are both fighting and what differs is who is fought, and Help
+follows as well, which its word does not say. The note under the row holds 48 characters and no
+more, so it carries the first of those, with an object on each verb: written "Help follows and
+fights", the second verb read as fighting the player too, which is the one thing the line exists
+to tell apart. The other two, that Help follows and that Stand turns to face you, are a line in
+"About spawned entities", which has the room. When a spawn or a wish is refused, a row under the
+two keys says why, "Refused: 16 are alive, the most at once", in a single player game as in a
+session, until the next spawn or a new world. The rows read unavailable with no level loaded.
+
+**Why a row is unavailable.** Over the refusal, whenever anything in the group is out of reach,
+stands a row that says what is in the way: "Why: the session runs no copies", "Why: no level, or no
+player in it", "Why: this level offers nothing to spawn", "Why: nothing is chosen to place", "Why:
+the camera cells did not resolve", "Why: the spawner cannot raise a copy here". One rule decides
+it (`spawn_reason.c`): the placement mode asks it before it starts, every row of the group asks it
+before it offers itself, and the row above and the log print its sentence. There is no second
+spelling of the question anywhere, which is what let the mode and the rows disagree before. Once a
+world the log also prints
+the numbers behind it, whether the group is usable or not: whether a session is running, whether the
+multiplayer runs the copies in it, whether its record was read, its cap, this machine's world slot
+and the epoch.
+
+**In a multiplayer session.** The group is the one a running session leaves alone, as long as the
+multiplayer runs the NPC copies in it, which it does in every co-op session over a socket. Both the
+host and a client can spawn and place; what each asks for becomes a wish and the host grants it. A
+session that does not run the copies is the only one that takes the group, and the row that says
+why reads "Why: the session runs no copies".
+
+Each copy built from a grant writes a line naming the player who ordered it, the key it was built
+under, the file and the place, for the first eight of a world; after that one line says they are no
+longer named and the count at the end of the world carries them. Without it a wish that worked and
+a wish that never left looked the same in a log.
+
+**What is offered.** The list is shelved under headings: From this level, Figures, Creatures and
+droids, Vehicles, Pickups, Guns, each sorted by the name a person reads. A file is offered when the
+data say it is safe to raise, four gates in this order (`entity_offer.c`):
+
+* no clip at all: never. The spawn plays clip 0, the play refuses it on a file with no tracks and
+  leaves the animation slot at -1, and the script opcodes then write in front of the track array.
+  Eighteen files of the archive have no clip, and no retail level places one of them.
+* `inviso.baf`: never, the engine's own script anchor with no body.
+* a node named `head` or `chest`: a figure, as before.
+* a class the eleven retail levels place the file under: 1 to 3 a living thing, 10 to 27 a pickup
+  (the player's pickup range), 4 with the nodes `turret` and `target` the one gun, `tripod.baf`.
+  Class 0 (props, ships, quest items) and class 8 (the tank) are not proven for a copy and are left
+  out.
+
+The classes live in the levels, which the panel never reads, so they are carried as generated data,
+`entity_class_data.h`, one row per archive file with its clip count and node facts, written by
+`tools/census_entity_classes.py` from `big.lab` and the retail levels (`--check` compares the
+committed table with the data). The unit test runs the rule over every row: 303 files, 204 offered,
+99 refused, not one of the clipless files among the offered. At run time the archive is read as
+before and held against the table, and a line says what the offer came to and how far the two
+agree.
+
+A pickup is raised as its own class, so the player takes it up as the level's own, and it runs the
+still script whatever the behaviour row says, which then reads `n/a`, as it does for the gun. Both
+are functions of the file name, so no behaviour number is added and every machine of a session
+builds the same copy. In a session a pickup the host takes is gone for everyone: its life ends on
+the host, and every client gives up its copy. One a client takes is taken on that client only, and
+the others still see it.
+
+Names come from a table in `entity_names.c`, which is a courtesy and never a filter: a file it does
+not name shows its stem. The level's own kinds show how many the level placed, `x31`.
+
+**Placing with the mouse.** "Place with the mouse", or its key, hides the panel and frees the
+pointer; the player stays held. In a single player game the world stays held as it is under the
+panel, and after each copy placed it runs for two of its substeps, counted by the panel's module
+node, so the copy stands where it was put: the engine's spawn writes only the actor's position,
+the body's stays at zero until the first substep hands it on, and a world held before two substeps
+have passed would draw the copy somewhere between the world's origin and its place. In a session the
+world runs, as it does under the panel there. The entity is drawn where it would stand, solid, with
+a render handle of its own and nothing spawned for it (`spawn_ghost.c`), and four corners around it
+say whether it may: green where a left click places it, red where it will not, with the reason in a
+line under the pointer. The ray under the pointer is turned round out of the camera's own numbers,
+read at the end of the scene from the cells the world pass projects with (`world_camera.c`,
+`world_pick.c`); where it strikes, the floor is looked for just above the strike and the entity
+stands on it. A body is not a point: four short rays go out from the place at a body's height, as
+long as the entity's collision radius, and a wall they strike pushes the place away from it, so a
+copy set at the foot of a wall stands beside it rather than half in it. Refused: nothing struck, no
+floor within reach, a moving platform, too tight between two walls, no headroom, a copy or the
+player already there, the cap reached.
+
+* left click places, again and again, the entity staying at the pointer; a second click within
+  150 ms is the same click;
+* the wheel turns it, 15 degrees a notch, 1 with Shift, 90 with Ctrl snapped to the nearest
+  quarter; until it is turned it faces the player, the tripod with its back to the player;
+* the middle button or the face key turns it back to face the player;
+* every copy in view gets thin corners, white for this player's and grey for another player's;
+  the one under the pointer, the first the ray enters before what it struck, gets bright corners
+  and its name, and a right click removes it, in a single player game and on the host of a
+  session, where every copy may be removed. A copy behind a wall is never under the pointer. A
+  ridden tripod is skipped with a line. A client cannot remove a single copy yet: that would be a
+  new wish on the wire, and the line under the pointer says so;
+* Escape, or the mode's key, brings the panel back; the key that opens the panel closes it. A new
+  world, a closed panel, a lost player or the player's death end the mode, and the free camera
+  takes the mouse from it while it flies.
+
+Who has the pointer, the wheel and the pause at any moment, the game, the panel, the free camera or
+the placement mode, is one answer, `input_owner.c`, which every part asks.
+
+The rest of this section is the spawner underneath, as it was built.
+
+A level's actors are placements, one record each in a directory the world record
 carries at `+0x20C` (count at `+0x204`), and `spawn_actor` (`0x00437250`, cdecl: the record, its
 index, a script index or -1 for the record's own) is the one routine that turns a record into a live
 actor. The activation scan calls it for every placement the player comes near (`0x0043722E`) and the
@@ -610,22 +858,15 @@ opening's two operands, which have to agree as well.
 What is spawned is a copy. The engine keeps one live actor per record and writes its death
 bookkeeping back into it, so a second actor on the level's own record would take over its live word
 and its spawn state. The chosen placement is copied into a record of the group's own, from a ring of
-thirty-two that skips any record a live actor still points at, with the position moved, the yaw
-turned to face the player, the starting mode set to 0, the class set to 2 and the reveal count
-zeroed; the copy goes in under its source's index, so a save made with spawned actors alive restores
-each as one more actor of its source placement, running the placement's own script, which is the one
-thing a save can say about it. The live words the engine keeps in those records are what the cap
-counts, sixteen alive at once against the engine's pool of 128 for the whole level, and what the
-spacing reads: a new spawn takes the first of twenty-four spots in three files ahead of the player
-that no live spawn stands within half a body's width of, the middle file first, one behind the other
-a body's width apart from two and a half units out, then a file a body's width to the left and one
-to the right, so holding the key down lays them out in close ranks ahead, a block that fits a
-corridor, and not in a heap; when the spawns stand on every spot, followers crowding in front of the
-player do, the one with the most room round it is used, since the engine's push layer sorts two
-bodies close together out on the first tick and a refusal for want of a spot read as the cap. A fan
-around the player was the first shape, and in a tight room its sides and its back put copies in the
-walls; ahead is where the player is looking and the one direction they can see is clear. The list is
-by model, one row per actor file; of a kind's placements the plainest is the source, one the
+128, one per actor the engine's pool holds, that takes a record again only when no actor names it
+any more, with the position moved, the yaw turned to face the player, the starting mode set to 0,
+the class set to 2, the reveal count zeroed, no removal by distance and a route of one node, the
+spot it stands on (`npc_spawn_record.c`); the copy goes in under an index of its own, 256 + k, past
+every placement of every level, which the engine reads back in two places only, the enemy block of
+a savegame and a tripod gun's mount. The live words the engine keeps in those records are what the
+cap counts, sixteen alive at once against the engine's pool of 128 for the whole level. A copy
+stands where the mouse puts it. The list is by model, one row per actor file; of a kind's placements
+the plainest is the source, one the
 activation scan spawns and the level did not name.
 
 **A copy runs a script of this project's own, never its source's.** A placement's script is the
@@ -767,6 +1008,48 @@ player, mounted, fired and dismounted; Watto, a Coruscant thug, a Wookiee, Maul,
 Palpatine from the archive on the Tatooine sand; and Tuskens on Attack against a Maul on Help, with
 the log showing his swings taking three and six points a hit until one fell.
 
+#### Spawned entities in a savegame
+
+A save keeps every living copy where it stands, facing as it faces, with its health, and a load
+brings it back. Three heads are hulled for that and nothing else. `enemy_saveBlock` takes every copy
+out of the enemy pool's chain for the length of the call and puts it back exactly where it was
+(`npc_spawn_list.c`), because the enemy block writes each actor's index and a load would read the
+level's directory with 256 + k. The copies go into the panel's own block instead, written by an
+engine module node of its own, `OPNpcCopies`, which a hull on `sys_startup` installs right after the
+engine builds its own (`npc_spawn_node.c`); the block is read back when the load hands it over and
+the copies are raised at the first frame after the load has finished, never in the middle of it.
+`save_saveGame` refuses a save while the player sits on a spawned tripod gun, with the engine's own
+message box ("Not saved / Leave the spawned tripod first"), since a load could not give the mounted
+gun back; it also refuses one when the pool cannot be walked to keep the copies out. Dying copies
+are not saved. Without the enemy block's hull or the module node no copy is raised at all, and
+without the refusal no tripod gun. The original game loads such a save, steps over the panel's block
+by its length, and only the copies are missing. A save written before this carries its copies under
+their source's index and still loads them as one more actor of that placement, running the
+placement's own script; that cannot be told apart afterwards and is not repaired.
+
+#### Spawned entities in a multiplayer session
+
+While a multiplayer session runs the copies, over the LAN or through the relay, on the host and on
+a client alike, the panel builds nothing of its own accord. A click of the placement mode asks the
+host's multiplayer for a copy, and the host's cap decides (`[multiplayer] NpcCopiesMax`); every copy
+is built on every machine, under the key the host handed out, and the count row shows the host's
+cap. A refusal is a line in the log with its reason: the cap, a full actor pool, no level, a host
+with no panel that could build it, a machine that cannot hold a copy still, or too many wishes too
+fast. The group shows it too, on a row under the count ("Refused: the host's cap is reached"), until
+the next wish. Every epoch, a level's end or the session's, the log also carries one line of what
+the panel's copies came to.
+
+"Remove your spawned entities" removes the copies this player asked for, wherever they stand. On
+the host a second row, "Remove every player's spawned entities", removes all of them. A copy
+somebody rides is not removed while they sit on it. A player who leaves hands their copies to the
+host. A load on the host asks for each of the save's copies again, and each comes back where the
+save had it; a client's load raises none, since its copies belong to the host's world. When the
+session ends or the world changes, a client's copies of the old world are removed as soon as
+nothing holds the pool, and the host's stay where they are.
+
+On the loopback, or beside a multiplayer older than the copies, the group stays locked for the
+length of the session, since a copy nobody hands a key out for cannot be shown to anybody else.
+
 ## The eleven original toggle codes
 
 They are not reimplemented. The engine keeps eleven `int32` of state and its own console flips a row
@@ -856,7 +1139,7 @@ therefore land on exactly the state the swap silently declines to run in, with n
 either way.
 
 So a press does not call the swap. It records which character was asked for, the row shows `QUEUED`
-in place of `RUN`, and the title bar swaps its usual `Esc closes` hint for `Close applies the queued
+in place of `RUN`, and the title bar, which says nothing otherwise, reads `Close applies the queued
 swap`, and then `cheats_original_actions_apply_pending()` runs it once, from `overlay_input.c`,
 right after the panel closes and the player has been un-suspended again. Only the last press before
 closing takes effect; the four are mutually exclusive characters anyway, so replacing a pending one
@@ -919,18 +1202,51 @@ anything, for either code, since they share the one counter. A row that greys ou
 because that shared budget ran out, not because a resolve failed; the panel does not need to say
 which.
 
-## The Enhanced resolution group
+## A group's rows as a table
 
-The picture, under one heading: the draw distance with its slider, the number in force and its
-two gates, the field of view, and the subtitle size. They were the front half of Utilities until
-the settings there outnumbered everything else, and every one of them answers the same question a
-player arrives with. Three DLLs own the keys, `view_distance_fix`, `variable_fov` and
-`enhanced_resolution`, and none of them is called from here; each re-reads its keys about once a
-second. The fog has a group of its own directly under this one.
+Three groups do not describe their rows in a `switch` any more. The picture, the fog and
+**Dismemberment** are tables of entries, one entry per row, each naming what it is and handing
+in the two or three functions its kind needs; `overlay_kit.c` turns a table into rows, into a
+press, into a committed number and into a drag. Adding a row there is one entry in the table
+and nothing else, except the group's row count and, if it does not go at the end, the slot
+numbers `session_lock.c` addresses.
+
+A number entry draws TWO rows, the value and the track under it, the way these groups always
+drew one, so an entry put in above another moves that one's slot by two. That is the piece
+worth knowing: a slot that moved hands a player a row a session takes away, or takes away one
+it should leave, and nothing in the build notices.
+`unittests/overlay_session.c` notices, by name.
+
+Each entry also carries its minimum, its maximum, its step, a coarse step and what a
+`Default` puts back. They sit on the entry rather than in the drawing so that the sideways
+keys and the Default are written once, in `overlay_number.c`, rather than once per group.
+The two groups that are not tables, the cheats and the controls, state the same numbers in
+the same shape, so every track in the panel is driven by one arithmetic.
+
+The standard is a **function** and not a number, which is the one thing here worth reading
+twice. A number could not say "this row has none": an entry that simply left it out would
+read as zero, and zero is a value on some of these tracks, so a Default nobody wrote would
+quietly put a row at the bottom of its band. It also lets the one row whose standard is not
+a constant answer for itself. The field of view shows a base plus an offset, this panel
+writes the offset, and the value with nothing written is the base, which comes out of the
+settings file every time; `FOV_ROW_MIN_DEFAULT` sits right beside it and is the low END of
+that row's track, named for the default `variable_fov`'s own slider uses for it. Wiring the
+two together sets the narrowest picture the row allows and calls it the default.
+
+## The picture rows
+
+The picture group, under the heading **Engine**: the draw distance with its slider, the number in
+force and its two gates, the field of view, and the subtitle size. They were the front half of
+Utilities until the settings there outnumbered everything else, and every one of them answers the
+same question a player arrives with, how the engine draws the world. Three DLLs own the keys,
+`view_distance_fix`, `variable_fov` and `enhanced_resolution`, and none of them is called from
+here; each re-reads its keys about once a second. The fog is a group of its own and is drawn under
+the same heading, after these rows. The group keeps its inner name, the picture, because its slots
+and its row ids are written against it.
 
 ## The draw distance row
 
-The first row under **Enhanced resolution** edits `[view_distance_fix] ViewRangeScale`, the draw
+The first row under **Engine** edits `[view_distance_fix] ViewRangeScale`, the draw
 distance, typed in the same way as the jump-boost scale. Its label carries the accepted range,
 `1.0 to 2.5`, so it is learned from the row and not from a refused number.
 
@@ -974,6 +1290,13 @@ here, except that the direction is reversed: that DLL publishes what it is runni
 `[view_distance_fix] EffectiveViewRange` and this only ever reads it. Editing that key does nothing,
 the next frame overwrites it, and a machine without `view_distance_fix` installed reads
 `in force: not reported`, not a number this would otherwise have to invent.
+
+On a client of a multiplayer session whose host set the draw distance, `view_distance_fix` does not
+write that key, because the ini is the player's own and the host's value holds only for the
+session. It files what it applies in a record instead (`host_taken_view_distance_fix`), the host's
+value after this machine's frame governor and cell watchdog, and the note reads it from there for
+as long as that record says the host's value is in force. The row above it reads `host 1.50x`, and
+the note can read less than that on a machine that cannot hold it.
 
 ## The two switches under the draw distance
 
@@ -1049,6 +1372,56 @@ from the file would move it in thirty steps against a hand moving in sixty. On t
 `variable_fov` polls every frame but asks the file system for its last write time before parsing
 anything, so it notices within a frame without reading ninety kilobytes sixty times a second.
 
+**One write path, and one place the two numbers are written down** (`overlay_slider.c`). The
+mouse's drag, the click that grabs a track and the pad's triggers were five writers in two files,
+two of them throttled with a copy each of the same two intervals. They are one hold now: which
+track, where the hand has it, what the file last got, and when. Two hands can reach a track, the
+pointer and the triggers, and a hand commands only the hold it has, so the triggers looking at
+whatever is under the pointer cannot end a mouse drag whose hand has wandered off its row.
+
+**The number beside a track follows the hand, not the file.** While a track is held, the value on
+the row above it is worked out from the same fraction the handle is drawn at, through the row's
+own arithmetic run backwards (`overlay_kit_value_at`). It used to come out of the file, which is
+written four times a second, so the number and the handle under it were up to a quarter of a
+second apart while somebody dragged.
+
+**The number stands at the end of the track as well.** The track now ends a little short of
+the panel's edge and the number reads in the gap, so an eye that is on a handle does not
+travel a row and the width of the panel to see what it is setting. It is the same reading as
+the chip above it, from the same fraction through the same inversion, so the two cannot
+disagree in either state: from the file with no hand on the track, from the hand's own
+fraction while there is one (`overlay_slider_number_on`).
+
+**And a `Default` after it**, drawn as a button, which puts the row back to the standard it
+named. A track that named none has no button. Pressing the track row runs it, from the
+keyboard with Return or with a click on the button, because a track is dragged rather than
+pressed and there is nothing else a press on that row could mean. A click that lands on the
+row but on neither target does nothing, so a missed handle cannot put a setting back.
+
+On a panel too narrow to hold all three the Default goes first and the number second, and
+the track never falls under about six capitals wide: a track that cannot be set is worse
+than a button that is not drawn (`overlay_number_fit`).
+
+**Left and Right change a number.** On a value row or on the track under it they move one
+step, with Control held the row's larger step, clamped at both ends; the same keys still
+fold a heading, still walk a row of words, and still change the tab on everything else. The
+rule is one function that the keyboard and the pad's D-pad both ask (`overlay_keys_sideways`),
+because the pad used to change the tab with Left and Right unconditionally and two halves of
+one rule written in two files is the pair that comes apart. The pad has no modifier to hold,
+so a D-pad press is always the fine step and the triggers remain its way to cross a track
+quickly. A press reaches the file through the same hold every other hand writes through, and
+unlike a drag it writes at once: there is no key release to write the last press of a burst
+on, and every press is a value somebody asked for.
+
+Pressing a sideways key while a number is being typed into ends the typing and steps the
+value, rather than being swallowed: clicking a number is the most likely way of reaching
+one, and the keys did nothing at all in exactly that state.
+
+**One row has a number and no track, on purpose:** `Dev menu size`. Its shipped value is
+`auto`, which is outside any band; its ends depend on the size of the picture; and a pull on
+it scales the panel the track is drawn in, so the track would move under the hand pulling
+it. It stays a number that is typed, and the sideways keys leave it to the tab.
+
 Thirty a second is the field of view's rate alone. Every other slider writes four times a second
 and once more on release, since a Steam Deck fell to seven frames a second dragging any of them:
 under Wine the profile layer parses and rewrites the whole file on every write, and every other
@@ -1079,7 +1452,7 @@ restarted. It now re-reads what is live on any pass where it acted. A row whose 
 row can write needs that, or it works once and never again.
 
 **And a group of its own decides whether any of this appears in the game's own menus.** Under
-**In game options extras**, `Show extra menu options (restart the game)` writes
+Under **Menus**, `Show extra menu options (restart the game)` writes
 `[variable_fov] MenuSlider` and `[enhanced_input] MenuWidgets` together. Both ship off, so the
 video options and controls screens look as they did in 1999, and all four settings live in this
 panel instead. It reads on only when both keys are on, since a half state can only be reached by
@@ -1097,7 +1470,7 @@ look ships on, so that slider was its only adjustment inside the game. That is w
 exists. Leaving one widget behind on a screen meant to look untouched would have been the worse
 answer: either the screen is the one the game shipped or it is not.
 
-## The Fog group
+## The fog rows
 
 No fog at its head, then two rows that are `[view_distance_fix]` keys the fog reads while the
 game runs, so each takes effect within about a second and neither needs a restart.
@@ -1127,7 +1500,7 @@ load, and switching while a level is up leaves nothing fogged at all.
 
 ## The key that opens this menu
 
-The last row under **Cheatmenu options** binds `[dev_overlay] OpenKey`. Click it, press a key, and
+The second row under **Menus** binds `[dev_overlay] OpenKey`. Click it, press a key, and
 it is bound in the running panel and written to the ini, so the next start already has it.
 
 **The default accepts three keys**: F6, and the key directly below Escape, which is the backtick on
@@ -1143,11 +1516,59 @@ both things at once.
 **Eight keys are refused**, all of which would lock a player out: Escape and Return and the four
 arrows, which drive the panel itself, and Alt and F4 together, so that Alt+F4 stays a way to quit
 on a panel that does not read modifiers. Keys the game uses are allowed, and both things then
-happen.
+happen. The key that opens the multiplayer chat is refused as well, for the reason given under the
+next heading.
+
+## The key that opens the chat
+
+The row under **Multiplayer**, directly below **Controls**, binds `[multiplayer] ChatKey`, the
+key that opens the chat in a multiplayer session. Click it (or press Return on it), and while its
+chip reads `...` the footer says `press a key`; then press the key. The key belongs to
+`multiplayer.dll`, so this row writes the file and nothing else, as the window keys and the
+subtitle size do: the multiplayer reads the key when a session is set up and again once a second,
+so a running session takes a new key within a second, and the band under the rows says so after
+every binding, as a confirmation in the ordinary text colour and not in the amber of a refusal.
+The row works with the multiplayer absent and in a session alike; it is not one of the rows a
+session takes away, because the chat's key is a matter for the machine it is pressed on.
+
+The search finds it by `chat` or `key` as well. Its row id is 1344, the first of the multiplayer
+group's own block; nothing but the key capture remembers a row by its id, and only for as long as
+one capture lasts.
+
+**It writes the key's NAME, `T` or `F9`, and never its number.** The multiplayer reads its keys by
+name, the way it reads `ScoreboardKey`: one letter, one digit, or F1 to F12. The other key rows here
+write a virtual key code, and a `ChatKey=84` would be no key at all to the multiplayer, which would
+fall back to T while this row showed the key the player chose. For the same reason the row reads
+the file with the multiplayer's grammar and not with the one `OpenKey` uses, which takes a bare `5`
+for key code 5 rather than the 5 key. The default is T, in the code and in the shipped file.
+
+**What it shows is the key the chat opens on.** A name the multiplayer cannot read, or one it
+refuses, shows the key the multiplayer falls back to: T, or U while `ScoreboardKey` is T.
+
+**Refused, with a sentence in the band, and the file left alone:**
+
+* every key without such a name: Escape, Return, Backspace, Tab, Space, the arrows, Shift, Ctrl,
+  Alt, the number pad, the key below Escape, F13 and above;
+* the keys the multiplayer refuses too: M, which opens its menu; F4, half of Alt+F4 and the free
+  camera's way out; F6, this panel's default key; F7, F8, F11 and F12, which the engine's graphics
+  keys take before any hook sees them; and F10, which arrives as a system key;
+* the key `[multiplayer] ScoreboardKey` names;
+* every key this panel already uses: the key that opens it, the two placement keys of the entity
+  spawner and the free camera's teleport key.
+
+The row that binds the key opening this panel refuses the chat's key in turn, so the two can never
+be one key: the chat asks the panel first, and the panel would take that key every time.
+
+Keys the game itself reads are allowed, as they are for `OpenKey`, but the digits are a poor choice:
+1 to 6 also switch weapons, so the chat would open on every change. A key bound by hand in the file
+to one this panel uses cannot be refused here; the multiplayer then opens the chat on it anyway.
+Nor are the placement keys and the free camera's key checked against the chat's when they are
+bound after it.
 
 ## The subtitle size row
 
-The last two rows of **Enhanced resolution**, and it edits `[enhanced_resolution] SubtitleScale`:
+The last two rows of the picture group under **Engine**, and they edit
+`[enhanced_resolution] SubtitleScale`:
 how big the subtitles are, as a multiple of the size they have at 640x480. Typed in like the rows
 above it, with the band in the label, and **dragged on the track beneath it**.
 
@@ -1165,16 +1586,17 @@ shrinking size alone", it sits outside the band this row offers, and there is no
 a handle for it. The row reports the default instead, and anyone who wants the engine's behaviour
 back sets `0` in the file, where the comment explains it.
 
-## The Cheatmenu size row
+## The dev menu size row
 
-The first row under **Cheatmenu options** edits `[dev_overlay] DevMenuSize`, which is how much
+The first row under **Menus** edits `[dev_overlay] DevMenuSize`, which is how much
 bigger than its authored size this menu is drawn. Typed in like the other value rows, with the
 accepted range, `0.33 to 4.0`, in the label.
 
-**It is named for the Cheatmenu and not for the panel**, because the menu is the thing a
-player already has a name for, the one on its own title band, and the panel is an implementation
-detail of it. The key it writes keeps its older name, `DevMenuSize`, because a renamed key would
-silently drop every size already set in a player's file.
+**It is named for the menu and not for the panel**, because the menu is the thing a player
+already has a name for, the one on its own title band, and the panel is an implementation
+detail of it. It read `Cheatmenu size` while the title band still read `Cheatmenu`, and went on
+reading it after the band did not. The key it writes keeps its older name, `DevMenuSize`,
+because a renamed key would silently drop every size already set in a player's file.
 
 **The menu is a fixed number of pixels, which is the problem this solves.** It reads the same on a
 1080 display as on a 4K one, which is deliberate: what it cannot know is how big those pixels
@@ -1185,8 +1607,8 @@ number this can default to that is right everywhere, so it is a row and not a co
 **It takes effect on the next frame, and it moves itself while it is being used.** Committing a
 value redraws the menu at the new size immediately, including the row that was just typed into.
 This row is near the bottom because a control that moves while you are working it is easier to
-find again at the end of a group than in the middle of one. Only the key binding sits below it,
-and that one is used once.
+find again at the end of a group than in the middle of one. Only the two key bindings sit below
+it, and each is used once.
 
 **The value is owned by `dev_menu_size_row.c`, not by the drawing.** The row is asked for the
 current scale on every frame and answers from memory, reading the ini only on the first ask of a
@@ -1234,6 +1656,9 @@ logged. Closing the list first and then pressing the row always worked, so this 
 | `PadPointerSpeed` | `0.6` | How fast the left stick moves the panel's pointer with the stick fully over, in screen widths a second, up to `5`. |
 | `PadLookSpeed` | `120` | How fast the right stick turns the free camera with the stick fully over, in degrees a second, up to `720`. |
 | `FreeCameraWorldRuns` | `0` | Whether the world keeps moving under the free camera while it flies, with the player's own input held. Written by the "World runs while flying" row. One or the other of this and the freeze. |
+| `SpawnPlaceKey` | `0` | The key that turns the entity spawner's placement mode on and off, and opens the panel straight into it when the panel is shut. `0` binds none. Takes a name or a virtual key code, as `OpenKey` does; written by the "Key: place with the mouse" row. Escape, Return, the arrows, Alt, F4, Shift, Ctrl, the panel's own key, the free camera's key and the other placement key are refused. |
+| `SpawnFaceKey` | `0` | The key that turns the entity being placed back to face the player. `0` binds none; the middle mouse button does the same. Written by the "Key: turn to face you" row. |
+| `TwoSidedSwap` | `1` | Whether a borrowed body, a model put on from the Appearance group or one a far player wears, is drawn two sided: the engine's backface drop is lowered for the one call that draws that body and put straight back. `0` keeps the drop, and where the asset never marked a limb shell two sided, its open side shows nothing. Read once, when the first model is put on. |
 
 ## Limitations
 
@@ -1245,8 +1670,31 @@ logged. Closing the list first and then pressing the row always worked, so this 
   Nothing else draws text between the panel and the end of the frame, so nothing is affected today.
 * The call the paint is redirected from cannot chain behind another DLL that redirected it first.
   Nothing else in this project targets it.
+* The entity spawner's placement mode does not ask whether the ground is walkable, only whether a
+  floor carries the place: a copy set on a ledge or a roof stands there and may not walk off it.
+  Its wall rays go out a unit over the floor, so an obstacle lower than that does not push the
+  place. Under a ceiling lower than about 1.15 the rays start inside it, all four strike at once and
+  the answer is "too tight between walls" rather than "no headroom". The four rays follow the
+  pointer's heading, so a diagonal wall or a pillar between two of them can overlap the body by up
+  to about 29 % of its radius. A push over the edge of a narrow ledge looks for the floor again up
+  to 3.5 below, and can stand the copy a level lower; the click's line says how far it was moved,
+  not how far it dropped. The ghost is drawn in its rest pose. A key bound to the mode is refused
+  when it is one the panel, the free camera or the mode itself reads, but the free camera's key
+  bound later is not checked against the mode's, and neither is the key that frees the mouse.
 
 ## What was tested
+
+The entity spawner's placement mode is covered by programs of its own: `spawn_place` (the mode's
+state, the clicks, the turn, the settle, the right click's decision, the pointer's reach, where the
+pointer puts the entity and the push off a wall), `world_pick` (the projection both ways, the
+reading of the camera, the ray against a body and the nearest body), `spawn_ghost` (the render
+handle's life), `input_owner` (who has the pointer, the wheel and the pause), `spawn_keys`,
+`spawn_marks`, and `spawn_mode`, which runs the mode's own frame against a stand in for the engine:
+the held world and its settle, the death, the refusal row, the right click and the order of two
+clicks in one frame. `entity_offer`, `npc_census` and `spawn_scripts_archive` hold the offer and the
+clipless gate on each of its three roads. The mode itself has run in the game once, in a co-op
+session, where it placed entities, refused clicks, turned entities with the wheel and drew the
+ghost; nothing else these programs cover has been checked against the game.
 
 `overlay_model` covers the half that can be checked without the game: the search, the folding,
 both groups on the Original tab, the tab switch, the bounds of the search box, the queued-swap
@@ -1256,6 +1704,25 @@ position, every row in the order it is drawn with its caption and whether it is 
 share the sources, the stubs and the row arithmetic and were one program until the tenth group
 put it over the size limit; the checks live in `unittests/overlay_model.c` and
 `unittests/overlay_groups.c`.
+
+The chat's key row has a program of its own, `chat_key_row`, linked beside the multiplayer's own
+reader, `mp_board_key_code`: the two readers answer alike for every printable string of one to
+three characters, every name the row can write reads back as its own key, every key the row takes
+is written and read back out of the file, and every refused key leaves the file as it was, the
+saved one standing as a confirmation and every refusal as a refusal. `overlay_groups` binds it once
+more through the panel itself, under its **Multiplayer** heading, which is what holds the key
+capture's arm for the group's own block of ids; `overlay_session` holds that the row stays free and
+can be pressed in a session; `overlay_legend` holds the `press a key` line and `overlay_notice` the
+two kinds of sentence. The row has not run against the game under its new heading, and neither
+have the footer's prompt or the colour of the confirmation.
+
+The host's values on a client are held by `overlay_session`, against the real records: the chip of
+every taken row on a host, on a client whose host named all four settings, on one whose host named
+the draw distance alone, and on a host with a client's records still filed; the note under the draw
+distance out of `view_distance_fix`'s record; and no row left carrying a host's value once the
+session ends. `overlay_kit` holds the hook that puts the words on a row, `overlay_width` measures
+the widest of them beside their rows, and the golden master prints a pass as a client. None of it
+has run against the game.
 
 Every row in the panel has been opened, drawn and switched against the running game, and the
 layout has been through several rounds of correction against screenshots. All of this
@@ -1392,7 +1859,7 @@ cap. The log lines to look for:
 ```
 
 
-## The Enhanced input group
+## The Controls group
 
 Five switches and the mouse speed, all of them `[enhanced_input]` keys, drawn under Enhanced
 resolution. They were Utilities rows until a player asked for one switch that turned the pad's
@@ -1451,14 +1918,16 @@ it is offered wherever that scheme is on. With free look on and the sideways wal
 steers, with fewer directions, because a lone forward key is a turn toward the camera. With both
 off it is greyed out, because the engine is already doing the job.
 
-## The Window mode group
+## The Window group
 
 Ten rows, and the group is a good deal more stateful than most, so the rules it follows are
 worth writing down.
 
-**The five shape rows are one choice, not five switches.** Pressing the lit one does nothing. An
+**The five shape rows are one choice, not five switches.** Pressing the marked one does nothing. An
 earlier build treated a second press as "turn this off" and dropped the player to the engine's own
-shape, which looks like the window feature having stopped working.
+shape, which looks like the window feature having stopped working. They were still DRAWN as five
+switches for a long while after that, with a chip each, and read as five settings of which one was
+on; they carry a mark now and no chip, and so do the sizes under them.
 
 **Fullscreen is the exception, and is a switch.** The engine's own shape covers most of a screen, so
 turning it on reads as going fullscreen and the next thing anyone does is press it again to come
@@ -1471,7 +1940,7 @@ entries below it are the display's own modes, asked of Windows and not of the en
 one of them is a real size. `auto` is not: it writes zero to both axes. The rest of the feature
 already reads that as "take the size the game is rendering", and it is what a fresh install has.
 Without a row for it, choosing any size was a one-way door out of the state the panel started in,
-because nothing else anywhere writes those numbers back. The row is lit by the ABSENCE of a size,
+because nothing else anywhere writes those numbers back. The row is marked by the ABSENCE of a size,
 which is the same test the row above it uses to decide it says `auto`, so the two cannot disagree.
 
 **Choosing a shape also writes the device.** `WindowedPresent` had a row of its own and should not
@@ -1535,7 +2004,7 @@ and back when it can; a digit pins one. The chip shows the fraction and the rate
 screen. A fraction the screen cannot go down to is not refused: `framerate_fix` steps it back up
 until the rate clears 30 a second and applies that, so on a 60 Hz screen `1/4` runs at a half, and
 the chip reads `1/4 as 1/2 = 30`. On a synchronised display, which the installer's wrapper
-configuration provides from 1.4.4, only the refresh and its fractions are even.
+configuration provides from 2.0.0, only the refresh and its fractions are even.
 
 Measured, because it cost the time to measure it: a limit of 100 on a 144 Hz screen leaves 44
 refreshes a second showing a repeat, and a limit of 60 on a 90 Hz Steam Deck OLED leaves 30. Both

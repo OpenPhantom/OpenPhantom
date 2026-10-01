@@ -160,8 +160,11 @@ order is deliberate: the two cheap checks come before libVLC is loaded, so a mac
 going to play a converted movie does not pay for one during the game's own startup.
 
 1. **The detour site does not resolve.** An unsupported build of the executable.
-2. **`MovieDirectory` does not exist.** Nothing has been converted, so there is nothing to do. This
+2. **`MovieDirectory` does not exist.** Nothing has been converted, so libVLC is never loaded. This
    is the normal state of a fresh installation and it is reported as information, not a warning.
+   The hook is installed all the same, for a multiplayer session only (see below): outside a
+   session it hands every movie to the retail player unchanged, and the log says so with
+   `movie playback is watched at ... for a multiplayer session only`.
 3. **No 32-bit libVLC can be found.** See below.
 
 After that, per movie: no converted file for this one, or playback that never started. Both are
@@ -370,9 +373,10 @@ sidesteps that surface entirely: libVLC renders into that window directly via
 
 ## Byte basis
 
-All four movie call sites (intro/logo, in-level cutscenes, the arena replay, credits) funnel
-through one function, confirmed by an xref sweep of its four `UNCONDITIONAL_CALL` callers inside
-`0x0043EB2A`:
+All four movie call sites (the two start-up splashes, a level's opening movie and the ending)
+funnel through one function, confirmed by an xref sweep of its four `UNCONDITIONAL_CALL` callers
+inside `0x0043EB2A`. There is no movie inside a level; a cutscene there is the engine's own scene,
+and `movie\arena` is the pod race's opening movie, not a replay:
 
 ```
 0043EB93  LEA EDX,[EBP-0x84]      ; a local buffer already filled with e.g. "movie\arena"
@@ -456,6 +460,107 @@ its load and its store, the Y cells must sit four bytes past the X cells in both
 pair must be reachable at a fixed distance with the expected opcode, and every cell must lie inside
 the host image.
 
+### The Bink player's two cells
+
+For a multiplayer client, `bink_cells.c` reads two cells out of the retail movie window's handler
+`0x00497E5D`. The handler is a switch on the message, and the 43 bytes of its head carry no
+address:
+
+```
+00497E67  83 7D FC 20 77 11 83 7D FC 20 74 1F 83 7D FC 10 74 70 E9 85 00 00 00
+00497E7E  81 7D FC 02 01 00 00 74 3F 81 7D FC 00 02 00 00 74 1A EB 71
+00497EC6  83 3D 94 20 86 00 00           cmp [s_bAbortOnKey], 0    head + 0x5F, cell at + 0x61
+00497ECF  C7 05 98 20 86 00 01 00 00 00  mov [s_bAbort], 1         head + 0x68, cell at + 0x6A
+00497EE9  C7 05 98 20 86 00 01 00 00 00  mov [s_bAbort], 1         head + 0x82, cell at + 0x84
+```
+
+`0x102` is `WM_CHAR`: a character key sets the abort cell only while the key skip is set, and the
+player writes the key skip from its own flags argument (`0x497B23`) and nowhere else. `0x10` is
+`WM_CLOSE`, dead on this window because the game's window procedure answers it first, but its
+bytes name the abort cell a second time, and the two encodings are required to agree. The loop
+reads the abort cell at the head of every round (`0x497B66`) and ends once it is set and a frame
+has been shown; it clears the cell once after its first pump (`0x497B12`), which is why the watch
+writes it every round. `WM_ACTIVATEAPP` is not in the switch: **the retail player never ends a
+movie on a lost foreground**, only at its own end or on a key.
+
+Measured on 2026-09-21 with the opcode and immediate around each operand checked: one match in
+each of the six images, `BIN\WMAIN.EXE`, `wmain.exe`, the English and the German retail
+`WMAIN.EXE`, the installed one, and the Edit Tool's `obi.exe`, where the head sits at `0x00497E07`
+and the cells at `0x00862044` and `0x00862048`. No other mod of this tree resolves a pattern
+anywhere in the Bink player, and a sweep of every mod's write ranges finds none over it.
+
+## In a multiplayer session
+
+A movie in a multiplayer session belongs to the host. The two DLLs may not call each other, so they
+talk through two records in `common/movie_note`: the multiplayer files a *gate* (session running,
+this machine a client, host connected, how many of the host's payloads arrived here, whether one
+arrived in the last half second), and this DLL files its *movie state* (movies begun, the newest
+one's name, playing, waiting or ended, and how). Without a multiplayer session there is no gate,
+and every movie plays exactly as it did before: same ways out, same log lines, nothing filed,
+nothing pumped.
+
+| Role | When | Escape / Start | Lost foreground | Close box | Session timer |
+|---|---|---|---|---|---|
+| free | no session | ends it | ends it | ends it | not pumped |
+| host | host of a running session | ends it | counted, ends nothing | counted, ends nothing | pumped |
+| held | client whose host is in its movie | counted | counted | counted | pumped |
+| skip | client whose host's world already moves | not played at all | | | |
+| alone | client whose host is not connected | ends it | ends it | ends it | pumped |
+
+A held movie ends when the host's payload count has grown on the connection the movie began on:
+the host sends payloads only from its substeps, and a host inside its opening movie runs none. When
+the client's own file ends first, the window turns black with "Waiting for the host" in the
+session's language and stays until the host's world moves or the session lets go (not running, not
+connected, another connection, or no gate filed over three seconds of pumping). That last one
+counts only turns that pumped, each for at most a tenth of a second, and every turn pumps before
+it asks, so a stall of the game's thread (a mode switch, a player being stopped) cannot let a
+held client go; it starts again with every loop, a retail loop after libVLC gave a movie back
+included. `g_bInMovie` stays set for the wait, and the game window's queued keys are dropped
+after a held movie, as its mouse traffic always was. On the retail path a held client hands the key
+skip 0 instead of 1 and a thread timer of this DLL's own, dispatched by the player's pump, writes
+the abort cell above once the host is done; should the session let go first, it gives the key skip
+back.
+
+**The session's timer is dispatched during a converted movie.** The overlay-scoped pump never took
+it, so a movie longer than the session's thirty second timeout used to end the session. Only
+`WM_TIMER` with no window (the session's) and the overlay's own are dispatched; a due tick of any
+other window is taken and dropped, because a filtered peek returns the first due timer and a
+foreign one left in place starves the thread timer (measured: 30 against 1 dispatch in half a
+second). `(HWND)-1` returns no thread timer at all. A timer with no window is not necessarily the
+session's: `MSS32.DLL` sets one of its own on one of its driver paths. So this DLL counts thread
+timers, a nought is the failure, and the witness that the multiplayer's own timer ran is the
+multiplayer's report, `timer pump N` in its `the pumps:` line, which has to grow across a movie.
+
+**The close box in a session ends no movie and is not lost.** It is taken, counted, and passed on
+once the movie and any wait for the host are over, however often it was pressed, as
+`WM_SYSCOMMAND`/`SC_CLOSE`, the command a completed click on the box produces. With
+`enhanced_resolution`'s frame that closes the game, as the box would have with no movie on
+screen. Not the click itself: a `WM_NCLBUTTONDOWN`/`HTCLOSE` handed to `DefWindowProc` after the
+button is up enters the modal tracking of the caption button and stays there until real mouse
+input arrives (measured in a test window: still inside after 2.5 s, no `SC_CLOSE`, no `WM_CLOSE`;
+posted mouse moves and a posted button up did not release it), while a posted `SC_CLOSE` gave
+exactly one `WM_CLOSE`.
+
+The reference is Unreal's replicated Level Sequence playback, where the server drives status and
+end and a client's play and stop are ignored; here every side plays its own file and only the end
+comes from the host. The waiting screen is the co-op pattern "waiting for other players".
+
+The lines, per movie, in a session:
+
+* client: `the movie "..." belongs to the host: ... (N host payload(s) seen before it began)`, then
+  `the host's movie is over (its world moved after N ms of playback here): ...`, or
+  `"..." ended here after N ms, before the host's: the picture stays black ...` followed by
+  `the host's world moved after a wait of N ms` or `the wait for the host ended without it ...`;
+* skipped: `the host is already in its level (its world is moving), so "..." is not played here`;
+* host: `the movie "..." is the host's: ...` and `the host's movie "..." ended here ...`;
+* retail: `"..." plays through the retail Bink path as a client of the host's ...` and
+  `the host's movie is over: the Bink player's abort cell was raised after N ms of playback`;
+* close box: `the close box was pressed N time(s) during the session's movie; ... passed on once`;
+* always: `during "..." N thread timer message(s) were dispatched; ...`, or on the retail path
+  `the retail player's own pump ran this DLL's timer N time(s) ...`. **A nought there is the
+  failure**, and so is `Escape ended playback` or `the game lost the foreground during playback`
+  on a held client before a line that says the session let it go.
+
 ## Closing the game during a movie
 
 **This game cannot be closed with Alt+F4 at any time, by the engine's own decision.** Its
@@ -500,6 +605,17 @@ movie player.
 * **`libdirectdraw_plugin.dll` is deliberately not installed** with the bundled runtime. It would
   let libVLC pick a DirectDraw video output, which on this install is the translation layer the
   whole feature exists to route around.
+* **In a session, a lost foreground in exclusive fullscreen.** `dxwrapper` minimises on
+  `WM_ACTIVATEAPP`; with the host and held rules the movie then plays on, minimised and audible.
+  Whether to mute it, and whether the device comes back cleanly, has not been looked at.
+* **In a session, the ending.** `movie\scene8`, the credits and the statistics play on the host
+  only; a client stands in the last level meanwhile. No rule here for it.
+* **In a session, no common start.** A held client begins its movie when it gets there, seconds
+  after the host, and plays its own copy from the beginning until the host's end cuts it off: at a
+  level change the client sees its movie from the start and misses the end. A start together needs
+  the host to wait for its clients, which needs a new message on the wire; not built.
+* **In a session, letting go shows only in the log.** A held client the session lets go (host
+  gone, gate quiet) plays on as its own movie; nothing on screen says why.
 * **No hardware certainty.** libVLC's own choice of decoder depends on the codec of the converted
   file and what the system offers. H.264 has broad hardware decode support; an unusual codec choice
   in the converter may fall back to software.
@@ -534,6 +650,17 @@ search order and the registry fix, the logging, the black fill moving after `Sho
 startup ordering, the honoured playback gate, the Escape edge trigger and the teardown. The
 detour signature is measured against the real retail `WMAIN.EXE` and counted for uniqueness: one
 match, at the address named above.
+
+**The multiplayer session rules are compiled, unit tested and played in part.**
+`movie_rule.c` and `movie_text.c` are covered by `unittests/movie_rule.c`, every gate against a
+reference and each rule held by a mutation probe; `movie_session.c` by `unittests/movie_session.c`
+against a gate the test files through the real channel, the quiet over pumped turns and the gate
+taken down included; `movie_close.c` by `unittests/movie_close.c` on a real window's queue; the
+record by `unittests/movie_note.c`; the Bink pattern by the measurement above. In the game, with
+three and with four players through the relay, the session came through the host's movie into
+the next level; a held client's movie ended when the host's world moved, with the lost foreground
+it saw refused, and the host announced the next world as its movie began. The black wait, where a
+client's own file ends first, has not been seen.
 
 `video_overlay.c`, `vlc_locate.c`, `vlc_runtime.c` and `vlc_playback.c` have no engine dependency
 and therefore no byte evidence to verify the same way, and no behaviour a unit test can observe

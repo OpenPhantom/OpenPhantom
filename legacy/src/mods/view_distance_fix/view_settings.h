@@ -12,6 +12,16 @@
 
 #include <stdbool.h>
 
+/* The clamps the draw distance and the fog band are held to, named because two more places hold
+ * them: the table of settings a multiplayer host may decide for its clients
+ * (common/host_settings_note.c), and the developer panel's rows. A test holds all three against
+ * each other, since a header cannot be shared between two DLLs without making one depend on the
+ * other. The reasons for each bound are in view_settings.c where they are applied. */
+#define VIEW_SETTINGS_RANGE_MIN    1.0f
+#define VIEW_SETTINGS_RANGE_MAX    2.5f
+#define VIEW_SETTINGS_FOG_BAND_MIN 0.25f
+#define VIEW_SETTINGS_FOG_BAND_MAX 1.0f
+
 typedef struct view_distance_config {
     bool  enabled;
     float view_range_scale;
@@ -44,6 +54,7 @@ typedef struct view_distance_config {
     bool  relocate_vertex_table;
     bool  spawn_census;
     bool  log_player_position;
+    bool  range_pinned;         /* no cell watchdog: the draw distance stays at 1.0 whoever asks */
 } view_distance_config_t;
 
 /* The clamp the reader holds every value to. It is shared rather than duplicated because the fog
@@ -58,11 +69,19 @@ void view_settings_load(view_distance_config_t *config);
 /* The handful of keys that are re-read while the game runs, on a frame counter of its own.
  * `effective_view_scale` is the number the draw distance hook multiplies by, and it is passed in
  * because a raise on disk has to reset it: the frame governor and the cell watchdog only ever
- * lower it, so without the reset a scale nobody is asking for any more would go on standing. */
+ * lower it, so without the reset a scale nobody is asking for any more would go on standing.
+ *
+ * In a multiplayer session a client takes the host's draw distance, fog band and authored band in
+ * place of its own, from memory, and its engine_fixes.ini is not written; its own values come back
+ * when the session is over. The frame governor, the cell watchdog and StrictViewRange stay this
+ * machine's own: the host sets the target, the machine protects itself. */
 void view_settings_poll(view_distance_config_t *config, float *effective_view_scale);
 
 /* Writes the draw distance actually in force back to the ini, for the panel that cannot see what
- * happened to the number it wrote. Output only; nothing reads it back into the engine. */
+ * happened to the number it wrote. Output only; nothing reads it back into the engine. While the
+ * host's draw distance is in force nothing is written, because the number would be the host's and
+ * not this machine's; the acknowledgement the multiplayer reads carries it instead, filed here
+ * because this is where the value after the governor and the watchdog is known. */
 void view_settings_publish_effective_scale(float scale);
 
 #endif /* VIEW_SETTINGS_H */

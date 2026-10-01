@@ -44,24 +44,19 @@
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
 ;
-; The installer's own number, and the last digit counts installer builds. Build a new one, add one:
-; 1.4.1, 1.4.2, and so on. It is not a judgement about how much changed.
+; The installer's number follows the patch it carries: the first number is one higher than the
+; patch's and the other two are the same, so patch 1.0.0 ships in installer 2.0.0 and patch 1.0.1
+; in installer 2.0.1. PatchVersion in src\openphantom_patch.iss holds the patch's number, and the
+; build stops there when the two break that rule.
 ;
-; The patch has a number of its own again, 0.4.x, at j0nny's asking. The two were merged into one at
-; 1.5.0 on the reasoning that they had never been released apart; that is being undone rather than
-; argued with, and PatchVersion in src\openphantom_patch.iss carries the patch's line again.
-;
-; The one merged release is being re-released into this line. Only i1.5.0 ever shipped under the
-; merged number, and it becomes i1.4.1, so the sequence reads i1.4, i1.4.1, i1.4.2 with no gap and
-; nothing moving backwards. That matters because Inno writes AppVersion into Add/Remove Programs;
-; without the renumbering a 1.4.x installer would have sat below something people already held.
+; Inno writes AppVersion into Add/Remove Programs. 2.0.0 sits above every installer released
+; before it, including the one whose own properties still read 1.5.0.
 ;
 ; Nothing here compares versions. An existing installation is found by AppId and the player is asked
 ; what to do with it, so no number decides whether an install is allowed.
 ;
-; Tagged i1.4.4, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
-; tagged v0.4.4 on its own line.
-#define AppVer "1.4.4"
+; Tagged i2.0.0, keeping the prefix the installer has always used. The patch is tagged v1.0.0.
+#define AppVer "2.0.0"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
@@ -134,6 +129,19 @@ UsePreviousSetupType=no
 ; anything short of running it twice with a hex editor.
 SetupLogging=yes
 
+; Signed only when the build asks for it with /DSIGN, which sign_installer.ps1 passes together with
+; the command itself as /Ssigntool=... . The command is not written here because it names one
+; person's certificate and one machine's signtool.
+;
+; Given a SignTool, Inno signs the uninstaller before embedding it and then Setup, so the uninstaller
+; left in the game folder carries the same signature as the download. Signing the finished file
+; afterwards would leave that one unsigned, and Windows would show it as from an unknown publisher.
+#ifdef SIGN
+SignTool=signtool
+#else
+#pragma message "Not signed. A release is built with sign_installer.ps1."
+#endif
+
 ; The installer stays in 32-bit mode. Windows then redirects its HKLM\SOFTWARE writes into
 ; WOW6432Node by itself, which is where the 32-bit game looks for them.
 
@@ -167,8 +175,10 @@ Name: "{app}\Save";  Permissions: users-modify
 
 [Files]
 ; dontcopy keeps this out of the installation: PrepareToInstall unpacks it into the temporary folder,
-; runs it once, and it is gone.
-Source: "{#ExtractorExe}"; Flags: dontcopy
+; runs it once, and it is gone. signonce has a signed build sign it in place before storing it, with
+; the same command as Setup, since it is ours and runs on the player's machine with Setup's rights.
+; Without SignTool the flag does nothing.
+Source: "{#ExtractorExe}"; Flags: dontcopy signonce
 
 ; PrepareToInstall has already produced this from the disc, so by now it exists and Inno copies and
 ; records it like any other file.
@@ -342,6 +352,7 @@ english.CompDismember=Lightsaber dismemberment (mod)
 english.CompCrashRep=Writes a crash report
 english.CompSoundLife=Fixes a save and load crash
 english.CompDiag=Logs for fault finding. Everything off until you switch it on
+english.CompMultiplayer=Co-op for up to four players, on your own network or over the internet
 english.CompDsoal=Restores the 3D sound audio option
 english.DsoundTaken=A different dsound.dll is already in the game folder and could not be moved aside:%n%n      %1%n%nNothing was installed. Sound support needs that exact name, and this installer never deletes a file it did not put there.%n%nUsually the game is still running. Close it and start again, or go back and untick sound support.
 english.OldWrapperFailed=An earlier version of this installer put the controller wrapper here, and it could not be moved aside:%n%n      %1%n%nEverything is installed and the game runs. On most machines that old file is never loaded and nothing is wrong.%n%nUsually the game is still running. If your controller behaves oddly, close the game and rename that file yourself.
@@ -446,6 +457,7 @@ german.CompDismember=Lichtschwert-Amputation (Mod)
 german.CompCrashRep=Schreibt einen Absturzbericht
 german.CompSoundLife=Behebt einen Absturz beim Speichern und Laden
 german.CompDiag=Protokolle zur Fehlersuche. Alles aus, bis Sie es einschalten
+german.CompMultiplayer=Koop für bis zu vier Spieler, im eigenen Netzwerk oder über das Internet
 german.CompDsoal=Wiederherstellung der 3D-Klang-Audio-Option
 german.DsoundTaken=Im Spielverzeichnis liegt bereits eine fremde dsound.dll, die nicht beiseitegelegt werden konnte:%n%n      %1%n%nEs wurde nichts installiert. Die Klang-Unterstützung braucht genau diesen Namen, und dieses Installationsprogramm löscht keine Datei, die es nicht selbst angelegt hat.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut, oder gehen Sie zurück und wählen Sie die Klang-Unterstützung ab.
 german.OldWrapperFailed=Eine frühere Fassung dieses Installationsprogramms hat den Controller-Wrapper hier abgelegt, und er konnte nicht beiseitegelegt werden:%n%n      %1%n%nAlles ist installiert und das Spiel läuft. Auf den meisten Rechnern wird diese alte Datei nie geladen und es ist nichts kaputt.%n%nMeist läuft das Spiel noch. Falls sich Ihr Controller seltsam verhält, beenden Sie das Spiel und benennen Sie die Datei selbst um.
@@ -1601,7 +1613,7 @@ begin
   // their own installation, so it is not folded in here.
   InstalledFFmpeg := ExpandConstant('{app}\mods\fmv\ffmpeg.exe');
   FFmpegExe := ExpandConstant('{tmp}\ffmpeg.exe');
-  if FileCopy(InstalledFFmpeg, FFmpegExe, False) then begin
+  if CopyFile(InstalledFFmpeg, FFmpegExe, False) then begin
     Log('convert_movies: staged FFmpeg into ' + FFmpegExe + ', running it from there');
   end else begin
     Log('convert_movies: could not stage FFmpeg into {tmp}, running the installed copy at ' +

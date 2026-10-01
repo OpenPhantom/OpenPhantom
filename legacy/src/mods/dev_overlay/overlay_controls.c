@@ -5,6 +5,8 @@
 #include "camera_follow_row.h"
 #include "controller_mode_row.h"
 #include "free_look_row.h"
+#include "overlay_number.h"
+#include "overlay_reason.h"
 #include "overlay_row_fill.h"
 #include "sensitivity_row.h"
 #include "strafe_row.h"
@@ -30,6 +32,15 @@ static const char *const CONTROLS_LINES[OVERLAY_CONTROLS_LINE_COUNT] = {
 };
 
 static bool fold_open;   /* the "what these do" row is showing its lines */
+
+/* The mouse speed's own numbers, in the shape every other track in this panel states them, so
+ * that the sideways keys and Default reach this row through overlay_number.c as they do the three
+ * groups that are tables. A press is a thousandth, which is what the file carries and what the
+ * row shows; the modifier's is ten of them, and the whole band is a hundred. The standard is what
+ * enhanced_input runs at with the key absent. */
+static const overlay_number_t SENSITIVITY_NUMBERS = {
+    SENSITIVITY_MIN, SENSITIVITY_MAX, 0.001f, 0.010f, SENSITIVITY_DEFAULT, true
+};
 
 /* The slots, in drawn order. The one-click switch first, so a reader meets it before the four
  * rows whose names give no hint that a pad wants all of them; then the two the scheme is built
@@ -96,6 +107,9 @@ void overlay_controls_row(uint32_t slot, const char *editing_text, overlay_row_t
         overlay_row_label(out->label, "Camera follows you (turns on free look)");
         out->on = camera_follow_row_get();
         out->available = camera_follow_row_available();
+        if (!out->available) {
+            out->reason = (uint32_t)OVERLAY_REASON_NEEDS_ROW;   /* strafe, two rows up */
+        }
         return;
 
     case CONTROLS_AIR_CONTROL:
@@ -106,6 +120,9 @@ void overlay_controls_row(uint32_t slot, const char *editing_text, overlay_row_t
         overlay_row_label(out->label, "Steer a jump in the air (free look)");
         out->on = air_control_row_get();
         out->available = air_control_row_available();
+        if (!out->available) {
+            out->reason = (uint32_t)OVERLAY_REASON_NEEDS_ROW;   /* strafe, as the row above */
+        }
         return;
 
     case CONTROLS_SENSITIVITY:
@@ -119,9 +136,12 @@ void overlay_controls_row(uint32_t slot, const char *editing_text, overlay_row_t
         overlay_row_label(out->label, "");
         /* No availability test, unlike the field of view: both ends of this one are fixed, so
          * there is nothing to wait for another DLL to publish. */
-        out->fraction = (sensitivity_row_get() - SENSITIVITY_MIN) /
-                        (SENSITIVITY_MAX - SENSITIVITY_MIN);
+        (void)overlay_number_fraction_of(&SENSITIVITY_NUMBERS, sensitivity_row_get(),
+                                         &out->fraction);
         overlay_row_clamp_fraction(out);
+        /* The number at the end of the track, the same reading the row above shows and through
+         * the same formatter. */
+        sensitivity_row_format(sensitivity_row_get(), out->value, sizeof out->value);
         return;
 
     case CONTROLS_SUMMARY:
@@ -190,19 +210,44 @@ bool overlay_controls_commit(uint32_t slot, const char *text)
     return sensitivity_row_parse(text, &parsed) && sensitivity_row_set(parsed);
 }
 
+/* What a handle at `fraction` stands for: the inverse of the reading the track's row takes, and
+ * the one arithmetic both the write and the shown number go through.
+ *
+ * Not rounded to anything, unlike the picture group's sliders: the band is a tenth of a degree
+ * wide and the row shows three decimals, so every position along the track is a value somebody can
+ * tell apart from the one beside it. The file carries three decimals as well, so the rounding
+ * those rows do by hand is already done by the write here. */
+static float value_at(float fraction)
+{
+    float value = SENSITIVITY_MIN;
+
+    (void)overlay_number_value_at(&SENSITIVITY_NUMBERS, fraction, &value);
+    return value;
+}
+
+bool overlay_controls_slider_limits(uint32_t slot, overlay_number_t *out)
+{
+    if ((controls_slot_t)slot != CONTROLS_SENSITIVITY_TRACK || out == NULL) {
+        return false;
+    }
+    *out = SENSITIVITY_NUMBERS;
+    return true;
+}
+
 bool overlay_controls_slider_set(uint32_t slot, float fraction)
 {
     if ((controls_slot_t)slot != CONTROLS_SENSITIVITY_TRACK) {
         return false;
     }
-    if (fraction < 0.0f) {
-        fraction = 0.0f;
+    return sensitivity_row_set(value_at(fraction));
+}
+
+bool overlay_controls_slider_value(uint32_t slot, float fraction, char *out, size_t size)
+{
+    if ((controls_slot_t)slot != CONTROLS_SENSITIVITY_TRACK || out == NULL || size == 0u) {
+        return false;
     }
-    if (fraction > 1.0f) {
-        fraction = 1.0f;
-    }
-    /* Not rounded to anything, unlike the picture group's sliders: the band is a tenth of a degree
-     * wide and the row shows three decimals, so every position along the track is a value somebody
-     * can tell apart from the one beside it. */
-    return sensitivity_row_set(SENSITIVITY_MIN + fraction * (SENSITIVITY_MAX - SENSITIVITY_MIN));
+    sensitivity_row_format(value_at(fraction), out, size);
+    out[size - 1u] = '\0';
+    return true;
 }

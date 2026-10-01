@@ -14,12 +14,17 @@
 #define DEV_OVERLAY_OVERLAY_FOG_H
 
 #include "overlay_model.h"
+#include "overlay_number.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
 /* No fog, the thickness, its slider, what it follows. */
 #define OVERLAY_FOG_ROW_COUNT 4u
+
+/* What the group's table draws, so the constant above can be checked against it instead of
+ * believed. The rows are a table now (overlay_kit.h) and a number row is two of them. */
+uint32_t overlay_fog_row_count(void);
 
 /* Fills everything about one row except `group` and `id`, which belong to the caller's numbering.
  * `editing_text` is what has been typed so far when the thickness is being typed into, or NULL. */
@@ -35,5 +40,12 @@ bool overlay_fog_commit(uint32_t slot, const char *text);
 /* Drags the thickness's slider to `fraction`, 0 to 1, on the hundredth grid the row's own
  * formatter shows. False for any other slot or a failed write. */
 bool overlay_fog_slider_set(uint32_t slot, float fraction);
+
+/* What the row above that track reads with the handle at `fraction`; see overlay_kit.h. */
+bool overlay_fog_slider_value(uint32_t slot, float fraction, char *out, size_t size);
+
+/* The numbers behind that track: its ends, the two press sizes and the standard, as the
+ * group's table wrote them. False for a slot that is no track. */
+bool overlay_fog_slider_limits(uint32_t slot, overlay_number_t *out);
 
 #endif /* DEV_OVERLAY_OVERLAY_FOG_H */

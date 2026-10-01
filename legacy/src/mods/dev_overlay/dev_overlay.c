@@ -16,23 +16,31 @@
  */
 #include "dev_overlay.h"
 
+#include "character_model.h"
 #include "cheats_openphantom.h"
+#include "model_blade_guard.h"
 #include "cheats_original.h"
 #include "cheats_original_actions.h"
+#include "far_model.h"
 #include "input_freeze.h"
+#include "input_owner.h"
 #include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
 #include "overlay_key_name.h"
 #include "overlay_model.h"
 #include "freeze_anim_row.h"
+#include "npc_spawn_link.h"
+#include "npc_spawn_node.h"
 #include "npc_spawner.h"
 #include "pad_input.h"
 #include "pad_panel.h"
 #include "panel_cage.h"
+#include "spawn_mode.h"
 #include "start_level.h"
 #include "start_level_row.h"
 
+#include "common/character_profile.h"
 #include "common/patch.h"
 #include "common/signature.h"
 #include "common/host_image.h"
@@ -100,7 +108,14 @@ static void __cdecl hook_scene_end(void)
     pad_panel_tick();     /* before the panel's own update, so a press lands this frame */
     npc_spawner_tick();   /* the spawned flyers' mark over the player's head, and the log of
                            * every hit a spawned copy takes */
-    if (overlay_input_is_open() && !overlay_input_is_hidden()) {
+    npc_spawn_link_tick();   /* the multiplayer's grants, and the panel's wishes */
+    npc_spawn_node_tick();   /* the copies a finished load left held */
+    character_model_tick();  /* a model swap the appearance note refused, said again */
+    far_model_tick(npc_spawn_node_epoch());   /* the far players' models, after the player's own */
+    spawn_mode_frame();   /* the placement mode, on or off: before the owner is read, so a mode
+                           * asked for this frame owns the pointer this frame */
+    switch (input_owner_sync()) {
+    case INPUT_OWNER_PANEL:
         /* The panel closes itself when it cannot be seen.
          *
          * This is one of three places the scene is closed from; the other two belong to the front
@@ -115,7 +130,25 @@ static void __cdecl hook_scene_end(void)
             overlay_input_update_scroll();
             overlay_model_rebuild();
         }
+        break;
+    case INPUT_OWNER_PLACEMENT:
+        /* The same rule for the mode, which draws its marks where the panel would be drawn. */
+        if (!overlay_draw_screen(NULL, NULL)) {
+            overlay_input_close();
+        } else {
+            overlay_input_update_pointer();
+            spawn_mode_draw();
+        }
+        break;
+    case INPUT_OWNER_GAME:
+    case INPUT_OWNER_FREE_CAMERA:
+    default:
+        break;
     }
+    /* Whoever owns the input: the placement mode's own line stands while it runs, and the tally
+     * of what it did stands for a moment after it ends, which is after the panel has the picture
+     * back. It draws nothing when the mode has nothing to say. */
+    spawn_mode_banner();
     panel_cage_tick();   /* after the paint laid the panel out; releases when it is not shown */
     scene_end_original();
 }
@@ -224,6 +257,20 @@ void dev_overlay_install(void)
      * the group's rows read unavailable when they did not resolve, and with no level loaded
      * either way. */
     (void)npc_spawner_install();
+    /* The spawner's placement mode: the camera cells and the two keys. Its ghost is drawn through
+     * the borrowed weapon's detour, which it installs itself the first time the mode comes on. */
+    spawn_mode_install();
+    /* The two parts of the model swap that cannot wait for the panel. The roster past the five
+     * heroes IS the profile table, and every DLL links its own copy of that table, so the
+     * multiplayer having read it gives this one nothing: without this load the swap offers the
+     * five heroes and no NPC. And a swap onto a hero with a blade waits until the blade resize
+     * guard has been asked once, which the level's first weapon remount does, but only when the
+     * guard is standing by then. Placed when the panel first opened, every row read n/a until the
+     * blade next changed. */
+    (void)character_profile_load();
+    (void)model_blade_guard_install();
+    /* The answer to the multiplayer's far models says from load on that somebody listens. */
+    far_model_install();
     pad_input_install();
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "
@@ -243,13 +290,13 @@ void dev_overlay_install(void)
 
     /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
      * window messages, which are overlay_input.c's own domain. Wired here, after both installs
-     * have run, rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name,
+     * have run, rather than cheats_openphantom.c calling input_owner_take_wheel() by name,
      * so that linking cheats_openphantom.c on its own (the unit test built against the real cheat
      * sources, see unittests/CMakeLists.txt) never has to drag in the whole message-hook
      * subsystem just to satisfy one symbol it never exercises. */
-    cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);
+    cheats_openphantom_set_wheel_source(&input_owner_take_wheel);
 
-    log_info("F6 or the key below Escape opens the Cheatmenu. The panel is drawn into the "
+    log_info("F6 or the key below Escape opens the dev menu. The panel is drawn into the "
              "game's own frame, so it needs "
              "no window and cannot take the focus. %s",
              input_freeze_is_available()

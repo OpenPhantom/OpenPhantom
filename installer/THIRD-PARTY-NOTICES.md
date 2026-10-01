@@ -1,16 +1,21 @@
 # Third-party components
 
-Everything under `dist/` except `saves/` is third-party, carried here so the
+Everything under `dist/` except `patch/` and `saves/` is third-party, carried here so the
 installer needs no network, during installation or afterwards. `dist/ffmpeg/ffmpeg.exe` is the
 exact build `convert_movies.ps1` pins, the one the converter would have downloaded on first use,
 so carrying it keeps cutscene conversion offline too. Each is redistributable; this file records
 what they are, what they are under, and what shipping them obliges us to do.
 
-The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover any of it.
+The repository's own MIT licence in [../LICENSE](../LICENSE) does **not** cover any of it. The
+patch's own files in `dist/patch/` are this project's; the two libraries compiled into its
+`multiplayer.dll` are not, and the table names them.
 
 | Component | Version | Licence | Upstream |
 |---|---|---|---|
-| OpenPhantom patch | 0.4.4 | this project's | https://github.com/OpenPhantom/OpenPhantom |
+| OpenPhantom patch | 1.0.0 | this project's | https://github.com/OpenPhantom/OpenPhantom |
+| HACL* (compiled into the patch's `multiplayer.dll`) | commit `504c2987452f87fe44bce9b9f12e19d6e051761f` | MIT | https://github.com/hacl-star/hacl-star |
+| KaRaMeL headers (included by HACL*), Copyright (c) INRIA and Microsoft Corporation | the copy HACL* carries at that commit | Apache 2.0 and MIT | https://github.com/FStarLang/karamel |
+| Mbed TLS with TF-PSA-Crypto (compiled into the patch's `multiplayer.dll`) | 4.1.1 | Apache 2.0, chosen from its dual Apache 2.0 or GPL 2.0 or later | https://github.com/Mbed-TLS/mbedtls |
 | VLC / libVLC | 3.0.23 | **GPL v2** | https://www.videolan.org/vlc/ |
 | DSOAL | r694 | **LGPL 2.1** | https://github.com/kcat/dsoal |
 | OpenAL Soft (inside DSOAL) | as shipped in DSOAL r694 | **LGPL 2** | https://github.com/kcat/openal-soft |
@@ -32,7 +37,7 @@ dxwrapper:
 | `EnableVSync` | 0 | 1 |
 
 `EnableVSync` with `ForceVsyncMode` is the wrapper's "force vertical sync on", and it took until
-1.4.4 to ship that way: the pair used to read 0 and 1, which is "force it off", and a frame was
+2.0.0 to ship that way: the pair used to read 0 and 1, which is "force it off", and a frame was
 shown at whatever scanline the display had reached. The patch's frame cap depends on the display
 being synchronised, and says so in `[framerate_fix]`.
 
@@ -49,6 +54,16 @@ only key in this file anything of ours ever writes.
 
 The licence text of every one of these is installed beside the game, and the files are in
 `dist/` next to the binaries they cover.
+
+HACL* and Mbed TLS are not separate files. Both are built into `multiplayer.dll` from unaltered
+upstream sources, HACL* at the commit in the table and Mbed TLS from its 4.1.1 release archive,
+so they arrive in `dist/patch/` with the patch, and so do their licence texts,
+`hacl-License.txt` and `mbedtls-License.txt`, which install with the multiplayer next to the
+patch's own `THIRD-PARTY-NOTICES.txt`. Those two cover the KaRaMeL headers as well, the MIT terms
+in the first and the Apache 2.0 text in the second, and TF-PSA-Crypto's own LICENSE grants the
+same dual licence as Mbed TLS in the same words. MIT and Apache 2.0 ask for the licence text and
+the notices to travel with the binary, not for the source, so none of them has an archive in
+`source/`.
 
 ## What has to ship with a release
 

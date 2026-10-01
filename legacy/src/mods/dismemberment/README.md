@@ -12,7 +12,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. On `obi.exe` the patterns do 
 
 | Key | Default | Range | Meaning |
 |---|---|---|---|
-| `Mode` | `0` | 0-2 | 0 off, 1 correct the node only, 2 also sever on the killing blow. Ships off: severing on the killing blow changes how the game plays rather than repairing it, so it is a switch with a default that leaves the game alone. The developer panel's Utilities page has a row that writes this key, and this DLL re-reads it while the game runs |
+| `Mode` | `0` | 0-2 | 0 off, 1 correct the node only, 2 also sever on the killing blow. Ships off: severing on the killing blow changes how the game plays rather than repairing it, so it is a switch with a default that leaves the game alone. The developer panel's Utilities page has a row that writes this key, and this DLL re-reads it while the game runs. In a multiplayer session a client runs the host's mode from memory (`common/host_settings_note`), files `host_taken_dismemberment` for the multiplayer's report, and never writes the key; its own mode applies again after the session |
 | `SpinScale` | `0.35` | 0-2 | the tumble of the flying piece |
 | `GravityScale` | `0.40` | 0.1-2 | its gravity |
 | `YawScale` | `0.12` | 0-2 | the 90 degree per substep yaw kick in the flight arm |
@@ -131,3 +131,17 @@ Built and linked, `/W4 /WX` clean. Offline verification passes on both retail bu
 To re-check the `prevRot` fix after any change here: decapitate an enemy and watch without
 moving. The piece must fall, tumble briefly, and then **really** lie still. Then set
 `Diagnostics=0`.
+
+The host's mode in a multiplayer session is newer than the v0.4.1 build: built and linked,
+`/W4 /WX` clean, **not yet played**. In a session a client runs the host's `Mode` in place of its
+own, from memory, and its own ini is not written (see the table above). `limb_mode_pick_test`
+covers the choice: the host's mode while the host names a whole number this DLL knows as a mode,
+this machine's own otherwise, a fraction, a 3 or a NaN from the host refused, and a mode in the
+ini this DLL does not know leaving the own one standing. It also holds the table the multiplayer
+checks a host's mode against to this DLL's modes: 0 to 2, whole numbers only, off when the key is
+missing. The lines to look for on a client:
+
+```
+[dismemberment] the host's dismemberment Mode 2 is used for this session; this machine's own 0 stays in engine_fixes.ini
+[dismemberment] the host's dismemberment Mode no longer applies: back to this machine's own 0 from engine_fixes.ini
+```

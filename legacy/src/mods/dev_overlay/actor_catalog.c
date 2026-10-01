@@ -81,6 +81,8 @@ static bool read_actor(HANDLE file, uint32_t data, uint32_t size, uint8_t *nodes
     uint32_t anim_start;
     uint32_t node_count;
     uint32_t i;
+    bool     turret = false;
+    bool     target = false;
 
     if (size < BAF_HEADER || !read_at(file, data, header, sizeof header)) {
         return false;
@@ -112,12 +114,15 @@ static bool read_actor(HANDLE file, uint32_t data, uint32_t size, uint8_t *nodes
         if (strcmp(name, "head") == 0 || strcmp(name, "chest") == 0) {
             out->has_body = true;
         }
+        turret = turret || strcmp(name, "turret") == 0;
+        target = target || strcmp(name, "target") == 0;
         if (strncmp(name, "sabre", 5) == 0) {
             out->weapon = ACTOR_WEAPON_SABRE;
         } else if (strcmp(name, "weapon") == 0 && out->weapon == ACTOR_WEAPON_NONE) {
             out->weapon = ACTOR_WEAPON_MOUNT;
         }
     }
+    out->has_mount = turret && target;
     return true;
 }
 

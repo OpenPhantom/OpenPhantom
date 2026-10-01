@@ -42,12 +42,14 @@ release.
 
 | | numbering | tags |
 |---|---|---|
-| the patch, `legacy/` | `0.4.x` | `v0.4.0`, `v0.4.1`, ... |
-| the installer that carries it | `1.4.x` | `i1.4`, `i1.4.1`, ... |
+| the patch, `legacy/` | `1.0.x` | `v1.0.0`, `v1.0.1`, ... |
+| the installer that carries it | `2.0.x` | `i2.0.0`, `i2.0.1`, ... |
 
-The last digit moves together on a release. The DLLs carry the **patch** number, so a DLL's
-properties and the first line of `engine_fixes.log` say `0.4.4` while the installer that delivered
-them says `1.4.4`.
+The installer's first number is always one higher than the patch's, and the other two are the
+same. The DLLs carry the **patch** number, so a DLL's properties and the first line of
+`engine_fixes.log` say `1.0.0` while the installer that delivered them says `2.0.0`. Before
+1.0.0, which brought the multiplayer, the patch ran from `v0.2.0` to `v0.4.3` and the installer
+from `i1.0` to `i1.4.3`.
 
 **One release merged the two into a single number**, published as `v1.5.0` and `i1.5.0`. That's
 been undone. On GitHub that release is now **`v0.4.1` and `i1.4.1`**, and the one after it is
@@ -122,10 +124,14 @@ MIT. The source here is free to use, modify and distribute under those terms, pr
 notice travels with it. See [LICENSE](LICENSE).
 
 The licence covers this source code only. It grants nothing regarding the original game, its
-assets, or anything else its rights holders own, and it does not cover the third-party binaries the
-installer carries in `installer/dist/`, which are each under their own terms and include GPL and
-proprietary components. [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md) names
-them and records what a release has to ship alongside the installer to satisfy them.
+assets, or anything else its rights holders own, and it does not cover the third-party code the
+project carries: the HACL* sources in `legacy/src/third_party/hacl/`, which are MIT, with KaRaMeL
+headers under Apache 2.0 and MIT; Mbed TLS, which the build downloads and links into
+`multiplayer.dll` under Apache 2.0; and the third-party binaries the installer carries in
+`installer/dist/`, which are each under their own terms and include GPL and proprietary
+components. [legacy/dist/THIRD-PARTY-NOTICES.txt](legacy/dist/THIRD-PARTY-NOTICES.txt) names
+what the patch carries, and [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md)
+names the rest and records what a release has to ship alongside the installer to satisfy them.
 
 ## Contact
 

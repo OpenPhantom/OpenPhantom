@@ -164,7 +164,7 @@ static void scale_take_off(uint32_t descriptor)
     }
 }
 
-/* JUMP_BOOST_SCALE_DEFAULT, 1.3 in cheats_internal.h, is what install_jump_boost() below seeds
+/* JUMP_BOOST_SCALE_DEFAULT, 1.3 in cheats_openphantom.h, is what install_jump_boost() below seeds
  * own_state.jump_boost_scale with. Velocity, not height. Jump height scales with velocity SQUARED
  * under the engine's own linear gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A
  * first guess for "noticeably higher, not silly" the same way cheats_openphantom.c's

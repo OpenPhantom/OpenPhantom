@@ -1,6 +1,8 @@
 /* overlay_row_fill.c: see overlay_row_fill.h. */
 #include "overlay_row_fill.h"
 
+#include "overlay_reason.h"
+
 #include "common/text.h"
 
 void overlay_row_defaults(overlay_row_t *out)
@@ -11,7 +13,13 @@ void overlay_row_defaults(overlay_row_t *out)
     out->value[0]  = '\0';
     out->expanded  = false;
     out->pending   = false;
+    out->warn      = false;
+    out->host_value = false;   /* only a row the host of a running session decides sets this */
     out->fraction  = 0.0f;
+    out->chosen    = 0u;
+    /* No reason named. A group that takes a row away says which one; left as it is the row reads
+     * `n/a`, the answer for a site that never resolved. */
+    out->reason    = (uint32_t)OVERLAY_REASON_NONE;
 }
 
 void overlay_row_label(char *out, const char *text)

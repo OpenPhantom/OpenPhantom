@@ -373,10 +373,19 @@ _Static_assert(sizeof(SIG_DRAW_CURSOR) == sizeof(MSK_DRAW_CURSOR),
 
 overlay_draw_state_t draw_state;
 
+/* `prologue` is how many bytes a detour on this site would overwrite, or zero for a site that is
+ * not a function head. It is not used to hook anything here: it is what lets the search skip a
+ * branch another module has already written over the head and anchor on the tail instead. This
+ * search runs the first time the overlay draws, which is after every other DLL has installed, and
+ * four of these heads are ones multiplayer and hud_ratio_scaling hull. */
+#define NOT_A_FUNCTION_HEAD 0u
+
 static bool resolve_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
-                        const char *what, uintptr_t *out)
+                        size_t prologue, const char *what, uintptr_t *out)
 {
-    uintptr_t site = signature_find_unique(bytes, mask, size);
+    uintptr_t site = prologue != 0u
+                     ? signature_find_detour_target(bytes, mask, size, prologue)
+                     : signature_find_unique(bytes, mask, size);
 
     if (site == 0) {
         log_warning("%s did not resolve, so the overlay cannot draw and stays closed", what);
@@ -419,24 +428,34 @@ bool overlay_draw_resolve(void)
         return false;
     }
     if (!resolve_one(SIG_SYS_FONT, MSK_SYS_FONT, sizeof SIG_SYS_FONT,
+                     NOT_A_FUNCTION_HEAD,
                      "the built in font", &sys_font) ||
         !resolve_one(SIG_SELECT, MSK_SELECT, sizeof SIG_SELECT,
+                     7u,
                      "the font selector", &select) ||
         !resolve_one(SIG_SET_COLOUR, MSK_SET_COLOUR, sizeof SIG_SET_COLOUR,
+                     11u,
                      "the text colour setter", &colour) ||
         !resolve_one(SIG_DRAW_TEXT, MSK_DRAW_TEXT, sizeof SIG_DRAW_TEXT,
+                     9u,
                      "the text drawer", &text) ||
         !resolve_one(SIG_GLYPH_SCALE, MSK_GLYPH_SCALE, sizeof SIG_GLYPH_SCALE,
+                     10u,
                      "the glyph scale setter", &glyph) ||
         !resolve_one(SIG_POS_SCALE, MSK_POS_SCALE, sizeof SIG_POS_SCALE,
+                     10u,
                      "the position scale setter", &pos) ||
         !resolve_one(SIG_SCREEN_SIZE, MSK_SCREEN_SIZE, sizeof SIG_SCREEN_SIZE,
+                     NOT_A_FUNCTION_HEAD,
                      "the screen size", &screen) ||
         !resolve_one(SIG_SET_ALIGN, MSK_SET_ALIGN, sizeof SIG_SET_ALIGN,
+                     11u,
                      "the text alignment", &align) ||
         !resolve_one(SIG_MEASURE_CHAR, MSK_MEASURE_CHAR, sizeof SIG_MEASURE_CHAR,
+                     6u,
                      "the character metrics", &mchar) ||
         !resolve_one(SIG_MEASURE_STRING, MSK_MEASURE_STRING, sizeof SIG_MEASURE_STRING,
+                     6u,
                      "the string width", &mstring)) {
         return false;
     }

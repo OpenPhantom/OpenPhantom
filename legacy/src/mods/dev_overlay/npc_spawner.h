@@ -6,10 +6,11 @@
  * scripts call the same routine for their own spawns. This asks it for one more: it copies a
  * placement the level already has, moves the copy to a point just ahead of the player, turns it
  * to face them, and hands it to the engine, which allocates the actor from its own pool, binds
- * the model, starts the stand clip and runs a script from then on: the placement's own for the
- * level's fighters, so a spawned droid patrols and fires the way that one was authored to, or
- * one of this project's own, stand or follow, for everyone else and for the archive's creatures,
- * whose scripts are not in the level. Nothing is hooked.
+ * the model, starts the stand clip and runs one of this project's own scripts from then on.
+ * The copy carries an engine index of its own, 256 + k, past every placement, and a savegame
+ * keeps it in the panel's own block rather than in the enemy block. Three heads are hulled for
+ * that and nothing else: enemy_saveBlock and save_saveGame (npc_spawn_save.c) and sys_startup
+ * (npc_spawn_node.c).
  *
  * The choice is offered by MODEL, one row per actor file, the level's own first and then the
  * archive's, because "a battle droid" is what somebody wants and "placement 31" is not; the
@@ -20,6 +21,8 @@
 #ifndef DEV_OVERLAY_NPC_SPAWNER_H
 #define DEV_OVERLAY_NPC_SPAWNER_H
 
+#include "npc_spawn_block.h"
+#include "npc_spawn_desc.h"
 #include "spawn_scripts.h"
 
 #include <stdbool.h>
@@ -44,6 +47,10 @@ void     npc_spawner_set_behaviour(uint32_t behaviour);
  * machine of the game's day would have felt them. */
 #define NPC_SPAWNER_ALIVE_MAX 16u
 
+/* The ring of records the copies are raised from: one per actor the engine's pool can hold, so
+ * every copy a savegame or a session brings has a record. The cap above is a separate number. */
+#define NPC_SPAWNER_RING NPC_SPAWN_COPIES_MAX
+
 /* How many different actor files one level is offered for. Mos Espa, the widest retail level,
  * places 122; a level with more is listed up to here and the log says how many were left off. */
 #define NPC_SPAWNER_KINDS_MAX 128u
@@ -54,11 +61,13 @@ typedef struct npc_spawner_kind {
     uint32_t placements;                    /* how many of the level's placements use it; 0 for
                                              * a file the level did not load */
     bool     foreign;                       /* from the archive, not the level: loaded on demand */
+    uint8_t  section;                       /* entity_section_t, the shelf the list shows it on;
+                                             * 0, the level's own, for a census kind */
 } npc_spawner_kind_t;
 
-/* How many of the archive's actor files are offered beyond the level's own: every file with a
- * body the level did not load, up to this. The retail archive has 303 files, about 200 of them
- * creatures. */
+/* How many of the archive's actor files are offered beyond the level's own: every file the offer
+ * rule passes (entity_offer.h) that the level did not load, up to this. Of the retail archive's 303
+ * files the rule offers 204. */
 #define NPC_SPAWNER_FOREIGN_MAX 256u
 
 /* Resolves the spawn routine and the world pointer, each from two places that have to agree.
@@ -92,12 +101,40 @@ void npc_spawner_tick(void);
  * went. Nothing to do with the level's own actors. */
 uint32_t npc_spawner_remove_all(void);
 
-/* Raises one actor of the chosen kind a few units ahead of the player, facing them, on the
- * first spot of three files ahead, a body's width apart, the middle one first, that none of
- * the earlier spawns still stands on, or on the spot with the most room when they stand on all
- * of them. False when
- * nothing is chosen, no level is loaded, the cap is reached, or the engine's pool had no room
- * even after it culled its corpses; the log says which. */
-bool npc_spawner_spawn(void);
+/* Raises the copy `desc` describes, where it says and facing as it says, under a key of its own:
+ * what the placement mode's click asks for outside a session. The same checks as a spawn, the
+ * player and the cap, and no spot is looked for, since the one who asks chose it. False when
+ * nothing was raised; the log says why. */
+bool npc_spawner_raise_described(const npc_spawn_desc_t *desc);
+
+/* Raises a copy a savegame held, where it stood, facing as it faced, with its health. False
+ * when it could not be raised; the log says why. The cap does not apply: a savegame holds only
+ * what was alive. */
+bool npc_spawner_raise_saved(const npc_spawn_saved_t *saved);
+
+/* A copy a multiplayer session granted, under the key its host chose: the builder with no cap,
+ * since the host's cap decided, and without looking at the player, since a client builds what its
+ * host announced. `saved`, when given, is how a restored copy stood. False when nothing was raised;
+ * the log says why. */
+bool npc_spawner_raise_granted(const npc_spawn_desc_t *desc, uint32_t key,
+                               const npc_spawn_saved_t *saved);
+
+/* Removes `actor`, one of this group's copies or its corpse, through the engine's own delete. False
+ * when there is no delete, a save window is open, or the actor is not this group's. */
+bool npc_spawner_delete(uintptr_t actor);
+
+/* Whether `actor` was raised from one of this group's ring records, and what from. */
+bool npc_spawner_owns(uintptr_t actor);
+bool npc_spawner_description(uintptr_t actor, npc_spawn_desc_t *out);
+
+/* The live actor on ring record `slot`, or NULL. */
+const uint8_t *npc_spawner_ring_actor(uint32_t slot);
+
+/* Whether any actor names one of the ring's records, a corpse included: whether a save has copies
+ * to keep out of its enemy block. */
+bool npc_spawner_names_any(void);
+
+/* Whether a copy can be raised at all: the routine, both savegame hulls and the module node. */
+bool npc_spawner_can_raise(void);
 
 #endif /* DEV_OVERLAY_NPC_SPAWNER_H */

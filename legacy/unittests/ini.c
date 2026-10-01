@@ -8,6 +8,10 @@
  *
  * The parsing underneath is Windows' own, and the point of pinning it here is that a change in it
  * would otherwise reach every setting in the project silently.
+ *
+ * ini_read_section adds one rule worth pinning: the profile API cannot say "the buffer was too
+ * small"; it fills what it can and returns a length two short of the buffer, and a caller that took
+ * that as a short answer would judge half a section as if it were the whole one.
  */
 #include "unittest.h"
 
@@ -20,6 +24,60 @@
 
 #define A "unittest_a"
 #define B "unittest_b"
+#define SECTION "unittest_section"
+
+/* alpha=1 NUL beta=22 NUL, and then the second NUL that ends the run. */
+static const char EXPECTED[] = "alpha=1\0beta=22\0";
+#define EXPECTED_LENGTH 16u
+
+static void check_a_whole_section(void)
+{
+    char   buffer[64];
+    size_t got;
+
+    ut_section("a section that is not there");
+    memset(buffer, 0x5A, sizeof buffer);
+    got = ini_read_section("unittest_absent", buffer, sizeof buffer);
+    ut_check(got == 0u, "an absent section reads as empty");
+    ut_check(buffer[0] == '\0' && buffer[1] == '\0',
+             "and the buffer carries the double terminator, so a caller may walk it regardless");
+
+    ut_section("a section written and read back whole");
+    ut_check(ini_write_int(SECTION, "alpha", 1), "the first key is written");
+    ut_check(ini_write_int(SECTION, "beta", 22), "and the second");
+    memset(buffer, 0x5A, sizeof buffer);
+    got = ini_read_section(SECTION, buffer, sizeof buffer);
+    ut_check(got == EXPECTED_LENGTH,
+             "the length counts every key=value run and its terminator, not the final one");
+    ut_check(memcmp(buffer, EXPECTED, EXPECTED_LENGTH + 1u) == 0,
+             "the runs come back in file order, each ended by a NUL and the last by a second one");
+
+    ut_section("a buffer too small for the section");
+    memset(buffer, 0x5A, sizeof buffer);
+    got = ini_read_section(SECTION, buffer, 10u);
+    ut_check(got == 0u,
+             "a section that does not fit reads as empty rather than as its first few keys");
+    ut_check(buffer[0] == '\0' && buffer[1] == '\0', "and the buffer is the empty run");
+
+    /* The profile API returns exactly two less than the buffer when it truncated, and the same
+     * number for a section that happens to be that long, so the two cannot be told apart. The rule
+     * refuses both: a caller that needs the difference passes a buffer it knows is large enough. */
+    got = ini_read_section(SECTION, buffer, EXPECTED_LENGTH + 2u);
+    ut_check(got == 0u,
+             "a section exactly two short of the buffer is refused, since that length is also what "
+             "a truncation returns");
+    got = ini_read_section(SECTION, buffer, EXPECTED_LENGTH + 3u);
+    ut_check(got == EXPECTED_LENGTH, "one byte more and the whole section is accepted");
+
+    ut_section("arguments that cannot hold a section");
+    ut_check(ini_read_section(SECTION, NULL, sizeof buffer) == 0u, "no buffer reads as empty");
+    ut_check(ini_read_section(SECTION, buffer, 1u) == 0u,
+             "a buffer with no room for the double terminator reads as empty");
+
+    WritePrivateProfileStringA(SECTION, NULL, NULL, ini_path());
+    ut_check(ini_read_section(SECTION, buffer, sizeof buffer) == 0u,
+             "with the section removed it reads as empty again");
+}
 
 int main(void)
 {
@@ -48,6 +106,18 @@ int main(void)
              "the same key name is written under a second section");
     ut_check(ini_read_int(A, "count", -1) == 1234, "the first section still reads its own value");
     ut_check(ini_read_int(B, "count", -1) == 4321, "and the second reads its own");
+
+    ut_section("a string written is read back at once, past the read cache");
+    ut_check(ini_write_string(A, "word", "first"), "a string is written");
+    (void)ini_read_string(A, "word", "", text, sizeof text);
+    ut_check(strcmp(text, "first") == 0, "and reads back as itself");
+    ut_check(ini_write_string(A, "word", "second"), "a second string over it is written");
+    (void)ini_read_string(A, "word", "", text, sizeof text);
+    ut_checkf(strcmp(text, "second") == 0,
+              "and the very next read gets it, not the cached \"first\" (read \"%s\")", text);
+    ut_check(ini_write_string(A, "word", NULL), "writing NULL removes the key");
+    ut_check(!ini_read_string(A, "word", "gone", text, sizeof text) && strcmp(text, "gone") == 0,
+             "and the very next read answers the default");
 
     ut_section("the bool mapping");
     (void)ini_write_int(A, "flag", 0);
@@ -90,6 +160,8 @@ int main(void)
     ut_check(after != before, "and a write moves it, which is the comparison a poll makes");
 
     ut_check(ini_path() != NULL && ini_path()[0] != '\0', "the path is never empty");
+
+    check_a_whole_section();
 
     return ut_summary("the settings file");
 }

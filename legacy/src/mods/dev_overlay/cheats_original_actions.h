@@ -54,6 +54,12 @@ const char *cheats_original_actions_name(cheats_action_id_t id);
  * say which, only that pressing it will not work. */
 bool cheats_original_actions_is_available(cheats_action_id_t id);
 
+/* Why an unavailable action is unavailable, an overlay_reason_t value, and it is only ever one of
+ * the three held-back answers or "nothing said". Three codes here resolve, run, and are still not
+ * offered, each for a different reason established against the running game, and a player reading
+ * `n/a` on them cannot tell them from a code this executable does not carry at all. */
+uint32_t cheats_original_actions_reason(cheats_action_id_t id);
+
 /* Runs it once, except the four play-as codes, which this only QUEUES. Answers false when it
  * could not, for either reason above.
  *

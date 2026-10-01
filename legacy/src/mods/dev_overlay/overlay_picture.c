@@ -3,7 +3,9 @@
 
 #include "auto_range_row.h"
 #include "fov_row.h"
-#include "overlay_row_fill.h"
+#include "overlay_host_value.h"
+#include "overlay_kit.h"
+#include "overlay_reason.h"
 #include "strict_range_row.h"
 #include "subtitle_size_row.h"
 #include "view_range_live_row.h"
@@ -11,273 +13,244 @@
 
 #include "common/text.h"
 
-/* The slots, in drawn order. The draw distance first, because it is the setting a player came
- * looking for, with a note under it saying what the game is actually running and the two gates
- * that decide who else may lower it; then the field of view; then the subtitle size, the one row
- * here that is not the 3-D picture. Three of these are slider tracks, each on its own line so the
- * handle never covers the number it sets. The fog has a group of its own, drawn under this one. */
-typedef enum picture_slot {
-    PICTURE_VIEW_RANGE = 0,
-    PICTURE_VIEW_RANGE_TRACK,
-    PICTURE_VIEW_RANGE_LIVE,
-    PICTURE_AUTO_RANGE,
-    PICTURE_STRICT_RANGE,
-    PICTURE_FOV,
-    PICTURE_FOV_TRACK,
-    PICTURE_SUBTITLE_SIZE,
-    PICTURE_SUBTITLE_SIZE_TRACK
-} picture_slot_t;
+/* The slot enum and its assert are in overlay_picture.h, because session_lock.c addresses four
+ * of these slots and was doing it with bare numbers. The table below is the order those names
+ * stand for, and a NUMBER entry in it is TWO slots. */
 
-_Static_assert((uint32_t)PICTURE_SUBTITLE_SIZE_TRACK + 1u == OVERLAY_PICTURE_ROW_COUNT,
-               "the slot enum and OVERLAY_PICTURE_ROW_COUNT have to end together, or the last "
-               "row is either built and never drawn or drawn and never built");
-
-/* The draw distance: the value, its slider, the number in force, and the two switches that
- * decide who else may lower it. True when `slot` was one of these. */
-static bool draw_distance_row(uint32_t slot, const char *editing_text, overlay_row_t *out)
+/* The two numbers that cannot fail to be read, handed to the table in the shape the field of view
+ * already has: the one that can. */
+static bool draw_distance_now(float *out)
 {
-    switch ((picture_slot_t)slot) {
-    case PICTURE_VIEW_RANGE:
-        out->kind = OVERLAY_ROW_VALUE;
-        /* The accepted range is in the label rather than left for a player to discover by having
-           a number refused. */
-        overlay_row_label(out->label, "Draw distance (1.0 to 2.5)");
-        overlay_row_typed(out, editing_text, view_range_row_format, view_range_row_get());
-        return true;
+    *out = view_range_row_get();
+    return true;
+}
 
-    case PICTURE_VIEW_RANGE_TRACK:
-        out->kind = OVERLAY_ROW_SLIDER;
-        overlay_row_label(out->label, "");
-        /* Both ends are compile-time constants here, unlike the field of view, whose ends come
-         * out of the settings file. So there is no divide-by-zero to guard and no way for a
-         * player to set them equal. */
-        out->fraction = (view_range_row_get() - VIEW_RANGE_MIN) /
-                        (VIEW_RANGE_MAX - VIEW_RANGE_MIN);
-        overlay_row_clamp_fraction(out);
-        return true;
+static bool subtitle_size_now(float *out)
+{
+    *out = subtitle_size_row_get();
+    return true;
+}
 
-    case PICTURE_VIEW_RANGE_LIVE: {
-        /* A note rather than a control, so it cannot be clicked into and cannot be mistaken for
-         * something to set. What it reports is the number the game is running, which is not always
-         * the number above it: the frame governor lowers that when a scene costs too much, and the
-         * cell watchdog lowers it when the draw table or the vertex cache is near overflowing. On
-         * Coruscant the watchdog can pin it at 1.00 for a whole level, and the row above then shows
-         * a number nothing is using. */
-        char text[16];
+/* The field of view's ends come out of the settings file rather than out of the table. */
+static void fov_ends(float *low, float *high)
+{
+    *low = fov_row_min();
+    *high = fov_row_max();
+}
 
-        out->kind = OVERLAY_ROW_INFO;
-        if (view_range_live_row_get(text, sizeof text)) {
-            text_format(out->label, sizeof out->label, "  in force: %s", text);
-        } else {
-            overlay_row_label(out->label, "  in force: not reported");
-        }
-        out->label[sizeof out->label - 1] = '\0';
-        return true;
-    }
+static void fov_label(char *out, size_t size)
+{
+    text_format(out, size, "Field of view (%.0f to %.0f)",
+                (double)fov_row_min(), (double)fov_row_max());
+}
 
-    case PICTURE_AUTO_RANGE:
-        /* Greyed while the row below is on, because the two contradict each other and the one
-         * below wins. Strict mode declines the governor outright, so a switch still reading ON
-         * would be describing something that is not happening.
-         *
-         * Its key is deliberately NOT written when that happens. A reader who had the governor on,
-         * turns strict on to look at something and turns it off again gets the governor back,
-         * rather than finding a setting they never changed has been changed for them. So this row
-         * reports the state the game is actually in, and the file keeps the state the reader
-         * asked for. */
-        overlay_row_label(out->label, "Draw distance follows the frame rate");
-        out->available = !strict_range_row_get();
-        out->on = out->available && auto_range_row_get();
-        return true;
+/* What Default puts back on each of the three numbers here, and each is a different claim.
+ *
+ * The draw distance has no shipped default: view_range_row_get() falls back to VIEW_RANGE_MIN
+ * when the key is absent or unreadable, so 1.0 is what an untouched installation reads and what
+ * Default has to return it to. It is that fallback and not a value anybody chose, and it is also
+ * the low end of the track, which is a coincidence of this one row.
+ *
+ * The subtitle size has a real one, SUBTITLE_SIZE_DEFAULT: the size the text has at 640x480,
+ * which is the point of that row. It sits in the middle of the band.
+ *
+ * The field of view has neither. What it shows is a base plus an offset, the offset is what this
+ * row writes, and the value with nothing written is the base itself. So Default here is "no
+ * offset", which is whatever base variable_fov published for this canvas, and the row has no
+ * Default at all while it has published none. FOV_ROW_MIN_DEFAULT is the track's low end. */
+static bool draw_distance_standard(float *out)
+{
+    *out = VIEW_RANGE_MIN;
+    return true;
+}
 
-    case PICTURE_STRICT_RANGE:
-        /* Named for the trade rather than for the machinery, like the row above it. The frame rate
-         * is the cost a reader will actually meet, because the governor is the term that acts in
-         * ordinary play; the watchdog only acts above 1.00x, and what it costs when declined is in
-         * the ini and in strict_range_row.h rather than in 47 characters. */
-        overlay_row_label(out->label, "Keep the draw distance (costs frame rate)");
-        out->on = strict_range_row_get();
-        return true;
+static bool subtitle_size_standard(float *out)
+{
+    *out = SUBTITLE_SIZE_DEFAULT;
+    return true;
+}
 
-    default:
-        return false;
+static bool fov_standard(float *out)
+{
+    return fov_row_base(out);
+}
+
+/* What the game is running, which is not always the number above it: the frame governor lowers
+ * that when a scene costs too much, and the cell watchdog lowers it when the draw table or the
+ * vertex cache is near overflowing. On Coruscant the watchdog can pin it at 1.00 for a whole
+ * level, and the row above then shows a number nothing is using. */
+static void live_range_label(char *out, size_t size)
+{
+    char text[16];
+
+    if (view_range_live_row_get(text, sizeof text)) {
+        text_format(out, size, "  in force: %s", text);
+    } else {
+        text_format(out, size, "  in force: not reported");
     }
 }
 
-/* The field of view, the value and its slider, and the subtitle size with its own. True when
- * `slot` was one of these. */
-static bool view_row(uint32_t slot, const char *editing_text, overlay_row_t *out)
+/* The governor is greyed while strict mode is on, because the two contradict each other and strict
+ * wins: it declines the governor outright, so a switch still reading ON would be describing
+ * something that is not happening.
+ *
+ * Its key is deliberately NOT written when that happens. A reader who had the governor on, turns
+ * strict on to look at something and turns it off again gets the governor back, rather than
+ * finding a setting they never changed has been changed for them. So the row reports the state the
+ * game is actually in, and the file keeps the state the reader asked for. */
+static bool auto_range_offered(void)
 {
-    switch ((picture_slot_t)slot) {
-    case PICTURE_FOV: {
-        /* The one row here that can be unavailable. Every other row edits a settings file and works
-         * with the DLL that reads it gone; this one needs a width in degrees that only variable_fov
-         * can publish, and inventing one would be wrong on some canvas. */
-        float degrees;
-        char  range[40];
+    return !strict_range_row_get();
+}
 
-        out->kind = OVERLAY_ROW_VALUE;
-        text_format(range, sizeof range, "Field of view (%.0f to %.0f)",
-                    (double)fov_row_min(), (double)fov_row_max());
-        overlay_row_label(out->label, range);
-        if (fov_row_get(&degrees)) {
-            overlay_row_typed(out, editing_text, fov_row_format, degrees);
-        } else {
-            out->available = false;
-            overlay_row_label(out->value, "");
-        }
-        return true;
-    }
+static uint32_t auto_range_reason(void)
+{
+    return (uint32_t)OVERLAY_REASON_NEEDS_ROW;   /* the strict row below it */
+}
 
-    case PICTURE_FOV_TRACK: {
-        float degrees;
-        float low  = fov_row_min();
-        float high = fov_row_max();
+static bool auto_range_is_on(void)
+{
+    return auto_range_offered() && auto_range_row_get();
+}
 
-        out->kind = OVERLAY_ROW_SLIDER;
-        overlay_row_label(out->label, "");
-        if (!fov_row_get(&degrees)) {
-            out->available = false;    /* no published base, so nothing to place a handle against */
-            return true;
-        }
-        /* Guarded rather than assumed: both ends come out of the file, and somebody who sets them
-         * equal would otherwise divide by zero here. */
-        out->fraction = (high > low) ? ((degrees - low) / (high - low)) : 0.0f;
-        /* ExtraDegrees can be set in the file to a width outside the slider's own ends; see
-         * overlay_row_clamp_fraction for why the row keeps the honest number and the handle does
-         * not. */
-        overlay_row_clamp_fraction(out);
-        return true;
-    }
+/* On a client of a running session the host's draw distance is the target here, and the row the
+ * session has taken says so in its chip. The two switches under it have no host value: whether the
+ * draw distance follows the frame rate, and whether it is kept at a cost, are this machine's own,
+ * so they read `session` as before. */
+static bool draw_distance_host_word(char *out, size_t size, bool *on)
+{
+    float value;
 
-    case PICTURE_SUBTITLE_SIZE:
-        out->kind = OVERLAY_ROW_VALUE;
-        /* Named for what it changes rather than for the key it writes, with the band in the label
-         * so it need not be found by having a value refused. */
-        overlay_row_label(out->label, "Subtitle size (0.50 to 3.0)");
-        overlay_row_typed(out, editing_text, subtitle_size_row_format, subtitle_size_row_get());
-        return true;
+    (void)on;   /* a number has no switch to report */
+    return overlay_host_value(HOST_SETTING_VIEW_RANGE_SCALE, &value) &&
+           overlay_host_number_word(value, view_range_row_format, out, size);
+}
 
-    case PICTURE_SUBTITLE_SIZE_TRACK: {
-        const float value = subtitle_size_row_get();
+static const overlay_kit_entry_t ROWS[] = {
+    /* The accepted range is in the label rather than left for a player to discover by having a
+     * number refused. Both ends are compile-time constants here, unlike the field of view, so
+     * there is no divide by zero to guard and no way for a player to set them equal.
+     *
+     * The step is a hundredth, the precision the formatter shows; without it a drag writes more
+     * decimals than the text beside it displays and the two disagree about what was set. A
+     * fiftieth was tried and is wrong, because the grid has to contain both ends of every row that
+     * uses it: the fog thickness, which uses the same one from its own group, starts at 0.25, so
+     * dragging fully left rounded up to 0.26 and the documented minimum could not be reached at
+     * all. Caught in a log, not in a test. */
+    { .type       = OVERLAY_KIT_NUMBER,
+      .label      = "Draw distance (1.0 to 2.5)",
+      .number     = draw_distance_now,
+      .set_number = view_range_row_set,
+      .format     = view_range_row_format,
+      .parse      = view_range_row_parse,
+      .minimum    = VIEW_RANGE_MIN,
+      .maximum    = VIEW_RANGE_MAX,
+      .step       = 0.01f,
+      .coarse     = 0.10f,
+      .standard   = draw_distance_standard,
+      .host_word  = draw_distance_host_word },
 
-        out->kind = OVERLAY_ROW_SLIDER;
-        overlay_row_label(out->label, "");
-        /* No availability test: both ends are fixed, so unlike the field of view nothing has to be
-         * published by another DLL first. With enhanced_resolution absent the drag writes a key
-         * nothing reads, which is how every cross-DLL row here already behaves. */
-        out->fraction = (value - SUBTITLE_SIZE_MIN) / (SUBTITLE_SIZE_MAX - SUBTITLE_SIZE_MIN);
-        overlay_row_clamp_fraction(out);
-        return true;
-    }
+    /* A note rather than a control, so it cannot be clicked into and cannot be mistaken for
+     * something to set. */
+    { .type       = OVERLAY_KIT_NOTE,
+      .label_now  = live_range_label },
 
-    default:
-        return false;
-    }
+    { .type       = OVERLAY_KIT_TOGGLE,
+      .label      = "Draw distance follows the frame rate",
+      .get_on     = auto_range_is_on,
+      .set_on     = auto_range_row_set,
+      .offered    = auto_range_offered,
+      .reason     = auto_range_reason },
+
+    /* Named for the trade rather than for the machinery, like the row above it. The frame rate is
+     * the cost a reader will actually meet, because the governor is the term that acts in ordinary
+     * play; the watchdog only acts above 1.00x, and what it costs when declined is in the ini and
+     * in strict_range_row.h rather than in 47 characters. */
+    { .type       = OVERLAY_KIT_TOGGLE,
+      .label      = "Keep the draw distance (costs frame rate)",
+      .get_on     = strict_range_row_get,
+      .set_on     = strict_range_row_set },
+
+    /* The one row here that can be unavailable. Every other row edits a settings file and works
+     * with the DLL that reads it gone; this one needs a width in degrees that only variable_fov
+     * can publish, and inventing one would be wrong on some canvas.
+     *
+     * Whole degrees, because the row shows whole degrees: a drag that set 96.4 would display 96
+     * and write 96.4 back into the file, and the two would disagree for anyone reading it. A
+     * degree is also below what the eye picks out mid-drag. The full rate is for this track alone:
+     * its whole effect is the picture zooming under the hand, and at a few writes a second that
+     * zoom is a series of steps. */
+    { .type       = OVERLAY_KIT_NUMBER,
+      .label_now  = fov_label,
+      .number     = fov_row_get,
+      .set_number = fov_row_set,
+      .format     = fov_row_format,
+      .parse      = fov_row_parse,
+      .ends       = fov_ends,
+      .minimum    = FOV_ROW_MIN_DEFAULT,
+      .maximum    = FOV_ROW_MAX_DEFAULT,
+      .step       = 1.0f,
+      .coarse     = 5.0f,
+      .standard   = fov_standard,
+      .full_rate  = true },
+
+    /* Named for what it changes rather than for the key it writes, with the band in the label so
+     * it need not be found by having a value refused. No availability test: both ends are fixed,
+     * so unlike the field of view nothing has to be published by another DLL first. With
+     * enhanced_resolution absent the drag writes a key nothing reads, which is how every
+     * cross-DLL row here already behaves. */
+    { .type       = OVERLAY_KIT_NUMBER,
+      .label      = "Subtitle size (0.50 to 3.0)",
+      .number     = subtitle_size_now,
+      .set_number = subtitle_size_row_set,
+      .format     = subtitle_size_row_format,
+      .parse      = subtitle_size_row_parse,
+      .minimum    = SUBTITLE_SIZE_MIN,
+      .maximum    = SUBTITLE_SIZE_MAX,
+      .step       = 0.01f,
+      .coarse     = 0.10f,
+      .standard   = subtitle_size_standard }
+};
+
+#define ROW_ENTRIES ((uint32_t)(sizeof ROWS / sizeof ROWS[0]))
+
+uint32_t overlay_picture_row_count(void)
+{
+    return overlay_kit_count(ROWS, ROW_ENTRIES);
 }
 
 void overlay_picture_row(uint32_t slot, const char *editing_text, overlay_row_t *out)
 {
-    if (out == NULL) {
-        return;
-    }
-    overlay_row_defaults(out);
-    if (draw_distance_row(slot, editing_text, out) || view_row(slot, editing_text, out)) {
-        return;
-    }
-
-    /* Past the end. Answered as an empty unavailable row rather than left as whatever the
-     * caller's struct held: a caller asking for a slot that does not exist has a bug, and a
-     * blank row makes that bug visible instead of showing stale text. */
-    overlay_row_label(out->label, "");
-    out->available = false;
+    overlay_kit_fill(ROWS, ROW_ENTRIES, slot, editing_text, out);
 }
 
 bool overlay_picture_toggle(uint32_t slot)
 {
-    switch ((picture_slot_t)slot) {
-    case PICTURE_AUTO_RANGE:
-        if (strict_range_row_get()) {
-            return false;            /* greyed; the model refuses first, this is the second lock */
-        }
-        return auto_range_row_set(!auto_range_row_get());
-    case PICTURE_STRICT_RANGE:
-        return strict_range_row_set(!strict_range_row_get());
-    default:
-        return false;
-    }
+    return overlay_kit_activate(ROWS, ROW_ENTRIES, slot);
 }
 
 bool overlay_picture_commit(uint32_t slot, const char *text)
 {
-    float parsed;
-
-    if (text == NULL || text[0] == '\0') {
-        return false;
-    }
-
-    /* Refused rather than clamped when the text is not a number. Each of these would turn a typing
-     * mistake into an extreme: the shortest draw distance, the narrowest view or the smallest
-     * subtitles. */
-    switch ((picture_slot_t)slot) {
-    case PICTURE_VIEW_RANGE:
-        return view_range_row_parse(text, &parsed) && view_range_row_set(parsed);
-    case PICTURE_FOV:
-        return fov_row_parse(text, &parsed) && fov_row_set(parsed);
-    case PICTURE_SUBTITLE_SIZE:
-        return subtitle_size_row_parse(text, &parsed) && subtitle_size_row_set(parsed);
-    default:
-        return false;
-    }
+    return overlay_kit_commit(ROWS, ROW_ENTRIES, slot, text);
 }
 
 bool overlay_picture_slider_wants_full_rate(uint32_t slot)
 {
-    return (picture_slot_t)slot == PICTURE_FOV_TRACK;
-}
-
-/* Rounded to a HUNDREDTH, the precision the rows' own formatters show (%.2f). Without it a drag
- * writes more decimals than the text beside it displays and the two disagree about what was set.
- *
- * A fiftieth was tried and is wrong, because the grid has to contain both ends of every row that
- * uses it. The fog thickness, which shares the grid from its own group, starts at 0.25, which is
- * not a multiple of a fiftieth, so dragging fully left rounded up to 0.26 and the documented
- * minimum could not be reached at all. Caught in a log, not in a test. */
-static float on_hundredths(float low, float high, float fraction)
-{
-    float value = low + fraction * (high - low);
-
-    return (float)((int)(value * 100.0f + 0.5f)) / 100.0f;
+    return overlay_kit_full_rate(ROWS, ROW_ENTRIES, slot);
 }
 
 bool overlay_picture_slider_set(uint32_t slot, float fraction)
 {
-    float low;
-    float high;
+    return overlay_kit_slider(ROWS, ROW_ENTRIES, slot, fraction);
+}
 
-    if (fraction < 0.0f) {
-        fraction = 0.0f;
-    }
-    if (fraction > 1.0f) {
-        fraction = 1.0f;
-    }
-    switch ((picture_slot_t)slot) {
-    case PICTURE_VIEW_RANGE_TRACK:
-        return view_range_row_set(on_hundredths(VIEW_RANGE_MIN, VIEW_RANGE_MAX, fraction));
-    case PICTURE_SUBTITLE_SIZE_TRACK:
-        return subtitle_size_row_set(on_hundredths(SUBTITLE_SIZE_MIN, SUBTITLE_SIZE_MAX,
-                                                   fraction));
-    case PICTURE_FOV_TRACK:
-        low  = fov_row_min();
-        high = fov_row_max();
-        if (!(high > low)) {
-            return false;
-        }
-        /* Rounded to whole degrees. The row shows whole degrees, so a drag that set 96.4 would
-         * display 96 and then write 96.4 back into the file, and the two would disagree for anyone
-         * reading it. A degree is also below what the eye picks out mid-drag. */
-        return fov_row_set((float)(int)(low + fraction * (high - low) + 0.5f));
-    default:
-        return false;
-    }
+bool overlay_picture_slider_value(uint32_t slot, float fraction, char *out, size_t size)
+{
+    return overlay_kit_value_at(ROWS, ROW_ENTRIES, slot, fraction, out, size);
+}
+
+/* The numbers behind that track, straight off the table entry; see overlay_kit.h. */
+bool overlay_picture_slider_limits(uint32_t slot, overlay_number_t *out)
+{
+    return overlay_kit_limits(ROWS, ROW_ENTRIES, slot, out);
 }

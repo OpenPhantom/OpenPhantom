@@ -44,10 +44,10 @@ static uint32_t __cdecl hook_is_held(int action, uint32_t *out)
 {
     is_held_fn_t original = (is_held_fn_t)run_detour.original;
 
-    /* ONLY EVER ADDS, never subtracts. If the original says the action is held it is held, whatever
-     * the stick is doing; this can only turn a no into a yes, and only for Run. That is what keeps
-     * a bound Run key working exactly as it always did, and what makes this safe on the many other
-     * actions that come through here every frame. */
+    /* Only ever adds, never subtracts. If the original says the action is held it is held, whatever
+     * the stick is doing; this can only turn a no into a yes, and only for Run. That keeps a bound
+     * Run key working exactly as it always did, and makes this safe on the many other actions that
+     * come through here every frame. */
     if (action == ACTION_RUN && pad_stick_wants_run()) {
         if (out != NULL) {
             *out = 0;    /* the engine zeroes this itself on the held path; match it rather than

@@ -22,26 +22,51 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. Each observer resolves indepe
 | `Enabled` | `0` | the master switch |
 | `Audio` | `0` | 1 play/stop/volume/zones, 2 plus the channel allocation |
 | `Music` | `0` | 1 state/sequence/volume, with the muscript symbol names |
-| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change, 3 plus the mover call-site census, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
+| `Trigger` | `0` | 1 mover commands, 2 plus every integrator phase change and any mover about to take an oversized step, 3 plus the mover call-site census, 4 plus the render-path census (entries to bapmap_polyToWorld and bapvrt_transformWorld), 5 plus a call-site census for bapmap_polyToWorld itself, 6 plus call-site censuses for the two traces bapmap_polyToWorld runs behind (FUN_0040be00 general trace, FUN_0040c2be floor trace) |
 | `Fsm` | `0` | 1 AI mode changes, 2 plus **every executed opcode** |
 | `Level` | `0` | 1 level loading and the cutscene lock |
 | `Player` | `0` | 1 mode changes of the 14-mode state machine |
-| `Dialogue` | `0` | 1 spoken lines and voice files |
+| `Dialogue` | `0` | 1 spoken lines and voice files, and the script side of them: every Statement opcode, each change of a Dialog Box opcode's actor, line or answer with a visit count, each change of a Check For opcode's answer in its dialogue modes, and the player's body clips on each change, base and overlay layer, with the base track's complete flag and what the record driving the body, if any, asks for |
 | `Fx` | `0` | 1 emitters on/off/destroyed, 2 plus every decal **stamped**, 3 plus every decal **drawn** |
-| `Frame` | `0` | 1 one frame-time summary a second, 2 plus the frames around every hitch. A hitch is both a percentage past the median of the last 64 frames and at least two milliseconds past it; without that floor the instrument reports scheduler noise as hitches and, because each dump writes from inside the frame callback, stretches the frames it measures |
+| `Frame` | `0` | 1 one frame-time summary a second, 2 plus the frames around every hitch. A hitch is both a percentage past the median of the last 64 frames and at least two milliseconds past it; without that floor the instrument reports scheduler noise as hitches and, because each dump writes from inside the frame callback, stretches the frames it measures. The summary ends with how many of the second's frames began on an efficiency core and whether this window was in front; see **Which core, and which window** |
 | `FrameHitchPercent` | `0` | how far past the median counts as a hitch. 0 uses the built-in default |
 | `FrameGpuCounter` | the graphics counter path | the performance counter the graphics load is read from. Windows localises these names, which is the only reason this is a setting |
+| `PushBlock` | `0` | 1 why a push block does or does not move for this machine's player: the USE test, the mode entry and tick with their move bits, the push and which of its gates refused it. One line in the diagnostics log, at most once a second while it changes |
 | `Present` | `0` | 1 names which output path is live, 2 also times the flip and says whether it blocks in the driver or spins |
 | `Projectiles` | `0` | 1 counts the engine's own ballistic-physics list every 30 frames, and past 10 live entries also names the first few by position, so a pileup reads as stacked or spread at a glance |
-| `CameraOwner` | `0` | 1 reports every take and release of the engine's scripted-camera flag with the caller that asked and a running depth. Seven places set that flag and six clear it, so a take with no release is possible, and it strands the camera on a forced region until the level reloads. This is the census that found the fault `camera_handback_fix` repairs; the two cannot both run, because the functions they share are too small for a second detour to anchor behind the first |
-| `Characters` | `0` | 1 names the characters within `CharactersRadius` of the player every 60 frames, with position, state, AI mode and the height each gained or lost since the previous report; 2 reports every live character in the level and ignores the radius |
+| `CameraOwner` | `0` | 1 reports every take and release of the engine's scripted-camera flag with the caller that asked and a running depth. Seven places set that flag and six clear it, so a take with no release is possible, and it strands the camera on a forced region until the level reloads. This is the census that found the fault `camera_handback_fix` repairs. The callers are found by scanning the code section for direct calls to the two functions at install, and the retail names are attached only where the scan found a call at the address they were written for, so a different build still names every caller as found or not found. The two run together now: they share three functions and each declares them as detour targets, and the one of the three too short to anchor on once detoured is found behind its neighbour |
+| `X87` | `0` | 1 samples the x87 status word either side of seven calls of the object draw, the model draw, the puppet track advance, the clip events, the halo and shield pass, the halos alone, the shadow projector and the deferred queue flush, counts every call across which the stack pointer moved, per function, writes the first two dozen with both words, and reports the pointer at each frame's end when it has moved. This is the observer that placed the halo draw's stack underflow, which render_guard's `BalanceNodeVerts` repairs |
+| `Footsteps` | `0` | 1 reports where the wet footprints come from. The engine stamps a body as wet on every footstep tick whose floor polygon carries material 12, 13 or 14, and lays wet prints on any other material for eight seconds after the stamp; this reports each stamp with the polygon, its surface word and the position, once when it begins and once a second while it lasts, and the start of each print spell with the material and the age of the stamp. A wet print on ground that should be dry is then traceable to the polygon that stamped it, or to a floor pointer that was not a polygon for a tick |
+| `Characters` | `0` | 1 names the characters within `CharactersRadius` of the player every 60 frames, with position, state, AI mode, the animation wanted and the one playing, the clip on each body layer, health, and the height each gained or lost since the previous report; 2 reports every live character in the level and ignores the radius |
 | `CharactersRadius` | `12` | world units around the player that `Characters=1` reports. Ignored at level 2, and a value below 1 falls back to the default |
 | `CharacterWatch` | empty | a character name from `Characters` above. Places a hardware write breakpoint on that character's height and logs the address of every instruction that writes it. Needs `Characters` on |
 | `CharacterWatchVelocity` | `0` | which field the watch is armed on: 0 the character's position height, 1 its velocity height. Position names what moved it, velocity names what decided it should move |
-| `PlayerBodyWatch` | `0` | arm the same write watch on the player's DRAWN body height instead of on a character. The body is a different object from the record that owns it, and on a level whose player phases never run nothing copies one onto the other, so a body can descend visibly while the record it belongs to never moves. Only one watch exists, so this and `CharacterWatch` are alternatives. Needs `Characters` on: the whole observer declines at `Characters=0`, and so does the DLL if nothing else is switched on |
+| `PlayerBodyWatch` | `0` | arm the same write watch on the player's DRAWN body instead of on a character. `1` watches the position height, as it always has; `2` watches the PREVIOUS position on X, which is the pair the engine interpolates between and which goes flat while a character rides a platform. The body is a different object from the record that owns it, and on a level whose player phases never run nothing copies one onto the other, so a body can descend visibly while the record it belongs to never moves. Only one watch exists, so this and `CharacterWatch` are alternatives. Needs `Characters` on: the whole observer declines at `Characters=0`, and so does the DLL if nothing else is switched on |
 | `AudioCensusMilliseconds` | `0` | >0 lists the occupied channels every N ms (minimum 100) |
 | `MaxLinesPerSecond` | `60` | 0 = unlimited |
 | `AlsoToMainLog` | `0` | mirror into `engine_fixes.log` as well |
+
+## Engine locations
+
+Every observer is a detour that calls the original and changes nothing, installed only when its
+area is switched on. The sources carry the disassembly beside each pattern; this is the map.
+
+| Area | Sites, retail VA |
+|---|---|
+| `Audio` | `bapsound_play` `0x0041681F`, `bapsound_startChannel` `0x004169BD`, `bapsound_freeChannel` `0x00417567`, `bapsound_periodic` `0x00415D1D`, `bapsound_setMasterVolume` `0x00417379`, `bapsound_activatePlace` `0x00417711`, `bapsound_deactivatePlace` `0x0041778C` |
+| `Music` | `bapMusicSetState` `0x004105A3`, `bapMusicSetSequence` `0x0041060E`, `bapMusicSetVolume` `0x004106CC` |
+| `CameraOwner` | `bapview_overrideOn` `0x0041840A`, `bapview_overrideOff` `0x00418421`, `Dialog_Close` `0x00430E82` |
+| `Footsteps` | `footstep_tick` `0x00437AC0`, with the wall clock cell read out of the load at `0x00437BCC` |
+| `Dialogue` | `Dialog_SpeakSingle` `0x00430D12`, `Dialog_PlayVoice` `0x0043125A`, opcode `0x500` `ai_runMenu` `0x004358B0`, opcode `0x504` `say_line` `0x00435A0A`, opcode `0x605` `op_checkFor` `0x0042EB8D` |
+| `Fx` | `bapvrt_addDecal` `0x0041C4C0`, `bapvrt_drawPolyDecals` `0x0041C620`, `emitter_setPlacementActive` `0x0041FE24`, `emitter_destroy` `0x004214BF`, `rdMaterial_selectCel` `0x0047B9BD` |
+| `Fsm` | `ai_dispatch` `0x00433E51`, `ai_setMode` `0x004335A5`, `ai_returnMode` `0x00433634` |
+| `Level` | `campaign_loadLevel` `0x0043F70A`, `Dialog_EnterInputLock` `0x00430ED9`, `Dialog_LeaveInputLock` `0x00430F18` |
+| `Player` | `Plr_RunPhases` `0x00448297`, the mode pointer table `player_save` pushes at `0x004479F8` (a data site) |
+| `Characters` | the character pool teardown `0x00431FF3` (a data site, never hooked) and `Plr_RunPhases` again |
+| `X87` | `bapthing_dispatch` `0x00417930`, `rdPuppet_updateTrack` `0x00483D20`, `bapobj_dispatchClipEvents` `0x00411897`, `fx_thingDraw` `0x00438E78`, `halo_drawForThing` `0x00439A54`, `fxprint_projectFloor` `0x0043A5FF`, `bapdraw_flushQueue` `0x00402155` |
+| `Present` | `stdDisplay_present` `0x0048F052`, the flip flag derivation `0x00487640` |
+| `Trigger` | `bapmap_openMover` `0x00408B50`, `bapmap_closeMover` `0x00408DF5`, `bapmap_tickMover` `0x00409170`, `bapmap_polyToWorld` `0x00419490`, `bapvrt_transformWorld` `0x004199B0`, and the two traces `0x0040BE00` and `0x0040C2BE` at the higher levels |
+| the projectile census | the list head test at `0x0045243E` |
 
 ## The log
 
@@ -57,7 +82,7 @@ it means rather than describing the costume.
 
 **The name on its own does not identify a character.** It is copied out of the placement, and a
 placement name is a reused archetype label; two earlier attempts in this project to pin down a
-specific placement by name matching were both wrong for exactly that reason. It is the name
+specific placement by name matching were both wrong for that reason. It is the name
 together with the position that picks one out.
 
 The vertical column is the second reason it exists. Each line carries `since`, the height the
@@ -67,12 +92,25 @@ irregular values with pauses in between mean something is displacing it, a smoot
 means it is falling.
 
 `step` sits beside it and is a different measurement: the engine's own current position against its
-own previous one. **Do not read `step` as whether a character is sinking.** It was the first thing
-this observer reported and it is always zero, because both values are read at frame end once the
-simulation has already copied one into the other. A whole measured session had `step` at zero on
-every line while a character descended nearly a unit through the floor during it. It is kept only
-because it separates a character the simulation is moving from one being written to from outside,
-and `since` is the column that answers the question.
+own previous one. **Do not read `step` as whether a character is sinking.** It is a genuine one
+step delta: the simulation copies the current position into the previous field and only then
+writes the new one, so the two differ exactly on a step the character moved. It reads zero almost
+always for a different reason: this reports once every sixty frames while the simulation runs
+thirty two steps a second, so a character that moves on one step in thirty is almost never caught
+mid step. A whole measured session had `step` at zero on every line while a character descended
+nearly a unit through the floor during it, and an earlier version of this paragraph took that to
+mean the field was structurally always zero, which the disassembly disproved. It is kept because
+it separates a character the simulation is moving from one being written to from outside, and
+`since` is the column that answers the question.
+
+`anim` is the pair the script interpreter keeps for the primary animation, the id its Animation
+node last asked for and the id it believes is playing, wanted first. A character stuck in a pose
+after their line reads as the same non-zero pair on every report while the mode column says the
+script has moved on; a new row in `dialogue_anim_fix` is written from that reading. `body` is the
+clip on each of the body's two layers, base then overlay, put there by
+whoever put it, which separates a clip the script asked for from one the engine played itself;
+`hp` is the health. The jail prisoner's death read `ai=4 anim=5/5 body=5 hp=-7` on one line,
+which is how a hold that stood him back up was caught.
 
 The pool's slot array is walked directly rather than through the engine's own iterator. That
 iterator keeps its cursor inside the list header and advances it on every call, so an observer
@@ -98,7 +136,7 @@ Some detail that matters if you are reading a report:
 
 The debug registers are per thread, and they are written from a short lived helper thread that
 suspends the simulation thread first. A thread cannot reliably set its own, and the failure is
-silent rather than loud, which would read as a field nothing writes.
+silent rather than loud, so it reads as a field nothing writes.
 
 The handler does no file work. It records into a fixed buffer and returns, and the frame callback
 writes those records out afterwards. Logging from inside the handler would put file work between
@@ -138,6 +176,20 @@ every frame, so an undrawn record can carry a current timestamp. Only the page p
 Level 3 is loud, the drawer runs once per decorated polygon per frame. Keep `MaxLinesPerSecond`
 on, stand still, and read the collapsed counts rather than the individual lines.
 
+## Where the projectile census finds the list
+
+The head of the engine's ballistic list is not written down here. It is read out of the only
+function that both tests the head and then loads it, at `0x45243E`, whose nineteen bytes carry
+the same global twice, once in the `cmp` and once in the `mov` that follows it. Both operands
+are masked and both are read back, and the census declines unless the two agree, which is the
+same pair test `dev_overlay/cheats_no_fog.c` already makes on its own. One operand proves the
+pattern matched something the right shape; two agreeing prove it matched the function meant.
+
+It matters because three builds of this engine ship at the same file size and the globals move
+between them. An address written down here would read a different cell on two of the three and
+report counts that look real, which is worse than reporting nothing. If the site does not
+resolve the census says so and counts nothing.
+
 ## Flood protection
 
 The simulation runs at 32 substeps/s and the renderer at up to 240 frames/s. Events that fire per
@@ -152,7 +204,7 @@ brakes:
 
 ## Names instead of numbers
 
-86 music states and 82 music sequences (from IMUSE.DLL's muscript tables), 60 FSM opcodes (the
+86 music states and 80 music sequences (from IMUSE.DLL's muscript tables), 71 FSM opcodes (the
 editor's own names), the 14 player modes, the 16 enemy reaction states, the mover types and phases,
 and the `SNDF_*` bits. The **number is always printed alongside**, so a missing name can never be
 mistaken for a different value.
@@ -183,12 +235,80 @@ is the expensive part, not the detour.
 * Both music setters latch **before** the DLL call, so a cue the DLL rejects leaves the latch out of
   step with what is audible. The hook therefore logs the latch before *and* after.
 
+## The projectile census named the wrong entries
+
+The census is meant to add positions to its count once the list is long enough, because a count
+alone does not say whether the entries are spread across the level or stacked on one spot. It
+compared the walk index against the threshold instead, which made the threshold a start offset: the
+first ten were skipped and entries ten to fourteen named. A list of exactly ten reported nothing but
+its count, and a list of twelve named two, neither of them the first few the comment promised.
+
+The first five positions are now kept as the list is walked and written out after it, once the total
+is known and only when the total clears the threshold.
+
+## A re-armed write watch could miss the first write
+
+Arming a watch cleared the address, the counts and the label, but not the value remembered from
+whatever was watched before. Only writes that change the value are recorded, so the first write to
+the new field was compared against a number belonging to a different field, and whenever the two
+happened to match it was counted as unchanged and never recorded. There is no predecessor to compare
+a first write against, and arming now clears the flag beside the value as well.
+
+## The debug register helper had the caller's stack
+
+The helper thread that writes the debug registers is handed a request block and the caller waits up
+to five seconds for it. That block was a local, so a helper that overran the wait would write its
+result into a stack frame the caller had already left. It is now a static: a late helper writes into
+a cell whose only reader has already reported the failure, rather than into whatever the game put
+there next.
+
+## Which core, and which window
+
+The frame summary ends with two fields, appended after everything a reader of the older line
+parses, so that reader still works. The tail reads, in this shape:
+
+    ... | N hitches this session; N of N frame(s) began on an efficiency core; this window behind
+
+Windows 11 may treat a process whose window is behind another as background work and run it on
+efficiency cores at a lower clock, and with several instances of the game on one machine only one
+window can be in front. The count is taken on the game thread at every frame boundary with
+`GetCurrentProcessorNumberEx`, against a map of the machine's processors read once at install
+from `GetSystemCpuSetInformation`: an efficiency core is a logical processor whose efficiency
+class is below the highest class on the machine, so a machine without the distinction has none
+and the count stays at zero. The map is logged at install; on a Windows older than 10 it cannot be
+read, the count stays at zero for that reason instead, and the install line says so. Whether this
+window is in front is asked once a second on the same thread, and means the foreground window
+belongs to this process. `framerate_fix`'s `HighQos` asks Windows not to do the throttling this
+measures, and logs the state Windows ends up with.
+
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes for every observer pattern on both
-retail builds.
+retail builds. `unittests/diag_core_class.c` pins the processor map; the two new fields of the
+frame summary have not been seen in a game log yet.
 
 **The audio observers are accepted in game.** They were used to find a live defect: the channel
 release observer reported three voices holding an owner handle that pointed into the calling
 thread's stack, named the sound in each and where the write would land. The fix was built
-from that. The other areas are still offline only.
+from that.
+
+**`X87` is accepted in game.** Its first run placed the x87 stack underflow that framerate_fix's
+rider trace had found: the pointer moved across `halo_drawForThing` once a frame and across
+none of the other six calls, and with render_guard's `BalanceNodeVerts` on it moved across
+nothing. The other areas are still offline only.
+
+## A mover about to take an oversized step
+
+At `Trigger=2` and above, the integrator observer reports any mover whose next step exceeds a
+quarter of a second, naming the mover, its type, the step, the clock and the pose. An ordinary step
+is one frame.
+
+It is worth having because a mover's step is `now` minus the time it last ticked, and the
+integrator then makes `now` its new base. Anything that moves that clock in a jump is charged to
+every mover at once, and a mover in motion covers the whole interval in a single frame. Doors slam,
+platforms arrive. Movers at rest absorb the same jump invisibly, so without this the only symptom
+is the one thing that happened to be moving.
+
+It found that: 59 movers each stepping 2.031 s on the frame a quicksave loaded, which was
+`framerate_fix` dropping its banked clock offset a frame later than the level opened. The reading
+is taken before the original runs, because the integrator overwrites the base it came from.

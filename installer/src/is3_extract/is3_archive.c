@@ -228,7 +228,8 @@ const is3_member_t *is3_find_member(const is3_archive_t *archive, const char *na
         const char *a = archive->members[i].name;
         const char *b = name;
 
-        while (*a != '\0' && *b != '\0' && ascii_lower((unsigned char)*a) == ascii_lower((unsigned char)*b)) {
+        while (*a != '\0' && *b != '\0' &&
+               ascii_lower((unsigned char)*a) == ascii_lower((unsigned char)*b)) {
             a++;
             b++;
         }

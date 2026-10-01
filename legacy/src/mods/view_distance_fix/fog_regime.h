@@ -13,7 +13,7 @@
  *     fcomp [esp+0x84]               <- range * range, formed at 0x00404FEB `imul edx, ecx`
  *     test ah,1 / je drop
  *
- * The grid step is ONE WORLD UNIT: every world-to-cell conversion in that function is
+ * The grid step is one world unit: every world-to-cell conversion in that function is
  * `floor(coordinate - (-0.5))` (`fsub [0x4A8054]` with [0x4A8054] = -0.5f, then the float-to-int
  * at 0x0049A44C), with no scale factor anywhere. The emitter cull at 0x004221FA settles it
  * independently; it takes the SAME number, converts it with `fild`, and compares it against a
@@ -190,9 +190,8 @@ void fog_regime_set_authored_band(bool authored);
  * band where it was rather than collapsing it onto the camera.
  *
  * There is deliberately no live switch for the fog DELIVERY beside it. See consider_pixel_fog():
- * going from the device back to the engine's ramp needs the device reprogrammed, and this engine
- * only programs it from inside applyLevelFog, which runs at a level load. That is chosen once,
- * from FogImplementation. */
+ * going from the device back to the engine's ramp was tried in the game three ways and never
+ * brought the fog back, for a reason not known. That is chosen once, from FogImplementation. */
 void fog_regime_set_band_scale(float scale);
 
 /* True while a level is still opening: the window the fog spends switched off, so that the band

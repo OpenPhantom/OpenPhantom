@@ -35,13 +35,13 @@
  * ==============================================================================================
  * Why there is only one slider, and the two that were removed were removed on evidence
  *
- *   VIEW DISTANCE tore the picture apart. The log showed the slider pushing the range up and the
+ *   View distance tore the picture apart. The log showed the slider pushing the range up and the
  *   cell watchdog taking it back in the same frame, 1.50 -> 1.35, 1.60 -> 1.45, 1.70 -> 1.55,
  *   frame after frame. Two controls on one number, working against each other, make the geometry
  *   pop in rhythm. That is NOT an argument against the range itself, which still works from the
  *   ini; it is an argument against a slider whose value a control loop immediately overwrites.
  *
- *   ASPECT MODE was simply not what was wanted: both settings change the HORIZONTAL too, because
+ *   Aspect mode was simply not what was wanted: both settings change the HORIZONTAL too, because
  *   the engine only has one number. As a mode switch it belongs in the ini, not next
  *   to a slider it silently moves.
  */
@@ -58,6 +58,7 @@
 #include "common/memory.h"
 #include "common/menu_patcher.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -71,7 +72,7 @@
  *   C7 45 B0 FFFFFFFF           result = -1
  *   C7 45 A0 00000000
  *   6A 00                       push selInit = 0
- *   68 88FB4A00                 push pWidgets = 0x4AFB88     <- THE WIDGET TABLE, imm at +0x1A
+ *   68 88FB4A00                 push pWidgets = 0x4AFB88     <- the widget table, imm at +0x1A
  *   68 F0ED4A00                 push pFontNames = 0x4AEDF0
  *   6A 00                       push field18 = 0
  *   68 10EE4A00                 push pBmpNames = 0x4AEE10
@@ -259,8 +260,9 @@ static float offset_for_notch(int notch)
 {
     float base = variable_fov_base_horizontal_degrees();
 
-    /* No base yet, or ASPECT_MODE_STRETCH, where there is no computed field to offset from. Fall
-     * back to treating the notch as the old pure offset rather than writing a wild number. */
+    /* ASPECT_MODE_STRETCH, where there is no computed field to offset from. It is the only way
+     * here: before a projection has been built the base is the authored 60, not zero. Fall back to
+     * treating the notch as the old pure offset rather than writing a wild number. */
     if (!(base > 0.0f)) {
         return (float)notch * NOTCH_STEP_DEGREES;
     }
@@ -276,7 +278,8 @@ static int notch_for_current_view(void)
     absolute = (base > 0.0f) ? base + variable_fov_extra_degrees()
                              : (float)variable_fov_slider_min_fov_degrees();
 
-    notch = (int)((absolute - (float)variable_fov_slider_min_fov_degrees()) / NOTCH_STEP_DEGREES + 0.5f);
+    notch = (int)((absolute - (float)variable_fov_slider_min_fov_degrees())
+                  / NOTCH_STEP_DEGREES + 0.5f);
     if (notch < 0) {
         notch = 0;
     }
@@ -296,15 +299,15 @@ static void update_caption(void)
     float vertical   = variable_fov_vertical_degrees();
 
     if (horizontal >= FOV_MIN_DEGREES && vertical >= 1.0f) {
-        _snprintf(menu_state.caption, sizeof(menu_state.caption),
-                  fov_string(FOV_STRING_HORIZONTAL_AND_VERTICAL),
-                  (double)horizontal, (double)vertical);
+        text_format(menu_state.caption, sizeof(menu_state.caption),
+                    fov_string(FOV_STRING_HORIZONTAL_AND_VERTICAL),
+                    (double)horizontal, (double)vertical);
     } else if (horizontal >= FOV_MIN_DEGREES) {
-        _snprintf(menu_state.caption, sizeof(menu_state.caption),
-                  fov_string(FOV_STRING_HORIZONTAL_ONLY), (double)horizontal);
+        text_format(menu_state.caption, sizeof(menu_state.caption),
+                    fov_string(FOV_STRING_HORIZONTAL_ONLY), (double)horizontal);
     } else {
-        _snprintf(menu_state.caption, sizeof(menu_state.caption),
-                  "%s", fov_string(FOV_STRING_NO_PROJECTION));
+        text_format(menu_state.caption, sizeof(menu_state.caption),
+                    "%s", fov_string(FOV_STRING_NO_PROJECTION));
     }
     menu_state.caption[sizeof(menu_state.caption) - 1] = '\0';
 }
@@ -321,8 +324,9 @@ static bool apply_notch(bool force)
     menu_state.last_notch = notch;
 
     /* Save immediately rather than only on leaving the screen. A crash or a hung graphics wrapper
-     * must not swallow a setting the user has just made, which is exactly what happened once.
-     * WritePrivateProfileString buffers; with a 31-notch slider that is not measurable work. */
+     * must not swallow a setting the user has just made; that happened once.
+     * WritePrivateProfileString buffers, and with a 31-notch slider that is not measurable
+     * work. */
     variable_fov_set_extra_degrees(offset_for_notch(notch));
 
     /* AFTER the refresh, never before: the caption quotes numbers the rebuild has just set. */
@@ -373,7 +377,8 @@ static int32_t __cdecl hook_options_video(void)
     if (notch != menu_state.seed_notch) {
         apply_notch(true);
         log_info("video options closed: offset %.1f deg (notch %d), hFOV now %.3f",
-                 (double)variable_fov_extra_degrees(), notch, (double)variable_fov_horizontal_degrees());
+                 (double)variable_fov_extra_degrees(), notch,
+                 (double)variable_fov_horizontal_degrees());
     } else {
         log_info("video options closed, the slider was not touched, the ini is left alone");
     }
@@ -392,9 +397,15 @@ static bool table_has_shipped_shape(const menu_patch_context_t *context)
     for (index = 0; index < context->original_count; ++index) {
         const sw_widget_t *widget = &context->widgets[index];
 
-        if (widget->id == WIDGET_ID_GAMMA     && widget->type == SW_TYPE_SLIDER)  { has_gamma = true; }
-        if (widget->id == WIDGET_ID_MODE_LIST && widget->type == SW_TYPE_LISTBOX) { has_list  = true; }
-        if (widget->id == WIDGET_ID_APPLY     && widget->type == SW_TYPE_TEXT)    { has_apply = true; }
+        if (widget->id == WIDGET_ID_GAMMA && widget->type == SW_TYPE_SLIDER) {
+            has_gamma = true;
+        }
+        if (widget->id == WIDGET_ID_MODE_LIST && widget->type == SW_TYPE_LISTBOX) {
+            has_list = true;
+        }
+        if (widget->id == WIDGET_ID_APPLY && widget->type == SW_TYPE_TEXT) {
+            has_apply = true;
+        }
     }
 
     if (has_gamma && has_list && has_apply) {
@@ -468,7 +479,7 @@ static bool build_widgets(uintptr_t site)
         return false;
     }
 
-    /* NO PLATE. See the layout above: this toolkit cannot crop or scale a bitmap, and no plate in
+    /* No plate. See the layout above: this toolkit cannot crop or scale a bitmap, and no plate in
      * the shared table is short enough for the 108-pixel strip that is free. The caption is drawn
      * over the screen's own background, which is opaque there. */
     if (!menu_patcher_append_slider(&menu_state.patch, WIDGET_ID_FOV_SLIDER,
@@ -498,8 +509,9 @@ void fov_menu_install(void)
         return;
     }
 
-    menu_state.notch_count = (variable_fov_slider_max_fov_degrees() - variable_fov_slider_min_fov_degrees())
-                           / (int)NOTCH_STEP_DEGREES + 1;
+    menu_state.notch_count = (variable_fov_slider_max_fov_degrees()
+                              - variable_fov_slider_min_fov_degrees())
+                             / (int)NOTCH_STEP_DEGREES + 1;
     if (menu_state.notch_count < 2) {
         menu_state.notch_count = 2;                /* swslider divides by start - 1 */
     }
@@ -507,7 +519,10 @@ void fov_menu_install(void)
         menu_state.notch_count = MAX_NOTCHES;
     }
 
-    site = signature_find_unique(SIG_OPTIONS_VIDEO, NULL, sizeof(SIG_OPTIONS_VIDEO));
+    /* A detour target, searched for as one: a DLL that hooked this screen first has replaced the
+     * nine bytes it opens with. */
+    site = signature_find_detour_target(SIG_OPTIONS_VIDEO, NULL, sizeof(SIG_OPTIONS_VIDEO),
+                                        OPTIONS_VIDEO_PROLOGUE_SIZE);
     if (site == 0) {
         log_warning("options_video did not resolve, no field-of-view slider");
         return;

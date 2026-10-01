@@ -20,7 +20,7 @@ bool frame_clock_install(void)
         return false;
     }
 
-    /* READ OUT OF THE OPERAND rather than embedded, so the cell is found again after a forced
+    /* Read out of the operand rather than embedded, so the cell is found again after a forced
      * relocation and after any patch that moves a nearby immediate. */
     if (!memory_read_u32(site + FRAME_HOOK_FRAME_DELTA_OPERAND_OFFSET, &address) ||
         !memory_is_inside_image(address, sizeof(float))) {

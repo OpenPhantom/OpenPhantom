@@ -20,7 +20,7 @@
  * render rate costs the simulation nothing, and nothing in this DLL touches that loop, except
  * to nail it down, see the sim-rate pin below.
  *
- * THE RENDER CAP is one dword:
+ * The render cap is one dword:
  *     0x475B82  mov [ebp-4], 0x3D088889     ; 1/30 s
  *     0x475B8B  mov [ebp-4], 0x3C888889     ; 1/60 s   ("60fps" cheat arm)
  *     0x475BAE  cmp [0x4B7D78], 0           ; g_frameLimiterOn, ships as 1
@@ -32,10 +32,11 @@
  *   (3) the pose throttle and the drawn euler -> draw_interpolation.c
  *   (4) the emitter dormancy counter       -> here
  *
- * What is not a compensation but a choice, each behind its own switch and each off unless the ini
- * says otherwise: measuring the frame period more precisely (frame_delta.c), drawing particles at
- * the instant the frame shows (particle_clock.c), rebasing the world clock so the drawn instant
- * and the simulation agree (sim_clock.c), and interpolating movers (mover_interpolation.c).
+ * What is not a compensation but a choice, each behind its own switch and each on by default,
+ * with the measurement behind the default in its own file: measuring the frame period more
+ * precisely (frame_delta.c), drawing particles at the instant the frame shows
+ * (particle_clock.c), rebasing the simulation clock pair so the interpolation phase stops
+ * precessing (sim_clock.c), and interpolating movers (mover_interpolation.c).
  *
  * What is proven not to need compensation: the LOD cross-fade (a real seconds delta), the input
  * latch and the pause gate. Movers were on that list and are not any more: they derive their dt
@@ -45,13 +46,18 @@
 #include "framerate_fix.h"
 
 #include "camera_compensation.h"
+#include "camera_target.h"
 #include "common/cinematic_gate.h"
 #include "draw_interpolation.h"
 #include "face_latch.h"
+#include "frame_cap.h"
 #include "frame_delta.h"
+#include "frame_wait.h"
 #include "framerate_stats.h"
 #include "mover_interpolation.h"
+#include "object_interpolation.h"
 #include "particle_clock.h"
+#include "power_throttling.h"
 #include "sim_clock.h"
 
 #include "common/frame_hook.h"
@@ -85,11 +91,11 @@ static const uint8_t SIG_WAIT_FOR_FRAME[] = {
 #define OFFSET_CAP_30_IMMEDIATE  0x10u
 #define OFFSET_CAP_60_IMMEDIATE  0x19u
 
-/* THE 1/30 IMMEDIATE IS INSIDE THE SIGNATURE AND THE 1/60 ONE IS NOT. The pattern above is 22
- * bytes, so it ends at +0x15 and a match already proves what sits at +0x10. +0x19 is three bytes past the
- * end of it and was written on the strength of the match alone, which is the one code write in this
- * DLL that did not check what it was overwriting. On a build that diverges after the matched
- * prologue that is four bytes of unknown instruction inside sys_waitForFrame.
+/* The 1/30 immediate is inside the signature and the 1/60 one is NOT. The pattern above is 22
+ * bytes, so it ends at +0x15 and a match already proves what sits at +0x10. +0x19 is three
+ * bytes past the end of it and was written on the strength of the match alone, the one code
+ * write in this DLL that did not check what it was overwriting. On a build that diverges after
+ * the matched prologue that is four bytes of unknown instruction inside sys_waitForFrame.
  *
  * What actually sits there is the immediate of the instruction that starts at +0x16:
  *
@@ -97,7 +103,7 @@ static const uint8_t SIG_WAIT_FOR_FRAME[] = {
  *
  * so the seven bytes from +0x16 are checked as a unit before either cap is written. Checking the
  * immediate alone would accept the right four bytes in the wrong instruction; checking the
- * instruction as well is what makes the offset mean something. */
+ * instruction as well makes the offset mean something. */
 #define OFFSET_CAP_60_MOV        0x16u
 static const uint8_t EXPECTED_CAP_60_MOV[] = {
     0xC7, 0x45, 0xFC, 0x89, 0x88, 0x88, 0x3C
@@ -114,14 +120,17 @@ static const uint8_t EXPECTED_CAP_60_MOV[] = {
  *   C7 05 14878600 0000803C          g_frameDelta = 1/64     <- imm at +0x1B
  *
  * This is the one place the simulation rate is decided, and [0x882294] is the "60fps" CHEAT,
- * one flag, read in exactly two places in the whole image, that moves the render cap 30->60 AND
- * the substep 32->64 together. Doubling the substep doubles every PURE PER-SUBSTEP constant:
+ * one flag, read in exactly two places in the whole image and written in none (world_clock.h has
+ * the census), that moves the render cap 30->60 AND the substep 32->64 together. From the
+ * shipped image the flag stays zero, so the pin below guards against a writer outside it, a
+ * trainer say. Doubling the substep doubles every PURE PER-SUBSTEP constant, and
+ * the NPC extension module and the player module carry five of them:
  *
- *     NPC gravity          velocity.z -= 0.9 per substep         (aiext.c:3123)
- *     NPC turn ramp        3, 6, 9, 12 deg PER SUBSTEP           (aiext.c:2846)
- *     pathfinding throttle exactly ONE actor re-plans per substep (aiext.c:2714)
- *     pitch convergence    new*0.25 + old*0.75 per substep       (aiext.c:3239)
- *     shimmy               0.01 u per substep                    (player.c:1734)
+ *     NPC gravity          velocity.z -= 0.9 per substep
+ *     NPC turn ramp        3, 6, 9, 12 deg PER SUBSTEP
+ *     pathfinding throttle exactly ONE actor re-plans per substep
+ *     pitch convergence    new*0.25 + old*0.75 per substep
+ *     shimmy               0.01 u per substep
  *
  * Everything else in NPC movement IS dt-scaled and therefore immune, because inside the substep
  * loop g_frameDelta IS the substep. So: leave the substep alone and NPC speed, turning and
@@ -140,7 +149,7 @@ static const uint8_t SIG_SUBSTEP_SELECT[] = {
 /* --- 0x0046C1B5  g_clockTicks++ inside render_frameEnd --------------------------------------- *
  *   8B 15 10 87 86 00   mov edx, [g_clockTicks]     -> its address at +0x02
  *
- * g_clockTicks [0x868710] is incremented ONCE PER FRAME by exactly one instruction in the whole
+ * g_clockTicks [0x868710] is incremented once per frame by exactly one instruction in the whole
  * image. bapmap_waterWave 0x428615 reads it as if it were a clock, so at 144 fps the water runs
  * 4.8x too fast.
  *
@@ -212,9 +221,12 @@ static signature_t sites[SITE_COUNT] = {
 typedef struct framerate_config {
     bool  enabled;
     int   target_fps;            /* 0 = uncapped (clears g_frameLimiterOn) */
+    bool  match_display_refresh; /* the cap follows the screen, TargetFps ignored */
+    int   refresh_divisor;       /* 0 steps by itself, 1..4 pins the fraction of the refresh */
     bool  compensate_camera;
     bool  compensate_camera_anchor;  /* the one camera patch that REWRITES code, not an operand */
     bool  compensate_camera_in_cutscenes;
+    bool  camera_target_pair;    /* the camera's two samples stay two while the player rides */
     bool  compensate_animation;
     bool  spin_sleep;
     bool  pin_simulation_rate;
@@ -226,8 +238,19 @@ typedef struct framerate_config {
     bool  interpolate_particles;
     bool  rebase_sim_clock;
     bool  interpolate_movers;
+    bool  mover_substep_clock;
+    bool  log_mover_evenness;
+    bool  log_mover_summary;
     float mover_travel_limit;    /* world units a mover may cross in one simulation step */
+
+    /* The same question for what STANDS on a mover. A carried character has its previous
+     * position overwritten with its current one inside the same step, so the engine has
+     * nothing to blend; see object_track.h for the measurement. */
+    int   interpolate_riders;
+    float rider_travel_limit;
     int   process_priority;      /* 0 = leave it alone, 1 = above normal, 2 = high */
+    bool  high_qos;              /* Windows may not throttle this process behind another window */
+    bool  frame_wait_sleep;      /* sleep ahead of the engine's spin, see frame_wait.h */
     int   stats_frame_interval;
     int   stats_player_frames;
 } framerate_config_t;
@@ -252,11 +275,20 @@ static void load_config(void)
 
     config->enabled                = ini_read_bool(FRAMERATE_SECTION, "Enabled", true);
     config->target_fps             = ini_read_int (FRAMERATE_SECTION, "TargetFps", 0);
+    /* On even for a file that predates the key, decided rather than overlooked: a cap
+     * below the refresh rate judders whatever this DLL does about
+     * interpolation, frame_cap.h has the measurements, and an installation carrying an older
+     * ini was judged better off with the cap on the refresh than held to a number it never
+     * chose for that reason. The README says so beside the key. */
+    config->match_display_refresh  =
+        ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
+    config->refresh_divisor        = ini_read_int (FRAMERATE_SECTION, "RefreshDivisor", 0);
     config->compensate_camera      = ini_read_bool(FRAMERATE_SECTION, "CompensateCamera", true);
     config->compensate_camera_anchor =
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraAnchor", true);
     config->compensate_camera_in_cutscenes =
         ini_read_bool(FRAMERATE_SECTION, "CompensateCameraInCutscenes", false);
+    config->camera_target_pair     = ini_read_bool(FRAMERATE_SECTION, "CameraTargetPair", true);
     config->compensate_animation   = ini_read_bool(FRAMERATE_SECTION, "CompensateAnimation", true);
     config->spin_sleep             = ini_read_bool(FRAMERATE_SECTION, "SpinSleep", false);
     config->pin_simulation_rate    = ini_read_bool(FRAMERATE_SECTION, "PinSimulationRate", true);
@@ -266,10 +298,45 @@ static void load_config(void)
     config->face_latch_yield       = ini_read_int (FRAMERATE_SECTION, "FaceLatchYield", 16);
     config->precise_frame_time     = ini_read_bool(FRAMERATE_SECTION, "PreciseFrameTime", true);
     config->process_priority       = ini_read_int (FRAMERATE_SECTION, "ProcessPriority", 0);
+    /* On for a file without the key: it changes nothing about how the game plays, only whether
+     * Windows may treat the game as background work while its window is behind another. */
+    config->high_qos               = ini_read_bool(FRAMERATE_SECTION, "HighQos", true);
+    config->frame_wait_sleep       = ini_read_bool(FRAMERATE_SECTION, "FrameWaitSleep", false);
     config->interpolate_particles  =
         ini_read_bool(FRAMERATE_SECTION, "InterpolateParticles", true);
     config->rebase_sim_clock       = ini_read_bool(FRAMERATE_SECTION, "RebaseSimClock", true);
     config->interpolate_movers     = ini_read_bool(FRAMERATE_SECTION, "InterpolateMovers", true);
+    /* ON by default, on the strength of a measurement rather than a preference. Without it a
+     * mover's drawn step disagrees with its neighbours on about one frame in three, and with it
+     * on about one in eighty, so the interpolation above barely works without this. It does
+     * change how movers move rather than only how they are drawn; world_clock.h has what that
+     * costs, and it is a phase shift of under one substep for everything else on that clock. */
+    config->mover_substep_clock    =
+        ini_read_bool(FRAMERATE_SECTION, "MoverSubstepClock", true);
+    config->log_mover_evenness     =
+        ini_read_bool(FRAMERATE_SECTION, "LogMoverEvenness", false);
+    config->log_mover_summary      =
+        ini_read_bool(FRAMERATE_SECTION, "LogMoverSummary", false);
+    /* The migration, said once. A negative default is impossible for the old key, so this
+     * detects presence and not merely a value, the way the mouse keys do. */
+    {
+        int legacy = ini_read_int(FRAMERATE_SECTION, "MoverBlendMode", -1);
+
+        if (legacy >= 0) {
+            log_warning("MoverBlendMode=%d is no longer read. The modes it chose between were "
+                        "removed: the jitter they chased was the render cap not matching the "
+                        "display, and the blend now applies the substep alpha, as mode 0 "
+                        "did. Delete the old key to silence this.", legacy);
+        }
+    }
+    config->interpolate_riders     = ini_read_int(FRAMERATE_SECTION, "InterpolateRiders", 1);
+    if (config->interpolate_riders < 0 || config->interpolate_riders > 3) {
+        log_warning("InterpolateRiders=%d is out of range (0 to 3), using 0",
+                    config->interpolate_riders);
+        config->interpolate_riders = 0;
+    }
+    config->rider_travel_limit     =
+        ini_read_float(FRAMERATE_SECTION, "RiderTravelLimitPerStep", 2.0f);
     config->mover_travel_limit     =
         ini_read_float(FRAMERATE_SECTION, "MoverTravelLimitPerStep", 64.0f);
     config->stats_frame_interval   = ini_read_int (FRAMERATE_SECTION, "StatsFrameInterval", 0);
@@ -283,6 +350,7 @@ static void load_config(void)
     if (config->face_latch_yield < 0)  { config->face_latch_yield = 0; }
     if (config->face_latch_yield > 64) { config->face_latch_yield = 64; }
     if (!(config->mover_travel_limit > 0.0f)) { config->mover_travel_limit = 0.0f; }
+    if (!(config->rider_travel_limit > 0.0f)) { config->rider_travel_limit = 0.0f; }
     if (config->stats_frame_interval < 0) { config->stats_frame_interval = 0; }
     if (config->stats_player_frames  < 0) { config->stats_player_frames  = 0; }
 }
@@ -329,53 +397,53 @@ static void resolve_globals(void)
 static void patch_render_cap(void)
 {
     uintptr_t site = sites[SITE_WAIT_FOR_FRAME].address;
-    uint8_t   cmp_opcode[2];
-    uint32_t  limiter_address;
 
     if (site == 0) {
         log_warning("wait_for_frame did not resolve, the 30 Hz cap STAYS");
         return;
     }
 
-    if (framerate_state.config.target_fps > 0) {
-        float cap = 1.0f / (float)framerate_state.config.target_fps;
+    /* frame_cap.c owns the cap itself, because the cap has to be changeable while the game runs:
+     * the dev panel offers it, and matching the display is a setting rather than a one-off write.
+     * The site stays here, since this file owns the signature table for this function and the
+     * frame delta repair and the Sleep push below sit on the same pattern. */
+    if (frame_cap_install(site)) {
+        int refresh = frame_cap_refresh_hz();
 
-        /* BOTH WRITES OR NEITHER. If the cheat arm is not where it is expected, the 30 Hz write on
-           its own would still cap the frame rate, and the 60fps cheat could then undo it from
-           inside the game with nothing here to notice. A half applied cap is the shape this
-           project's own rule about unknown builds exists to refuse, so the whole cap declines and
-           says which byte disagreed. */
-        if (!patch_validate_bytes(site + OFFSET_CAP_60_MOV, EXPECTED_CAP_60_MOV,
-                                  sizeof(EXPECTED_CAP_60_MOV))) {
-            log_warning("the 60fps cheat arm is not the expected `mov [ebp-4],1/60` at %08X, so "
-                        "the render cap is left alone entirely rather than half applied",
-                        (unsigned)(site + OFFSET_CAP_60_MOV));
-            return;
+        if (framerate_state.config.match_display_refresh && refresh == 0) {
+            log_warning("MatchDisplayRefresh=1 but the display will not report a refresh rate, so "
+                        "TargetFps=%d stands. A cap that does not match the refresh leaves the "
+                        "screen repeating frames on an irregular pattern",
+                        framerate_state.config.target_fps);
         }
-
-        patch_write_f32(site + OFFSET_CAP_30_IMMEDIATE, cap);
-        patch_write_f32(site + OFFSET_CAP_60_IMMEDIATE, cap);   /* the cheat arm must not undo us */
-        log_info("render cap -> %d fps (%.8f s) at %08X and %08X",
-                 framerate_state.config.target_fps, (double)cap,
-                 (unsigned)(site + OFFSET_CAP_30_IMMEDIATE),
-                 (unsigned)(site + OFFSET_CAP_60_IMMEDIATE));
-    } else {
-        /* Uncapped: clear g_frameLimiterOn. Its address is the operand of `cmp [imm32], 0`, and
-         * the opcode pair is checked before the operand is believed. */
-        if (!memory_read(site + OFFSET_LIMITER_CMP, cmp_opcode, sizeof(cmp_opcode)) ||
-            cmp_opcode[0] != 0x83 || cmp_opcode[1] != 0x3D) {
-            log_warning("the limiter `cmp [imm32],0` shape is not at %08X, so the cap is left "
-                        "alone", (unsigned)(site + OFFSET_LIMITER_CMP));
-            return;
+        frame_cap_configure(framerate_state.config.target_fps,
+                            framerate_state.config.match_display_refresh,
+                            framerate_state.config.refresh_divisor);
+        if (framerate_state.config.match_display_refresh && refresh > 0) {
+            log_info("MatchDisplayRefresh=1, so the cap follows the display at %d Hz rather than "
+                     "the configured TargetFps=%d. Nothing in the shipped stack ties produced "
+                     "frames to shown ones, so a cap below the refresh judders however correct "
+                     "the interpolation is",
+                     refresh, framerate_state.config.target_fps);
+            if (framerate_state.config.refresh_divisor > 0) {
+                /* The cap clamps an out-of-range divisor and says so; this line reports the cap
+                 * it applied rather than the key as written, so the two agree. */
+                log_info("RefreshDivisor pins the cap at a fraction of the refresh, %d fps, and "
+                         "it will not step by itself", frame_cap_applied());
+            } else if (!framerate_state.config.precise_frame_time) {
+                log_warning("RefreshDivisor=0 asks the cap to step down when the machine cannot "
+                            "hold the refresh, but the frame's work is measured in the wait hook "
+                            "that PreciseFrameTime=0 leaves out, so it stays at the refresh");
+            } else {
+                log_info("RefreshDivisor=0: when more than a tenth of a second's frames need more "
+                         "work than the cap allows it steps down to the next fraction of the "
+                         "refresh, %d, %d or %d fps, where every frame is shown the same number "
+                         "of times, and steps back after %u clear seconds. Each step is logged",
+                         frame_cap_effective(0, true, refresh, 2),
+                         frame_cap_effective(0, true, refresh, 3),
+                         frame_cap_effective(0, true, refresh, 4), FRAME_CAP_CLEAN_SECONDS);
+            }
         }
-        if (!memory_read_u32(site + OFFSET_LIMITER_ADDRESS, &limiter_address) ||
-            !memory_is_inside_image(limiter_address, sizeof(uint32_t))) {
-            log_warning("the limiter address %08X is out of image, the cap is left alone",
-                        (unsigned)limiter_address);
-            return;
-        }
-        patch_write_u32(limiter_address, 0);
-        log_info("UNCAPPED, g_frameLimiterOn [%08X] cleared", (unsigned)limiter_address);
     }
 
     if (framerate_state.config.spin_sleep) {
@@ -404,9 +472,10 @@ static void pin_simulation_rate(void)
     uint32_t  immediate_64;
 
     if (!framerate_state.config.pin_simulation_rate) {
-        log_warning("PinSimulationRate=0, the '60fps' cheat can still move the SIMULATION to "
-                    "64 Hz, which doubles NPC gravity, the turn ramp and the pathfinding re-plan "
-                    "rate");
+        log_warning("PinSimulationRate=0, the 1/64 arm of the substep selector stays live. "
+                    "Nothing in the shipped image writes the '60fps' cell that selects it, so "
+                    "this matters only if something outside the image does; taken, it doubles "
+                    "NPC gravity, the turn ramp and the pathfinding re-plan rate");
         return;
     }
     if (site == 0) {
@@ -512,10 +581,43 @@ static void patch_emitter_dormancy(void)
 #define SCALE_QUANTISATION 256.0f
 #define MAX_PLAUSIBLE_DELTA 0.25f
 
+/* The cap, re-read about once a second so the dev panel's own rows take effect while the game
+ * runs rather than at the next launch. Only the three keys it needs are read, and the write inside
+ * frame_cap_configure is skipped when the value has not moved, which is every second but the one
+ * somebody changes something. */
+#define FRAME_CAP_POLL_SECONDS 1.0f
+
+static void poll_frame_cap(void)
+{
+    static float since_poll;
+
+    since_poll += *framerate_state.frame_delta;
+    if (since_poll < FRAME_CAP_POLL_SECONDS) {
+        return;
+    }
+    since_poll = 0.0f;
+
+    {
+        int  configured = ini_read_int(FRAMERATE_SECTION, "TargetFps", 0);
+        bool match       = ini_read_bool(FRAMERATE_SECTION, "MatchDisplayRefresh", true);
+        int  divisor     = ini_read_int(FRAMERATE_SECTION, "RefreshDivisor", 0);
+
+        frame_cap_configure(configured, match, divisor);
+    }
+}
+
 static void on_frame(void)
 {
     float frame_delta;
     float scale;
+
+    /* Before the guards below, deliberately. This counts rendered frames so the
+     * rider tracker can tell an object nobody has drawn for a while from one that is on screen,
+     * and a frame is a frame whatever its length: from the tail of this function it was skipped
+     * on any frame with no resolved delta or an implausible one, and a run of those aged nothing
+     * out at all. It measures frames and asks for no arguments, so there is nothing here it can
+     * be wrong about. */
+    object_interpolation_frame();
 
     if (framerate_state.frame_delta == NULL) {
         return;
@@ -525,7 +627,7 @@ static void on_frame(void)
     /* A zero or absurd frame delta is not an invitation to invent one. Substituting 1/30 here
      * made the camera take a full 30 Hz-sized step on a frame that took no time at all, pure
      * jitter at a high frame rate. Skipping is correct: the constants simply keep the value they
-     * had, which is what a zero-length frame deserves. */
+     * had. */
     if (!(frame_delta > 0.0f) || frame_delta > MAX_PLAUSIBLE_DELTA) {
         return;                                    /* also catches NaN */
     }
@@ -546,7 +648,7 @@ static void on_frame(void)
                                    cinematic_gate_script_owns_camera());
     }
 
-    /* THE ANIMATION CLOCK, and it is a genuine choice rather than a fix.
+    /* The animation clock, and it is a genuine choice rather than a fix.
      * g_clockTicks is an INTEGER counter that the water wave consumes as
      * (float)(uint32_t)(ticks * rate) degrees, so its resolution is one tick, whatever we do.
      * (Not the UV scroll: see the corrected census at SIG_CLOCK_TICKS_INCREMENT. The surface UV
@@ -571,6 +673,7 @@ static void on_frame(void)
     framerate_stats_sample(frame_delta);
     mover_interpolation_sample();
     sim_clock_sample();
+    poll_frame_cap();
 }
 
 /* ============================================================================================ */
@@ -646,6 +749,7 @@ void framerate_fix_install(void)
     /* Before any patching, because it touches no engine memory and a failure here must not
      * leave a half patched image behind. */
     apply_process_priority();
+    power_throttling_apply(framerate_state.config.high_qos);
 
     signature_resolve_table(sites, SITE_COUNT);
 
@@ -665,6 +769,7 @@ void framerate_fix_install(void)
     } else {
         log_info("CompensateCamera=0, the camera will feel rigid above 30 fps");
     }
+    camera_target_install(framerate_state.config.camera_target_pair);
 
     if (framerate_state.config.interpolate_pitch_roll) {
         draw_interpolation_install_euler();
@@ -677,10 +782,21 @@ void framerate_fix_install(void)
      * publish a value derived from the substep alpha and the alpha is only as good as the period
      * the wait measured. */
     frame_delta_install(framerate_state.config.precise_frame_time);
+    /* After the delta, whose detour on the wait is the one the sleep runs from. */
+    frame_wait_install(framerate_state.config.frame_wait_sleep, frame_delta_hooked());
     particle_clock_install(framerate_state.config.interpolate_particles);
-    sim_clock_install(framerate_state.config.rebase_sim_clock);
+    sim_clock_install(framerate_state.config.rebase_sim_clock,
+                      framerate_state.config.mover_substep_clock);
     mover_interpolation_install(framerate_state.config.interpolate_movers,
-                                framerate_state.config.mover_travel_limit);
+                                framerate_state.config.mover_travel_limit,
+                                framerate_state.config.log_mover_evenness,
+                                framerate_state.config.log_mover_summary);
+
+    /* After the movers, because the two are read together in the log and a platform that is
+     * not smoothed makes the rider question meaningless. Neither depends on the other at
+     * run time. */
+    object_interpolation_install(framerate_state.config.interpolate_riders,
+                                 framerate_state.config.rider_travel_limit);
 
     if (framerate_state.config.pose_per_frame) {
         draw_interpolation_install_pose_throttle();
@@ -691,10 +807,16 @@ void framerate_fix_install(void)
 
     framerate_state.installed = true;
 
+    if (!frame_hook_add_before(frame_cap_frame_drawn)) {
+        log_warning("the before-present frame hook is unavailable, so the cap cannot measure a "
+                    "frame's work and will not step by itself");
+    }
     if (!frame_hook_add(on_frame)) {
-        log_warning("no per-frame hook, the camera compensation and the animation clock do NOT "
-                    "run. The render cap, the pinned simulation rate, the emitter dormancy and "
-                    "both draw patches are already in place and stay in place.");
+        log_warning("no per-frame hook, so nothing driven from frame end runs: the camera "
+                    "compensation, the animation clock, the clock rebase, the mover and rider "
+                    "frame counts with their window lines, the cap's re-read of the ini and the "
+                    "statistics. The render cap, the pinned simulation rate, the emitter dormancy "
+                    "and the draw patches are already in place and stay in place.");
         return;
     }
 

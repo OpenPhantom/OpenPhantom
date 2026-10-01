@@ -23,7 +23,7 @@ const vlc_api_t *vlc_runtime_api(void)
 /* ============================================================================================ */
 /* Resolves one export and says which one was missing rather than only that something was. A
  * missing name here means the libVLC on this machine is not the API this file was written
- * against, and that is worth naming in the log by the name that was not there. */
+ * against, so the log names the export that was not there. */
 static void *resolve(const char *name)
 {
     void *address = (void *)GetProcAddress(vlc_api.module, name);
@@ -43,7 +43,8 @@ static bool resolve_exports(void)
     vlc_api.player_new_from_media =
         (libvlc_media_player_new_from_media_fn)resolve("libvlc_media_player_new_from_media");
     vlc_api.player_release = (libvlc_media_player_release_fn)resolve("libvlc_media_player_release");
-    vlc_api.player_set_hwnd = (libvlc_media_player_set_hwnd_fn)resolve("libvlc_media_player_set_hwnd");
+    vlc_api.player_set_hwnd =
+        (libvlc_media_player_set_hwnd_fn)resolve("libvlc_media_player_set_hwnd");
     vlc_api.player_play = (libvlc_media_player_play_fn)resolve("libvlc_media_player_play");
     vlc_api.player_stop = (libvlc_media_player_stop_fn)resolve("libvlc_media_player_stop");
     vlc_api.player_is_playing =
@@ -123,7 +124,7 @@ static bool init_worker(void)
     wchar_t plugin_path[MAX_PATH];
     const char *instance_args[3];
     int         instance_arg_count = 0;
-    /* CONFIRMED FIELD FIX for a ROG Ally X that reported silent movies with DSOAL installed.
+    /* Confirmed field fix for a ROG Ally X that reported silent movies with dsoal installed.
      *
      * --aout=mmdevice (forcing WASAPI) was the first fix tried, on the theory that libVLC's own
      * auto-probe was falling back to DirectSound and DSOAL (a DirectSound-to-OpenAL layer for the
@@ -209,7 +210,7 @@ static bool init_worker(void)
 }
 
 /* ============================================================================================
- * WHY THE LOAD ABOVE RUNS ON ITS OWN THREAD
+ * Why the load above runs on its own thread
  *
  * init_worker() walks the registry and the disk for a 32-bit VLC, loads two DLLs out of it and
  * then calls libvlc_new, which initialises VLC's entire plugin system. None of that is fast, and

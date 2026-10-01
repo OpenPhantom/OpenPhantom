@@ -12,6 +12,7 @@
 
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/numeric.h"
 
 #include <stdbool.h>
 
@@ -54,7 +55,7 @@
  *     than the frame's duration. That is a boundary correction, and it cannot be done from a sum.
  *
  * It was on by default once and that build was rejected in one sitting for input lag, having been
- * tuned against the spread of the delivered step and nothing else.
+ * tuned against the spread of the delivered step alone.
  *
  * What the setting is for is the case the arithmetic cannot reach: a device that reports far more
  * slowly than the simulation consumes, which is a streamed or injected pointer rather than a mouse.
@@ -64,7 +65,7 @@
  * intervals.
  *
  * The maximum is a plausibility bound rather than a tuning range. The latency the filter adds is
- * one time constant, so a player who asks for the whole of this key has asked for four tenths of a
+ * one time constant, so a player who asks for all of this key has asked for four tenths of a
  * second of it and will find out immediately. */
 #define DEFAULT_SMOOTH_CEILING_MS 0.0f
 #define MAX_SMOOTHING_MS          400.0f
@@ -96,8 +97,8 @@
 /* The old key, kept only to be recognised. Its unit was the reader's, so one of it was 0.3 degrees
  * per count, a full turn in an inch and a half at 800 DPI, and that was before the collector
  * stopped discarding four fifths of the motion. Silently reusing the number would have made every
- * tuned installation about four and a half times hotter at 144 frames per second, which is why the
- * key is renamed rather than reinterpreted. */
+ * tuned installation about four and a half times hotter at 144 frames per second, so the key is
+ * renamed rather than reinterpreted. */
 #define LEGACY_SENSITIVITY_KEY "MouseSensitivity"
 
 /* The bolt's key is renamed for the same reason, and the reason is not tidiness. An installation
@@ -111,17 +112,6 @@
 
 static mouse_config_t config;
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 const mouse_config_t *mouse_config(void)
 {
     return &config;
@@ -134,8 +124,8 @@ void mouse_config_load(void)
 
     config.degrees_per_count =
         ini_read_float(INPUT_SECTION, "MouseDegreesPerCount", DEFAULT_DEGREES_PER_COUNT);
-    config.degrees_per_count = clamp_float(config.degrees_per_count,
-                                           MIN_DEGREES_PER_COUNT, MAX_DEGREES_PER_COUNT);
+    config.degrees_per_count = numeric_clamp(config.degrees_per_count,
+                                             MIN_DEGREES_PER_COUNT, MAX_DEGREES_PER_COUNT);
 
     /* The setting is in degrees per mouse count and everything upstream of it is in the reader's
      * own axis units, so the conversion happens once, here.
@@ -150,8 +140,8 @@ void mouse_config_load(void)
 
     config.max_turn_rate =
         ini_read_float(INPUT_SECTION, SPIKE_LIMIT_KEY, DEFAULT_MAX_TURN_RATE);
-    config.max_turn_rate = clamp_float(config.max_turn_rate,
-                                       MIN_MAX_TURN_RATE, MAX_MAX_TURN_RATE);
+    config.max_turn_rate = numeric_clamp(config.max_turn_rate,
+                                         MIN_MAX_TURN_RATE, MAX_MAX_TURN_RATE);
 
     config.accumulate_requested = ini_read_bool(INPUT_SECTION, "MouseAccumulate", true);
     config.raw_requested        = ini_read_bool(INPUT_SECTION, "MouseRawInput", true);
@@ -166,46 +156,36 @@ void mouse_config_load(void)
     if (config.smoothing_is_automatic) {
         smoothing_ms = DEFAULT_SMOOTH_CEILING_MS;
     }
-    smoothing_ms = clamp_float(smoothing_ms, 0.0f, MAX_SMOOTHING_MS);
+    smoothing_ms = numeric_clamp(smoothing_ms, 0.0f, MAX_SMOOTHING_MS);
     config.smooth_ceiling_seconds = smoothing_ms / MILLISECONDS_PER_SECOND;
 
     /* The migrations, said loudly and exactly once each. A negative default is impossible for all
      * three old keys, so each of these detects presence and not merely a value. */
     legacy = ini_read_float(INPUT_SECTION, LEGACY_SENSITIVITY_KEY, -1.0f);
     if (legacy >= 0.0f) {
-        log_warning("%s=%.2f is no longer read. It is replaced by MouseDegreesPerCount, which is "
-                    "measured in degrees of view turn per MOUSE COUNT rather than per axis unit, "
-                    "and the mouse is no longer sampled once per substep, nothing is discarded "
-                    "any more, so the same feel needs a much smaller number. Your old value is "
-                    "%.3f in the new key; the default is %.3f and the usual band is 0.023 to "
-                    "0.045. MouseDegreesPerCount=%.3f is in force. Delete the old key to silence "
-                    "this.",
+        log_warning("%s=%.2f is no longer read; MouseDegreesPerCount replaces it, in degrees per "
+                    "mouse count, and your old value is %.3f in that unit (the usual band is "
+                    "0.023 to 0.045). MouseDegreesPerCount=%.3f is in force. Delete the old key "
+                    "to silence this.",
                     LEGACY_SENSITIVITY_KEY, (double)legacy,
-                    (double)(legacy * ENGINE_AXIS_SCALE), (double)DEFAULT_DEGREES_PER_COUNT,
+                    (double)(legacy * ENGINE_AXIS_SCALE),
                     (double)config.degrees_per_count);
     }
 
     legacy = ini_read_float(INPUT_SECTION, "MouseSmoothingMs", -1.0f);
     if (legacy >= 0.0f) {
-        log_warning("MouseSmoothingMs=%.0f is no longer read. It set a FIXED time constant, and a "
-                    "fixed one cannot be right at two different report rates: what is barely enough "
-                    "for a mouse reporting a hundred times a second is a quarter of a second of "
-                    "mush for one reporting a thousand times. The filter now measures the device's "
-                    "own report interval and sizes itself from that, and the new key "
-                    "MouseSmoothMaxMs is the CEILING on how much delay it may spend, default %.0f. "
-                    "Delete the old key to silence this.",
+        log_warning("MouseSmoothingMs=%.0f is no longer read. The filter now sizes itself from "
+                    "the device's own report interval, and MouseSmoothMaxMs is the ceiling on the "
+                    "delay it may spend, default %.0f. Delete the old key to silence this.",
                     (double)legacy, (double)DEFAULT_SMOOTH_CEILING_MS);
     }
 
     legacy = ini_read_float(INPUT_SECTION, LEGACY_TURN_RATE_KEY, -1.0f);
     if (legacy >= 0.0f) {
         log_warning("%s=%.0f is no longer read; the key is now %s and the default is %.0f. The old "
-                    "value was a SPEED LIMIT: it was measured against a single frame's own "
-                    "duration and it deleted what it cut, so a flick faster than it was truncated "
-                    "and the frame clock's own jitter was cut straight into the aim. What the new "
-                    "limit holds back is delivered on the next drain instead, so it bounds a "
-                    "broken device rather than your hand. %s=%.0f is in force. Delete the old key "
-                    "to silence this.",
+                    "limit deleted what it cut; the new one holds it back and delivers it on the "
+                    "next drain, so it bounds a broken device rather than your hand. %s=%.0f is in "
+                    "force. Delete the old key to silence this.",
                     LEGACY_TURN_RATE_KEY, (double)legacy, SPIKE_LIMIT_KEY,
                     (double)DEFAULT_MAX_TURN_RATE, SPIKE_LIMIT_KEY,
                     (double)config.max_turn_rate);
@@ -222,8 +202,8 @@ bool mouse_config_set_degrees_per_count(float degrees_per_count)
         return false;
     }
 
-    config.degrees_per_count     = clamp_float(degrees_per_count, MIN_DEGREES_PER_COUNT,
-                                               MAX_DEGREES_PER_COUNT);
+    config.degrees_per_count     = numeric_clamp(degrees_per_count, MIN_DEGREES_PER_COUNT,
+                                                 MAX_DEGREES_PER_COUNT);
     config.degrees_per_axis_unit = config.degrees_per_count / ENGINE_AXIS_SCALE;
 
     /* The bank is left alone. It holds counts the player has already made at the old sensitivity,
@@ -251,8 +231,9 @@ void mouse_config_use_frame_clock_smoothing(void)
         if (!(config.smooth_ceiling_seconds > 0.0f)) {
             log_warning("MouseSmoothMaxMs=0 is in your ini and the per-frame view path is on, so "
                         "each frame is handed whichever device reports happened to fall inside it. "
-                        "That is about a tenth of the movement on a 1000 Hz mouse and most of it on "
-                        "a 125 Hz one, and it is felt as a restless camera on fast turns. Delete "
+                        "That is about a tenth of the movement on a 1000 Hz mouse and most of "
+                        "it on a 125 Hz one, and it is felt as a restless camera on fast turns. "
+                        "Delete "
                         "the line to let this build choose, which is up to %.0f ms sized from your "
                         "device's own report interval. Older versions of this file wrote the zero "
                         "themselves, so it may well not be a choice you made.",
@@ -263,8 +244,8 @@ void mouse_config_use_frame_clock_smoothing(void)
     config.smooth_ceiling_seconds = FRAME_CLOCK_SMOOTH_CEILING_MS / MILLISECONDS_PER_SECOND;
     log_info("the delivery filter is on at up to %.0f ms, this build's default for the per-frame "
              "view path rather than a value from the ini. Its LENGTH is the device's own, six "
-             "report intervals, so a 1000 Hz mouse pays about 6 ms and a slow one is given what the "
-             "ceiling allows. Without it each frame is handed whichever reports fell inside it: a "
-             "tenth of the movement on a fast device and most of it on a slow one. "
+             "report intervals, so a 1000 Hz mouse pays about 6 ms and a slow one is given what "
+             "the ceiling allows. Without it each frame is handed whichever reports fell inside "
+             "it: a tenth of the movement on a fast device and most of it on a slow one. "
              "MouseSmoothMaxMs=0 is obeyed.", (double)FRAME_CLOCK_SMOOTH_CEILING_MS);
 }

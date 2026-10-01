@@ -15,12 +15,16 @@
  * So the samples are collected once per rendered frame and banked, and the bank is drained by
  * whoever consumes, at that consumer's own cadence. The arithmetic of the drain is in mouse_rate.c
  * and it has one property this file depends on completely: a drain removes what it delivers, and
- * it can neither deliver what has not arrived nor deliver against what has. That is what lets two
+ * it can neither deliver what has not arrived nor deliver against what has. That is how two
  * consumers at different cadences share one bank.
  */
 
 /* The engine's own axis reader, resolved out of the call site inside Plr_Steer. Answers the axis
  * already scaled by the binding, not raw device counts. */
+/* __cdecl from the bytes of the CALLEE, not of the call. 0x00449F94 is the site inside Plr_Steer
+ * where the reader is called, and the address is read out of that call's rel32; the reader it
+ * reaches ends in a plain ret after its epilogue and has no ret imm16, so the caller clears its
+ * one argument. */
 typedef float (__cdecl *input_axis_fn_t)(int axis);
 
 /* control_applyMouseDefaults at 0x0046586C registers one binding on function 0, source 6, with
@@ -48,7 +52,7 @@ typedef float (__cdecl *input_axis_fn_t)(int axis);
  * `hard_cap_degrees` alone, because a limit measured against no time at all would silently swallow
  * every input.
  *
- * It THROWS AWAY what it clips, which is why the primary path does not use it. A drain there
+ * It THROWS AWAY what it clips, so the primary path does not use it. A drain there
  * happens once per rendered frame, and the mouse counts arriving in a frame are not proportional
  * to that frame's duration: frame times on real hardware swing by a factor of four or more, so
  * identical hand movement would be clipped on a short frame and passed on a long one, and the

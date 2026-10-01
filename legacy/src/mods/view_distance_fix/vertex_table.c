@@ -9,9 +9,10 @@
  *
  * The cache is not a table of pointers or structs Ghidra ever named as one; it is addressed by
  * three DIFFERENT literal forms, all baked directly into instruction operands rather than read
- * from a pointer variable: `SHL reg,6` then `ADD reg,0x5bf9f0` (five call sites, two encodings
- * of ADD depending on which register: `81 /0 id` for EDX/ESI, the EAX-only short form `05 id` for
- * EAX), one direct `MOV byte ptr [reg+0x5bf9f1],1` (the per-slot "touched" flag, offset +1), and
+ * from a pointer variable: `SHL reg,6` then `ADD reg,0x5bf9f0` (ten sites, one on EDX, five on
+ * ESI and four on EAX, in two encodings of ADD depending on the register: `81 /0 id` for EDX and
+ * ESI, the EAX-only short form `05 id` for EAX), one direct `MOV byte ptr [reg+0x5bf9f1],1` (the
+ * per-slot "touched" flag, offset +1), and
  * one seed pointer `MOV ECX,0x5bf9f2` walked with `ADD ECX,0x40` per iteration (offset +2, the
  * per-frame touched-flag RESET loop). Twelve address-bearing sites in total, found by exhaustive
  * xref census across the three functions that read or write the cache
@@ -30,7 +31,7 @@
  *     the same reasoning draw_table.c already gives its own counter at 0x59DEBC.
  *
  * ==============================================================================================
- * 1. THE THREE GATES, and why unlike the cell table this one aborts clean
+ * 1. The three gates, and why unlike the cell table this one aborts clean
  *
  * cell_watchdog.h already documents this precisely, "unlike the cell table the vertex cache
  * aborts CLEANLY (all three gates branch to a return before every write)". That is confirmed here
@@ -49,11 +50,14 @@
  *           torn/stretched geometry that does not self-correct until the level reloads.
  *   gate 3  0x0041C0D5  FUN_0041BAF0: the same shape as gate 2, in the second (mover) entry point.
  *
- * All three are genuine pre-checks, not entry-only checks with unchecked appends after (the cell
- * table's own failure mode). That is why this file needs NO reserve the way draw_table.c's 8192
- * entries do: the retail code itself never writes past whatever limit these three gates enforce.
- * Raise all three together and the buffer's true capacity is exactly what gets used: a straight
- * multiplication, not an overshoot allowance.
+ * Gates 2 and 3 check before their loops; gate 1 checks after its write, and what keeps that
+ * write inside the buffer is the two in front of it: once gate 1 has tripped the counter is left
+ * at exactly 0x4000, and gates 2 and 3 reject the very next call before its first face. None of
+ * the three is an entry-only check with unchecked appends after it (the cell table's own failure
+ * mode). That is why this file needs NO reserve the way draw_table.c's 8192 entries do: the
+ * retail code itself never writes past whatever limit these three gates enforce. Raise all three
+ * together and the buffer's true capacity is exactly what gets used: a straight multiplication,
+ * not an overshoot allowance.
  *
  * ==============================================================================================
  * 2. THE SIZES
@@ -70,7 +74,7 @@
  * instruction instead of corrupting whatever memory happens to sit next.
  *
  * ==============================================================================================
- * 3. ALL OR NOTHING, same discipline as draw_table.c
+ * 3. all or nothing, same discipline as draw_table.c
  *
  *   pre-flight (NO write) -> buffer -> the twelve address operands -> the three gates LAST.
  *
@@ -199,19 +203,19 @@ static bool allocate_buffer(void)
     reserved = (uint8_t *)VirtualAlloc(NULL, BUFFER_BYTES + GUARD_BYTES, MEM_RESERVE,
                                        PAGE_NOACCESS);
     if (reserved == NULL) {
-        log_error("vertex table: VirtualAlloc(RESERVE %u B) failed (%lu), NOT ONE BYTE patched",
+        log_error("vertex table: VirtualAlloc(RESERVE %u B) failed (%lu), not one byte patched",
                   (unsigned)(BUFFER_BYTES + GUARD_BYTES), (unsigned long)GetLastError());
         return false;
     }
     if (VirtualAlloc(reserved, BUFFER_BYTES, MEM_COMMIT, PAGE_READWRITE) == NULL) {
-        log_error("vertex table: VirtualAlloc(COMMIT %u B) failed (%lu), NOT ONE BYTE patched",
+        log_error("vertex table: VirtualAlloc(COMMIT %u B) failed (%lu), not one byte patched",
                   (unsigned)BUFFER_BYTES, (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
     }
     if (VirtualAlloc(reserved + BUFFER_BYTES, GUARD_BYTES, MEM_COMMIT, PAGE_NOACCESS) == NULL) {
-        log_error("vertex table: the guard page at %08X could not be committed (%lu), NOT "
-                  "ONE BYTE patched", (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
+        log_error("vertex table: the guard page at %08X could not be committed (%lu), not "
+                  "one byte patched", (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)GetLastError());
         VirtualFree(reserved, 0, MEM_RELEASE);
         return false;
@@ -220,7 +224,7 @@ static bool allocate_buffer(void)
             != sizeof(information) ||
         information.Protect != PAGE_NOACCESS || information.State != MEM_COMMIT) {
         log_error("vertex table: the guard page at %08X does not carry PAGE_NOACCESS "
-                  "(State %08lX, Protect %08lX), NOT ONE BYTE patched",
+                  "(State %08lX, Protect %08lX), not one byte patched",
                   (unsigned)(uintptr_t)(reserved + BUFFER_BYTES),
                   (unsigned long)information.State, (unsigned long)information.Protect);
         VirtualFree(reserved, 0, MEM_RELEASE);
@@ -287,7 +291,7 @@ static bool find_address_sites(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_M
         }
     }
     if (!all_ok) {
-        log_warning("vertex table: unexpected match count, unknown image, NOT ONE BYTE patched");
+        log_warning("vertex table: unexpected match count, unknown image, not one byte patched");
         return false;
     }
     return true;
@@ -301,7 +305,7 @@ static bool find_gate_sites(uintptr_t gates[GATE_WORD_COUNT])
         gates[index] = signature_find_unique(GATE_PATTERNS[index].bytes, NULL,
                                              GATE_PATTERNS[index].size);
         if (gates[index] == 0) {
-            log_warning("vertex table: %s did not resolve uniquely, NOT ONE BYTE patched",
+            log_warning("vertex table: %s did not resolve uniquely, not one byte patched",
                         GATE_PATTERNS[index].name);
             return false;
         }
@@ -349,7 +353,7 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
     }
 
     if (table_state.word_count != WORD_COUNT) {
-        log_error("vertex table: %u instead of %u sites collected, NOT ONE BYTE patched",
+        log_error("vertex table: %u instead of %u sites collected, not one byte patched",
                   (unsigned)table_state.word_count, (unsigned)WORD_COUNT);
         table_state.word_count = 0;
         return false;
@@ -358,12 +362,16 @@ static bool build_word_list(uintptr_t hits[ADDRESS_PATTERN_COUNT][SIGNATURE_MAX_
     for (word_index = 0; word_index < WORD_COUNT; ++word_index) {
         if (!memory_read_u32(table_state.words[word_index].address,
                              &table_state.words[word_index].old_value)) {
+            log_warning("vertex table: site %u/%u (%s) at %08X is not readable, nothing is "
+                        "patched", (unsigned)(word_index + 1), (unsigned)WORD_COUNT,
+                        table_state.words[word_index].description,
+                        (unsigned)table_state.words[word_index].address);
             table_state.word_count = 0;
             return false;
         }
         if (table_state.words[word_index].old_value != table_state.words[word_index].expected) {
             log_warning("vertex table: pre-flight: site %u/%u (%s) at %08X carries %08X, "
-                        "expected %08X, NOT ONE BYTE patched", (unsigned)(word_index + 1),
+                        "expected %08X, not one byte patched", (unsigned)(word_index + 1),
                         (unsigned)WORD_COUNT, table_state.words[word_index].description,
                         (unsigned)table_state.words[word_index].address,
                         (unsigned)table_state.words[word_index].old_value,
@@ -432,6 +440,9 @@ void vertex_table_relocate(void)
     {
         uint32_t current = 0;
         if (!memory_read_u32(hits[0][0] + ADDRESS_PATTERNS[0].immediate_offset, &current)) {
+            log_warning("vertex table: the base operand at %08X is not readable, nothing is "
+                        "patched",
+                        (unsigned)(hits[0][0] + ADDRESS_PATTERNS[0].immediate_offset));
             return;
         }
         if (!memory_is_inside_image(current, sizeof(uint32_t))) {

@@ -4,6 +4,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 
@@ -44,8 +45,7 @@ void sensitivity_row_format(float degrees, char *out, size_t size)
     if (out == NULL || size == 0u) {
         return;
     }
-    (void)_snprintf(out, size - 1u, "%.3f", (double)degrees);
-    out[size - 1u] = '\0';
+    text_format(out, size, "%.3f", (double)degrees);
 }
 
 float sensitivity_row_get(void)

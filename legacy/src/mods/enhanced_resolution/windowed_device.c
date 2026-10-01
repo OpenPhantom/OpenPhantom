@@ -6,6 +6,7 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -50,7 +51,7 @@ static const uint8_t SIG_DD_SET_MODE[] = {
 /* Named for what they are rather than after the DDSCL_ constants they encode. DDSCL_NORMAL is a
  * real macro in the Windows SDK's ddraw.h, and defining it here would become a C4005 redefinition,
  * and therefore an error under /W4 /WX, the moment anything in this DLL's include chain pulled that
- * header in. Nothing does today, which is exactly the sort of thing that changes quietly. */
+ * header in. Nothing does today, and that can change quietly. */
 #define COOP_FLAGS_EXCLUSIVE 0x11u   /* DDSCL_FULLSCREEN|DDSCL_EXCLUSIVE, what the engine ships */
 #define COOP_FLAGS_NORMAL    0x08u   /* DDSCL_NORMAL, what this writes                          */
 
@@ -92,8 +93,10 @@ static void report_surfaces(void)
     if (surfaces_reported || primary_desc == NULL || back_desc == NULL) {
         return;
     }
-    if (!memory_is_readable_range((uintptr_t)primary_desc, 0x20u) ||
-        !memory_is_readable_range((uintptr_t)back_desc, 0x20u)) {
+    /* The faulting probe rather than the asking one: this runs every frame until the surfaces
+     * exist, and the asking form is two VirtualQuery walks a frame for as long as that takes. */
+    if (!memory_try_readable((uintptr_t)primary_desc, 0x20u) ||
+        !memory_try_readable((uintptr_t)back_desc, 0x20u)) {
         return;
     }
     surfaces_reported = true;
@@ -103,7 +106,8 @@ static void report_surfaces(void)
              "a corner of a larger surface and everything outside it is whatever was there, "
              "because the engine draws from a size it copied out of the mode table and never "
              "refreshes.",
-             (unsigned)primary_desc[DESC_OFF_WIDTH / 4], (unsigned)primary_desc[DESC_OFF_HEIGHT / 4],
+             (unsigned)primary_desc[DESC_OFF_WIDTH / 4],
+             (unsigned)primary_desc[DESC_OFF_HEIGHT / 4],
              (unsigned)back_desc[DESC_OFF_WIDTH / 4], (unsigned)back_desc[DESC_OFF_HEIGHT / 4]);
 }
 
@@ -159,10 +163,9 @@ void windowed_device_align_wrapper(bool windowed_present)
     if (directory == NULL) {
         return;
     }
-    if (_snprintf(path, sizeof path, "%s\\%s", directory, WRAPPER_INI_NAME) < 0) {
-        return;
+    if (text_format(path, sizeof path, "%s\\%s", directory, WRAPPER_INI_NAME) >= sizeof path - 1) {
+        return;                          /* a path that did not fit is not a path */
     }
-    path[sizeof path - 1] = 0;
 
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
         return;              /* no wrapper installed, so there is nothing of its to keep in step */
@@ -220,8 +223,8 @@ bool windowed_device_install(const windowed_device_config_t *config)
     flags_at = site + COOPERATIVE_FLAGS_OFFSET;
 
     /* Read back before writing. The pattern makes this redundant on a first install and it is kept
-     * because it is what makes the write idempotent: a second install finds 0x08 rather than 0x11
-     * and declines instead of writing again. */
+     * because it makes the write idempotent: a second install finds 0x08 rather than 0x11 and
+     * declines instead of writing again. */
     if (!patch_validate_bytes(flags_at, expect_exclusive, sizeof expect_exclusive)) {
         if (patch_validate_bytes(flags_at, expect_normal, sizeof expect_normal)) {
             log_info("the cooperative level at %08X is already DDSCL_NORMAL, so this is a second "

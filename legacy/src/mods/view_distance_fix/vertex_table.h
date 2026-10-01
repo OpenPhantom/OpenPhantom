@@ -8,7 +8,7 @@
  * gates cell_watchdog.h documents may be raised together and the abort becomes something normal
  * play does not reach, rather than something a longer view distance walks straight into.
  *
- * ORDERING CONSTRAINT, same shape as draw_table.h's: cell_watchdog_install() resolves the vertex
+ * Ordering constraint, same shape as draw_table.h's: cell_watchdog_install() resolves the vertex
  * counter against operand +0x08 of gate 1, an operand this module never touches, so in principle
  * the order does not matter for THAT read. It is kept second anyway, after cell_watchdog and after
  * draw_table, so every relocation in this DLL follows one rule rather than one rule for some and a

@@ -9,8 +9,8 @@
  *     fog:           world+0x218 / +0x21C (B3D hdr+0x90 / +0x94)
  * And graphics_clearFrame 0x46C0F5 clears the picture to the FOG COLOUR. Geometry beyond fogEnd
  * is therefore exactly background-coloured, i.e. invisible. Raising the draw distance alone costs
- * fill rate without a single additional pixel. The two have to move together, and connecting them
- * is what fog_regime.c does.
+ * fill rate without a single additional pixel. The two have to move together, and fog_regime.c
+ * connects them.
  *
  * Authored per level (draw distance / fog end):
  *   GUNGA 16/14, GARDEN 22/26, MAUL 28/32, FINAL 24/30, SWAMP 22/30, ESPA 22/32,
@@ -34,20 +34,20 @@
  * too. This is the ONE change here that touches GAME BEHAVIOUR: an actor created earlier thinks
  * earlier. It therefore ships at 1.0, the engine's own value, and installs nothing.
  *
- * Creating them earlier is not free, and that is why the default came back down. The engine draws
- * actors from two pools fixed at start-up, 128 actors and 255 things, and the activation test is
- * a SPHERE, so a radius multiplied by k multiplies the activated volume by k cubed: 1.25 was very
- * nearly twice as many actors alive at once. A full pool makes the spawn return zero silently,
- * the placement is skipped, and an enemy that should be standing in front of the player is not
- * there at all. spawn_census.c counts exactly that.
+ * Creating them earlier is not free, so the default came back down. The engine draws actors from
+ * two pools fixed at start-up, 128 actors and 255 things, and the activation test is a SPHERE, so
+ * a radius multiplied by k multiplies the activated volume by k cubed: 1.25 was very nearly twice
+ * as many actors alive at once. A full pool makes the spawn return zero silently, the placement is
+ * skipped, and an enemy that should be standing in front of the player is not there at all.
+ * spawn_census.c counts exactly that.
  *
- * THE SEAMS TAKEN. This file was well past the hard limit, and three whole responsibilities came
+ * The seams taken. This file was well past the hard limit, and three whole responsibilities came
  * out of it, each carrying the byte evidence that explains it:
  *
  *   view_settings.c    the ini: every key, its default and its clamp, and the handful that are
  *                      re-read while the game runs. It touches no engine memory and resolves no
- *                      signature, which is what made it the first cut and why it took the
- *                      configuration record with it.
+ *                      signature, so it was the first cut, and it took the configuration record
+ *                      with it.
  *   view_range.c       the draw distance actually in force: the field of view observer, the
  *                      radius cap, the cut edge, the bapmat_viewDistance detour, and the per
  *                      frame tick that arbitrates between the frame governor, the level opening
@@ -65,6 +65,7 @@
 #include "cell_watchdog.h"
 #include "frame_governor.h"
 #include "draw_table.h"
+#include "fog_owner.h"
 #include "fog_regime.h"
 
 #include "poly_bias.h"
@@ -75,6 +76,7 @@
 #include "common/cinematic_gate.h"
 #include "fog_trace.h"
 #include "spawn_census.h"
+#include "npc_range.h"
 #include "vertex_table.h"
 
 #include "two_sided_faces.h"
@@ -95,25 +97,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* --- 0x0040E42A  bapmat_viewDistance: THE DRAW DISTANCE --------------------------------------- *
+/* --- 0x0040E42A  bapmat_viewDistance: the draw distance --------------------------------------- *
  *   55 / 8B EC / 51 / 8B 45 08        prologue, 7 bytes, clean boundary
  *   8B 48 14                          range = world->viewRange (+0x14, from B3D hdr+0x854)
  *
  * The [2,64] clamp is NOT here; it lives only in the world-walk caller 0x404F33. The other two
- * callers (0x4048F3 an oldcode cheat, 0x4221FA the emitter cull radius) do NOT clamp, which is
- * why our detour clamps itself. */
+ * callers (0x4048F3 an oldcode cheat, 0x4221FA the emitter cull radius) do NOT clamp, so our
+ * detour clamps itself. */
 static const uint8_t SIG_VIEW_DISTANCE[] = {
     0x55, 0x8B, 0xEC, 0x51, 0x8B, 0x45, 0x08, 0x8B, 0x48, 0x14, 0x89, 0x4D, 0xFC, 0x8B, 0x55, 0x0C
 };
 
-/* --- 0x004371E4  enemy_activationScan: THE ACTIVATION RADIUS ---------------------------------- *
+/* --- 0x004371E4  enemy_activationScan: the activation radius ---------------------------------- *
  *   8B 55 F8 / 8B 42 28 / 50          push rec+0x28 = ACTIVE RANGE  -> arg3
  *   8B 4D FC / 83 C1 18 / 51          push playerBody+0x18
  *   8B 55 F8 / 81 C2 AC000000 / 52    push rec+0xAC
  *   E8 <rel32>                        call within_range 0x428EB3    <- at +0x18
  *
- * Only THIS call site is redirected. within_range has a second caller (0x4332F2, an AI query)
- * that must stay untouched. radius == 0 means "always active" and must not become finite. */
+ * Only THIS call site is redirected. within_range has a second caller, 0x4332F2, the removal
+ * test against the placement's removal radius, which stays untouched; npc_range.h says why the
+ * scale stops short of that radius. radius == 0 means "always active" and must not become
+ * finite. */
 static const uint8_t SIG_ACTIVATION_SCAN[] = {
     0x8B, 0x55, 0xF8, 0x8B, 0x42, 0x28, 0x50,
     0x8B, 0x4D, 0xFC, 0x83, 0xC1, 0x18, 0x51,
@@ -121,7 +125,7 @@ static const uint8_t SIG_ACTIVATION_SCAN[] = {
 };
 #define OFFSET_ACTIVATION_SCAN_CALL 0x18u
 
-/* --- 0x0040F3F7  rdMesh_draw: THE BACKFACE CULL ---------------------------------------------- *
+/* --- 0x0040F3F7  rdMesh_draw: the backface cull ---------------------------------------------- *
  *   (before) 8A 1D A0868600   mov bl,[0x8686A0]      <- the cull address, at anchor-4
  *   B8 01000000              mov eax,1
  *   84 D8                    test al,bl
@@ -137,12 +141,12 @@ static const uint8_t SIG_MESH_CULL_WORD[] = {
 /* --- 0x0040FE70  rdThing_Draw --------------------------------------------------------------- *
  *   83 EC 48 / B9 0C000000            prologue, 8 bytes, clean boundary
  * NO frame pointer: the two cdecl arguments are at [esp+4] / [esp+8] on entry.
- * rdMesh_draw has two callers (0x4100E5 from here, 0x456E17 from shot_drawAll), which is why
- * the detour must RESET the cull word at the end, not merely set it at the start.
+ * rdMesh_draw has two callers (0x4100E5 from here, 0x456E17 from shot_drawAll), so the detour
+ * must RESET the cull word at the end, not merely set it at the start.
  *
- * The pattern reaches eight bytes past the prologue on purpose. The prologue itself is what another
- * DLL's detour overwrites, and dev_overlay does exactly that here, so the site is declared in the
- * DETOUR form and the tail is what identifies it. */
+ * The pattern reaches eight bytes past the prologue on purpose. Another DLL's detour overwrites
+ * the prologue itself, and dev_overlay does exactly that here, so the site is declared in the
+ * DETOUR form and identified by its tail. */
 static const uint8_t SIG_THING_DRAW[] = {
     0x83, 0xEC, 0x48, 0xB9, 0x0C, 0x00, 0x00, 0x00, 0x55, 0x8B, 0x6C, 0x24, 0x50, 0x56, 0x8B, 0x74
 };
@@ -194,12 +198,27 @@ static view_distance_state_t view_state;
 /* ============================================================================================
  * The NPC activation radius
  * ============================================================================================ */
+/* `a` is the placement's position, rec+0xAC, the last push before the call; the removal radius is
+ * rec+0x2C in the same record, 0x80 bytes before it. */
+#define PLACEMENT_POSITION_TO_REMOVAL_RANGE 0x80u
+
+static uint32_t npc_range_capped_tests;
+
 static int32_t __cdecl hook_within_range(const float *a, const float *b, float radius)
 {
-    /* radius == 0 means "always active" in the engine (0x4371D7 compares against 0.0f), the
-     * scaling must not turn that into a finite radius. */
-    if (radius > 0.0f) {
-        radius *= view_state.config.npc_range_scale;
+    float authored = radius;
+    float removal = *(const float *)((const uint8_t *)a - PLACEMENT_POSITION_TO_REMOVAL_RANGE);
+    bool  capped = false;
+
+    /* radius == 0 means "always active" in the engine (0x4371D7 compares against 0.0f) and stays
+     * 0. The scale stops short of the removal radius, or the actor is made and removed on every
+     * substep. */
+    radius = npc_range_scaled(radius, removal, view_state.config.npc_range_scale, &capped);
+    if (capped && npc_range_capped_tests++ == 0u) {
+        log_info("NpcRangeScale reaches a removal radius: a placement with activation radius %.1f "
+                 "and removal radius %.1f wakes at %.1f instead of %.1f (said once)",
+                 (double)authored, (double)removal, (double)radius,
+                 (double)(authored * view_state.config.npc_range_scale));
     }
     return view_state.engine_within_range(a, b, radius);
 }
@@ -317,6 +336,7 @@ void view_distance_fix_install(void)
                                         view_state.config.relocate_draw_table);
     if (!watchdog_ok) {
         view_state.config.view_range_scale = 1.0f;
+        view_state.config.range_pinned     = true;   /* and the settings poll keeps it there */
         view_range_set_scale(1.0f);
     }
 
@@ -370,6 +390,8 @@ void view_distance_fix_shutdown(void)
     /* The capture is a rolling window now, so this is the only place it can be written
      * out: whatever the player was doing last is what it holds. */
     fog_trace_flush("the game is closing");
+    /* The level still up has not been left, so its fog line is written here. */
+    fog_owner_level_ends();
 
     draw_table_restore();
     vertex_table_restore();

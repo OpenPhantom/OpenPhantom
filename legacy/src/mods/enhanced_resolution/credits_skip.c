@@ -52,8 +52,9 @@ static const uint8_t SIG_CREDITS_READ_LINE[] = {
 enum { SITE_CREDITS_SCREEN, SITE_CREDITS_READ_LINE, SITE_COUNT };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY_MASKED("credits_screen",    SIG_CREDITS_SCREEN, MSK_CREDITS_SCREEN),
-    SIGNATURE_ENTRY       ("credits_read_line", SIG_CREDITS_READ_LINE)
+    SIGNATURE_ENTRY_DETOUR_MASKED("credits_screen", SIG_CREDITS_SCREEN, MSK_CREDITS_SCREEN,
+                                  CREDITS_SCREEN_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("credits_read_line", SIG_CREDITS_READ_LINE, CREDITS_READ_LINE_PROLOGUE)
 };
 
 typedef int32_t (__cdecl *credits_screen_fn_t)(void);
@@ -109,7 +110,7 @@ static int32_t __cdecl hook_credits_read_line(int32_t slot, char *out, int32_t *
     }
 
     if (skip_state.skip_requested) {
-        /* An empty line and "not a heading", which is what the real function answers at end of
+        /* An empty line and "not a heading", the answer the real function gives at end of
          * file. The engine blanks its own rows a step later; matching it here keeps the two
          * consistent in the meantime rather than leaving whatever the buffer last held. */
         if (out != NULL) {

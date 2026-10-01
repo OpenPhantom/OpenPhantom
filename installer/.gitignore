@@ -25,3 +25,10 @@ build*/
 # A release archive dropped in the checkout to test a pinned build against. The one that counts is on
 # the releases page and the script downloads it.
 *.zip
+
+# Visual Studio's Open Folder configures CMake into out/ beside the CMakeLists.txt it opened, and
+# CMakeUserPresets.json is the personal half of CMake's presets, which CMake says not to commit.
+# The only CMake project here is the extractor under src/, and naming src/ keeps the rule away
+# from dist/, which the exception above keeps whole.
+src/**/out/
+CMakeUserPresets.json

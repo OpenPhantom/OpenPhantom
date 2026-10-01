@@ -1,5 +1,12 @@
 /* cheats_openphantom.c: unlimited ammunition, unlimited health, invincible NPCs, one-shot NPCs,
- * giant player, tiny player, jump boost and free camera. No fog was here too and is not: it never
+ * giant player, tiny player, no clip, super run, jump boost and free camera.
+ *
+ * SIZE NOTE: just over the 600 line mark. The file is the install pass and the panel's interface
+ * to every cheat, and the byte evidence for the two sites it detours itself stands in the header
+ * below; the cheats themselves were already split out by responsibility, one file each, so the
+ * seam here has been taken and what is left is the part they share.
+ *
+ * No fog was here too and is not: it never
  * shared this file's shape, it lives in cheats_no_fog.c, and its row moved to the Utilities group
  * so that it sits with the other fog settings rather than away from them. Nothing here dispatches
  * to it any more. Free camera is documented next to its own two signatures below rather than up
@@ -8,7 +15,7 @@
  * giant/tiny player next to SIG_THING_DRAW.
  *
  * ==============================================================================================
- * THE TWO SITES, READ OUT OF THE RETAIL EXECUTABLE
+ * The two sites, read out of the retail executable
  *
  * Ammunition is spent in one place. 0x00459FD4, and the whole function is this:
  *
@@ -59,7 +66,7 @@
  * for damage. The record pointer inside them is masked and never depended on.
  *
  * ==============================================================================================
- * WHY A DETOUR THAT DECLINES, RATHER THAN A TOPPED UP COUNTER
+ * Why a detour that declines, rather than a topped up counter
  *
  * The obvious implementation of unlimited ammunition writes the magazine full once a frame. That
  * fights the pickup code, makes the weapon bar flash on frames nothing happened, and writes a value
@@ -77,6 +84,8 @@
  * and the console's own "kill me now" both go elsewhere and are not blocked here.
  * ============================================================================================ */
 #include "cheats_openphantom.h"
+
+#include "local_look.h"
 #include "cheats_internal.h"
 
 #include "sim_pause.h"
@@ -109,7 +118,7 @@ static const uint8_t SIG_USE_AMMO[] = {
     0x8B, 0x54, 0x81, 0x10,                          /* mov edx,[ecx+eax*4+0x10]     */
     0x2B, 0x55, 0x0C                                 /* sub edx,[ebp+0x0C]           */
 };
-/* THE LAST THREE BYTES ARE THE WHOLE POINT. The function that GIVES ammunition sits twenty nine
+/* The last three bytes are the whole point. The function that gives ammunition sits twenty nine
  * bytes earlier and is identical up to here:
  *
  *   00459FA6  8B 54 81 10 03 55 0C     mov edx,[ecx+eax*4+0x10]; ADD edx,[ebp+0x0C]
@@ -153,7 +162,7 @@ static const uint8_t MSK_DAMAGE[] = {
 _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
                "the damage pattern and its mask are different lengths");
 
-/* TEN, AND NOT FIVE, AND THE DIFFERENCE IS A CRASH.
+/* Ten, and not five, and the difference is a crash.
  *
  * The trampoline copies these bytes verbatim and appends a jump past them; there is no length
  * disassembler anywhere in the shared code. So the size has to land on a real instruction boundary.
@@ -171,12 +180,11 @@ _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
 
 /* --- 0x0040FE70  rdThing_Draw: every drawn object's own render call, including the player ------
  * SUB ESP,0x48 / MOV ECX,0xC / PUSH EBP / MOV EBP,[ESP+0x50], with no push-ebp;mov-ebp,esp frame at
- * all: this is one of the frame-pointer-omitted /O2 translation units this game's own toolchain
- * analysis (see engine/engine-identification.md) already found this build mixes with /Od per
- * source file. Still plain __cdecl(thing*, matrix[12]) at the ABI boundary regardless of how the
- * callee itself addresses its own params internally; the caller pushes two dwords and cleans its
- * own stack afterward (ADD ESP,8), the same shape hook_use_ammo/hook_damage above already detour,
- * so a normally-typed hook works here too, no naked-asm trick needed.
+ * all: this is one of the frame-pointer-omitted /O2 translation units this build mixes with /Od
+ * ones, per source file. Still plain __cdecl(thing*, matrix[12]) at the ABI boundary regardless
+ * of how the callee itself addresses its own params internally; the caller pushes two dwords and
+ * cleans its own stack afterward (ADD ESP,8), the same shape hook_use_ammo/hook_damage above
+ * already detour, so a normally-typed hook works here too, no naked-asm trick needed.
  *
  * Confirmed via xrefs to have exactly two callers: FUN_00417930's own switch(kind==1) arm, which
  * is the path every ordinary object takes, the player included, and emitter_drawParticles, for
@@ -184,7 +192,7 @@ _Static_assert(sizeof(SIG_DAMAGE) == sizeof(MSK_DAMAGE),
  * without needing two patches; the particle path is untouched regardless, since this hook only
  * ever acts when the incoming thing is the player's own (see hook_thing_draw below).
  *
- * THE SCALE TRICK IS ALREADY IN THE RETAIL GAME. A few instructions past this prologue, gated
+ * The scale trick is already in the retail game. A few instructions past this prologue, gated
  * behind a specific cheat-flag slot and a hardcoded four-character model-name match, neither of
  * which this feature depends on, touches, or needs to fully identify, retail applies a flat 3.0x
  * scale to this exact incoming matrix, via a small, self-contained "compose a diagonal scale into
@@ -202,8 +210,8 @@ static const uint8_t SIG_THING_DRAW[] = {
 
 /* The matrix-scale composer at 0x0047E185, found as a CALL rel32 operand rather than matched by
  * its own signature. A hand-transcribed byte pattern for a thirteen-instruction function, derived
- * from disassembly text rather than raw bytes, is exactly the kind of thing that fails silently -
- * signature_find_unique just answers zero, indistinguishable from "this build does not have it" -
+ * from disassembly text rather than raw bytes, is exactly the kind of thing that fails silently:
+ * signature_find_unique just answers zero, indistinguishable from "this build does not have it",
  * and a first attempt at exactly that here did fail silently. This is lower-risk: the CALL sits at
  * a fixed, confirmed offset from rdThing_Draw's own entry (0x67 bytes, measured directly off two
  * addresses already trusted for the detour above: entry 0x0040FE70, call instruction 0x0040FED7),
@@ -273,7 +281,7 @@ void __cdecl hook_damage(int32_t amount)
 static int32_t __cdecl hook_thing_draw(void *thing, float *matrix)
 {
     if (own_state.scale_matrix_compose != NULL && thing != NULL) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
+        void *player_record = player_slot_current();
 
         if (player_record != NULL) {
             void *player_actor = *(void **)((char *)player_record + PLAYER_ACTOR_OFFSET);
@@ -338,7 +346,8 @@ static void install_player_scale(void)
     uint32_t  rel32;
     uintptr_t scale_target;
 
-    if (!cheats_install_one(SIG_THING_DRAW, NULL, sizeof SIG_THING_DRAW, (const void *)&hook_thing_draw,
+    if (!cheats_install_one(SIG_THING_DRAW, NULL, sizeof SIG_THING_DRAW,
+                     (const void *)&hook_thing_draw,
                      &own_state.thing_draw_detour, THING_DRAW_PROLOGUE_SIZE,
                      "the object render call")) {
         return;
@@ -379,6 +388,7 @@ bool cheats_openphantom_install(void)
     own_state.cheats[CHEATS_OWN_GIANT_PLAYER].name = "Giant player";
     own_state.cheats[CHEATS_OWN_TINY_PLAYER].name = "Tiny player";
     own_state.cheats[CHEATS_OWN_NOCLIP].name = "No clip";
+    own_state.cheats[CHEATS_OWN_SUPER_RUN].name = "Super run";
     own_state.cheats[CHEATS_OWN_JUMP_BOOST].name = "Jump boost";
     own_state.cheats[CHEATS_OWN_FREECAM].name = "Free camera";
 
@@ -397,13 +407,20 @@ bool cheats_openphantom_install(void)
     }
 
     install_npc_damage();
-    install_player_scale();
-    install_jump_boost();
-    install_fall_punishment_immunity();
-    install_noclip();
+    install_super_run();
 
-    if (install_freecam()) {
-        own_state.cheats[CHEATS_OWN_FREECAM].available = true;
+    /* The five below read the player through the engine's own cell. Without that cell none of
+     * them can do its job, so none is installed: a detour that reads the wrong player is worse
+     * than a row that says unavailable. */
+    if (player_slot_resolve()) {
+        install_player_scale();
+        install_jump_boost();
+        install_fall_punishment_immunity();
+        install_noclip();
+
+        if (install_freecam()) {
+            own_state.cheats[CHEATS_OWN_FREECAM].available = true;
+        }
     }
 
     /* A different shape, see cheats_no_fog.h, so it owns its own state and this only asks it. */
@@ -423,6 +440,7 @@ bool cheats_openphantom_install(void)
            own_state.cheats[CHEATS_OWN_GIANT_PLAYER].available ||
            own_state.cheats[CHEATS_OWN_TINY_PLAYER].available ||
            own_state.cheats[CHEATS_OWN_NOCLIP].available ||
+           own_state.cheats[CHEATS_OWN_SUPER_RUN].available ||
            own_state.cheats[CHEATS_OWN_JUMP_BOOST].available ||
            own_state.cheats[CHEATS_OWN_FREECAM].available ||
            cheats_no_fog_is_available();
@@ -478,10 +496,17 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
      * is also what the dev panel and the game's own pause menu need, and there is no way to close
      * this cheat again without one. The authoritative gate lives here rather than only in the
      * panel's own row.available, so nothing that reaches this function directly can bypass it. */
-    if (id == CHEATS_OWN_FREECAM && !own_state.cheats[id].on && cheats_openphantom_freecam_hotkey() == 0) {
+    if (id == CHEATS_OWN_FREECAM && !own_state.cheats[id].on &&
+        cheats_openphantom_freecam_hotkey() == 0) {
         return false;
     }
     own_state.cheats[id].on = !own_state.cheats[id].on;
+    /* Super run is a write into the run site, made here and undone here, so the row and the
+     * bytes cannot disagree: a write that does not land puts the flag back. */
+    if (id == CHEATS_OWN_SUPER_RUN && !cheats_super_run_apply(own_state.cheats[id].on)) {
+        own_state.cheats[id].on = !own_state.cheats[id].on;
+        return own_state.cheats[id].on;
+    }
     /* Giant and tiny player are mutually exclusive: turning one on turns the other off, rather
      * than leaving a row reading ON that has no visible effect because hook_thing_draw's own
      * precedence (giant checked first) is the one actually deciding what gets applied. */
@@ -505,6 +530,16 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
             own_state.cheats[CHEATS_OWN_FREECAM].on = false;
         }
     }
+    /* And what the player now looks like, for a second machine. The two scales are drawn by a
+     * factor composed into the player's own matrix every frame, which nothing outside this
+     * process can see; local_look says it, the multiplayer's appearance carries it, and the far
+     * body is built at the same size. Said here rather than in the draw hook because this is the
+     * one place the state changes, and the draw hook runs sixty times a second. */
+    if (id == CHEATS_OWN_GIANT_PLAYER || id == CHEATS_OWN_TINY_PLAYER) {
+        local_look_set_scale(own_state.cheats[CHEATS_OWN_GIANT_PLAYER].on ? GIANT_PLAYER_SCALE
+                             : own_state.cheats[CHEATS_OWN_TINY_PLAYER].on ? TINY_PLAYER_SCALE
+                             : 1.0f);
+    }
     return own_state.cheats[id].on;
 }
 
@@ -520,7 +555,7 @@ bool cheats_openphantom_toggle(cheats_own_id_t id)
  * DAT_00881368 is written to 3 from exactly one place in the whole binary: FUN_00429880, case
  * (param_2 == 1). FUN_00429880 has exactly one caller anywhere: the level script interpreter
  * (FUN_00433d0b, dialogue_anim_fix.c's own "opcode 0x202" function), script opcode 0x606,
- * sub-command 1 - `FUN_00429880(param_1, *local_c, local_c[1], local_c[2])` when `*local_c == 1`.
+ * sub-command 1, `FUN_00429880(param_1, *local_c, local_c[1], local_c[2])` when `*local_c == 1`.
  * That is almost certainly the literal command a level's own exit trigger/volume issues.
  *
  * This writes DAT_00881368 = 3 directly, the same value that one script command produces, rather
@@ -549,7 +584,7 @@ bool cheats_openphantom_end_level_invoke(void)
         return false;
     }
 
-    /* THE PANEL CLOSES ITSELF, and this is a repair rather than tidiness.
+    /* The panel closes itself, and this is a repair rather than tidiness.
      *
      * The panel is toggled from the game's own key handler at 0043F603, which is on the GAMEPLAY
      * path. Skipping the LAST level does not load another one: the campaign driver runs the closing

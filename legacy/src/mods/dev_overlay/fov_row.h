@@ -2,13 +2,13 @@
  *
  * The same setting the video options screen offers, reachable without leaving the game to find it.
  *
- * IT SHOWS DEGREES AND WRITES AN OFFSET, and that is the only awkward thing here. variable_fov
+ * It shows degrees and writes an offset, the only awkward thing here. variable_fov
  * stores ExtraDegrees, a signed offset from a base that depends on the canvas, the aspect mode and
  * the engine's own projection. None of those exist in this DLL, so an offset is a number this row
  * could show and nobody could read. variable_fov therefore publishes BaseFov, and the width of the
  * picture is BaseFov plus ExtraDegrees, both of them in the file.
  *
- * THE BASE IS PUBLISHED RATHER THAN THE WIDTH, and the first version of this got that wrong. The
+ * The base is published rather than the width, and the first version of this got that wrong. The
  * width moves every time the offset does, which is every frame of a drag, so working the base out
  * as "width minus offset" pairs a width written a moment ago with an offset written just now. The
  * base then drifts by exactly the amount of the last drag step, every step is measured from a
@@ -33,16 +33,21 @@
 
 /* The range the video options slider offers, and the defaults variable_fov uses for its own ends.
  * Read from the file rather than assumed, since somebody who widened the slider there should not
- * find this row refusing what that one accepts. */
+ * find this row refusing what that one accepts.
+ *
+ * They are the two ENDS of the row's track and neither of them is the row's default, however the
+ * names read. What this row shows is BaseFov plus ExtraDegrees, and the value it has with nothing
+ * set is the base, which fov_row_base() below answers; putting the row back to FOV_ROW_MIN_DEFAULT
+ * would set the narrowest picture it allows and call that the default. */
 #define FOV_ROW_MIN_DEFAULT 60.0f
 #define FOV_ROW_MAX_DEFAULT 120.0f
 
-/* One press of the row's own step, in degrees. A whole degree is below what the eye picks up on a
- * single press and ten would cross the useful range in six. */
-#define FOV_ROW_STEP 2.0f
-
 float fov_row_min(void);
 float fov_row_max(void);
+
+/* The width with no offset at all, which is the base variable_fov published for this canvas.
+ * False when it has published none, the same case fov_row_get() answers false for. */
+bool fov_row_base(float *degrees);
 
 /* Clamps to the range above. A value that is not a number comes back as the minimum, which is the
  * narrowest picture and the one closest to what the game shipped with. */

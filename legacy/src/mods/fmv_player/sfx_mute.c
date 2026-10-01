@@ -2,7 +2,7 @@
  * curtain (render_curtain.c), not the master SFX volume, not dialogue, not music.
  *
  * ==============================================================================================
- * FINDING THE ACTUAL SOUND
+ * Finding the actual sound
  *
  * Two earlier attempts, both replaced:
  *
@@ -22,27 +22,27 @@
  * for being out of range, or a menu sound from well before the level even loads. Named for whatever
  * put it there, not for what it is; the timing is the evidence.
  *
- * This is not one sound, it is a FAMILY, one per playable character. Field-confirmed with a second
- * live capture: playing as Qui-Gon (cheats_original_actions.c's own "iamquigon"), the same transient
- * at a DIFFERENT level's own opening (race.b3d, not fedship.b3d, so the transient itself is not
- * unique to the one level this was first found on either) plays `FSUJSND1.wav` instead. Both share
- * the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
- * sound-specific suffix, which is what this file matches on rather than either exact name, so
- * Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having to
- * catch each one individually first.
+ * This is not one sound, it is a FAMILY, one per playable character. Field-confirmed with a
+ * second live capture: playing as Qui-Gon (cheats_original_actions.c's own "iamquigon"), the same
+ * transient at a DIFFERENT level's own opening (race.b3d, not fedship.b3d, so the transient itself
+ * is not unique to the one level this was first found on either) plays `FSUJSND1.wav` instead.
+ * Both share the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`,
+ * then a sound-specific suffix. This file matches on that suffix rather than on either exact
+ * name, so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered
+ * without having to catch each one individually first.
  *
  * ==============================================================================================
- * WHAT THIS DOES
+ * What this does
  *
  * Detours bapsound_play (0x0041681F, byte-identical to diagnostics/diag_audio.c's own
- * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the calls whose sound record's own
- * name matches the shared `FS?J*` shape (case-insensitive; the third character is a wildcard, the
- * rest of the name after `J` is not checked); every other sound, including both spoken lines,
+ * SIG_SOUND_PLAY) and, while suppression is armed, skips exactly the calls whose sound record's
+ * own name matches the shared `FS?J*` shape (case-insensitive; the third character is a wildcard,
+ * the rest of the name after `J` is not checked); every other sound, including both spoken lines,
  * passes through untouched. Armed and disarmed exactly like the two earlier, replaced attempts
  * were: begin() when the curtain arms, watching pPlayer+0xA0 (the position-override flag
  * documented beside PLAYER_OVERRIDE_FLAG_OFFSET below) so end() can fire the instant that
- * transient actually
- * finishes, with the curtain's own timer as a fallback cap if the flag is never seen.
+ * transient actually finishes, with the curtain's own timer as a fallback cap if the flag is never
+ * seen.
  */
 #include "sfx_mute.h"
 
@@ -56,7 +56,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* --- bapsound_play 0x0041681F, byte-identical to diagnostics/diag_audio.c's own SIG_SOUND_PLAY -- */
+/* --- bapsound_play 0x0041681F, byte-identical to diagnostics/diag_audio.c's own SIG_SOUND_PLAY */
 static const uint8_t SIG_SOUND_PLAY[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18, 0xA1, 0x88, 0xAE, 0x5B, 0x00, 0x89,
     0x45, 0xFC, 0x83, 0x3D, 0xB8, 0xB4, 0x5B, 0x00
@@ -82,7 +82,7 @@ static bool name_has_suppressed_prefix(const char *name)
     if (name[1] != 'S' && name[1] != 's') {
         return false;
     }
-    /* name[2] is the character letter, deliberately unchecked, and that is the whole point */
+    /* name[2] is the character letter, deliberately unchecked */
     return name[3] == 'J' || name[3] == 'j';
 }
 
@@ -96,6 +96,12 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
 #define OFFSET_PLAYER_POINTER 0x27u
+
+/* Six bytes: push ebp; mov ebp,esp; sub esp,8. Nothing here detours this function, but three other
+ * DLLs do, and the first of them replaces those six bytes with a jump. A plain pattern would then
+ * find nothing and this feature would switch itself off reporting an unsupported executable. */
+#define PLAYER_RUN_PHASES_PROLOGUE 6u
+
 
 /* Plr_CommitPose (0x0044C06B): while pPlayer+0xA0 is nonzero, the player's position is force-copied
  * every substep from pPlayer+0x124, the exact mechanism behind the position-settle transient
@@ -112,7 +118,8 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY_DETOUR("sfx_mute_sound_play", SIG_SOUND_PLAY, SOUND_PLAY_PROLOGUE),
-    SIGNATURE_ENTRY("sfx_mute_player_run_phases", SIG_PLAYER_RUN_PHASES)
+    SIGNATURE_ENTRY_DETOUR("sfx_mute_player_run_phases", SIG_PLAYER_RUN_PHASES,
+                           PLAYER_RUN_PHASES_PROLOGUE)
 };
 
 typedef int32_t (__cdecl *sound_play_fn_t)(const void *sound, int32_t *handle, const float *pos);
@@ -184,9 +191,9 @@ static void sfx_mute_frame_tick(void)
     if (!mute_state.suppressing || mute_state.player_pointer_slot == NULL) {
         return;
     }
-    if (!memory_read((uintptr_t)mute_state.player_pointer_slot, &player, sizeof(player)) ||
+    if (!memory_try_read((uintptr_t)mute_state.player_pointer_slot, &player, sizeof(player)) ||
         player == 0 ||
-        !memory_read((uintptr_t)player + PLAYER_OVERRIDE_FLAG_OFFSET, &override_flag,
+        !memory_try_read((uintptr_t)player + PLAYER_OVERRIDE_FLAG_OFFSET, &override_flag,
                      sizeof(override_flag))) {
         return;
     }

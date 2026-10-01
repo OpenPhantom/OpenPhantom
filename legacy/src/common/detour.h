@@ -11,12 +11,12 @@
  * A naive second detour on an already-detoured target copies the first detour's `E9 rel32` into
  * its own trampoline and produces an INFINITE LOOP that reports success. So:
  *
- *   FIRST INSTALLER  the target is untouched. Copy `prologue_size` bytes into a freshly allocated
+ *   First installer  the target is untouched. Copy `prologue_size` bytes into a freshly allocated
  *                    trampoline, append `jmp target + prologue_size`, then overwrite the prologue
  *                    with `jmp hook` padded with NOPs to an instruction boundary.
  *                    `original` = the trampoline.
  *
- *   LATER INSTALLER  the target already begins with 0xE9. Do NOT copy any bytes, the originals
+ *   Later installer  the target already begins with 0xE9. Do NOT copy any bytes, the originals
  *                    are gone. Read the existing displacement, keep that address as `original`,
  *                    and rewrite the displacement to point at the new hook.
  *                    `original` = the PREVIOUS HOOK.
@@ -32,10 +32,13 @@
  *   * NO UNINSTALL. Removing a link from the middle of a chain would require knowing who points
  *     at us, and nothing here does. Feature DLLs are loaded once by the mod loader and are never
  *     freed, so the pointers stay valid for the life of the process.
- *   * NO INSTRUCTION DECODING. `prologue_size` must be an exact instruction boundary and the
- *     copied bytes must contain no rip- or rel-relative operand. Every target used in this
- *     project is a plain MSVC `push ebp; mov ebp,esp; sub esp,imm` prologue whose exact byte
- *     sequence is part of the signature that found it, so the boundary is checked, not assumed.
+ *   * no instruction decoding. `prologue_size` must be an exact instruction boundary and the
+ *     copied bytes must contain no rip- or rel-relative operand. Most targets in this project
+ *     open with the plain MSVC `push ebp; mov ebp,esp; sub esp,imm`, but not all: the cinematic
+ *     lock and render_guard's caps compare push ecx and zero a local, eleven bytes, and the
+ *     deferred face submit has no frame pointer at all, so its first boundary past five bytes is
+ *     eight. In every case the exact byte sequence is part of the signature that found the
+ *     target, so the boundary is checked by the pattern, not assumed here.
  *   * it chains onto foreign hooks too. If a graphics wrapper detoured the function before us,
  *     the 0xE9 branch treats that wrapper's hook as `original`, which is the correct behaviour.
  */
@@ -48,14 +51,17 @@
 
 typedef struct detour {
     uintptr_t target;
-    void     *original;       /* call this to reach the previous behaviour; never NULL if installed */
+    /* call this to reach the previous behaviour; never NULL if installed */
+    void     *original;
     size_t    prologue_size;  /* 0 when we chained onto an existing hook */
     bool      installed;
     bool      chained;        /* true = we linked in front of a hook that was already there */
 } detour_t;
 
 /* `prologue_size` must be 5..16 and land on an instruction boundary.
- * Returns false and leaves the target untouched on any failure. */
+ * Returns false and leaves the target untouched on any failure. The trampoline lives on a page
+ * this DLL owns, executable and read only once written; see detour.c for why it is not a page of
+ * its own. */
 bool detour_install(detour_t *detour, uintptr_t target, const void *hook, size_t prologue_size);
 
 #endif /* COMMON_DETOUR_H */

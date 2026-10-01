@@ -1,6 +1,6 @@
 /* view_range_row.h: the draw distance setting, as the overlay's own row sees it.
  *
- * WHY THIS GOES THROUGH THE INI RATHER THAN A FUNCTION CALL. The scale this row edits belongs to
+ * Why this goes through the INI rather than a function call. The scale this row edits belongs to
  * view_distance_fix.dll, and feature DLLs in this project never depend on each other at run time:
  * any one of them can be deleted from mods\ without breaking the others, and a direct call would
  * end that. The overlay therefore writes the value to engine_fixes.ini and view_distance_fix reads
@@ -27,9 +27,6 @@
 #define VIEW_RANGE_MIN 1.0f
 #define VIEW_RANGE_MAX 2.5f
 
-/* One press of the row's own step, in scale units. */
-#define VIEW_RANGE_STEP 0.1f
-
 /* Clamps to the accepted range. A value that is not a number comes back as the minimum, because
  * the alternative is writing a NaN into a file the game reads on every start. */
 float view_range_row_clamp(float scale);
@@ -45,7 +42,7 @@ bool view_range_row_parse(const char *text, float *out);
 void view_range_row_format(float scale, char *out, size_t size);
 
 /* The current setting, read from the ini, clamped. Falls back to the minimum when the key is
- * absent or unreadable, which is what an untouched installation reads as. */
+ * absent or unreadable, as an untouched installation reads. */
 float view_range_row_get(void);
 
 /* Writes the setting to the ini, clamped first. False when the file could not be written, which

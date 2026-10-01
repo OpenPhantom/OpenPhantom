@@ -11,6 +11,8 @@
  */
 #include "unittest.h"
 
+#include "common/text.h"
+
 #include <stdint.h>
 
 /* fog_regime asks view_distance_fix where the cut edge lands, because that DLL owns the scale and
@@ -26,6 +28,7 @@ int32_t view_distance_fix_cut_for(int32_t engine_range)
 #include <string.h>
 
 #include "fog_regime.h"
+#include "fog_band.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -75,7 +78,7 @@ static fog_regime_config_t default_config(void)
 }
 
 /* ============================================================================================
- * THE ACCEPTANCE CRITERION
+ * The acceptance criterion
  * ============================================================================================ */
 static void test_identity_at_the_authored_field_of_view(void)
 {
@@ -97,9 +100,9 @@ static void test_identity_at_the_authored_field_of_view(void)
 
         fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
 
-        _snprintf(label, sizeof label,
-                  "%s keeps its authored band %.1f..%.1f bit-exactly at 60 degrees",
-                  level->name, (double)authored.start, (double)authored.end);
+        text_format(label, sizeof label,
+                    "%s keeps its authored band %.1f..%.1f bit-exactly at 60 degrees",
+                    level->name, (double)authored.start, (double)authored.end);
         label[sizeof label - 1] = '\0';
         ut_check(out.start == authored.start && out.end == authored.end, label);
     }
@@ -132,7 +135,7 @@ static void test_the_follow_factor_is_exactly_one(void)
 }
 
 /* ============================================================================================
- * THE GEOMETRY
+ * The geometry
  * ============================================================================================ */
 static void test_the_edge_limit_is_the_screen_corner(void)
 {
@@ -190,15 +193,15 @@ static void test_every_level_moves_when_the_picture_widens(void)
         fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &narrow);
         fog_regime_target_band(&config, &authored, WIDE_FOV, cut, cut, &wide);
 
-        _snprintf(label, sizeof label, "%s: %.1f at 60 degrees -> %.1f at 87",
-                  level->name, (double)narrow.end, (double)wide.end);
+        text_format(label, sizeof label, "%s: %.1f at 60 degrees -> %.1f at 87",
+                    level->name, (double)narrow.end, (double)wide.end);
         label[sizeof label - 1] = '\0';
         ut_check(wide.end < narrow.end && wide.start < narrow.start, label);
     }
 }
 
 /* ============================================================================================
- * THE TRAP: a band whose end falls below the level's own start disarms the engine's ramp, and a
+ * The trap: a band whose end falls below the level's own start disarms the engine's ramp, and a
  * disarmed ramp paints the world in the fog colour. BIGCITY (start 20, draw distance 20) and
  * FEDSHIP (start 16, draw distance 18) are the two shipped levels that reach it.
  * ============================================================================================ */
@@ -297,15 +300,15 @@ static void test_repeating_the_call_changes_nothing(void)
           "eight repeats of the same inputs give bit-identical output");
 
     /* The failure this guards against: feeding the previous OUTPUT back in as the authored band,
-     * which is what a coupling that reads the live field would do on the second apply. */
+     * as a coupling that reads the live field would do on the second apply. */
     fog_regime_target_band(&config, &first, WIDE_FOV, 23.0f, 23.0f, &again);
     ut_check(again.end < first.end,
-          "feeding the output back in DOES shrink it, which is why the module keeps the "
+          "feeding the output back in DOES shrink it, so the module keeps the "
           "authored band and never re-reads the field");
 }
 
 /* ============================================================================================
- * THE EASING
+ * The easing
  * ============================================================================================ */
 static void test_easing_is_frame_rate_independent(void)
 {
@@ -358,7 +361,7 @@ static void test_easing_degenerate_input(void)
     ut_check(fog_regime_ease(10.0f, 20.0f, -1.0f, 1.5f) == 10.0f,
           "a negative frame delta moves nothing");
     ut_check(fog_regime_ease(10.0f, 20.0f, 1.0f / 60.0f, 0.0f) == 20.0f,
-          "settle 0 is the instant step, which is what the setting promises");
+          "settle 0 is the instant step the setting promises");
 
     /* A three-second hitch must not sweep the fog across the level in one frame: the delta is
      * clamped, so the step is the one an eighth of a second would have made. */
@@ -417,7 +420,7 @@ static void test_the_band_scale(void)
     fog_regime_config_t config = default_config();
     fog_regime_band_t   authored;
     fog_regime_band_t   full;
-    fog_regime_band_t   near;
+    fog_regime_band_t   nearer;
     float               cut = 22.0f;
 
     authored.start = 10.0f;
@@ -428,31 +431,31 @@ static void test_the_band_scale(void)
     fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &full);
 
     config.band_scale = 0.8f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
 
     ut_section("the band scale");
-    ut_check(near.end < full.end,
+    ut_check(nearer.end < full.end,
              "below 1 the fog ends nearer the eye than every other term put it, which is the "
              "whole point: the terms above decide where the fog HAS to be, this decides how much "
              "sooner than that a player wants it");
-    ut_check(near.end > full.end * 0.79f && near.end < full.end * 0.81f,
+    ut_check(nearer.end > full.end * 0.79f && nearer.end < full.end * 0.81f,
              "and it is the plain multiple it says it is, not an approximation of one");
-    ut_check(near.start < full.start,
+    ut_check(nearer.start < full.start,
              "the start comes in with it, so the level's authored proportions survive and the "
              "band does not simply get shorter at one end");
-    ut_check(near.end > near.start,
+    ut_check(nearer.end > nearer.start,
              "and the span never inverts, which would have the engine paint the world in the fog "
              "colour rather than showing less of it");
 
     config.band_scale = 1.0f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.end == full.end && near.start == full.start,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.end == full.end && nearer.start == full.start,
              "exactly 1 is a no-op, so the shipped default cannot move the band by rounding");
 
     config.band_scale = 0.0f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.end == full.end,
-             "and a zero, which is what an absent or unreadable setting comes through as, is "
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.end == full.end,
+             "and a zero, the value an absent or unreadable setting comes through as, is "
              "ignored rather than collapsing the band onto the camera");
 
     /* The one place this differs from every other term here: those all exist to hide the edge the
@@ -465,8 +468,8 @@ static void test_the_band_scale(void)
              "an authored band at 1.0 is the level's own numbers exactly, untouched");
 
     config.band_scale = 0.5f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.start == authored.start * 0.5f && near.end == authored.end * 0.5f,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.start == authored.start * 0.5f && nearer.end == authored.end * 0.5f,
              "and it brings an authored band in as well, both ends by the same factor, rather "
              "than doing nothing wherever the scaling terms do nothing");
 
@@ -474,10 +477,83 @@ static void test_the_band_scale(void)
     authored.start = 1.0f;
     authored.end   = 3.0f;
     config.band_scale = 0.25f;
-    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &near);
-    ut_check(near.end > near.start,
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &nearer);
+    ut_check(nearer.end > nearer.start,
              "a band too short to survive the multiple is refused rather than clamped, since "
              "clamping one end past the other paints the world in the fog colour");
+}
+
+/* Floats that are not numbers. The band comes out of a level file's header and the terms come
+ * out of the ini, where "nan" and "inf" parse, and every refusal below is a comparison written so
+ * that NaN lands on the refusing side. */
+static void test_numbers_that_are_not(void)
+{
+    fog_regime_config_t config = default_config();
+    fog_regime_band_t   authored;
+    fog_regime_band_t   out;
+    float               cut = 22.0f;
+
+    ut_section("a level whose band is not a number");
+    authored.start = 10.0f;
+    authored.end   = (float)NAN;
+    out.start = 1.0f;
+    out.end   = 2.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(isnan(out.end) && out.start == 10.0f,
+             "a band whose end is NaN is handed back untouched, as a band without fog is: the "
+             "level keeps whatever it had and gains no band made from NaN");
+    authored.start = (float)NAN;
+    authored.end   = 32.0f;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(isnan(out.start) && out.end == 32.0f,
+             "and so is a band whose start is NaN, since no span can be measured against it");
+    authored.start = 10.0f;
+    authored.end   = (float)INFINITY;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(isfinite(out.end) && out.end == fog_regime_edge_limit(AUTHORED_FOV, cut) &&
+             out.start == 0.0f,
+             "an infinite end under the pop-in cap is brought to the cap, and the start with it, "
+             "so the band the engine is handed is finite");
+
+    ut_section("terms from the ini that are not numbers");
+    authored.start = 10.0f;
+    authored.end   = 32.0f;
+    config.inside_cut = FOG_END_UNBOUNDED;
+    config.fog_scale  = (float)NAN;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(out.start == 10.0f && out.end == 32.0f,
+             "a NaN FogScale is not above 1, so it is not applied, and the band is as authored");
+    config.fog_scale        = 1.0f;
+    config.min_end_fraction = (float)NAN;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(out.start == 10.0f && out.end == 32.0f,
+             "a NaN floor fraction is not above 0, so there is no floor");
+    config.min_end_fraction = 0.0f;
+    config.band_scale       = (float)NAN;
+    fog_regime_target_band(&config, &authored, AUTHORED_FOV, cut, cut, &out);
+    ut_check(out.start == 10.0f && out.end == 32.0f,
+             "a NaN band scale is ignored, as a zero one is");
+
+    ut_section("a field of view or a cut that is not a number");
+    ut_check(fog_regime_edge_limit((float)NAN, cut) == fog_regime_edge_limit(AUTHORED_FOV, cut),
+             "a NaN field of view is read as the authored picture, bit for bit");
+    ut_check(fog_regime_edge_limit((float)INFINITY, cut) ==
+                 fog_regime_edge_limit(2.0f * FOG_MAX_HALF_ANGLE, cut),
+             "an infinite one is clamped to the widest half angle the limit admits");
+    ut_check(fog_regime_edge_limit(AUTHORED_FOV, (float)NAN) == 0.0f,
+             "a NaN cut has no reach, and no reach is no limit");
+    ut_check(fog_regime_follow_factor((float)NAN, cut, cut) == 1.0f,
+             "a NaN field of view leaves the authored band alone");
+    ut_check(fog_regime_follow_factor(WIDE_FOV, cut, (float)NAN) == 1.0f,
+             "and so does a NaN live cut, since there is nowhere to follow it to");
+
+    ut_section("an easing time that is not a number");
+    ut_check(fog_regime_ease(10.0f, 20.0f, 1.0f / 60.0f, (float)NAN) == 20.0f,
+             "a NaN settle time steps immediately, as zero does");
+    ut_check(fog_regime_ease(10.0f, 20.0f, (float)NAN, 1.5f) == 10.0f,
+             "a NaN frame delta moves nothing, as a negative one does");
+    ut_check(fog_regime_ease(10.0f, 20.0f, 1.0f / 60.0f, (float)INFINITY) == 10.0f,
+             "an infinite settle time never arrives, which is the limit of a long one");
 }
 
 int main(void)
@@ -497,6 +573,7 @@ int main(void)
     test_the_fog_follows_a_shortened_cut_edge();
     test_the_floor();
     test_the_band_scale();
+    test_numbers_that_are_not();
 
     return ut_summary("fog_regime");
 }

@@ -45,7 +45,7 @@ static const uint8_t SIG_LOCK_LEAVE[] = {
 /* --- Plr_RunPhases 0x00448297 ----------------------------------------------------------------- *
  * The player mode is NOT an enum but a POINTER to a descriptor (player+0x60, the state-object
  * pattern). It becomes a number only through the NULL-terminated pointer table at [0x4B54B0], and
- * that is exactly what this hook does. It runs per SUBSTEP (32 Hz) and logs only the CHANGE.
+ * this hook resolves it there. It runs per SUBSTEP (32 Hz) and logs only the CHANGE.
  *   +0x27 : &pPlayer [0x4B5220] */
 static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,
@@ -56,7 +56,7 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
 #define PLAYER_RUN_PHASES_PROLOGUE 6u
 #define OFFSET_PLAYER_POINTER      0x27u
 
-/* --- A DATA SITE ONLY, no hook: player_save 0x004479F8 pushes the mode pointer table as a
+/* --- A data site only, no hook: player_save 0x004479F8 pushes the mode pointer table as a
  *     `push imm32`. That is where [0x4B54B0] comes from.
  *   +0x0A : &g_plrModeTable */
 static const uint8_t SIG_PLAYER_MODE_TABLE[] = {
@@ -109,9 +109,9 @@ static const uint8_t SIG_ADD_DECAL[] = {
  * and the blob shadow is re-stamped every frame, so an undrawn record can carry a current
  * timestamp. Only the page pointer is read here.
  *
- * void, and that is checked at the callers rather than assumed: all four (0x0041B987, 0x0041BA17,
- * 0x0041C324, 0x0041C3B9) do `add esp,0x10` and then overwrite EAX without ever reading it. Four
- * cdecl arguments. Prologue `81 EC 94 00 00 00` is six bytes on a clean boundary. Level 3. */
+ * void, checked at the callers rather than assumed: all four (0x0041B987, 0x0041BA17, 0x0041C324,
+ * 0x0041C3B9) do `add esp,0x10` and then overwrite EAX without ever reading it. Four cdecl
+ * arguments. Prologue `81 EC 94 00 00 00` is six bytes on a clean boundary. Level 3. */
 static const uint8_t SIG_DRAW_POLY_DECALS[] = {
     0x81, 0xEC, 0x94, 0x00, 0x00, 0x00, 0x53, 0x55, 0x8B, 0xAC, 0x24, 0xA0,
     0x00, 0x00, 0x00, 0x33, 0xC0, 0x56, 0x57, 0x8A
@@ -148,8 +148,8 @@ static const uint8_t SIG_DECAL_TABLE[] = {
  *
  * The surrounding material module is barely understood: which texture formats the retail renderer
  * really produces is an open question, and even which source file this routine belonged to is
- * disputed. None of that matters here, because the hook reports the return value and nothing
- * else. It draws no conclusion from the material it observes. */
+ * disputed. None of that matters here: the hook reports only the return value, and draws no
+ * conclusion from the material it observes. */
 static const uint8_t SIG_SELECT_CEL[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x10, 0x8B, 0x4D, 0x0C,
     0x8B, 0x54, 0x81, 0x1C, 0x89, 0x55, 0xFC, 0x8B
@@ -186,24 +186,27 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("level_load",        SIG_LEVEL_LOAD),
+    SIGNATURE_ENTRY_DETOUR("level_load", SIG_LEVEL_LOAD, LEVEL_LOAD_PROLOGUE),
     /* No other DLL in this tree detours this exact site today, but the detour-aware form is kept
      * rather than narrowed back: a plain SIGNATURE_ENTRY searches for the PRISTINE bytes and finds
      * zero matches the moment anything else patches the prologue first, which is the
      * render_frameEnd lesson signature.h's own header documents. It costs nothing here and it
      * survives the next feature that takes this site. */
     SIGNATURE_ENTRY_DETOUR("lock_enter", SIG_LOCK_ENTER, LOCK_ENTER_PROLOGUE),
-    SIGNATURE_ENTRY("lock_leave",        SIG_LOCK_LEAVE),
-    SIGNATURE_ENTRY("player_run_phases", SIG_PLAYER_RUN_PHASES),
+    SIGNATURE_ENTRY_DETOUR("lock_leave", SIG_LOCK_LEAVE, LOCK_LEAVE_PROLOGUE),
+    /* A detour target, and this file is one of the DLLs that detours it. Declared plainly it
+     * resolved only when it happened to install before the others. */
+    SIGNATURE_ENTRY_DETOUR("player_run_phases", SIG_PLAYER_RUN_PHASES,
+                           PLAYER_RUN_PHASES_PROLOGUE),
     SIGNATURE_ENTRY("player_mode_table", SIG_PLAYER_MODE_TABLE),
-    SIGNATURE_ENTRY("dialog_speak",      SIG_DIALOG_SPEAK),
-    SIGNATURE_ENTRY("dialog_play_voice", SIG_DIALOG_VOICE),
-    SIGNATURE_ENTRY("fx_add_decal",      SIG_ADD_DECAL),
-    SIGNATURE_ENTRY("fx_draw_decals",    SIG_DRAW_POLY_DECALS),
+    SIGNATURE_ENTRY_DETOUR("dialog_speak", SIG_DIALOG_SPEAK, DIALOG_SPEAK_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("dialog_play_voice", SIG_DIALOG_VOICE, DIALOG_VOICE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_add_decal", SIG_ADD_DECAL, ADD_DECAL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_draw_decals", SIG_DRAW_POLY_DECALS, DRAW_POLY_DECALS_PROLOGUE),
     SIGNATURE_ENTRY("fx_decal_table",    SIG_DECAL_TABLE),
-    SIGNATURE_ENTRY("fx_select_cel",     SIG_SELECT_CEL),
-    SIGNATURE_ENTRY("fx_emitter_active", SIG_EMITTER_ACTIVE),
-    SIGNATURE_ENTRY("fx_emitter_destroy",SIG_EMITTER_DESTROY)
+    SIGNATURE_ENTRY_DETOUR("fx_select_cel", SIG_SELECT_CEL, SELECT_CEL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_emitter_active", SIG_EMITTER_ACTIVE, EMITTER_ACTIVE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("fx_emitter_destroy", SIG_EMITTER_DESTROY, EMITTER_DESTROY_PROLOGUE)
 };
 
 #define PLAYER_CURRENT_MODE 0x60   /* a POINTER to the descriptor, not an enum */
@@ -408,17 +411,17 @@ static void __cdecl hook_draw_poly_decals(void *poly, const float *verts, int32_
         uintptr_t record = (uintptr_t)flow_state.decal_table + i * DECAL_RECORD_STRIDE;
         uint32_t  record_poly = 0, material = 0, page = 0;
 
-        if (!memory_read_u32(record + DECAL_OFF_POLY, &record_poly) ||
+        if (!memory_try_read_u32(record + DECAL_OFF_POLY, &record_poly) ||
             record_poly != (uint32_t)(uintptr_t)poly) {
             continue;
         }
         ++found;
 
-        if (!memory_read_u32(record + DECAL_OFF_MATERIAL, &material) || material == 0) {
+        if (!memory_try_read_u32(record + DECAL_OFF_MATERIAL, &material) || material == 0) {
             ++no_material;
             continue;
         }
-        if (!memory_read_u32((uintptr_t)material + MATERIAL_OFF_PAGE, &page) || page == 0) {
+        if (!memory_try_read_u32((uintptr_t)material + MATERIAL_OFF_PAGE, &page) || page == 0) {
             ++no_page;
         } else {
             ++with_page;
@@ -584,11 +587,12 @@ int diag_fx_install(int fx_level)
         installed += diag_install_observer(sites, SITE_DRAW_POLY_DECALS, &flow_state.draw_decals,
                                            (const void *)hook_draw_poly_decals,
                                            DRAW_POLY_DECALS_PROLOGUE,
-                                           "every decal DRAW, and whether the texture page is there")
-                     ? 1 : 0;
+                                           "every decal DRAW, and whether the texture page is "
+                                           "there") ? 1 : 0;
         installed += diag_install_observer(sites, SITE_SELECT_CEL, &flow_state.select_cel,
                                            (const void *)hook_select_cel, SELECT_CEL_PROLOGUE,
-                                           "materials the decal drawer REFUSES (that call site only)")
+                                           "materials the decal drawer REFUSES (that call site "
+                                           "only)")
                      ? 1 : 0;
     }
     return installed;

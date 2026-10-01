@@ -1,5 +1,7 @@
 #include "unittest.h"
 
+#include "common/text.h"
+
 #include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -35,12 +37,8 @@ void ut_checkf(int condition, const char *format, ...)
     va_list arguments;
 
     va_start(arguments, format);
-    /* _vsnprintf does not terminate on truncation, so the buffer is one short and the last byte
-     * is written by hand. A truncated check name is a cosmetic problem; an unterminated one walks
-     * off the end of the buffer while reporting a failure, which is the worst possible moment. */
-    _vsnprintf(message, sizeof(message) - 1, format, arguments);
+    text_vformat(message, sizeof(message), format, arguments);
     va_end(arguments);
-    message[sizeof(message) - 1] = '\0';
 
     report(condition, message);
 }
@@ -67,6 +65,12 @@ int ut_summary(const char *suite)
     const char *name = (suite != NULL) ? suite : "";
 
     printf("\n");
+    /* A run that checked nothing is not a pass. A fixture that failed to arm, or a loop whose
+     * every case was skipped, would otherwise walk out green on the strength of an empty tally. */
+    if (checks_run == 0) {
+        printf("%s: no checks ran, so this is a FAILURE\n", name);
+        return 1;
+    }
     if (checks_failed == 0) {
         printf("%s: all %u checks passed\n", name, (unsigned)checks_run);
         return 0;

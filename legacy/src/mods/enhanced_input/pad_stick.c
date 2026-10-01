@@ -5,6 +5,7 @@
 #include "strafe_walk.h"
 
 #include "common/logging.h"
+#include "common/session_note.h"
 #include "common/stick.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -38,7 +39,7 @@ static struct {
     float x;
     float y;
     float magnitude;
-    bool  running;          /* latched across substeps, which is what makes the hysteresis work */
+    bool  running;          /* latched across substeps, so the hysteresis works */
 
     bool     absent;
     ULONGLONG absent_next_tick;
@@ -55,7 +56,7 @@ static struct {
        the controls in its desktop layout and drives mouse and keyboard with them: Wine enumerates a
        pad, so the call succeeds, and not one report ever carries a value.
 
-       Time is what tells it apart from a pad sitting at rest, because at rest is exactly what the
+       Time tells it apart from a pad sitting at rest, because at rest is exactly what the
        first report of a healthy pad looks like. Nothing is claimed until the pad has been connected
        a while and every field of every report in that time has been zero. */
     ULONGLONG connected_since;
@@ -90,7 +91,7 @@ void pad_stick_poll(void)
         return;
     }
 
-    /* THE BINDINGS ARE NOT OURS TO IGNORE, and this is where taking the stick has to pay for
+    /* The bindings are not ours to ignore, and this is where taking the stick has to pay for
      * itself. A dialogue with a choice menu stops the player moving so the stick can pick an
      * answer, and the engine does that by swapping the whole binding set rather than by testing
      * anything. Reading XInput directly is not bound by anything and sailed straight past it: the
@@ -120,9 +121,9 @@ void pad_stick_poll(void)
                      "If one is plugged in NOW then it is a pad this cannot see, because only "
                      "XInput devices are visible here. An XBOX pad works as it is; anything else "
                      "has to be presented as one. Add the game to Steam as a non-Steam game and "
-                     "launch it from there, which is what Steam Input does for almost any "
-                     "controller, or run something that emulates XInput such as DS4Windows for a "
-                     "PlayStation pad. Without one of those, an older or off-brand pad, a "
+                     "launch it from there, where Steam Input presents almost any controller as "
+                     "an XInput pad, or run something that emulates XInput such as DS4Windows "
+                     "for a PlayStation pad. Without one of those, an older or off-brand pad, a "
                      "PlayStation controller plugged straight in or a flight stick is invisible "
                      "here; the game's own Controls screen still reads those.",
                      pad_state.controller_index);
@@ -154,16 +155,15 @@ void pad_stick_poll(void)
         } else if (!pad_state.seen_any_report && !pad_state.reported_silent &&
                    now - pad_state.connected_since >= SILENT_PAD_MS) {
             pad_state.reported_silent = true;
-            log_info("pad: slot %d has been connected for %u seconds and every field of "
-                     "every report in that time has been zero. The device is answering and "
-                     "sending nothing, which is a third thing, different from no pad at all and "
-                     "from a pad this cannot see. On a Steam Deck in desktop mode that is Steam "
-                     "holding the controls in its desktop layout, where they drive mouse and "
-                     "keyboard instead of a gamepad. The fix is to ADD the game to Steam as a non-Steam game "
-                     "and launch it from Steam: that is the configuration confirmed working on a "
-                     "Deck, and it gives the window modes and every input feature here at the "
-                     "same time. Elsewhere this usually means another program has taken the pad "
-                     "exclusively. "
+            log_info("pad: slot %d has been connected for %u seconds and every field of every "
+                     "report in that time has been zero. The device is answering and sending "
+                     "nothing, which is a third thing, different from no pad at all and from a pad "
+                     "this cannot see. On a Steam Deck in desktop mode that is Steam holding the "
+                     "controls in its desktop layout, where they drive mouse and keyboard instead "
+                     "of a gamepad. The fix is to ADD the game to Steam as a non-Steam game and "
+                     "launch it from Steam: that is the configuration confirmed working on a Deck, "
+                     "and it gives the window modes and every input feature here at the same time. "
+                     "Elsewhere this usually means another program has taken the pad exclusively. "
                      "Nothing is wrong with this patch and it goes on watching; touch the stick "
                      "and it will be used.",
                      pad_state.controller_index, (unsigned)(SILENT_PAD_MS / 1000u));
@@ -181,7 +181,7 @@ void pad_stick_poll(void)
                  pad_state.controller_index, (double)(pad_state.deadzone * 100.0f));
 
         /* The raw report, once, stated and not interpreted. All zero here is the normal reading
-         * for a pad nobody is touching, which is what a pad at the title screen always is, so this
+         * for a pad nobody is touching, as a pad at the title screen always is, so this
          * line proves the call works and nothing more. The claim that a pad is SILENT is made
          * below, on time, and only after nothing has arrived for long enough to mean it. */
         log_info("pad: first raw report from slot %d, left stick %d,%d right stick %d,%d "
@@ -225,7 +225,7 @@ void pad_stick_poll(void)
 #define PAD_BACKWARD_THRESHOLD 0.35f
 
 bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert,
-                            float *out_strafe, float *out_forward)
+                            bool sideways_walk, float *out_strafe, float *out_forward)
 {
     float forward;
     float strafe;
@@ -242,7 +242,16 @@ bool pad_stick_take_substep(uint8_t *record, bool stand_mode, bool strafe_invert
     }
     strafe = pad_stick_x();
 
-    strafe_walk_apply_stick_move(record, forward, strafe);
+    /* The move bits hear about the sideways deflection only when something is going to turn the
+     * travel angle to match it. With the sideways walk off nothing does, and a sideways push then
+     * set the walk-forward bit and full forward drive with nothing to redirect them: the stick
+     * steered correctly, through the engine's own turn, and ran the player straight ahead at the
+     * same time. Measured at a full left push with the sideways walk off: move bit 0 set, drive
+     * 0.563, the same number a full forward push writes, and speed climbing to the 3.50 run cap
+     * while the stick asked for no forward at all.
+     *
+     * The handback path below has always passed a zero here, for this reason. */
+    strafe_walk_apply_stick_move(record, forward, sideways_walk ? strafe : 0.0f);
 
     *out_forward = forward;
     *out_strafe  = strafe_invert ? -strafe : strafe;
@@ -265,7 +274,7 @@ bool pad_stick_take_handback(uint8_t *record, bool stand_mode, float *out_turn,
         forward = 0.0f;
     }
 
-    /* No sideways component, so the move bits say walk or back-pedal and nothing else. The
+    /* No sideways component, so the move bits say walk or back-pedal and no more. The
      * sideways deflection leaves here as a turn instead. */
     strafe_walk_apply_stick_move(record, forward, 0.0f);
 
@@ -289,12 +298,11 @@ float pad_stick_y(void)
     return pad_state.active ? pad_state.y : 0.0f;
 }
 
-float pad_stick_magnitude(void)
-{
-    return pad_state.active ? pad_state.magnitude : 0.0f;
-}
 
 bool pad_stick_wants_run(void)
 {
-    return pad_state.active && pad_state.running;
+    /* Not while a session's pause menu holds the input: with pad_run in front of the multiplayer's
+     * reader a pushed stick would still answer Run. */
+    return pad_state.active && pad_state.running &&
+           !session_note_input_held((uint32_t)GetTickCount());
 }

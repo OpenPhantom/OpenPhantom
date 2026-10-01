@@ -3,7 +3,7 @@
  * Three things live here, and each of them exists because getting it wrong is invisible until the
  * game is running:
  *
- *   * THE TRAVEL ANGLE. The integrator multiplies the facing by a SIGNED speed, so walking
+ *   * the travel angle. The integrator multiplies the facing by a signed speed, so walking
  *     backward is a negative speed along an unchanged facing. An angle built as "where do I want to
  *     go, relative to forward" double-counts that reversal, and holding only the back key would
  *     send the player FORWARD while the backward clip played. The backward rows are the reason this
@@ -25,10 +25,9 @@
  *
  * SIZE NOTE: past the preferred 400 lines. It is one test binary for one DLL's pure logic, and
  * splitting it would put the travel angle and free look's input angle, which are the same trap
- * seen from two
- * sides, and which are only meaningful next to each other, into different files. Each check
- * carries the sentence that says what breaks when it fails, because a test named `case_17` teaches
- * the next reader nothing; that prose is most of the length.
+ * seen from two sides, and which are only meaningful next to each other, into different files.
+ * Each check carries the sentence that says what breaks when it fails, because a test named
+ * `case_17` teaches the next reader nothing; that prose is most of the length.
  */
 #include "unittest.h"
 
@@ -65,7 +64,8 @@ static void check_angle(float strafe, float forward, float drive_sign,
     ut_near(strafe_walk_travel_offset(strafe, forward, drive_sign), expected, 0.001f, what);
 }
 
-/* Runs the damper for `seconds` of wall time in steps of `substep`, from `start` toward `target`. */
+/* Runs the damper for `seconds` of wall time in steps of `substep`, from `start` toward
+ * `target`. */
 static float damp_for(float start, float target, float substep, float seconds,
                       float settle, float rate)
 {
@@ -87,11 +87,12 @@ static void test_travel_angle(void)
     check_angle(NONE, NONE,     DRIVE_FWD,   0.0f, "no input is no offset");
     check_angle(NONE, FORWARD,  DRIVE_FWD,   0.0f, "forward alone is unchanged");
 
-    /* The row that matters. Backward alone must be a true no-op, or vanilla backpedalling breaks. */
+    /* The row that matters. Backward alone must be a true no-op, or vanilla backpedalling
+     * breaks. */
     check_angle(NONE, BACKWARD, DRIVE_BACK,  0.0f, "backward alone is unchanged");
 
     /* A lone sideways key. `forward` is the player's OWN input and stays 0 even though a walk is
-     * forced on their behalf, which is what makes this a right angle rather than a diagonal. */
+     * forced on their behalf, so this is a right angle rather than a diagonal. */
     check_angle(RIGHT, NONE, DRIVE_FWD, -90.0f, "right alone walks to the right");
     check_angle(LEFT,  NONE, DRIVE_FWD, +90.0f, "left alone walks to the left");
 
@@ -119,7 +120,7 @@ static void test_damper(void)
 
     ut_section("the damper");
 
-    /* FRAMERATE INDEPENDENCE, with the rate cap lifted out of the way so the exponential alone is
+    /* Framerate independence, with the rate cap lifted out of the way so the exponential alone is
      * under test. Equal wall time must give equal angle whatever the substep. */
     at_32 = damp_for(0.0f, 90.0f, SUBSTEP_32, 0.25f, SETTLE, 1.0e9f);
     at_64 = damp_for(0.0f, 90.0f, SUBSTEP_64, 0.25f, SETTLE, 1.0e9f);
@@ -130,28 +131,28 @@ static void test_damper(void)
     ut_near(damp_for(0.0f, 90.0f, SUBSTEP_32, 0.50f, SETTLE, 1.0e9f), 89.1f, 0.05f,
                 "two settle times close 99 %");
 
-    /* THE SAME, with the shipped cap in force. While the cap is what limits the step the two
+    /* The same, with the shipped cap in force. While the cap is what limits the step the two
      * substeps advance at the same rate, so they must still agree. */
     at_32 = damp_for(0.0f, 90.0f, SUBSTEP_32, 0.25f, SETTLE, RATE);
     at_64 = damp_for(0.0f, 90.0f, SUBSTEP_64, 0.25f, SETTLE, RATE);
     ut_near(at_32, at_64, 0.01f, "1/32 and 1/64 agree with the shipped rate cap");
     ut_near(at_32, RATE * 0.25f, 0.01f, "a 90-degree gap is rate-limited, not eased");
 
-    /* THE RATE CAP itself: one step can never travel further than the rate allows, and the cap is
+    /* The rate cap itself: one step can never travel further than the rate allows, and the cap is
      * a RATE, so it halves with the substep. */
     ut_near(strafe_walk_damp_step(0.0f, 90.0f, SUBSTEP_32, SETTLE, RATE),
                 RATE * SUBSTEP_32, 0.001f, "the first step at 1/32 is the rate cap");
     ut_near(strafe_walk_damp_step(0.0f, 90.0f, SUBSTEP_64, SETTLE, RATE),
                 RATE * SUBSTEP_64, 0.001f, "the first step at 1/64 is half of it");
 
-    /* IT SETTLES, exactly, and in finite time, which is what lets the body latch be given up. */
+    /* It settles, exactly, and in finite time, so the body latch can be given up. */
     current = 0.0f;
     for (steps = 0; steps < 1000 && current != 90.0f; ++steps) {
         current = strafe_walk_damp_step(current, 90.0f, SUBSTEP_32, SETTLE, RATE);
     }
     ut_check(current == 90.0f && steps < 1000, "the angle lands exactly on its target");
 
-    /* THE DECAY that clears the latch when Stand is left. It must reach exactly zero, or the model
+    /* The decay that clears the latch when Stand is left. It must reach exactly zero, or the model
      * root would be left holding a residue for good. */
     current = 90.0f;
     for (steps = 0; steps < 1000 && current != 0.0f; ++steps) {
@@ -272,7 +273,7 @@ static void test_free_look_offset(void)
     ut_near(free_look_interpolated_heading(100.0f, 140.0f, 1.0f), 140.0f, 0.001f,
                 "alpha 1 is the current substep exactly");
 
-    /* THE ROUND TRIP, which is the whole feature in one line: the engine adds our offset to its
+    /* The round trip, which is the whole feature in one line: the engine adds our offset to its
      * interpolated heading, so that sum has to be the camera yaw we asked for. */
     interpolated = free_look_interpolated_heading(350.0f, 10.0f, 0.5f);
     offset       = free_look_offset(75.0f, interpolated);
@@ -462,9 +463,9 @@ static void test_free_look_release_reasons(void)
     }
 }
 
-/* The bounded recovery. It is the whole of the fix for "the camera rotates at random while
- * walking", and its one hazard is the opposite defect: a limit large enough to snap the camera a
- * long way when an authored region really did re-aim the shot. */
+/* The bounded recovery. It is the entire fix for "the camera rotates at random while walking",
+ * and its one hazard is the opposite defect: a limit large enough to snap the camera a long way
+ * when an authored region really did re-aim the shot. */
 static void test_free_look_recovery(void)
 {
     ut_section("free look: taking the wanted yaw back after an authored region");

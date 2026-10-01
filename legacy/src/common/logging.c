@@ -1,6 +1,7 @@
 #include "logging.h"
 
 #include "host_image.h"
+#include "text.h"
 #include "common/version.h"
 
 #include <windows.h>
@@ -16,16 +17,16 @@
 #define LOG_LINE_MAX  1024
 
 /* ==============================================================================================
- * WHY THIS USES WriteFile AND NOT fopen("a").
+ * Why this uses WriteFile and not fopen("a").
  *
- * Eleven modules in one process write to this one file. With eleven CRT streams in append mode
- * each stream keeps its own file position, and two flushes that land in the same instant overwrite
- * each other; one observed line lost its first 46 characters that way, taking the address of a
- * hooked function with it.
+ * Every module in this project writes to this one file, and they are all in one process. Given a
+ * CRT stream each in append mode, every stream keeps its own file position, and two flushes that
+ * land in the same instant overwrite each other; one observed line lost its first 46 characters
+ * that way, taking the address of a hooked function with it.
  *
  * A handle opened with FILE_APPEND_DATA (and WITHOUT FILE_WRITE_DATA) makes every WriteFile an
- * atomic append at the current end of file, which is exactly the guarantee needed here. The whole
- * line is therefore formatted into one buffer and written in one call.
+ * atomic append at the current end of file. The whole line is therefore formatted into one buffer
+ * and written in one call.
  * ============================================================================================ */
 typedef struct log_state {
     HANDLE      file;
@@ -46,16 +47,15 @@ void log_init(const char *feature_name, bool truncate)
 
     log_state.feature_name = (feature_name != NULL) ? feature_name : "?";
 
-    _snprintf(log_state.path, sizeof(log_state.path), "%s%s", host_directory(), LOG_FILE_NAME);
-    log_state.path[sizeof(log_state.path) - 1] = '\0';
+    text_format(log_state.path, sizeof(log_state.path), "%s%s", host_directory(), LOG_FILE_NAME);
 
-    /* The truncation is a separate open, and that is not a detail. FILE_APPEND_DATA only means
-     * "append" when FILE_WRITE_DATA is ABSENT; with both, the handle keeps an ordinary file
-     * pointer. The first attempt gave the loader's handle both, so the loader wrote at its own
-     * position while the feature DLLs appended at the end, and the loader's next line overwrote
-     * what they had just written. crash_report, crt_copy_fix and diagnostics lost every line they
-     * logged, silently, because they happen to install first. */
-    /* The previous run is kept, and that is not a nicety either. The way this project is used is:
+    /* The truncation is a separate open. FILE_APPEND_DATA only means "append" when
+     * FILE_WRITE_DATA is ABSENT; with both, the handle keeps an ordinary file pointer. The first
+     * attempt gave the loader's handle both, so the loader wrote at its own position while the
+     * feature DLLs appended at the end, and the loader's next line overwrote what they had just
+     * written. crash_report, crt_copy_fix and diagnostics lost every line they logged, silently,
+     * because they happen to install first. */
+    /* The previous run is kept. The way this project is used is:
      * play, quit, then read the log. Truncating on every start means a single accidental restart,
      * or a launcher that starts the game twice, erases the session that is being investigated,
      * and the file that is left describes a run in which nothing happened. That has already cost
@@ -66,12 +66,11 @@ void log_init(const char *feature_name, bool truncate)
         HANDLE reset;
         char   previous[MAX_PATH];
 
-        _snprintf(previous, sizeof(previous), "%s%s", host_directory(), LOG_PREVIOUS_NAME);
-        previous[sizeof(previous) - 1] = '\0';
+        text_format(previous, sizeof(previous), "%s%s", host_directory(), LOG_PREVIOUS_NAME);
         DeleteFileA(previous);
         if (!MoveFileA(log_state.path, previous)) {
-            /* Nothing to move on the very first run; anything else is worth knowing, because it
-             * means the previous session's log was lost rather than kept. */
+            /* Nothing to move on the very first run; any other error means the previous
+             * session's log was lost rather than kept. */
             DWORD error = GetLastError();
             if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) {
                 rotate_error = error;
@@ -96,18 +95,16 @@ void log_init(const char *feature_name, bool truncate)
 
     if (truncate) {
         char   header[256];
-        int    length;
+        size_t length;
         DWORD  written;
 
         GetLocalTime(&now);
-        length = _snprintf(header, sizeof(header),
-                           "OpenPhantom engine fixes %s  %04d-%02d-%02d %02d:%02d:%02d\r\n"
-                           "-----------------------------------------------------\r\n",
-                           OPENPHANTOM_VERSION,
-                           now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
-        if (length > 0) {
-            WriteFile(log_state.file, header, (DWORD)length, &written, NULL);
-        }
+        length = text_format(header, sizeof(header),
+                             "OpenPhantom engine fixes %s  %04d-%02d-%02d %02d:%02d:%02d\r\n"
+                             "-----------------------------------------------------\r\n",
+                             OPENPHANTOM_VERSION,
+                             now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+        WriteFile(log_state.file, header, (DWORD)length, &written, NULL);
 
         /* Reported only now, because there was nowhere to report it before the handle existed. */
         if (rotate_error != 0) {
@@ -128,25 +125,20 @@ void log_shutdown(void)
 
 static void write_line(const char *severity, const char *format, va_list arguments)
 {
-    char  line[LOG_LINE_MAX];
-    int   length;
-    DWORD written;
+    char   line[LOG_LINE_MAX];
+    size_t length;
+    DWORD  written;
 
     if (log_state.file == NULL) {
         return;
     }
 
-    length = _snprintf(line, sizeof(line) - 3, "[%s] %s", log_state.feature_name, severity);
-    if (length < 0) {
-        length = (int)sizeof(line) - 3;
-    }
-
-    {
-        int body = _vsnprintf(line + length, sizeof(line) - 3 - (size_t)length, format, arguments);
-        if (body < 0) {
-            body = (int)(sizeof(line) - 3 - (size_t)length);
-        }
-        length += body;
+    /* Two bytes are kept back for the line ending. A body longer than the room left is cut, and
+     * the cut is marked so a truncated line cannot be read as a complete one. */
+    length  = text_format(line, sizeof(line) - 2, "[%s] %s", log_state.feature_name, severity);
+    length += text_vformat(line + length, sizeof(line) - 2 - length, format, arguments);
+    if (length == sizeof(line) - 3) {
+        memcpy(line + length - 3, "...", 3);
     }
 
     line[length++] = '\r';
@@ -180,7 +172,3 @@ void log_error(const char *format, ...)
     va_end(arguments);
 }
 
-const char *log_path(void)
-{
-    return log_state.path;
-}

@@ -1,9 +1,9 @@
 /* import_patch.h: replace one entry in another module's import address table.
  *
- * Everything else in this tree patches the GAME. This patches a library the game loads, which is a
- * different thing and worth being explicit about: it changes which function one named module calls
- * for one named import, and nothing else in the process is affected. Our own calls to the same
- * function are untouched, because they resolve through our own import table.
+ * Everything else in this tree patches the GAME. This patches a library the game loads: it changes
+ * which function one named module calls for one named import, while the rest of the process is
+ * affected. Our own calls to the same function are untouched, because they resolve through our own
+ * import table.
  *
  * The entry is found by ADDRESS rather than by name. A module's import names live in
  * OriginalFirstThunk, which the loader is free to leave at zero for a bound import, in which case
@@ -26,6 +26,9 @@
  * is not in that module's table. That is a normal outcome rather than an error: the module may not
  * be loaded, or a different build of it may not import that function at all, and the caller is
  * expected to log and carry on without the feature. */
+/* The slot has to hold the address the exporting module answers for `function_name` today. A slot
+ * something else has already redirected, a wrapper hooking the same import, reads as absent and
+ * this answers false, so the feature declines rather than chaining onto a stranger's hook. */
 bool import_patch_replace(const char *module_name, const char *imported_dll,
                           const char *function_name, void *replacement, void **out_original);
 

@@ -9,17 +9,49 @@
  *
  * Conservation, the property the whole repair rests on, is tested against the delivery itself in
  * mouse_rate.c, because that is where it now lives.
+ *
+ * And the gate those drains ask, which a session's pause menu shuts while the player phases run
+ * on: the phase stamp alone would leave it open, and the raw mouse would turn the view under the
+ * menu.
  */
 #include "unittest.h"
 
+#include "input_gate.h"
 #include "input_slider.h"
 #include "mouse_look.h"
 
+#include "common/session_note.h"
+
 #include <math.h>
+#include <string.h>
+
+/* Runs first: a read before any note is filed would be remembered as a miss for a second, and the
+ * gate would then read "not held" for the whole test. */
+static void test_session_hold_shuts_the_gate(void)
+{
+    session_note_t note;
+
+    memset(&note, 0, sizeof note);
+    note.running    = true;
+    note.input_held = true;
+    ut_check(session_note_publish(&note), "a session with its pause menu up is published");
+
+    input_gate_note_phase_ran();
+    ut_check(!input_gate_is_open(),
+             "the phases ran a moment ago and the gate is still shut: the menu holds the input");
+    ut_check(input_gate_session_holds(), "and the hold is what says so");
+
+    note.input_held = false;
+    ut_check(session_note_publish(&note), "the menu closes and the note says so");
+    input_gate_note_phase_ran();
+    ut_check(input_gate_is_open(), "the gate opens again with the next phase");
+    ut_check(!input_gate_session_holds(), "and nothing holds it any more");
+}
 
 static void test_slider_notches(void)
 {
-    int notch;
+    size_t failures_before = ut_failures();
+    int    notch;
 
     ut_near(input_slider_degrees_from_notch(0), 0.001f, 0.00001f,
                 "the slider's left end is 0.001 degrees per count, which the caption shows as 1");
@@ -38,11 +70,13 @@ static void test_slider_notches(void)
             ut_checkf(0, "notch %d shows as %.4f, not %d", notch, (double)shown, notch + 1);
         }
     }
-    ut_checkf(1, "every notch shows as a whole number, 1 through %d", MOUSE_SLIDER_NOTCH_COUNT);
+    ut_checkf(ut_failures() == failures_before, "every notch shows as a whole number, 1 through %d",
+              MOUSE_SLIDER_NOTCH_COUNT);
 
     ut_check(input_slider_notch_from_degrees(0.030f) == 29,
           "and converts back to notch 29");
 
+    failures_before = ut_failures();
     for (notch = 0; notch < MOUSE_SLIDER_NOTCH_COUNT; ++notch) {
         float degrees = input_slider_degrees_from_notch(notch);
 
@@ -51,7 +85,7 @@ static void test_slider_notches(void)
                    notch, (double)degrees, input_slider_notch_from_degrees(degrees));
         }
     }
-    ut_check(1, "every notch survives the round trip");
+    ut_check(ut_failures() == failures_before, "every notch survives the round trip");
 
     /* A setting typed into the ini between two notches shows as the CLOSER one. */
     ut_check(input_slider_notch_from_degrees(0.0296f) == 29,
@@ -89,6 +123,7 @@ static void test_clamp_step(void)
 
 int main(void)
 {
+    test_session_hold_shuts_the_gate();
     test_slider_notches();
     test_clamp_step();
 

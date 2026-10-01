@@ -2,7 +2,7 @@
  *
  * The seam is between finding engine code and deciding what to write into it. The byte patterns
  * and the disassembly that proves each one are in menu_scale_sites.c; what is here is what the
- * rest of the feature needs in order to name a site, reach a field, or read an engine global.
+ * rest of the feature needs to name a site, reach a field, or read an engine global.
  * Every number here is the engine's own, so none of it is adjustable and none of it is derived.
  *
  * Internal to the menu scale files. Nothing else includes it: the SITE_ names below have the same
@@ -13,6 +13,7 @@
 
 #include "common/signature.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,9 +28,11 @@
 #define ORIGIN_SCALE_OPERAND  0x3Au
 #define ORIGIN_SITE_COUNT     2u
 
-/* swlistbx_draw: the two insets it holds its rows in by, and what the game ships them as. */
-#define LISTBOX_DRAW_X_INSET 0xA8u
-#define LISTBOX_DRAW_Y_INSET 0xB7u
+/* swlistbx_draw: the two insets it holds its rows in by, and what the game ships them as. Each
+ * is the imm8 of an `add r32,imm8`, and the opcode in front of it is checked before it is
+ * written, because both sit far past the matched pattern. */
+#define LISTBOX_DRAW_X_INSET 0xA8u          /* 83 C1 06   add ecx,6  at +0xA6 */
+#define LISTBOX_DRAW_Y_INSET 0xB7u          /* 83 C0 03   add eax,3  at +0xB5 */
 #define LISTBOX_SHIPPED_X_INSET 6
 #define LISTBOX_SHIPPED_Y_INSET 3
 
@@ -80,22 +83,28 @@
 #define WIDGET_LISTBOX_TYPE 5
 
 /* SWMSG_RESET. swmenu_reset sends it to every widget when a screen is opened, and a list box's arm
- * is what derives its row height, its row count and its own height from the font. Sending it again
- * is what makes those three follow a canvas that has changed under an open screen. It carries no
+ * derives its row height, its row count and its own height from the font. Sending it again makes
+ * those three follow a canvas that has changed under an open screen. It carries no
  * allocation and leaves the selected row alone, so a second one is not a second open. */
 #define SWMSG_RESET 0
 
-/* The three `mov reg,[g_menuScale]` operands, one per axis of the scale. */
-#define SW3D_SCALE_OPERAND_X 0xAEu
-#define SW3D_SCALE_OPERAND_Y 0xB6u
-#define SW3D_SCALE_OPERAND_Z 0xBFu
+/* The three `mov reg,[g_menuScale]` operands, one per axis of the scale. All three sit well past
+ * the matched pattern, so each opcode is checked before its operand is written, and the three
+ * operands have to name the same global, since they are three reads of one value. */
+#define SW3D_SCALE_OPERAND_X 0xAEu          /* 8B 15 disp32   mov edx,[g_menuScale] at +0xAC */
+#define SW3D_SCALE_OPERAND_Y 0xB6u          /* A1 disp32      mov eax,[g_menuScale] at +0xB5 */
+#define SW3D_SCALE_OPERAND_Z 0xBFu          /* 8B 0D disp32   mov ecx,[g_menuScale] at +0xBD */
 
-/* g_menuScale and g_menuTextScale, the two the repointed numerator feeds, and the base size the
- * second is the first multiplied by.
+/* The engine cells the feature reads and writes. None is written down as an address: every one is
+ * read out of the operand of an instruction one of the patterns in menu_scale_sites.c already
+ * matches, by menu_scale_resolve_cells, and the feature does not install without all of them.
+ *
+ * g_menuScale and g_menuTextScale are the two the repointed numerator feeds, and the base size is
+ * what the second is the first multiplied by.
  *
  * WRITTEN as well as read. Leaving them read-only is why a live resolution change used to leave
  * the menus in pieces. The engine derives both in exactly one block, which runs at startup and on
- * the mode-change message and nowhere else:
+ * the mode-change message and nowhere else, and it is the tail of the origin block:
  *
  *     D9 05 90 88 4A 00   fld  [numerator]     <- repointed at a cell of ours
  *     D8 35 40 A4 86 00   fdiv [g_screenW]
@@ -112,33 +121,42 @@
  * The base size is read, never written: swmenu_startup passes its address to a settings read, so
  * it is a live value rather than the 1.0 the image ships.
  *
+ * The screen size is the display the engine settled on, as floats, and the origin is what it
+ * derived from them. The size is read to check the canvas still fits, and the origin is WRITTEN
+ * when it does not; see menu_scale_stand_down.
+ *
  * The camera is whatever rdCamera_BuildProjection last produced, and +0x3C is the focal in pixels
- * it derived from the field of view. */
-#define ENGINE_MENU_SCALE_CELL      0x004B682CU
-#define ENGINE_MENU_TEXT_SCALE_CELL 0x004B6830U
-#define ENGINE_MENU_BASE_TEXT_CELL  0x004B683CU
+ * it derived from the field of view. The projection scale is THE number the projection actually
+ * multiplies by, `s = g_projScale / depth` in bapvrt_projectVertex. It is COPIED from
+ * rdCamera+0x3C once per frame, in render_prepareFrame, and that copy is the whole point of
+ * reading it instead of the camera: the field of view can be applied to the camera between the
+ * copy and the draw, and then the camera says one lens while the renderer is still using another.
+ * Reading the camera is what made the hero slide sideways while the field of view slider moved.
+ *
+ * g_swMac.pCurrMenu is null whenever no menu is open, which is the test for "this text belongs
+ * to a menu". See the note by hook_query_font for why that gate exists. */
+typedef struct menu_engine_cells {
+    volatile float         *screen_width;
+    volatile float         *screen_height;
+    volatile int32_t       *origin_x;
+    volatile int32_t       *origin_y;
+    volatile float         *menu_scale;
+    volatile float         *menu_text_scale;
+    const volatile float   *base_text;
+    void *const volatile   *current_menu;
+    const volatile float   *proj_scale;
+    const char *const volatile *current_camera;
+} menu_engine_cells_t;
 
-/* The display the engine settled on, as floats, and the menu origin it derived from them. Read to
- * check the canvas still fits, and the origin is WRITTEN when it does not. See menu_scale_stand_down.
- */
-#define ENGINE_SCREEN_WIDTH_CELL  0x0086A440U
-#define ENGINE_SCREEN_HEIGHT_CELL 0x0086A438U
-#define ENGINE_MENU_ORIGIN_X_CELL 0x006CFD58U
-#define ENGINE_MENU_ORIGIN_Y_CELL 0x006CFD5CU
-#define ENGINE_CURRENT_CAMERA  0x006F83E4U
+extern menu_engine_cells_t menu_cells;
+
 #define CAMERA_FOCAL_PIXELS    0x3Cu
 
-/* THE number the projection actually multiplies by, `s = g_projScale / depth` in
- * bapvrt_projectVertex. It is COPIED from rdCamera+0x3C once per frame, in render_prepareFrame, and
- * that copy is the whole point of reading it here instead of reading the camera: the field of view
- * can be applied to the camera between the copy and the draw, and then the camera says one lens
- * while the renderer is still using another. Reading the camera is what made the hero slide
- * sideways while the field of view slider moved. */
-#define ENGINE_PROJ_SCALE_CELL 0x005BF9E8U
-
-/* g_swMac.pCurrMenu: null whenever no menu is open, which is the test for "this text belongs to a
- * menu". See the note by hook_query_font for why that gate exists. */
-#define ENGINE_CURRENT_MENU_CELL 0x0086D370U
+/* Fills menu_cells from the operands of the resolved sites: the two origin blocks (which have to
+ * agree with each other on every cell), the menu stack's pop and the projection copy. None of the
+ * operands read sits inside a prologue a detour could have replaced. False, with the reason
+ * logged, when any of them is missing or names a cell outside the image. */
+bool menu_scale_resolve_cells(const uintptr_t *origin_sites, size_t origin_count);
 
 /* The widget record, from the engine's own layout. Stride and field offsets are byte proven. */
 #define WIDGET_STRIDE        0x38u
@@ -161,6 +179,8 @@
 enum {
     SITE_RLE_BLIT,
     SITE_MENU_OPEN,
+    SITE_PROJECTION_COPY,
+    SITE_MENU_POP,
     SITE_LISTBOX_DRAW,
     SITE_PIC_DRAW,
     SITE_DRAW_MENU,
@@ -181,7 +201,7 @@ extern signature_t menu_scale_sites[SITE_COUNT];
 
 /* The origin block is matched by COUNT rather than by uniqueness, so the pattern and its mask stay
  * beside the disassembly that explains them and the caller asks for the addresses instead. The
- * return value is the true number of matches, which is what the install decides on. */
+ * return value is the true number of matches, and the install decides on it. */
 size_t menu_scale_find_origin_sites(uintptr_t *addresses, size_t max_addresses);
 
 #endif /* MENU_SCALE_SITES_H */

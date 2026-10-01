@@ -1,4 +1,4 @@
-/* framerate_stats.h: the measurements that prove this DLL's own work, and nothing else.
+/* framerate_stats.h: the measurements that prove this DLL's own work, and only those.
  *
  * These are here rather than in the diagnostics DLL because they read exactly the quantities the
  * frame-rate fix acts on, frame time, substep count, interpolation alpha, and resolving those

@@ -1,6 +1,6 @@
 /* dll_main.c: entry point of fmv_player.dll. See ../common/mod_entry.h for the contract.
  *
- * WHY THERE IS NO TEARDOWN HERE, WHICH IS NOT THE SAME AS HAVING FORGOTTEN ONE
+ * Why there is no teardown here, which is not the same as having forgotten one
  *
  * This DLL holds more process-global state than any other fix in this tree: two foreign modules
  * loaded with LoadLibraryW, a libVLC instance that owns threads of its own, an environment

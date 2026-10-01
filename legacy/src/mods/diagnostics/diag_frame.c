@@ -2,10 +2,12 @@
  *
  * The reasoning is in the header. Three things a maintainer has to hold on to while changing this:
  *
- *   * Nothing expensive happens on the frame path. Two counter reads and a store. The process
- *     times, the fault counts and the graphics counter are sampled on a thread of their own, and
- *     the frame path reads only what that thread has already published. Moving any of it onto the
- *     frame would make the instrument a cause of what it measures.
+ *   * Nothing expensive happens on the frame path. Two counter reads, the processor number and a
+ *     store. The process times, the fault counts and the graphics counter are sampled on a thread
+ *     of their own, and the frame path reads only what that thread has already published. Moving
+ *     any of it onto the frame would make the instrument a cause of what it measures. The one
+ *     thing that cannot move is the processor number: which core a thread is on is a fact about
+ *     that thread, so the sampler asking it would describe the sampler.
  *   * The ring is written before it is judged. A hitch is reported from the ring after the fact, so
  *     the frames leading up to it are in the dump. A report built at the moment of the hitch would
  *     carry only the hitch.
@@ -22,12 +24,14 @@
  */
 #include "diag_frame.h"
 
+#include "diag_core_class.h"
 #include "diag_log.h"
 
 #include "common/frame_hook.h"
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/platform.h"
 
 #include <windows.h>
 #include <psapi.h>
@@ -73,7 +77,7 @@
 
 /* And at least this many milliseconds longer than the median, whatever the percentage says.
  *
- * The percentage on its own is scale free, which is what it was chosen for, and that turns into a
+ * The percentage on its own is scale free, the property it was chosen for, and that turns into a
  * defect as soon as the frame rate is high. At a 2.2 ms median and a 20 per cent trigger, a frame
  * that ran 0.44 ms long is called a hitch, and 0.44 ms is ordinary scheduler noise that nobody can
  * see. The instrument then reported a dozen hitches a second on a picture the player called
@@ -137,6 +141,7 @@ typedef struct diag_frame_state {
     double   window_worst;
     uint32_t window_frames;
     uint32_t window_hitches;
+    uint32_t window_efficient;          /* frames that began on an efficiency core             */
     double   window_sum;
 
     machine_sample_t machine;
@@ -162,7 +167,7 @@ static double filetime_seconds(const FILETIME *time)
 
 /* The graphics counter, opened once and left open. A wildcard instance is used because a machine
  * has one engine per queue per adapter and the interesting one is whichever is doing the 3D work;
- * the values are summed and clamped, which is what a task manager shows. */
+ * the values are summed and clamped, the same figure a task manager shows. */
 typedef struct gpu_counter {
     bool         tried;
     bool         live;
@@ -208,7 +213,7 @@ static LONG gpu_read(void)
     }
 
     status = PdhGetFormattedCounterArrayA(gpu.counter, PDH_FMT_DOUBLE, &size, &count, NULL);
-    if (status != PDH_MORE_DATA || size == 0) {
+    if ((DWORD)status != PDH_MORE_DATA || size == 0) {
         return -1;
     }
     items = (PDH_FMT_COUNTERVALUE_ITEM_A *)LocalAlloc(LPTR, size);
@@ -235,7 +240,7 @@ static LONG gpu_read(void)
 static DWORD WINAPI sampler_main(LPVOID parameter)
 {
     HANDLE   process = GetCurrentProcess();
-    FILETIME creation, exit, kernel, user;
+    FILETIME creation, exited, kernel, user;
     FILETIME idle_before, kernel_before, user_before;
     double   cpu_before = 0.0;
     DWORD    faults_before = 0;
@@ -255,7 +260,7 @@ static DWORD WINAPI sampler_main(LPVOID parameter)
 
         Sleep(SAMPLER_PERIOD_MS);
 
-        if (GetProcessTimes(process, &creation, &exit, &kernel, &user)) {
+        if (GetProcessTimes(process, &creation, &exited, &kernel, &user)) {
             cpu_now = filetime_seconds(&kernel) + filetime_seconds(&user);
             if (have_previous) {
                 double share = (cpu_now - cpu_before) / ((double)SAMPLER_PERIOD_MS / 1000.0);
@@ -316,7 +321,7 @@ static int compare_float(const void *left, const void *right)
     return (a > b) ? 1 : 0;
 }
 
-/* The median of the most recent frames, which is what a hitch is measured against. Taken from a
+/* The median of the most recent frames, the baseline a hitch is measured against. Taken from a
  * copy so that the ring itself is never reordered. */
 static float recent_median(void)
 {
@@ -388,10 +393,15 @@ static void report_second(float median)
      * percentage of a core is not. Measured on one session: 68 per cent of a core at 165 frames a
      * second is 4.2 ms of CPU on each of them, which against a 6.09 ms frame is most of it. A
      * reader given only the percentage has to do that division in their head, and the whole point
-     * of this line is to be readable at a glance during play. */
+     * of this line is to be readable at a glance during play.
+     *
+     * The core class and the foreground are appended at the END, so a reader written for the
+     * line before them still parses it. Whether this window is in front is asked here, once a
+     * second, on the same thread as the frames it describes. */
     diag_log_write("frame second: %u frames, %.1f fps, median %.2f ms, mean %.2f, worst %.2f, "
                    "%u hitches | cpu %.2f ms/frame (%.1f%% of a core), machine %.1f%%, "
-                   "faults %ld/s, working set %ld MB, gpu %ld%% | %u hitches this session",
+                   "faults %ld/s, working set %ld MB, gpu %ld%% | %u hitches this session; "
+                   "%u of %u frame(s) began on an efficiency core; this window %s",
                    frame_state.window_frames,
                    (frame_state.window_seconds > 0.0)
                        ? (double)frame_state.window_frames / frame_state.window_seconds : 0.0,
@@ -407,13 +417,16 @@ static void report_second(float median)
                    frame_state.machine.faults_per_second,
                    frame_state.machine.working_set_mb,
                    frame_state.machine.gpu_percent,
-                   frame_state.hitches);
+                   frame_state.hitches,
+                   frame_state.window_efficient, frame_state.window_frames,
+                   platform_foreground_is_ours() ? "in front" : "behind");
 
-    frame_state.window_frames  = 0u;
-    frame_state.window_hitches = 0u;
-    frame_state.window_seconds = 0.0;
-    frame_state.window_worst   = 0.0;
-    frame_state.window_sum     = 0.0;
+    frame_state.window_frames    = 0u;
+    frame_state.window_efficient = 0u;
+    frame_state.window_hitches   = 0u;
+    frame_state.window_seconds   = 0.0;
+    frame_state.window_worst     = 0.0;
+    frame_state.window_sum       = 0.0;
 }
 
 static void on_frame_end(void)
@@ -453,14 +466,19 @@ static void on_frame_end(void)
     ++frame_state.written;
 
     ++frame_state.window_frames;
+    /* Asked here, at the frame boundary, on the game thread: the core the thread is on as one
+     * frame hands over to the next is the core the next one begins on. */
+    if (diag_core_class_efficient_now()) {
+        ++frame_state.window_efficient;
+    }
     frame_state.window_seconds += wall_ms / 1000.0;
     frame_state.window_sum     += wall_ms;
     if (wall_ms > frame_state.window_worst) {
         frame_state.window_worst = wall_ms;
     }
 
-    /* The dump is collected after the hitch, which is why it is a countdown rather than a call: the
-     * frames that follow one are part of the picture and they do not exist yet. */
+    /* The dump is collected after the hitch, so it is a countdown rather than a call: the frames
+     * that follow one are part of the picture and they do not exist yet. */
     if (frame_state.pending_dump > 0u) {
         --frame_state.pending_dump;
         if (frame_state.pending_dump == 0u) {
@@ -526,6 +544,10 @@ int diag_frame_install(int level, int hitch_percent)
         return 0;
     }
     frame_state.engine_delta = resolve_engine_delta();
+    /* Without the map the count stays at zero, which the frame line cannot tell apart from a
+     * machine that has no efficiency cores, so the line this writes at install is the only place
+     * that difference is said. */
+    (void)diag_core_class_init();
 
     if (!ini_read_string(DIAGNOSTICS_SECTION, "FrameGpuCounter", GPU_COUNTER_DEFAULT,
                          path, sizeof path)) {
@@ -536,6 +558,8 @@ int diag_frame_install(int level, int hitch_percent)
     }
 
     frame_state.machine.gpu_percent = -1;
+    /* Runs for the life of the process, like the controller poll: the DLL is never unloaded and
+     * the sampler holds only a performance counter query, which the process end closes. */
     frame_state.sampler = CreateThread(NULL, 0, sampler_main, NULL, 0, NULL);
 
     frame_state.armed = true;

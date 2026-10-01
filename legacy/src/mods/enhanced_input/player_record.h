@@ -69,6 +69,10 @@
 
 /* bapobj_setNodeYaw. Fails SILENTLY when the node index is out of range, so a return of 0 must
  * never be read as "the model has no such node, carry on". */
+/* __cdecl from the bytes, not from a guess: the function at 0x0041481B ends in a plain ret
+ * after its epilogue at +75 and +147, and carries no ret imm16 anywhere in its body, so the
+ * CALLER clears the three arguments. Getting this wrong corrupts the stack a long way from
+ * the symptom. The rule here is that a convention is read rather than assumed. */
 typedef int32_t (__cdecl *set_node_yaw_fn_t)(void *body, uint32_t node, float degrees);
 
 #endif /* PLAYER_RECORD_H */

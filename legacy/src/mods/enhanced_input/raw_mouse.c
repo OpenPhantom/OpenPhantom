@@ -26,9 +26,9 @@
  * input rather than costing us our feature.
  *
  * A message-only window on a thread of our own has none of that. It cannot be seen, cannot be
- * activated, cannot take focus and shares nothing with the engine. RIDEV_INPUTSINK is what makes it
- * work: the registration asks for the device's data even while our window is not in the foreground,
- * which it never is.
+ * activated, cannot take focus and shares nothing with the engine. RIDEV_INPUTSINK is the piece
+ * that makes it work: the registration asks for the device's data even while our window is not in
+ * the foreground, which it never is.
  *
  * RIDEV_NOLEGACY is the flag deliberately not used, at any rung of the ladder below. It suppresses
  * ordinary mouse messages for the whole process, and the engine's menus, its pointer warp and its
@@ -90,6 +90,10 @@ typedef struct raw_mouse_state {
      * sides, because these are the only two cells the two threads share. */
     volatile LONG accumulated_counts;
     volatile LONG packets;             /* lifetime, for the report rate */
+    /* The arrival tick of the newest packet, in milliseconds. A second, coarser copy of the
+       timestamp below, kept because the delivery test runs on the menu's message path and that
+       arrives at the device's own rate: it must not take the lock that guards the fine one. */
+    volatile LONG newest_ms;
     volatile LONG packets_since_take;  /* reset by every take */
     /* The timestamp of the newest packet, in performance counter ticks. Written on the raw thread
      * and read on the game thread; a 64-bit value cannot be read atomically on a 32-bit build, so
@@ -158,10 +162,11 @@ static void accumulate_packet(const RAWMOUSE *mouse)
     }
     InterlockedIncrement(&raw_state.packets);
     InterlockedIncrement(&raw_state.packets_since_take);
+    InterlockedExchange(&raw_state.newest_ms, (LONG)GetTickCount());
 
-    /* The arrival time is the whole point of reading the device directly: it is what lets the
-     * counts be divided by the time the reports span rather than by the interval they happened
-     * to be collected in. */
+    /* The arrival time is the whole point of reading the device directly: it lets the counts be
+     * divided by the time the reports span rather than by the interval they happened to be
+     * collected in. */
     {
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);
@@ -342,9 +347,9 @@ static bool register_one(DWORD flags, HWND target, const char *what)
             if (direct(&device, 1, (UINT)sizeof(device))) {
                 log_info("raw input registered: %s, through the unshimmed function. Windows ships "
                          "an application compatibility fix for this executable which intercepts "
-                         "RegisterRawInputDevices and fails it, and that is what the refusal above "
-                         "was. The real function was resolved out of user32's export table and "
-                         "accepted the same parameters.", what);
+                         "RegisterRawInputDevices and fails it, which is where the refusal "
+                         "above came from. The real function was resolved out of user32's export "
+                         "table and accepted the same parameters.", what);
                 return true;
             }
             log_warning("raw input refused %s with error %lu, and the unshimmed function refused "
@@ -548,9 +553,9 @@ void raw_mouse_take(raw_mouse_sample_t *out)
 
     if (raw_state.absolute_seen && !raw_state.warned_absolute) {
         raw_state.warned_absolute = true;
-        log_warning("the mouse is reporting ABSOLUTE positions rather than relative counts, which "
-                    "is what a remote desktop and the virtual mice that streaming and VR software "
-                    "install do. They are differenced here so the view still turns, but the "
+        log_warning("the mouse is reporting ABSOLUTE positions rather than relative counts, as a "
+                    "remote desktop and the virtual mice that streaming and VR software install "
+                    "do. They are differenced here so the view still turns, but the "
                     "resolution is the resolution of that virtual pointer and not of your mouse. "
                     "If the aim feels coarse, the cause is that device rather than this game.");
     }
@@ -582,7 +587,7 @@ void raw_mouse_take(raw_mouse_sample_t *out)
  * every packet exactly once.
  *
  * Counts, not pixels, and both axes. The caller decides what a count is worth on screen and keeps
- * the remainder; nothing is rounded here, because rounding is what the engine already gets
+ * the remainder; nothing is rounded here, because rounding is the thing the engine already gets
  * wrong. */
 void raw_mouse_take_cursor(long *out_dx, long *out_dy)
 {
@@ -597,12 +602,39 @@ void raw_mouse_take_cursor(long *out_dx, long *out_dy)
     }
 }
 
-/* True once the reader is registered and has actually delivered a packet. The cursor path uses it
- * to decide whether it may take the engine's own motion away: a registration that succeeded and
- * then stayed silent would otherwise leave the player with a frozen pointer, which is worse than
- * the stepping this replaces. */
+/* How stale the newest packet may be, in milliseconds, and still count as delivery. A hand moving
+ * a mouse produces packets hundreds of times a second, so an ordinary movement is never near this;
+ * a hand that is still produces no WM_MOUSEMOVE either, so the cursor path does not ask. The only
+ * state that fails it is a reader that has genuinely stopped. */
+#define RAW_DELIVERY_STALE_MS 1000
+
+/* True while the reader is registered and packets are still arriving. The cursor path uses it to
+ * decide whether it may take the engine's own motion away: a reader that is not delivering would
+ * otherwise leave the player with a frozen pointer, which is worse than the stepping this replaces.
+ *
+ * The lifetime count alone was not enough. It only ever increments, so it answered yes forever
+ * after the first packet, and a reader that delivered and then stopped, because the device was
+ * removed or the registration was lost, went on swallowing every mouse move and substituting the
+ * screen centre for it. That is the frozen pointer this exists to prevent, reached by the one route
+ * the test did not cover. The arrival time is already recorded for the report rate, so asking how
+ * old the newest packet is costs nothing new. */
 bool raw_mouse_is_delivering(void)
 {
-    return raw_state.active && raw_state.registered &&
-           InterlockedCompareExchange(&raw_state.packets, 0, 0) > 0;
+    LONG newest;
+
+    if (!raw_state.active || !raw_state.registered) {
+        return false;
+    }
+    if (InterlockedCompareExchange(&raw_state.packets, 0, 0) <= 0) {
+        return false;
+    }
+
+    /* No lock and no counter query. This is asked once per mouse-move message, which arrives at
+       whatever rate the device reports at, so it is one of the paths that must stay cheap. The
+       millisecond stamp is a single interlocked read. The subtraction is unsigned, so the tick
+       counter's own wrap is a small difference rather than a huge one, and the result is then
+       read as signed so that a stamp the raw thread wrote a moment AFTER this thread read the
+       clock comes out slightly negative, which is fresh, rather than enormous. */
+    newest = InterlockedCompareExchange(&raw_state.newest_ms, 0, 0);
+    return (int32_t)(GetTickCount() - (DWORD)newest) < RAW_DELIVERY_STALE_MS;
 }

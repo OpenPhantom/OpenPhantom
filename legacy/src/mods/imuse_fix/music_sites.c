@@ -1,7 +1,7 @@
 /* music_sites.c: find the music latch pair and the three cells that say what it means.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * The music module is small enough to quote whole. Two functions carry the pause, and they are
  * byte-for-byte identical except for the import they call and the value they latch:
@@ -32,7 +32,7 @@
  *
  * The two cue getters sit next to each other and are near-identical, which makes one pattern
  * cover both. They are wanted for the log rather than for the repair: when the music hangs, the
- * cue that was in force at that moment is the first thing worth knowing.
+ * cue that was in force at that moment is the first thing to look at.
  *
  *   bapMusicGetState   ... 75 07 B8 E8 03 00 00 EB 05 A1 <state latch> 5D C3    (1000 = NULL cue)
  *   bapMusicGetSequence... 75 07 B8 D0 07 00 00 EB 05 A1 <seq latch>   5D C3    (2000 = NULL cue)
@@ -50,7 +50,7 @@
  *             6A 09 / 6A 00 / E8 <module_broadcastDt>     command 9, id 0
  *             C7 05 <sys_pause_on> 00000000
  *
- * That broadcast is what actually pauses the music in the shipped game, and it is BALANCED: the
+ * That broadcast actually pauses the music in the shipped game, and it is BALANCED: the
  * dispatcher it goes through walks the module list, calls each handler and keeps the return value
  * in a local nobody reads. There is a second dispatcher pair in the image that DOES gate on the
  * return value and on a flag bit, and whose music arm would indeed stick, but neither of those
@@ -137,10 +137,10 @@ static const uint8_t MSK_MUSIC_RESUME[] = {
     0xFF, 0xFF
 };
 
-_Static_assert(sizeof(SIG_MUSIC_PAUSE) == sizeof(MSK_MUSIC_PAUSE),
-               "the pause pattern and its mask are different lengths");
-_Static_assert(sizeof(SIG_MUSIC_RESUME) == sizeof(MSK_MUSIC_RESUME),
-               "the resume pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_PAUSE == sizeof MSK_MUSIC_PAUSE,
+               "the music pause pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_RESUME == sizeof MSK_MUSIC_RESUME,
+               "the music resume pattern and its mask are different lengths");
 _Static_assert(sizeof(SIG_MUSIC_PAUSE) == sizeof(SIG_MUSIC_RESUME),
                "the two halves of the latch pair must be the same shape");
 
@@ -170,15 +170,16 @@ static const uint8_t MSK_MUSIC_PERIODIC[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF
 };
-_Static_assert(sizeof(SIG_MUSIC_PERIODIC) == sizeof(MSK_MUSIC_PERIODIC),
-               "the periodic pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_PERIODIC == sizeof MSK_MUSIC_PERIODIC,
+               "the music periodic pattern and its mask are different lengths");
 
 #define OFFSET_PERIODIC_ATTACHED 0x05u
 #define OFFSET_PERIODIC_REENTRY  0x13u
 
 /* --- the two cue getters, one pattern ---------------------------------------------------------
- * The NULL cues 1000 and 2000 are literal on purpose: they are what tells the two apart, and a
- * build that spelled them differently is a build this feature should not read latches from. */
+ * The NULL cues 1000 and 2000 are literal on purpose: they are the only thing telling the two
+ * apart, and a build that spelled them differently is a build this feature should not read
+ * latches from. */
 static const uint8_t SIG_MUSIC_GETTERS[] = {
     0x55, 0x8B, 0xEC,
     0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -211,8 +212,8 @@ static const uint8_t MSK_MUSIC_GETTERS[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_MUSIC_GETTERS) == sizeof(MSK_MUSIC_GETTERS),
-               "the getter pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MUSIC_GETTERS == sizeof MSK_MUSIC_GETTERS,
+               "the cue getter pattern and its mask are different lengths");
 
 #define OFFSET_GETTERS_ATTACHED_A 0x05u
 #define OFFSET_GETTERS_STATE      0x14u
@@ -248,7 +249,7 @@ static const uint8_t MSK_SYS_PAUSE[] = {
     0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_SYS_PAUSE) == sizeof(MSK_SYS_PAUSE),
+_Static_assert(sizeof SIG_SYS_PAUSE == sizeof MSK_SYS_PAUSE,
                "the sys_pause pattern and its mask are different lengths");
 
 /* The `cmp dword [..], 1` operand at the top; the claim below it must name the same cell. */
@@ -275,21 +276,11 @@ static signature_t sites[SITE_COUNT] = {
 /* ============================================================================================ */
 static bool read_cell(uintptr_t site, uint32_t offset, const char *what, uint32_t *out)
 {
-    uint32_t cell = 0;
-
-    if (!memory_read_u32(site + offset, &cell)) {
-        log_warning("could not read the %s operand at %08X", what, (unsigned)(site + offset));
+    if (!memory_read_image_cell(site + offset, sizeof(uint32_t), out)) {
+        log_warning("the %s operand at %08X does not name a readable cell inside the image, "
+                    "refused", what, (unsigned)(site + offset));
         return false;
     }
-    /* An engine global lives in the image. Anything else means the pattern matched something that
-     * is not the function it was cut from, and believing it would write into a stranger. */
-    if (!memory_is_inside_image(cell, sizeof(uint32_t)) ||
-        !memory_is_readable_range(cell, sizeof(uint32_t))) {
-        log_warning("the %s would be at %08X, which is not a readable address inside the image "
-                    "- refused", what, (unsigned)cell);
-        return false;
-    }
-    *out = cell;
     return true;
 }
 
@@ -401,7 +392,7 @@ bool music_sites_resolve(music_sites_t *out)
                   &sys_claim) &&
         agree(sys_test, sys_claim, "pause-menu latch")) {
         out->sys_pause_on = (volatile int32_t *)(uintptr_t)sys_test;
-        log_info("the pause menu's own latch is at %08X - while it is set, the music is paused by "
+        log_info("the pause menu's own latch is at %08X; while it is set, the music is paused by "
                  "the game and this feature keeps its hands off", (unsigned)sys_test);
     } else {
         log_warning("sys_pause did not resolve, the orphan guard stays OFF this session, because "

@@ -1,6 +1,6 @@
 /* menu_patcher.c: the shared widget-table patcher, exercised without the game.
  *
- * The source tables below are STATIC, which is what makes this testable at all:
+ * The source tables below are STATIC, and nothing here would be testable otherwise:
  * menu_patcher_begin() insists that the source table lies inside the host image, and a static
  * array in this executable does. A heap table would be refused, correctly, because in the game
  * a widget table that is not in the image is not the engine's table.
@@ -10,6 +10,7 @@
 #include "common/engine_types.h"
 #include "common/host_image.h"
 #include "common/menu_patcher.h"
+#include "controls_layout.h"
 
 #include <string.h>
 
@@ -43,8 +44,8 @@ static sw_widget_t unterminated_source[8] = {
 
 /* The controls screen exactly as it ships, read out of the retail image: eight authored widgets
  * and the terminator, with their real ids and rects. It is here rather than paraphrased because
- * the two check boxes enhanced_input appends are placed against these rects and must not shadow these
- * ids, and both of those are claims about THIS table.
+ * the two check boxes enhanced_input appends are placed against these rects and must not shadow
+ * these ids, and both of those are claims about THIS table.
  *
  * Widget ids in use: 50, 0, 1, 2, 3, 4, 5, 6. Neither 0x70 nor 0x71 is among them.
  */
@@ -61,7 +62,7 @@ static sw_widget_t controls_source[9] = {
 };
 
 /* A screen's bitmap-name table, laid out as the engine lays it out: 8-byte records ended by a
- * first dword of -1. Eighteen names, which is what the shared options table [0x4AEE10] carries, so
+ * first dword of -1. Eighteen names, the count the shared options table [0x4AEE10] carries, so
  * the valid index range here is 0..17 exactly as it is in the game. Static, so the patcher can
  * read it, and the content of each record does not matter, only where the terminator is. */
 #define TEST_BITMAP_NAME_COUNT 18
@@ -175,7 +176,15 @@ static void test_append_and_commit(void)
     ut_check(!menu_patcher_append_label(&context, 0x72, 0, 0, 0, 0, 1, NULL, NULL),
           "a label with no text is refused");
 
+    /* The operand holds something other than the authored table: a screen somebody else has
+     * already repointed, or a second run. Refused, and the cell is left as it was. */
     table_pointer_cell = 0;
+    ut_check(!menu_patcher_commit(&context),
+             "a table pointer that does not hold the authored table is refused");
+    ut_check(table_pointer_cell == 0, "and is not written");
+    ut_check(!context.committed, "and the context is not marked committed");
+
+    table_pointer_cell = (uint32_t)(uintptr_t)good_source;
     ut_check(menu_patcher_commit(&context), "commit succeeds");
     ut_check(context.committed, "commit marks the context");
     ut_check(target[4].type == SW_TYPE_TERMINATOR, "commit writes the terminator behind the last "
@@ -194,22 +203,13 @@ static void test_append_and_commit(void)
  * back with no symptom until it was clicked, and that the layout invariants hold against the
  * shipped table rather than only in prose.
  *
- * There is no plate, and that is the point of this version. The previous one appended one and then
+ * There is no plate. That is the point of this version. The previous one appended one and then
  * checked that every widget of the group sat inside the plate's RECTANGLE. That check passed while
  * the screen was wrong, because a picture's rectangle is not where its bitmap goes: the blit takes
  * x and y and no size at all, so the plate drew its full 640x480 from the rectangle's corner and
  * the rectangle bounded nothing. The layout checks below are therefore written against the DRAWN
  * footprints, the gauge bitmap's 250x50, the check box's 34x34 plus a caption forced to 200
  * wide, and against the region of the background art that is actually empty. */
-#define CONTROLS_FREE_X       281
-#define CONTROLS_FREE_Y        86
-#define CONTROLS_FREE_RIGHT   639
-#define CONTROLS_FREE_BOTTOM  398
-#define GAUGE_W               250
-#define GAUGE_H                50
-#define BOX_SIZE               34
-#define BOX_LABEL_GAP           4
-#define BOX_LABEL_W           200
 
 static void test_append_controls_group(void)
 {
@@ -238,10 +238,11 @@ static void test_append_controls_group(void)
     ut_check(!menu_patcher_has_widget_id(&context, 0x71),
           "widget id 0x71 is free on the shipped controls screen");
 
-    ut_check(menu_patcher_append_checkbox(&context, 0x70, 0x7655, 330, 192, 255, 50, 2, 4, 0,
-                                       &strafe_index),
+    ut_check(menu_patcher_append_checkbox(&context, 0x70, 0x7655, GROUP_X, CHECKBOX_Y_STRAFE,
+                                       CHECKBOX_WIDTH, CHECKBOX_HEIGHT, 2, 4, 0, &strafe_index),
           "the first check box is appended");
-    ut_check(menu_patcher_append_checkbox(&context, 0x71, 0x7656, 330, 246, 255, 50, 2, 4, 1,
+    ut_check(menu_patcher_append_checkbox(&context, 0x71, 0x7656, GROUP_X, CHECKBOX_Y_FREE_LOOK,
+                                       CHECKBOX_WIDTH, CHECKBOX_HEIGHT, 2, 4, 1,
                                        &free_look_index),
           "the second check box is appended behind it");
     ut_check(strafe_index == 8 && free_look_index == 9,
@@ -252,7 +253,7 @@ static void test_append_controls_group(void)
     ut_check(target[8].action == SW_ACTION_SELECT && target[9].action == SW_ACTION_SELECT,
           "both carry a non-static action, which the hit test requires");
     ut_check(target[8].visible == 1 && target[9].visible == 1,
-          "both are visible == 1, which is what the draw loop and the hit test compare against");
+          "both are visible == 1, the value the draw loop and the hit test compare against");
     ut_check(target[8].start == 0x7655 && target[9].start == 0x7656,
           "the label string id lands in `start`, and the two ids are distinct");
     ut_check(target[8].state == 0 && target[9].state == 1,
@@ -268,11 +269,13 @@ static void test_append_controls_group(void)
           "a box shadowing the authored BACK id is refused");
 
     /* The slider and its caption, which the controls screen ships neither of. The two bitmap
-     * indices are the ones the shared table [0x4AEE10] carries: 2 = slgauge.bmp, 3 = slslide.bmp. */
-    ut_check(menu_patcher_append_slider(&context, 0x72, 100, 330, 96, 255, 50, 3, 2, &slider_index),
+     * indices are the ones the shared table [0x4AEE10] carries: 2 = slgauge.bmp,
+     * 3 = slslide.bmp. */
+    ut_check(menu_patcher_append_slider(&context, 0x72, 100, SLIDER_X, SLIDER_Y, SLIDER_WIDTH,
+                                     SLIDER_HEIGHT, 3, 2, &slider_index),
           "the mouse speed slider is appended");
-    ut_check(menu_patcher_append_label(&context, 0x73, 330, 148, 250, 40, 1, slider_caption,
-                                    &label_index),
+    ut_check(menu_patcher_append_label(&context, 0x73, SLIDER_X, SLIDER_LABEL_Y, GAUGE_WIDTH,
+                                    SLIDER_LABEL_HEIGHT, 1, slider_caption, &label_index),
           "its caption is appended behind it");
     ut_check(slider_index == 10 && label_index == 11,
           "each widget gets its own index, in append order, behind the authored ones");
@@ -282,26 +285,29 @@ static void test_append_controls_group(void)
           "the caption's text pointer is ours, and the engine reads it every frame");
 
     /* THE LAYOUT, checked against what the engine really draws rather than against the rectangles
-     * it discards. These are the invariants input_menu.c asserts at compile time; repeating them
-     * here catches a change made to that file's numbers without its assertions. */
-    ut_check(target[10].rect.x >= CONTROLS_FREE_X &&
-          target[10].rect.x + GAUGE_W - 1 <= CONTROLS_FREE_RIGHT,
+     * it discards. The region, the footprints and the positions are the ones input_menu.c lays
+     * the group out from, through controls_layout.h, so a number changed there is checked here
+     * on the next run. What these checks add to that header's own assertions is that the patcher
+     * lays the widgets out where it was told to, against the shipped table and not against
+     * prose. */
+    ut_check(target[10].rect.x >= FREE_REGION_X &&
+          target[10].rect.x + GAUGE_WIDTH - 1 <= FREE_REGION_RIGHT,
           "the slider's 250-wide gauge stays inside the empty region");
-    ut_check(target[8].rect.x + BOX_SIZE + BOX_LABEL_GAP + BOX_LABEL_W - 1 <= CONTROLS_FREE_RIGHT,
+    ut_check(target[8].rect.x + CHECKBOX_DRAWN_WIDTH - 1 <= FREE_REGION_RIGHT,
           "a check box plus its 200-wide forced caption stays inside the empty region");
-    ut_check(target[10].rect.y >= CONTROLS_FREE_Y &&
-          target[9].rect.y + BOX_SIZE - 1 <= CONTROLS_FREE_BOTTOM,
+    ut_check(target[10].rect.y >= FREE_REGION_Y &&
+          target[9].rect.y + CHECKBOX_BOX_SIZE - 1 <= FREE_REGION_BOTTOM,
           "the group stays inside the empty region vertically");
-    ut_check(target[11].rect.y >= target[10].rect.y + GAUGE_H,
+    ut_check(target[11].rect.y >= target[10].rect.y + GAUGE_HEIGHT,
           "the caption begins at or below where the drawn gauge ends");
-    ut_check(target[9].rect.y >= target[8].rect.y + BOX_SIZE,
+    ut_check(target[9].rect.y >= target[8].rect.y + CHECKBOX_BOX_SIZE,
           "the two boxes do not overlap each other");
     ut_check(target[8].rect.x >= controls_source[3].rect.x + controls_source[3].rect.width,
           "the group is a column of its own, clear of the authored buttons");
     ut_check(target[9].rect.y + target[9].rect.height <= controls_source[5].rect.y,
           "and it ends above BACK's row, so the two cannot collide");
 
-    table_pointer_cell = 0;
+    table_pointer_cell = (uint32_t)(uintptr_t)controls_source;
     ut_check(menu_patcher_commit(&context), "the four-widget screen commits");
     ut_check(target[12].type == SW_TYPE_TERMINATOR, "the terminator lands behind all four");
 }
@@ -323,7 +329,8 @@ static void test_bitmap_index_bounds(void)
     ut_check(context.bitmap_name_count == TEST_BITMAP_NAME_COUNT,
           "the bitmap-name table is counted to its -1 terminator, stride 8");
 
-    ut_check(menu_patcher_append_pic(&context, 0x90, TEST_BITMAP_NAME_COUNT - 1, 0, 0, 10, 10, NULL),
+    ut_check(menu_patcher_append_pic(&context, 0x90, TEST_BITMAP_NAME_COUNT - 1, 0, 0, 10, 10,
+                                     NULL),
           "the last valid bitmap index is accepted");
     ut_check(!menu_patcher_append_pic(&context, 0x91, TEST_BITMAP_NAME_COUNT, 0, 0, 10, 10, NULL),
           "one index past the table is refused rather than read");

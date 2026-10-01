@@ -8,6 +8,7 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -191,7 +192,7 @@ static void __cdecl resample_then_compress(void *vbuffer)
         load_state.reported = true;
         log_info("menu artwork is being replicated as it loads: the first was %dx%d and is now "
                  "%dx%d. Whole pixels only, so every pixel drawn is one that was already in the "
-                 "picture, which is what keeps an exactly black pixel transparent to this engine "
+                 "picture, keeping an exactly black pixel transparent to this engine "
                  "rather than turning it into a halo or a hole.",
                  (int)width, (int)height, (int)new_width, (int)new_height);
     }
@@ -204,7 +205,8 @@ compress:
 
 /* The authored canvas every menu is laid out on, and the size the artwork on disk is authored at.
  * Named here rather than taken from menu_scale.h so this file does not depend on the scale it
- * serves; the two are checked against each other by the static assert below. */
+ * serves. Nothing checks the two against each other; both are the 640x480 the engine hard codes
+ * in its own toolkit, so neither can move without the other. */
 #define AUTHORED_WIDTH  640
 #define AUTHORED_HEIGHT 480
 
@@ -218,10 +220,9 @@ bool menu_art_load_display_ratio(float *out_ratio_x, float *out_ratio_y)
     if (out_ratio_x == NULL || out_ratio_y == NULL || directory == NULL) {
         return false;
     }
-    if (_snprintf(path, sizeof path, "%s\\obi.ini", directory) < 0) {
-        return false;
+    if (text_format(path, sizeof path, "%s\\obi.ini", directory) >= sizeof path - 1) {
+        return false;                          /* a path that did not fit is not a path */
     }
-    path[sizeof path - 1] = 0;
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
         return false;
     }
@@ -245,8 +246,8 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
     signature_resolve_table(sites, SITE_COUNT);
     if (sites[SITE_LOAD_COMPRESS].address == 0 || sites[SITE_MEM_ALLOC].address == 0 ||
         sites[SITE_MEM_FREE].address == 0) {
-        log_warning("the menu bitmap load path did not resolve, so artwork keeps the size it has on "
-                    "disk and the menus need a converted set to fill the canvas");
+        log_warning("the menu bitmap load path did not resolve, so artwork keeps the size it has "
+                    "on disk and the menus need a converted set to fill the canvas");
         return false;
     }
 
@@ -291,13 +292,22 @@ bool menu_art_load_install(float ratio_x, float ratio_y)
 
 void menu_art_load_set_ratio(float ratio_x, float ratio_y)
 {
-    if (!load_state.armed) {
-        return;
-    }
+    /* Recorded unarmed too. Nothing is replicated while the redirect is not armed, so the number
+     * has no effect there, and a ratio that only moved while armed is one a caller cannot check. */
     load_state.ratio_x = ratio_x;
     load_state.ratio_y = ratio_y;
 
     /* Said again for the new size, because the first one is the line a reader looks for when the
      * artwork comes out the wrong size and it would otherwise name a ratio no longer in use. */
     load_state.reported = false;
+}
+
+void menu_art_load_ratio(float *out_ratio_x, float *out_ratio_y)
+{
+    if (out_ratio_x != NULL) {
+        *out_ratio_x = load_state.ratio_x;
+    }
+    if (out_ratio_y != NULL) {
+        *out_ratio_y = load_state.ratio_y;
+    }
 }

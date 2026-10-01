@@ -1,5 +1,7 @@
 #include "diag_names.h"
 
+#include "common/text.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -136,8 +138,7 @@ const char *diag_numbered_name(const diag_name_t *table, int32_t id)
     turn = (turn + 1) & (ROTATING_BUFFERS - 1);
     buffer = buffers[turn];
 
-    _snprintf(buffer, NUMBERED_NAME_MAX, (name != NULL) ? "%d %s" : "%d ?", (int)id, name);
-    buffer[NUMBERED_NAME_MAX - 1] = '\0';
+    text_format(buffer, NUMBERED_NAME_MAX, (name != NULL) ? "%d %s" : "%d ?", (int)id, name);
     return buffer;
 }
 

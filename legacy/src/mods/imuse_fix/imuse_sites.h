@@ -40,7 +40,7 @@ typedef struct imuse_sites {
     /* The two halves of the broken lock, and the function that forgets to release it.
      *
      * ImLock and ImUnlock are not exported and come from a pattern. ImSetParam IS exported, but
-     * the export is a thin forwarder and the body is what matters: the internal callers, the
+     * the export is a thin forwarder and only the body matters: the internal callers, the
      * fade tick above all, reach the body directly, so hooking the export would miss exactly
      * the traffic worth guarding. */
     uintptr_t im_lock;

@@ -1,7 +1,7 @@
 /* imuse_guard.c: close the two ways iMUSE's heartbeat lock gets stuck.
  *
  * ==============================================================================================
- * WHAT IS BROKEN
+ * What is broken
  *
  * iMUSE's script engine and its music mixer both run from ImHeartbeat, and ImHeartbeat runs only
  * while a counter reads zero. That counter is maintained by two functions:
@@ -13,8 +13,8 @@
  * decrements, so the counter can only ever get stuck too HIGH, never too low. Stuck high, the
  * heartbeat never runs again; nothing refills the music buffer; and because that buffer plays
  * LOOPING, the result is the last half second of music circling forever rather than silence.
- * Only ImInitialize writes the counter back to zero, which is why nothing short of tearing the
- * music system down and rebuilding it brings the music back.
+ * Only ImInitialize writes the counter back to zero, so nothing short of tearing the music
+ * system down and rebuilding it brings the music back.
  *
  * Two ways in, and they need different repairs.
  *
@@ -48,7 +48,7 @@
  * ImSetParam looks its handle up BEFORE it range-checks, so an out-of-range value on a handle
  * that does not exist returns -4 ("no such sound") in the original and -5 ("bad value") here.
  * Both are failures, both are ignored by every caller in this game, and no caller distinguishes
- * them. Refusing first is what makes the repair race-free.
+ * them. Refusing first makes the repair race-free.
  * ============================================================================================ */
 #include "imuse_guard.h"
 
@@ -69,7 +69,7 @@
 #define IMUSE_PARAM_BAD_VALUE ((int32_t)0xFFFFFFFB)
 
 /* The parameters that have a range check, and the bound each one applies. Taken from the body of
- * ImSetParam; the first four compare UNSIGNED and the fifth SIGNED, which is why they are not one
+ * ImSetParam; the first four compare UNSIGNED and the fifth SIGNED, so they are not one
  * expression. */
 #define IMUSE_PARAM_TRANSPOSE   0x400   /* value < 0x10   unsigned */
 #define IMUSE_PARAM_PAN         0x500   /* value < 0x80   unsigned */
@@ -159,14 +159,14 @@ static void __cdecl hook_im_unlock(void)
 }
 
 /* ==============================================================================================
- * QUIESCING THE OTHER THREADS, AND WHY ONLY THIS ONE WRITE NEEDS IT.
+ * Quiescing the other threads, and why only this one write needs it.
  *
  * iMUSE runs its heartbeat from a WINMM timer thread, and that thread calls ImLock. This patch is
  * therefore written over code another thread may be executing at that instant. Installing before
  * audio starts was the assumption that made it safe, and it was only ever an assumption: nothing
  * checked it and nothing wrote it down.
  *
- * IT MATTERS HERE BECAUSE THE INSTRUCTION BOUNDARIES MOVE. Before the patch the body is
+ * It matters here because the instruction boundaries move. Before the patch the body is
  *
  *     +0  FF 05 <abs32>   inc dword ptr [gate]     six bytes
  *     +6  C3              ret
@@ -187,14 +187,14 @@ static void __cdecl hook_im_unlock(void)
  * resumed and it is tried again a moment later; after eight attempts the patch declines, and
  * declining is handled by the caller exactly as any other failure to make the lock atomic is.
  *
- * NOTHING IS ALLOCATED WHILE THEY ARE SUSPENDED. patch_write_bytes reaches VirtualProtect, memcpy
+ * Nothing is allocated while they are suspended. patch_write_bytes reaches VirtualProtect, memcpy
  * and FlushInstructionCache and no further; if a suspended thread held a lock this one then
  * wanted, the process would stop there and never start again. That is also why the ImUnlock detour
  * is installed outside this window rather than inside it: detour_install builds a trampoline with
  * VirtualAlloc, and taking the address space lock while holding threads still is a worse trade
  * than the thing it would buy.
  *
- * WHAT ImUnlock DOES NOT NEED. Its patch puts a five byte jmp where a five byte mov was, so no
+ * What ImUnlock does not need. Its patch puts a five byte jmp where a five byte mov was, so no
  * boundary moves: an instruction pointer in that function is either at +0, which is valid before
  * and after, or already past +5. What is left there is the ordinary cross modifying code window,
  * which is narrow and which every detour in this project already lives with.
@@ -289,10 +289,38 @@ static bool quiesce_take(quiesce_t *held, uintptr_t low, uintptr_t high)
  * A `lock` prefix makes the increment atomic and costs one byte, so the whole repair fits inside
  * the function's own paragraph. See the essay above for why the write waits for the other
  * threads to be somewhere else. */
+/* Every write over ImLock's body goes through here, the one that adds the prefix and the one
+ * that takes it back, because both move the instruction boundary the essay above is about. */
+static bool write_lock_body(uintptr_t im_lock, const uint8_t *bytes, size_t size,
+                            const char *what)
+{
+    quiesce_t held;
+    unsigned  attempt;
+
+    for (attempt = 0; attempt < QUIESCE_ATTEMPTS; ++attempt) {
+        bool clear = quiesce_take(&held, im_lock, im_lock + size);
+        bool written = false;
+
+        if (clear) {
+            written = (patch_write_bytes(im_lock, bytes, size) == PATCH_RESULT_OK);
+        }
+        quiesce_release(&held);
+
+        if (clear) {
+            return written;            /* logged by the caller either way */
+        }
+        Sleep(2);                      /* outside the suspension, on purpose */
+    }
+
+    log_warning("ImLock at %08X had another thread standing on it every time this looked, so %s "
+                "is NOT written.", (unsigned)im_lock, what);
+    return false;
+}
+
 static bool make_lock_atomic(uintptr_t im_lock)
 {
     uint8_t  atomic_increment[8];
-    uint8_t  existing[7];
+    uint8_t  existing[8];
     uint32_t gate_operand;
 
     if (!memory_read(im_lock, existing, sizeof(existing))) {
@@ -307,11 +335,13 @@ static bool make_lock_atomic(uintptr_t im_lock)
     if (existing[0] == 0xF0) {
         return true;
     }
-    /* Refuse unless it is exactly the body this was measured against: `FF 05 <abs32>` then `C3`.
-     * Resolving the site is not the same as knowing what is at it. */
-    if (existing[0] != 0xFF || existing[1] != 0x05 || existing[6] != 0xC3) {
-        log_warning("ImLock at %08X is not `inc [mem] / ret` - the atomic increment is NOT written",
-                    (unsigned)im_lock);
+    /* Refuse unless it is exactly the body this was measured against: `FF 05 <abs32>` then `C3`,
+     * then the compiler's 0x90 padding, which the prefix pushes the ret onto. Resolving the site
+     * is not the same as knowing what is at it, and the eighth byte is written too. */
+    if (existing[0] != 0xFF || existing[1] != 0x05 || existing[6] != 0xC3 ||
+        existing[7] != 0x90) {
+        log_warning("ImLock at %08X is not `inc [mem] / ret` followed by padding, the atomic "
+                    "increment is NOT written", (unsigned)im_lock);
         return false;
     }
 
@@ -323,32 +353,8 @@ static bool make_lock_atomic(uintptr_t im_lock)
     memcpy(atomic_increment + 3, &gate_operand, sizeof(gate_operand));
     atomic_increment[7] = 0xC3;          /* ret                          */
 
-    {
-        quiesce_t held;
-        unsigned  attempt;
-
-        for (attempt = 0; attempt < QUIESCE_ATTEMPTS; ++attempt) {
-            bool clear = quiesce_take(&held, im_lock, im_lock + sizeof(atomic_increment));
-            bool written = false;
-
-            if (clear) {
-                written = (patch_write_bytes(im_lock, atomic_increment,
-                                             sizeof(atomic_increment)) == PATCH_RESULT_OK);
-            }
-            quiesce_release(&held);
-
-            if (clear) {
-                return written;            /* logged by the caller either way */
-            }
-            Sleep(2);                      /* outside the suspension, on purpose */
-        }
-
-        log_warning("ImLock at %08X had another thread standing on it every time this looked, so "
-                    "the atomic increment is NOT written. The music lock stays as the game "
-                    "shipped it, which is the state this fix improves on rather than depends on.",
-                    (unsigned)im_lock);
-        return false;
-    }
+    return write_lock_body(im_lock, atomic_increment, sizeof(atomic_increment),
+                           "the atomic increment");
 }
 
 bool imuse_guard_install(const imuse_sites_t *sites)
@@ -369,9 +375,9 @@ bool imuse_guard_install(const imuse_sites_t *sites)
     /* ---- the race ---------------------------------------------------------------------- */
     guard.lock_made_atomic = make_lock_atomic(sites->im_lock);
     if (guard.lock_made_atomic) {
-        /* The prologue of ImUnlock is `mov eax,[abs32]`, five bytes, which is exactly what a
-         * jmp rel32 needs and a clean instruction boundary. The original is deliberately never
-         * called: this replaces it rather than wrapping it. */
+        /* The prologue of ImUnlock is `mov eax,[abs32]`, five bytes: exactly what a jmp rel32
+         * needs, and a clean instruction boundary. The original is deliberately never called:
+         * this replaces it rather than wrapping it. */
         if (detour_install(&unlock_detour, sites->im_unlock, (const void *)hook_im_unlock, 5u)) {
             log_info("the music heartbeat lock is now atomic: ImLock at %08X increments with a "
                      "lock prefix, and ImUnlock at %08X is replaced by a compare-and-exchange "
@@ -391,13 +397,22 @@ bool imuse_guard_install(const imuse_sites_t *sites)
             memcpy(plain + 2, &operand, sizeof(operand));
             plain[6] = 0xC3;                                   /* ret                  */
             plain[7] = 0x90;                                   /* the byte the prefix took */
-            (void)patch_write_bytes(sites->im_lock, plain, sizeof(plain));
 
-            guard.lock_made_atomic = false;
-            log_warning("ImUnlock at %08X could not be replaced, so the atomic increment at %08X "
-                        "was rolled back. An atomic raise against a racy lower is a different "
-                        "imbalance, not half a repair.",
-                        (unsigned)sites->im_unlock, (unsigned)sites->im_lock);
+            /* The rollback moves the boundary back the way the patch moved it forward, so it
+             * needs the same quiesce: a timer thread parked on the ret of the seven byte form
+             * would otherwise resume into the padding byte. */
+            if (write_lock_body(sites->im_lock, plain, sizeof(plain), "the rollback")) {
+                guard.lock_made_atomic = false;
+                log_warning("ImUnlock at %08X could not be replaced, so the atomic increment at "
+                            "%08X was rolled back. An atomic raise against a racy lower is a "
+                            "different imbalance, not half a repair.",
+                            (unsigned)sites->im_unlock, (unsigned)sites->im_lock);
+            } else {
+                log_error("ImUnlock at %08X could not be replaced and the atomic increment at "
+                          "%08X could not be rolled back either, so the lock is raised atomically "
+                          "and lowered as the game shipped it for this session",
+                          (unsigned)sites->im_unlock, (unsigned)sites->im_lock);
+            }
         }
     }
 

@@ -5,6 +5,10 @@
 The SFX volume slider resets to (about) full on every reload, no matter what it was set to when
 the game last closed. Two independent bugs, both fixed here.
 
+A third bug lives in the same screen and is fixed here too, because it is the same slider: both
+volume sliders lose 7 of 127 every time the audio screen is opened. That one takes the music
+slider with it, since the two share the code that drifts. See **The sliders walk downward** below.
+
 ## Supported executables
 
 Any build whose audio code matches the retail sites at `0x00417459` / `0x0041738D` /
@@ -12,17 +16,17 @@ Any build whose audio code matches the retail sites at `0x00417459` / `0x0041738
 nothing and says so in the log.
 
 Two of the three patterns carry absolute data addresses, because those addresses are the sites'
-own operands and are what makes the patterns unique. The consequence is worth stating: a build
-that relinked its data section fails those two and the DLL declines rather than guessing. Measured
-on every retail image to hand, including the German one, all three resolve exactly once; on the
-Edit Tool's own recompile of the engine only the address-free middle pattern resolves, and the DLL
-declines with a log line, which is the intended answer.
+own operands and the patterns are only unique with them in. The consequence: a build that relinked
+its data section fails those two and the DLL declines. Measured on every
+retail image to hand, including the German one, all three resolve exactly once; on the Edit Tool's
+own recompile of the engine only the address-free middle pattern resolves, and the DLL declines
+with a log line, the intended answer.
 
 ## Configuration: `[sfx_volume_save_fix]`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | |
+| `Enabled` | `1` | `0` installs nothing and the log says so |
 
 ## Bug 1: the saved value was wrong
 
@@ -64,10 +68,10 @@ stay correct for in-game volume to be right at all.
 **Fix:** `bapsound_getMasterVolume` is entirely replaced (not wrapped: calling through to the AIL
 query first would just reintroduce the bug) with a detour that computes the same 0..127 integer
 the engine itself derived the mirror from, clamped to `[0, scale]`. Both data addresses are read
-out of `bapsound_setMasterVolume`'s own instruction stream rather than hardcoded, and range
+out of `bapsound_setMasterVolume`'s own instruction stream, never hardcoded, and range
 checked against the host image before they are followed.
 
-**The replacement keeps the original's own guard branch,** and that is not a detail. The function
+**The replacement keeps the original's own guard branch.** That is not a detail. The function
 answers `0`, not a volume, while `g_soundReady` is still `0`. A replacement that skipped that
 branch would answer with the mirror instead, and the mirror reads `1.0` at that point for exactly
 the reason bug 2 describes, so on a machine whose sound never initialises, the options screen
@@ -80,7 +84,7 @@ did **not** fix "resets on reload"; that symptom survived unchanged and led to b
 
 ## Bug 2: the loaded value was never applied (the actual cause of "resets to full on reload")
 
-`bapsound_moduleInit` (`0x004159F0`, runs once at startup) does this, in exactly this order:
+`bapsound_moduleInit` (`0x004159F0`, runs once at startup) does this, in this order:
 
 ```c
 ini_read_int_alt("SVOL", 127, &loaded);   // reads obi.ini correctly
@@ -110,7 +114,7 @@ apply that cannot work, and one live slider that can.
 
 **Confirmed** with a temporary diagnostic build across two separate sessions: the very first call
 to `bapsound_setMasterVolume` in each run showed the mirror ending up at `1.0` regardless of the
-argument passed in (`120` in one run, `0` in the other), exactly what "the guard blocked the
+argument passed in (`120` in one run, `0` in the other), what "the guard blocked the
 write and the mirror kept its old value" looks like from outside the function.
 
 **Fix:** `bapsound_setMasterVolume` is tapped (not replaced: the live path must keep working
@@ -139,9 +143,10 @@ code was never going to honour.
 
 The menu's own arithmetic truncates in both directions: the slider seeds from
 `trunc(volume / 127 * 19)` and a drag writes back `trunc(notch / 19 * 127)`. Notch 5 gives
-`SVOL=33`, and 33 seeds back to `trunc(4.937)`, which is notch 4. Only 0 and 19 survive the round
-trip exactly. That is 1999 engine behaviour and not something this DLL changes, so **check
-`SVOL=` in `obi.ini` and the log, never the slider's position.**
+`SVOL=33`, and in the shipped engine 33 seeds back to `trunc(4.937)`, which is notch 4; only 0 and
+19 survived the round trip exactly. This DLL now rounds the seed (**The sliders walk downward**
+below), so 33 seeds to notch 5 again, but nineteen notches are still a coarse reading of a
+`0..127` value, so **check `SVOL=` in `obi.ini` and the log, never the slider's position.**
 
 ## Testing status
 
@@ -152,7 +157,7 @@ twice (`0x00417459` and `0x0041778C`), so the pattern is the whole 30-byte body.
 Bug 1 (wrong saved value) was confirmed fixed in game before the guard branch was restored. Bug 2
 (dropped load-time apply) was diagnosed from two real runs' logs and fixed per the analysis
 above. **Both the restored guard branch and the bug-2 re-apply are accepted in game**, in the
-1.5.0 build, which was played through by hand.
+v0.4.1 build, which was played through by hand.
 
 The log line to look for is `startup SFX volume (N) applied`. The actual test is whether the value
 in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.
@@ -161,4 +166,68 @@ in `obi.ini`'s `SVOL` is the value the game starts at on the very next launch.
 
 Music volume is unaffected by either bug. It round-trips through a simple engine-side float with
 no driver query and no ordering dependency on a "ready" flag. That pointed at these two
-SFX-specific sites rather than at the settings file or the code that reads it.
+SFX-specific sites and away from the settings file and the code that reads it.
+
+## The sliders walk downward
+
+Opening the audio screen costs 7 of 127 on the SFX slider, and the equivalent on the music one,
+without anything being touched. Four visits take 60 down to about 32. The reporter of this
+described it as a slider not being where they left it, which is how it looks from the outside.
+It is also why the fault seemed to follow the 3-D provider list around: the provider row is simply
+the thing people click on that screen.
+
+### Nineteen steps, truncated twice
+
+`[0x004A8634]` is `19.0f`, the number of steps the slider widget has. The screen seeds the widget
+from the live volume when it opens, and reads the widget back when it moves:
+
+    seed      widget = ftol(volume / 127.0f * 19.0f)     0x004420B1 music, 0x004420E1 sfx
+    readback  volume = ftol(widget / 19.0f * 127.0f)
+
+`__ftol` truncates toward zero. Neither step rounds, so the value can only ever fall:
+
+| SVOL in | widget | SVOL out | lost |
+|---|---|---|---|
+| 127 | 19 | 127 | 0 |
+| 106 | 15 | 100 | 7 |
+| 100 | 14 | 93 | 7 |
+| 60 | 8 | 53 | 7 |
+| 33 | 4 | 26 | 7 |
+
+Those are not worked examples. `106`, `100`, `93`, `60`, `53` and `33` are the values a field log
+recorded, in that order, over two sessions of a player opening the screen and touching only the
+provider list. Only full volume is stable.
+
+Music takes the same path through a 100 scale, so `0.47` seeds `8.93`, truncates to 8, returns as
+`0.421` and writes `MVOL=42`. A 47 becomes a 42 with nothing touched.
+
+### Rounding the seed is the whole fix
+
+`8.93` becomes 9, which reads back as `60.16`, truncates to 60, and the value is stable. Checked
+across the range: every value holds except 1, which has nowhere to sit among nineteen steps and
+becomes 0. Rounding the readback as well would be a second write for nothing, because by then the
+seed has already made the value representable.
+
+### Why two call redirects and not a detour
+
+`__ftol` is the compiler's own helper and the image calls it from everywhere, so rounding inside it
+would change every float-to-int conversion in the game. Only the two seed calls are redirected, to
+a thunk that adds a half and falls into the real helper. The helper is read out of the displacement
+being replaced, not resolved separately, so a wrapper somebody else had already installed
+still runs. Both displacements are read and compared before either is written, and if they name
+different helpers nothing is touched.
+
+### Engine locations
+
+| What | Where |
+|---|---|
+| the music seed's `call __ftol` | `0x004420B1`, displacement rewritten |
+| the sfx seed's `call __ftol` | `0x004420E1`, displacement rewritten |
+| `__ftol` | `0x0049A44C`, read from those displacements, never modified |
+| the slider step count | `[0x004A8634]`, `19.0f`, read only |
+
+### Testing status
+
+Played. Before, the log read `get 60` then `set 53` one line later, the widget answering the seed
+with a different number; after, the `get 60` stands alone and `obi.ini` keeps `SVOL=60` across
+repeated visits and provider changes. Confirmed with the music slider in the same session.

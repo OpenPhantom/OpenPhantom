@@ -1,9 +1,11 @@
 #include "mod_loader.h"
+#include "early_trigger.h"
 
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/mod_entry.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -51,14 +53,20 @@ static void insert_sorted(mod_list_t *list, const char *name)
     ++list->count;
 }
 
+static bool name_ends_with_dll(const char *name)
+{
+    size_t length = strlen(name);
+
+    return length > 4u && _stricmp(name + length - 4u, ".dll") == 0;
+}
+
 static bool collect_mods(const char *directory, mod_list_t *list)
 {
     WIN32_FIND_DATAA entry;
     HANDLE           search;
     char             pattern[MAX_PATH];
 
-    _snprintf(pattern, sizeof(pattern), "%s\\*.dll", directory);
-    pattern[sizeof(pattern) - 1] = '\0';
+    text_format(pattern, sizeof(pattern), "%s\\*.dll", directory);
 
     search = FindFirstFileA(pattern, &entry);
     if (search == INVALID_HANDLE_VALUE) {
@@ -69,6 +77,12 @@ static bool collect_mods(const char *directory, mod_list_t *list)
         if ((entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
             continue;
         }
+        /* The pattern is matched against the 8.3 short name as well as the long one, so
+         * feature.dll.disabled, whose short name is FEATUR~1.DLL, comes back from it and was
+         * loaded like any other. The long name is the one that has to end in .dll. */
+        if (!name_ends_with_dll(entry.cFileName)) {
+            continue;
+        }
         insert_sorted(list, entry.cFileName);
     } while (FindNextFileA(search, &entry));
 
@@ -76,7 +90,7 @@ static bool collect_mods(const char *directory, mod_list_t *list)
     return true;
 }
 
-/* WHICH BUILD IS THIS, answered on the line that announces the module rather than by asking
+/* Which build is this, answered on the line that announces the module rather than by asking
  * somebody to look at file properties.
  *
  * The cost of not having this was three rounds of a field investigation. A tester reported a
@@ -85,7 +99,7 @@ static bool collect_mods(const char *directory, mod_list_t *list)
  * message. The one whose constant had changed logged nothing different at all, so its build was
  * unknowable from a log; a fix was briefly credited to the wrong DLL because of it.
  *
- * THE PE TIMESTAMP AND NOT THE FILE DATE. IMAGE_FILE_HEADER.TimeDateStamp is the link time,
+ * The PE timestamp and not the file date. IMAGE_FILE_HEADER.TimeDateStamp is the link time,
  * written into the bytes of the file, so it survives copying, zipping, emailing and anything
  * else that happens between a build and a tester. A file date is metadata and any of those can
  * reset it. It is read out of the already mapped headers, so this costs no file I/O.
@@ -102,7 +116,8 @@ static void describe_build(HMODULE module, char *out, size_t size)
     const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)module;
     const IMAGE_NT_HEADERS *nt;
     ULONGLONG               hundred_ns;
-    FILETIME                utc, local;
+    FILETIME                utc;
+    FILETIME                local;
     SYSTEMTIME              when;
     DWORD                   stamp;
 
@@ -117,18 +132,18 @@ static void describe_build(HMODULE module, char *out, size_t size)
     }
     stamp = nt->FileHeader.TimeDateStamp;
 
-    /* 1970 in hundred nanosecond units since 1601, which is what a FILETIME counts. */
+    /* 1970 in hundred nanosecond units since 1601, the units a FILETIME counts. */
     hundred_ns = 116444736000000000ULL + (ULONGLONG)stamp * 10000000ULL;
     utc.dwLowDateTime  = (DWORD)hundred_ns;
     utc.dwHighDateTime = (DWORD)(hundred_ns >> 32);
 
     if (stamp > 0x40000000u && stamp < 0x80000000u &&
         FileTimeToLocalFileTime(&utc, &local) && FileTimeToSystemTime(&local, &when)) {
-        _snprintf(out, size, ", built %04u-%02u-%02u %02u:%02u (%08X)",
-                  when.wYear, when.wMonth, when.wDay, when.wHour, when.wMinute,
-                  (unsigned)stamp);
+        text_format(out, size, ", built %04u-%02u-%02u %02u:%02u (%08X)",
+                    when.wYear, when.wMonth, when.wDay, when.wHour, when.wMinute,
+                    (unsigned)stamp);
     } else {
-        _snprintf(out, size, ", build id %08X", (unsigned)stamp);
+        text_format(out, size, ", build id %08X", (unsigned)stamp);
     }
     out[size - 1] = '\0';
 }
@@ -140,8 +155,7 @@ static void load_one(const char *directory, const char *name)
     HMODULE                 module;
     engine_fix_install_fn_t install;
 
-    _snprintf(path, sizeof(path), "%s\\%s", directory, name);
-    path[sizeof(path) - 1] = '\0';
+    text_format(path, sizeof(path), "%s\\%s", directory, name);
 
     module = LoadLibraryA(path);
     if (module == NULL) {
@@ -169,14 +183,30 @@ void mod_loader_run_once(void)
     char       directory[MAX_PATH];
     mod_list_t list;
     size_t     index;
+    bool       host_ok;
 
     if (loader_has_run) {
         return;
     }
     loader_has_run = true;
 
-    host_image_resolve();
+    /* The image before the log, the one place in the tree the order is reversed: the log's own
+     * path is the host's directory, which the resolve is what finds. The result is kept and
+     * judged once there is a log to say so in. */
+    host_ok = host_image_resolve();
     log_init("loader", true);
+    if (!host_ok) {
+        log_error("the host is not a 32-bit executable this loader can read, so no mod is loaded: "
+                  "every one of them patches a 32-bit image and would refuse for itself");
+        return;
+    }
+
+    if (!early_trigger_armed()) {
+        log_warning("the entry point hook did not arm, so the mods are loaded from the "
+                    "DirectInputCreateA fallback instead, which is after the display mode list "
+                    "was built. Anything that has to be in place before graphics start is late "
+                    "this session");
+    }
 
     {
         char host_path[MAX_PATH];
@@ -203,8 +233,7 @@ void mod_loader_run_once(void)
 
     ini_read_string(LOADER_SECTION, "ModDirectory", DEFAULT_MOD_DIRECTORY,
                     configured, sizeof(configured));
-    _snprintf(directory, sizeof(directory), "%s%s", host_directory(), configured);
-    directory[sizeof(directory) - 1] = '\0';
+    text_format(directory, sizeof(directory), "%s%s", host_directory(), configured);
 
     memset(&list, 0, sizeof(list));
     if (!collect_mods(directory, &list)) {

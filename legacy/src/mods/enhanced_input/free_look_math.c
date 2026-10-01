@@ -43,7 +43,7 @@ float free_look_interpolated_heading(float previous, float current, float alpha)
 
 bool free_look_input_angle(float strafe, float forward, float *out_degrees)
 {
-    /* Subtracted from zero rather than negated, and that is not decoration. Negating a zero
+    /* Subtracted from zero rather than negated. That is not decoration. Negating a zero
      * strafe gives NEGATIVE zero, and atan2(-0, -1) is minus a half turn while atan2(+0, -1) is
      * plus one. Both name the same direction and the sum is wrapped either way, so nothing
      * downstream can tell, but an angle that carries a sign bit out of an input that had none is
@@ -92,8 +92,8 @@ free_look_release_t free_look_gate_refusal(const free_look_gate_t *gate)
      * turret. Every one of them forces its region during the substeps, i.e. BEFORE the camera
      * update of the same frame, so this signal is exact rather than one frame late.
      *
-     * This is tested before the camera object and before the region, and the order is what keeps
-     * the two families apart. A forced region runs through exactly the same arms an authored one
+     * This is tested before the camera object and before the region, and the order keeps the two
+     * families apart. A forced region runs through exactly the same arms an authored one
      * does and leaves exactly the same camera state behind, so testing the state first would file
      * every cutscene under "the level author placed a camera here" and hand the wanted yaw back
      * afterwards, which is the one thing a cutscene must not get. */

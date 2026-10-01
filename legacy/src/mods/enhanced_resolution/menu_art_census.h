@@ -4,10 +4,10 @@
  * The question this exists to answer
  *
  * Menu artwork is upscaled on disk, by a converter run against the player's own installation, and
- * that is why the menus are locked to one resolution: the engine's blitter copies one source pixel
- * to one destination pixel, so a picture only fills a bigger canvas if the file itself is bigger.
- * Below a resolution the artwork was converted for, the whole scale stands down, because a canvas
- * larger than the screen writes past the end of the frame buffer.
+ * it is the reason the menus are locked to one resolution: the engine's blitter copies one
+ * source pixel to one destination pixel, so a picture only fills a bigger canvas if the file
+ * itself is bigger. Below a resolution the artwork was converted for, the whole scale stands
+ * down, because a canvas larger than the screen writes past the end of the frame buffer.
  *
  * Upscaling at draw time instead would remove all of that. The mechanism is already here and
  * proven: menu_preview.c resamples the four animated previews into buffers of its own, swaps them
@@ -29,9 +29,9 @@
  * lines a minute and would answer the same question worse.
  *
  * It sits in the swpic_draw detour that is already installed, so it resolves no new engine site and
- * costs nothing when it is off. That also bounds what it can see: PICTURE WIDGETS, and nothing
- * else. If a menu screen turns out to draw pixels some other way, this census will not show them,
- * and a screen whose reported shapes plainly do not add up to what is on it is itself the finding.
+ * costs nothing when it is off. That also bounds what it can see: only PICTURE WIDGETS. If a
+ * menu screen turns out to draw pixels some other way, this census will not show them, and a
+ * screen whose reported shapes plainly do not add up to what is on it is itself the finding.
  * Reading it that way is the point, so the summary says how many screens were opened as well as
  * what was drawn.
  */

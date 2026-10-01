@@ -12,7 +12,7 @@
 ; no [Run] section at all. Microsoft's Visual C++ redistributable used to be carried and is not:
 ; every binary this project builds links the static runtime, so there is nothing to install.
 ;
-; The disc is copied with Flags: external rather than by a helper process, which is what lets Inno
+; The disc is copied with Flags: external rather than by a helper process; that lets Inno
 ; record every file it wrote. The uninstaller then removes exactly those and leaves the rest, so it
 ; never has to delete the whole directory with the saved games in it.
 
@@ -44,24 +44,19 @@
 ; Note what this is NOT: the v1.0 in GameKey below is the retail registry key and the v1.0 in the
 ; PowerShell path is Windows own, neither of them moves when this does.
 ;
-; THE INSTALLER'S OWN NUMBER, and the last digit counts installer builds. Build a new one, add one:
-; 1.4.1, 1.4.2, and so on. It is not a judgement about how much changed.
+; The installer's number follows the patch it carries: the first number is one higher than the
+; patch's and the other two are the same, so patch 1.0.0 ships in installer 2.0.0 and patch 1.0.1
+; in installer 2.0.1. PatchVersion in src\openphantom_patch.iss holds the patch's number, and the
+; build stops there when the two break that rule.
 ;
-; The patch has a number of its own again, 0.4.x, at j0nny's asking. The two were merged into one at
-; 1.5.0 on the reasoning that they had never been released apart; that is being undone rather than
-; argued with, and PatchVersion in src\openphantom_patch.iss carries the patch's line again.
-;
-; THE ONE MERGED RELEASE IS BEING RE-RELEASED INTO THIS LINE. Only i1.5.0 ever shipped under the
-; merged number, and it becomes i1.4.1, so the sequence reads i1.4, i1.4.1, i1.4.2 with no gap and
-; nothing moving backwards. That matters because Inno writes AppVersion into Add/Remove Programs;
-; without the renumbering a 1.4.x installer would have sat below something people already held.
+; Inno writes AppVersion into Add/Remove Programs. 2.0.0 sits above every installer released
+; before it, including the one whose own properties still read 1.5.0.
 ;
 ; Nothing here compares versions. An existing installation is found by AppId and the player is asked
 ; what to do with it, so no number decides whether an install is allowed.
 ;
-; Tagged i1.4.3, keeping the prefix the installer has always used, i1.0 through i1.4. The patch is
-; tagged v0.4.3 on its own line.
-#define AppVer "1.4.3"
+; Tagged i2.0.0, keeping the prefix the installer has always used. The patch is tagged v1.0.0.
+#define AppVer "2.0.0"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"
@@ -116,7 +111,7 @@ PrivilegesRequired=admin
 ; That is the safer behaviour in general and it is being given up deliberately: this installer is
 ; how the patch is updated, so the same person runs it again after components have been added, and
 ; a restored selection silently leaves every new one unticked. Starting from "everything" each time
-; is what makes an update install the whole patch.
+; is how an update installs the whole patch.
 ;
 ; The cost is that somebody who deliberately took less than everything is offered everything again,
 ; including the cutscene player and its converter. They are still on the
@@ -133,6 +128,19 @@ UsePreviousSetupType=no
 ; exercised it produced no log to read it in, which left a save handling change unverifiable by
 ; anything short of running it twice with a hex editor.
 SetupLogging=yes
+
+; Signed only when the build asks for it with /DSIGN, which sign_installer.ps1 passes together with
+; the command itself as /Ssigntool=... . The command is not written here because it names one
+; person's certificate and one machine's signtool.
+;
+; Given a SignTool, Inno signs the uninstaller before embedding it and then Setup, so the uninstaller
+; left in the game folder carries the same signature as the download. Signing the finished file
+; afterwards would leave that one unsigned, and Windows would show it as from an unknown publisher.
+#ifdef SIGN
+SignTool=signtool
+#else
+#pragma message "Not signed. A release is built with sign_installer.ps1."
+#endif
 
 ; The installer stays in 32-bit mode. Windows then redirects its HKLM\SOFTWARE writes into
 ; WOW6432Node by itself, which is where the 32-bit game looks for them.
@@ -167,8 +175,10 @@ Name: "{app}\Save";  Permissions: users-modify
 
 [Files]
 ; dontcopy keeps this out of the installation: PrepareToInstall unpacks it into the temporary folder,
-; runs it once, and it is gone.
-Source: "{#ExtractorExe}"; Flags: dontcopy
+; runs it once, and it is gone. signonce has a signed build sign it in place before storing it, with
+; the same command as Setup, since it is ours and runs on the player's machine with Setup's rights.
+; Without SignTool the flag does nothing.
+Source: "{#ExtractorExe}"; Flags: dontcopy signonce
 
 ; PrepareToInstall has already produced this from the disc, so by now it exists and Inno copies and
 ; records it like any other file.
@@ -277,14 +287,14 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\TPM.EXE
 ; WMAIN.EXE is what runs, and TPM.EXE is what the icon comes from. Those have to be two different
 ; files here. A shortcut with no IconFilename takes its icon from whatever it points at, and
 ; WMAIN.EXE has no resource directory at all: no icon, no version information, nothing. Windows then
-; falls back to the blank page it shows for a file type it does not know, which is what the desktop
+; falls back to the blank page it shows for a file type it does not know, the page the desktop
 ; shortcut looked like before this line existed.
 ;
 ; Of the six executables the disc carries, WMAIN.EXE is the only one with no icon. TPM.EXE is the
 ; one to borrow from: it is the original launcher, it is copied unconditionally above, and it is the
 ; file the disc check looks for, so it cannot be absent while the game is installed. Its icon is the
 ; LucasArts logo, one 32x32 image at 16 colours, which is the era it comes from. It will look coarse
-; at the sizes a modern desktop draws, and that is a deliberate trade against inventing artwork.
+; at the sizes a modern desktop draws, a deliberate trade against inventing artwork.
 [Icons]
 Name: "{group}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir: "{app}"; \
     IconFilename: "{app}\TPM.EXE"
@@ -294,7 +304,7 @@ Name: "{commondesktop}\{#ShortcutName}"; Filename: "{app}\WMAIN.EXE"; WorkingDir
 
 ; There is deliberately no [UninstallDelete] section. Inno removes the files it installed; saved
 ; games, settings and anything a player added afterwards are not ours to delete. The folder stays
-; behind with those in it, and that is the intended outcome.
+; behind with those in it, the intended outcome.
 
 ; Nothing is downloaded during installation, so there is no download hash to check. Everything the
 ; installer places is compiled into it out of dist and is covered by Setup's own integrity check.
@@ -327,6 +337,7 @@ english.CompHud=Display and text are no longer stretched on wide screens
 english.CompInput=New input options, for example free look and sideways movement
 english.CompController=Controller support: right stick looks, Start pauses, the triggers roll
 english.CompDialogueAnim=Stops a talking character's head animation carrying into the next line
+english.CompDialogueMenu=Keeps a conversation open while the character's first line is still being spoken, instead of releasing you and repeating it
 english.CompCameraHandback=Gives the camera back when a conversation ends, instead of leaving it stuck on that shot
 english.CompAudio=Audio bugfix
 english.CompSfxVolume=Fixes the audio settings not being saved correctly
@@ -341,10 +352,11 @@ english.CompDismember=Lightsaber dismemberment (mod)
 english.CompCrashRep=Writes a crash report
 english.CompSoundLife=Fixes a save and load crash
 english.CompDiag=Logs for fault finding. Everything off until you switch it on
+english.CompMultiplayer=Co-op for up to four players, on your own network or over the internet
 english.CompDsoal=Restores the 3D sound audio option
 english.DsoundTaken=A different dsound.dll is already in the game folder and could not be moved aside:%n%n      %1%n%nNothing was installed. Sound support needs that exact name, and this installer never deletes a file it did not put there.%n%nUsually the game is still running. Close it and start again, or go back and untick sound support.
 english.OldWrapperFailed=An earlier version of this installer put the controller wrapper here, and it could not be moved aside:%n%n      %1%n%nEverything is installed and the game runs. On most machines that old file is never loaded and nothing is wrong.%n%nUsually the game is still running. If your controller behaves oddly, close the game and rename that file yourself.
-english.CompSaves=Saved games, one at the start of each chapter
+english.CompSaves=Saved games, one at the start of each chapter (for the shipped levels; a modded level needs a new game)
 english.CompGameDefaults=Starting settings: a PlayStation-style controller layout and 1920x1080. Overwrites your own bindings if you have any
 english.SavesFailed=Not all of the saved games could be copied into:%n%n      %1%n%nEverything else is installed and the game runs. Your own saved games were not touched.%n%nUsually the folder is write protected or the game is still running.
 english.ReinstallCaption=The game is already installed here
@@ -374,8 +386,9 @@ english.ScalingLetterbox=Keep the original shape, with black bars at the sides (
 english.ScalingStretch=Fill the whole screen. Nothing is cut off, faces get a little wider
 english.FpsPageCaption=Frame rate
 english.FpsPageDescription=How many frames per second the game should draw
-english.FpsPageText=Without a limit this engine draws many hundreds of frames per second. Your screen cannot show them, and it costs you a fully loaded processor core and a loud fan.%n%nA limit a little above your screen refresh rate looks just as smooth.%n%nYou find it later in engine_fixes.ini under [framerate_fix] TargetFps.
-english.Fps100=100 frames per second (recommended)
+english.FpsPageText=Without a limit this engine draws many hundreds of frames per second. Your screen cannot show them, and it costs you a fully loaded processor core and a loud fan.%n%nYour screen shows frames at its own rate, so a limit that does not match it repeats some frames and not others, a slight judder on everything moving even while the frame counter reads steady. The first option caps the game at your screen's rate, read every time it starts, and in a scene the machine cannot hold at that rate it steps down to a half or a third of it, where every frame is still shown the same number of times, and back up when the scene clears. The second holds the screen's rate and never steps.%n%nYou can change this later in the game's own menu, or in engine_fixes.ini under [framerate_fix].
+english.FpsOptAuto=Automatic: my screen's rate, lower in a heavy scene (recommended)
+english.FpsOptMatch=My screen's rate exactly, whatever it refreshes at
 english.FpsUnlimited=No limit, as fast as the machine manages
 english.FpsOwn=Own limit
 english.FpsBadValue=That is not a valid frame rate.%n%nEnter a whole number from 0 to 1000. 0 means no limit.
@@ -429,6 +442,7 @@ german.CompHud=Anzeige und Schrift werden auf breiten Bildschirmen nicht mehr ve
 german.CompInput=Neue Eingabeoptionen, z. B. freie Sicht und Seitwärtsbewegungen
 german.CompController=Controller-Unterstützung: rechter Stick blickt, Start pausiert, die Trigger rollen
 german.CompDialogueAnim=Beendet die Sprechanimation einer Figur, sobald die nächste Zeile beginnt
+german.CompDialogueMenu=Hält ein Gespräch offen, solange die erste Zeile der Figur noch gesprochen wird, statt es abzubrechen und die Zeile zu wiederholen
 german.CompCameraHandback=Gibt die Kamera nach einem Gespräch wieder frei, statt sie auf der Szeneneinstellung stehen zu lassen
 german.CompAudio=Audio-Bugfix
 german.CompSfxVolume=Bugfix für die korrekte Speicherung der Audio-Einstellungen
@@ -443,10 +457,11 @@ german.CompDismember=Lichtschwert-Amputation (Mod)
 german.CompCrashRep=Schreibt einen Absturzbericht
 german.CompSoundLife=Behebt einen Absturz beim Speichern und Laden
 german.CompDiag=Protokolle zur Fehlersuche. Alles aus, bis Sie es einschalten
+german.CompMultiplayer=Koop für bis zu vier Spieler, im eigenen Netzwerk oder über das Internet
 german.CompDsoal=Wiederherstellung der 3D-Klang-Audio-Option
 german.DsoundTaken=Im Spielverzeichnis liegt bereits eine fremde dsound.dll, die nicht beiseitegelegt werden konnte:%n%n      %1%n%nEs wurde nichts installiert. Die Klang-Unterstützung braucht genau diesen Namen, und dieses Installationsprogramm löscht keine Datei, die es nicht selbst angelegt hat.%n%nMeist läuft das Spiel noch. Beenden Sie es und starten Sie erneut, oder gehen Sie zurück und wählen Sie die Klang-Unterstützung ab.
 german.OldWrapperFailed=Eine frühere Fassung dieses Installationsprogramms hat den Controller-Wrapper hier abgelegt, und er konnte nicht beiseitegelegt werden:%n%n      %1%n%nAlles ist installiert und das Spiel läuft. Auf den meisten Rechnern wird diese alte Datei nie geladen und es ist nichts kaputt.%n%nMeist läuft das Spiel noch. Falls sich Ihr Controller seltsam verhält, beenden Sie das Spiel und benennen Sie die Datei selbst um.
-german.CompSaves=Spielstände, je einer zu Beginn jedes Kapitels
+german.CompSaves=Spielstände, je einer zu Beginn jedes Kapitels (für die mitgelieferten Level; ein modifizierter Level braucht ein neues Spiel)
 german.CompGameDefaults=Startwerte: eine Controller-Belegung im PlayStation-Stil und 1920x1080. Überschreibt vorhandene eigene Belegungen
 german.SavesFailed=Es konnten nicht alle Spielstände kopiert werden nach:%n%n      %1%n%nAlles Übrige ist installiert und das Spiel läuft. Ihre eigenen Spielstände wurden nicht angetastet.%n%nMeist ist das Verzeichnis schreibgeschützt oder das Spiel läuft noch.
 german.ReinstallCaption=Das Spiel ist hier bereits installiert
@@ -476,8 +491,9 @@ german.ScalingLetterbox=Ursprüngliche Form behalten, mit schwarzen Balken an de
 german.ScalingStretch=Den ganzen Bildschirm füllen. Es wird nichts abgeschnitten, Gesichter werden etwas breiter
 german.FpsPageCaption=Bildrate
 german.FpsPageDescription=Wie viele Bilder pro Sekunde das Spiel zeichnen soll
-german.FpsPageText=Ohne Begrenzung zeichnet diese Engine viele Hundert Bilder pro Sekunde. Ihr Bildschirm kann sie nicht zeigen, und es kostet Sie einen voll ausgelasteten Prozessorkern und einen lauten Lüfter.%n%nEine Grenze etwas über der Bildwiederholrate Ihres Bildschirms sieht genauso flüssig aus.%n%nSpäter finden Sie es in der engine_fixes.ini unter [framerate_fix] TargetFps.
-german.Fps100=100 Bilder pro Sekunde (empfohlen)
+german.FpsPageText=Ohne Begrenzung zeichnet diese Engine viele Hundert Bilder pro Sekunde. Ihr Bildschirm kann sie nicht zeigen, und es kostet Sie einen voll ausgelasteten Prozessorkern und einen lauten Lüfter.%n%nIhr Bildschirm zeigt Bilder in seiner eigenen Rate, daher wiederholt eine Grenze, die nicht dazu passt, einige Bilder und andere nicht: ein leichtes Ruckeln in allem, was sich bewegt, obwohl die Bildratenanzeige gleichmäßig aussieht. Die erste Option begrenzt das Spiel auf die Rate Ihres Bildschirms, bei jedem Start neu gelesen, und geht in einer Szene, die der Rechner bei dieser Rate nicht schafft, auf die Hälfte oder ein Drittel davon herunter, wo jedes Bild weiterhin gleich oft gezeigt wird, und wieder hinauf, sobald die Szene es zulässt. Die zweite hält die Rate des Bildschirms und ändert sie nie.%n%nSie können dies später im Menü des Spiels ändern oder in der engine_fixes.ini unter [framerate_fix].
+german.FpsOptAuto=Automatisch: Bildschirmrate, in schweren Szenen gesenkt (empfohlen)
+german.FpsOptMatch=Genau die Rate meines Bildschirms, was immer sie ist
 german.FpsUnlimited=Keine Begrenzung, so schnell der Rechner es schafft
 german.FpsOwn=Eigene Begrenzung
 german.FpsBadValue=Das ist keine gültige Bildrate.%n%nGeben Sie eine ganze Zahl von 0 bis 1000 ein. 0 bedeutet keine Begrenzung.
@@ -527,8 +543,9 @@ function SetFileAttributes(lpFileName: String; dwFileAttributes: Cardinal): Bool
 function SetEnvironmentVariable(lpName, lpValue: String): Boolean;
   external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
-{ SM_CXSCREEN and SM_CYSCREEN, for the menu artwork page's first option. Declared here with the
-  other imports rather than beside its callers, because an external has to be seen first. }
+{ SM_CXSCREEN and SM_CYSCREEN, for the starting resolution page's first option. Declared here
+  with the other imports rather than beside its callers, because an external has to be seen
+  first. }
 function GetSystemMetrics(nIndex: Integer): Integer;
   external 'GetSystemMetrics@user32.dll stdcall';
 
@@ -588,7 +605,7 @@ end;
   installed game has the expanded big.lab and no BIG.Z, so this is what tells a disc from somebody
   else's installation.
 
-  INSTALL is a folder, which is why that row is not AddIfMissing. }
+  INSTALL is a folder, so that row is not AddIfMissing. }
 function MissingDiscParts(const Root: String): String;
 var
   Base: String;
@@ -613,7 +630,7 @@ begin
   Result := FmtMessage(ExpandConstant('{cm:' + Name + '}'), [Argument]);
 end;
 
-{ The primary display, in pixels, for the menu artwork page's first option.
+{ The primary display, in pixels, for the starting resolution page's first option.
 
   SM_CXSCREEN and SM_CYSCREEN, which are the PRIMARY monitor rather than the whole desktop, and that
   is the wanted answer: the game runs on one monitor. They are also the values Windows reports after
@@ -726,12 +743,12 @@ end;
 { Typing in the box ticks the option it belongs to. Without this a player types a number, leaves the
   option alone, and is quietly given the preselected 100 instead of what they typed.
 
-  The other direction is not wired, and that is on purpose: it would depend on the list raising an
+  The other direction is not wired, on purpose: it would depend on the list raising an
   event for a radio selection, and if it did not the box would sit disabled and the whole option
   would be unreachable. This way the box always works. }
 procedure FpsEditChanged(Sender: TObject);
 begin
-  FpsPage.SelectedValueIndex := 2;
+  FpsPage.SelectedValueIndex := 3;
 end;
 
 { Typing in the box picks the row it sits on, so nobody fills it in and then wonders why their size
@@ -787,7 +804,7 @@ begin
 
   { Letterbox first and preselected, because it is the answer that shows the movie the shape it was
     made in. Stretch is offered rather than hidden: on a wide screen some people would rather have no
-    bars than correct faces, and that is a taste rather than a mistake. }
+    bars than correct faces, a taste rather than a mistake. }
   ScalingPage := CreateInputOptionPage(
     MoviePage.ID,
     ExpandConstant('{cm:ScalingPageCaption}'),
@@ -799,8 +816,9 @@ begin
   ScalingPage.Add(ExpandConstant('{cm:ScalingStretch}'));
   ScalingPage.SelectedValueIndex := 0;
 
-  { The frame rate cap. Four common answers and a box to type any other, because the useful values
-    are not a list: a player with a 165 Hz screen wants 165 and nobody can enumerate that. }
+  { The frame rate cap. Three answers that name no number and a box to type any other, because the
+    useful values are not a list: a player with a 165 Hz screen wants 165 and nobody can enumerate
+    that. }
   FpsPage := CreateInputOptionPage(
     ScalingPage.ID,
     ExpandConstant('{cm:FpsPageCaption}'),
@@ -812,20 +830,29 @@ begin
     and a guessed height would put it between two of them. }
   FpsPage.CheckListBox.MinItemHeight := ScaleY(18);
 
-  FpsPage.Add(ExpandConstant('{cm:Fps100}'));
+  { The first two rows name no number, and reading one off the screen here was built and then
+    taken out again. A rate read at install time is written to a file and goes stale: the
+    machine gains a second screen, the game is moved to a television, the player changes the
+    mode. The patch reads the rate every time the game starts, so the rows that ask it to are
+    worth more than a row that guesses once. The two differ in one key: the first leaves the
+    fraction automatic, so a heavy scene steps the cap down to a half or a third of the refresh
+    and back; the second pins the fraction at the whole rate, for the player who wants the cap
+    to stop deciding. Both are one row in the game's own menu. }
+  FpsPage.Add(ExpandConstant('{cm:FpsOptAuto}'));
+  FpsPage.Add(ExpandConstant('{cm:FpsOptMatch}'));
   FpsPage.Add(ExpandConstant('{cm:FpsUnlimited}'));
   FpsPage.Add(ExpandConstant('{cm:FpsOwn}'));
   FpsPage.SelectedValueIndex := 0;
 
-  FpsPage.CheckListBox.Height := ScaleY(58);
+  FpsPage.CheckListBox.Height := ScaleY(76);
 
-  { On the third row and to the right of its label, so it reads as part of that option rather than as
-    a separate question. The offset clears the longest label in either language with room to spare;
-    the two are not measured against each other, so leave a gap when changing the text. }
+  { On the fourth row and to the right of its label, so it reads as part of that option rather than
+    as a separate question. The offset clears the longest label in either language with room to
+    spare; the two are not measured against each other, so leave a gap when changing the text. }
   FpsEdit := TNewEdit.Create(FpsPage);
   FpsEdit.Parent := FpsPage.Surface;
   FpsEdit.Left := FpsPage.CheckListBox.Left + ScaleX(145);
-  FpsEdit.Top := FpsPage.CheckListBox.Top + ScaleY(18) * 2 - ScaleY(2);
+  FpsEdit.Top := FpsPage.CheckListBox.Top + ScaleY(18) * 3 - ScaleY(2);
   FpsEdit.Width := ScaleX(56);
   FpsEdit.Text := '120';
 
@@ -1048,8 +1075,11 @@ var
   Typed: Integer;
 begin
   case FpsPage.SelectedValueIndex of
-    0: Result := '100';
-    1: Result := '0';   { no limit }
+    { Following the screen is a key of its own, and the cap under it is left at no limit:
+      that is what the player falls back to if they ever turn the following off. }
+    0: Result := '0';
+    1: Result := '0';
+    2: Result := '0';   { no limit }
   else
     begin
       Result := '';
@@ -1058,6 +1088,29 @@ begin
         Result := IntToStr(Typed);
     end;
   end;
+end;
+
+{ Whether the patch follows the screen rather than the number above. A function of its own
+  rather than the page read twice, so the keys cannot come from different readings of the same
+  list. }
+function ChosenMatchRefresh: String;
+begin
+  if FpsPage.SelectedValueIndex <= 1 then
+    Result := '1'
+  else
+    Result := '0';
+end;
+
+{ Which fraction of the screen's rate the cap sits at while it follows the screen: 0 lets the patch
+  step down and back as a scene needs, 1 pins the whole rate. The other two rows do not follow the
+  screen, so the fraction is idle there and is written as automatic, the value that is right if
+  the player later turns the following on from the game's own menu. }
+function ChosenRefreshDivisor: String;
+begin
+  if FpsPage.SelectedValueIndex = 1 then
+    Result := '1'
+  else
+    Result := '0';
 end;
 
 { Leaving the frame rate page. Only the typed answer can be wrong, and it is caught here rather than
@@ -1076,7 +1129,7 @@ end;
   Cancelling the browser leaves the page up rather than falling through to one of the other two: the
   player asked to install somewhere else and has not said where yet.
 
-  A folder that also holds a game puts the same question again about that folder, which is why the
+  A folder that also holds a game puts the same question again about that folder, so the
   page is left up and the caption refreshed. Otherwise the choice is reset to the recommended one,
   so a later pass over this page does not start on an option that has already been acted on. }
 function ChooseDifferentFolder: Boolean;
@@ -1162,8 +1215,8 @@ begin
   Result := False;
 end;
 
-{ Leaving the menu artwork page. Only the typed answer can be wrong, and it is caught here rather
-  than at the end, because here the box is still in front of the person who filled it in.
+{ Leaving the starting resolution page. Only the typed answer can be wrong, and it is caught here
+  rather than at the end, because here the box is still in front of the person who filled it in.
 
   The ceiling is the engine's, not a preference: the run length encoder writes a literal control word
   as (run and 0xfff) while advancing the output by the whole run, so a canvas wider than 4095 pixels
@@ -1375,7 +1428,7 @@ begin
 end;
 
 { The height the player chose, or -1 for "not now". 0 is a real answer and means the source's own
-  resolution, which is why this cannot report "nothing to do" as zero. }
+  resolution, so this cannot report "nothing to do" as zero. }
 function ChosenMovieHeight: Integer;
 begin
   Result := -1;
@@ -1411,7 +1464,7 @@ begin
 end;
 
 { Called once per line the converter writes. Its --quiet mode prints one machine-readable line per
-  movie, which is what makes a progress bar possible without guessing how long anything takes.
+  movie, and a progress bar is possible from that without guessing how long anything takes.
 
   Machine lines go to stdout and anything written for a human to stderr, so Error tells them apart. }
 procedure ConvertOnLog(const S: String; const Error, FirstLine: Boolean);
@@ -1560,7 +1613,7 @@ begin
   // their own installation, so it is not folded in here.
   InstalledFFmpeg := ExpandConstant('{app}\mods\fmv\ffmpeg.exe');
   FFmpegExe := ExpandConstant('{tmp}\ffmpeg.exe');
-  if FileCopy(InstalledFFmpeg, FFmpegExe, False) then begin
+  if CopyFile(InstalledFFmpeg, FFmpegExe, False) then begin
     Log('convert_movies: staged FFmpeg into ' + FFmpegExe + ', running it from there');
   end else begin
     Log('convert_movies: could not stage FFmpeg into {tmp}, running the installed copy at ' +
@@ -1588,7 +1641,7 @@ begin
     converting anything, which is its own answer. }
   if (ResultCode = 0) and (MovieResult <> '') then begin
     { A successful run can still have encoded nothing, in two different ways, and the difference is
-      the whole of what the player needs to know. The converter reports success for all of them, so
+      everything the player needs to know. The converter reports success for all of them, so
       testing the exit code alone said "the cutscenes were converted" whether it did eleven films
       or none.
 
@@ -1618,7 +1671,7 @@ end;
   when the converter looks and it skips them instead of producing them again. }
 { Copies the bundled saves into Save\.
 
-  After the carry-over, which is why this is not a file row: rows are written first and the restore
+  After the carry-over, so this is not a file row: rows are written first and the restore
   would copy the player's own folder straight over them.
 
   Collisions are overwritten and everything else is left alone. The game numbers its slots with two
@@ -1713,8 +1766,14 @@ begin
       AddName('[fmv_player] Scaling', Failed);
 
   if WizardIsComponentSelected('patch\framerate_fix') then
+  begin
     if not SetIniString('framerate_fix', 'TargetFps', ChosenTargetFps, Ini) then
       AddName('[framerate_fix] TargetFps', Failed);
+    if not SetIniString('framerate_fix', 'MatchDisplayRefresh', ChosenMatchRefresh, Ini) then
+      AddName('[framerate_fix] MatchDisplayRefresh', Failed);
+    if not SetIniString('framerate_fix', 'RefreshDivisor', ChosenRefreshDivisor, Ini) then
+      AddName('[framerate_fix] RefreshDivisor', Failed);
+  end;
 
   if Failed <> '' then
     MsgBox(UserMessage('SettingsFailed', Failed), mbError, MB_OK);
@@ -1759,7 +1818,7 @@ end;
   anywhere in this project, so they are carried as the numbers they are. JOYENABLE is among them
   because a layout with the pad switched off is the state this component exists to save people from.
 
-  1920x1080 replaces the engine's own 640x480, which is what a fresh obi.ini carries. It is a
+  1920x1080 replaces the engine's own 640x480, the value a fresh obi.ini carries. It is a
   starting value and not a limit: enhanced_resolution offers the full mode list, and the video
   options screen still writes whatever the player picks.
 
@@ -1914,7 +1973,7 @@ end;
   menus at that size and stops them following a resolution change at all. Between 210 MB and 840 MB
   of it, depending on what it was made for.
 
-  The MANIFEST is the test, not the folder, and that is the whole safety of this step. Artwork
+  The MANIFEST is the test, not the folder; the whole safety of this step rests on that. Artwork
   somebody drew themselves is still supported and still mounts from a folder of that name, and a
   folder like that must never be offered up for deletion. Only this project's own converter writes
   openphantom_menu_art.txt, and that file's own first lines already say to delete the folder to undo

@@ -1,7 +1,7 @@
 /* mouse_look.c: the mouse axis, collected per rendered frame and drained by whoever consumes.
  *
  * ==============================================================================================
- * The order the engine runs things in, which is the reason this file exists at all
+ * The order the engine runs things in, and the reason this file exists at all
  *
  *     sys_runSubsteps(0)          <- every substep of this frame
  *     module_send(0, 13)          <- the poll: one DirectInput sample per frame
@@ -20,35 +20,35 @@
  * ==============================================================================================
  * The invariants a change here must not break
  *
- * ONE READ PER FRAME ON THE RAW PATH. The raw reader CONSUMES what it answers and the engine's own
- * reader does not. The per-frame collector is what guarantees exactly one read per rendered frame,
+ * One read per frame on the raw path. The raw reader CONSUMES what it answers and the engine's own
+ * reader does not. The per-frame collector guarantees exactly one read per rendered frame,
  * so the raw source is only ever enabled while the collector is live. On the degraded path the
  * axis is read once per substep, and a consuming reader would hand each substep a different
  * fraction of the same movement.
  *
- * BOTH READERS ARE CONSULTED EVERY FRAME. A raw input registration can succeed and then deliver
+ * Both readers are consulted every frame. A raw input registration can succeed and then deliver
  * nothing, which would leave the player with a mouse that works in the menus and does not turn the
  * view. Asking the engine's reader as well costs nothing, since it is not destructive, and the two
- * disagreeing in one direction only is the signature of that failure and of nothing else.
+ * disagreeing in one direction only is the signature of that failure alone.
  *
- * A STEP MAY NEVER REACH 180 DEGREES, because at that angle a turn is ambiguous and beyond it the
+ * A step may never reach 180 degrees, because at that angle a turn is ambiguous and beyond it the
  * eye reads the short way round. One substep cannot get there on the banked path, since the step is
  * clamped below it and a take removes what it delivers. The route that exists is the REPEAT: a
  * frame long enough to owe two substeps runs them back to back with no poll in between, and on the
- * degraded path both read the same sample, which is why that path carries a much smaller cap.
+ * degraded path both read the same sample, so that path carries a much smaller cap.
  *
- * NOTHING A LIMIT HOLDS BACK MAY BE DELETED. What is not delivered this drain stays banked and goes
+ * Nothing a limit holds back may be deleted. What is not delivered this drain stays banked and goes
  * out on the next one, so the total is conserved exactly. A guard that deletes evidence hides the
- * fault it guards against, and this file has paid for that twice.
+ * fault it guards against; two earlier versions of this file did, and both are described below.
  *
- * AND THE CUT RUNS BEFORE THE BANK, not after it. Holding motion back rather than deleting
+ * And the cut runs before the bank, not after it. Holding motion back rather than deleting
  * it is right for input and wrong for a FAULT: once clipped motion started being paid out instead
  * of dropped, a single impossible sample became a guaranteed full turn. bolt_implausible_sample()
  * cuts one frame's sample to the fastest a hand could have been BEFORE it is banked, so the bank
  * only ever holds motion a person really made. It cuts rather than drops, because at the top of the
  * sensitivity band a genuine flick can reach that rate.
  *
- * A DRAIN MAY NOT INVENT AND MAY NOT REVERSE. Two consumers share one bank at different cadences,
+ * A drain may not invent and may not reverse. Two consumers share one bank at different cadences,
  * phase 2 once per substep and free look once per rendered frame, and between them they ask for
  * about two seconds of delivery per second of arrivals. The only thing that makes that safe is that
  * mouse_rate_take removes what it hands over and can reach neither past the bank nor against it.
@@ -67,13 +67,13 @@
  * raw_mouse.c keeps that structure instead of summing it away and holds its own reasoning.
  *
  * ==============================================================================================
- * TWO EARLIER ANSWERS TO THE SAME COMPLAINT, and both were wrong
+ * Two earlier answers to the same complaint, and both were wrong
  *
  * The complaint never changed: mouse movement shimmers, the direction keys do not. Both of the
- * answers below are what a reader reaches for first, which is why they are written down here
- * rather than left as deleted code.
+ * answers below are what a reader reaches for first, so they are written down here rather than
+ * left as deleted code.
  *
- * THE FIRST WAS THE LIMITER, which was a speed limit measured against a noisy clock. It computed
+ * The first was the limiter, a speed limit measured against a noisy clock. It computed
  * its allowance as the rate times the drained interval's own duration, and it DISCARDED what it
  * clipped. Both halves are wrong and they compound. The interval is one rendered frame, and frame
  * times on real hardware swing by a factor of 4.6: measured on the reporting machine, one window of
@@ -85,10 +85,10 @@
  * 1200 to 1800 deg/s. It sat in the middle of ordinary aiming. That was a real defect and it is
  * repaired, but it was not the reported one.
  *
- * THE SECOND WAS DELIVERY CADENCE. The simulation step is pinned at 1/32 s while the render runs
+ * The second was delivery cadence. The simulation step is pinned at 1/32 s while the render runs
  * far faster, so a drain carries however many rendered frames fell between two substeps, two or
  * three at 90 frames per second, while a key delivers a rate times the fixed step. All of that is
- * byte-true, a pacer was built for it, and it shipped. It was then killed on four counts:
+ * byte-true, a pacer was built for it, and it shipped. It was removed on four counts:
  *
  *   - the field test meant to confirm it, a 64 fps cap making the grouping exactly two frames per
  *     substep, came back unchanged. That run's own log reads dt in ms minimum 15.625, average
@@ -107,14 +107,14 @@
  * be driven by a NOISE model and must assert that the paced spread is no worse than the unpaced one
  * at 64, 91.5 and 144 frames per second. The shipped version fails that at 64.
  *
- * AND THE TEST-DESIGN LESSON, which cost the whole feature. Its unit test reported a step spread of
+ * The test that let it ship reported a step spread of
  * 0.00 per cent and it was not lying: the model fed it a perfectly steady hand, so the only
  * variation present was the sampling, which is the one thing the pacer cancels in closed form. A
  * model that feeds a filter a clean signal measures what the filter does to the sampling and never
  * what it does to the signal, and it will pass a filter that makes the signal worse.
  *
  * ==============================================================================================
- * A CLAIM ABOUT NON-EXCLUSIVE DIRECTINPUT THAT IS NOT ESTABLISHED
+ * A claim about non-exclusive DirectInput that is not established
  *
  * An intermediate version of this file asserted that because the device is opened
  * DISCL_NONEXCLUSIVE, the number read is pointer travel carrying the acceleration curve, the
@@ -127,7 +127,7 @@
  * softened, and it is written down here so that it does not get reasoned back in.
  *
  * ==============================================================================================
- * THE AUDIT THAT REMOVED FOUR ACCUMULATORS, and the one lesson worth keeping from it
+ * The audit that removed four accumulators, and the one lesson worth keeping from it
  *
  * It found two defects in the delivery itself, and neither is visible in a reading of the code that
  * produced it. A frame carrying no device report was being handed to the filter as a zero count
@@ -147,14 +147,15 @@
  * and the two refuted answers above; each records a defect that has actually shipped, and none of
  * them is visible in the code that implements the repair. One seam has already been taken: the
  * CONFIGURATION half went into mouse_config.c with every key, every clamp and the three renamed
- * keys. The next seam, measured rather than guessed, is the census, about 150 lines that touch the
- * engine at no point and share one struct with the rest. Whatever is added here next has to come
- * out of the file along that seam rather than onto it.
+ * keys, and the census, the measurement that decides whether any of this worked, went into
+ * mouse_census.c with its own account. Whatever is added here next has to come out of the file
+ * along a seam of its own, not onto it.
  */
 #include "mouse_look.h"
 
 #include "input_gate.h"
 
+#include "mouse_census.h"
 #include "mouse_config.h"
 #include "frame_clock.h"
 #include "mouse_rate.h"
@@ -164,6 +165,7 @@
 #include "common/frame_hook.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/numeric.h"
 
 #include <windows.h>
 
@@ -172,8 +174,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The backstop on the primary path. A single step is the whole of what one consumed interval can
- * produce and 90 is a factor of two below the ambiguity. It is deliberately far below the old 179:
+/* The backstop on the primary path. A single step is all one consumed interval can produce and
+ * 90 is a factor of two below the ambiguity. It is deliberately far below the old 179:
  * 179 was already saturating inside ordinary aiming motions. */
 #define MOUSE_MAX_STEP_DEGREES 90.0f
 
@@ -199,8 +201,8 @@
 
 /* One frame's axis reading is 0.3 times minus lX and lX is a device count, so a million axis units
  * is over three million counts in a single frame and nothing that answers with more than that is a
- * mouse. The bound is deliberately far too loose to be the only one, which is what the door bolt
- * below is for: at the shipped sensitivity a million axis units is a hundred thousand degrees, so a
+ * mouse. The bound is deliberately far too loose to be the only one, and the door bolt below is
+ * the other: at the shipped sensitivity a million axis units is a hundred thousand degrees, so a
  * single bad sample passed it comfortably. It never showed while the limiter deleted what it
  * clipped; once the bank started paying clipped motion out instead, the same sample became a
  * guaranteed full turn inside a tenth of a second. */
@@ -208,88 +210,6 @@
 
 #define MILLISECONDS_PER_SECOND 1000.0f
 
-/* ==============================================================================================
- * THE MEASUREMENT, and it is the one number that decides whether any of this worked.
- *
- * The camera draws the player heading by interpolating between the previous substep's value and the
- * current one, sweeping the whole way across exactly one substep of game time. So the rendered
- * angular velocity inside a substep is the increment times 32, and it is constant. A constant
- * increment therefore draws a straight line and a varying one draws a polyline whose slope changes
- * 32 times a second. That is the whole of the difference between the mouse and a held direction
- * key, whose axis is pinned at exactly 1.0 and whose increment cannot vary.
- *
- * Smoothness here is therefore not a feeling, it is the spread of the per-substep increment, and
- * nothing in this tree had ever measured it. It is measured over gameplay rather than from
- * installation, and that gate was paid for: the first version of this instrument opened its window
- * at process start and printed fields that a reset clears, and the reset runs once per rendered
- * frame in every state where nobody consumes, which is what a menu is. It reported a measured rate
- * of zero over a consumed interval of 0.00 ms from a state that is parked by construction, and a
- * whole handoff was written on the strength of reading that as a broken chain.
- *
- * WHAT IS MEASURED: the second difference of the delivered rate, along a chain of consecutive
- * substeps, normalised by the mean speed, reported as a MEDIAN. It is the change of slope between
- * two consecutive ramps that the eye reads as a kink, so a steady sweep measures near zero and so
- * does a smooth reversal, while an alternation of plus and minus p about the true rate measures 4p
- * and that number divided by four is the size of the wobble it implies.
- *
- * TWO METRICS BEFORE THIS ONE MEASURED THE WRONG THING, and both were caught in the field on the
- * same evening.
- *
- * The first was the spread about the mean, the coefficient of variation of the delivered rate. The
- * rate is signed, and a player asked to sweep steadily sweeps one way and then the other, so the
- * mean runs through zero and the statistic ends up measuring how symmetric the sweep was. The first
- * field run came back at 327.1 per cent, mean -49 deg/s, -532 to 327, from a session the player
- * called fine. Nothing about the data was wrong; the question was.
- *
- * The second was the MEAN of the second difference. The quantity is right and the average is not: a
- * hard reversal of the hand is a genuine and enormous change of slope, and one of them among a
- * hundred samples carries several percentage points. Two field runs then produced 22.1 per cent at
- * a mean speed of 111 deg/s and 32.6 per cent at 33 deg/s, and the second was the one the player
- * preferred. They are not comparable: they differ in hand speed by a factor of three and in how
- * often the hand turned around.
- *
- * Hence the median, with the mean printed beside it, because the gap between the two is itself the
- * measurement of how much a few large events dominate.
- *
- * AND WHAT THE NORMALISATION MEANS FOR READING THE NUMBER. Roughness is divided by the mean speed,
- * so it is dimensionless, and the residual it is measuring is a fixed number of COUNTS per substep,
- * so the same residual reads larger at a slower sweep. At 0.100 degrees per count a sweep at
- * 33 deg/s carries about ten counts into each substep and one at 111 deg/s carries thirty-five. Two
- * runs are therefore only comparable at the same hand speed, which is why the comparison that
- * settles anything is the same sweep with one ini key changed rather than two sessions side by
- * side. MouseAccumulate=0 is that key: the census runs on the degraded path too, and that path is
- * the engine's own behaviour, one live read per substep with nothing banked. Same hand, two
- * settings, two numbers. */
-#define CENSUS_MIN_STEPS       128      /* four seconds of substeps */
-#define CENSUS_MIN_DEGREES     60.0f    /* enough turn that the roughness means something */
-#define CENSUS_MAX_SECONDS     30.0f    /* give up and report what there is */
-#define CENSUS_MAX_SAMPLES     256      /* kept sorted, so the median is free at the end */
-
-typedef struct step_census {
-    bool     open;
-    bool     reported;
-    uint32_t steps;                 /* substeps that carried movement */
-    double   speed_sum;             /* the delivered rate, unsigned, summed */
-    double   rough_sum;             /* the second difference, unsigned, summed */
-    uint32_t rough_steps;
-    float    rough[CENSUS_MAX_SAMPLES];  /* the same values, kept in ascending order */
-    uint32_t rough_kept;
-    float    rate_min;
-    float    rate_max;
-    double   degrees;               /* total turn delivered, for the gate */
-    float    seconds;
-    uint32_t frames;
-    unsigned packet_baseline;
-
-    /* The chain the second difference is taken along. A substep that delivered nothing, or a gap in
-     * the substep numbering, breaks it: a second difference across a hole is not a slope change, it
-     * is two unrelated movements subtracted from each other. */
-    uint32_t substep_index;
-    uint32_t last_index;
-    uint32_t chain;
-    float    prev_rate;
-    float    prev2_rate;
-} step_census_t;
 
 typedef struct mouse_look_state {
     input_axis_fn_t reader;
@@ -303,29 +223,18 @@ typedef struct mouse_look_state {
 
     /* The dormancy guard. `idle_seconds` is cleared by every drain, so it measures how long nobody
      * has consumed. `dormant` exists so that going dormant resets the reconstruction ONCE rather
-     * than on every frame of a menu, which is what previously erased the only diagnostic that
-     * could have answered whether the reconstruction was running. */
+     * than on every frame of a menu, which previously erased the only diagnostic that could have
+     * answered whether the reconstruction was running. */
     float idle_seconds;
     bool  dormant;
 
-    step_census_t census;
+    mouse_census_t census;
 
     bool     warned_bolted_sample;
     uint32_t bolted_samples;
 } mouse_look_state_t;
 
 static mouse_look_state_t mouse_state;
-
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
 
 /* ==============================================================================================
  * The pure half
@@ -341,7 +250,7 @@ float mouse_look_clamp_step(float degrees, float span_seconds,
             limit = hard_cap_degrees;
         }
     }
-    return clamp_float(degrees, -limit, limit);
+    return numeric_clamp(degrees, -limit, limit);
 }
 
 /* ==============================================================================================
@@ -349,7 +258,7 @@ float mouse_look_clamp_step(float degrees, float span_seconds,
  * ============================================================================================ */
 
 /* ==============================================================================================
- * THE DOOR BOLT: a sample no hand could have made is CUT before it is banked.
+ * The door bolt: a sample no hand could have made is CUT before it is banked.
  *
  * This is the bolt the bank made necessary, and the distinction it rests on is the whole point. A
  * fast flick is legitimate input that happens to exceed what one drain may deliver, so it is
@@ -366,15 +275,16 @@ static float bolt_implausible_sample(float sample, float seconds)
     float ceiling_units;
     float degrees;
 
-    /* With no clock and no scale there is nothing to measure plausibility against, so the sample
-     * is passed through to the existing bound rather than guessed at. */
-    if (!(seconds > 0.0f) || !(mouse_config()->degrees_per_axis_unit > 0.0f)) {
-        return sample;
-    }
-    /* A sample that is not a number would poison the bank for good, and no clamp downstream can
-     * undo it. Both comparisons fail for NaN. */
+    /* A sample that is not a number, or one past anything a device produces, is cut whatever the
+     * clock says: neither needs a clock to be judged, and the frame with no clock was the one that
+     * let them through to the bank. Both comparisons fail for NaN. */
     if (!(sample >= -MAX_PLAUSIBLE_AXIS_SAMPLE && sample <= MAX_PLAUSIBLE_AXIS_SAMPLE)) {
         return 0.0f;
+    }
+    /* With no clock and no scale there is nothing to measure a RATE against, so a plausible
+     * sample is passed through rather than guessed at. */
+    if (!(seconds > 0.0f) || !(mouse_config()->degrees_per_axis_unit > 0.0f)) {
+        return sample;
     }
 
     ceiling_units = (mouse_config()->max_turn_rate * seconds)
@@ -412,7 +322,7 @@ static float bolt_implausible_sample(float sample, float seconds)
 }
 
 /* ==============================================================================================
- * THE WATCHDOG ON THE RAW READER, and it guards the one failure that would be worse than jitter.
+ * The watchdog on the raw reader, and it guards the one failure that would be worse than jitter.
  *
  * A raw input registration can succeed and then deliver nothing: a policy, a filter driver, a
  * remote session or a virtual device that answers the registration and never sends a packet. The
@@ -427,7 +337,9 @@ static float bolt_implausible_sample(float sample, float seconds)
  * ============================================================================================ */
 #define RAW_SILENCE_LIMIT_SECONDS 2.0f
 
-static float read_frame_sample(float seconds)
+/* `collector_dormant` is the caller's own dormancy decision, taken before this runs so the
+ * watchdog below can be told about it. */
+static float read_frame_sample(float seconds, bool collector_dormant)
 {
     float engine_sample = 0.0f;
     float raw_sample;
@@ -453,6 +365,15 @@ static float read_frame_sample(float seconds)
         return 0.0f;                    /* nobody saw anything: the hand is still */
     }
 
+    /* Only a frame somebody is consuming can say anything about whether raw input is delivering.
+     * While the collector is dormant the engine skips its poll, so its reader keeps answering the
+     * same non-zero number it last saw. That is the condition this watchdog tests for, so ageing it
+     * there meant two seconds of pause, a cutscene or an alt-tab begun mid-turn demoted raw input
+     * for the rest of the session and the log blamed the device. */
+    if (collector_dormant) {
+        return 0.0f;
+    }
+
     mouse_state.raw_silent_seconds += (seconds > 0.0f) ? seconds : 0.0f;
     if (mouse_state.raw_silent_seconds <= RAW_SILENCE_LIMIT_SECONDS) {
         return 0.0f;
@@ -468,165 +389,28 @@ static float read_frame_sample(float seconds)
     return engine_sample;
 }
 
-/* ==============================================================================================
- * The census. Opened by the first substep that consumes, closed when there is enough movement in it
- * to mean something, and reported exactly once.
- * ============================================================================================ */
-static void census_frame(float seconds)
-{
-    if (!mouse_state.census.open || mouse_state.census.reported) {
-        return;
-    }
-    mouse_state.census.seconds += (seconds > 0.0f) ? seconds : 0.0f;
-    ++mouse_state.census.frames;
-}
-
-static void census_report(void)
-{
-    step_census_t *census = &mouse_state.census;
-    double         speed;
-    double         roughness = 0.0;
-    double         median = 0.0;
-    unsigned       packets;
-    float          report_hz = 0.0f;
-
-    census->reported = true;
-
-    speed = census->speed_sum / (double)census->steps;
-    if (census->rough_steps > 0u && speed > 0.0) {
-        roughness = 100.0 * (census->rough_sum / (double)census->rough_steps) / speed;
-    }
-    if (census->rough_kept > 0u && speed > 0.0) {
-        median = 100.0 * (double)census->rough[census->rough_kept / 2u] / speed;
-    }
-
-    packets = raw_mouse_packet_count() - census->packet_baseline;
-    if (mouse_state.raw_source && census->seconds > 0.0f) {
-        report_hz = (float)packets / census->seconds;
-    }
-
-    /* The roughness first, because it is the answer. Everything after it is the input to that
-     * answer, and it is printed on the same line so that a field log needs no second run. */
-    log_info("view turn measured over %u simulation steps in %.1f s of play: roughness MEDIAN %.1f "
-             "percent, mean %.1f, over %u slope changes. Mean speed %.0f deg/s, %.0f to %.0f. "
-             "The camera draws each step as a straight ramp, so what the eye reads as a kink is the "
-             "change of slope between two of them, and the median divided by four is the wobble "
-             "that implies. Read the MEDIAN: a mean far above it means a few large events "
-             "dominate, such as a hard reversal of the hand.",
-             census->steps, (double)census->seconds, median, roughness, census->rough_steps,
-             speed, (double)census->rate_min, (double)census->rate_max);
-
-    if (report_hz > 0.0f) {
-        log_info("the mouse reported at about %.0f Hz during that window (%u packets over %u "
-                 "frames, %.1f per simulation step), and the reconstruction smoothed over %.0f ms. "
-                 "A faster device is given less smoothing and a slower one more, up to the "
-                 "MouseSmoothMaxMs ceiling.",
-                 (double)report_hz, packets, census->frames, (double)(report_hz / 32.0f),
-                 (double)(mouse_rate_time_constant(&mouse_state.rate,
-                                                   mouse_config()->smooth_ceiling_seconds)
-                          * MILLISECONDS_PER_SECOND));
-    } else if (mouse_state.raw_source) {
-        log_info("no raw packet arrived during the measurement window, so the report rate is not "
-                 "known and the numbers above came from the engine's own reader");
-    }
-}
-
-static void census_step(float degrees, float dt_seconds)
-{
-    step_census_t *census = &mouse_state.census;
-    float          rate;
-
-    if (census->reported || !(dt_seconds > 0.0f)) {
-        return;
-    }
-    if (!census->open) {
-        census->open            = true;
-        census->rate_min        = 0.0f;
-        census->rate_max        = 0.0f;
-        census->packet_baseline = raw_mouse_packet_count();
-    }
-
-    ++census->substep_index;
-    if (degrees == 0.0f) {
-        census->chain = 0u;             /* a still hand measures the still hand */
-        return;
-    }
-
-    rate = degrees / dt_seconds;
-    if (census->steps == 0 || rate < census->rate_min) {
-        census->rate_min = rate;
-    }
-    if (census->steps == 0 || rate > census->rate_max) {
-        census->rate_max = rate;
-    }
-    ++census->steps;
-    census->speed_sum += (rate < 0.0f) ? -(double)rate : (double)rate;
-    census->degrees   += (degrees < 0.0f) ? -(double)degrees : (double)degrees;
-
-    if (census->chain > 0u && census->last_index + 1u != census->substep_index) {
-        census->chain = 0u;             /* a gap: the two are not neighbours */
-    }
-    if (census->chain >= 2u) {
-        float second = rate - 2.0f * census->prev_rate + census->prev2_rate;
-
-        if (second < 0.0f) {
-            second = -second;
-        }
-        census->rough_sum += (double)second;
-        ++census->rough_steps;
-
-        /* Inserted in order rather than sorted at the end, which costs a few dozen moves per sample
-         * and nothing at all where it would be noticed. Once the array is full the SMALLEST value is
-         * dropped, which biases the median upward and therefore cannot flatter the result. */
-        if (census->rough_kept < CENSUS_MAX_SAMPLES) {
-            uint32_t slot = census->rough_kept;
-
-            ++census->rough_kept;
-            while (slot > 0u && census->rough[slot - 1u] > second) {
-                census->rough[slot] = census->rough[slot - 1u];
-                --slot;
-            }
-            census->rough[slot] = second;
-        } else if (second > census->rough[0]) {
-            uint32_t slot = 0u;
-
-            while (slot + 1u < CENSUS_MAX_SAMPLES && census->rough[slot + 1u] < second) {
-                census->rough[slot] = census->rough[slot + 1u];
-                ++slot;
-            }
-            census->rough[slot] = second;
-        }
-    }
-    census->prev2_rate = census->prev_rate;
-    census->prev_rate  = rate;
-    census->last_index = census->substep_index;
-    if (census->chain < 2u) {
-        ++census->chain;
-    }
-
-    if ((census->steps >= CENSUS_MIN_STEPS && census->degrees >= (double)CENSUS_MIN_DEGREES) ||
-        census->seconds >= CENSUS_MAX_SECONDS) {
-        census_report();
-    }
-}
-
 static void collect_frame_sample(void)
 {
     float sample = 0.0f;
     float seconds = 0.0f;
+    bool  dormant_now;
 
     if (frame_clock_seconds() > 0.0f) {
         seconds = frame_clock_seconds();
     }
 
+    /* Aged before the read rather than after it, because the read has a watchdog in it that must
+     * not run while nobody is consuming. Nothing else looks at this between the two. */
+    mouse_state.idle_seconds += (seconds > 0.0f) ? seconds : 0.0f;
+    dormant_now = mouse_state.idle_seconds > COLLECTOR_DORMANT_AFTER_SECONDS;
+
     /* Read first and unconditionally, whatever happens next. The raw reader CONSUMES, so skipping
      * the read would let its accumulator grow across a whole pause and arrive as one lump. */
-    sample = read_frame_sample(seconds);
+    sample = read_frame_sample(seconds, dormant_now);
     sample = bolt_implausible_sample(sample, seconds);
-    census_frame(seconds);
+    mouse_census_frame(&mouse_state.census, seconds);
 
-    mouse_state.idle_seconds += (seconds > 0.0f) ? seconds : 0.0f;
-    if (mouse_state.idle_seconds > COLLECTOR_DORMANT_AFTER_SECONDS) {
+    if (dormant_now) {
         /* Nobody has consumed for an eighth of a second: a pause, a cutscene, a loading screen or a
          * menu. The sample is dropped rather than banked, and the reconstruction is parked ONCE
          * rather than on every frame, because a rate measured before an interruption says nothing
@@ -640,13 +424,13 @@ static void collect_frame_sample(void)
     }
     mouse_state.dormant = false;
 
-    /* The packet count is what separates "the hand did not move" from "this frame happened to fall
+    /* The packet count separates "the hand did not move" from "this frame happened to fall
      * between two reports", and only the reader knows which. Handing the second case in as a zero
      * count over the frame's own duration is the mistake mouse_rate.c exists to avoid: it pulls the
      * rate estimate to zero on every frame the device did not report in, which above the device's
      * own rate is most of them, and it teaches the filter the frame interval where it wants the
      * report interval. The engine's reader has no packets to count, so there the frame genuinely
-     * does stand in for one report, and the boundary correction is what is given up. */
+     * does stand in for one report, and the boundary correction is given up. */
     if (mouse_state.raw_source) {
         mouse_rate_observe(&mouse_state.rate, sample, mouse_state.last_sample.packets,
                            mouse_state.last_sample.span_seconds, seconds,
@@ -668,8 +452,8 @@ void mouse_look_install(input_axis_fn_t reader)
     if (!mouse_config()->accumulate_requested) {
         log_warning("MouseAccumulate=0, the mouse is read once per substep, as the engine does. "
                     "Motion between substeps is dropped and the effective sensitivity follows the "
-                    "frame rate; the step is capped at %.0f degrees, which is what keeps a frame "
-                    "that owes several substeps from reading one sample up to half a turn.",
+                    "frame rate; the step is capped at %.0f degrees, which keeps a frame that "
+                    "owes several substeps from reading one sample up to half a turn.",
                     (double)MOUSE_FALLBACK_MAX_STEP_DEGREES);
         return;
     }
@@ -697,7 +481,7 @@ void mouse_look_install(input_axis_fn_t reader)
     mouse_state.accumulating = true;
 
     /* AFTER the collector is live, and only then. Raw input consumes what it answers, so it is only
-     * safe with exactly one reader per frame, and that is what the collector gives it. On the
+     * safe with exactly one reader per frame, and the collector gives it exactly that. On the
      * degraded path the sample is read once per substep and a consuming reader would hand each
      * substep a different fraction of the same movement. */
     if (mouse_config()->raw_requested) {
@@ -711,34 +495,23 @@ void mouse_look_install(input_axis_fn_t reader)
         menu_cursor_install(mouse_config()->menu_cursor_raw);
     }
 
+    /* The facts a log reader needs: which reader, and the numbers in force. The reasoning is in
+     * the header of this file and of raw_mouse.c, where it can be read once. */
     if (mouse_state.raw_source) {
-        log_info("the mouse is read as RAW INPUT, straight from the device. The engine's own reader "
-                 "answers a SUM: it hands over everything accumulated since the previous call, so "
-                 "nothing downstream can tell three device reports in a step from four. The "
-                 "simulation consumes at a fixed 32 Hz, so a mouse reporting at 125 Hz delivers "
-                 "three or four whole reports into each consumed step whatever the frame rate does, "
-                 "which is a wobble no frame rate cap can remove. This keeps that structure instead "
-                 "of summing it away. The engine's own reader stays available and is switched back "
-                 "to if raw input ever goes quiet. MouseRawInput=0 refuses it from the start.");
+        log_info("the mouse is read as raw input, with the engine's own reader as the fallback "
+                 "if it goes quiet");
     } else if (mouse_config()->raw_requested) {
         log_warning("raw input is not available, so the mouse is read through the engine's own "
-                    "device, which answers the counts since the last call as a single sum. The "
-                    "device's own report timing is then not recoverable, so the boundary correction "
-                    "is off and only the smoothing is left. Nothing else is affected.");
+                    "device; the report timing is then unknown, so the boundary correction is "
+                    "off and only the smoothing is left");
     } else {
         log_info("MouseRawInput=0, the mouse is read through the engine's own DirectInput device");
     }
 
-    log_info("the view turn is RECONSTRUCTED from the device's own report timing rather than summed "
-             "over the interval it lands in, which costs no delay and removes the error that made "
-             "a steady hand shimmer: a device reporting at R per second puts R/32 reports into each "
-             "simulation step, and when that is not a whole number the sum alternates between three "
-             "and four of them. What is left is the report clock's own jitter, and the filter for "
-             "that takes its length from the DEVICE, six of its report intervals, never past %.0f "
-             "ms (MouseSmoothMaxMs). %.3f degrees per count, spikes held back past %.0f deg/s and "
-             "paid out rather than deleted, never more than %.0f degrees in one step.",
-             (double)(mouse_config()->smooth_ceiling_seconds * MILLISECONDS_PER_SECOND),
+    log_info("%.3f degrees per count, smoothing up to %.0f ms (MouseSmoothMaxMs), spikes held "
+             "back past %.0f deg/s and paid out later, never more than %.0f degrees in one step",
              (double)mouse_config()->degrees_per_count,
+             (double)(mouse_config()->smooth_ceiling_seconds * MILLISECONDS_PER_SECOND),
              (double)mouse_config()->max_turn_rate, (double)MOUSE_MAX_STEP_DEGREES);
 }
 
@@ -755,7 +528,7 @@ static float read_live_sample(void)
 }
 
 /* One consumer's share, over the interval that consumer covers. Phase 2 passes the simulation step
- * and free look passes the frame, which is the whole of the difference between them. */
+ * and free look passes the frame; nothing else differs between them. */
 static float deliver(float dt_seconds)
 {
     float degrees;
@@ -767,22 +540,22 @@ static float deliver(float dt_seconds)
         return read_live_sample();
     }
 
-    /* Taking is what marks the collector as having a consumer, and it is done for a drain of no
+    /* Taking marks the collector as having a consumer, and it is done for a drain of no
      * length as well, because a substep with no clock is still a substep that ran. */
     mouse_state.idle_seconds = 0.0f;
 
-    /* THE UNITS, and leaving this conversion out is what made the sensitivity setting stop
-     * working entirely. Everything upstream of here is in the engine's own AXIS UNITS, which is
-     * what both readers answer in and what the reconstruction therefore carries; degrees only
-     * exist once the setting has been applied. Returning the reconstruction's answer directly
-     * meant one axis unit became one degree, so the slider on the controls screen wrote a number
-     * nothing read and the mouse ran at about four times the configured speed. */
+    /* The units. Leaving this conversion out made the sensitivity setting stop working entirely.
+     * Everything upstream of here is in the engine's own AXIS UNITS, the form both readers answer
+     * in and the reconstruction therefore carries; degrees only exist once the setting has been
+     * applied. Returning the reconstruction's answer directly meant one axis unit became one
+     * degree, so the slider on the controls screen wrote a number nothing read and the mouse ran
+     * at about four times the configured speed. */
     degrees = mouse_rate_take(&mouse_state.rate, dt_seconds, mouse_config()->smooth_ceiling_seconds)
             * mouse_config()->degrees_per_axis_unit;
 
     /* The last bolt, unchanged in meaning: whatever else happens, one step stays clear of the angle
      * at which a turn becomes ambiguous. */
-    return clamp_float(degrees, -MOUSE_MAX_STEP_DEGREES, MOUSE_MAX_STEP_DEGREES);
+    return numeric_clamp(degrees, -MOUSE_MAX_STEP_DEGREES, MOUSE_MAX_STEP_DEGREES);
 }
 
 /* Everything this file drains is gated on the engine running its own player phases, which is the
@@ -812,7 +585,9 @@ float mouse_look_take_substep_degrees(float substep_seconds)
     /* Censused here and not in deliver(), because the measurement is of the per-SUBSTEP increment.
      * That is the quantity the camera turns into a ramp; free look's per-frame drain covers a
      * different interval and mixing the two would measure the cadence rather than the hand. */
-    census_step(degrees, substep_seconds);
+    mouse_census_step(&mouse_state.census, degrees, substep_seconds, mouse_state.raw_source,
+                      mouse_rate_time_constant(&mouse_state.rate,
+                                               mouse_config()->smooth_ceiling_seconds));
     return degrees;
 }
 
@@ -850,7 +625,7 @@ bool mouse_look_set_degrees_per_count(float degrees_per_count)
     return mouse_config_set_degrees_per_count(degrees_per_count);
 }
 
-/* WHY THE SMOOTHING CEILING CANNOT HAVE ONE DEFAULT FOR BOTH CONTROL PATHS, and the measurement is
+/* Why the smoothing ceiling cannot have one default for both control paths, and the measurement is
  * here rather than at the setter because it is about what CONSUMES the bank.
  *
  * The boundary error in the delivery is one device report either way, and what it is measured

@@ -2,6 +2,7 @@
 
 #include "common/host_image.h"
 #include "common/logging.h"
+#include "common/text.h"
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -37,8 +38,9 @@ static void write_raw(const char *line)
     DWORD elapsed = timeGetTime() - diag_state.started_at;
 
     if (diag_state.file != NULL) {
-        fprintf(diag_state.file, "[%4u.%03u] %s\n",
-                elapsed / MILLISECONDS_PER_SECOND, elapsed % MILLISECONDS_PER_SECOND, line);
+        fprintf(diag_state.file, "[%4lu.%03lu] %s\n",
+                (unsigned long)(elapsed / MILLISECONDS_PER_SECOND),
+                (unsigned long)(elapsed % MILLISECONDS_PER_SECOND), line);
         fflush(diag_state.file);
     }
     if (diag_state.also_to_main_log) {
@@ -53,8 +55,7 @@ static void flush_repeat(void)
     if (diag_state.repeat_count <= 0) {
         return;
     }
-    _snprintf(note, sizeof(note), "     (previous line x%d)", diag_state.repeat_count + 1);
-    note[sizeof(note) - 1] = '\0';
+    text_format(note, sizeof(note), "     (previous line x%d)", diag_state.repeat_count + 1);
     diag_state.repeat_count = 0;
     write_raw(note);
 }
@@ -68,8 +69,7 @@ bool diag_log_open(int max_lines_per_second, bool also_to_main_log)
     diag_state.also_to_main_log     = also_to_main_log;
     diag_state.started_at           = timeGetTime();
 
-    _snprintf(path, sizeof(path), "%s%s", host_directory(), DIAG_LOG_FILE_NAME);
-    path[sizeof(path) - 1] = '\0';
+    text_format(path, sizeof(path), "%s%s", host_directory(), DIAG_LOG_FILE_NAME);
 
     diag_state.file = fopen(path, "w");
     if (diag_state.file == NULL) {
@@ -101,9 +101,8 @@ void diag_log_write(const char *format, ...)
     }
 
     va_start(arguments, format);
-    _vsnprintf(line, sizeof(line), format, arguments);
+    text_vformat(line, sizeof(line), format, arguments);
     va_end(arguments);
-    line[sizeof(line) - 1] = '\0';
 
     /* (a) collapse identical lines, the most effective brake, and it loses nothing but the
      *     repetition itself, whose count it hands in. */
@@ -111,9 +110,6 @@ void diag_log_write(const char *format, ...)
         ++diag_state.repeat_count;
         return;
     }
-    flush_repeat();
-    strncpy(diag_state.last_line, line, sizeof(diag_state.last_line) - 1);
-    diag_state.last_line[sizeof(diag_state.last_line) - 1] = '\0';
 
     /* (b) the per-second token bucket. */
     if (diag_state.max_lines_per_second > 0) {
@@ -124,10 +120,9 @@ void diag_log_write(const char *format, ...)
 
             if (diag_state.dropped != 0) {
                 char note[96];
-                _snprintf(note, sizeof(note),
-                          "     ... %d lines suppressed (MaxLinesPerSecond=%d)",
-                          diag_state.dropped, diag_state.max_lines_per_second);
-                note[sizeof(note) - 1] = '\0';
+                text_format(note, sizeof(note),
+                            "     ... %d lines suppressed (MaxLinesPerSecond=%d)",
+                            diag_state.dropped, diag_state.max_lines_per_second);
                 diag_state.dropped = 0;
                 write_raw(note);
             }
@@ -138,6 +133,17 @@ void diag_log_write(const char *format, ...)
         }
         --diag_state.budget;
     }
+
+    /* Only a line that reaches the file becomes the one repeats are counted against. This
+     * used to be latched above the bucket, so a DROPPED line became "the previous line":
+     * every later repeat of it was absorbed as a repeat of something that is not in the file
+     * at all, and the suppressed count was short by exactly that many. The repeat note is
+     * written here for the same reason: above the bucket it went out for a line the bucket then
+     * dropped, so the note sat under nothing and the repeats of the line before it, which was
+     * still the last one in the file, started their count again from one. */
+    flush_repeat();
+    strncpy(diag_state.last_line, line, sizeof(diag_state.last_line) - 1);
+    diag_state.last_line[sizeof(diag_state.last_line) - 1] = '\0';
 
     write_raw(line);
 }

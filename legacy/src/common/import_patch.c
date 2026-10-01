@@ -1,5 +1,7 @@
 #include "import_patch.h"
 
+#include "patch.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -54,21 +56,20 @@ bool import_patch_replace(const char *module_name, const char *imported_dll,
 
         entry = (IMAGE_THUNK_DATA *)(base + descriptor->FirstThunk);
         for (; entry->u1.Function != 0; entry++) {
-            DWORD previous;
-
             if ((FARPROC)(uintptr_t)entry->u1.Function != real) {
                 continue;
             }
-            if (!VirtualProtect(&entry->u1.Function, sizeof entry->u1.Function,
-                                PAGE_READWRITE, &previous)) {
+            /* Through the patch layer like every other write into the image: the slot is
+             * required to hold the import it was matched on, the protection is put back, and the
+             * new pointer is read back before this claims to have placed it. */
+            if (patch_repoint_operand((uintptr_t)&entry->u1.Function,
+                                      (uint32_t)(uintptr_t)real,
+                                      (uint32_t)(uintptr_t)replacement) != PATCH_RESULT_OK) {
                 return false;
             }
             if (out_original != NULL) {
-                *out_original = (void *)(uintptr_t)entry->u1.Function;
+                *out_original = (void *)(uintptr_t)real;
             }
-            entry->u1.Function = (DWORD)(uintptr_t)replacement;
-            (void)VirtualProtect(&entry->u1.Function, sizeof entry->u1.Function,
-                                 previous, &previous);
             return true;
         }
     }

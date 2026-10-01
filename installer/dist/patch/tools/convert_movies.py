@@ -5,12 +5,12 @@ A tool, not content: this project ships no game assets, converted or otherwise. 
 files in your own legally owned copy of the game and writes .mp4 files beside them, in a folder of
 its own.
 
-THIS IS THE LINUX AND STEAM DECK HALF OF A PAIR. convert_movies.ps1 beside it does the same job on
+This is the Linux and Steam Deck half of a pair. convert_movies.ps1 beside it does the same job on
 Windows. That script cannot run here: Wine ships no PowerShell, so under Proton or Lutris the
 installer's own conversion step fails and there was, until this file existed, no way to convert the
 movies on Linux at all.
 
-BECAUSE THEY ARE TWO IMPLEMENTATIONS OF ONE THING, these have to stay in step, and a change to
+Because they are two implementations of one thing, these have to stay in step, and a change to
 either file that does not change the other is a bug:
 
   * the FFmpeg arguments, including the codec, the preset, the CRF and the filter chain
@@ -76,8 +76,8 @@ def bink_frame_size(path):
 def encode_height(path, requested):
     """The height to actually encode at: the one asked for, unless it would make this film too wide.
 
-    A source whose header cannot be read keeps the requested height, which is what happened before
-    the cap existed.
+    A source whose header cannot be read keeps the requested height, the behaviour from before the
+    cap existed.
     """
     if requested <= 0:
         return requested

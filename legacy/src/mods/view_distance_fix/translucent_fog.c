@@ -20,7 +20,7 @@
  * No address anywhere in the run, so no mask is needed, and it matches once.
  *
  * The patch is the last byte, BF to FF: `and ebp, -1`, which changes nothing. Three bytes stay
- * three bytes, no branch moves, and reading it back is what makes it idempotent. */
+ * three bytes, no branch moves, and reading it back makes it idempotent. */
 static const uint8_t SIG_TRANSLUCENT_FOG_OFF[] = {
     0x8B, 0x6C, 0x24, 0x40, 0xF7, 0xC5, 0x00, 0x00, 0x06, 0x00,
     0x74, 0x75, 0xF7, 0xC5, 0x00, 0x00, 0x20, 0x00, 0x75, 0x03,
@@ -46,9 +46,13 @@ void translucent_fog_install(bool keep_fog_on_translucent)
         return;
     }
     if (!memory_read_u8(site + OFFSET_AND_IMMEDIATE, &immediate)) {
+        log_warning("the fog-disable immediate at %08X is not readable, so translucent faces "
+                    "keep losing their fog", (unsigned)(site + OFFSET_AND_IMMEDIATE));
         return;
     }
     if (immediate == IMMEDIATE_KEEPS_FOG) {
+        log_info("the fog-disable at %08X already keeps the fog, nothing to do",
+                 (unsigned)(site + OFFSET_AND_IMMEDIATE));
         return;                                /* already done, idempotent */
     }
     if (immediate != IMMEDIATE_CLEARS_FOG) {
@@ -65,7 +69,7 @@ void translucent_fog_install(bool keep_fog_on_translucent)
     log_info("TranslucentFog=1: the fog-enable clear at %08X is a no-op, so an alpha-blended face "
              "keeps the fog every other face gets. This is a DIAGNOSTIC. The engine drops fog on "
              "translucent faces, and the level-of-detail cross-fade makes geometry translucent "
-             "WHILE IT CROSSES, so a surface loses its fog for the length of the transition and "
+             "while it crosses, so a surface loses its fog for the length of the transition and "
              "reads at full brightness against a background already saturated to the fog colour. "
              "That is a band at a fixed distance from the camera, moving with it, invisible when "
              "the band saturates beyond the draw cut, and steady when the camera is still.",

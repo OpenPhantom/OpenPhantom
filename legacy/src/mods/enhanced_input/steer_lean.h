@@ -7,11 +7,11 @@
  *     setNodeYaw(hActor, headNode,  turnWheel / 10.0)
  *
  * How big that really is, and the trap that cost two rounds: the keyboard ramp has a ceiling of
- * 40 deg/s, and that is the ceiling of the INCREMENT, not of the cell. `turnWheel += ramp * axis`
+ * 40 deg/s, the ceiling of the INCREMENT, not of the cell. `turnWheel += ramp * axis`
  * ACCUMULATES, so a held key climbs 12, 26, 42, 60, 80, 102, 120 and saturates the +-120 clamp in
  * seven substeps, about a fifth of a second. Chest 1.0 -> 10.0 deg, head 1.2 -> 12.0 deg.
  *
- * That climb is the engine's own ease-in, which is why nothing here damps the value a second time.
+ * That climb is the engine's own ease-in, so nothing here damps the value a second time.
  *
  * That is the body leading into a corner before the feet follow. Mouse look has to clear the turn
  * cell; it carries the mouse as well as the keys, so leaving it standing integrates the mouse a
@@ -61,15 +61,9 @@ void steer_lean_bind(set_node_yaw_fn_t set_node_yaw, bool enabled, bool prefer_h
 bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
                       bool keyboard_is_turning, float substep_seconds);
 
-/* Forgets the damper state. No node is written: whichever substep stops calling apply() has
+/* Resets the last report. No node is written: whichever substep stops calling apply() has
  * already taken the engine's own twist from the original, so there is nothing to hand back. */
 void steer_lean_release(void);
-
-/* Writes the chest to an explicit angle and reports whether it did. For the free-look aim, where
- * the number is not a turn rate at all but the angle between the shot and the body. Must be called
- * AFTER the original phase 2: Plr_Steer writes that node unconditionally every substep, with no
- * gate, so it is the last writer before the draw and anything written earlier is lost. */
-bool steer_lean_aim(const uint8_t *record, float degrees);
 
 /* For the log line, so it can name what is actually in force. */
 bool steer_lean_is_active(void);
@@ -95,7 +89,7 @@ typedef struct steer_lean_report {
 
 void steer_lean_last_report(steer_lean_report_t *out);
 
-/* Diagnostic: force a fixed twist on both nodes every substep, ignoring turn, damper and clamp.
+/* Diagnostic: force a fixed twist on both nodes every substep, ignoring turn, hand rate and clamp.
  * 0 disables. It answers one question only, does a yaw on these nodes reach the screen. */
 void steer_lean_set_test_degrees(float degrees);
 

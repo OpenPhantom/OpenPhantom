@@ -6,7 +6,7 @@ replace it: it is a loader and a set of small DLLs that patch the retail executa
 
 Nothing on disk is modified. Drop the loader next to `WMAIN.EXE`, put the fixes you want in
 `mods\`, and each one patches the image as the game starts. Delete a DLL and its fix is gone.
-Delete the loader and the game is exactly as it shipped.
+Delete the loader and the game is as it shipped.
 
 |  |  |
 |---|---|
@@ -33,17 +33,21 @@ included here or distributed with this project.
 | `dismemberment` | Lightsaber dismemberment: the limb the blade actually hit, and only on the killing blow |
 | `imuse_fix` | Pauses the music when the game loses focus, and stops the music thread locking itself up |
 | `sfx_volume_save_fix` | Keeps the SFX volume you set, which the original wrote back wrongly and then never applied on load |
-| `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops |
+| `decal_fix` | Restores blast marks, scorch marks and blob shadows, which a Direct3D 9 translation layer drops, and stops the wet footprints a body left for the first eight seconds after launch |
 | `controller_input` | Right stick looks around, Start pauses, the triggers roll, reading the pad directly with no wrapper DLL of any kind |
 | `fmv_player` | Plays the pre-rendered movies through a modern decoder in a window over the game, for any movie you have converted yourself |
-| `dialogue_anim_fix` | Stops a talking NPC's leftover head animation once the other speaker's line takes over, scoped to the one confirmed conversation |
+| `dialogue_anim_fix` | Stops a character's talking animation carrying on after their line, in the two scenes where the script leaves it parked |
+| `dialogue_menu_fix` | Keeps a conversation open while the character's first line is still being spoken, instead of releasing you and starting the line again |
 | `crt_copy_fix` | Repairs an inlined copy loop that reads four bytes before its source, in 40 places |
 | `ground_clip_fix` | Stops a character the engine never collision tests from being pushed down through the floor it stands on, which is how a seated character can be walked under the level a fraction at a time |
-| `render_guard` | Bounds two unbounded writes in the deferred face path and repairs an undefined depth comparison answer |
+| `render_guard` | Bounds two unbounded writes in the deferred face path, repairs an undefined depth comparison answer, draws the engine's flat screen quads with vertices Intel's driver accepts, balances the x87 stack the halo draw left one short, and culls the halo the engine built from stale stack, the beam out of Obi-Wan's hand |
 | `effect_clock` | Puts three effects that re-roll once per rendered frame back on the rate they were authored for |
 | `large_textures` | Lifts the 256 pixel ceiling on texture pages, so replacement artwork can be larger than 1999 hardware allowed |
-| `dev_overlay` | A panel over the running game, opened with the key below Escape: the game's own eleven cheat codes, two this project adds, and the ground the developer tools will stand on |
+| `dev_overlay` | A panel over the running game, opened with F6 or the key below Escape: the game's own cheat codes, the ten this project adds, every OpenPhantom setting on a row, a free camera and a level to start a new game at |
+| `multiplayer` | Co-operative play for up to four players, over the LAN or through a relay, with a lobby in the game's own menu. See its README |
 | `crash_report` | On a crash: exception code, address, module, registers and the engine frames from the stack |
+| `sound_lifetime_fix` | Stops a pinned voice keeping the address of a local whose function has returned, which crashed a load made with blaster bolts in flight |
+| `camera_handback_fix` | Gives the camera back after a conversation that took it and never returned it |
 | `diagnostics` | Observation only, per subsystem, off by default |
 
 Each directory under `src/mods` has a `README.md` with its settings, the engine locations it
@@ -67,15 +71,27 @@ That produces `build/dist/`, laid out the way an installation is: `dinput.dll` a
 per feature in `mods/`, and the standalone scripts in `tools/`. Nothing is installed for you, and no
 build output is tracked in this repository.
 
+The first configure downloads one library: Mbed TLS 4.1.1, the release archive from
+`github.com/Mbed-TLS/mbedtls`, for the TLS client in `multiplayer.dll` that fetches the relay's
+key. The configure refuses the archive unless its SHA-256 is the one
+`src/third_party/CMakeLists.txt` names. To configure without the network, unpack that same release
+and name its folder:
+
+```sh
+cmake -S . -B build -A Win32 -DFETCHCONTENT_SOURCE_DIR_MBEDTLS=<folder>
+```
+
+CMake then uses the folder as it is and checks no hash.
+
 ## Installing
 
 1. Copy `build/dist/dinput.dll` next to `WMAIN.EXE`.
-   **If a `dinput.dll` is already there, rename it to `dinput_orig.dll` first rather than
-   overwriting it.** Graphics wrappers and ASI loaders want the same slot, and the loader forwards
+   **If a `dinput.dll` is already there, rename it to `dinput_orig.dll` first; do not overwrite
+   it.** Graphics wrappers and ASI loaders want the same slot, and the loader forwards
    every DirectInput export to whatever it finds under that name, so the previous occupant keeps
    working.
 2. Copy the DLLs you want from `build/dist/mods/` into `<game>\mods\`.
-3. Copy `dist/engine_fixes.ini` next to `WMAIN.EXE`.
+3. Copy `dist/engine_fixes.ini` and `dist/characters.ini` next to `WMAIN.EXE`.
 4. Start the game.
 
 `build/dist/tools/` is only needed for `fmv_player`, which is the one fix that does nothing until
@@ -84,35 +100,39 @@ you have converted something. Copy it to `<game>\tools\` and read that fix's own
 ## Configuration
 
 `engine_fixes.ini` sits beside `WMAIN.EXE`, one section per DLL, named after that DLL. The copy in
-`dist/` is meant to be playable as it stands: every fix on, every measurement off, and nothing that
-changes how the game plays beyond repairing what it was written to repair. Each key carries a short
-comment, so the file is also the reference.
+`dist/` is meant to be playable as it stands: every repair on, every measurement off. Each key
+carries a short comment, so the file is also the reference.
 
-The file is optional. Every setting has the same default in the code, so a missing ini behaves
-exactly like the shipped one.
+The file is optional. A missing ini behaves like the shipped one, with one class of exception.
 
-**Free look** (`[enhanced_input] FreeLook`) is the one deliberate exception: it is off, because it
-changes the control scheme rather than fixing a fault. There is a check box for it on the game's
-own controls screen.
+**Anything that changes how the game plays ships off**, because it is a different game rather
+than a repaired one: free look, sideways walking, the camera that follows your heading and the
+air steer (`[enhanced_input] FreeLook`, `Strafe`, `CameraFollow`, `AirControl`) and lightsaber
+dismemberment (`[dismemberment] Mode`). Each has a row in the developer menu, and the first two
+have a check box on the game's own controls screen when `MenuWidgets=1`. Mouse look is the one
+setting that changes play and ships on (`MouseLook=1`), because a fresh install is asking for a
+game that can be played with a mouse; its code default is off, so an ini that predates the key
+leaves the game as it shipped, and the comment above the key says so.
 
-**Almost nothing writes to disk while you play.** Every diagnostic channel is off. Each DLL logs a
-few lines to `engine_fixes.log` when it installs and then goes quiet, which is enough for a bug
-report and costs nothing during play. `[crash_report]` is on for the same reason: it does nothing at
-all until the process dies.
+**Little writes to disk while you play.** Every measurement is off. Each DLL logs its install to
+`engine_fixes.log` and then writes only on an event worth a line: a level opening, a cutscene, the
+frame cap stepping, a dialogue the animation fix acted on, a halo it culled. That is enough for a
+bug report and costs nothing during play. `[crash_report]` is on for the same reason: it does
+nothing at all until the process dies.
 
-The one exception is `fmv_player`, which writes one line per cutscene naming either the file it
-played or the file it looked for and did not find. That is deliberate rather than an oversight: this
-is the one fix whose most likely failure is to install correctly and then quietly do nothing, and a
-log that goes silent after installing is exactly what that failure looks like. A handful of lines
-per playthrough is the cost of being able to tell the two apart.
+`fmv_player` writes one line per cutscene naming either the file it played or the file it looked
+for and did not find, on purpose: this is the one fix whose most likely failure is to install
+correctly and then quietly do nothing, and a log that goes silent after installing is what that
+failure looks like. A handful of lines per playthrough is the cost of being able to tell the
+two apart.
 
 When you upgrade, keep your own ini and copy across any keys the new version added. Nothing
 rewrites your file for you.
 
 ## If a fix does not take
 
-Read `engine_fixes.log`. Every DLL logs the branch it took rather than just the result, so a fix
-that did nothing says which site failed to resolve. A byte pattern that does not match exactly once
+Read `engine_fixes.log`. Every DLL logs the branch it took as well as the result, so a fix that
+did nothing says which site failed to resolve. A byte pattern that does not match exactly once
 disables that one patch and leaves the engine untouched; the other fixes carry on. That is the
 designed behaviour on an executable these patterns were not cut from.
 
@@ -127,6 +147,8 @@ README.md
 CONTRIBUTING.md        the coding rules, and why each one exists
 dist/
   engine_fixes.ini     the configuration that ships with a release
+  characters.ini       what each actor's animation ordinals mean, read by the character roster
+                       in common; an actor missing from it falls back to the convention
 src/
   common/              static library, linked into every DLL and every test
   loader/              builds dinput.dll, installed next to WMAIN.EXE
@@ -134,6 +156,7 @@ src/
     variable_fov/      builds mods\variable_fov.dll
     enhanced_input/    builds mods\enhanced_input.dll
     ...                one directory per feature DLL
+  third_party/         code that is not this project's own, for multiplayer.dll and its tests
 unittests/             pure logic, runs without the game
 ```
 
@@ -148,19 +171,36 @@ step, and deleting one fix cannot break another. Small modules, one job each:
 | `host_image` | Where the game is: base address, code section, its directory |
 | `signature` | Find engine code by what it looks like, never by where it used to be |
 | `memory` | Range checks and page protection |
-| `patch` | Every write into engine memory goes through here |
+| `patch` | Every write into engine memory goes through here, with a journal for a feature that writes several places and has to put them all back |
 | `detour` | Inline hooks that several DLLs may place on one function |
 | `frame_hook` | Call me once per rendered frame |
 | `logging` | One log file, one prefix per DLL |
 | `ini` | One ini file, one section per DLL |
 | `menu_patcher` | Append widgets to one of the game's own menu screens |
+| `platform` | Whether this is Wine, so a fix for a Wine defect applies there and nowhere else, and whose window is in front |
+| `import_patch` | Replace one entry in another module's import table |
+| `cinematic_gate` | Whether a script holds the camera right now |
+| `stick` | The gamepad's radial deadzone, shared so two DLLs cannot drift apart |
+| `text` | One bounded formatter that always terminates, for every label, path and log line |
+| `numeric.h` | The float clamp and the finite test, inline because two of their callers are on the draw path |
 | `engine_types.h` | Binary structures more than one fix needs |
+| `shared_note` | A named record one DLL publishes and another reads through a mapping, with no call between them |
+| `appearance_note` | The model name the local player wears, filed through a shared note for whoever describes the player to another machine |
+| `character_profile` | What each actor's animation ordinals mean, read out of `characters.ini` beside the game, which ships as `dist/characters.ini`, and the fallback chain for a role an actor lacks |
+| `session_note` | Whether a multiplayer session is running in this process and whether it holds the player's input, published by the multiplayer for the DLLs that behave differently then |
+| `npc_spawn_note` | What the developer menu's entity spawner and the multiplayer tell each other, so that a copy one player spawns stands on every machine of a session |
+| `model_wear_note` | Which borrowed model a far player's body wears, asked for by the multiplayer and answered by the developer menu's model swap |
+| `movie_note` | What the movie player and the multiplayer tell each other about a movie, so that in a session the host's movie decides when everybody's ends |
+| `host_settings_note` | The host's draw distance, fog and dismemberment settings, in force on a client's feature DLLs for the length of a session without a byte of its ini changing |
+| `mod_identity` | Whether a DLL in `mods\` is one of this release's own mods and which build of it, read from its version resource and its file header |
+| `language` | Which of the game's five languages a mod draws its own text in: a `Language` key that names one, else the Windows UI language, else English |
+| `memory_guard` | The copy behind `memory`'s trying reads, which refuses a read that faults although Windows runs the game with a compatibility fix that resumes every read fault |
 
 **`src/loader` builds `dinput.dll`**, which sits next to the executable and patches nothing itself.
 Its only job is to load the fixes at the right moment and get out of the way.
 
 **`src/mods` holds the fixes**, one directory per DLL. They never call each other. A fix can be
-deleted from `mods\` and nothing else notices. That is also how you bisect a problem.
+deleted from `mods\` without anything else noticing. That is also how you bisect a problem.
 
 ### Inside a fix
 
@@ -174,7 +214,7 @@ src/mods/decal_fix/
   README.md        settings, engine locations touched, testing status
 ```
 
-A larger one splits by responsibility rather than by size. `enhanced_input` has separate files for
+A larger one splits by responsibility. `enhanced_input` has separate files for
 the mouse, sideways walking, free look, the camera it steers, the byte patterns that find the
 engine sites, and the menu widgets it adds. The rule of thumb is that a new file earns its place
 when it has a job you can name in one sentence.
@@ -210,14 +250,14 @@ include.
 
 ### Tests
 
-`unittests/` holds one file per module under test, built against the real module rather than a
-stub. `unittest.c` is a small shared harness: `ut_check`, `ut_near`, `ut_section` and a summary.
+`unittests/` holds one file per module under test, built against the real module; a stub would
+prove only itself. `unittest.c` is a small shared harness: `ut_check`, `ut_near`, `ut_section` and a summary.
 Adding a suite is one line in `unittests/CMakeLists.txt`.
 
 They cover the arithmetic, which is where the mistakes that are invisible at run time live: field
 of view maths, the HUD layout, the mouse and movement dampers, the fog band, the instruction
 encoder, the menu patcher, the pattern matcher and the detour chain. None of them needs the game
-or a graphics device, so `ctest` runs the lot in about two seconds.
+or a graphics device, so `ctest` runs the lot in well under a minute.
 
 ## How it works
 
@@ -250,7 +290,7 @@ three hooks and calls through it.
 
 **Validate, then write.** Every patch reads back what it is about to overwrite and refuses when it
 is not what it expected. That habit is also what makes the patches idempotent: a second run finds
-the new bytes rather than the expected old ones, and declines.
+the new bytes where it expected the old ones, and declines.
 
 ## Status
 
@@ -260,13 +300,13 @@ the new bytes rather than the expected old ones, and declines.
   shipped `IMUSE.DLL`, checked offline without running the game.
 
 What has and has not been tried in the running game is a per fix question, so each feature's own
-`README.md` answers it rather than this page.
+`README.md` answers it.
 
 ## Contributing
 
 `CONTRIBUTING.md` has the coding rules. They are short, and most of them exist because breaking one
-cost somebody a day. Patches are welcome; if a rule gets in your way, say so in the pull request
-rather than working around it quietly.
+cost somebody a day. Patches are welcome; if a rule gets in your way, say so in the pull request.
+Working around it quietly helps nobody.
 
 ## Legal
 

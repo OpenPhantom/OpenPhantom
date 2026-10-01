@@ -1,4 +1,4 @@
-/* menu_scale_internal.h: the one state record the menu scale files share, and nothing else.
+/* menu_scale_internal.h: just the one state record the menu scale files share.
  *
  * The scale was a single file of over two thousand lines until it was split by responsibility.
  * The parts still share one record, because they share one install pass and one canvas: the
@@ -66,6 +66,10 @@ typedef struct menu_scale_state {
     int32_t   fitted_screen_width;
     int32_t   fitted_screen_height;
 
+    /* The drawn cursor's size as last written, 0 until a write has landed. The cursor cage reads
+     * it through menu_scale_cursor_size, so the two cannot disagree about how big the quad is. */
+    int32_t   cursor_size;
+
     detour_t  menu_open_detour;
     detour_t  pic_draw_detour;
     detour_t  draw_menu_detour;
@@ -89,8 +93,8 @@ extern menu_scale_state_t scale_state;
 /* Canvas units to scaled ones, and back. Both are defined in menu_scale.c; the first is used by the
  * preview upscaler as well, because a preview grows by exactly the ratio its widget did.
  *
- * Rounding means the two are not an exact round trip on every value, which is why the shadow keeps
- * the authored rectangle and unscaled_coordinate is only the fallback for a menu that has no
+ * Rounding means the two are not an exact round trip on every value, so the shadow keeps the
+ * authored rectangle and unscaled_coordinate is only the fallback for a menu that has no
  * shadow to keep it in. */
 int32_t scaled_coordinate(int32_t value, float ratio);
 int32_t unscaled_coordinate(int32_t value, float ratio);
@@ -107,13 +111,13 @@ bool canvas_still_fits(void);
  * blitter's clip and the three cells the origin operands read. Every one is absolute, so applying
  * the same ratio twice writes the same numbers.
  *
- * False when a clip immediate could not be written, and then the clip has been put back and
- * nothing else was touched. */
+ * False when a clip immediate could not be written, and then the clip has been put back, with
+ * nothing else touched. */
 bool menu_scale_apply_canvas(float ratio_x, float ratio_y);
 
 /* The rest of what the ratio in force decides: the list box row height floor and text insets, and
- * the drawn cursor's size. None of them can fail the scale, so each is attempted on its own and
- * a failure costs only itself. `verbose` is the install; a refit writes the same numbers quietly. */
+ * the drawn cursor's size. None of them can fail the scale, so each is attempted on its own and a
+ * failure costs only itself. `verbose` is the install; a refit writes the same numbers quietly. */
 void menu_scale_apply_trimmings(bool verbose);
 
 /* Points the three origin operands at this file's cells. Done once, at install: after it, changing
@@ -126,11 +130,19 @@ bool menu_scale_repoint_origin(const uintptr_t *sites, size_t count);
  * whatever changes the canvas afterwards has to do it instead. Either pointer may be NULL.
  *
  * Reads scale_state's canvas and the display, so call it after the canvas is in force. */
-void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y);
+/* False when the engine has no screen size yet, which is the one case it declines on; the two
+ * out parameters are written on every path either way, so a caller can report what it got. */
+bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y);
 
 /* Refits the canvas to the display if it has changed size, then checks the canvas still fits.
  * Called from both menu hooks in place of canvas_still_fits, which it ends with. */
 void menu_scale_follow_display(void);
+
+/* Drops a tracked screen's artwork through the engine's own swmenu_freeBitmaps, so the pictures
+ * are loaded again at whatever ratio the load path was last told. The refit does it to every
+ * tracked screen, and so does the stand down. A screen with no menu, or a build where the site did
+ * not resolve, is left alone. */
+void menu_scale_drop_bitmaps(const void *menu);
 
 /* The three hooks menu_scale.c owns. */
 int32_t __cdecl hook_menu_open(void *menu);

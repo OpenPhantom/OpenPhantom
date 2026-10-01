@@ -1,7 +1,12 @@
 /* diag_characters.c: name the characters standing near the player, and say which way each one is
  * moving vertically.
  *
- * WHAT THIS IS FOR. A field report names what a character looked like, not what the engine calls
+ * SIZE NOTE: a few lines over the 600 mark. The census, the pool walk, the write watch it arms
+ * and the player phase hook that paces it all read one record layout, and the account of how
+ * that layout was confirmed and which earlier readings it refuted is most of the file; a half
+ * lifted out would carry the layout with it.
+ *
+ * What this is for. A field report names what a character looked like, not what the engine calls
  * it, and the two are not easy to connect while playing. This walks the engine's own character
  * pool every so often and reports the ones within a radius of the player by name and position, so
  * a report can say which record it means. The vertical column is the second reason it exists: a
@@ -11,7 +16,7 @@
  * The name is NOT a unique identifier. The spawn path copies it out of the placement, and a
  * placement name turns out to be a reused archetype label rather than a per-placement id; two
  * earlier attempts to identify a specific placement by name matching were both wrong for that
- * reason. Position is what distinguishes one from another, which is why every line carries it.
+ * reason. Position is what distinguishes one from another, so every line carries it.
  *
  * ================================ The pool, and why it is walked by hand ======================
  *
@@ -37,13 +42,19 @@
  *   +0x20  state            local_8[8], set to 1, or to 0x10 for a record with flag 0x2000.
  *   +0x34  body             local_8[0xd], the object created by FUN_0041223e a few lines earlier.
  *   +0x7C  AI mode          local_8[0x1f], taken from the placement's own first dword.
+ *   +0x38  health           the spawn path's local_8[0xe], from the placement's own record
+ *   +0x1BC animation playing the id the script interpreter believes the primary animation is
+ *   +0x1C0 animation wanted  the id its Animation node last asked for; the pair dialogue_anim_fix
+ *                           acts on, reported so a stuck pose can be read off the census
  *
  * The body is the same structure the player's own +0x0C points at: both carry an rdThing at +0x9C,
- * which is what ties the two independent readings of this layout together.
+ * the field that ties the two independent readings of this layout together.
  *
  *   +0x18  position           float[3], world x/y/z
  *   +0x54  previous position  float[3], the same at the end of the previous simulation step
  *   +0xA0  owner              back to the character record, written by the spawn path
+ *   +0xE8  base clip          the clip last put on the body's base layer, by whoever put it
+ *   +0xF4  overlay clip       the same for the overlay layer, where hit reactions play
  *
  * That last field is not needed to report anything. It is read anyway and compared against the
  * record the walk arrived from, because it is a free check that the slot really is a character and
@@ -58,7 +69,9 @@
  * Reads go through memory_try_read, not memory_read. The per slot reads are the many ones here,
  * and the guarded readers cost a structured exception frame rather than a VirtualQuery syscall.
  * This project has already paid once for getting that the wrong way round in a walk that runs
- * often; the rule is written down in CONTRIBUTING.md.
+ * often. memory_read and memory_is_readable_range belong in installation code and in code that
+ * runs at human rates, never on a path the engine drives per object or per frame, because each of
+ * them calls VirtualQuery and a guarded pointer read through them costs two of those syscalls.
  */
 #include "diag_characters.h"
 
@@ -71,6 +84,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -78,7 +92,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* --- 0x00431ff3, the character pool teardown. A DATA SITE ONLY, never hooked ------------------ *
+/* --- 0x00431ff3, the character pool teardown. A data site only, never hooked ------------------ *
  * Chosen because its very first test is against the pool pointer itself, so the address sits at a
  * fixed offset from a prologue:
  *
@@ -97,9 +111,8 @@
  *
  * The pattern HAS TO run this far. The first twenty bytes alone match twice in the retail image:
  * a second function at 0x00415B38 opens identically against a different global, 0x005BB4B8, and a
- * pattern
- * that matched both would have resolved to nothing and switched this observer off. The two
- * diverge at the instruction after the jump, where this one loads the global it just tested and
+ * pattern that matched both would have resolved to nothing and switched this observer off. The
+ * two diverge at the instruction after the jump, where this one loads the global it just tested and
  * the other stores a zero somewhere else, so the pattern runs on to that A1 opcode. Counted
  * against the retail executable, 829,952 bytes, MD5 7c5af8428c19b17cca09ae3a49bd10ef: one match.
  * The jump displacement and both addresses are wildcarded, since all three are what differ
@@ -128,21 +141,21 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x3C, 0x85, 0x28, 0x52, 0x4B, 0x00, 0x01, 0x0F, 0x84, 0x95, 0x00, 0x00,
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
-/* SEARCHED AS A DETOUR TARGET even though nothing here hooks it, and that is the whole of why
- * this census used to switch itself off.
+/* Searched as a detour target even though nothing here hooks it. Searching for the plain
+ * prologue instead is the entire reason this census used to switch itself off.
  *
  * diag_flow.c detours this same function, and with [diagnostics] Player=1 it gets there
  * first: the prologue is replaced by a jump before this table is resolved, so a search for
  * the prologue found nothing and the census declined with a warning that named the symptom
  * rather than the cause. Searching as a detour target finds the site by its tail instead,
- * which is what every other already-detoured site in this project does.
+ * as every other already-detoured site in this project does.
  *
  * The operand read below is at +0x27, well past the six bytes a detour overwrites, so the
  * address it yields is the same either way. */
 #define PLAYER_RUN_PHASES_PROLOGUE 6u
 #define OFFSET_PLAYER_POINTER 0x27u
 
-/* THE DRAWN BODY, which is a different object from the record that owns it.
+/* The drawn body, which is a different object from the record that owns it.
  *
  * The player record holds its body at +0x0C, and a bapObj carries its own world position at
  * +0x18. That position is what the frame arm draws from, and it is NOT the position the
@@ -169,6 +182,9 @@ static signature_t sites[SITE_COUNT] = {
 #define CHARACTER_STATE_OFFSET   0x20u
 #define CHARACTER_BODY_OFFSET    0x34u
 #define CHARACTER_AI_MODE_OFFSET 0x7Cu
+#define CHARACTER_HEALTH_OFFSET  0x38u
+#define CHARACTER_ANIM_PLAYING_OFFSET 0x1BCu
+#define CHARACTER_ANIM_WANTED_OFFSET  0x1C0u
 /* The character's OWN position, and the authoritative one. FUN_004333e1 runs every simulation step
  * and copies it into the body at +0x18, so the body's position is a courier's copy that is always
  * one propagation behind whatever actually moved the character. A watch belongs here, not there. */
@@ -192,6 +208,8 @@ static signature_t sites[SITE_COUNT] = {
 #define OBJECT_POSITION_OFFSET          0x18u
 #define OBJECT_PREVIOUS_POSITION_OFFSET 0x54u
 #define OBJECT_OWNER_OFFSET             0xA0u
+#define OBJECT_BASE_CLIP_OFFSET         0xE8u
+#define OBJECT_OVERLAY_CLIP_OFFSET      0xF4u
 
 #define PLAYER_OBJECT_OFFSET 0x0Cu
 
@@ -215,6 +233,12 @@ typedef struct character_census {
     uint32_t  tracked_pool;        /* the pool the table below belongs to */
     char      watch_name[16];      /* empty: watch nothing */
     bool      watch_velocity;      /* watch the velocity Z rather than the position Z */
+    /* Which record the character watch was armed on and under what name, so a slot that changes
+     * hands is noticed: a character that despawns leaves its slot to the next spawn, and a watch
+     * that only followed the pool pointer went on reporting the newcomer under the old label. */
+    uintptr_t watched_record;
+    char      watched_name[32];
+    bool      watched_seen;        /* the watched record turned up in the scan in progress */
     bool      watch_prepared;
     character_track_t tracked[CHARACTER_TRACK_MAX];
 } character_census_t;
@@ -266,6 +290,11 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     int32_t  state = 0;
     int32_t  ai_mode = 0;
     int32_t  move_mode = 0;
+    int32_t  anim_playing = 0;
+    int32_t  anim_wanted = 0;
+    int32_t  base_clip = 0;
+    int32_t  overlay_clip = 0;
+    int32_t  health = 0;
     float    position[3];
     float    previous[3];
     float    velocity[3] = { 0.0f, 0.0f, 0.0f };
@@ -277,6 +306,28 @@ static bool report_character(uintptr_t record, const float player_position[3], b
 
     if (!memory_try_read(record + CHARACTER_BODY_OFFSET, &body, sizeof(body)) || body == 0) {
         return false;
+    }
+    if (record == character_census.watched_record) {
+        character_census.watched_seen = true;   /* in the pool, whether or not in range */
+        /* The name is checked here, on every scanned slot that is the watched one, and not after
+         * the radius test below: a slot that changed hands to a differently named character
+         * standing outside the radius was marked seen and never checked, so the watch went on
+         * reporting the newcomer under the old label until it walked into range. The record stays
+         * remembered while the disarm declines, so the next scan tries again; zeroing it
+         * regardless left the registers armed with nothing able to drop them. */
+        if (diag_write_watch_is_armed() &&
+            memory_try_read(record + CHARACTER_NAME_OFFSET, raw_name, sizeof(raw_name))) {
+            character_scan_copy_name(raw_name, sizeof(raw_name), name, sizeof(name));
+            if (strncmp(name, character_census.watched_name,
+                        sizeof(character_census.watched_name)) != 0) {
+                diag_log_write("chr    the watched slot now holds %s, not %s, so the watch is "
+                               "dropped", name, character_census.watched_name);
+                diag_write_watch_disarm();
+                if (!diag_write_watch_is_armed()) {
+                    character_census.watched_record = 0;
+                }
+            }
+        }
     }
     if (!memory_try_read((uintptr_t)body + OBJECT_POSITION_OFFSET, position, sizeof(position)) ||
         !memory_try_read((uintptr_t)body + OBJECT_PREVIOUS_POSITION_OFFSET, previous,
@@ -297,6 +348,15 @@ static bool report_character(uintptr_t record, const float player_position[3], b
     (void)memory_try_read(record + CHARACTER_MOVE_MODE_OFFSET, &move_mode, sizeof(move_mode));
     (void)memory_try_read((uintptr_t)body + OBJECT_OWNER_OFFSET, &owner, sizeof(owner));
     (void)memory_try_read(record + CHARACTER_VELOCITY_OFFSET, velocity, sizeof(velocity));
+    (void)memory_try_read(record + CHARACTER_ANIM_PLAYING_OFFSET, &anim_playing,
+                          sizeof(anim_playing));
+    (void)memory_try_read(record + CHARACTER_ANIM_WANTED_OFFSET, &anim_wanted,
+                          sizeof(anim_wanted));
+    (void)memory_try_read(record + CHARACTER_HEALTH_OFFSET, &health, sizeof(health));
+    (void)memory_try_read((uintptr_t)body + OBJECT_BASE_CLIP_OFFSET, &base_clip,
+                          sizeof(base_clip));
+    (void)memory_try_read((uintptr_t)body + OBJECT_OVERLAY_CLIP_OFFSET, &overlay_clip,
+                          sizeof(overlay_clip));
 
 
     /* `step` is a genuine one step delta, not a broken one. FUN_004333e1 copies the body's current
@@ -313,22 +373,28 @@ static bool report_character(uintptr_t record, const float player_position[3], b
 
     if (known) {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
-                       "since=%+.3f %s  v=(%.2f, %.2f, %.2f) mode=%d%s%s",
+                       "since=%+.3f %s  v=(%.2f, %.2f, %.2f) mode=%d anim=%d/%d body=%d/%d "
+                       "hp=%d%s%s",
                        name, (double)position[0], (double)position[1], (double)position[2],
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical, (double)since,
                        character_scan_motion_text(character_scan_classify(since)),
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
-                       (int)move_mode, (move_mode & 1) ? " NOT COLLISION TESTED" : "",
+                       (int)move_mode, (int)anim_wanted, (int)anim_playing, (int)base_clip,
+                       (int)overlay_clip, (int)health,
+                       (move_mode & 1) ? " not collision tested" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     } else {
         diag_log_write("chr    %-12s at (%.1f, %.1f, %.1f)  d=%.1f  state=%d ai=%d  step=%+.3f  "
-                       "first sighting  v=(%.2f, %.2f, %.2f) mode=%d%s%s",
+                       "first sighting  v=(%.2f, %.2f, %.2f) mode=%d anim=%d/%d body=%d/%d "
+                       "hp=%d%s%s",
                        name, (double)position[0], (double)position[1], (double)position[2],
                        (double)character_scan_distance(position, player_position), (int)state,
                        (int)ai_mode, (double)vertical,
                        (double)velocity[0], (double)velocity[1], (double)velocity[2],
-                       (int)move_mode, (move_mode & 1) ? " NOT COLLISION TESTED" : "",
+                       (int)move_mode, (int)anim_wanted, (int)anim_playing, (int)base_clip,
+                       (int)overlay_clip, (int)health,
+                       (move_mode & 1) ? " not collision tested" : "",
                        ((uintptr_t)owner == record) ? "" : "  (owner mismatch, offsets suspect)");
     }
     /* Arming on the Z rather than the whole position: the field this bug moves is the only one
@@ -341,10 +407,14 @@ static bool report_character(uintptr_t record, const float player_position[3], b
         field = character_census.watch_velocity
                     ? record + CHARACTER_VELOCITY_OFFSET + (2u * sizeof(float))
                     : record + CHARACTER_POSITION_OFFSET + (2u * sizeof(float));
-        (void)_snprintf(label, sizeof(label) - 1u, "%s %s", name,
+        text_format(label, sizeof(label), "%s %s", name,
                         character_census.watch_velocity ? "velocity Z" : "position Z");
-        label[sizeof(label) - 1u] = '\0';
-        (void)diag_write_watch_arm(field, label);
+        if (diag_write_watch_arm(field, label)) {
+            character_census.watched_record = record;
+            character_census.watched_seen   = true;
+            text_format(character_census.watched_name, sizeof(character_census.watched_name),
+                        "%s", name);
+        }
     }
 
     *out_named = true;
@@ -354,13 +424,28 @@ static bool report_character(uintptr_t record, const float player_position[3], b
 /* Arms the write watch on the player's own drawn body rather than on a character.
  *
  * Two hops, and each can fail on a frame where no level is up: the player pointer out of the
- * global the census already derives, then the body out of the record. Four bytes at the body's
- * Z, because the four watchable bytes have to be exactly the four being written or the report
- * names the wrong instruction. */
+ * global the census already derives, then the body out of the record. Exactly four bytes,
+ * because the four watchable bytes have to be the four being written or the report names the
+ * wrong instruction.
+ *
+ * WHICH four is a setting, and the second choice is why this exists at all. The drawn object
+ * carries a previous position beside its current one and the engine interpolates between the
+ * two, and that interpolation is how a character moves smoothly between steps. Measured on a
+ * platform, that pair is identical on every frame, so nothing is interpolated and the rider
+ * steps 32 times a second while the platform under it is drawn every frame. Walking, the same
+ * pair differs and the same interpolation works. Watching the PREVIOUS position names whatever
+ * flattens it.
+ *
+ * The height is the other choice and stays the default meaning of 1, but it is no use on a
+ * platform that travels horizontally, where the height never changes and the watch never
+ * fires. X is watched instead of Z for the same reason: it is the axis that moves in both
+ * cases, walking and carried. */
 static void arm_body_watch(void)
 {
-    uint32_t record = 0;
-    uint32_t body   = 0;
+    uint32_t  record = 0;
+    uint32_t  body   = 0;
+    uintptr_t field;
+    const char *label;
 
     if (character_census.player_slot == NULL ||
         !memory_try_read((uintptr_t)character_census.player_slot, &record, sizeof(record)) ||
@@ -371,12 +456,19 @@ static void arm_body_watch(void)
         body == 0) {
         return;
     }
-    (void)diag_write_watch_arm((uintptr_t)body + BODY_POSITION_OFFSET + (2u * sizeof(float)),
-                               "the player's drawn body, position Z");
+    if (character_census.watch_body == 2) {
+        field = (uintptr_t)body + OBJECT_PREVIOUS_POSITION_OFFSET;
+        label = "the player's drawn body, PREVIOUS position X";
+    } else {
+        field = (uintptr_t)body + BODY_POSITION_OFFSET + (2u * sizeof(float));
+        label = "the player's drawn body, position Z";
+    }
+    (void)diag_write_watch_arm(field, label);
 }
 
 static void character_census_tick(void)
 {
+    bool     scan_complete;
     uint32_t pool = 0;
     uint32_t element_size = 0;
     uint32_t capacity = 0;
@@ -437,15 +529,19 @@ static void character_census_tick(void)
         return;
     }
 
+    character_census.watched_seen = false;
+    scan_complete = true;
     for (index = 0; index < capacity; ++index) {
         uint32_t offset = character_scan_slot_offset(element_size, index);
         uint32_t link = 0;
         bool     was_named = false;
 
         if (offset == 0u) {
+            scan_complete = false;
             break;
         }
         if (!memory_try_read((uintptr_t)pool + offset, &link, sizeof(link))) {
+            scan_complete = false;
             break;
         }
         if (!character_scan_slot_is_live(link)) {
@@ -453,6 +549,7 @@ static void character_census_tick(void)
         }
         ++live;
         if (named >= CHARACTER_NAMED_MAX) {
+            scan_complete = false;      /* the rest were not looked at, so nothing is absent */
             continue;
         }
         if (!report_character((uintptr_t)pool + offset + CHARACTER_POOL_LINK_SIZE, player_position,
@@ -462,6 +559,20 @@ static void character_census_tick(void)
         }
         if (was_named) {
             ++named;
+        }
+    }
+
+    /* A watched character that was not in this scan has despawned; its slot is free for the next
+     * spawn, and the watch would report that one under this one's name. The record is forgotten
+     * only once the disarm went through; while it declines, the watch is still armed and this
+     * runs again on the next scan. */
+    if (character_census.watched_record != 0 && !character_census.watched_seen &&
+        diag_write_watch_is_armed() && scan_complete) {
+        diag_log_write("chr    %s is no longer in the pool, so the watch is dropped",
+                       character_census.watched_name);
+        diag_write_watch_disarm();
+        if (!diag_write_watch_is_armed()) {
+            character_census.watched_record = 0;
         }
     }
 

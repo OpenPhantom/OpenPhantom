@@ -7,7 +7,7 @@
  * always "finished", and a scripted state whose only work hangs off the other branch stops making
  * progress for good.
  *
- * This hands the script an in-progress answer on one simulation step in every N, which is what the
+ * This hands the script an in-progress answer on one simulation step in every N, the effect the
  * shipped frame rate produced by accident.
  */
 #ifndef FRAMERATE_FIX_FACE_LATCH_H

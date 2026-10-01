@@ -5,6 +5,9 @@
 # project ships lives and where the installer reads them from.
 add_executable(openphantom_convert openphantom_convert.c)
 
+# It ships, so it names its build the way every DLL does.
+add_version_resource(openphantom_convert "OpenPhantom cutscene converter" exe)
+
 # The tools target wipes dist/tools and copies src/tools into it. Without this dependency the wipe
 # can run after the link and delete the executable that was just built, which is the sort of failure
 # that appears only in a clean build on somebody else's machine.

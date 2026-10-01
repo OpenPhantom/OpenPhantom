@@ -52,6 +52,9 @@
  */
 #include "decal_fix.h"
 
+#include "dry_at_start.h"
+#include "scorch_reach.h"
+
 #include "common/detour.h"
 #include "common/host_image.h"
 #include "common/ini.h"
@@ -82,7 +85,7 @@ static const uint8_t SIG_DECAL_SUBMIT[] = {
 #define DECAL_SUBMIT_PROLOGUE 8u
 
 /* --- 0x00487672  which way is "nearer"? ------------------------------------------------------ *
- * This engine does not always use a less-THAN DEPTH TEST, and getting that wrong makes every
+ * This engine does not always use a less-than depth test, and getting that wrong makes every
  * value of DepthBias useless; it pushes the decal AWAY instead of forward. The compare function
  * is chosen from a device capability at run time:
  *
@@ -172,14 +175,50 @@ static signature_t sites[SITE_COUNT] = {
 
 #define DEPTH_BIAS_DEFAULT    0.0f
 #define DEPTH_BIAS_MAX        0.01f
-#define SUBMIT_REPORT_INTERVAL 2000u   /* a handful of lines a session, not a flood */
+/* Every so many decal fans, one line. A scene on Coruscant submits about two thousand a second, so
+ * the old interval of 2000 was a line a second and 422 lines in a five minute log; this is one
+ * every couple of minutes there and rarer everywhere else. */
+#define SUBMIT_REPORT_INTERVAL 250000u
 
 typedef int32_t (__cdecl *decal_submit_fn_t)(void *stage, uint32_t render_state, float *vertices,
                                              uint32_t count, int32_t clipped, void *sorted);
 
+/* --- a measurement for the blade drawn out of a hand ------------------------------------------
+ * framerate_fix's rider trace found the x87 stack pointer one higher after the player's draw than
+ * before it, every frame, and view_distance_fix's sample put the pop outside rdThing_Draw. This
+ * samples the status word either side of the call this hook wraps, and names the change. Off as
+ * shipped; SubmitTrace=1 switches it on. */
+static bool     x87_trace;
+static unsigned x87_trace_lines;
+
+static uint16_t x87_status_word(void)
+{
+    uint16_t status = 0;
+
+    __asm {
+        fnstsw status
+    }
+    return status;
+}
+
+static void x87_trace_report(const char *what, uint16_t before, uint16_t after, uint32_t count)
+{
+    bool moved = ((before ^ after) & 0x3800u) != 0;
+
+    if (!moved && x87_trace_lines >= 200u) {
+        return;
+    }
+    ++x87_trace_lines;
+    log_info("x87 trace: %s entered with status %04X and left with %04X (%u vertices)%s", what,
+             (unsigned)before, (unsigned)after, (unsigned)count,
+             moved ? ": the stack pointer moved across the call" : "");
+}
+
 typedef struct decal_fix_state {
     bool            installed;
     bool            enabled;
+    bool            dry_at_start;      /* the two wet stamp stores write long ago, not zero */
+    bool            scorch_reach;      /* the burn's cell query reaches as far as its sphere */
     bool            neutralise_zbias;
     bool            zbias_neutralised;
     float           depth_bias;
@@ -200,6 +239,9 @@ static void neutralise_zbias(void);
 static void load_config(void)
 {
     decal_state.enabled    = ini_read_bool(DECAL_FIX_SECTION, "Enabled", true);
+    x87_trace              = ini_read_bool(DECAL_FIX_SECTION, "SubmitTrace", false);
+    decal_state.dry_at_start = ini_read_bool(DECAL_FIX_SECTION, "DryAtStart", true);
+    decal_state.scorch_reach = ini_read_bool(DECAL_FIX_SECTION, "ScorchReach", true);
     decal_state.neutralise_zbias =
         ini_read_bool(DECAL_FIX_SECTION, "NeutraliseZBias", true);
     /* DEFAULT 0. The geometric nudge was this DLL's first theory and it is NOT the fix: the engine
@@ -296,15 +338,12 @@ static void resolve_zfunc_mask(void)
  * opposite one, at every magnitude. */
 static bool depth_test_is_reversed(void)
 {
-    uint32_t mask = 0;
-
     if (decal_state.zfunc_mask == NULL) {
         return false;   /* unknown: assume the conventional LESS, and say so at install */
     }
-    if (!memory_read_u32((uintptr_t)decal_state.zfunc_mask, &mask)) {
-        return false;
-    }
-    return (mask & ZFUNC_MASK_GREATER) != 0u;
+    /* A plain read: the cell was checked to lie in the image at install, and this runs once per
+     * decal fan, where asking the operating system each time is the wrong shape. */
+    return (*decal_state.zfunc_mask & ZFUNC_MASK_GREATER) != 0u;
 }
 
 /* Pull every vertex of this fan towards the camera by the configured amount. The vertices are
@@ -334,6 +373,7 @@ static int32_t __cdecl hook_decal_submit(void *stage, uint32_t render_state, flo
     decal_submit_fn_t original = (decal_submit_fn_t)decal_state.submit.original;
     uint32_t          state = (render_state & ~decal_state.state_clear) | decal_state.state_set;
     int32_t           result;
+    uint16_t          before = x87_trace ? x87_status_word() : 0u;
 
     /* Everything that reaches this function is a decal, the site has one caller. The only reasons
      * to leave the geometry alone are a switched-off feature, a zero bias, or a fan that is not the
@@ -380,6 +420,9 @@ static int32_t __cdecl hook_decal_submit(void *stage, uint32_t render_state, flo
     }
 
     result = original(stage, state, vertices, count, clipped, sorted);
+    if (x87_trace) {
+        x87_trace_report("the decal submit", before, x87_status_word(), count);
+    }
 
     /* The function answers the question we have been asking. 0x00487F40 returns 0 when
      * std3D_deferFace (0x00487D20) refuses the face, the deferred pool is full, or the entry was
@@ -424,6 +467,21 @@ void decal_fix_install(void)
     if (!decal_state.enabled) {
         log_info("disabled");
         return;
+    }
+
+    /* Its own two sites, and its own answer: the wet print repair stands whether or not the
+     * submit below resolves, since a wrong print is a defect on any device. */
+    if (decal_state.dry_at_start) {
+        (void)dry_at_start_install();
+    } else {
+        log_info("DryAtStart=0, a body spawned or restored in the first eight seconds of the "
+                 "process leaves wet prints on dry ground, as the engine shipped");
+    }
+    if (decal_state.scorch_reach) {
+        (void)scorch_reach_install();
+    } else {
+        log_info("ScorchReach=0, a burn wider than 0.95 units asks too few cells and a mark "
+                 "across two polygons can lose its far half, as the engine shipped");
     }
 
     signature_resolve_table(sites, SITE_COUNT);

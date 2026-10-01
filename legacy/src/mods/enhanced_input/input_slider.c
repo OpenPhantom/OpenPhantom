@@ -27,6 +27,7 @@
 #include "mouse_look.h"
 
 #include "common/logging.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -64,8 +65,7 @@ void input_slider_set_caption_format(const char *format)
     if (format == NULL) {
         return;
     }
-    _snprintf(slider_state.format, sizeof(slider_state.format), "%s", format);
-    slider_state.format[sizeof(slider_state.format) - 1] = '\0';
+    text_format(slider_state.format, sizeof(slider_state.format), "%s", format);
 }
 
 static void update_caption(void)
@@ -75,8 +75,7 @@ static void update_caption(void)
     if (slider_state.format[0] == '\0') {
         return;
     }
-    _snprintf(slider_state.caption, sizeof(slider_state.caption), slider_state.format, shown);
-    slider_state.caption[sizeof(slider_state.caption) - 1] = '\0';
+    text_format(slider_state.caption, sizeof(slider_state.caption), slider_state.format, shown);
 }
 
 static int clamped_notch(void)

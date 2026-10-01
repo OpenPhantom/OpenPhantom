@@ -22,8 +22,8 @@
  * Only the yaw is interpolated. Position (0x41125B..0x4112D3) and yaw (0x4112F9..0x411321) track
  * the substep alpha at [ebp-0x420]; pitch and roll are taken straight from the current substep,
  * so they step at 32 Hz while everything around them moves at the render rate. On a
- * slope-following NPC that is visible judder above 30 fps: aiext.c rewrites actualPitch every
- * substep as new*0.25 + old*0.75.
+ * slope-following NPC that is visible judder above 30 fps: the NPC extension module rewrites
+ * actualPitch every substep as new*0.25 + old*0.75.
  *
  * The first 0x20 bytes are self-contained; they only fill the three euler locals out of
  * obj+0x3C, so they can be replaced wholesale by a call that fills the same three slots with
@@ -67,14 +67,14 @@ static const uint8_t SIG_OBJECT_DRAW_EULER[] = {
  * freezes pose and placement together.
  *
  * g_tickCounter [0x4B8860] has two increment sites in the whole image: sys_runSubsteps (per
- * SUBSTEP) and swmenu_render (per MENU frame), which is why the 3-D inventory model already
- * animated smoothly while the world did not.
+ * SUBSTEP) and swmenu_render (per MENU frame), so the 3-D inventory model already animated
+ * smoothly while the world did not.
  *
  * One shared-state note, and it is a return to the original rather than a new coupling.
  * poseStamp is shared: the draw path builds the pose from the INTERPOLATED transform, the
  * simulation's node queries (hit spheres, muzzle and auto-aim via rdThing_GetNodeMatrix) build it
  * from the RAW substep transform, and whoever runs first stamps it. At 30 fps the draw rebuilt
- * essentially always, so the simulation always inherited the draw's pose. Uncapped, that
+ * nearly always, so the simulation always inherited the draw's pose. Uncapped, that
  * inheritance is intermittent; NOPing the branch makes it constant again. */
 static const uint8_t SIG_POSE_THROTTLE[] = {
     0x8B, 0x3D, 0x60, 0x88, 0x4B, 0x00, 0x8D, 0x4C, 0xCA, 0x24,

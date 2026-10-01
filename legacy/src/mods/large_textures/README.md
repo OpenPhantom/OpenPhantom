@@ -143,7 +143,7 @@ rather than all of them.
 Each site is independent: different functions, different modules, no shared state and no ordering
 constraint between them. If one does not resolve, that patch is skipped, the other still applies,
 and the log names which of the two happened. If neither applies, the DLL logs `nothing was applied`
-and the game runs exactly as it would without it.
+and the game runs as it would without it.
 
 A size that is out of range, not a power of two, or already the engine's own is refused before any
 search happens, and each of those three refusals has its own log line. There is no path here that
@@ -152,14 +152,14 @@ not hold the value this DLL expects.
 
 ## Testing status
 
-**A unit test for the size validation, and accepted in game**, in the 1.5.0 build, which was
+**A unit test for the size validation, and accepted in game**, in the v0.4.1 build, which was
 played through by hand. This copy builds and links here, `/W4 /WX` clean, and ships in the
 patch. The pattern work below is what establishes where it acts.
 
 * `unittests/texture_size.c` covers what a requested size is allowed to do: the identity case, both
   clamps and the values on either side of them, a size that is not a power of two, a negative one,
-  and the two numbers the engine's own instructions hold. It runs with the rest of the suite, so it is a
-  statement about the arithmetic and not yet evidence that the arithmetic passes.
+  and the two numbers the engine's own instructions hold. It runs with the rest of the suite, so
+  it is a statement about the arithmetic, not yet evidence that the arithmetic passes.
 * The clamp site was located in all three builds and its operand read out of the image in each:
   `0x00488757` in the retail `WMAIN.EXE` and in `wmain.exe`, `0x004886F7` in `obi.exe`, all three
   holding `0x100`.

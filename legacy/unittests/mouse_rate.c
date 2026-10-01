@@ -6,11 +6,11 @@
  * cancels in closed form. A model that feeds a filter a clean signal measures what the filter does
  * to the sampling and never what it does to the signal.
  *
- * The model below jitters both clocks, and that is not decoration. A first version made the reports
- * perfectly periodic and the frames even, and at 1000 reports a second against 64 frames a second
- * everything divided exactly and the plain path scored a flawless zero. That zero is a coincidence
- * of periodicity and nothing else. A real device does not tick on a metronome, least of all a
- * virtual one fed over a network.
+ * The model below jitters both clocks. A first version made the reports perfectly periodic and
+ * the frames even, and at 1000 reports a second against 64 frames a second everything divided
+ * exactly and the plain path scored a flawless zero. That zero is a coincidence of periodicity
+ * alone. A real device does not tick on a metronome, least of all a virtual one fed over a
+ * network.
  *
  * So the model is the real chain. A device reports at its own rate in whole counts, which is where
  * the noise comes from: a hand at a constant speed produces one count on one report and two on
@@ -42,7 +42,7 @@
  *     500 Hz     15 or 16            6.4 %          3.1 %   12.0 Hz
  *     1000 Hz    31 or 32            3.2 %          1.4 %    8.0 Hz
  *
- * That is two shapes rather than one, which is why 62.5 and 104 both appear below. At 62.5 Hz it is
+ * That is two shapes rather than one, so 62.5 and 104 both appear below. At 62.5 Hz it is
  * a fifty per cent lurch one and a half times a second; at 104 Hz it is an eight hertz shimmer. A
  * filter can pass one of those and fail the other, so both are driven.
  *
@@ -60,12 +60,11 @@
 #define SUBSTEP     0.03125f
 #define MAX_STEPS   8192
 
-/* The ceiling on the adaptive time constant, in seconds, which is what a player sets with
- * MouseSmoothMaxMs. The filter asks for six of the device's own report intervals, so it wants 96 ms
- * at 62.5 reports a second and 6 ms at 1000. A ceiling of 120 ms therefore binds nothing above 50
- * reports a second, and that is deliberate: the delay assertion below has to measure the filter and
- * not the clamp. Below 50 the ceiling is what answers, which is the slow device the last check
- * drives. */
+/* The ceiling on the adaptive time constant, in seconds, set by a player with MouseSmoothMaxMs.
+ * The filter asks for six of the device's own report intervals, so it wants 96 ms at 62.5 reports
+ * a second and 6 ms at 1000. A ceiling of 120 ms therefore binds nothing above 50 reports a
+ * second, deliberately: the delay assertion below has to measure the filter and not the clamp.
+ * Below 50 the ceiling is what answers, which is the slow device the last check drives. */
 #define MAX_TAU     0.120f
 
 /* A deterministic pseudo-random source, so the model jitters the same way on every run and a
@@ -248,6 +247,7 @@ static double step_spread_percent(const run_t *run)
 static void test_conserves(void)
 {
     static const float report_rates[4] = { 62.5f, 125.0f, 250.0f, 1000.0f };
+    size_t failures_before = ut_failures();
     int i;
 
     for (i = 0; i < 4; ++i) {
@@ -259,7 +259,8 @@ static void test_conserves(void)
                       run.delivered + run.banked - run.emitted);
         }
     }
-    ut_check(1, "delivered plus banked equals emitted at every report rate");
+    ut_check(ut_failures() == failures_before,
+             "delivered plus banked equals emitted at every report rate");
 }
 
 /* ==============================================================================================
@@ -291,6 +292,7 @@ static void test_conserves(void)
 static void test_never_reverses(void)
 {
     static const float report_rates[4] = { 30.0f, 62.5f, 125.0f, 1000.0f };
+    size_t failures_before = ut_failures();
     int i;
 
     for (i = 0; i < 4; ++i) {
@@ -318,8 +320,9 @@ static void test_never_reverses(void)
                       two.delivered, one.delivered);
         }
     }
-    ut_check(1, "a rightward hand never produces a leftward step, with one consumer or two");
-    ut_check(1, "and a second consumer cannot double the turn");
+    ut_check(ut_failures() == failures_before,
+             "a rightward hand never produces a leftward step, with one consumer or two, the "
+             "ledger balances with two, and a second consumer cannot double the turn");
 }
 
 /* ==============================================================================================
@@ -351,7 +354,7 @@ static void test_a_frame_without_a_report_is_not_a_zero(void)
      * interval. The hand has not stopped; the device simply has not reported yet. Nothing here may
      * pull the estimate down. The version this replaced handed those frames to the filter as a zero
      * count over the frame's own duration, which dragged the rate to zero between every pair of
-     * reports and then snapped it back, and that is a shimmer built by the smoother. */
+     * reports and then snapped it back: a shimmer built by the smoother. */
     for (i = 0; i < 4; ++i) {
         mouse_rate_observe(&rate, 0.0f, 0u, 0.0f, 0.004f, MAX_TAU);
     }
@@ -404,6 +407,7 @@ static void test_spread_beats_the_plain_path(void)
 {
     static const float report_rates[4] = { 62.5f, 104.0f, 125.0f, 500.0f };
     static const float frame_rates[3]  = { 64.0f, 91.5f, 144.0f };
+    size_t failures_before = ut_failures();
     double worst_fast_delay = 0.0;
     int i;
     int j;
@@ -446,10 +450,10 @@ static void test_spread_beats_the_plain_path(void)
             }
         }
     }
-    ut_check(1, "the reconstruction beats the plain spread at every report and frame rate");
-    ut_checkf(1, "a fast device is at most %.1f ms behind the hand, against the 31.2 ms allowed",
-              worst_fast_delay * 1000.0);
-    ut_check(1, "and no device exceeds the configured smoothing ceiling");
+    ut_checkf(ut_failures() == failures_before,
+              "the reconstruction beats the plain spread at every report and frame rate, a fast "
+              "device is at most %.1f ms behind the hand against the 31.2 ms allowed, and no "
+              "device exceeds the configured smoothing ceiling", worst_fast_delay * 1000.0);
 }
 
 /* The bound the whole design turns on: a device slower than the consumer cannot be made smooth by
@@ -492,6 +496,39 @@ static void test_survives_nonsense(void)
             "and an unprimed filter reports no time constant");
 }
 
+/* MouseSmoothMaxMs=0 means no smoothing, and it has to mean that at every report rate. */
+static void test_a_zero_ceiling_is_obeyed(void)
+{
+    mouse_rate_t rate;
+    unsigned     i;
+
+    ut_section("a ceiling of zero");
+
+    /* An 8 kHz device at 250 frames a second: 32 reports in each 4 ms frame, so a report interval
+     * of 0.125 ms and six of them is 0.75 ms, which is below the arithmetic's own 2 ms floor. That
+     * is the only place the floor and the ceiling can cross, and the floor used to win, so a player
+     * who had written that they wanted no smoothing was given 2 ms of it. */
+    mouse_rate_reset(&rate);
+    for (i = 0; i < 40u; ++i) {
+        mouse_rate_observe(&rate, 4.0f, 32u, 0.004f, 0.004f, 0.0f);
+    }
+    ut_check(rate.report_seconds < 0.000334f,
+             "the estimate really is below a third of a millisecond, which is where six intervals "
+             "fall under the floor");
+    ut_near(mouse_rate_time_constant(&rate, 0.0f), 0.0f, 0.0f,
+            "and a zero ceiling then gives no smoothing at all");
+
+    /* The ordinary case is unchanged: a 1 kHz device asks for 6 ms, well above the floor. */
+    mouse_rate_reset(&rate);
+    for (i = 0; i < 40u; ++i) {
+        mouse_rate_observe(&rate, 4.0f, 4u, 0.004f, 0.004f, MAX_TAU);
+    }
+    ut_near(mouse_rate_time_constant(&rate, 0.0f), 0.0f, 0.0f,
+            "a zero ceiling gives none on a 1 kHz device either");
+    ut_check(mouse_rate_time_constant(&rate, MAX_TAU) > 0.002f,
+             "while the same device under an ordinary ceiling still gets its six intervals");
+}
+
 int main(void)
 {
     test_conserves();
@@ -500,6 +537,7 @@ int main(void)
     test_spread_beats_the_plain_path();
     test_a_slow_device_is_still_improved();
     test_survives_nonsense();
+    test_a_zero_ceiling_is_obeyed();
 
     return ut_summary("mouse_rate");
 }

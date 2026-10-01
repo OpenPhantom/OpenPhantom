@@ -74,9 +74,9 @@ static void note_stall(const free_look_state_t *state, follow_stall_t stall)
 }
 
 
-/* THE PASSIVE CAMERA: one damped step toward the body, once per DRAWN FRAME.
+/* The passive camera: one damped step toward the body, once per DRAWN FRAME.
  *
- * WHY THE FRAME AND NOT THE SUBSTEP. The first version stepped this in phase 7, at the simulation's
+ * Why the frame and not the substep. The first version stepped this in phase 7, at the simulation's
  * fixed 32 Hz, and it was visibly jittery. The camera is published every rendered frame, so a yaw
  * that only changes thirty two times a second is held for two, three or four frames at a time and
  * then jumps: a staircase, and above about 60 fps an obvious one. strafe_walk.c already learned
@@ -85,15 +85,15 @@ static void note_stall(const free_look_state_t *state, follow_stall_t stall)
  * `interpolated` is right here, already smoothed across the substep by the engine's own alpha. So
  * the step and the thing it aims at are both on the same clock and there is nothing left to stair.
  *
- * WHY THE HEADING AND NEVER THE TRAVEL ANGLE. Under free look the stick is measured against the
+ * Why the heading and never the travel angle. Under free look the stick is measured against the
  * CAMERA. Point the camera at the direction of travel and that is a loop with a gain of one: the
  * camera turns toward where you are going, the direction the stick means turns with it, and the
  * player rotates for as long as they hold it. The heading closes no loop, because nothing measures
  * the stick against the heading. And free_look_steer has already turned the body to face its
- * travel, so behind the body and behind the direction of travel are the same place. That is what
- * makes one step toward the heading read as the camera following the movement.
+ * travel, so behind the body and behind the direction of travel are the same place. One step
+ * toward the heading therefore reads as the camera following the movement.
  *
- * THE AUTHORED ANGLE IS KEPT. Drifting at the bare heading was considered once before and rejected,
+ * The authored angle is kept. Drifting at the bare heading was considered once before and rejected,
  * because seventeen shipped follow regions author a real over-the-shoulder yaw and three of them a
  * full ninety degrees, and a camera pulling to dead centre would fight every one. The region's own
  * authored yaw is the third argument of the engine's recentre and camera_sites already resolves it,

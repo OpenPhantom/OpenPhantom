@@ -2,8 +2,8 @@
  * saved.
  *
  * ==============================================================================================
- * BUG 1 - the value handed to the ini write is wrong (fixed, but it turned out not to be the whole
- *          story)
+ * BUG 1: the value handed to the ini write is wrong (fixed, but it turned out not to be the
+ *        whole story)
  *
  * The audio options screen (options_audio, retail 0x00441FA4) has exactly one function it calls to
  * find out "what is the SFX volume right now": bapsound_getMasterVolume, retail 0x00417459. It
@@ -12,7 +12,7 @@
  * with _AIL_set_digital_master_volume.
  *
  * That getter has exactly two callers in the whole image, and both are inside options_audio: an
- * E8 sweep of the entire .text finds call sites at 0x004420C1 and 0x004428C2 and nothing else,
+ * E8 sweep of the entire .text finds call sites at 0x004420C1 and 0x004428C2 and no others,
  * and the next function entry after 0x00441FA4 is 0x00442A98, so both lie inside that one screen.
  * They are the two things the screen does with the number: seed the slider widget when it opens,
  * and build the value written to obi.ini's SVOL key when it closes.
@@ -26,26 +26,26 @@
  *
  * [0x004AA970] is not a write-only shadow: the per-channel attenuation at 0x004169BD reads it back
  * on every sample start, `base * scale * g_sfxMasterVolume`, so this cell has to stay correct for
- * gameplay volume to be right at all. bapsound_getMasterVolume is entirely replaced (not wrapped -
- * calling through to the AIL query first would just reintroduce the bug) with a hook that computes
- * the same 0..127 integer the engine itself derived the mirror from.
+ * gameplay volume to be right at all. bapsound_getMasterVolume is entirely replaced (not
+ * wrapped: calling through to the AIL query first would just reintroduce the bug) with a hook
+ * that computes the same 0..127 integer the engine itself derived the mirror from.
  *
- * THE REPLACEMENT REPRODUCES THE ENGINE'S OWN GUARD BRANCH, and that is not a detail. The original
+ * The replacement reproduces the engine's own guard branch. That is not a detail: the original
  * body answers 0, not a volume, while g_soundReady is still 0:
  *
  *     0041745C  83 3D B8 B4 5B 00 00   cmp dword ptr [g_soundReady], 0
  *     00417463  75 04                  jnz  <ask AIL>
- *     00417465  33 C0                  xor eax,eax                    ; <- 0, and that is an answer
+ *     00417465  33 C0                  xor eax,eax                    ; <- 0, and 0 is an answer
  *     00417467  EB 0C                  jmp  <return>
  *
  * A replacement that skipped that branch would answer with the mirror instead, and the mirror is
- * 1.0 at that point for exactly the reason bug 2 below describes - so on a machine whose sound
+ * 1.0 at that point for exactly the reason bug 2 below describes. So on a machine whose sound
  * never initialises, the options screen would seed its slider at full and write SVOL=127 over the
  * player's saved value. That is the very symptom this DLL exists to remove, reintroduced for the
  * no-sound case, so the branch is kept.
  *
  * ==============================================================================================
- * BUG 2 - the value never gets APPLIED on load, which is the actual cause of the reported symptom
+ * BUG 2: the value never gets APPLIED on load, the actual cause of the reported symptom
  *
  * bapsound_moduleInit (retail 0x004159F0), the function that runs once at startup, does this, in
  * exactly this order:
@@ -53,7 +53,7 @@
  *     ini_read_int_alt(&"SVOL", 0x7F, &loaded);   // reads obi.ini correctly
  *     bapsound_setMasterVolume(loaded);           // called from 0x00415A78
  *     ...
- *     [0x005BB4B8] = 1;                           // "sound is ready" - set AFTER the call above
+ *     [0x005BB4B8] = 1;                           // "sound is ready", set AFTER the call above
  *
  * bapsound_setMasterVolume's entire body is gated on that same cell:
  *
@@ -62,11 +62,11 @@
  *     0041738B  E9 C8 00 00 00         jmp <exit, does nothing>
  *
  * At the moment bapsound_moduleInit calls it with the value it just loaded from obi.ini,
- * g_soundReady is STILL 0 - it is not set to 1 until several instructions later, in the SAME
+ * g_soundReady is STILL 0; it is not set to 1 until several instructions later, in the SAME
  * function. So the very first, load-time apply is a GUARANTEED silent no-op, every single launch,
  * regardless of what SVOL says in the file. The mirror simply keeps its compiled-in startup value
  * (measured as 1.0, i.e. full) until the player manually touches the slider. This is a genuine
- * ordering mistake in the original 1999 code - one statement in the wrong place - and it is the
+ * ordering mistake in the original 1999 code, one statement in the wrong place, and it is the
  * actual reason "the SFX slider always resets to full on reload": the save was never the whole
  * problem, the load silently threw the saved value away.
  *
@@ -76,18 +76,19 @@
  *
  * Confirmed with a temporary diagnostic build across two separate sessions: the very first call to
  * bapsound_setMasterVolume in each run showed the mirror ending up at 1.0 regardless of the
- * argument passed in (120 in one run, 0 in the other), which is exactly what "the guard blocked
- * the write and the mirror kept its old value" looks like from outside the function.
+ * argument passed in (120 in one run, 0 in the other). That is what "the guard blocked the write
+ * and the mirror kept its old value" looks like from outside the function.
  *
  * The fix taps bapsound_setMasterVolume: if it is called while g_soundReady is still 0, the
  * intended value is remembered rather than lost. A per-frame check (common/frame_hook.h, the same
  * "call me once per rendered frame" site every other feature in this tree uses for a live slider
- * preview) re-applies that value the moment g_soundReady actually becomes 1 - which happens a
+ * preview) re-applies that value the moment g_soundReady actually becomes 1, which happens a
  * handful of instructions later in the very same function, so in practice this resolves within the
  * same frame sys_frame is next pumped. Nothing about live control changes; this only affects the
  * one call that the original code was never going to honour anyway.
  */
 #include "sfx_volume_save_fix.h"
+#include "slider_rounding.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -106,7 +107,7 @@
 #define SFX_VOLUME_SAVE_FIX_SECTION "sfx_volume_save_fix"
 
 /* --- 0x00417459  bapsound_getMasterVolume: the whole function is the detour target ------------ *
- * The 10-byte prologue alone (push ebp / mov ebp,esp / cmp [g_soundReady],0) is NOT unique -
+ * The 10-byte prologue alone (push ebp / mov ebp,esp / cmp [g_soundReady],0) is NOT unique:
  * measured against the retail image it matches twice, at 0x00417459 and 0x0041778C, because
  * another tiny getter shares the same guard idiom. The full 30-byte body is used instead: it ends
  * on a clean instruction boundary and matches exactly once in every retail build measured,
@@ -116,8 +117,8 @@
  * The two embedded absolute addresses (the guard cell and the _AIL_digital_master_volume IAT slot)
  * are the site's own operands rather than something this patch derives, so leaving them literal
  * follows the same precedent as diag_audio.c's SIG_SOUND_MASTER_VOLUME, one function over. The
- * consequence is worth naming: a build that relinked its data section fails this pattern and the
- * bug-1 half declines, which is the correct answer rather than a guess. */
+ * consequence: a build that relinked its data section fails this pattern and the bug-1 half
+ * declines, the correct answer rather than a guess. */
 static const uint8_t SIG_MASTER_GET[] = {
     0x55, 0x8B, 0xEC,                         /* push ebp / mov ebp,esp                       */
     0x83, 0x3D, 0xB8, 0xB4, 0x5B, 0x00, 0x00, /* cmp dword ptr [0x005BB4B8], 0                */
@@ -134,7 +135,7 @@ static const uint8_t SIG_MASTER_GET[] = {
 #define MASTER_GET_GUARD_OFFSET  5u   /* the `cmp dword ptr [addr],0` operand */
 
 /* --- 0x0041738D  inside bapsound_setMasterVolume: where the scale and the mirror live --------- *
- * `fild [ebp+8]; fdiv [scale]; fstp [mirror]` - both operands masked out and read back, because
+ * `fild [ebp+8]; fdiv [scale]; fstp [mirror]`: both operands masked out and read back, because
  * they are plain .data addresses with no reason to survive a relink at the same offset. Being
  * address-free, this is the one site of the three that also resolves on the Edit Tool's recompile
  * of the engine. */
@@ -148,8 +149,8 @@ static const uint8_t MASK_MIRROR_SITE[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
-_Static_assert(sizeof(SIG_MIRROR_SITE) == sizeof(MASK_MIRROR_SITE),
-               "the mirror pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_MIRROR_SITE == sizeof MASK_MIRROR_SITE,
+               "the volume mirror pattern and its mask are different lengths");
 #define MIRROR_SITE_SCALE_OFFSET  5u
 #define MIRROR_SITE_MIRROR_OFFSET 11u
 
@@ -189,7 +190,7 @@ typedef struct sfx_volume_save_fix_state {
     detour_t         master_set;
     const float     *mirror;      /* g_sfxMasterVolume, normalised 0..1, kept live by the setter */
     const float     *scale;       /* g_sfxVolumeScale, the 0..127 conversion factor (127.0)      */
-    const int32_t   *sound_ready; /* g_soundReady - the flag that arrives one statement too late */
+    const int32_t   *sound_ready; /* g_soundReady, the flag that arrives one statement too late */
     bool             pending;
     int32_t          pending_volume;
 } sfx_volume_save_fix_state_t;
@@ -259,7 +260,7 @@ static void on_frame(void)
     }
     original(fix_state.pending_volume);
 
-    log_info("startup SFX volume (%d) applied - bapsound_moduleInit calls bapsound_setMasterVolume "
+    log_info("startup SFX volume (%d) applied: bapsound_moduleInit calls bapsound_setMasterVolume "
              "BEFORE marking sound ready, so its own load-time apply is always dropped and "
              "the engine would otherwise start every session at full SFX volume regardless of "
              "obi.ini. Re-applied the moment the sound subsystem actually finished initialising.",
@@ -320,6 +321,13 @@ void sfx_volume_save_fix_install(void)
 
     signature_resolve_table(sites, SITE_COUNT);
 
+    /* Independent of everything below, and placed here so it is reached whether or not the master
+     * volume work resolves: different sites, a different fault, and it fixes the music slider too
+     * because both sliders share the seed that drifts. After host_image_resolve and after
+     * log_init, or it would search an image that is not mapped yet and say so into a log that is
+     * not open yet. */
+    (void)slider_rounding_install();
+
     if (!resolve_operand(SITE_MIRROR_SITE, MIRROR_SITE_SCALE_OFFSET, "volume scale",
                          &scale_address) ||
         !resolve_operand(SITE_MIRROR_SITE, MIRROR_SITE_MIRROR_OFFSET, "volume mirror",
@@ -375,13 +383,13 @@ void sfx_volume_save_fix_install(void)
                       (unsigned)sites[SITE_MASTER_GET].address);
         }
     } else {
-        log_warning("bapsound_getMasterVolume did not resolve - obi.ini's SVOL will keep being "
+        log_warning("bapsound_getMasterVolume did not resolve, so obi.ini's SVOL will keep being "
                     "written from an unreliable AIL query");
     }
 
     if (sites[SITE_MASTER_SET].address == 0) {
-        log_warning("bapsound_setMasterVolume did not resolve - the SFX slider will keep starting "
-                    "at full every launch regardless of obi.ini's SVOL");
+        log_warning("bapsound_setMasterVolume did not resolve, so the SFX slider will keep "
+                    "starting at full every launch regardless of obi.ini's SVOL");
         return;
     }
     if (!detour_install(&fix_state.master_set, sites[SITE_MASTER_SET].address,
@@ -391,14 +399,14 @@ void sfx_volume_save_fix_install(void)
         return;
     }
     if (!frame_hook_add(on_frame)) {
-        log_warning("frame hook unavailable, the startup re-apply is skipped - the SFX slider will "
-                    "keep starting at full every launch regardless of obi.ini's SVOL");
+        log_warning("frame hook unavailable, the startup re-apply is skipped, so the SFX slider "
+                    "will keep starting at full every launch regardless of obi.ini's SVOL");
         return;
     }
 
     log_info("bapsound_setMasterVolume tapped at %08X, g_soundReady at %08X: bapsound_moduleInit's "
              "own load-time volume apply happens before it marks sound ready and was always a "
-             "silent no-op, which is why the SFX slider reset to full on every reload regardless "
+             "silent no-op, so the SFX slider reset to full on every reload regardless "
              "of what obi.ini said. The dropped value is now re-applied the moment sound actually "
              "finishes initialising.",
              (unsigned)sites[SITE_MASTER_SET].address, (unsigned)(uintptr_t)fix_state.sound_ready);

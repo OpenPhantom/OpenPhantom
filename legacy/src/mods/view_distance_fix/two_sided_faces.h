@@ -4,7 +4,7 @@
  * device is set to D3DCULL_NONE and never culls at all. Clearing that byte around one thing draws
  * it two-sided, which softens the see-through hole a severed limb leaves.
  *
- * THE SEAM. It shares nothing with the draw distance but the DLL it ships in: a different engine
+ * The seam. It shares nothing with the draw distance but the DLL it ships in: a different engine
  * function, a different byte, a per frame budget of its own, and a switch of its own that ships
  * off. The two site patterns stay with the rest of the site table, because resolving sites is the
  * install sequence's job; what comes across is the prologue this feature's own detour overwrites.

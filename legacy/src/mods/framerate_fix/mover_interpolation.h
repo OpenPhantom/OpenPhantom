@@ -18,10 +18,15 @@
 /* `translation_limit` is the furthest a mover may legitimately travel in one simulation step; a
  * larger step is a teleport or a track wrapping round, and is drawn as the jump it is. Zero
  * disables that test and leaves only the rotation guard. */
-void mover_interpolation_install(bool enabled, float translation_limit);
+/* `log_evenness` turns on the drawn evenness measurement, which is off unless something is being
+ * investigated; mover_evenness.h says what it can and cannot tell you. `log_summary` turns on the
+ * count line every 600 frames, off for the same reason: it is a measurement, and a played session
+ * is not the place for one. */
+void mover_interpolation_install(bool enabled, float translation_limit, bool log_evenness,
+                                 bool log_summary);
 
-/* Called once per rendered frame. Emits the instrument line every so often, so that a build which
- * installed but never interpolated anything says so instead of looking like it worked. */
+/* Called once per rendered frame. A build which installed but never interpolated anything says so
+ * once, whatever the switches; the counts themselves are written only when asked for. */
 void mover_interpolation_sample(void);
 
 #endif /* MOVER_INTERPOLATION_H */

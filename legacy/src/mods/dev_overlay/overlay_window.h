@@ -23,9 +23,17 @@
  * and the note. */
 #define OVERLAY_WINDOW_BASE_ROWS 10u
 
+/* How many sizes the list will hold. Thirty two is well past what any display reports once
+ * duplicates at other depths and refresh rates are folded together; the ones seen in testing offer
+ * around fifteen. The list also carries one entry of its own above the sizes, so the group's
+ * ceiling is the base rows plus this plus one. */
+#define OVERLAY_WINDOW_SIZE_LIST_MAX 32u
+#define OVERLAY_WINDOW_ROWS_MAX     (OVERLAY_WINDOW_BASE_ROWS + OVERLAY_WINDOW_SIZE_LIST_MAX + 1u)
+
 /* And what it draws right now, which is more than that while the size list is open. The list is a
  * fold on one row rather than a group of its own, the same shape the free-camera "how to fly" row
- * already uses, because it belongs to the row above it and closes as soon as something is chosen. */
+ * already uses, because it belongs to the row above it and closes as soon as something is
+ * chosen. */
 uint32_t overlay_window_row_count(void);
 
 /* Closes the size list, so the panel opens the way the groups do: folded. Without it a list left
@@ -36,10 +44,6 @@ void overlay_window_reset(void);
  * `editing_text` and `capturing` mean what they mean in overlay_utilities.h. */
 void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
                         overlay_row_t *out);
-
-/* Always false: nothing in this group is typed into. Nothing calls it either, the same as the
- * matching test in the Utilities group. */
-bool overlay_window_row_is_value(uint32_t slot);
 
 /* True for the two binding rows. Takes a slot as this group numbers it. */
 bool overlay_window_row_is_key(uint32_t slot);

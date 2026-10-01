@@ -3,8 +3,8 @@
  * This one function is the whole deterministic repair. If it says "safe" for a value that is
  * really out of range, the music DLL takes its heartbeat lock and never gives it back and the
  * music loops forever. If it says "leaks" for a value that is really fine, a legitimate setting
- * is silently refused. Both are quiet failures, which is exactly why the bounds are checked here
- * against the ones read out of the DLL rather than trusted.
+ * is silently refused. Both are quiet failures, so the bounds are checked here against the ones
+ * read out of the DLL rather than trusted.
  *
  * The bounds, from the body of ImSetParam:
  *     0x400  value < 0x10    UNSIGNED
@@ -44,8 +44,10 @@ int main(void)
 
     /* --- the one signed bound --------------------------------------------------------------- */
     ut_check(!imuse_guard_set_param_leaks(0x800, 0), "0x800 with 0 is inside");
-    ut_check(!imuse_guard_set_param_leaks(0x800,  0x2400), "0x800 with +0x2400 is the last safe value");
-    ut_check(!imuse_guard_set_param_leaks(0x800, -0x2400), "0x800 with -0x2400 is the last safe value");
+    ut_check(!imuse_guard_set_param_leaks(0x800,  0x2400),
+             "0x800 with +0x2400 is the last safe value");
+    ut_check(!imuse_guard_set_param_leaks(0x800, -0x2400),
+             "0x800 with -0x2400 is the last safe value");
     ut_check( imuse_guard_set_param_leaks(0x800,  0x2401), "0x800 with +0x2401 leaks");
     ut_check( imuse_guard_set_param_leaks(0x800, -0x2401), "0x800 with -0x2401 leaks");
     /* And the mirror of the trap above: here the DLL DOES compare signed, so a negative value
@@ -55,14 +57,17 @@ int main(void)
 
     /* --- the parameters that clean up after themselves --------------------------------------- */
     ut_check(!imuse_guard_set_param_leaks(0x900, -1), "0x900 releases its own lock, so never ours");
-    ut_check(!imuse_guard_set_param_leaks(0x900, 0x7FFFFFFF), "0x900 out of range is still not ours");
+    ut_check(!imuse_guard_set_param_leaks(0x900, 0x7FFFFFFF),
+             "0x900 out of range is still not ours");
     ut_check(!imuse_guard_set_param_leaks(0x000, 0x7FFFFFFF), "an unknown parameter is not ours");
     ut_check(!imuse_guard_set_param_leaks(0x1234, -5), "another unknown parameter is not ours");
 
     /* --- the values the game really uses ----------------------------------------------------- */
-    ut_check(!imuse_guard_set_param_leaks(0x600, 0x7E), "the muscript's own volume 0x7E is let through");
+    ut_check(!imuse_guard_set_param_leaks(0x600, 0x7E),
+             "the muscript's own volume 0x7E is let through");
     ut_check(!imuse_guard_set_param_leaks(0x600, 0x7F), "full volume 0x7F is let through");
-    ut_check(!imuse_guard_set_param_leaks(0x400, 0x04), "the muscript's own 0x400 value 4 is let through");
+    ut_check(!imuse_guard_set_param_leaks(0x400, 0x04),
+             "the muscript's own 0x400 value 4 is let through");
 
     return ut_summary("imuse_guard");
 }

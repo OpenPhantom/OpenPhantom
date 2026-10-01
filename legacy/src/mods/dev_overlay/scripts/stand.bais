@@ -1,0 +1,29 @@
+# title: Stand
+# about: Stands where it was put, playing its stand clip, and turns to face the player when
+# about: they are near. Dies with its own death clip and fades eight seconds later. Clip 0 is
+# about: the stand in every actor file; the death clip is the one the file marks as its death
+# about: and is filled in per model when the copy is raised.
+script "stnd":
+    if check_death():
+        set_ai_mode(1)
+        mode_jmp()
+    mode_jmp()
+
+mode "idle":
+    move_speed(0.0f)
+    when move_to(3, 0, 0.5f) completes:
+        end_cycle()
+    end_cycle()
+
+mode "die":
+    when animation(0, 30, 0) completes:
+        start_timer()
+        set_ai_mode(2)
+        end_cycle()
+    end_cycle()
+
+mode "gone":
+    if check_timer(1, 8.0f):
+        ai_killed(0)
+        end_cycle()
+    end_cycle()

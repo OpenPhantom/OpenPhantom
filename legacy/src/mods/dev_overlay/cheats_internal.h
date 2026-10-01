@@ -13,6 +13,7 @@
 #define DEV_OVERLAY_CHEATS_INTERNAL_H
 
 #include "cheats_openphantom.h"
+#include "player_slot.h"
 
 #include "common/detour.h"
 
@@ -20,9 +21,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* The player record pointer, read by the jump cheats and by the panel's own rows. */
-
-#define PLAYER_RECORD_PTR_ADDR 0x004B5220u
+/* The player record is read through player_slot_current(), the cell the engine itself loads it
+ * from, resolved once out of an operand. Every cheat below that reads the player is installed
+ * only after that resolve has succeeded. */
 
 /* The player's live position, three floats, byte-proven from 0x0044F891's own argument
  * (ECX = pPlayer+0x118). Shared by jump boost's fall handling and by free camera's exit
@@ -46,9 +47,11 @@
  *
  * Zero it and the player falls from rest. Shared with jump boost, which scales it. */
 #define PLAYER_VERTICAL_VELOCITY_OFFSET 0xB4u
-#define JUMP_BOOST_SCALE_DEFAULT 1.3f
-#define JUMP_BOOST_SCALE_MIN     0.5f
-#define JUMP_BOOST_SCALE_MAX     5.0f
+
+/* The heading, degrees, the direction the player faces: 0x0044A6B2 `fstp [eax+0x2A0]` writes it
+ * back after the turn and 0x0044BB45 `fld [pPlayer+0x2A0]` reads it live; enhanced_input keeps
+ * the same number. The engine's forward from it is (-sin, cos). The NPC spawner reads it. */
+#define PLAYER_HEADING_OFFSET 0x2A0u
 typedef void (__cdecl *use_ammo_fn_t)(int32_t weapon_id, int32_t amount);
 typedef void (__cdecl *damage_fn_t)(int32_t amount);
 typedef void (__cdecl *camera_update_fn_t)(void);
@@ -123,7 +126,7 @@ typedef struct cheats_own_state {
                                                           * directly rather than detoured; NULL if
                                                           * its own site did not resolve */
     uintptr_t               camera_view_address;       /* address OF the camera object pointer;
-                                                          * 0 = unresolved, free camera unavailable */
+                                                          * 0 = unresolved, no free camera */
     float                   jump_boost_scale;           /* see JUMP_BOOST_SCALE_DEFAULT above */
 } cheats_own_state_t;
 
@@ -141,6 +144,7 @@ bool cheats_install_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
 
 /* Each group installs itself; cheats_openphantom_install calls them in order. */
 void install_npc_damage(void);
+void install_super_run(void);
 void install_jump_boost(void);
 void install_fall_punishment_immunity(void);
 void install_noclip(void);
@@ -150,6 +154,10 @@ void install_noclip(void);
  * every frame from the chained camera update, the one site in this group that always runs. */
 void cheats_noclip_tick(void);
 bool install_freecam(void);
+
+/* Super run's one write, on or off; false when the site never resolved or the write did not
+ * land, so the toggle can put its flag back. */
+bool cheats_super_run_apply(bool on);
 
 /* The player damage hook, which unlimited health owns. Jump boost calls it rather than the engine
  * original, so that turning unlimited health on still wins when both cheats are on at once: the

@@ -1,7 +1,7 @@
 /* cell_watchdog.h: measure the two walls that a longer view distance runs into, and back off.
  *
  * ==============================================================================================
- * WALL 1: THE CELL TABLE
+ * Wall 1: the cell table
  *
  * bapdraw_gatherCell checks its 8192-entry limit EXACTLY ONCE, at function entry
  * (0x4064B8 `cmp eax,0x2000`). The face loop afterwards runs unchecked to 0x406815, and
@@ -22,7 +22,7 @@
  * tight or too loose. So we measure.
  *
  * ==============================================================================================
- * WALL 2: THE VERTEX CACHE, and it is the nastier one
+ * Wall 2: the vertex cache, and it is the nastier one
  *
  * 16384 slots of 0x40 bytes = exactly 1 MiB. If gate 1 (0x41A0DF) trips, the counter is left at
  * exactly 0x4000, the counter is written BEFORE the branch, and the other two gates then trip
@@ -31,9 +31,11 @@
  * and is therefore never reset until the level is reloaded. That is the cause of the stretched
  * triangles seen after raising the view distance: the damage is permanent, not transient.
  *
- * Unlike the cell table the vertex cache aborts CLEANLY (all three gates branch to a return
- * before every write), so the draw function returns normally and a measurement at frame end SEES
- * it. That was not true for the cell table, where the draw function dies first.
+ * Unlike the cell table the vertex cache aborts CLEANLY: gates 2 and 3 branch to a return before
+ * their loops, and gate 1 checks the counter it has just incremented, so the slot it wrote was
+ * the last valid one and the next call is refused by the other two. The draw function returns
+ * normally and a measurement at frame end SEES it. That was not true for the cell table, where
+ * the draw function dies first.
  */
 #ifndef CELL_WATCHDOG_H
 #define CELL_WATCHDOG_H
@@ -72,7 +74,7 @@ float cell_watchdog_ceiling(void);
 /* Forgets that ceiling. Called only when ViewRangeScale changes on disk: the reader has just said
  * what they want, and a watchdog still braked from a setting nobody is asking for any more would
  * quietly ignore it. Nothing else resets it, because a brake applied to avoid an overflow
- * stands for the rest of the level, which is the whole point of it. */
+ * stands for the rest of the level. */
 void cell_watchdog_reset_ceiling(void);
 
 /* The engine's own two counters as they stand right now: cells gathered and vertex cache slots

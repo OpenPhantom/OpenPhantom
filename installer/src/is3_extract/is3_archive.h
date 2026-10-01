@@ -11,7 +11,7 @@
  *
  * Every member is stored back to back from 0xFF, each compressed with PKWARE DCL implode.
  *
- * A directory record is self-describing, which is what makes walking it safe: six bytes before the
+ * A directory record is self-describing, so walking it is safe: six bytes before the
  * name-length byte sits the record's own length, and that length added to the current record's
  * name-length position lands exactly on the next one. The fields are addressed relative to the
  * name-length byte because that is the one position in a record that can be found by inspection.

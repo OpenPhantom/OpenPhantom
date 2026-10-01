@@ -6,17 +6,19 @@
  *
  *   - a frame that carried no report teaches nothing and must not be fed to the filter as a zero.
  *     The interval it covers has not been reported on yet; the next report will cover it. Feeding
- *     zeroes there is what makes a slow device look like a stopping hand, and it is the mistake
- *     this file exists to avoid. The caller has to tell the difference, which is why observe takes
- *     a packet count rather than working it out from the counts;
+ *     zeroes there makes a slow device look like a stopping hand, and it is the mistake this file
+ *     exists to avoid. The caller has to tell the difference, so observe takes a packet count
+ *     rather than working it out from the counts;
  *   - a take may never deliver what has not arrived and may never run against the bank's own
- *     direction. Two consumers share this state at different cadences, and that rule is the whole
+ *     direction. Two consumers share this state at different cadences, and that rule is all
  *     of what keeps them from each taking a full interval's worth of the same motion;
  *   - and a take must nevertheless always deliver something while the bank is not empty, or the
  *     last of a movement would sit there until the hand moved again. That is the exponential
  *     share below, and it is the floor rather than the shape.
  */
 #include "mouse_rate.h"
+
+#include "common/numeric.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -55,17 +57,6 @@
  * would stretch the filter to a quarter of a second on one bad frame. */
 #define MAX_REPORT_SECONDS 0.100f
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 static float magnitude_of(float value)
 {
     return (value < 0.0f) ? -value : value;
@@ -77,7 +68,7 @@ static float weight(float span, float tau)
     if (!(tau > 0.0f) || !(span > 0.0f)) {
         return 1.0f;
     }
-    return clamp_float(1.0f - (float)exp(-(double)span / (double)tau), 0.0f, 1.0f);
+    return numeric_clamp(1.0f - (float)exp(-(double)span / (double)tau), 0.0f, 1.0f);
 }
 
 void mouse_rate_reset(mouse_rate_t *rate)
@@ -118,8 +109,13 @@ float mouse_rate_time_constant(const mouse_rate_t *rate, float max_time_constant
      * directly. It also put the two delivery rules within a hair of each other, since at tau equal
      * to the step the exponential share and the rate term are the same size, so the delivery kept
      * flipping between the smooth one and the frame-grouped one. Reported from a real machine as
-     * lag and stutter at the same time, which is exactly what that pair produces. */
-    return clamp_float(wanted, TIME_CONSTANT_FLOOR, max_time_constant_seconds);
+     * lag and stutter at the same time, the pair of symptoms that combination produces.
+     *
+     * The ceiling has to win where it sits below the floor, which the shared clamp guarantees:
+     * a version that returned the floor handed 2 ms of smoothing to somebody who had written
+     * MouseSmoothMaxMs=0, visible only on a device reporting faster than about 3 kHz, where six
+     * report intervals first fall below the floor. */
+    return numeric_clamp(wanted, TIME_CONSTANT_FLOOR, max_time_constant_seconds);
 }
 
 void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, float span_seconds,
@@ -140,8 +136,8 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
         rate->bank = 0.0f;
     }
 
-    /* The window's clock runs on every call, including the ones that carried nothing, and that is
-     * not tidiness. Whenever the device reports more slowly than the game draws, most frames carry
+    /* The window's clock runs on every call, including the ones that carried nothing, and not for
+     * tidiness. Whenever the device reports more slowly than the game draws, most frames carry
      * no packet at all: at 62 reports a second against 144 frames, fewer than half of them do.
      * Counting only the frames that carried one would measure the interval between reports as the
      * length of the frames they happened to land in, which is less than half of it, and the rate is
@@ -165,7 +161,7 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
          * one, and the report interval learned the frame interval instead, which sizes a 1000 Hz
          * mouse's filter as if it were a 100 Hz one.
          *
-         * The stop detection below is what tells the two cases apart honestly: three missed report
+         * The stop detection below tells the two cases apart honestly: three missed report
          * intervals is past any ordinary gap in a stream, and only then does the estimate begin to
          * walk down. */
         rate->idle_seconds += (frame_seconds > 0.0f) ? frame_seconds : 0.0f;
@@ -181,7 +177,7 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
     /* The report interval. Until a full window has closed there is nothing better than this call's
      * own arithmetic, and being roughly right at once beats being exactly right in a quarter of a
      * second; a device that has just been picked up must be sized before then. */
-    measured = clamp_float(span_seconds / (float)packets, MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
+    measured = numeric_clamp(span_seconds / (float)packets, MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
     if (!rate->primed) {
         rate->report_seconds = measured;
         rate->primed         = true;
@@ -199,14 +195,14 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
     }
 
     /* And then the window owns it. Within a single frame the packet count is a small whole number,
-     * five or six, and its rounding is the whole of the error being removed here; an interval
+     * five or six, and its rounding is the entire error being removed here; an interval
      * derived from it would carry that error into the very estimate meant to be free of it. Over a
      * window the count is in the dozens and the rounding is a few per cent, and successive windows
      * are blended so that what is left of it averages away rather than stepping. */
     if (rate->window_packets >= REPORT_WINDOW_PACKETS ||
         (rate->window_seconds >= REPORT_WINDOW_SECONDS && rate->window_packets > 0u)) {
-        measured = clamp_float(rate->window_seconds / (float)rate->window_packets,
-                               MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
+        measured = numeric_clamp(rate->window_seconds / (float)rate->window_packets,
+                                 MIN_REPORT_SECONDS, MAX_REPORT_SECONDS);
         if (rate->window_ready) {
             rate->report_seconds += (measured - rate->report_seconds) * WINDOW_BLEND;
         } else {
@@ -217,13 +213,13 @@ void mouse_rate_observe(mouse_rate_t *rate, float counts, unsigned packets, floa
         rate->window_packets = 0u;
     }
 
-    /* The boundary correction, and it is this one line. The divisor is what the reports represent,
+    /* The boundary correction, and it is this one line. The divisor is what the reports stand for,
      * their number times the device's own interval, and not how long they took to arrive. Dividing
      * by the measured span would put the sampling boundary straight back in, because six reports
      * instead of five carry a sixth more counts across a span that did not grow by a sixth.
      *
-     * The reason is the arithmetic and nothing else. This comment used to justify it by claiming
-     * that raw input arrives in one burst when the game pumps its queue once a frame, and that is
+     * The reason is the arithmetic alone. This comment used to justify it by claiming
+     * that raw input arrives in one burst when the game pumps its queue once a frame, which is
      * false: the packets are received on a thread of their own, whose window has its own blocking
      * pump, so they are drained as they arrive and the game's frame pacing never touches them. The
      * conclusion survived the correction, but the false reason is worth naming, because "the
@@ -289,17 +285,17 @@ float mouse_rate_take(mouse_rate_t *rate, float dt, float max_time_constant_seco
      * The clamp costs the lead, which is at most one report interval of latency, and it buys a
      * delivery that cannot reverse, which is the one a player actually notices. */
     if (bank > 0.0f) {
-        wanted = clamp_float(wanted, 0.0f, bank);
+        wanted = numeric_clamp(wanted, 0.0f, bank);
     } else {
-        wanted = -clamp_float(-wanted, 0.0f, -bank);
+        wanted = -numeric_clamp(-wanted, 0.0f, -bank);
     }
 
     /* The floor. Whatever the rate estimate says, an exponential share of the bank leaves on every
      * take, so a bank the estimate has stopped asking for still empties over one time constant
-     * rather than standing there. This is also what pays out the tail of a movement after the hand
-     * has come to rest.
+     * rather than standing there. This also pays out the tail of a movement after the hand has
+     * come to rest.
      *
-     * It is what bounds the bank as well, which is the part that is not obvious from the line.
+     * It bounds the bank as well, which is the part that is not obvious from the line.
      * Delivery is the larger of rate times dt and bank times w in magnitude, with w one minus
      * exp(-dt/tau), so the bank only shrinks while bank times w exceeds rate times dt and can
      * therefore never sit above rate times dt over w, which is about one time constant of the

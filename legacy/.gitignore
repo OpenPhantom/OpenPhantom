@@ -16,6 +16,9 @@ build*/
 engine_fixes.log
 engine_fixes.prev.log
 engine_fixes_diag.log
+# The dedicated server writes its log into the directory it was started from, which is this one
+# when it is run from here out of build\dist.
+obi_dedicated.log
 
 # A tuned copy someone dropped in the checkout. The one that ships is dist/engine_fixes.ini
 # and is tracked; this only matches the repository root.
@@ -24,3 +27,13 @@ engine_fixes_diag.log
 # Working notes for splitting a branch into commits. Useful while the work is in progress and
 # meaningless afterwards, so it stays out of the history rather than being deleted by hand.
 /COMMIT-MESSAGES.txt
+
+# Left behind by a run rather than written by anybody: ctest started in a directory keeps its
+# logs in Testing/ there, and Python caches every script under tools/ that another one imports.
+Testing/
+__pycache__/
+
+# Visual Studio's Open Folder configures CMake into out/ beside the CMakeLists.txt it opened, and
+# CMakeUserPresets.json is the personal half of CMake's presets, which CMake says not to commit.
+out/
+CMakeUserPresets.json

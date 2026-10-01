@@ -53,8 +53,8 @@ the caller that asked for it. Across three field runs:
 * the take that broke the camera had no release after it at all, until the level tore down
 
 A fourth run watched `Dialog_Close` itself, reading the flag on the way in and again on the way out,
-and reported the choice count as zero. That is what separates the two halves of the condition and
-names the count as what refused.
+and reported the choice count as zero. That separates the two halves of the condition and names
+the count as the half that refused.
 
 The free look gate in `enhanced_input` reads the same flag and had been reporting it all along:
 `gOver 1` with `camera state 0`, meaning the camera object was in ordinary follow while the flag
@@ -65,19 +65,39 @@ still claimed a script had it.
 When a dialogue closes still holding a camera it took itself, the camera is handed back.
 
 **Only the count test is dropped.** The lock half is kept, in the form "nobody above this dialogue
-is still holding the input lock". That is what stops this from stealing a camera a cutscene is
+is still holding the input lock". That stops this from stealing a camera a cutscene is
 holding: a cutscene takes the lock to level 5, and it is still standing when a dialogue nested
 inside it closes. Asking whether the lock is clear *now* also covers the second failure above,
 which deleting the count test on its own would have left in place.
 
-**Nothing else's camera is ever touched.** A take is credited to the dialogue by the address control
-returns to, derived from the resolved `Dialog_SpeakSingle` rather than written down. A take from the
-cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered as not ours.
+**Nothing else's camera is ever touched.** The setter is called from inside `Dialog_SpeakSingle`, so
+a take is credited to the dialogue by that function being on the stack when it happens: a detour on
+it counts how deep inside a spoken line the thread is, and the setter's hook reads that count. A
+take from the cutscene opcode, a menu, the tripod gun or the fall-death camera is remembered as not
+ours.
 
-Installed all three detours or none. Without the setter nothing knows whose camera it is; without
-the clearer it would think the dialogue still holds one the engine already gave back; and the close
-is the only moment it acts at. Any two of them is not a smaller version of this fix, it is a wrong
-one.
+An earlier version read the address control returned to from the setter instead, which is the
+engine's only while this module's hook is the outermost link of the detour chain. The loader
+installs in name order, so `diagnostics` chains in front of it, and with its camera owner census
+on the take was credited to nobody and the fix never fired, in the session somebody was
+instrumenting the fault in.
+
+Installed all four detours or none. Without the spoken line nothing knows whose camera it is;
+without the setter and the clearer it would think the dialogue still holds one the engine already
+gave back; and the close is the only moment it acts at. Any three of them is not a smaller version
+of this fix; it is a wrong one.
+
+## Engine locations
+
+| Site | Retail VA | What |
+|---|---|---|
+| `Dialog_SpeakSingle` | `0x00430D12` | detoured; counts how deep inside a spoken line the thread is, so a take can be credited to the dialogue |
+| `bapview_overrideOn` | `0x0041840A` | detoured; a take made with a spoken line on the stack is remembered as the dialogue's |
+| `bapview_overrideOff` | `0x00418421` | detoured; the engine giving the camera back clears the memory |
+| `Dialog_Close` | `0x00430E82` | detoured; the one moment this acts, handing a held camera back |
+| `Dialog_LeaveInputLock` | `0x00430F18` | read for the lock level; the camera is only handed back when nobody above the dialogue holds the lock |
+
+All four detours or none, and the fifth site read with them.
 
 ## Configuration: `[camera_handback_fix]`
 
@@ -90,7 +110,11 @@ one.
 **The repair was watched working, in the game.** In a logged session all five sites resolved, and
 three consecutive lines show the whole mechanism: free look released with the scripted-camera
 flag set, this module reported handing the camera back, and free look re-armed on the very next
-line with the flag clear. That is the fault and its repair inside three lines of one log.
+line with the flag clear. That is the fault and its repair inside three lines of one log. That
+session ran the earlier attribution, by return address, with three detours. The spoken-line count
+that replaced it was built and run in the game afterwards, and the "closed still holding the
+camera and it was LEFT alone" line, which only prints for a take this module credited to the
+dialogue, appeared in play; the hand-back itself was not watched again under the new mechanism.
 
 **The original visible symptom was not cured by a direct before-and-after.** It was found on the
 run up Otoh Gunga's escape route after Jar Jar joins, and by the time this module worked that

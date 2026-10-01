@@ -1,7 +1,7 @@
 /* enhanced_resolution.c: lift the 4:3 lock, and cap the array it would otherwise overflow.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * graphics_buildModeList 0x46C592 filters the platform's raw DirectDraw table [0x862740]
  * (count [0x862014], stride 0x54) into this device's list. The acceptance rule, in code order:
@@ -35,9 +35,20 @@
  *
  * ==============================================================================================
  * SIZE NOTE: past the 600 line mark, and about half of it is the byte evidence above and at each
- * hooked site. That evidence belongs at the site, and it is what makes a patch that rewrites a
- * conditional jump reviewable at all: without the acceptance rule written out in code order,
- * `EB 32` is an unaccountable two bytes.
+ * hooked site. That evidence belongs at the site. A patch that rewrites a conditional jump cannot
+ * be reviewed without it: with no acceptance rule written out in code order, `EB 32` is an
+ * unaccountable two bytes.
+ *
+ * The seam taken was the mode table, now mode_table.c: reading the raw display list out of the
+ * instructions around the aspect gate, dumping it on request, and capping what the options
+ * screen is handed. It reached this file exactly 900 lines, the hard limit, with a note that
+ * said only 600 and so granted permission instead of warning. Only two values cross the new
+ * boundary, the two table pointers window_fit measures a requested mode against.
+ *
+ * The seam measured and rejected was the configuration block, which is longer but is read by
+ * every part of this file, so moving it would have replaced one long file with two coupled
+ * ones. The next seam, if this grows again, is the forced startup resolution together with the
+ * menu gates: they share only the site table with everything else here.
  */
 #include "enhanced_resolution.h"
 
@@ -49,6 +60,7 @@
 #include "menu_scale.h"
 #include "mode_depth.h"
 #include "mode_filter.h"
+#include "mode_table.h"
 #include "sw_blit_guard.h"
 #include "ending_resolution.h"
 #include "credits_skip.h"
@@ -93,7 +105,6 @@ static const uint8_t SIG_ENUM_MODES[] = {
     0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x08, 0x08, 0x00, 0x00, 0x56, 0x57,
     0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x45
 };
-#define ENUM_MODES_PROLOGUE_SIZE 9u
 
 /* --- 0x0046BE3D  graphics_setResolution (function start) ------------------------------------- */
 static const uint8_t SIG_SET_RESOLUTION[] = {
@@ -143,42 +154,20 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("graphics_aspect_gate",   SIG_ASPECT_GATE),
-    SIGNATURE_ENTRY("graphics_enum_modes",    SIG_ENUM_MODES),
-    SIGNATURE_ENTRY("graphics_set_resolution",SIG_SET_RESOLUTION),
+    /* Both functions are detoured, mode_table.c's cap on the first and this file's hook on the
+     * second, so both are declared as detour targets: a plain pattern is searched for whole, and
+     * a DLL that detoured either first has replaced exactly the bytes it opens with. */
+    SIGNATURE_ENTRY_DETOUR("graphics_enum_modes", SIG_ENUM_MODES, ENUM_MODES_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY_DETOUR("graphics_set_resolution", SIG_SET_RESOLUTION,
+                           SET_RESOLUTION_PROLOGUE_SIZE),
     SIGNATURE_ENTRY("menu_gate_enter",        SIG_MENU_GATE_ENTER),
     SIGNATURE_ENTRY("menu_gate_usable",       SIG_MENU_GATE_USABLE)
 };
 
-/* The three data references the mode dump wants all live in graphics_buildModeList, at fixed
- * distances BEHIND the aspect gate (which is inside the same function). Each is verified by its
- * opcode bytes before the operand is believed, so a build that moved them degrades to "not
- * resolved" and the dump simply does not run.
- *
- *   gate - 0x0A7 : C7 45 FC <g_aRawMode>        (0x46C632, seeds the walk pointer)
- *   gate - 0x12C : 8B 0D    <g_numRawModes>     (0x46C5AD)
- *   gate - 0x0F4 : E8       <rel32 -> mem_free> (0x46C5E5)                                      */
-#define BACKWARD_RAW_MODES     0x0A7
-#define BACKWARD_NUM_RAW_MODES 0x12C
-#define BACKWARD_MEM_FREE      0x0F4
-
-/* RAW_MODE_STRIDE and the four field offsets live in window_fit.h: the same layout is read there
- * to find out how big a requested mode is, and one layout described in two places is one layout
- * that can disagree with itself. */
-
-#define MENU_LABEL_SLOTS      64   /* [0x4AF988] .. [0x4AFB88] */
 #define MAX_MENU_MODES_LIMIT  63
 #define MIN_MENU_MODES_LIMIT   4
-#define SCRATCH_MODE_SLOTS   512
-#define MAX_RAW_MODES_LOGGED 512
 
-typedef struct mode_label {
-    int32_t index;
-    char   *label;
-} mode_label_t;
-
-typedef int32_t (__cdecl *enum_modes_fn_t)(mode_label_t *out);
 typedef int32_t (__cdecl *set_resolution_fn_t)(uint32_t width, uint32_t height);
-typedef void    (__cdecl *engine_free_fn_t)(void *block);
 
 typedef struct resolution_config {
     bool enabled;
@@ -213,18 +202,13 @@ typedef struct resolution_state {
     bool                installed;
     resolution_config_t config;
 
-    detour_t            enum_modes_detour;
     detour_t            set_resolution_detour;
 
-    const uint8_t      *raw_modes;
-    const uint32_t     *raw_mode_count;
-    engine_free_fn_t    engine_free;
-    bool                logged_mode_table;
 
-    mode_label_t        scratch[SCRATCH_MODE_SLOTS];
 } resolution_state_t;
 
 static resolution_state_t resolution_state;
+static patch_journal_t bolt_journal;
 
 /* The cell both menu bolts are repointed at. 0x7FFFFFFF makes the comparison never true. */
 static uint32_t menu_width_cell = 0x7FFFFFFFu;
@@ -267,10 +251,10 @@ static void load_config(void)
     config->windowed_fill         = ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true);
     config->pointer_release_key   = ini_read_int (RESOLUTION_SECTION, "PointerReleaseKey", 0x91);
 
-    /* Default ON, and the reason it is safe to default a behaviour change on: on a window that
-     * sits at screen 0,0, which is where the engine puts it and where it stays without the line
-     * above, the correction is the identity, bit for bit. It can only change what happens on a
-     * window this DLL has moved somewhere else, and there the current behaviour is already wrong. */
+    /* Default ON, and the reason it is safe to default a behaviour change on: on a window that sits
+     * at screen 0,0, which is where the engine puts it and where it stays without the line above,
+     * the correction is the identity, bit for bit. It can only change what happens on a window this
+     * DLL has moved somewhere else, and there the current behaviour is already wrong. */
     config->keep_cursor_in_window = ini_read_bool(RESOLUTION_SECTION, "KeepCursorInWindow", true);
 
     /* Default ON, and the reason a new piece of process-global OS state may default on: the engine
@@ -296,7 +280,7 @@ static void load_config(void)
      * happens on a mode the engine's own constant was never written for. It does not move or
      * rescale any menu: the engine already centres those itself.
      *
-     * KNOWN COST, not yet reproduced here, and the reason this default is under review: the pause
+     * Known cost, not yet reproduced here, and the reason this default is under review: the pause
      * screens repair themselves through the menu toolkit's damage rectangles, which live in canvas
      * coordinates clipped to the same hard-coded 640x480 every blit in that toolkit clips to. A
      * cursor quad drawn partly outside the island cannot be expressed as a damage rectangle, so it
@@ -355,156 +339,6 @@ static void load_config(void)
 }
 
 /* ============================================================================================ */
-static void resolve_mode_table(void)
-{
-    uintptr_t gate = sites[SITE_ASPECT_GATE].address;
-    uint8_t   opcodes[3];
-    uint32_t  address;
-
-    if (gate == 0 || gate < BACKWARD_NUM_RAW_MODES) {
-        return;
-    }
-
-    if (memory_read(gate - BACKWARD_RAW_MODES, opcodes, 3) &&
-        opcodes[0] == 0xC7 && opcodes[1] == 0x45 && opcodes[2] == 0xFC &&
-        memory_read_u32(gate - BACKWARD_RAW_MODES + 3, &address) &&
-        memory_is_inside_image(address, RAW_MODE_STRIDE)) {
-        resolution_state.raw_modes = (const uint8_t *)(uintptr_t)address;
-    }
-
-    if (memory_read(gate - BACKWARD_NUM_RAW_MODES, opcodes, 2) &&
-        opcodes[0] == 0x8B && opcodes[1] == 0x0D &&
-        memory_read_u32(gate - BACKWARD_NUM_RAW_MODES + 2, &address) &&
-        memory_is_inside_image(address, sizeof(uint32_t))) {
-        resolution_state.raw_mode_count = (const uint32_t *)(uintptr_t)address;
-    }
-
-    {
-        uintptr_t call_site = gate - BACKWARD_MEM_FREE;
-        uintptr_t target;
-        if (patch_read_call_target(call_site, &target)) {
-            resolution_state.engine_free = (engine_free_fn_t)target;
-        }
-    }
-
-    log_info("g_aRawMode=%08X g_numRawModes=%08X mem_free=%08X",
-             (unsigned)(uintptr_t)resolution_state.raw_modes,
-             (unsigned)(uintptr_t)resolution_state.raw_mode_count,
-             (unsigned)(uintptr_t)resolution_state.engine_free);
-}
-
-static void log_mode_table(void)
-{
-    uint32_t count;
-    uint32_t index;
-
-    if (resolution_state.raw_modes == NULL || resolution_state.raw_mode_count == NULL) {
-        log_warning("the mode table did not resolve, cannot list what DirectDraw offers");
-        return;
-    }
-
-    count = *resolution_state.raw_mode_count;
-    log_info("DirectDraw reports %u raw modes (only kind==1 && bpp==16 are usable):",
-             (unsigned)count);
-
-    for (index = 0; index < count && index < MAX_RAW_MODES_LOGGED; ++index) {
-        const uint8_t *mode = resolution_state.raw_modes + index * RAW_MODE_STRIDE;
-        uint32_t width;
-        uint32_t height;
-        uint32_t kind;
-        uint32_t bits;
-
-        if (!memory_is_readable_range((uintptr_t)mode, RAW_MODE_STRIDE)) {
-            break;
-        }
-        width  = *(const uint32_t *)(mode + RAW_MODE_WIDTH);
-        height = *(const uint32_t *)(mode + RAW_MODE_HEIGHT);
-        kind   = *(const uint32_t *)(mode + RAW_MODE_KIND);
-        bits   = *(const uint32_t *)(mode + RAW_MODE_BPP);
-
-        log_info("   [%3u] %5u x %5u  kind %u  bpp %2u  %s",
-                 (unsigned)index, (unsigned)width, (unsigned)height, (unsigned)kind,
-                 (unsigned)bits,
-                 (kind == 1 && bits == 16)
-                     ? ((width >= 640 && height >= 480) ? "USABLE" : "too small")
-                     : "-");
-    }
-}
-
-/* ============================================================================================ */
-static int32_t __cdecl hook_enum_modes(mode_label_t *out)
-{
-    enum_modes_fn_t original = (enum_modes_fn_t)resolution_state.enum_modes_detour.original;
-    int32_t         produced;
-    int32_t         kept;
-    int32_t         index;
-
-    /* The raw table is EMPTY at load time, stdDisplay_startup has not run yet. The first
-     * enumeration is the earliest point at which it is populated. */
-    if (!resolution_state.logged_mode_table && resolution_state.config.log_mode_table) {
-        resolution_state.logged_mode_table = true;
-        log_mode_table();
-    }
-
-    memset(resolution_state.scratch, 0, sizeof(resolution_state.scratch));
-    produced = original(resolution_state.scratch);
-    if (produced < 0) {
-        produced = 0;
-    }
-    if (produced > SCRATCH_MODE_SLOTS - 1) {
-        produced = SCRATCH_MODE_SLOTS - 1;
-    }
-
-    kept = (produced > resolution_state.config.max_menu_modes)
-         ? resolution_state.config.max_menu_modes
-         : produced;
-
-    for (index = 0; index < kept; ++index) {
-        out[index] = resolution_state.scratch[index];
-    }
-    out[kept].index = -1;
-    out[kept].label = NULL;
-
-    /* Hand the dropped labels back to the engine's allocator; the caller only ever frees the ones
-     * it received. */
-    if (produced > kept && resolution_state.engine_free != NULL) {
-        for (index = kept; index < produced; ++index) {
-            if (resolution_state.scratch[index].label != NULL) {
-                resolution_state.engine_free(resolution_state.scratch[index].label);
-            }
-        }
-    }
-
-    if (produced != kept) {
-        log_warning("enumModes produced %d modes, TRUNCATED to %d (the menu array holds %d)",
-                    (int)produced, (int)kept, MENU_LABEL_SLOTS);
-    }
-
-    /* Unconditional, and it stays unconditional. This is the only line that says what the options
-     * screen was actually handed, and the first field report, "the list only had 800x600",
-     * arrived with no way to tell whether the enumerator or the filter was at fault, because this
-     * used to sit behind a verbose flag. */
-    /* What the filter kept out of the enumeration, next to what the enumeration produced. The
-     * two numbers only mean something together: a short list with nothing filtered is a driver
-     * offering little, a short list with a lot filtered is the table having been full. */
-    mode_filter_log_summary();
-
-    log_info("enumModes handed %d mode(s) to the options screen:", (int)kept);
-    for (index = 0; index < kept; ++index) {
-        log_info("   [%2d] index %-3d \"%s\"", (int)index, (int)out[index].index,
-                 (out[index].label != NULL) ? out[index].label : "(no label)");
-    }
-    if (kept <= 1) {
-        log_warning("that is one mode or none. The engine builds this list in "
-                    "graphics_buildModeList during GRAPHICS startup, so anything that has to "
-                    "influence it, the 4:3 gate above all, must be patched before then. If "
-                    "the gate was lifted after the list was built, only the 4:3 entries survive.");
-    }
-
-    return kept;
-}
-
-/* ============================================================================================ */
 #define RESOLUTION_READ_INI 0xFFFFFFFFu
 
 /* Enough to cover a whole session's mode changes and nowhere near enough to be a flood. */
@@ -515,7 +349,7 @@ static int32_t __cdecl hook_set_resolution(uint32_t width, uint32_t height)
     set_resolution_fn_t original =
         (set_resolution_fn_t)resolution_state.set_resolution_detour.original;
 
-    /* This detour exists for ForceWidth/ForceHeight and nothing else. The window fit used to be
+    /* This detour exists for ForceWidth/ForceHeight only. The window fit used to be
      * driven from here and that was the defect: this function is not the choke point, and the mode
      * changes a player triggers do not pass through it. */
     /* MEASUREMENT, off unless asked for. graphics_setResolution has SIX callers and
@@ -595,9 +429,15 @@ static void install_menu_resolution_gate(void)
         return;
     }
 
-    if (patch_repoint_operand(enter_operand, enter_cell, our_cell) != PATCH_RESULT_OK ||
-        patch_repoint_operand(usable_operand, enter_cell, our_cell) != PATCH_RESULT_OK) {
-        log_error("repointing the menu bolts failed, unchanged");
+    /* Both operands or neither: with one repointed the entry test and the usable-width test
+     * would disagree about the ceiling, which is a state the engine never had. */
+    patch_journal_reset(&bolt_journal);
+    if (patch_journal_repoint_operand(&bolt_journal, enter_operand, enter_cell, our_cell)
+            != PATCH_RESULT_OK ||
+        patch_journal_repoint_operand(&bolt_journal, usable_operand, enter_cell, our_cell)
+            != PATCH_RESULT_OK) {
+        patch_journal_undo(&bolt_journal);
+        log_error("repointing the menu bolts failed, both operands are as they were");
         return;
     }
 
@@ -629,26 +469,6 @@ static void install_aspect_gate(void)
                  "are untouched.", (unsigned)gate);
     } else {
         log_error("the aspect-gate patch at %08X could not be written", (unsigned)gate);
-    }
-}
-
-static void install_enum_modes_cap(void)
-{
-    uintptr_t site = sites[SITE_ENUM_MODES].address;
-
-    if (site == 0) {
-        log_warning("graphics_enum_modes did not resolve, with the 4:3 lock lifted the options "
-                    "screen can overflow its %d-slot array. Consider WidescreenModes=0.",
-                    MENU_LABEL_SLOTS);
-        return;
-    }
-    if (detour_install(&resolution_state.enum_modes_detour, site,
-                       (const void *)hook_enum_modes, ENUM_MODES_PROLOGUE_SIZE)) {
-        log_info("hooked graphics_enumModes at %08X (cap %d entries)",
-                 (unsigned)site, resolution_state.config.max_menu_modes);
-    } else {
-        log_error("the graphics_enumModes detour FAILED. With the 4:3 lock lifted the options "
-                  "screen can overflow its %d-slot array", MENU_LABEL_SLOTS);
     }
 }
 
@@ -707,17 +527,146 @@ static bool install_window_mode(void)
     return window_mode_install(&mode_config);
 }
 
-/* The window fit is a whole responsibility of its own and lives in window_fit.c; this hands it the
- * two table pointers that were resolved here and nothing else. */
+/* The window fit is a whole responsibility of its own and lives in window_fit.c; this hands it
+ * only the two table pointers that were resolved here. */
 static bool install_window_fit(void)
 {
     window_fit_config_t fit_config;
 
     fit_config.enabled        = resolution_state.config.fit_window_to_mode;
-    fit_config.raw_modes      = resolution_state.raw_modes;
-    fit_config.raw_mode_count = resolution_state.raw_mode_count;
+    fit_config.raw_modes      = mode_table_raw_modes();
+    fit_config.raw_mode_count = mode_table_raw_mode_count();
 
     return window_fit_install(&fit_config);
+}
+
+/* The window: the device change, whichever of the fit and the mode moves the window, and the
+ * four features that read whether it was moved.
+ *
+ * EITHER of the fit and the mode counts as moving the window, and the OR is the whole reason
+ * `window_is_moved` is one variable rather than two. The two features that read it report whether
+ * they are load-bearing, and the answer is "load-bearing exactly when this DLL moves the window".
+ * A window mode that centres a window, or puts a borderless one on a monitor whose origin is not
+ * (0,0), breaks the engine's own pointer arithmetic exactly as the fit does, so counting only the
+ * fit would leave them calling themselves insurance while they were carrying the feature.
+ *
+ * The fit runs first because the mode asks it for the display mode size. */
+static void install_window_group(void)
+{
+    windowed_device_config_t device_config;
+    focus_guard_config_t     focus_config;
+    present_clip_config_t    clip_config;
+    pointer_release_config_t release_config;
+    window_poll_config_t     poll_config;
+    bool fit_moved;
+    bool mode_moved;
+    bool window_is_moved;
+
+    /* The device change is a single byte written into code the engine runs later, so its
+     * position in this sequence decides nothing. It is here because this is where the window
+     * work lives, and for no other reason. */
+    device_config.enabled = resolution_state.config.windowed_present;
+    (void)windowed_device_install(&device_config);
+
+    /* Only one of them may move the window. Each is a complete opinion about where the
+     * window goes: the fit puts it at the monitor's corner at the size of the display mode and
+     * re-applies for frames afterwards, the mode centres it at a size of the player's choosing
+     * and applies from the same site. Run together the fit acts last and wins, so the player
+     * silently gets neither what they asked for nor a warning.
+     *
+     * The mode wins, because it is the more specific request and because the fit documents
+     * itself as a last resort for a setup with no graphics wrapper at all. */
+    if (resolution_state.config.fit_window_to_mode &&
+        resolution_state.config.window_mode != (int32_t)WINDOW_MODE_AUTHENTIC) {
+        log_warning("FitWindowToMode=1 and WindowMode=%d both decide where the window goes, "
+                    "and they disagree. WindowMode wins and the fit is not installed: it is "
+                    "the older setting and it documents itself as a last resort for a machine "
+                    "with no graphics wrapper. Set WindowMode=0 if you wanted the fit.",
+                    (int)resolution_state.config.window_mode);
+        fit_moved = false;
+    } else {
+        fit_moved = install_window_fit();
+    }
+    mode_moved = install_window_mode();
+
+    window_is_moved = fit_moved || mode_moved;
+
+    /* This repairs the one piece of engine arithmetic that assumed the window would never be
+     * moved at all. */
+    (void)cursor_anchor_install(resolution_state.config.keep_cursor_in_window, window_is_moved);
+
+    /* And this covers what the repaired arithmetic still cannot: the warp only fires when a
+     * mouse message arrives, and a pointer that crossed the edge stops generating them. */
+    focus_config.confine_pointer = resolution_state.config.clip_pointer_to_window;
+    focus_config.reacquire_input = resolution_state.config.reacquire_input_on_focus;
+    focus_config.window_is_moved = window_is_moved;
+    (void)focus_guard_install(&focus_config);
+
+    /* Last of the window group: both read what the calls above settled. */
+    clip_config.windowed_present = resolution_state.config.windowed_present;
+    clip_config.enabled = resolution_state.config.windowed_fill &&
+                          clip_config.windowed_present;
+    (void)present_clip_install(&clip_config);
+
+    release_config.key = resolution_state.config.pointer_release_key;
+    (void)pointer_release_install(&release_config);
+
+    /* Seeded with what was just installed, so the first poll compares against what is in force
+     * rather than re-applying everything a second in. */
+    poll_config.mode                = resolution_state.config.window_mode;
+    poll_config.windowed_width      = resolution_state.config.windowed_width;
+    poll_config.windowed_height     = resolution_state.config.windowed_height;
+    poll_config.pointer_release_key = resolution_state.config.pointer_release_key;
+    poll_config.windowed_fill       = resolution_state.config.windowed_fill;
+    (void)window_poll_install(&poll_config);
+}
+
+/* The menus: the artwork mount, the scale, and the three features sized from the canvas the
+ * scale settles on. */
+static void install_menu_group(void)
+{
+    int32_t canvas_width;
+    int32_t canvas_height;
+
+    /* The artwork mount comes first of all, because menu_scale reads the converted
+     * artwork's own size to decide the canvas, and that file lives in this folder. The mount
+     * itself happens later, when the engine starts its menu system; this only arms it. */
+    (void)menu_art_source_install(resolution_state.config.menu_art_directory[0] != '\0',
+                                  resolution_state.config.menu_art_directory);
+
+    /* menu_scale FIRST now, because the cage is sized from the canvas it draws and
+     * asks menu_scale_canvas() for the size. The two used to be the other way
+     * round, when the cage widened to the display mode and the scale had to ask
+     * whether it had armed. */
+    (void)menu_scale_install(resolution_state.config.menu_scale,
+                             resolution_state.config.widen_menu_cursor_area);
+
+    menu_scale_canvas(&canvas_width, &canvas_height);
+
+    /* AFTER install_window_fit(), and this is an ordering constraint rather than a
+     * reading order: the cage asks window_fit_current_mode_size() for the display mode,
+     * and that accessor is resolved inside window_fit_install(). Installing the cage
+     * first would find it unresolved and decline for a reason that has nothing to do
+     * with the cage.
+     *
+     * The two are otherwise unrelated: this one is about the cursor the MENUS draw and
+     * is useful whether or not the window is ever moved. */
+    pointer_cage_install(resolution_state.config.widen_menu_cursor_area,
+                         canvas_width, canvas_height, menu_scale_cursor_size());
+
+    /* Same ordering constraint again, and the same reason: the loading bar is drawn by
+     * hand off the menu origin rather than as widgets, so it is sized from the canvas
+     * menu_scale settled on rather than from the setting. */
+    (void)menu_loading_bar_install(canvas_width, canvas_height);
+
+    /* Same ordering constraint as the cage: the island's origin is derived from
+     * window_fit_current_mode_size(), and its SIZE is the canvas menu_scale settled on.
+     * Clamping to the authored 640x480 while the menus draw on a scaled canvas cuts real
+     * widgets off at a border that is no longer there. This is the erase-side companion
+     * of MenuKeepsResolution: it closes the blue stamp the hovered button's halo leaves
+     * on the island's border, drawn against the screen and repaired against the canvas. */
+    (void)menu_island_clip_install(resolution_state.config.clamp_menu_sprites_to_island,
+                                   canvas_width, canvas_height);
 }
 
 void enhanced_resolution_install(void)
@@ -739,11 +688,11 @@ void enhanced_resolution_install(void)
     }
 
     signature_resolve_table(sites, SITE_COUNT);
-    resolve_mode_table();
+    mode_table_resolve(sites[SITE_ASPECT_GATE].address);
 
     resolution_state.installed = true;
 
-    /* FIRST of all the patches here, and that is an ordering constraint rather than a reading
+    /* FIRST of all the patches here, an ordering constraint rather than a reading
      * order. The display mode enumeration runs once, inside graphics startup, so the depth choice
      * and the filter can only work on an enumeration that has not happened yet, and the filter has
      * to agree with whatever depth this settled on. Everything below acts on the list that
@@ -756,7 +705,9 @@ void enhanced_resolution_install(void)
     (void)mode_filter_install(resolution_state.config.filter_mode_enumeration);
 
     install_aspect_gate();
-    install_enum_modes_cap();
+    mode_table_install_cap(sites[SITE_ENUM_MODES].address,
+                           resolution_state.config.max_menu_modes,
+                           resolution_state.config.log_mode_table);
     install_forced_startup_resolution();
     ending_resolution_install(resolution_state.config.ending_keeps_resolution);
     credits_skip_install(resolution_state.config.skip_credits);
@@ -767,128 +718,11 @@ void enhanced_resolution_install(void)
      * report whether they are load-bearing or merely insurance, and the answer is "load-bearing
      * exactly when this DLL moves the window". That is not known until the window fit has either
      * gone in or failed, so neither may be installed before install_window_fit() has returned. */
-    {
-        /* EITHER of them counts as moving the window, and the OR is the whole reason this is one
-         * variable rather than two. The two features below report whether they are load-bearing,
-         * and the answer is "load-bearing exactly when this DLL moves the window". A window mode
-         * that centres a window, or puts a borderless one on a monitor whose origin is not (0,0),
-         * breaks the engine's own pointer arithmetic exactly as the fit does, so counting only the
-         * fit would leave them calling themselves insurance while they were carrying the feature.
-         *
-         * The fit runs first because the mode asks it for the display mode size. */
-        windowed_device_config_t device_config;
-        bool fit_moved;
-        bool mode_moved;
-        bool window_is_moved;
+    install_window_group();
 
-        /* The device change is a single byte written into code the engine runs later, so its
-         * position in this sequence decides nothing. It is here because this is where the window
-         * work lives, and for no other reason. */
-        device_config.enabled = resolution_state.config.windowed_present;
-        (void)windowed_device_install(&device_config);
-
-        /* Only one of them may move the window. Each is a complete opinion about where the
-         * window goes: the fit puts it at the monitor's corner at the size of the display mode and
-         * re-applies for frames afterwards, the mode centres it at a size of the player's choosing
-         * and applies from the same site. Run together the fit acts last and wins, so the player
-         * silently gets neither what they asked for nor a warning.
-         *
-         * The mode wins, because it is the more specific request and because the fit documents
-         * itself as a last resort for a setup with no graphics wrapper at all. */
-        if (resolution_state.config.fit_window_to_mode &&
-            resolution_state.config.window_mode != (int32_t)WINDOW_MODE_AUTHENTIC) {
-            log_warning("FitWindowToMode=1 and WindowMode=%d both decide where the window goes, "
-                        "and they disagree. WindowMode wins and the fit is not installed: it is "
-                        "the older setting and it documents itself as a last resort for a machine "
-                        "with no graphics wrapper. Set WindowMode=0 if you wanted the fit.",
-                        (int)resolution_state.config.window_mode);
-            fit_moved = false;
-        } else {
-            fit_moved = install_window_fit();
-        }
-        mode_moved = install_window_mode();
-        focus_guard_config_t     focus_config;
-        present_clip_config_t    clip_config;
-        pointer_release_config_t release_config;
-        window_poll_config_t     poll_config;
-
-        window_is_moved = fit_moved || mode_moved;
-
-        /* This repairs the one piece of engine arithmetic that assumed the window would never be
-         * moved at all. */
-        (void)cursor_anchor_install(resolution_state.config.keep_cursor_in_window, window_is_moved);
-
-        /* And this covers what the repaired arithmetic still cannot: the warp only fires when a
-         * mouse message arrives, and a pointer that crossed the edge stops generating them. */
-        focus_config.confine_pointer = resolution_state.config.clip_pointer_to_window;
-        focus_config.reacquire_input = resolution_state.config.reacquire_input_on_focus;
-        focus_config.window_is_moved = window_is_moved;
-        (void)focus_guard_install(&focus_config);
-
-        /* Last of the window group: both read what the calls above settled. */
-        clip_config.windowed_present = resolution_state.config.windowed_present;
-        clip_config.enabled = resolution_state.config.windowed_fill &&
-                              clip_config.windowed_present;
-        (void)present_clip_install(&clip_config);
-
-        release_config.key = resolution_state.config.pointer_release_key;
-        (void)pointer_release_install(&release_config);
-
-        /* Seeded with what was just installed, so the first poll compares against what is in force
-         * rather than re-applying everything a second in. */
-        poll_config.mode                = resolution_state.config.window_mode;
-        poll_config.windowed_width      = resolution_state.config.windowed_width;
-        poll_config.windowed_height     = resolution_state.config.windowed_height;
-        poll_config.pointer_release_key = resolution_state.config.pointer_release_key;
-        poll_config.windowed_fill       = resolution_state.config.windowed_fill;
-        (void)window_poll_install(&poll_config);
-
-        /* The artwork mount comes first of all, because menu_scale reads the converted
-         * artwork's own size to decide the canvas, and that file lives in this folder. The mount
-         * itself happens later, when the engine starts its menu system; this only arms it. */
-        (void)menu_art_source_install(resolution_state.config.menu_art_directory[0] != '\0',
-                                      resolution_state.config.menu_art_directory);
-
-        /* menu_scale FIRST now, because the cage is sized from the canvas it draws and
-         * asks menu_scale_canvas() for the size. The two used to be the other way
-         * round, when the cage widened to the display mode and the scale had to ask
-         * whether it had armed. */
-        (void)menu_scale_install(resolution_state.config.menu_scale,
-                                 resolution_state.config.widen_menu_cursor_area);
-
-        {
-            int32_t canvas_width;
-            int32_t canvas_height;
-
-            menu_scale_canvas(&canvas_width, &canvas_height);
-
-            /* AFTER install_window_fit(), and this is an ordering constraint rather than a
-             * reading order: the cage asks window_fit_current_mode_size() for the display mode,
-             * and that accessor is resolved inside window_fit_install(). Installing the cage
-             * first would find it unresolved and decline for a reason that has nothing to do
-             * with the cage.
-             *
-             * The two are otherwise unrelated: this one is about the cursor the MENUS draw and
-             * is useful whether or not the window is ever moved. */
-            pointer_cage_install(resolution_state.config.widen_menu_cursor_area,
-                                 canvas_width, canvas_height);
-
-            /* Same ordering constraint again, and the same reason: the loading bar is drawn by
-             * hand off the menu origin rather than as widgets, so it is sized from the canvas
-             * menu_scale settled on rather than from the setting. */
-            (void)menu_loading_bar_install(canvas_width, canvas_height);
-
-            /* Same ordering constraint as the cage: the island's origin is derived from
-             * window_fit_current_mode_size(), and its SIZE is the canvas menu_scale settled on.
-             * Clamping to the authored 640x480 while the menus draw on a scaled canvas cuts real
-             * widgets off at a border that is no longer there. This is the erase-side companion
-             * of MenuKeepsResolution: it closes the blue stamp the hovered button's halo leaves
-             * on the island's border, drawn against the screen and repaired against the canvas. */
-            (void)menu_island_clip_install(resolution_state.config.clamp_menu_sprites_to_island,
-                                           canvas_width, canvas_height);
-        }
-
-    }
+    /* And after the window group, because the cursor cage asks window_fit_current_mode_size()
+     * for the display mode, and that accessor is resolved inside window_fit_install(). */
+    install_menu_group();
 }
 
 void enhanced_resolution_shutdown(void)

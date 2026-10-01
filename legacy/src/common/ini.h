@@ -5,6 +5,11 @@
  *
  * This module knows nothing about what any key means. Range checks, NaN handling and semantic
  * validation belong to the feature that owns the value.
+ *
+ * Reads are remembered per key and asked of the file again only when its write time has moved,
+ * checked at most ten times a second, or when this DLL wrote it. A caller may read a key every
+ * frame; under Wine the profile API opens the file on every call, and the developer panel's rows
+ * did exactly that.
  */
 #ifndef COMMON_INI_H
 #define COMMON_INI_H
@@ -25,14 +30,31 @@ float   ini_read_float (const char *section, const char *key, float default_valu
 bool ini_read_string(const char *section, const char *key, const char *default_value,
                      char *buffer, size_t buffer_size);
 
+/* Every key of one section at once, as the profile API hands them over: `key=value` runs, each
+ * terminated by a NUL, the last one followed by a second NUL. Returns the number of bytes written
+ * before that final terminator, 0 for a section that is absent or empty, and 0 when the buffer is
+ * too small (the profile API cannot report truncation any other way, so a caller that needs the
+ * difference passes a buffer it knows is large enough).
+ *
+ * It exists because a caller that has to judge a whole section cannot enumerate one with the
+ * key at a time reads above, and a hard coded list of key names goes stale in silence: a key
+ * added later is then simply not looked at. */
+size_t ini_read_section(const char *section, char *buffer, size_t buffer_size);
+
 /* `decimal_places` is clamped to 0..6. Returns false and leaves the file alone on failure,
  * a caller that logs "saved" without checking this is lying to the user. */
 bool ini_write_float(const char *section, const char *key, float value, int decimal_places);
 bool ini_write_int  (const char *section, const char *key, int32_t value);
 
+/* A value that is text rather than a number: an address, a name, a path. A NULL value removes
+ * the key, which is how a list shrinks without leaving a hole behind it. The text is written as
+ * given; a value carrying a newline or a NUL is the caller's problem, because the file format has
+ * no way to represent either and the profile API would silently truncate. */
+bool ini_write_string(const char *section, const char *key, const char *value);
+
 /* A number that changes whenever the file has been written, and does not change while it has not.
  *
- * WHY THIS EXISTS. Reading a key means parsing the whole file, and this project's ini is around
+ * Why this exists. Reading a key means parsing the whole file, and this project's ini is around
  * ninety kilobytes. A feature that wants to notice an edit within a frame rather than within a
  * second cannot afford to do that every frame, and until now the only way to notice one at all was
  * to read the key and compare. This asks the file system for the last write time instead, which

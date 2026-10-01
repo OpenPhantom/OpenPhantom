@@ -7,15 +7,14 @@
  * Ten separate conditions produce that identical symptom.
  *
  * So each line carries the condition BY NAME, the camera region under the player and its flags, the
- * yaw on screen against the yaw free look wants, and the camera's PITCH and EYE HEIGHT.
+ * yaw on screen against the yaw free look wants, and the camera's pitch and eye height.
  *
  * The last two are there to be WATCHED rather than because this feature can move them. It writes
  * neither: the pitch is built by a different lerp with a rate pushed as an immediate, and the eye
  * height is composed by adding an UNROTATED Z, so a horizontal free look provably cannot tilt the
  * view or raise the eye. When those two numbers move across a transition, what moved them is the
- * authored pitch and camera offset of the region named on the same line, and having them printed
- * either side of every transition is what turns that argument from a promise into something a
- * player can check.
+ * authored pitch and camera offset of the region named on the same line, and printing them either
+ * side of every transition turns that argument from a promise into something a player can check.
  *
  * It is off unless the ini asks for it, because a normal session should be silent.
  */
@@ -26,6 +25,7 @@
 
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -106,7 +106,7 @@ void free_look_log_transition(bool armed, free_look_release_t reason, const char
     }
 
     view = (const uint8_t *)*log_state.camera->view;
-    if (view != NULL && memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+    if (view != NULL && memory_try_readable((uintptr_t)view, BAPVIEW_READ_SIZE)) {
         view_read  = true;
         shown_yaw  = *(const float *)(view + BAPVIEW_EULER_YAW_OFFSET);
         pitch      = *(const float *)(view + BAPVIEW_EULER_PITCH_OFFSET);
@@ -114,12 +114,12 @@ void free_look_log_transition(bool armed, free_look_release_t reason, const char
     }
 
     if (wanted_valid && view_read) {
-        _snprintf(wanted, sizeof(wanted), "%.1f (%+.1f from what is on screen)",
-                  (double)wanted_yaw, (double)free_look_wrap180(wanted_yaw - shown_yaw));
+        text_format(wanted, sizeof(wanted), "%.1f (%+.1f from what is on screen)",
+                    (double)wanted_yaw, (double)free_look_wrap180(wanted_yaw - shown_yaw));
     } else if (wanted_valid) {
-        _snprintf(wanted, sizeof(wanted), "%.1f", (double)wanted_yaw);
+        text_format(wanted, sizeof(wanted), "%.1f", (double)wanted_yaw);
     } else {
-        _snprintf(wanted, sizeof(wanted), "nothing, the wanted yaw is dropped");
+        text_format(wanted, sizeof(wanted), "nothing, the wanted yaw is dropped");
     }
     wanted[sizeof(wanted) - 1] = '\0';
 

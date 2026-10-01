@@ -5,22 +5,42 @@
  * a player would find. So input, which is the only thing that can open it, is installed last and
  * only if everything it would show has already answered for itself.
  *
- * The cheats are the exception in the other direction: they are installed first and a failure
- * there is not fatal. A panel with one working tab is worth having, and the log names which half
- * is missing.
+ * The panel's own three sites are found, and its two writes made, before the cheats place
+ * anything. A cheat failure is not fatal: a panel with one working tab is worth having, and the
+ * log names which half is missing. A panel whose cheats all failed is still installed and opens
+ * with every cheat row unavailable, because the settings rows ask nothing of the game and still
+ * work. A panel failure, on the other hand, is settled before the cheats have placed a single
+ * detour, because a detour cannot be taken out again and a cheat nobody can switch on is a hook
+ * with no purpose. The cheats used to go in between the finding and the writing, which left every
+ * detour they had placed live behind a panel whose own write had refused.
  */
 #include "dev_overlay.h"
 
+#include "character_model.h"
 #include "cheats_openphantom.h"
+#include "model_blade_guard.h"
 #include "cheats_original.h"
 #include "cheats_original_actions.h"
+#include "far_model.h"
 #include "input_freeze.h"
+#include "input_owner.h"
 #include "sim_pause.h"
 #include "overlay_draw.h"
 #include "overlay_input.h"
 #include "overlay_key_name.h"
 #include "overlay_model.h"
+#include "freeze_anim_row.h"
+#include "npc_spawn_link.h"
+#include "npc_spawn_node.h"
+#include "npc_spawner.h"
+#include "pad_input.h"
+#include "pad_panel.h"
+#include "panel_cage.h"
+#include "spawn_mode.h"
+#include "start_level.h"
+#include "start_level_row.h"
 
+#include "common/character_profile.h"
 #include "common/patch.h"
 #include "common/signature.h"
 #include "common/host_image.h"
@@ -35,7 +55,7 @@
 static bool overlay_entered;
 
 /* ==============================================================================================
- * WHERE THE PAINT HAPPENS, AND WHY IT MOVED
+ * Where the paint happens, and why it moved
  *
  * The panel was first painted from the shared per-frame hook, which runs its callbacks AFTER the
  * function it sits on. That function ends by closing the scene and flipping the page, so the panel
@@ -46,7 +66,7 @@ static bool overlay_entered;
  * The right instant is after the world and its overlays are drawn and before the scene is closed.
  * The engine puts both of those next to each other:
  *
- *   0046C32D  6A 00 E8 .. 83 C4 04            the call before it, which is what makes this unique
+ *   0046C32D  6A 00 E8 .. 83 C4 04            the call before it, and the reason this is unique
  *   0046C337  C7 05 C4 6F 86 00 00 00 00 00   a flag, cleared
  *   0046C341  E8 BA B8 01 00                  close the scene      <- this call is redirected
  *   0046C346  E8 07 2D 02 00                  show the page
@@ -81,11 +101,22 @@ _Static_assert(sizeof(SIG_SCENE_END) == sizeof(MSK_SCENE_END),
 
 typedef void (__cdecl *scene_end_fn_t)(void);
 static scene_end_fn_t scene_end_original;
+static uintptr_t      scene_end_call;      /* the call that is redirected, once found */
 
 static void __cdecl hook_scene_end(void)
 {
-    if (overlay_input_is_open()) {
-        /* THE PANEL CLOSES ITSELF WHEN IT CANNOT BE SEEN.
+    pad_panel_tick();     /* before the panel's own update, so a press lands this frame */
+    npc_spawner_tick();   /* the spawned flyers' mark over the player's head, and the log of
+                           * every hit a spawned copy takes */
+    npc_spawn_link_tick();   /* the multiplayer's grants, and the panel's wishes */
+    npc_spawn_node_tick();   /* the copies a finished load left held */
+    character_model_tick();  /* a model swap the appearance note refused, said again */
+    far_model_tick(npc_spawn_node_epoch());   /* the far players' models, after the player's own */
+    spawn_mode_frame();   /* the placement mode, on or off: before the owner is read, so a mode
+                           * asked for this frame owns the pointer this frame */
+    switch (input_owner_sync()) {
+    case INPUT_OWNER_PANEL:
+        /* The panel closes itself when it cannot be seen.
          *
          * This is one of three places the scene is closed from; the other two belong to the front
          * end and to a movie. While one of those is running the panel would be open, the player
@@ -99,11 +130,31 @@ static void __cdecl hook_scene_end(void)
             overlay_input_update_scroll();
             overlay_model_rebuild();
         }
+        break;
+    case INPUT_OWNER_PLACEMENT:
+        /* The same rule for the mode, which draws its marks where the panel would be drawn. */
+        if (!overlay_draw_screen(NULL, NULL)) {
+            overlay_input_close();
+        } else {
+            overlay_input_update_pointer();
+            spawn_mode_draw();
+        }
+        break;
+    case INPUT_OWNER_GAME:
+    case INPUT_OWNER_FREE_CAMERA:
+    default:
+        break;
     }
+    /* Whoever owns the input: the placement mode's own line stands while it runs, and the tally
+     * of what it did stands for a moment after it ends, which is after the panel has the picture
+     * back. It draws nothing when the mode has nothing to say. */
+    spawn_mode_banner();
+    panel_cage_tick();   /* after the paint laid the panel out; releases when it is not shown */
     scene_end_original();
 }
 
-static bool redirect_scene_end(void)
+/* Finds the call and what it goes to, and writes nothing. */
+static bool resolve_scene_end(void)
 {
     uintptr_t site = signature_find_unique(SIG_SCENE_END, MSK_SCENE_END, sizeof SIG_SCENE_END);
     uintptr_t call;
@@ -120,12 +171,18 @@ static bool redirect_scene_end(void)
         return false;
     }
     scene_end_original = (scene_end_fn_t)original;
-    if (patch_redirect_call(call, (const void *)&hook_scene_end) != PATCH_RESULT_OK) {
-        log_warning("the call at %08X was not redirected", (unsigned)call);
+    scene_end_call     = call;
+    return true;
+}
+
+static bool redirect_scene_end(void)
+{
+    if (patch_redirect_call(scene_end_call, (const void *)&hook_scene_end) != PATCH_RESULT_OK) {
+        log_warning("the call at %08X was not redirected", (unsigned)scene_end_call);
         return false;
     }
     log_info("the panel is drawn just before the scene closes, at %08X, so it composites with the "
-             "finished picture instead of landing in the next one", (unsigned)call);
+             "finished picture instead of landing in the next one", (unsigned)scene_end_call);
     return true;
 }
 
@@ -150,7 +207,7 @@ void dev_overlay_install(void)
 
     overlay_model_reset();
     /* Read as TEXT, so the file can be typed into. A person who cannot open the panel cannot use
-     * the row inside it that binds a key, and that is exactly the person this setting is for, so
+     * the row inside it that binds a key, and this setting is for exactly that person, so
      * "F8" and "numpad +" have to work as well as a number. A bare number still means what it
      * always did. Anything unreadable is reported and falls back to the default rather than being
      * taken as zero, which would have been indistinguishable from asking for the default. */
@@ -171,44 +228,75 @@ void dev_overlay_install(void)
     }
     overlay_draw_set_align(ini_read_int(DEV_OVERLAY_SECTION, "TextAlign", 1));
 
+    /* The panel's three sites first, and only found: the drawing, the instant it is drawn at and
+     * the hook that opens it. A panel that cannot open has no use for a cheat, so this is settled
+     * before the cheats place anything. */
+    if (!overlay_draw_resolve() || !resolve_scene_end() || !overlay_input_resolve()) {
+        return;
+    }
+    /* Then the panel's two writes, still before any cheat has placed a detour. A refusal here
+     * used to leave every cheat detour that had already gone in standing behind a panel that
+     * never opened. A redirected scene end with no message hook behind it is harmless on its
+     * own: the paint asks whether the panel is open, and nothing can open it. */
+    if (!redirect_scene_end() || !overlay_input_install()) {
+        return;
+    }
+
     /* Either half is worth having on its own, so both are attempted and neither decides the
-     * outcome. What decides it is whether anything at all can be offered. */
+     * outcome. The panel is installed either way: with nothing resolved its cheat rows all
+     * read unavailable and the settings rows still work. */
     cheats_ready = cheats_original_resolve();
     cheats_ready = cheats_original_actions_resolve() || cheats_ready;
     cheats_ready = cheats_openphantom_install() || cheats_ready;
+    /* A new game beginning at a chosen level. Its own sites, its own refusal; the row reads
+     * unavailable when they did not resolve, and the setting is read either way. */
+    if (start_level_install()) {
+        start_level_row_load();
+    }
+    /* Any actor in the game, raised in front of the player. Its own sites, its own refusal;
+     * the group's rows read unavailable when they did not resolve, and with no level loaded
+     * either way. */
+    (void)npc_spawner_install();
+    /* The spawner's placement mode: the camera cells and the two keys. Its ghost is drawn through
+     * the borrowed weapon's detour, which it installs itself the first time the mode comes on. */
+    spawn_mode_install();
+    /* The two parts of the model swap that cannot wait for the panel. The roster past the five
+     * heroes IS the profile table, and every DLL links its own copy of that table, so the
+     * multiplayer having read it gives this one nothing: without this load the swap offers the
+     * five heroes and no NPC. And a swap onto a hero with a blade waits until the blade resize
+     * guard has been asked once, which the level's first weapon remount does, but only when the
+     * guard is standing by then. Placed when the panel first opened, every row read n/a until the
+     * blade next changed. */
+    (void)character_profile_load();
+    (void)model_blade_guard_install();
+    /* The answer to the multiplayer's far models says from load on that somebody listens. */
+    far_model_install();
+    pad_input_install();
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "
-                    "there is nothing for the overlay to show and it is not installed");
-        return;
+                    "every cheat row in the panel is unavailable. The panel still opens, and its "
+                    "settings rows ask nothing of the game");
     }
 
-    if (!overlay_draw_resolve()) {
-        return;
-    }
-    if (!redirect_scene_end()) {
-        return;
-    }
     /* The freeze is not a condition of the panel. If it does not arm, the panel still opens and
-     * still switches cheats; the player simply keeps moving behind it, which is what happened
-     * before this existed. The log says which of the two the session got. */
+     * still switches cheats; the player simply keeps moving behind it, as happened before this
+     * existed. The log says which of the two the session got. */
     (void)input_freeze_install();
     /* Neither is a condition of the panel, and they fail independently: one stops the player being
        given orders, the other stops the simulation stepping at all. */
-    (void)sim_pause_install();
-
-    if (!overlay_input_install()) {
-        return;
+    if (sim_pause_install()) {
+        freeze_anim_row_load();
     }
 
     /* Free camera's fly speed reads the scroll wheel, which is only ever observable through
      * window messages, which are overlay_input.c's own domain. Wired here, after both installs
-     * have run, rather than cheats_openphantom.c calling overlay_input_take_wheel_delta() by name,
+     * have run, rather than cheats_openphantom.c calling input_owner_take_wheel() by name,
      * so that linking cheats_openphantom.c on its own (the unit test built against the real cheat
      * sources, see unittests/CMakeLists.txt) never has to drag in the whole message-hook
      * subsystem just to satisfy one symbol it never exercises. */
-    cheats_openphantom_set_wheel_source(&overlay_input_take_wheel_delta);
+    cheats_openphantom_set_wheel_source(&input_owner_take_wheel);
 
-    log_info("The key below Escape opens the Cheatmenu. The panel is drawn into the "
+    log_info("F6 or the key below Escape opens the dev menu. The panel is drawn into the "
              "game's own frame, so it needs "
              "no window and cannot take the focus. %s",
              input_freeze_is_available()

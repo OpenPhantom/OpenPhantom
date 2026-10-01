@@ -1,8 +1,10 @@
 #include "overlay_window.h"
 
 #include "overlay_key_name.h"
+#include "overlay_notice.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -14,7 +16,7 @@
 #define RESOLUTION_SECTION "enhanced_resolution"
 
 /* Mirrors window_mode_kind_t, which lives in the other DLL's header and is deliberately not
- * included: these are file format values, and the file is the whole of the contract between the
+ * included: these are file format values, and the file is the entire contract between the
  * two. A number written here that the other side does not know is refused there and logged, which
  * is the behaviour wanted anyway. */
 #define MODE_AUTHENTIC        0
@@ -41,9 +43,7 @@ static const int32_t SLOT_MODE[] = {
     MODE_AUTHENTIC, MODE_BORDERLESS, MODE_WINDOWED, MODE_RESIZABLE, MODE_BORDERLESS_SIZED
 };
 
-/* Thirty two is well past what any display reports once duplicates at other depths and refresh
- * rates are folded together; the ones seen in testing offer around fifteen. */
-#define SIZE_LIST_MAX 32u
+#define SIZE_LIST_MAX OVERLAY_WINDOW_SIZE_LIST_MAX
 
 static struct {
     int32_t width;
@@ -53,7 +53,7 @@ static struct {
 static uint32_t size_list_count;
 static bool     size_list_open;
 
-/* THE DISPLAY'S OWN LIST, asked of Windows rather than of the engine.
+/* The display's own list, asked of Windows rather than of the engine.
  *
  * The engine has a list too, and enhanced_resolution owns it, but that is a different DLL and
  * feature DLLs in this tree do not depend on each other. Windows answers the same question from the
@@ -87,7 +87,8 @@ static void build_size_list(void)
         mode.dmSize = sizeof mode;
 
         /* The floor the engine's own mouse re-centring needs: below roughly 640x480 of client area
-         * its warp to client (320,240) lands outside the window and a constant delta accumulates. */
+         * its warp to client (320,240) lands outside the window and a constant delta builds
+         * up. */
         if (w < 640 || h < 480) {
             continue;
         }
@@ -101,7 +102,7 @@ static void build_size_list(void)
         }
 
         /* Inserted in order rather than sorted afterwards: the list is short, this runs once, and
-         * an ordered list is what makes it readable. */
+         * only an ordered list is readable. */
         for (at = size_list_count; at > 0u; --at) {
             if (size_list[at - 1u].width < w ||
                 (size_list[at - 1u].width == w && size_list[at - 1u].height <= h)) {
@@ -123,8 +124,8 @@ void overlay_window_reset(void)
 /* Auto is the FIRST entry, ahead of every size the display reports, and it is a row rather than
  * only a label.
  *
- * The size row shows "auto" whenever no size has been chosen, which is what a fresh install reads,
- * and auto means the window takes the size the game is rendering so the picture is one pixel for
+ * The size row shows "auto" whenever no size has been chosen, as a fresh install reads, and auto
+ * means the window takes the size the game is rendering so the picture is one pixel for
  * one pixel. Without a row that writes it back there was no way to return: the list held nothing
  * but real modes, so picking one was a one way door out of the state the panel started in.
  *
@@ -214,10 +215,104 @@ static bool shape_rows_usable(void)
     return device_is_windowed() && current_mode() != MODE_AUTHENTIC;
 }
 
-/* True while the file and the device disagree, which is the whole of what a restart would settle. */
+/* True while the file and the device disagree, the only thing a restart would settle. */
 static bool restart_is_pending(void)
 {
     return device_is_windowed() != (current_mode() != MODE_AUTHENTIC);
+}
+
+/* No size in the file means the window matches the game's own. Two rows read it, the "auto" entry
+ * of the list and the chip on the row that opens the list, and they were two spellings of it a
+ * hundred and twenty lines apart under a comment claiming they were one test. */
+static bool size_is_automatic(int32_t width, int32_t height)
+{
+    return !(width > 0 && height > 0);
+}
+
+/* One entry of the open size list. True when `slot` was one. */
+static bool size_entry_row(uint32_t slot, overlay_row_t *out)
+{
+    uint32_t entry = 0;
+    int32_t  chosen_width;
+    int32_t  chosen_height;
+
+    if (!slot_is_size_entry(slot, &entry)) {
+        return false;
+    }
+    chosen_width  = ini_read_int(RESOLUTION_SECTION, "WindowedWidth", 0);
+    chosen_height = ini_read_int(RESOLUTION_SECTION, "WindowedHeight", 0);
+
+    out->kind      = OVERLAY_ROW_CHOICE;
+    out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
+    out->value[0]  = 0;
+
+    if (entry == 0u) {
+        /* Lit by the absence of a size rather than by a number, the same test the row above reads
+         * to decide it says auto. One test, one meaning. */
+        out->on = !(chosen_width > 0 && chosen_height > 0);
+        copy_label(out->label, "    auto (match the game's own size)");
+        return true;
+    }
+
+    out->on = size_list[entry - 1u].width == chosen_width &&
+              size_list[entry - 1u].height == chosen_height;
+    text_format(out->label, sizeof out->label, "    %dx%d",
+                (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
+    out->label[sizeof out->label - 1] = 0;
+    return true;
+}
+
+/* The five shapes, one of which the window is in. True when `slot` was one of them.
+ *
+ * A choice and not five switches. They were five switches, and four of them read OFF beside one
+ * reading ON, which says the window has five independent settings of which one happens to be on;
+ * it has one setting with five values. The mark says that, and a press moves it. */
+static bool mode_row(uint32_t slot, overlay_row_t *out)
+{
+    out->kind = OVERLAY_ROW_CHOICE;
+    switch ((window_slot_t)slot) {
+    case WINDOW_MODE_ROW_AUTHENTIC:
+        copy_label(out->label, "Fullscreen (restart to take effect)");
+        out->on = current_mode() == MODE_AUTHENTIC;
+        return true;
+
+    /* Greyed while fullscreen is on, all four of them, which makes the row above a switch that
+     * governs the group rather than the first of five equals. Nothing below it describes a shape
+     * the game is in while fullscreen is on, so nothing below it should look settable: switch
+     * fullscreen off and the shape rows come back, already showing the one that will be used.
+     *
+     * The model refuses to act on a row it has been told is unavailable, so this is the entire
+     * gate and there is no second check in the toggle to keep in step with it. */
+    case WINDOW_MODE_ROW_BORDERLESS:
+        copy_label(out->label, "Borderless, the whole monitor");
+        out->on        = current_mode() == MODE_BORDERLESS;
+        out->available = shape_rows_usable();
+        return true;
+
+    case WINDOW_MODE_ROW_WINDOWED:
+        copy_label(out->label, "In a window, fixed size");
+        out->on        = current_mode() == MODE_WINDOWED;
+        out->available = shape_rows_usable();
+        return true;
+
+    case WINDOW_MODE_ROW_RESIZABLE:
+        copy_label(out->label, "In a window you can resize");
+        out->on        = current_mode() == MODE_RESIZABLE;
+        out->available = shape_rows_usable();
+        return true;
+
+    case WINDOW_MODE_ROW_BORDERLESS_SIZED:
+        copy_label(out->label, "Borderless, at the size below");
+        out->on        = current_mode() == MODE_BORDERLESS_SIZED;
+        out->available = shape_rows_usable();
+        return true;
+
+    default:
+        /* Not a shape row after all. The kind is put back where the caller left it, because the
+         * caller goes on to fill an ordinary row with the same struct. */
+        out->kind = OVERLAY_ROW_CHEAT;
+        return false;
+    }
 }
 
 void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
@@ -231,32 +326,8 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
      * same three things to every group and this one having a different shape would be worse. */
     (void)editing_text;
 
-    {
-        uint32_t entry = 0;
-
-        if (slot_is_size_entry(slot, &entry)) {
-            int32_t chosen_width  = ini_read_int(RESOLUTION_SECTION, "WindowedWidth", 0);
-            int32_t chosen_height = ini_read_int(RESOLUTION_SECTION, "WindowedHeight", 0);
-
-            out->kind      = OVERLAY_ROW_CHEAT;
-            out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
-            out->value[0]  = 0;
-
-            if (entry == 0u) {
-                /* Lit by the absence of a size rather than by a number, which is exactly what the
-                 * row above reads to decide it says auto. One test, one meaning. */
-                out->on = !(chosen_width > 0 && chosen_height > 0);
-                copy_label(out->label, "    auto (match the game's own size)");
-                return;
-            }
-
-            out->on = size_list[entry - 1u].width == chosen_width &&
-                      size_list[entry - 1u].height == chosen_height;
-            _snprintf(out->label, sizeof out->label, "    %dx%d",
-                      (int)size_list[entry - 1u].width, (int)size_list[entry - 1u].height);
-            out->label[sizeof out->label - 1] = 0;
-            return;
-        }
+    if (size_entry_row(slot, out)) {
+        return;
     }
     slot = slot_without_list(slot);
 
@@ -268,43 +339,11 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
     out->pending   = false;
     out->fraction  = 0.0f;
 
+    if (mode_row(slot, out)) {
+        return;
+    }
+
     switch ((window_slot_t)slot) {
-    case WINDOW_MODE_ROW_AUTHENTIC:
-        copy_label(out->label, "Fullscreen (restart to take effect)");
-        out->on = current_mode() == MODE_AUTHENTIC;
-        return;
-
-    /* Greyed while fullscreen is on, all four of them, which makes the row above a switch that
-     * governs the group rather than the first of five equals. Nothing below it describes a shape
-     * the game is in while fullscreen is on, so nothing below it should look settable: switch
-     * fullscreen off and the shape rows come back, already showing the one that will be used.
-     *
-     * The model refuses to act on a row it has been told is unavailable, so this is the whole of
-     * the gate and there is no second check in the toggle to keep in step with it. */
-    case WINDOW_MODE_ROW_BORDERLESS:
-        copy_label(out->label, "Borderless, the whole monitor");
-        out->on        = current_mode() == MODE_BORDERLESS;
-        out->available = shape_rows_usable();
-        return;
-
-    case WINDOW_MODE_ROW_WINDOWED:
-        copy_label(out->label, "In a window, fixed size");
-        out->on        = current_mode() == MODE_WINDOWED;
-        out->available = shape_rows_usable();
-        return;
-
-    case WINDOW_MODE_ROW_RESIZABLE:
-        copy_label(out->label, "In a window you can resize");
-        out->on        = current_mode() == MODE_RESIZABLE;
-        out->available = shape_rows_usable();
-        return;
-
-    case WINDOW_MODE_ROW_BORDERLESS_SIZED:
-        copy_label(out->label, "Borderless, at the size below");
-        out->on        = current_mode() == MODE_BORDERLESS_SIZED;
-        out->available = shape_rows_usable();
-        return;
-
     /* The way back to the engine's own shape, as a choice of its own rather than as the side
      * effect of pressing the lit row. It was that side effect first, and it made the group read as
      * broken: pressing the mode you were already in dropped you to a frameless oversized window,
@@ -329,7 +368,7 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
         out->available = shape_rows_usable() && current_mode() >= MODE_WINDOWED;
         copy_label(out->label, size_list_open ? "  Window size (pick one)" : "  Window size");
         if (width > 0 && height > 0) {
-            _snprintf(out->value, sizeof out->value, "%dx%d", (int)width, (int)height);
+            text_format(out->value, sizeof out->value, "%dx%d", (int)width, (int)height);
             out->value[sizeof out->value - 1] = 0;
         } else {
             copy_label(out->value, "auto");
@@ -409,16 +448,29 @@ void overlay_window_row(uint32_t slot, const char *editing_text, bool capturing,
     }
 }
 
-bool overlay_window_row_is_value(uint32_t slot)
-{
-    (void)slot;
-    return false;              /* the size is chosen from a list now, not typed */
-}
 
+/* Takes a slot with the size list already taken out of it, the convention every other slot-taking
+ * function in this file follows. Handing it a raw slot while the list is open asks about the wrong
+ * row. */
 bool overlay_window_row_is_key(uint32_t slot)
 {
     return slot == (uint32_t)WINDOW_ROW_RELEASE_KEY ||
            slot == (uint32_t)WINDOW_ROW_FULLSCREEN_KEY;
+}
+
+/* Every setting here lives in the file and nowhere else, so a write that did not land leaves the
+ * row showing what it showed, which is exactly the picture pressing the value already set gives.
+ * The sentence is the difference, said once instead of at the five writes, where four had none. */
+#define NOT_SAVED_SHAPE "The window shape could not be saved to the settings file"
+#define NOT_SAVED_KEY   "That key could not be saved to the settings file"
+
+static bool put_int(const char *key, int32_t value, const char *complaint)
+{
+    if (ini_write_int(RESOLUTION_SECTION, key, value)) {
+        return true;
+    }
+    overlay_notice_say(complaint);
+    return false;
 }
 
 /* The mode and the device are written together, because there is only one device setting that
@@ -432,29 +484,28 @@ bool overlay_window_row_is_key(uint32_t slot)
  * is live. That is why the fullscreen row says so on its face. */
 static bool write_mode(int32_t mode)
 {
-    bool ok = ini_write_int(RESOLUTION_SECTION, "WindowMode", mode);
+    bool ok = put_int("WindowMode", mode, NOT_SAVED_SHAPE);
 
-    return ini_write_int(RESOLUTION_SECTION, "WindowedPresent",
-                         (mode == MODE_AUTHENTIC) ? 0 : 1) && ok;
+    return put_int("WindowedPresent", (mode == MODE_AUTHENTIC) ? 0 : 1, NOT_SAVED_SHAPE) && ok;
 }
 
 bool overlay_window_toggle(uint32_t slot)
 {
     uint32_t entry = 0;
 
-    /* Choosing one closes the list, which is what a list of choices does: the answer is on the row
-     * above now and there is nothing left to pick. */
+    /* Choosing one closes the list, as a list of choices does: the answer is on the row above
+     * now and there is nothing left to pick. */
     if (slot_is_size_entry(slot, &entry)) {
         size_list_open = false;
 
         /* Zero on both axes is what the rest of this feature already reads as auto, so returning to
          * it is writing the numbers a fresh install has rather than a state of its own. */
         if (entry == 0u) {
-            return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", 0) &&
-                   ini_write_int(RESOLUTION_SECTION, "WindowedHeight", 0);
+            return put_int("WindowedWidth", 0, NOT_SAVED_SHAPE) &&
+                   put_int("WindowedHeight", 0, NOT_SAVED_SHAPE);
         }
-        return ini_write_int(RESOLUTION_SECTION, "WindowedWidth", size_list[entry - 1u].width) &&
-               ini_write_int(RESOLUTION_SECTION, "WindowedHeight", size_list[entry - 1u].height);
+        return put_int("WindowedWidth", size_list[entry - 1u].width, NOT_SAVED_SHAPE) &&
+               put_int("WindowedHeight", size_list[entry - 1u].height, NOT_SAVED_SHAPE);
     }
     slot = slot_without_list(slot);
 
@@ -465,8 +516,8 @@ bool overlay_window_toggle(uint32_t slot)
     case WINDOW_MODE_ROW_BORDERLESS_SIZED: {
         int32_t wanted = SLOT_MODE[slot];
 
-        /* Pressing the row that is already lit does NOTHING, which is what a set of choices does
-         * everywhere else. Answering true rather than false because nothing failed: the answer is
+        /* Pressing the row that is already lit does NOTHING, as a set of choices does everywhere
+         * else. Answering true rather than false because nothing failed: the answer is
          * already the one being asked for. */
         if (current_mode() == wanted) {
             return true;
@@ -503,8 +554,9 @@ bool overlay_window_toggle(uint32_t slot)
         return true;
 
     case WINDOW_ROW_FILL:
-        return ini_write_int(RESOLUTION_SECTION, "WindowedFill",
-                             ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true) ? 0 : 1);
+        return put_int("WindowedFill",
+                       ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true) ? 0 : 1,
+                       NOT_SAVED_SHAPE);
 
     default:
         return false;
@@ -520,11 +572,28 @@ bool overlay_window_commit(uint32_t slot, const char *text)
 
 bool overlay_window_bind(uint32_t slot, int32_t virtual_key)
 {
-    if (!overlay_window_row_is_key(slot) || virtual_key < 0 || virtual_key > 0xFF) {
+    uint32_t entry = 0;
+
+    if (virtual_key < 0 || virtual_key > 0xFF) {
         return false;
     }
-    if (slot == (uint32_t)WINDOW_ROW_FULLSCREEN_KEY) {
-        return ini_write_int(RESOLUTION_SECTION, "FullscreenToggleKey", virtual_key);
+    /* The same two steps, in the same order, that source_row() and overlay_window_activate() both
+     * take: a slot inside the open size list belongs to the list, and every row below the list is
+     * pushed down by its length. This did neither, so it compared a pushed-down slot against the
+     * unshifted numbers: with the list open, pressing either key row and then a key wrote nothing
+     * and reported nothing, and the row went on showing the key it already had. */
+    if (slot_is_size_entry(slot, &entry)) {
+        return false;
     }
-    return ini_write_int(RESOLUTION_SECTION, "PointerReleaseKey", virtual_key);
+    (void)entry;
+    slot = slot_without_list(slot);
+
+    if (!overlay_window_row_is_key(slot)) {
+        return false;
+    }
+    /* The file is the whole binding: the DLL that owns the window reads both keys out of it. */
+    if (slot == (uint32_t)WINDOW_ROW_FULLSCREEN_KEY) {
+        return put_int("FullscreenToggleKey", virtual_key, NOT_SAVED_KEY);
+    }
+    return put_int("PointerReleaseKey", virtual_key, NOT_SAVED_KEY);
 }

@@ -1,9 +1,9 @@
 /* frame_hook.h: "call me once per rendered frame", without every feature re-deriving the site.
  *
- * render_frameEnd 0x0046C139 sits inside sys_frame, which is what every game loop AND every
- * blocking menu loop calls. It is therefore the only place guaranteed to run in both, and a
- * menu that blocks in its own `while (result < 0) { sys_frame(); }` is exactly where a live
- * slider preview has to work.
+ * render_frameEnd 0x0046C139 sits inside sys_frame, which every game loop and every blocking
+ * menu loop calls. It is therefore the only place guaranteed to run in both, and a menu that
+ * blocks in its own `while (result < 0) { sys_frame(); }` is exactly where a live slider
+ * preview has to work.
  *
  * Each feature DLL links its own copy of this module and installs its own detour. Two DLLs on the
  * same target are fine: common/detour.c chains them, so the callbacks of both run, in whichever
@@ -24,6 +24,12 @@ typedef void (*frame_hook_callback_t)(void);
  * Returns false when the site did not resolve or the detour failed, the caller must then say
  * so in its log and fall back to whatever it can still do without a per-frame tick. */
 bool frame_hook_add(frame_hook_callback_t callback);
+
+/* The same, but the callback runs BEFORE the engine's own frame end, which is the end of scene and
+ * the present. A callback here sees the frame drawn and not yet shown; the ordinary one above sees
+ * it shown, and under vertical sync that includes the wait for the retrace. The frame cap measures
+ * the frame's work between the wait and this point for exactly that reason. */
+bool frame_hook_add_before(frame_hook_callback_t callback);
 
 /* True once the detour stands. Lets a feature word its fallback message accurately. */
 bool frame_hook_is_installed(void);

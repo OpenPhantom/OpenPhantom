@@ -57,7 +57,7 @@
  *     contained rather than by its duration. It cannot be done from a sum.
  *   - the simulation consumes at a fixed 32 Hz, so a device reporting at 125 Hz delivers three or
  *     four whole reports per consumed interval no matter what the render rate does. That is a
- *     frame-rate-invariant wobble, which is exactly the shape the field reported, and it is the one
+ *     frame-rate-invariant wobble, exactly the shape the field reported, and it is the one
  *     surviving candidate that a frame rate cap could not have removed.
  *   - and the report rate itself is not knowable any other way. Counting packets here measures it
  *     directly, which turns the remaining question from an argument into a number.
@@ -116,9 +116,10 @@ unsigned raw_mouse_packet_count(void);
  * The vertical axis exists only here: the view turn has no use for it. */
 void raw_mouse_take_cursor(long *out_dx, long *out_dy);
 
-/* True once the reader is registered and a packet has actually arrived. The cursor path must not
- * take the engine's own pointer motion away on the strength of a registration alone: a silent
- * reader would leave the player with a frozen cursor, which is worse than the stepping it
+/* True while the reader is registered and packets are still arriving, which is a question about
+ * now rather than about the past. The cursor path must not take the engine's own pointer motion
+ * away on the strength of a registration alone, nor on the strength of a packet that arrived once
+ * an hour ago: either leaves the player with a frozen cursor, which is worse than the stepping it
  * replaces. */
 bool raw_mouse_is_delivering(void);
 

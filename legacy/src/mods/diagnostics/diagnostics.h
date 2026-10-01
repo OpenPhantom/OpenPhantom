@@ -2,7 +2,7 @@
  *
  * Produces: diagnostics.dll
  *
- * WHAT THIS IS, and what it explicitly is NOT
+ * What this is, and what it explicitly is not
  *
  *   It is a tool for finding faults, not a feature. Every hook calls the original, returns its
  *   result unchanged, and touches neither registers nor flags nor any game field. A diagnostic
@@ -11,7 +11,7 @@
  *   If an area is not switched on in the ini, its detour is not installed at all. With
  *   Enabled=0 this DLL touches not one byte of the image; it does not even read .text.
  *
- * The levels: 0 = off, 1 = events, 2 = additionally the fine-grained traffic (channel
+ * The levels: 0 = off, 1 = events, 2 = events plus the fine-grained traffic (channel
  * allocation, opcodes).
  */
 #ifndef DIAGNOSTICS_H
@@ -42,6 +42,7 @@ typedef struct diagnostics_config {
      * whether a DirectDraw wrapper owns the presentation at all or the frame goes past it into the
      * window through GDI. */
     int  present;             /* 1 = the live path, 2 = plus the addresses it resolved to       */
+    int  x87;                 /* 1 = the stack pointer sampled around the object draw's calls   */
 
     /* The engine's own generic ballistic-physics list (blaster bolts, confirmed; whatever else
      * shares it, unconfirmed): a live count every 30 frames, plus a position sample of the first
@@ -53,6 +54,10 @@ typedef struct diagnostics_config {
      * shot the player has walked away from until the level reloads. See diag_camera_owner.c. */
     int  camera_owner;        /* 1 = on, no further levels                                      */
 
+    /* Where the wet footprints come from: the footstep tick's wet stamp as it happens, with the
+     * polygon and its material, and the start of each wet print spell. See diag_footsteps.c. */
+    int  footsteps;           /* 1 = on, no further levels                                      */
+
     /* The engine's own character pool, walked read only: who is standing near the player, what the
      * engine calls them, and whether they are gaining or losing height. See diag_characters.c. */
     int  characters;          /* 1 = the ones near the player, 2 = every live one               */
@@ -61,14 +66,15 @@ typedef struct diagnostics_config {
     int  characters_watch_velocity; /* 1 = watch its velocity Z, 0 = its position Z             */
     int  player_body_watch;         /* watch the player's DRAWN body height, not a character */
 
-    int  audio_census_ms;     /* >0: list the occupied sound channels every N ms                */
+    /* Why a push block does or does not move for this machine's player, once a second while it
+     * changes. The single player question under a multiplayer report of crates that do not move. */
+    int  push_block;          /* 1 = the use test, the mode, the push and its gates             */
+
+    int  audio_census_ms;    /* >0: list the occupied sound channels every N ms                */
     int  max_lines_per_second;
     bool also_to_main_log;
 } diagnostics_config_t;
 
 void diagnostics_install(void);
-
-/* Read-only, for the subsystem modules. Valid after diagnostics_install(). */
-const diagnostics_config_t *diagnostics_config(void);
 
 #endif /* DIAGNOSTICS_H */

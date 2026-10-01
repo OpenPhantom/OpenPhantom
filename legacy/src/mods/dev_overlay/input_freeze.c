@@ -1,10 +1,10 @@
 /* input_freeze.c: the two functions the whole game reads its input through.
  *
  * ==============================================================================================
- * THE TWO SITES
+ * The two sites
  *
  * Retail WMAIN.EXE, 829,952 bytes, ImageBase 0x400000. Both open the same way and both already
- * know how to answer when there is nothing to report, which is what this borrows.
+ * know how to answer when there is nothing to report; this borrows that answer.
  *
  *   0048D38D  55 8B EC 83 EC 14        the axis read, answering a float
  *             83 3D C8 19 86 00 00     cmp [008619C8],0     ; the device layer is up
@@ -20,7 +20,7 @@
  *             74 09
  *             83 3D D8 9A 4B 00 00
  *             75 07
- *             33 C0                    NOT READY: answer zero
+ *             33 C0                    not ready: answer zero
  *             E9 8A 00 00 00
  *             8B 45 08 6B C0 18        mov eax,[ebp+8]; imul eax,0x18  ; stride 0x18 per axis
  *
@@ -30,7 +30,7 @@
  * centred stick, would be a value nothing downstream has ever been given.
  *
  * ==============================================================================================
- * THE POINTER IS NOT BUILT FROM THESE DELTAS
+ * The pointer is not built from these deltas
  *
  * It was, once, and it was not usable: a relative stream has no home position, it drifts, and its
  * speed is a number somebody has to guess. The panel takes the system cursor instead, which is
@@ -38,16 +38,17 @@
  * ============================================================================================ */
 #include "input_freeze.h"
 
+#include "player_slot.h"
+
 #include "common/detour.h"
 #include "common/logging.h"
-#include "common/memory.h"
 #include "common/signature.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-/* --- 0x00450FD8, THE PLAYER'S OWN SUSPEND STATE, and this is the lock that actually works.
+/* --- 0x00450FD8, the player's own suspend state, and this is the lock that actually works.
  *
  * The engine does not gate input with a flag. It reads the mouse inside the steering phase, and the
  * phases are dispatched from a table by the player's task; in a menu, a dialogue and a cutscene it
@@ -65,7 +66,7 @@
  *   00450FDB  A1 20 52 4B 00           mov eax,[004B5220]      ; the player block
  *   00450FE0  83 78 04 00              cmp dword [eax+4],0     ; the module state
  *   00450FE4  75 07                    non zero: jump PAST the 1, so answer 0
- *   00450FE6  B8 01 00 00 00           zero: answer 1, which is what "suspended" means
+ *   00450FE6  B8 01 00 00 00           zero: answer 1, and 1 is what "suspended" means
  *   00450FEF  5D C3
  *
  * Setting that field to zero while the panel is open is therefore not an invention: it is the state
@@ -76,30 +77,10 @@
  * unless the player is standing, puts the sabre away and makes the resume read the position back
  * off the model. All three are right for a cutscene and wrong for a cheat panel somebody opened in
  * mid air.
+ *
+ * The predicate's pattern lives in player_slot.c, because the cell it loads the player from is
+ * the one every cheat reads as well; this file asks for the cell and tests the field at +4.
  * ============================================================================================ */
-static const uint8_t SIG_IS_SUSPENDED[] = {
-    0x55, 0x8B, 0xEC,
-    0xA1, 0x00, 0x00, 0x00, 0x00,                    /* mov eax,[the player block] */
-    0x83, 0x78, 0x04, 0x00,                          /* cmp [eax+4],0              */
-    0x75, 0x07,
-    0xB8, 0x01, 0x00, 0x00, 0x00,
-    0xEB, 0x02,
-    0x33, 0xC0,
-    0x5D, 0xC3
-};
-static const uint8_t MSK_IS_SUSPENDED[] = {
-    0xFF, 0xFF, 0xFF,
-    0xFF, 0x00, 0x00, 0x00, 0x00,
-    0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF,
-    0xFF, 0xFF,
-    0xFF, 0xFF
-};
-_Static_assert(sizeof(SIG_IS_SUSPENDED) == sizeof(MSK_IS_SUSPENDED),
-               "the is suspended pattern and its mask are different lengths");
-#define OFFSET_PLAYER_BLOCK 4u
 #define OFFSET_MODULE_STATE 4u
 
 /* --- 0x0048D38D, thirty bytes. The three cells are masked and read back by nobody: what makes the
@@ -159,6 +140,7 @@ typedef int32_t (__cdecl *read_delta_fn_t)(int32_t axis);
 typedef struct input_freeze_state {
     bool            installed;
     bool            frozen;
+    uint32_t        holders;      /* bitmask of input_freeze_holder_t; frozen while any is set */
     detour_t        axis_detour;
     detour_t        delta_detour;
     void *const volatile *player_block;   /* the engine's own pointer at the player            */
@@ -216,24 +198,15 @@ bool input_freeze_install(void)
         return true;
     }
 
-    {
-        uintptr_t suspended = signature_find_unique(SIG_IS_SUSPENDED, MSK_IS_SUSPENDED,
-                                                    sizeof SIG_IS_SUSPENDED);
-        uint32_t  block = 0;
-
-        if (suspended != 0 && memory_read_u32(suspended + OFFSET_PLAYER_BLOCK, &block) &&
-            memory_is_inside_image(block, sizeof(void *))) {
-            freeze_state.player_block = (void *const volatile *)(uintptr_t)block;
-            log_info("while the panel is open the player's phases are stopped, which is what the "
-                     "engine does for a menu and a cutscene and is the only thing that really "
-                     "holds this game still (player block at %08X)", (unsigned)block);
-        } else {
-            log_warning("the player's own suspend state did not resolve, so the player will keep "
-                        "moving while the panel is open");
-        }
+    if (player_slot_resolve()) {
+        freeze_state.player_block = player_slot();
+        log_info("while the panel is open the player's phases are stopped, as the engine "
+                 "does for a menu and a cutscene; that is the only thing that really holds "
+                 "this game still (player block at %08X)", (unsigned)player_slot_address());
+    } else {
+        log_warning("the player's own suspend state did not resolve, so the player will keep "
+                    "moving while the panel is open");
     }
-
-
 
     axis = install_one(SIG_READ_AXIS, MSK_READ_AXIS, sizeof SIG_READ_AXIS,
                        (const void *)&hook_read_axis, &freeze_state.axis_detour,
@@ -286,7 +259,7 @@ static void suspend_player(bool suspend)
     if (!freeze_state.suspended) {
         return;
     }
-    /* ONLY IF IT IS STILL THE ZERO WE WROTE.
+    /* Only if it is still the zero we wrote.
      *
      * The engine has its own suspend, and a cutscene starting while the panel is open would save
      * our zero into its own slot and put that zero back afterwards. Writing our remembered value
@@ -299,8 +272,16 @@ static void suspend_player(bool suspend)
     freeze_state.suspended = false;
 }
 
-void input_freeze_set(bool frozen)
+void input_freeze_hold(input_freeze_holder_t who, bool held)
 {
+    bool frozen;
+
+    if (held) {
+        freeze_state.holders |= (uint32_t)who;
+    } else {
+        freeze_state.holders &= ~(uint32_t)who;
+    }
+    frozen = freeze_state.holders != 0u;
     if (freeze_state.frozen == frozen) {
         return;
     }

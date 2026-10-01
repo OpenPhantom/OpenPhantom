@@ -14,10 +14,10 @@
  *
  * It has two defects. This file repairs the first and goes around the second.
  *
- * DEFECT 1. THE WRONG NODE.
+ * Defect 1. The wrong node.
  *   0x433879 asks bapobj_hitNodeSpheresVsCylinder(victim->pBody, attacker). The probe uses
  *   attacker->pos (+0x18) = the player's FEET and attacker->cylinderRadius (+0xB8) = the whole
- *   body cylinder. It therefore picks the node nearest the ATTACKER'S BODY AXIS, not the one the
+ *   body cylinder. It therefore picks the node nearest the attacker's body axis, not the one the
  *   blade touched. On a head strike the leg flies off.
  *   The right value is already in g_msgContactNode [0x869258] at that moment, written at
  *   0x41216F from the blade sphere (node `sabreblad01`, r = 0.15..0.25 u), nine bytes before the
@@ -47,33 +47,42 @@
  *     computes `imul n,0xB4` and reads node+0x48 unchecked; 0x4144BE writes unchecked into
  *     pNodeHidden[n]. The garbage index also lands in partIo, and `if (partIo & 8) health = 0`,
  *     an out-of-range index has roughly a 50 % chance of instant death.
- *  4. NOT ALREADY OFF  pNodeHidden[n] == 0. detachNode does not check this and would sever the
+ *  4. Not already off  pNodeHidden[n] == 0. DetachNode does not check this and would sever the
  *     same node twice: two flying objects, the second showing a hidden mesh.
  *  5. BODY-PART MASK  node+0x48 & 0x6E rather than the constant `part > 4`. The constant is tuned
  *     to baronsec-shaped skeletons (0..4 = dummy01/hips/waistdum/waist/chest); on tc14.baf the
  *     chest is node 8 and would be released. The mask is the AUTHORED statement:
  *     0x2 lArm, 0x4 rArm, 0x8 head, 0x20 lLeg, 0x40 rLeg; 0x1 = generic, 0x10 = hips.
  *     But only TEN of 265 rigs carry a mask at all, so there is a documented fallback below.
- *  6. THE DROID CASE  a node with no mesh anywhere in its subtree cannot be severed at all.
+ *  6. The droid case  a node with no mesh anywhere in its subtree cannot be severed at all.
  *
- * INDEX SPACE: settled. A census over 265 unique actor .baf files says node+0x44 (matrix slot) ==
+ * Index space: settled. A census over 265 unique actor .baf files says node+0x44 (matrix slot) ==
  * the ordinal in 3251/3251 nodes. g_msgContactNode and the return value of 0x412E22 live in the
  * SAME space (both are pNode->+0x44), so the substitution is type-safe.
  *
  * SIZE NOTE. Over the 600 line mark, under the 900 hard limit. Most of the excess is the byte
- * evidence above rather than code. The six gates cannot be reviewed without it, and it has to
- * stand at the site.
+ * evidence above, not code. The six gates cannot be reviewed without it, and it has to stand at
+ * the site. The node walk and the body-part mask test took the seam to limb_nodes.c when this
+ * file came within twenty lines of the limit; the flight of the severed piece went to
+ * limb_flight.c before that. The next seam is the run-time switch at the end: the poll of the
+ * mode, a multiplayer host's mode in place of the own and its acknowledgement, which touch no
+ * engine site and need only the configuration and the flight's switch.
  */
 #include "dismemberment.h"
 
+#include "limb_nodes.h"
+
 #include "limb_flight.h"
+#include "limb_mode_pick.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
 #include "common/host_image.h"
+#include "common/host_settings_note.h"
 #include "common/ini.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/numeric.h"
 #include "common/patch.h"
 #include "common/signature.h"
 
@@ -82,6 +91,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define DISMEMBERMENT_SECTION "dismemberment"
 
@@ -111,14 +121,88 @@ static const uint8_t SIG_SEVER_PROBE[] = {
  *   8B 45 FC / C7 40 20 0B000000                 ; state = kEnemy_Death (11)
  *
  * The site is only reached when health <= 0 (0x437070 `cmp [eax+0x38],0` / `jg`), i.e. exactly on
- * the lethal hit. Prologue 6 bytes (3+3), clean boundary. This 26-byte pattern contains NO rel32. */
+ * the lethal hit. Prologue 6 bytes (3+3), clean boundary. This 26-byte pattern holds NO rel32. */
 static const uint8_t SIG_DEATH_GATE[] = {
     0x8B, 0x4D, 0xFC, 0x8B, 0x51, 0x14, 0x81, 0xE2, 0x00, 0x00, 0x01, 0x00,
     0x85, 0xD2, 0x75, 0x0A, 0x8B, 0x45, 0xFC, 0xC7, 0x40, 0x20, 0x0B, 0x00, 0x00, 0x00
 };
 #define DEATH_GATE_PROLOGUE_SIZE 6u
 
-/* --- 0x00414436  bapobj_detachNode: THE TYPE ERROR ------------------------------------------- *
+/* --- 0x00414C99  bapobj_sendMessage: the out-of-line filler of the mailbox ------------------- *
+ *   55 8B EC              push ebp / mov ebp,esp
+ *   8B 45 08  A3 <self>   mov eax,[ebp+8]    / mov [g_msgSelf],eax      operand at +0x07
+ *   8B 4D 0C  89 0D <oth> mov ecx,[ebp+0xC]  / mov [g_msgOther],ecx     operand at +0x10
+ *   8B 55 10  89 15 <cod> mov edx,[ebp+0x10] / mov [g_msgCode],edx      operand at +0x19
+ *   8B 45 14  A3 <a>      mov eax,[ebp+0x14] / mov [g_msgA],eax         operand at +0x21
+ *   8B 4D 18  89 0D <b>   mov ecx,[ebp+0x18] / mov [g_msgB],ecx         operand at +0x2A
+ *   8B 55 08  8B 42 0C A3 the sender's own +0xC, into the impact slot this never reads
+ *
+ * Resolved, never detoured. Eleven other sites in the image post a message with an inline copy of
+ * these stores and every one names the same cells; the gates below read five of them, so the
+ * cells are read out of this function's operands rather than written down. The retail image keeps
+ * them contiguous from 0x869240, and that was an observation about one build, not a property of
+ * the engine. */
+static const uint8_t SIG_SEND_MESSAGE[] = {
+    0x55, 0x8B, 0xEC,
+    0x8B, 0x45, 0x08, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x4D, 0x0C, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x55, 0x10, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x45, 0x14, 0xA3, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x4D, 0x18, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x55, 0x08, 0x8B, 0x42, 0x0C, 0xA3
+};
+static const uint8_t MSK_SEND_MESSAGE[] = {
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SEND_MESSAGE == sizeof MSK_SEND_MESSAGE,
+               "the send message pattern and its mask are different lengths");
+#define SEND_MESSAGE_SELF_OPERAND  0x07u
+/* Six is push ebp, mov ebp esp, mov eax [ebp+8], the boundary before the store the operand above
+ * belongs to. Nothing here hulls this head; multiplayer does, on six, for the contact it relays,
+ * and a search that did not know the prologue would find nothing once that hull is in. The
+ * operand at +7 lies past it and is never written over. */
+#define SEND_MESSAGE_PROLOGUE      6u
+#define SEND_MESSAGE_OTHER_OPERAND 0x10u
+#define SEND_MESSAGE_CODE_OPERAND  0x19u
+#define SEND_MESSAGE_A_OPERAND     0x21u
+#define SEND_MESSAGE_B_OPERAND     0x2Au
+
+/* --- 0x004121CF and 0x0041216C  bapobj_collidePairs: the two NODE posts ---------------------- *
+ *   8B 55 FC              mov edx,[ebp-4]              the node the probe answered
+ *   89 15 <node>          mov [g_msgContactNode],edx   operand at +0x05
+ *   6A 00 6A 01           push 0 / push 1              b = 0, a = 1, the (1,0) shape of gate 1
+ *   ...                   the pair's own code, other, self, and the call to sendMessage
+ *
+ * The block runs twice, once for each direction of the pair with the registers the compiler
+ * chose for that copy, and the two operands have to name one cell. That agreement is the check
+ * that the pattern found the post and not another store to the same register. */
+static const uint8_t SIG_NODE_POST_FIRST[] = {
+    0x8B, 0x4D, 0xFC, 0x89, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x6A, 0x00, 0x6A, 0x01,
+    0x8B, 0x55, 0xEC, 0x8B, 0x82, 0xAC, 0x00, 0x00, 0x00, 0x50,
+    0x8B, 0x4D, 0xE8, 0x51, 0x8B, 0x55, 0xEC, 0x52, 0xE8
+};
+static const uint8_t SIG_NODE_POST_SECOND[] = {
+    0x8B, 0x55, 0xFC, 0x89, 0x15, 0x00, 0x00, 0x00, 0x00, 0x6A, 0x00, 0x6A, 0x01,
+    0x8B, 0x45, 0xE8, 0x8B, 0x88, 0xAC, 0x00, 0x00, 0x00, 0x51,
+    0x8B, 0x55, 0xEC, 0x52, 0x8B, 0x45, 0xE8, 0x50, 0xE8
+};
+static const uint8_t MSK_NODE_POST[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_NODE_POST_FIRST == sizeof MSK_NODE_POST &&
+               sizeof SIG_NODE_POST_SECOND == sizeof MSK_NODE_POST,
+               "the node post patterns and their mask are different lengths");
+#define NODE_POST_OPERAND 0x05u
+
+/* --- 0x00414436  bapobj_detachNode: the type error ------------------------------------------- *
  *   8B 45 EC              mov  eax,[ebp-0x14]        ; keep = a NODE ordinal
  *   50                    push eax                   ; arg4
  *   8B 4D F8 8B 51 58     mov  edx,[model3+0x58]     ; the node list
@@ -165,13 +249,22 @@ enum {
     SITE_SEVER_PROBE,
     SITE_DEATH_GATE,
     SITE_DETACH_HIDE_CALL,
+    SITE_SEND_MESSAGE,
+    SITE_NODE_POST_FIRST,
+    SITE_NODE_POST_SECOND,
     SITE_COUNT
 };
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("sever_probe",      SIG_SEVER_PROBE),
-    SIGNATURE_ENTRY("death_gate",       SIG_DEATH_GATE),
-    SIGNATURE_ENTRY("detach_hide_call", SIG_DETACH_HIDE_CALL)
+    /* A detour target, and declared as one: with a plain pattern the first DLL to detour the gate
+     * would have left this one searching for a prologue that is now a jump. */
+    SIGNATURE_ENTRY_DETOUR("death_gate", SIG_DEATH_GATE, DEATH_GATE_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY("detach_hide_call", SIG_DETACH_HIDE_CALL),
+    SIGNATURE_ENTRY_DETOUR_MASKED("send_message", SIG_SEND_MESSAGE, MSK_SEND_MESSAGE,
+                                  SEND_MESSAGE_PROLOGUE),
+    SIGNATURE_ENTRY_MASKED("node_post_first",  SIG_NODE_POST_FIRST,  MSK_NODE_POST),
+    SIGNATURE_ENTRY_MASKED("node_post_second", SIG_NODE_POST_SECOND, MSK_NODE_POST)
 };
 
 /* --- bapObj / rdThing / rdModel3 / character offsets ----------------------------------------- */
@@ -180,29 +273,10 @@ static signature_t sites[SITE_COUNT] = {
 #define THING_NODE_HIDDEN  0x28
 #define MODEL3_NODE_COUNT  0x54   /* proven by the copy loop 0x414456: cmp edx,[ecx+0x54] */
 #define MODEL3_NODES       0x58
-#define NODE_STRIDE        0xB4
-#define NODE_TYPE          0x48   /* the body-part mask */
-#define NODE_MESH_INDEX    0x4C   /* < 0 = this node carries no mesh */
-#define NODE_CHILD_COUNT   0x54
-#define NODE_FIRST_CHILD   0x58
-#define NODE_NEXT_SIBLING  0x5C
 #define CHARACTER_BODY     0x34   /* 0x433872: mov eax,[edx+0x34] */
 
-#define LIMB_MASK 0x6Eu           /* arms, head, legs, never 0x1 (generic), never 0x10 (hips) */
-#define ENGINE_TORSO_NODE_LIMIT 4 /* the engine's own `part > 4` rule at 0x43389D */
-
-#define MAX_SUBTREE_DEPTH    12
-#define MAX_PLAUSIBLE_KIDS  128u
 #define MAX_PLAUSIBLE_NODES 4096u
 
-/* The message mailbox, laid out contiguously from [0x869240]. */
-#define MAILBOX_BASE       0x869240u
-#define MAILBOX_SELF       0x00
-#define MAILBOX_OTHER      0x04
-#define MAILBOX_CODE       0x08
-#define MAILBOX_A          0x0C
-#define MAILBOX_B          0x10
-#define MAILBOX_NODE       0x18
 #define MESSAGE_CODE_SABER 0x25
 
 typedef int32_t (__cdecl *probe_fn_t)(void *victim_body, void *attacker);
@@ -226,13 +300,19 @@ typedef struct dismemberment_state {
     volatile const int32_t *message_b;
     volatile const int32_t *message_node;
 
-    /* Does this model carry a body-part mask at all? Cached per model pointer, otherwise the
-     * scan walks every node on every hit. */
-    const char       *mask_model;
-    bool              mask_answer;
-
     uint32_t          sever_count;
     int               hide_log_count;
+
+    /* A multiplayer host's mode, which a client runs in place of its own for a session without
+     * the ini changing: this machine's own as the ini last gave it, whose hand the running mode is,
+     * and the acknowledgement the multiplayer's report reads, as last filed. */
+    int               own_mode;
+    bool              mode_from_host;
+    bool              answer_filed;
+    bool              answer_from_host;
+    int               answer_mode;
+    uint32_t          answers;
+    bool              answer_warned;
 } dismemberment_state_t;
 
 static dismemberment_state_t limb_state;
@@ -243,17 +323,6 @@ const limb_config_t *limb_config(void)
 }
 
 /* ============================================================================================ */
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 static void load_config(void)
 {
     limb_config_t *config = &limb_state.config;
@@ -264,115 +333,26 @@ static void load_config(void)
      * limb on the killing blow changes how the game plays rather than repairing it, and this
      * project's rule for that class is a switch with a default that leaves the game alone. */
     mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)LIMB_MODE_OFF);
-    if (mode < (int)LIMB_MODE_OFF || mode > (int)LIMB_MODE_ON_DEATH) {
+    if (!limb_mode_is_known(mode)) {
         mode = (int)LIMB_MODE_OFF;
     }
-    config->mode = (limb_mode_t)mode;
+    config->mode         = (limb_mode_t)mode;
+    limb_state.own_mode  = mode;
 
-    config->spin_scale     = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SpinScale", 0.35f),
-                                         0.0f, 2.0f);
-    config->gravity_scale  = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "GravityScale", 0.40f),
-                                         0.1f, 2.0f);
-    config->settle_seconds = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleSeconds", 1.20f),
-                                         0.0f, 5.0f);
-    config->settle_damping = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "SettleDamping", 0.80f),
-                                         0.1f, 1.0f);
-    config->yaw_scale      = clamp_float(ini_read_float(DISMEMBERMENT_SECTION, "YawScale", 0.12f),
-                                         0.0f, 2.0f);
+    config->spin_scale     = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SpinScale",
+                                                          0.35f), 0.0f, 2.0f);
+    config->gravity_scale  = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "GravityScale",
+                                                          0.40f), 0.1f, 2.0f);
+    config->settle_seconds = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SettleSeconds",
+                                                          1.20f), 0.0f, 5.0f);
+    config->settle_damping = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "SettleDamping",
+                                                          0.80f), 0.1f, 1.0f);
+    config->yaw_scale      = numeric_clamp(ini_read_float(DISMEMBERMENT_SECTION, "YawScale", 0.12f),
+                                           0.0f, 2.0f);
     config->diagnostics    = ini_read_bool(DISMEMBERMENT_SECTION, "Diagnostics", false);
 }
 
 /* ============================================================================================ */
-static bool node_pointer_is_plausible(const void *pointer)
-{
-    return pointer != NULL && ((uintptr_t)pointer & 3u) == 0 && (uintptr_t)pointer > 0x10000u;
-}
-
-/* 30 shipped nodes carry NO mesh (tusken/tathum1/handmaid rthigh+lthigh, nimoid rlegdum, tank
- * waist, ...). For those there is no `keep` that hideMeshesBelow could match, and with no mesh
- * there is nothing to show either. Rather than passing the raw node index through (the old, wrong
- * behaviour), we look for the FIRST mesh IN THE SUBTREE of that node: the topmost visible piece
- * of exactly this limb. If there is none, the node is unusable and is rejected. */
-int32_t limb_first_mesh_in_subtree(const uint8_t *node, int depth)
-{
-    uint32_t       child_count;
-    uint32_t       index;
-    const uint8_t *child;
-    int32_t        mesh;
-
-    if (!node_pointer_is_plausible(node) || depth > MAX_SUBTREE_DEPTH) {
-        return -1;
-    }
-    if (!memory_is_readable_range((uintptr_t)node, NODE_STRIDE)) {
-        return -1;
-    }
-
-    mesh = *(const int32_t *)(node + NODE_MESH_INDEX);
-    if (mesh >= 0) {
-        return mesh;
-    }
-
-    child_count = *(const uint32_t *)(node + NODE_CHILD_COUNT);
-    if (child_count > MAX_PLAUSIBLE_KIDS) {
-        return -1;
-    }
-
-    child = *(const uint8_t * const *)(node + NODE_FIRST_CHILD);
-    for (index = 0; index < child_count && node_pointer_is_plausible(child); ++index) {
-        mesh = limb_first_mesh_in_subtree(child, depth + 1);
-        if (mesh >= 0) {
-            return mesh;
-        }
-        child = *(const uint8_t * const *)(child + NODE_NEXT_SIBLING);
-    }
-
-    return -1;
-}
-
-static bool model_has_part_mask(const char *model, const char *nodes, uint32_t node_count)
-{
-    uint32_t index;
-
-    if (limb_state.mask_model == model) {
-        return limb_state.mask_answer;
-    }
-
-    limb_state.mask_answer = false;
-    for (index = 0; index < node_count; ++index) {
-        if ((*(const uint32_t *)(nodes + index * NODE_STRIDE + NODE_TYPE) & ~1u) != 0) {
-            limb_state.mask_answer = true;
-            break;
-        }
-    }
-    limb_state.mask_model = model;
-    return limb_state.mask_answer;
-}
-
-/* Gate 5. the authored mask, with a fallback.
- *
- * The census over 265 actor .baf files says: only ten rigs carry a body-part mask at all (anakin,
- * baron, baronsec, obiwan, quigon, queen, panaka, pitdroid, sithmrc2, jawagun); on every other
- * model EVERY node reads 0x1 = generic. A pure `type & 0x6E` gate therefore refuses on those
- * outright, which is exactly why decapitation did not happen on all enemies.
- *
- * Hence two stages, and the ORDER is the statement:
- *   1. if the model carries a real mask ANYWHERE, that mask is the truth, a node without a limb
- *      bit is not severed, however large its index;
- *   2. if it carries none, the decision falls back to the engine's own rule `part > 4`. That is
- *      tuned to baronsec-shaped skeletons and protects the torso column there. On a foreign rig
- *      it is a heuristic, but it is THE ENGINE'S heuristic, not ours. */
-static bool part_mask_allows(uint32_t type, const char *model, const char *nodes,
-                             uint32_t node_count, int32_t node_index)
-{
-    if ((type & LIMB_MASK) != 0) {
-        return true;
-    }
-    if (model_has_part_mask(model, nodes, node_count)) {
-        return false;                              /* the model knows better */
-    }
-    return node_index > ENGINE_TORSO_NODE_LIMIT;   /* the engine's own bound */
-}
-
 /* Answers with the node the blade REALLY hit, or 0 when any of the gates is shut. 0 is the safe
  * value: the engine tests `> 0` at both use sites. */
 static int32_t blade_node(void *victim_body, void *attacker)
@@ -439,7 +419,7 @@ static int32_t blade_node(void *victim_body, void *attacker)
     }
     type = *(const uint32_t *)(nodes + (uint32_t)node_index * NODE_STRIDE + NODE_TYPE);
 
-    if (!part_mask_allows(type, model, nodes, node_count, node_index)) {
+    if (!limb_part_mask_allows(type, model, nodes, node_count, node_index)) {
         return 0;                                  /* gate 5 */
     }
 
@@ -459,7 +439,7 @@ static int32_t blade_node(void *victim_body, void *attacker)
 static int32_t __cdecl hook_sever_probe(void *victim_body, void *attacker)
 {
     /* Always call the original: its side effects (bapmap_eulerToMatrixT and, behind the poseStamp
-     * gate, rdPuppet_buildJointMatrices) are what bapobj_detachNode's throw direction depends on. */
+     * gate, rdPuppet_buildJointMatrices) are what bapobj_detachNode's throw direction rests on. */
     int32_t original_node = limb_state.engine_probe(victim_body, attacker);
     int32_t blade;
 
@@ -593,28 +573,65 @@ static void __cdecl hook_hide_meshes(void *piece_thing, void *model3, uint8_t *n
 }
 
 /* ============================================================================================ */
+/* One mailbox cell out of an operand, checked to lie in the image. */
+static bool read_cell(uintptr_t site, uint32_t operand, volatile const int32_t **out)
+{
+    uint32_t address = 0;
+
+    if (!memory_read_image_cell(site + operand, sizeof(int32_t), &address)) {
+        return false;
+    }
+    *out = (volatile const int32_t *)(uintptr_t)address;
+    return true;
+}
+
+/* The six cells the gates read, out of the two functions that write them. Resolved before
+ * anything is patched, and the feature stays off without them: the gates are what make a sever
+ * land on the limb that was hit, and reading them from the wrong cells would be worse than not
+ * reading them at all. */
 static bool resolve_message_mailbox(void)
 {
-    /* The mailbox lies contiguously from [0x869240]: self=+0, other=+4, code=+8, a=+0xC, b=+0x10,
-     * impact=+0x14, node=+0x18. Every address is checked against the
-     * image. */
-    if (!memory_is_inside_image(MAILBOX_BASE, MAILBOX_NODE + sizeof(int32_t))) {
-        log_error("the message mailbox %08X is not inside the image, feature OFF",
-                  (unsigned)MAILBOX_BASE);
+    uintptr_t               send  = sites[SITE_SEND_MESSAGE].address;
+    uintptr_t               first = sites[SITE_NODE_POST_FIRST].address;
+    uintptr_t               second = sites[SITE_NODE_POST_SECOND].address;
+    volatile const int32_t *node_again = NULL;
+
+    if (send == 0 || first == 0 || second == 0) {
+        log_error("the message mailbox could not be located (%s, %s, %s), feature OFF",
+                  (send != 0) ? "sendMessage found" : "sendMessage NOT found",
+                  (first != 0) ? "first node post found" : "first node post NOT found",
+                  (second != 0) ? "second node post found" : "second node post NOT found");
+        return false;
+    }
+    if (!read_cell(send, SEND_MESSAGE_SELF_OPERAND,  &limb_state.message_self) ||
+        !read_cell(send, SEND_MESSAGE_OTHER_OPERAND, &limb_state.message_other) ||
+        !read_cell(send, SEND_MESSAGE_CODE_OPERAND,  &limb_state.message_code) ||
+        !read_cell(send, SEND_MESSAGE_A_OPERAND,     &limb_state.message_a) ||
+        !read_cell(send, SEND_MESSAGE_B_OPERAND,     &limb_state.message_b) ||
+        !read_cell(first, NODE_POST_OPERAND,         &limb_state.message_node) ||
+        !read_cell(second, NODE_POST_OPERAND,        &node_again)) {
+        log_error("a mailbox operand in sendMessage at %08X or in the node posts at %08X or %08X "
+                  "names a cell outside the image, feature OFF",
+                  (unsigned)send, (unsigned)first, (unsigned)second);
+        return false;
+    }
+    if (node_again != limb_state.message_node) {
+        log_error("the two node posts at %08X and %08X write different cells, %08X and %08X, so "
+                  "this is not the collidePairs expected, feature OFF",
+                  (unsigned)first, (unsigned)second, (unsigned)(uintptr_t)limb_state.message_node,
+                  (unsigned)(uintptr_t)node_again);
         return false;
     }
 
-    limb_state.message_self  = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_SELF);
-    limb_state.message_other = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_OTHER);
-    limb_state.message_code  = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_CODE);
-    limb_state.message_a     = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_A);
-    limb_state.message_b     = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_B);
-    limb_state.message_node  = (volatile const int32_t *)(uintptr_t)(MAILBOX_BASE + MAILBOX_NODE);
-
-    log_info("mailbox self=%08X other=%08X code=%08X a=%08X b=%08X node=%08X",
-             (unsigned)(MAILBOX_BASE + MAILBOX_SELF), (unsigned)(MAILBOX_BASE + MAILBOX_OTHER),
-             (unsigned)(MAILBOX_BASE + MAILBOX_CODE), (unsigned)(MAILBOX_BASE + MAILBOX_A),
-             (unsigned)(MAILBOX_BASE + MAILBOX_B), (unsigned)(MAILBOX_BASE + MAILBOX_NODE));
+    log_info("mailbox self=%08X other=%08X code=%08X a=%08X b=%08X node=%08X, read out of "
+             "sendMessage at %08X and the node posts at %08X and %08X",
+             (unsigned)(uintptr_t)limb_state.message_self,
+             (unsigned)(uintptr_t)limb_state.message_other,
+             (unsigned)(uintptr_t)limb_state.message_code,
+             (unsigned)(uintptr_t)limb_state.message_a,
+             (unsigned)(uintptr_t)limb_state.message_b,
+             (unsigned)(uintptr_t)limb_state.message_node,
+             (unsigned)send, (unsigned)first, (unsigned)second);
     return true;
 }
 
@@ -710,10 +727,69 @@ static void install_mesh_index_fix(void)
  * and the flight constants are only written when the answer actually changes. */
 #define POLL_INTERVAL_FRAMES 60u
 
+/* The acknowledgement the multiplayer's report reads, host_taken_dismemberment: whether the mode
+ * running is the host's, and which one. Filed on a change of hand, or of the mode while it is the
+ * host's, and never on a machine where no host's mode was ever in force. A refused filing is warned
+ * about once and not tried again until something changes. */
+static void acknowledge_mode(void)
+{
+    host_settings_taken_t taken;
+    host_settings_t       record;
+
+    if (!limb_state.answer_filed && !limb_state.mode_from_host) {
+        return;
+    }
+    if (limb_state.answer_filed && limb_state.answer_from_host == limb_state.mode_from_host &&
+        (!limb_state.mode_from_host || limb_state.answer_mode == (int)limb_state.config.mode)) {
+        return;
+    }
+    memset(&taken, 0, sizeof taken);
+    if (limb_state.mode_from_host) {
+        taken.in_force = (uint16_t)(1u << HOST_SETTING_DISMEMBERMENT_MODE);
+        taken.effective[HOST_SETTING_DISMEMBERMENT_MODE] = (float)limb_state.config.mode;
+        if (host_settings_read(&record)) {
+            taken.generation = record.generation;
+        }
+    }
+    taken.published = ++limb_state.answers;
+    if (!host_settings_publish_taken(DISMEMBERMENT_SECTION, &taken) &&
+        !limb_state.answer_warned) {
+        limb_state.answer_warned = true;
+        log_warning("the acknowledgement of the host's settings could not be filed as "
+                    "host_taken_%s, so the multiplayer's report will say no note answered",
+                    DISMEMBERMENT_SECTION);
+    }
+    limb_state.answer_filed     = true;
+    limb_state.answer_from_host = limb_state.mode_from_host;
+    limb_state.answer_mode      = (int)limb_state.config.mode;
+}
+
+/* Said once per change of hand, whichever way, with this machine's own mode beside the host's and
+ * the word that the file was not touched. */
+static void say_the_hand(const limb_mode_choice_t *choice)
+{
+    if (choice->from_host == limb_state.mode_from_host) {
+        return;
+    }
+    if (choice->from_host) {
+        log_info("the host's dismemberment Mode %d is used for this session; this machine's own "
+                 "%d stays in engine_fixes.ini", choice->mode, choice->own);
+    } else {
+        log_info("the host's dismemberment Mode no longer applies: back to this machine's own %d "
+                 "from engine_fixes.ini", choice->own);
+    }
+}
+
+/* In a multiplayer session a client runs the host's mode in place of its own, read from the record
+ * the multiplayer publishes and never written to the ini; the own mode is there again when the
+ * session is over. */
 static void poll_mode(void)
 {
-    static uint32_t countdown;
-    int             mode;
+    static uint32_t    countdown;
+    float              host_value = 0.0f;
+    bool               host_named;
+    bool               was_host;
+    limb_mode_choice_t choice;
 
     if (countdown != 0u) {
         countdown--;
@@ -721,18 +797,29 @@ static void poll_mode(void)
     }
     countdown = POLL_INTERVAL_FRAMES;
 
-    mode = ini_read_int(DISMEMBERMENT_SECTION, "Mode", (int)limb_state.config.mode);
-    if (mode < (int)LIMB_MODE_OFF || mode > (int)LIMB_MODE_ON_DEATH ||
-        mode == (int)limb_state.config.mode) {
-        return;
+    host_named = host_settings_value(HOST_SETTING_DISMEMBERMENT_MODE, &host_value,
+                                     GetTickCount());
+    choice = limb_mode_pick(host_named, host_value,
+                            ini_read_int(DISMEMBERMENT_SECTION, "Mode", limb_state.own_mode),
+                            limb_state.own_mode);
+    limb_state.own_mode = choice.own;
+    say_the_hand(&choice);
+    was_host                  = limb_state.mode_from_host;
+    limb_state.mode_from_host = choice.from_host;
+    if (choice.mode != (int)limb_state.config.mode) {
+        limb_state.config.mode = (limb_mode_t)choice.mode;
+
+        /* Said before the flight constants are moved, so the log reads in the order the reader
+         * thinks in: the setting changed, and here is what changed because of it. */
+        if (choice.from_host && was_host) {
+            log_info("the host's dismemberment Mode is now %d for this session", choice.mode);
+        } else if (!choice.from_host && !was_host) {
+            log_info("Mode is now %d, read from the settings file while the game runs",
+                     choice.mode);
+        }
+        limb_flight_set_active(choice.mode != (int)LIMB_MODE_OFF);
     }
-
-    limb_state.config.mode = (limb_mode_t)mode;
-
-    /* Said before the flight constants are moved, so the log reads in the order the reader thinks
-     * in: the setting changed, and here is what changed because of it. */
-    log_info("Mode is now %d, read from the settings file while the game runs", mode);
-    limb_flight_set_active(mode != (int)LIMB_MODE_OFF);
+    acknowledge_mode();
 }
 
 void dismemberment_install(void)
@@ -748,11 +835,10 @@ void dismemberment_install(void)
     }
 
     load_config();
+    signature_resolve_table(sites, SITE_COUNT);
     if (!resolve_message_mailbox()) {
         return;
     }
-
-    signature_resolve_table(sites, SITE_COUNT);
     limb_state.installed = true;
 
     /* Everything is installed whatever the setting says, and the setting is then obeyed at run

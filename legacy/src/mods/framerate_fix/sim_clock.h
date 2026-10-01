@@ -18,14 +18,26 @@
 
 #include <stdbool.h>
 
-void sim_clock_install(bool enabled);
+/* `enabled` is RebaseSimClock and `substep_clock` is MoverSubstepClock. They are independent
+ * features that share this file's one detour on bapmap_setWorldClock, so either alone places it
+ * and neither is switched off by the other being off. The second is a change to how movers MOVE
+ * rather than to how they are drawn; world_clock.h carries what it does and what it costs. */
+void sim_clock_install(bool enabled, bool substep_clock);
 
 /* How much to take off both clocks, or 0 when it is not time yet. Split out and declared here
  * because it is the one claim this feature stands on and it is pure arithmetic: the amount must be
- * a power of two no greater than the live value, which is what makes both subtractions exact and
+ * a power of two no greater than the live value, which makes both subtractions exact and
  * therefore leaves the difference the interpolation depends on untouched. Driven by the unit test.
  */
 double sim_clock_rebase_step(float live);
+
+/* Everything this feature has taken off the simulation clock since the level opened, in seconds.
+ * Zero when the rebase is off, and zero again from the moment a level opens.
+ *
+ * Published because framerate_stats reads the very cell this file subtracts from, and a window
+ * that spans a rebase otherwise sees the clock jump backwards and calls it a level load. A reader
+ * comparing two samples of that clock has to add back whatever was taken between them. */
+double sim_clock_rebase_offset(void);
 
 /* Called once per rendered frame, from outside the substep loop. */
 void sim_clock_sample(void);

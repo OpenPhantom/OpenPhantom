@@ -1,11 +1,11 @@
 /* overlay_sites.c: every engine entry point the panel draws through.
  *
  * ==============================================================================================
- * THE SITES, AND HOW EACH ONE WAS ESTABLISHED
+ * The sites, and how each one was established
  *
  * All addresses are from retail WMAIN.EXE, 829,952 bytes, ImageBase 0x400000.
  *
- * THE FILLED SHAPE. 0x00419660 takes four screen coordinates, a packed ARGB and a layer, and is
+ * The filled shape. 0x00419660 takes four screen coordinates, a packed ARGB and a layer, and is
  * what the game draws its own letterbox bars and its screen tint with:
  *
  *   00419660  81 EC 84 00 00 00        sub esp,0x84        ; no frame pointer, an optimised leaf
@@ -35,7 +35,7 @@
  * asset to ship.
  *
  * ==============================================================================================
- * WHAT WENT WRONG THE FIRST TIME, BECAUSE IT COST A TEST ROUND
+ * What went wrong the first time, because it cost a test round
  *
  * Every pattern here was first written with its mask inverted. The shared matcher treats a NON ZERO
  * mask byte as "must match" and a zero as a wildcard, and these were written the other way round,
@@ -47,7 +47,7 @@
  * one: see the note beside the ammunition pattern in cheats_openphantom.c.
  *
  * ==============================================================================================
- * WHY THE PANEL IS DRAWN AND NOT BLITTED
+ * Why the panel is drawn and not blitted
  *
  * Every shape and every string goes through the engine on the frame it appears on. Nothing is
  * cached, no surface is held and no state is left changed behind us: the colour is set before each
@@ -61,6 +61,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
+#include "common/screen_fill.h"
 #include "common/signature.h"
 
 #include <stdbool.h>
@@ -86,8 +87,8 @@ _Static_assert(sizeof(SIG_DRAW_QUAD) == sizeof(MSK_DRAW_QUAD),
  * far too common a shape to find on its own: that pattern alone matches twenty five places.
  *
  * So this is not used to CALL anything. The pattern starts five bytes earlier, in the tail of the
- * function before it, which is what makes it unique, and the cell's address is read out of the
- * operand and then read directly. That is better than a call would have been anyway: the slot is
+ * function before it; that tail makes it unique. The cell's address is read out of the operand
+ * and then read directly. That is better than a call would have been anyway: the slot is
  * fetched fresh wherever it is needed instead of once at install time.
  *
  *   0046B74F  83 C4 10 5D C3           the previous function ending
@@ -137,7 +138,7 @@ _Static_assert(sizeof(SIG_SELECT) == sizeof(MSK_SELECT),
  *   0046B188  C7 45 FC 00 00 00 00     the index, cleared
  *   0046B18F  EB 09                    into the test
  *   0046B191  8B 45 FC 83 C0 01 89 45 FC   ++index
- *   0046B19A  83 7D FC 04              cmp index,4     <- four corners, and that is the tell */
+ *   0046B19A  83 7D FC 04              cmp index,4     <- four corners, the tell */
 static const uint8_t SIG_SET_COLOUR[] = {
     0x55, 0x8B, 0xEC,                                /* push ebp; mov ebp,esp    */
     0x51,                                            /* push ecx                 */
@@ -185,8 +186,8 @@ _Static_assert(sizeof(SIG_DRAW_TEXT) == sizeof(MSK_DRAW_TEXT),
 /* --- 0x0046B293 and 0x0046B2BA, the two scales. Text is not drawn in pixels: the font layer keeps
  * a position scale and a glyph scale, and the engine sets both before every string of its own,
  * 1/width and 1/height for the first and 640/width and 480/height for the second. Setting neither
- * draws at whatever the last user of the font left behind, which is why the panel first came out
- * enormous and off the screen.
+ * draws at whatever the last user of the font left behind, so the panel first came out enormous
+ * and off the screen.
  *
  * The two setters are identical for their first twenty four bytes, both being the same guard around
  * the same pool. They part at the field they write, +0x28 against +0x38, so each pattern has to
@@ -372,10 +373,19 @@ _Static_assert(sizeof(SIG_DRAW_CURSOR) == sizeof(MSK_DRAW_CURSOR),
 
 overlay_draw_state_t draw_state;
 
+/* `prologue` is how many bytes a detour on this site would overwrite, or zero for a site that is
+ * not a function head. It is not used to hook anything here: it is what lets the search skip a
+ * branch another module has already written over the head and anchor on the tail instead. This
+ * search runs the first time the overlay draws, which is after every other DLL has installed, and
+ * four of these heads are ones multiplayer and hud_ratio_scaling hull. */
+#define NOT_A_FUNCTION_HEAD 0u
+
 static bool resolve_one(const uint8_t *bytes, const uint8_t *mask, size_t size,
-                        const char *what, uintptr_t *out)
+                        size_t prologue, const char *what, uintptr_t *out)
 {
-    uintptr_t site = signature_find_unique(bytes, mask, size);
+    uintptr_t site = prologue != 0u
+                     ? signature_find_detour_target(bytes, mask, size, prologue)
+                     : signature_find_unique(bytes, mask, size);
 
     if (site == 0) {
         log_warning("%s did not resolve, so the overlay cannot draw and stays closed", what);
@@ -409,27 +419,43 @@ bool overlay_draw_resolve(void)
         return true;
     }
 
-    if (!resolve_one(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD,
-                     "the filled shape drawer", &quad) ||
-        !resolve_one(SIG_SYS_FONT, MSK_SYS_FONT, sizeof SIG_SYS_FONT,
+    /* The quad is looked for the way a detoured site is, because render_guard replaces it whole
+     * (flat_quad.c) and the load order that puts this DLL first is alphabetical, not promised. */
+    quad = signature_find_detour_target(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD, 6u);
+    if (quad == 0) {
+        log_warning("the filled shape drawer did not resolve, so the overlay cannot draw and "
+                    "stays closed");
+        return false;
+    }
+    if (!resolve_one(SIG_SYS_FONT, MSK_SYS_FONT, sizeof SIG_SYS_FONT,
+                     NOT_A_FUNCTION_HEAD,
                      "the built in font", &sys_font) ||
         !resolve_one(SIG_SELECT, MSK_SELECT, sizeof SIG_SELECT,
+                     7u,
                      "the font selector", &select) ||
         !resolve_one(SIG_SET_COLOUR, MSK_SET_COLOUR, sizeof SIG_SET_COLOUR,
+                     11u,
                      "the text colour setter", &colour) ||
         !resolve_one(SIG_DRAW_TEXT, MSK_DRAW_TEXT, sizeof SIG_DRAW_TEXT,
+                     9u,
                      "the text drawer", &text) ||
         !resolve_one(SIG_GLYPH_SCALE, MSK_GLYPH_SCALE, sizeof SIG_GLYPH_SCALE,
+                     10u,
                      "the glyph scale setter", &glyph) ||
         !resolve_one(SIG_POS_SCALE, MSK_POS_SCALE, sizeof SIG_POS_SCALE,
+                     10u,
                      "the position scale setter", &pos) ||
         !resolve_one(SIG_SCREEN_SIZE, MSK_SCREEN_SIZE, sizeof SIG_SCREEN_SIZE,
+                     NOT_A_FUNCTION_HEAD,
                      "the screen size", &screen) ||
         !resolve_one(SIG_SET_ALIGN, MSK_SET_ALIGN, sizeof SIG_SET_ALIGN,
+                     11u,
                      "the text alignment", &align) ||
         !resolve_one(SIG_MEASURE_CHAR, MSK_MEASURE_CHAR, sizeof SIG_MEASURE_CHAR,
+                     6u,
                      "the character metrics", &mchar) ||
         !resolve_one(SIG_MEASURE_STRING, MSK_MEASURE_STRING, sizeof SIG_MEASURE_STRING,
+                     6u,
                      "the string width", &mstring)) {
         return false;
     }
@@ -473,6 +499,7 @@ bool overlay_draw_resolve(void)
     }
 
     draw_state.quad = (draw_quad_fn_t)quad;
+    (void)screen_fill_resolve(quad);
     draw_state.select = (select_fn_t)select;
     draw_state.colour = (set_colour_fn_t)colour;
     draw_state.text = (draw_text_fn_t)text;

@@ -69,7 +69,9 @@ typedef struct fog_regime_state {
     uint8_t             saved_query[3];
 
     bool                pixel_fog_active;
-    fog_regime_band_t   device_band;       /* what FOGSTART and FOGEND were last told */
+    /* The band this module last put on the device, or the record's band applyLevelFog last gave
+     * it. Any other band in the device's cells is the effects'. */
+    fog_regime_band_t   device_band;
     bool                inside_apply;      /* true while our own applyLevelFog detour is running */
 
     const void         *projection_device;   /* the device the matrix was last given to */

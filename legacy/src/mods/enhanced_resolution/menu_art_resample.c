@@ -37,9 +37,9 @@ int32_t menu_art_resample_scaled(int32_t value, float ratio)
     }
     scaled = (float)value * ratio;
 
-    /* Away from zero at the half, which is what Python's round() does not do and what
-     * the retired artwork converter's int(v * ratio + 0.5) does. The converter is the reference
-     * because its output is what a player who ran it already has on disk. */
+    /* Away from zero at the half. Python's round() does not do that; the retired artwork
+     * converter's int(v * ratio + 0.5) does. The converter is the reference because its output
+     * is what a player who ran it already has on disk. */
     return (scaled >= 0.0f) ? (int32_t)(scaled + 0.5f) : -(int32_t)(-scaled + 0.5f);
 }
 

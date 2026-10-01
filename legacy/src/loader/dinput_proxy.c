@@ -5,6 +5,7 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -37,12 +38,48 @@ typedef HRESULT (WINAPI *get_class_object_fn_t)(const void *, const void *, void
 static HMODULE chain_module;
 static bool    chain_attempted;
 
+/* The link stamp out of a mapped module's headers, 0 when the headers are not a PE's. The same
+ * number mod_loader prints beside every mod, and here it is an identity: two mappings of this
+ * loader carry the same one whatever the file is called. */
+static DWORD module_link_stamp(HMODULE module)
+{
+    const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)module;
+    const IMAGE_NT_HEADERS *nt;
+
+    if (dos == NULL || dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return 0;
+    }
+    nt = (const IMAGE_NT_HEADERS *)((const char *)module + dos->e_lfanew);
+    return (nt->Signature == IMAGE_NT_SIGNATURE) ? nt->FileHeader.TimeDateStamp : 0;
+}
+
+/* A chain target that is this loader again, by handle or by copy, would resolve every export to
+ * the proxy in front of it and recurse until the stack ran out. ChainDll=dinput.dll relative to
+ * the game folder is the first, a dinput_orig.dll that is a copy of this file is the second, and
+ * both are one wrong step in an installation away. */
+static bool chain_is_this_loader(HMODULE candidate)
+{
+    HMODULE self = NULL;
+
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)(const void *)&chain_is_this_loader, &self)) {
+        return false;
+    }
+    if (candidate == self) {
+        return true;
+    }
+    return module_link_stamp(candidate) != 0 &&
+           module_link_stamp(candidate) == module_link_stamp(self);
+}
+
 static bool try_load_chain(const char *path, const char *how)
 {
     if (path == NULL || path[0] == '\0') {
         return false;
     }
     if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+        log_info("chain: no %s at %s", how, path);
         return false;
     }
 
@@ -52,6 +89,13 @@ static bool try_load_chain(const char *path, const char *how)
                     how, (unsigned long)GetLastError(), path);
         return false;
     }
+    if (chain_is_this_loader(chain_module)) {
+        log_error("chain: %s is this loader itself, and forwarding to it would call back into "
+                  "this proxy without end, so it is refused: %s", how, path);
+        FreeLibrary(chain_module);
+        chain_module = NULL;
+        return false;
+    }
 
     log_info("chain: forwarding dinput exports to %s (%s)", path, how);
     return true;
@@ -59,8 +103,7 @@ static bool try_load_chain(const char *path, const char *how)
 
 static void build_game_relative(const char *name, char *buffer, size_t buffer_size)
 {
-    _snprintf(buffer, buffer_size, "%s%s", host_directory(), name);
-    buffer[buffer_size - 1] = '\0';
+    text_format(buffer, buffer_size, "%s%s", host_directory(), name);
 }
 
 void dinput_proxy_open_chain(void)
@@ -102,7 +145,7 @@ void dinput_proxy_open_chain(void)
         log_error("chain: the system directory could not be determined, dinput calls will fail");
         return;
     }
-    _snprintf(candidate + length, MAX_PATH - length, "\\%s", CHAIN_SYSTEM_NAME);
+    text_format(candidate + length, MAX_PATH - length, "\\%s", CHAIN_SYSTEM_NAME);
     candidate[MAX_PATH - 1] = '\0';
     if (try_load_chain(candidate, "system")) {
         return;

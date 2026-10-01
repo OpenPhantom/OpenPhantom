@@ -1,6 +1,6 @@
 /* view_range.c: the draw distance actually in force, frame by frame.
  *
- * THE SEAM. Lifted whole out of view_distance_fix.c, which was past the hard limit. Everything
+ * The seam. Lifted whole out of view_distance_fix.c, which was past the hard limit. Everything
  * that decides how far the world is drawn is here, together with the state it decides over: the
  * observed field of view, the radius cap, the cut edge, the bapmat_viewDistance detour and the
  * per frame tick. The tick came with it rather than staying with the install sequence because
@@ -8,7 +8,7 @@
  * the two-sided budget and the dither, have to happen once a frame at a fixed point in that
  * order.
  *
- * THE ORDER OF THE TICK IS ITS CORRECTNESS. The frame governor runs before the cell watchdog, the
+ * The order of the tick is its correctness. The frame governor runs before the cell watchdog, the
  * two raises sit between them, and the fog reads the settled number afterwards. Each step says
  * next to itself what breaks in the other order.
  */
@@ -156,7 +156,7 @@ static float maximum_range(void)
  * That is a whole frame of authored fog followed by a walk to the real band, and at a wide field
  * of view the two are far apart: 32 against 21.3 on a level that draws to 22. Predicting it from
  * the level's own authored view distance costs nothing and is exact wherever the level has no
- * per-cell override and the scale is 1, which is what ships. */
+ * per-cell override and the scale is 1, the case that ships. */
 int32_t view_distance_fix_cut_for(int32_t engine_range)
 {
     int32_t range = engine_range;
@@ -187,7 +187,7 @@ static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
     int32_t            engine_range = original(world, out_lod_mask);
     int32_t            range = view_distance_fix_cut_for(engine_range);
 
-    /* This is the only place both numbers exist at once, which is why the fog is told from here
+    /* This is the only place both numbers exist at once, so the fog is told from here
      * rather than recomputing the cut edge from the configuration. `engine_range` is where the cut
      * edge would have been; it already carries the level's default AND any per-cell override
      * from bapCell+0x03, and `range` is where we have actually put it. The fog needs the ratio,
@@ -195,9 +195,9 @@ static int32_t __cdecl hook_view_distance(void *world, uint8_t *out_lod_mask)
     /* But NOT while the level's opening window has the scale raised above what the player asked
      * for. The frame governor and the cell watchdog only ever LOWER it, so a scale above the
      * configured one can only be that override, and the cut edge it produces is one the player is
-     * about to lose. Letting it into the fog's memory is what made the band fade in against an
-     * edge two and a half times the real one, on every level whose window ran: Mos Espa settled
-     * towards 27.1 in a world that stops at 22.
+     * about to lose. Letting it into the fog's memory made the band fade in against an edge two
+     * and a half times the real one, on every level whose window ran: Mos Espa settled towards
+     * 27.1 in a world that stops at 22.
      *
      * A comparison rather than a timer, deliberately. Three attempts at timing this failed,
      * because the scale is applied at the end of a frame and governs the next one, so every
@@ -221,15 +221,15 @@ void view_range_on_frame(void)
     two_sided_faces_begin_frame();
     view_settings_poll(range_state.config, &range_state.effective_view_scale);
 
-    /* STRICT MODE, and it is deliberately the first thing after the poll rather than a branch
+    /* Strict mode, and it is deliberately the first thing after the poll rather than a branch
      * wrapped around everything below.
      *
      * Every term further down either lowers the scale or raises it, and each has a reason. Strict
      * mode says none of those reasons outrank the number the reader typed, so the honest way to
      * express it is to assign that number here and then decline each term in turn, rather than to
      * skip a block and leave whatever the last frame settled on. A scale lowered by the watchdog
-     * before strict was switched on is therefore released on the next frame, which is what a
-     * reader turning it on is asking for. */
+     * before strict was switched on is therefore released on the next frame; a reader turning it
+     * on is asking for exactly that. */
     if (range_state.config->strict_view_range) {
         range_state.effective_view_scale = range_state.config->view_range_scale;
     }
@@ -281,7 +281,7 @@ void view_range_on_frame(void)
                  (double)range_state.effective_view_scale);
     }
 
-    /* A SCRIPTED CAMERA GETS A RADIUS AUTHORED FOR SOMEWHERE ELSE, and this is the correction.
+    /* A scripted camera gets a radius authored for SOMEWHERE ELSE, and this is the correction.
      *
      * bapdraw_drawWorld collects cells in a circle centred on the CAMERA's eye, and takes the
      * radius from bapmat_viewDistance, which reads the override through level+0xA30. That field is
@@ -323,8 +323,8 @@ void view_range_on_frame(void)
     if (range_state.config->strict_view_range) {
         /* The watchdog still runs, on a copy. It keeps measuring both walls, keeps its own ceiling
          * current for the moment strict mode is switched off again, and keeps warning in the log;
-         * what it cannot do is move the number the reader asked for. That is the whole of the
-         * setting, and it is the dangerous half: see the key's comment in engine_fixes.ini. */
+         * what it cannot do is move the number the reader asked for. That is all the setting does,
+         * and it is the dangerous half: see the key's comment in engine_fixes.ini. */
         float measured_only = range_state.effective_view_scale;
 
         cell_watchdog_on_frame(&measured_only);

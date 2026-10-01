@@ -1,8 +1,8 @@
 /* window_mode.c: what shape the window is asked for, checked without a window.
  *
  * Everything this feature decides is one function. The rest is SetWindowLong and SetWindowPos,
- * which cannot be tested without a desktop, so the whole of the policy is here and none of the
- * plumbing is.
+ * which cannot be tested without a desktop, so the whole policy is here and none of the plumbing
+ * is.
  */
 #include "unittest.h"
 
@@ -62,7 +62,7 @@ static void test_windowed_takes_an_explicit_size(void)
     ut_check(window_mode_client_rect(WINDOW_MODE_WINDOWED, &primary, 1920, 1080, 800, 600, &out),
           "an explicit size is accepted");
     ut_check(out.width == 800 && out.height == 600,
-          "an explicit size beats the display mode, which is what the keys are for");
+          "an explicit size beats the display mode, the job the keys exist for");
 
     ut_check(window_mode_client_rect(WINDOW_MODE_WINDOWED, &primary, 1920, 1080, 800, 0, &out),
           "one axis given and the other left at zero is still answerable");
@@ -136,7 +136,7 @@ static void test_the_style_words(void)
 {
     ut_check(window_mode_style(WINDOW_MODE_BORDERLESS) == 0x10000000u,
           "borderless is WS_VISIBLE alone, which is the style the engine already runs with, so "
-          "that mode changes the geometry and nothing else");
+          "that mode changes the geometry alone");
 
     ut_check((window_mode_style(WINDOW_MODE_WINDOWED) & 0x00040000u) == 0u,
           "the windowed style does NOT set WS_THICKFRAME: the window procedure handles no WM_SIZE "
@@ -189,7 +189,7 @@ static void test_a_framed_window_is_made_to_fit(void)
     window_mode_rect_t monitor = { 0, 0, 3840, 2160 };
 
     ut_check(window_mode_client_rect(WINDOW_MODE_RESIZABLE, &monitor, 1920, 1080, 3840, 2160, &out),
-          "a resizable window is asked for a client the size of the monitor, which is what "
+          "a resizable window is asked for a client the size of the monitor, as "
           "choosing the top entry of the panel's resolution list does");
     ut_check(out.width == 3840 && out.height == 2160,
           "and on its own that is what it gets, because the size a reader asked for is the same "

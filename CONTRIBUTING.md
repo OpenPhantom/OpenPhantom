@@ -13,7 +13,7 @@ just a good bug report. You do not need to know the engine to help.
 in a commit, not in a release, not in an issue attachment. Everything here operates on files the
 user already owns. A pull request that adds game data will be closed regardless of how good the
 rest of it is, and if something slips through, say so immediately so it can be removed from the
-history rather than quietly left there.
+history.
 
 This is not paperwork. It is the difference between a project that survives and one that does not.
 
@@ -43,9 +43,9 @@ architecture/    How the original engine is put together, written down.
 installer/       Packaging and setup.
 ```
 
-`legacy/` and `installer/` have something in them. The rest are placeholders. Know that before
-you plan a large contribution: if you want to start one of them, open an issue first
-so the shape can be agreed before anybody writes a thousand lines.
+`legacy/` and `installer/` have something in them, and `architecture/` has one note. The rest are
+placeholders. Know that before you plan a large contribution: if you want to start one of them,
+open an issue first so the shape can be agreed before anybody writes a thousand lines.
 
 Both components that exist are laid out the same way: an entry point and the documents at the top,
 sources under `src/`, and an output directory that git keeps but never fills.
@@ -124,10 +124,10 @@ outcome and so is talking somebody else out of one.
 
 * Reproduce an open issue and add what you find. A confirmed report with a log attached is worth
   more than it sounds.
-* Take one of the fixes in `legacy/` that is marked as not yet tested in the game and test it.
-  Each feature README says what to look for. This is the single most useful thing right now,
-  because almost everything there is verified offline and only three fixes have been confirmed in
-  actual play.
+* Take one of the fixes in `legacy/` whose README marks it as not yet tested in the game and test
+  it, or retest one that is marked accepted. Each feature README says what to look for. This is
+  the single most useful thing right now, because everything there is verified offline first, and
+  a README's in-game claim rests on the one or two machines it was played on.
 * Improve a test. Most of the arithmetic is covered; most of the failure paths are not.
 * Documentation. If something took you an hour to work out from the source, that hour is worth
   writing down for the next person.

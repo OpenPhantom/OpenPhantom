@@ -44,7 +44,7 @@ The force bar's edges are each built as "the matching health edge, lifted by one
 one more pixel", so its bottom is `H-2-0.06667*H` and not `H-1-0.06667*H`. That single pixel is the
 whole tolerance budget of the recogniser that finds it.
 
-Three consequences, and they are what this DLL exists for.
+Three consequences, and they are why this DLL exists.
 
 **The bars stretch, the icon does not.** A bar is `0.2*W` wide and `0.06667*H` tall, so its shape
 follows the aspect ratio, 4:1 at 4:3, 5.33:1 at 16:9. The weapon icon takes its *width* from the
@@ -52,7 +52,7 @@ height and therefore keeps its shape. `SquareHud` derives the bar widths from th
 
 **The weapon icon is not exempt.** Its width comes from the height but its **left edge** comes from
 the width, so the two terms need different multipliers. Exempting the block entirely, as this DLL
-used to, leaves a hole between the bar and the icon exactly as wide as the bar
+used to, leaves a hole between the bar and the icon as wide as the bar
 lost: 97 px at 1920x1080.
 
 **Nothing grows relative to the screen.** Every extent is a fixed fraction, so the HUD occupies the
@@ -141,7 +141,7 @@ nothing is cached, by the engine or by this DLL. `status_drawHud` rebuilds all f
 the live screen size on every frame and the font layer re-reads the display size on every string,
 so a resolution change needs no notification to take effect. What is lost is the fresh log line
 after a mode change and the live re-read of `HudScale`, which then needs a restart. The warning in
-the log says exactly that.
+the log says that.
 
 If `font3d_draw` cannot be hooked, the four rectangles still move and the two numbers do not; the
 summary log line reports which of the two happened rather than claiming both.
@@ -152,13 +152,13 @@ engine's size.
 ## Testing status
 
 * **Compiled and linked** with the configured 32-bit MSVC toolset, `/W4 /WX`, zero warnings.
-* **Unit tested offline**, `unittests/hud_layout.c`, 56 checks, all passing, over all 26 display
+* **Unit tested offline**, `unittests/hud_layout.c`, all passing, over all 26 display
   modes the game offers. They cover: every one of the four blocks classified correctly and
   uniquely at every mode; both numbers landing on the exact centre of their own block at every
   mode; and the two identities, measured as a **bit-exact deviation of 0.0**, `SquareHud=0` with
   `HudScale=1.0` at every mode, and both `SquareHud` values at every 4:3 mode.
 * **Every byte pattern verified offline** against both retail builds. All six patterns resolve
   uniquely on each.
-* **Accepted in game**, at 3840x2160, which is a 16:9 canvas and therefore the case this exists
-  for: the HUD blocks stay square and the text is not stretched. The bit exact identities above
-  are what say it changes nothing at 4:3.
+* **Accepted in game**, at 3840x2160, a 16:9 canvas and therefore the case this exists for: the
+  HUD blocks stay square and the text is not stretched. The bit exact identities above are the
+  evidence that it changes nothing at 4:3.

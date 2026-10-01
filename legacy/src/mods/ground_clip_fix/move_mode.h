@@ -52,7 +52,7 @@ bool move_mode_skips_collision(int32_t move_mode);
  * character is exempt from collision, so nothing could stop the resulting move, AND the velocity
  * differs from what it held before the contact handler ran.
  *
- * Comparing before against after is what keeps a ship flying. A scripted mover's velocity is the
+ * Comparing before against after keeps a ship flying. A scripted mover's velocity is the
  * same on both sides of the handler, so there is nothing to undo and nothing is touched. Only a
  * velocity the handler itself changed is seen as a push.
  *

@@ -16,8 +16,8 @@
  * the top left corner, because scaling the canvas to fill the screen drives the origin to 0,0 and
  * there is nothing left to carry them down and right.
  *
- * What is already right and is NOT touched here. The text SIZE, because ui_progress sets the
- * glyph scale from g_menuTextScale, which menu_scale already grows with the canvas. The picture behind
+ * What is already right and is NOT touched here. The text SIZE, because ui_progress sets the glyph
+ * scale from g_menuTextScale, which menu_scale already grows with the canvas. The picture behind
  * it, because it is an ordinary SW_PIC. Only the ten position and size numbers are wrong.
  */
 #ifndef MENU_LOADING_BAR_H
@@ -33,16 +33,16 @@
  * means the scale is not in force and this does nothing at all.
  *
  * Returns true when the geometry was scaled, false when it was left alone, whether because there
- * was nothing to do or because a site did not resolve. A failure here costs the bar's position and
- * nothing else, so it is never worth declining anything larger over. */
+ * was nothing to do or because a site did not resolve. A failure here costs only the bar's
+ * position, so it is never worth declining anything larger over. */
 bool menu_loading_bar_install(int32_t canvas_width, int32_t canvas_height);
 
 /* The canvas has changed size, so the ten numbers are written again for the new one.
  *
  * All ten are written absolutely from the canvas, so a refit back down to the authored 640x480
  * puts the game's own numbers back rather than leaving the bar sized for a canvas that has gone.
- * The two sites are resolved on the first call that needs them, which is why a canvas that starts
- * at the authored size and grows later still works. */
+ * The two sites are resolved on the first call that needs them, so a canvas that starts at the
+ * authored size and grows later still works. */
 bool menu_loading_bar_resize(int32_t canvas_width, int32_t canvas_height);
 
 #endif /* MENU_LOADING_BAR_H */

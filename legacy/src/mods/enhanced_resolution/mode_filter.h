@@ -8,8 +8,8 @@
  * thirds of those 64 slots on modes the engine will reject a moment later, because the mode list
  * it builds from that table keeps only entries whose bit depth is exactly 16. What reaches the
  * options screen is whatever resolutions happened to fit in the third that was left, in whatever
- * order the driver enumerated them, which is why one machine shows a full list and the next shows
- * a handful.
+ * order the driver enumerated them, so one machine shows a full list and the next shows a
+ * handful.
  *
  * This filter answers the callback for the modes that cannot survive that later test, without
  * letting them take a slot: anything that is not 16 bit RGB, and any resolution already in the

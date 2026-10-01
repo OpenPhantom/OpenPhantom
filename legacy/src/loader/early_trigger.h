@@ -1,11 +1,11 @@
 /* early_trigger.h: load the mods BEFORE the game has initialised anything.
  *
  * ==============================================================================================
- * WHY THIS EXISTS, a measured failure, not a precaution
+ * Why this exists, a measured failure, not a precaution
  *
  * The loader originally did all its work on the game's call to DirectInputCreateA. That call is
- * outside the loader lock, which is what makes LoadLibrary legal there, and it looked like the
- * ideal trigger. It is too late.
+ * outside the loader lock, so LoadLibrary is legal there, and it looked like the ideal trigger.
+ * It is too late.
  *
  * The proof is in the log of the first real run. The old build, which patched from DllMain,
  * wrote:
@@ -23,7 +23,7 @@
  * DirectDraw layer reports. The patch was applied, logged as successful, and had no effect.
  *
  * ==============================================================================================
- * THE TRIGGER: the host's own entry point, patched from DllMain
+ * The trigger: the host's own entry point, patched from DllMain
  *
  * dinput.dll is a static import of WMAIN.EXE, so its DllMain runs during process initialisation,
  * before a single instruction of the game. Loading the mods THERE is what must not happen,
@@ -36,7 +36,7 @@
  *   in DllMain   save the first 5 bytes of the entry point, write `jmp our_stub` over them
  *   in the stub  restore those 5 bytes, load the mods, jump back to the entry point
  *
- * Restoring before jumping back is what makes this safe without decoding a single instruction:
+ * Restoring before jumping back makes this safe without decoding a single instruction:
  * the entry point is re-executed from its first byte, so it does not matter whether those 5 bytes
  * happened to end mid-instruction. Only one thread exists at that point, so nothing can be
  * executing them while they are swapped.
@@ -56,5 +56,9 @@
  * Returns false when the entry point could not be hooked, in which case the DirectInputCreateA
  * fallback is the only trigger and the graphics-related patches will be too late. */
 bool early_trigger_arm(void);
+
+/* Whether the arm took. The fallback trigger asks, so that a session the entry point hook missed
+ * says so in the log instead of looking like an ordinary one with late patches. */
+bool early_trigger_armed(void);
 
 #endif /* DINPUT_LOADER_EARLY_TRIGGER_H */

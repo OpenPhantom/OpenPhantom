@@ -1,3 +1,9 @@
+/* diag_audio.c: see diag_audio.h.
+ *
+ * SIZE NOTE: a few lines over the 600 mark. Ten sites and their evidence, ten observers, the
+ * channel census and the install that wires them by level; the observers are short and share
+ * the site table, so there is no half of them to lift out that would not carry the table with
+ * it. */
 #include "diag_audio.h"
 
 #include "diag_install.h"
@@ -40,7 +46,7 @@ static const uint8_t SIG_SOUND_START_CHANNEL[] = {
  * The other half of the life cycle, and the more interesting one: this is where a voice dies,
  * distance cull (LOOPs only), voice stealing, an animation change (bapobj_playClip frees the
  * channel) or a level change. Everything that "restarts by itself" restarts because of this.
- *   +0x15 : `05 <imm32>` = add eax, &g_channel[0] -> THE CHANNEL BANK ([0x5BAEA0], 12 x 0x80).
+ *   +0x15 : `05 <imm32>` = add eax, &g_channel[0] -> the channel bank ([0x5BAEA0], 12 x 0x80).
  *           The operand is at +0x16 and is checked against the image before use. */
 static const uint8_t SIG_SOUND_FREE_CHANNEL[] = {
     0x55, 0x8B, 0xEC, 0x51, 0x83, 0x7D, 0x08, 0x0C, 0x72, 0x05, 0xE9, 0xDF,
@@ -87,12 +93,12 @@ static const uint8_t SIG_SOUND_PLACE_OFF[] = {
 #define SOUND_PLACE_OFF_PROLOGUE 10u
 
 /* --- bapMusicSetState 0x004105A3 -------------------------------------------------------------- *
- * Twenty lines, and that is the WHOLE music "state machine" on the game's side: refuse when not
- * attached, no-op when the cue is already pending, latch, call the DLL. Everything that looks like
- * an automaton lives in IMUSE.DLL and in the muscript records.
+ * Twenty lines are the WHOLE music "state machine" on the game's side: refuse when not attached,
+ * no-op when the cue is already pending, latch, call the DLL. Everything that looks like an
+ * automaton lives in IMUSE.DLL and in the muscript records.
  * WARNING: both setters LATCH BEFORE the DLL call. A cue the DLL rejects (GARDEN's 2950 has no
- * muscript record) therefore leaves the latch out of step with what is audible, which is why
- * this hook logs the latch BEFORE and AFTER the call.
+ * muscript record) therefore leaves the latch out of step with what is audible, so this hook
+ * logs the latch BEFORE and AFTER the call.
  *   +0x06 : &g_musicAttached [0x5BAB8C]  (0 => this function does NOTHING)
  *   +0x16 : &g_stateLatch    [0x4AA41C] */
 static const uint8_t SIG_MUSIC_STATE[] = {
@@ -141,16 +147,19 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("sound_play",           SIG_SOUND_PLAY),
-    SIGNATURE_ENTRY("sound_start_channel",  SIG_SOUND_START_CHANNEL),
-    SIGNATURE_ENTRY("sound_free_channel",   SIG_SOUND_FREE_CHANNEL),
-    SIGNATURE_ENTRY("sound_master_volume",  SIG_SOUND_MASTER_VOLUME),
-    SIGNATURE_ENTRY("sound_periodic",       SIG_SOUND_PERIODIC),
-    SIGNATURE_ENTRY("sound_place_on",       SIG_SOUND_PLACE_ON),
-    SIGNATURE_ENTRY("sound_place_off",      SIG_SOUND_PLACE_OFF),
-    SIGNATURE_ENTRY("music_set_state",      SIG_MUSIC_STATE),
-    SIGNATURE_ENTRY("music_set_sequence",   SIG_MUSIC_SEQUENCE),
-    SIGNATURE_ENTRY("music_set_volume",     SIG_MUSIC_VOLUME)
+    SIGNATURE_ENTRY_DETOUR("sound_play", SIG_SOUND_PLAY, SOUND_PLAY_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_start_channel", SIG_SOUND_START_CHANNEL,
+                           SOUND_START_CHANNEL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_free_channel", SIG_SOUND_FREE_CHANNEL,
+                           SOUND_FREE_CHANNEL_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_master_volume", SIG_SOUND_MASTER_VOLUME,
+                           SOUND_MASTER_VOLUME_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_periodic", SIG_SOUND_PERIODIC, SOUND_PERIODIC_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_place_on", SIG_SOUND_PLACE_ON, SOUND_PLACE_ON_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("sound_place_off", SIG_SOUND_PLACE_OFF, SOUND_PLACE_OFF_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("music_set_state", SIG_MUSIC_STATE, MUSIC_STATE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("music_set_sequence", SIG_MUSIC_SEQUENCE, MUSIC_SEQUENCE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("music_set_volume", SIG_MUSIC_VOLUME, MUSIC_VOLUME_PROLOGUE)
 };
 
 /* B3D_SCAL, a "sound call", 0x40 bytes. */
@@ -523,7 +532,8 @@ int diag_audio_install(int audio_level, int census_milliseconds)
     resolve_sites_once();
 
     audio_state.channel_bank =
-        (uint8_t *)diag_derive_address(sites, SITE_SOUND_FREE_CHANNEL, OFFSET_CHANNEL_BANK, "channel bank");
+        (uint8_t *)diag_derive_address(sites, SITE_SOUND_FREE_CHANNEL, OFFSET_CHANNEL_BANK,
+                                       "channel bank");
     audio_state.census_milliseconds = census_milliseconds;
 
     installed += diag_install_observer(sites, SITE_SOUND_PLAY, &audio_state.play,
@@ -557,7 +567,8 @@ int diag_audio_install(int audio_level, int census_milliseconds)
         }
     }
     if (audio_level >= 2) {
-        installed += diag_install_observer(sites, SITE_SOUND_START_CHANNEL, &audio_state.start_channel,
+        installed += diag_install_observer(sites, SITE_SOUND_START_CHANNEL,
+                                      &audio_state.start_channel,
                                       (const void *)hook_sound_start_channel,
                                       SOUND_START_CHANNEL_PROLOGUE,
                                       "channel allocation and its rejections") ? 1 : 0;
@@ -576,11 +587,13 @@ int diag_music_install(int music_level)
     resolve_sites_once();
 
     audio_state.music_attached =
-        (int32_t *)diag_derive_address(sites, SITE_MUSIC_STATE, OFFSET_MUSIC_ATTACHED, "g_musicAttached");
+        (int32_t *)diag_derive_address(sites, SITE_MUSIC_STATE, OFFSET_MUSIC_ATTACHED,
+                                       "g_musicAttached");
     audio_state.state_latch =
         (int32_t *)diag_derive_address(sites, SITE_MUSIC_STATE, OFFSET_STATE_LATCH, "g_stateLatch");
     audio_state.sequence_latch =
-        (int32_t *)diag_derive_address(sites, SITE_MUSIC_SEQUENCE, OFFSET_SEQUENCE_LATCH, "g_seqLatch");
+        (int32_t *)diag_derive_address(sites, SITE_MUSIC_SEQUENCE, OFFSET_SEQUENCE_LATCH,
+                                       "g_seqLatch");
 
     installed += diag_install_observer(sites, SITE_MUSIC_STATE, &audio_state.music_state,
                                   (const void *)hook_music_state, MUSIC_STATE_PROLOGUE,

@@ -74,11 +74,11 @@ static const uint8_t SIG_STUNT_CONTACT[] = {
 
 /* --- 0x0042F79A  candy_stuntTick: the TUMBLE of a severed piece ------------------------------- *
  *   89 45 FC / DB 45 FC          rand15() -> int
- *   D8 0D 84834A00               fmul [0x4A8384] = 1/32768   (the normaliser. DO NOT TOUCH,
+ *   D8 0D 84834A00               fmul [0x4A8384] = 1/32768   (the normaliser. Do not touch,
  *                                                             it has four readers)
  *   D8 0D 88834A00               fmul [0x4A8388] = 6.6       <- operand at +0x0E
  *   D8 2D 8C834A00               fsubr[0x4A838C] = 3.3       <- operand at +0x14
- *   ... (a call rel32 in between, which is why the pattern ends after 24 bytes)
+ *   ... (a call rel32 in between, so the pattern ends after 24 bytes)
  *   D8 0D 90834A00               fmul [0x4A8390] = 4.0       <- operand at +0x40
  *   D8 2D 94834A00               fsubr[0x4A8394] = 2.0       <- operand at +0x46
  *
@@ -129,8 +129,11 @@ typedef struct flight_constant {
 } flight_constant_t;
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("stunt_tick",    SIG_STUNT_TICK),
-    SIGNATURE_ENTRY("stunt_contact", SIG_STUNT_CONTACT),
+    /* Both are detoured, so both are declared as detour targets: a plain pattern is searched for
+     * whole, and the first DLL to detour either function replaces exactly the bytes it starts
+     * with. */
+    SIGNATURE_ENTRY_DETOUR("stunt_tick",    SIG_STUNT_TICK,    STUNT_TICK_PROLOGUE_SIZE),
+    SIGNATURE_ENTRY_DETOUR("stunt_contact", SIG_STUNT_CONTACT, STUNT_CONTACT_PROLOGUE_SIZE),
     SIGNATURE_ENTRY("stunt_spin",    SIG_STUNT_SPIN),
     SIGNATURE_ENTRY("stunt_gravity", SIG_STUNT_GRAVITY)
 };
@@ -164,6 +167,7 @@ typedef struct limb_flight_state {
 
     /* prevRot maintenance. */
     uint8_t   *previous_rot_owner[PREVIOUS_ROT_SLOTS];
+    bool       slots_held;      /* whether the table above may still hold live block pointers */
     float      previous_rot[PREVIOUS_ROT_SLOTS][3];
 
     /* Which blocks have already been reported at rest. Remembering only the LAST one is not
@@ -348,13 +352,9 @@ void limb_flight_set_active(bool active)
     }
 }
 
-bool limb_flight_is_active(void)
-{
-    return flight_state.active;
-}
 
 /* ============================================================================================
- * THE SAMPLING, because two theories in a row without data were already two too many.
+ * The sampling, because two theories in a row without data were already two too many.
  *
  * Recorded AFTER the original tick but BEFORE our own intervention:
  *   life         remaining time (5.0 -> 0), says whether the rest phase is reached at all
@@ -362,7 +362,7 @@ bool limb_flight_is_active(void)
  *                writing it and no number in this block is the cause.
  *   spin         block+0x04, our lever
  *   vel          block+0x10, of which z is deliberately not zeroed
- *   groundDelta  block+0x6C, DECIDES THE ARM:  3.4e38 or > 1  => arm A (damps nothing)
+ *   GroundDelta  block+0x6C, decides the arm:  3.4e38 or > 1  => arm a (damps nothing)
  *                                              0 < d <= 1     => arm B (damps)
  *                                              d <= 0         => airborne, nothing at all
  * ============================================================================================ */
@@ -399,7 +399,7 @@ static void sample_stunt(uint8_t *block, float life)
         return;
     }
 
-    if (!memory_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
+    if (!memory_try_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
         object == NULL) {
         return;
     }
@@ -423,8 +423,10 @@ static void sample_stunt(uint8_t *block, float life)
  *
  * Measured, not asserted (120 samples over three pieces):
  *
- *   sever[0] t=0.53 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000) vel(0 0 0.032)
- *   sever[0] t=2.66 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000) vel(0 0 0.032)
+ *   sever[0] t=0.53 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000)
+ *            vel(0 0 0.032)
+ *   sever[0] t=2.66 B(ground) gd=0.048 rot(-0.7 -1.6 -0.0) spin(0.0000 0.0000 0.0000)
+ *            vel(0 0 0.032)
  *
  * `spin` is zero from 0.5 s on and `rot` is LITERALLY constant over seconds. 112 of 120 samples
  * are in arm B, the damping one. the piece lies still in the simulation. That retired three
@@ -445,7 +447,7 @@ static void sample_stunt(uint8_t *block, float life)
  * the frame-rate DLL's pitch/roll interpolation only widens it from one axis to three and makes
  * it more noticeable.
  *
- * THE TREATMENT is what the engine already does for prevPos: maintain the field.
+ * The treatment is what the engine already does for prevPos: maintain the field.
  * ============================================================================================ */
 static void maintain_previous_rotation(uint8_t *block)
 {
@@ -456,7 +458,9 @@ static void maintain_previous_rotation(uint8_t *block)
     int      free_slot = -1;
     int      index;
 
-    if (!memory_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
+    /* The faulting read rather than the asking one: this runs once per substep per flying piece,
+     * and the block is the engine's own, handed over a call ago. */
+    if (!memory_try_read((uintptr_t)(block + STUNT_OBJECT), &object, sizeof(object)) ||
         object == NULL) {
         return;
     }
@@ -508,7 +512,7 @@ static void release_previous_rotation_slot(const uint8_t *block)
 }
 
 /* ============================================================================================
- * THE REST STATE the engine does not have.
+ * The rest state the engine does not have.
  *
  * Arm B (0 < delta <= 1) damps spin with -0.5 and vel with 0.667; arm A (delta == 3.4e38 or
  * delta > 1) adds 90 degrees of yaw PER SUBSTEP and leaves spin ALONE. So a piece lying slightly
@@ -540,8 +544,22 @@ static int32_t __cdecl hook_stunt_tick(void)
     /* Off means the engine's own tick and nothing after it. Its result is returned untouched, so
      * a piece the engine severed by itself behaves exactly as it always did. */
     if (!flight_state.active || flight_state.stunt_block_pointer == NULL) {
+        /* Released on the way out, once, for the same reason they are released when a piece
+         * disappears: a slot left holding a dead block pointer hands the next stunt at that
+         * address a foreign attitude. Switching the feature off mid-session used to return here
+         * without doing it, so the slots kept whatever the last severing had put in them until
+         * something happened to match. */
+        if (flight_state.slots_held) {
+            int index;
+
+            for (index = 0; index < PREVIOUS_ROT_SLOTS; ++index) {
+                flight_state.previous_rot_owner[index] = NULL;
+            }
+            flight_state.slots_held = false;
+        }
         return result;
     }
+    flight_state.slots_held = true;
     block = *flight_state.stunt_block_pointer;
 
     /* The slot is released as soon as the piece disappears, otherwise the table holds a dead
@@ -575,7 +593,7 @@ static int32_t __cdecl hook_stunt_tick(void)
         velocity[0] = 0.0f;
         velocity[1] = 0.0f;                        /* vel.z NOT - it may finish falling */
 
-        /* ONCE PER PIECE, and once really means once. A one-shot flag hid what was being
+        /* Once per piece, and once really means once. A one-shot flag hid what was being
          * reported (one message for five severings); remembering only the last block then went
          * the other way and printed sixteen messages for three pieces, because two of them
          * settled in the same second and alternated. Both times the message lied about how many

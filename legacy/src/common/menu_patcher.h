@@ -29,8 +29,8 @@
  *
  * This is the fact that invalidated three attempts at laying widgets out, so it is stated before
  * anything else a caller might believe. The blit the whole toolkit ends in takes five arguments,
- * canvas, bitmap, x, y, font, and NO width and NO height. It clips against a hard-coded 640x480
- * and nothing else.
+ * canvas, bitmap, x, y, font, and NO width and NO height. Its only clip is against a hard-coded
+ * 640x480.
  *
  * There is therefore no crop and no scale anywhere in this toolkit. A rectangle cannot turn a
  * full-screen bitmap into a partial overlay: asking for a 286x232 window onto a 640x480 plate draws
@@ -56,7 +56,7 @@
  * taking only its HEIGHT from the rectangle supplied.
  *
  * ==============================================================================================
- * ONE TRAP, and it is why a label must carry parameter = -1
+ * One trap, and it is why a label must carry parameter = -1
  *
  * swmenu_build walks the array once and, for every widget of type 0 or 1 (SW_PIC and SW_TEXT)
  * whose `parameter` is >= 0, replaces `link` with the result of a lookup and then clears
@@ -70,7 +70,7 @@
  *   SW_TEXT  `link` IS the alignment. A pointer where an alignment belongs falls into the text
  *            draw's `default:` case with no positioning at all.
  *   SW_PIC   a non-NULL `link` makes the picture copy that other widget's `state` into its own
- *            EVERY FRAME, and a picture's state is its bitmap index, so the plate would change
+ *            Every frame, and a picture's state is its bitmap index, so the plate would change
  *            which bitmap it draws according to a check box on another screen.
  *
  * All 216 authored SW_TYPE_TEXT widgets in the retail data carry -1. The append functions below
@@ -107,10 +107,10 @@ typedef struct menu_patch_context {
  *
  * `bitmap_name_table_address` is the screen's own bitmap-name table, the third `push imm32` the
  * caller already reads out of the screen's prologue to find the widget table. It is walked to its
- * `-1` terminator (stride 8) and the count is kept, because the engine does not bound-CHECK A
- * BITMAP INDEX: its lookup rejects a negative index and nothing else, so an index one past the end
- * of this table is an unchecked read whose result is handed to a file loader. Pass 0 to say "not
- * known", which disables the check and is reported once. */
+ * `-1` terminator (stride 8) and the count is kept, because the engine does not bounds-check a
+ * bitmap index: its lookup rejects a negative index and checks nothing further, so an index one
+ * past the end of this table is an unchecked read whose result is handed to a file loader. Pass 0
+ * to say "not known", which disables the check and is reported once. */
 bool menu_patcher_begin(menu_patch_context_t *context,
                         uintptr_t             source_table_address,
                         uintptr_t             table_pointer_address,
@@ -142,7 +142,7 @@ bool menu_patcher_append_slider(menu_patch_context_t *context,
  * are bounds-checked, because the state can reach 1 and the pair is what the table has to hold.
  *
  * `width` is discarded: the box is 34x34 from its own bitmap and the caption beside it is forced to
- * 200 wide. `height` reaches the caption box and nothing else.
+ * 200 wide. `height` reaches only the caption box.
  *
  * `label_string_id` goes to swmenu_getString, which indexes the localised table WITHOUT a bounds
  * check; it reads a pointer at [table + id*8 + 4] and copies from it when it is non-NULL. Only

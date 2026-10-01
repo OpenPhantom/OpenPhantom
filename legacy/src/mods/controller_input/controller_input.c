@@ -6,7 +6,7 @@
  * Win32, on this DLL's own dedicated background thread rather than common/frame_hook.h's usual
  * once-per-rendered-frame site.
  *
- * THAT IS A DELIBERATE DEPARTURE FROM THIS PROJECT'S USUAL PATTERN, AND HERE IS WHY. The first
+ * That is a deliberate departure from this project's usual pattern, and here is why. The first
  * build of this feature used frame_hook, like every other per-frame need in this tree. Look worked
  * immediately. Skipping a playing movie with Start never did, on any test. The reason: fmv_player's
  * own movie playback (vlc_playback.c) runs a dedicated `for (;;)` pump loop on the game's own
@@ -20,13 +20,16 @@
  */
 #include "controller_input.h"
 
+#include "look_counts.h"
+
+#include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/stick.h"
 
 #include <windows.h>
 #include <xinput.h>
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -56,7 +59,25 @@
  * real milliseconds instead, since this thread has nothing to do with frames any more. */
 #define ESCAPE_HOLD_MS 60u
 
-/* Radial deadzone, applied to the magnitude of the stick vector rather than per axis, which is what
+/* The right stick's vertical axis, off by default.
+ *
+ * This game's camera does not pitch. enhanced_input's view turn says so directly in
+ * raw_mouse.h, where the vertical axis is drained only for the menu pointer, and its free look
+ * is horizontal throughout. A synthesised vertical count is therefore not a look anywhere, and
+ * the poll spends work producing one that nothing is waiting for.
+ *
+ * It is NOT what made the right stick walk the player. That was found in the same session and
+ * measured to the game's own joystick bindings, which bind the pad's R axis to the same
+ * forward and back control as the left stick's. It is a separate defect and this setting does
+ * not touch it. What is established here is that the count buys nothing, not that it cost
+ * anything.
+ *
+ * The axis is kept behind a setting instead of being deleted because two things do read a
+ * vertical mouse movement: the menu pointer, and dev_overlay's free camera, which pitches from
+ * the screen pointer and is the one place in this project where a vertical look exists. */
+#define DEFAULT_LOOK_VERTICAL false
+
+/* Radial deadzone, applied to the magnitude of the stick vector rather than per axis, as
  * Microsoft's own XInput documentation recommends: a per-axis deadzone leaves a square dead region
  * that still lets a small diagonal push through on both axes at once. 0.24 is close to
  * XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE (8689 of 32767, about 0.265) rounded to a plainer default. */
@@ -68,6 +89,13 @@
  * second, brisk but controllable; independent of and not read from enhanced_input's own
  * configuration, since this DLL does not depend on that one at run time. */
 #define DEFAULT_LOOK_SENSITIVITY 4000.0f
+
+/* The accepted range for that key. The floor is 1 rather than 0 because a zero is better said with
+ * LookEnabled=0, which also stops the poll doing the work. The ceiling is a long way above any
+ * usable value and exists to catch a typed exponent rather than to judge anyone's taste: at 100000
+ * a full deflection would cross a 1920 wide screen more than fifty times a second. */
+#define MIN_LOOK_SENSITIVITY 1.0f
+#define MAX_LOOK_SENSITIVITY 100000.0f
 
 /* How far a trigger has to travel before it counts as pressed, matching Microsoft's own
  * XINPUT_GAMEPAD_TRIGGER_THRESHOLD (30 of 255). Below this a trigger at rest, which is not
@@ -87,6 +115,7 @@
 typedef struct controller_input_config {
     bool  enabled;
     bool  look_enabled;
+    bool  look_vertical;
     bool  pause_enabled;
     bool  roll_enabled;
     int   controller_index;
@@ -127,33 +156,12 @@ typedef struct controller_input_state {
     ULONGLONG roll_left_next_tap_tick;
     ULONGLONG roll_right_next_tap_tick;
 
-    double remainder_x;  /* fractional synthesised mouse counts carried across polls */
-    double remainder_y;
+    /* The fraction of a mouse count owed from earlier polls. See look_counts.h; it is a
+     * record rather than two doubles here because the arithmetic that owns it lives there. */
+    look_carry_t look_carry;
 } controller_input_state_t;
 
 static controller_input_state_t ci_state;
-
-/* The magnitude-scaled stick vector, deadzone already applied, both axes in [-1, 1]. Returns false
- * (and leaves the two outputs untouched) when the stick is inside the deadzone. */
-static bool apply_radial_deadzone(SHORT raw_x, SHORT raw_y, float deadzone, float *out_x,
-                                  float *out_y)
-{
-    float x = (float)raw_x / 32767.0f;
-    float y = (float)raw_y / 32767.0f;
-    float magnitude = (float)sqrt((double)(x * x + y * y));
-    float scaled;
-
-    if (magnitude < deadzone) {
-        return false;
-    }
-    if (magnitude > 1.0f) {
-        magnitude = 1.0f;
-    }
-    scaled = (magnitude - deadzone) / (1.0f - deadzone);
-    *out_x = (x / magnitude) * scaled;
-    *out_y = (y / magnitude) * scaled;
-    return true;
-}
 
 static double seconds_since_last_poll(void)
 {
@@ -181,34 +189,23 @@ static double seconds_since_last_poll(void)
 
 static void synthesize_look(float x, float y, double dt)
 {
-    double desired_x;
-    double desired_y;
-    LONG   send_x;
-    LONG   send_y;
-    INPUT  input;
+    long  send_x;
+    long  send_y;
+    INPUT input;
 
-    if (dt <= 0.0) {
-        return;
-    }
-
-    /* Y is inverted here on purpose: XInput's right stick reports +1 as "up", and pushing the
-     * stick up is meant to look up, which is a negative (upward) mouse movement on screen. */
-    desired_x = (double)x * (double)ci_state.config.look_sensitivity * dt + ci_state.remainder_x;
-    desired_y = (double)(-y) * (double)ci_state.config.look_sensitivity * dt + ci_state.remainder_y;
-
-    send_x = (LONG)desired_x;
-    send_y = (LONG)desired_y;
-    ci_state.remainder_x = desired_x - (double)send_x;
-    ci_state.remainder_y = desired_y - (double)send_y;
-
-    if (send_x == 0 && send_y == 0) {
+    /* The vertical axis is dropped here rather than inside the arithmetic, which has no
+     * opinion about what the game does with a count. A zero deflection banks nothing, so the
+     * carry does not quietly fill up while the axis is switched off. */
+    if (!look_counts_step(&ci_state.look_carry, x,
+                          ci_state.config.look_vertical ? y : 0.0f,
+                          ci_state.config.look_sensitivity, dt, &send_x, &send_y)) {
         return;
     }
 
     ZeroMemory(&input, sizeof(input));
     input.type = INPUT_MOUSE;
-    input.mi.dx = send_x;
-    input.mi.dy = send_y;
+    input.mi.dx = (LONG)send_x;
+    input.mi.dy = (LONG)send_y;
     input.mi.dwFlags = MOUSEEVENTF_MOVE;
     (void)SendInput(1, &input, sizeof(INPUT));
 }
@@ -231,11 +228,10 @@ static void synthesize_pause_press(void)
     (void)SendInput(1, &input, sizeof(INPUT));
 }
 
-/* Whether this game's movement/roll keys are read through WM_KEYDOWN, GetAsyncKeyState or
- * DirectInput's own polled keyboard state has not been confirmed the way Escape's path was; this
- * game's use of a dinput.dll loader in the first place is evidence DirectInput reads at least some
- * of its input, which is a real, different question from the two paths Escape was proven to
- * reach. Field-test before trusting this. */
+/* Which of WM_KEYDOWN, GetAsyncKeyState and DirectInput's polled keyboard state the game reads its
+ * movement and roll keys through has not been established from the bytes the way Escape's path
+ * was. It has been established in play: the synthesised Alt and arrow taps roll the character, and
+ * the README's testing status records the sessions. */
 static void set_alt_held(bool want_held)
 {
     INPUT input;
@@ -256,8 +252,8 @@ static void set_alt_held(bool want_held)
 /* One tap: down, held for ROLL_TAP_DOWN_MS, then up, blocking this thread only, the same shape
  * synthesize_pause_press already uses for Escape. The arrow keys are extended keys on a real
  * keyboard (the block they share a physical position with is the numeric keypad), and
- * KEYEVENTF_EXTENDEDKEY is what tells the receiving code which one a synthesised press means, the
- * same way a real keyboard's own scan code would. */
+ * KEYEVENTF_EXTENDEDKEY tells the receiving code which one a synthesised press means, the same
+ * way a real keyboard's own scan code would. */
 static void synthesize_roll_tap(WORD vk)
 {
     INPUT input;
@@ -319,10 +315,11 @@ static void handle_roll_triggers(const XINPUT_GAMEPAD *pad, int threshold)
 
 /* Whether this game owns the foreground.
  *
- * WHY EVERY INJECTION IS GATED ON THIS. SendInput does not aim at a window, it goes to whatever has
- * focus. Without this check, a stick pushed while the game is alt tabbed moves the mouse in the
- * player's browser, a trigger fires Alt chords into it, and Start sends it an Escape. That is not a
- * quirk, it is this DLL typing into somebody else's application, and it shipped enabled by default.
+ * Why every injection is gated on this. SendInput does not aim at a window; it goes to whatever
+ * has focus. Without this check, a stick pushed while the game is alt tabbed moves the mouse in
+ * the player's browser, a trigger fires Alt chords into it, and Start sends it an Escape. That is
+ * not a quirk; it is this DLL typing into somebody else's application, and it shipped enabled by
+ * default.
  *
  * The foreground window's owning process is compared to this one rather than a HWND of our own
  * being tracked, which needs nothing set up anywhere else here. Byte for byte the same check
@@ -342,9 +339,9 @@ static bool is_game_foreground(void)
 
 /* Everything this thread might be holding down, released, and every edge it tracks reset.
  *
- * Called when the game does not own the foreground. RELEASING HAS TO HAPPEN ANYWAY, which is why
- * this is not simply an early return: a synthetic Alt left down belongs to whichever window has
- * focus now, and leaving it there is worse than anything the gate prevents. The audit that found
+ * Called when the game does not own the foreground. Releasing has to happen anyway, so this is not
+ * simply an early return: a synthetic Alt left down belongs to whichever window has focus now, and
+ * leaving it there is worse than anything the gate prevents. The audit that found
  * the missing gate found this alongside it, and it is the half that outlives the alt tab.
  *
  * The edges are recorded rather than cleared so that returning to the game with Start or a trigger
@@ -355,8 +352,7 @@ static void release_everything_held(const XINPUT_GAMEPAD *pad, int threshold)
     ci_state.start_was_down = (pad->wButtons & XINPUT_GAMEPAD_START) != 0;
     ci_state.roll_left_was_engaged  = (int)pad->bLeftTrigger  > threshold;
     ci_state.roll_right_was_engaged = (int)pad->bRightTrigger > threshold;
-    ci_state.remainder_x = 0.0;
-    ci_state.remainder_y = 0.0;
+    look_counts_reset(&ci_state.look_carry);
 }
 
 static void poll_once(void)
@@ -375,19 +371,24 @@ static void poll_once(void)
             ci_state.reported_absent = true;
             log_info("no XInput controller was found in slot %d, so the right stick, Start "
                      "and the triggers do nothing. That is not a fault in this patch and "
-                     "nothing further will be "
-                     "reported about it; a pad plugged in later is picked up on its own. "
-                     "Rechecked twice a second. "
+                     "nothing further will be reported about it; a pad plugged in later is "
+                     "picked up on its own. Rechecked twice a second. "
                      "If one is plugged in NOW then it is a pad this cannot see, because only "
                      "XInput devices are visible here. An XBOX pad works as it is; anything else "
                      "has to be presented as one. Add the game to Steam as a non-Steam game and "
-                     "launch it from there, which is what Steam Input does for almost any "
-                     "controller, or run something that emulates XInput such as DS4Windows for a "
-                     "PlayStation pad. Without one of those, an older or off-brand pad, a "
+                     "launch it from there, where Steam Input presents almost any controller as "
+                     "an XInput pad, or run something that emulates XInput such as DS4Windows "
+                     "for a PlayStation pad. Without one of those, an older or off-brand pad, a "
                      "PlayStation controller plugged straight in or a flight stick is invisible "
                      "here; the game's own Controls screen still reads those.",
                      ci_state.config.controller_index);
         }
+        /* Whatever the pad was holding down goes up with it. The state is the zeroed one from
+           above, because a failed XInputGetState fills nothing in, so this releases Alt and
+           forgets the button and trigger edges rather than reading a pad that is not there.
+           Without it a trigger held at the moment the pad drops out leaves a synthetic Alt down
+           in the game, and in whatever gets focus after it, until the pad comes back. */
+        release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
         ci_state.pad_connected = false;
         return;
     }
@@ -409,8 +410,8 @@ static void poll_once(void)
     if (ci_state.config.look_enabled) {
         float x, y;
 
-        if (apply_radial_deadzone(state.Gamepad.sThumbRX, state.Gamepad.sThumbRY,
-                                  ci_state.config.deadzone, &x, &y)) {
+        if (stick_apply_radial_deadzone(state.Gamepad.sThumbRX, state.Gamepad.sThumbRY,
+                                        ci_state.config.deadzone, &x, &y)) {
             synthesize_look(x, y, dt);
         }
     }
@@ -443,6 +444,8 @@ static void load_config(controller_input_config_t *config)
 {
     config->enabled          = ini_read_bool (CONTROLLER_SECTION, "Enabled", true);
     config->look_enabled     = ini_read_bool (CONTROLLER_SECTION, "LookEnabled", true);
+    config->look_vertical    = ini_read_bool (CONTROLLER_SECTION, "LookVertical",
+                                              DEFAULT_LOOK_VERTICAL);
     config->pause_enabled    = ini_read_bool (CONTROLLER_SECTION, "PauseEnabled", true);
     config->roll_enabled     = ini_read_bool (CONTROLLER_SECTION, "RollEnabled", true);
     config->controller_index = ini_read_int  (CONTROLLER_SECTION, "ControllerIndex", 0);
@@ -467,6 +470,29 @@ static void load_config(controller_input_config_t *config)
                     config->trigger_threshold, DEFAULT_TRIGGER_THRESHOLD);
         config->trigger_threshold = DEFAULT_TRIGGER_THRESHOLD;
     }
+    /* Written as a NOT so that a NaN fails it. atof answers nan for the word, and a NaN survives
+     * every ordinary comparison. look_counts_step refuses one now as well, so the pointer no
+     * longer ends up in the far corner either way, but the two are not the same answer: there the
+     * look simply stops, here the player is told what was typed and given a working stick back.
+     * The ceiling is loose on purpose: it is there to catch a typed exponent, not to hold an
+     * opinion about how fast anyone likes their look. */
+    if (!(config->look_sensitivity >= MIN_LOOK_SENSITIVITY) ||
+        !(config->look_sensitivity <= MAX_LOOK_SENSITIVITY)) {
+        log_warning("LookSensitivity=%.1f is out of range (%.0f to %.0f), using %.0f",
+                    (double)config->look_sensitivity, (double)MIN_LOOK_SENSITIVITY,
+                    (double)MAX_LOOK_SENSITIVITY, (double)DEFAULT_LOOK_SENSITIVITY);
+        config->look_sensitivity = DEFAULT_LOOK_SENSITIVITY;
+    }
+}
+
+void controller_input_shutdown(void)
+{
+    /* ExitProcess has already ended the poll thread by the time this runs, so the flag is not
+     * racing anything; the one SendInput here is the release that thread would have sent on its
+     * next poll. A process that dies hard never reaches this; that case is not covered. */
+    if (ci_state.alt_held) {
+        set_alt_held(false);
+    }
 }
 
 void controller_input_install(void)
@@ -479,6 +505,13 @@ void controller_input_install(void)
     ci_state.installed = true;
 
     log_init("controller_input", false);
+    /* Nothing here reads the image, and the call is still made: it is the first two lines of
+     * every DLL in this tree, and a DLL that found itself beside something other than the game's
+     * 32-bit executable has no business feeding that process synthetic input. */
+    if (!host_image_resolve()) {
+        log_error("no 32-bit host image, the controller is not read");
+        return;
+    }
 
     load_config(&ci_state.config);
     if (!ci_state.config.enabled) {
@@ -498,6 +531,8 @@ void controller_input_install(void)
         return;
     }
 
+    /* The thread runs for the life of the process and nothing stops it: feature DLLs are never
+     * unloaded, and the loop owns nothing that has to be released before the process ends. */
     ci_state.thread = CreateThread(NULL, 0, poll_thread_proc, NULL, 0, &thread_id);
     if (ci_state.thread == NULL) {
         log_error("the polling thread could not be created (error %lu), controller look and "
@@ -507,10 +542,11 @@ void controller_input_install(void)
     }
 
     log_info("armed on its own thread (id %lu): controller %d, look %s (sensitivity %.0f, "
-             "deadzone %.2f), pause %s, roll %s (trigger threshold %d)",
+             "deadzone %.2f, vertical %s), pause %s, roll %s (trigger threshold %d)",
              (unsigned long)thread_id, ci_state.config.controller_index,
              ci_state.config.look_enabled ? "on" : "off",
              (double)ci_state.config.look_sensitivity, (double)ci_state.config.deadzone,
+             ci_state.config.look_vertical ? "on" : "off",
              ci_state.config.pause_enabled ? "on" : "off",
              ci_state.config.roll_enabled ? "on" : "off", ci_state.config.trigger_threshold);
 }

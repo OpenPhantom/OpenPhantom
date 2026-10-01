@@ -21,10 +21,13 @@
 
 #include "common/detour.h"
 #include "common/logging.h"
+#include "common/memory.h"
+#include "common/signature.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* --- 0x0044EC80 and 0x0044EDF6: the two mode-entry functions that launch the player upward ------
  *
@@ -39,8 +42,8 @@
  *
  * Both functions open identically for the first twenty bytes: a guard that skips the whole jump if
  * some player-record float at +0x168 fails a threshold check against a shared constant at
- * 0x004A86A4, which is exactly the shape this file's own SIG_USE_AMMO/SIG_DAMAGE comment already
- * warns about: a pattern that stopped at the shared prefix would match either function, or others
+ * 0x004A86A4, the shape this file's own SIG_USE_AMMO/SIG_DAMAGE comment already warns about: a
+ * pattern that stopped at the shared prefix would match either function, or others
  * like it for the remaining mode-entry functions (Sabre Attack, Panaka Attack, Push Block) this
  * feature has no reason to touch. Both patterns below therefore reach all the way to the
  * `mov [ecx+0x60],<that mode's own descriptor address>` instruction, the exact table[6]/table[7]
@@ -80,117 +83,98 @@
 static const uint8_t SIG_JUMP_ENTRY[] = {
     0x55,                                              /* push ebp                              */
     0x8B, 0xEC,                                        /* mov ebp,esp                           */
-    0xA1, 0x20, 0x52, 0x4B, 0x00,                      /* mov eax,[0x004b5220]                  */
+    0xA1, 0x00, 0x00, 0x00, 0x00,                      /* mov eax,[the player record]           */
     0xD9, 0x80, 0x68, 0x01, 0x00, 0x00,                /* fld dword ptr [eax+0x168]             */
     0xD8, 0x1D, 0xA4, 0x86, 0x4A, 0x00,                /* fcomp dword ptr [0x004a86a4]          */
     0xDF, 0xE0,                                        /* fnstsw ax                             */
     0xF6, 0xC4, 0x41,                                  /* test ah,0x41                          */
     0x75, 0x05,                                        /* jnz +5                                */
     0xE9, 0xE0, 0x00, 0x00, 0x00,                      /* jmp 0x0044ed80                        */
-    0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00,                /* mov ecx,[0x004b5220]                  */
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,                /* mov ecx,[the player record]           */
     0xC7, 0x41, 0x60, 0x38, 0x53, 0x4B, 0x00           /* mov [ecx+0x60],0x004b5338 -> Jump      */
 };
 #define JUMP_ENTRY_PROLOGUE_SIZE 8u   /* first boundary at/past five bytes: push ebp; mov ebp,esp;
-                                        * mov eax,[0x004b5220], identical in both functions, but the
-                                        * SIGNATURE above reaches nineteen bytes past this to stay
-                                        * unique; only these first eight are ever relocated */
+                                        * mov eax,[the player record], identical in both
+                                        * functions, but the SIGNATURE above reaches nineteen bytes
+                                        * past this to stay unique; only these first eight are ever
+                                        * relocated */
 
 static const uint8_t SIG_JEDI_JUMP_ENTRY[] = {
     0x55,                                              /* push ebp                              */
     0x8B, 0xEC,                                        /* mov ebp,esp                           */
-    0xA1, 0x20, 0x52, 0x4B, 0x00,                      /* mov eax,[0x004b5220]                  */
+    0xA1, 0x00, 0x00, 0x00, 0x00,                      /* mov eax,[the player record]           */
     0xD9, 0x80, 0x68, 0x01, 0x00, 0x00,                /* fld dword ptr [eax+0x168]             */
     0xD8, 0x1D, 0xA4, 0x86, 0x4A, 0x00,                /* fcomp dword ptr [0x004a86a4]          */
     0xDF, 0xE0,                                        /* fnstsw ax                             */
     0xF6, 0xC4, 0x41,                                  /* test ah,0x41                          */
     0x75, 0x05,                                        /* jnz +5                                */
     0xE9, 0x10, 0x01, 0x00, 0x00,                      /* jmp 0x0044ef26                        */
-    0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00,                /* mov ecx,[0x004b5220]                  */
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,                /* mov ecx,[the player record]           */
     0xC7, 0x41, 0x60, 0x68, 0x53, 0x4B, 0x00           /* mov [ecx+0x60],0x004b5368 -> JediJump  */
 };
 #define JEDI_JUMP_ENTRY_PROLOGUE_SIZE 8u   /* same reasoning as JUMP_ENTRY_PROLOGUE_SIZE above */
 
-/* Velocity, not height. Jump height scales with velocity SQUARED under the engine's own linear
- * gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A first guess for "noticeably
- * higher, not silly" the same way TINY_PLAYER_SCALE above is; no retail precedent either direction.
- * Runtime-adjustable rather than fixed; the dev panel's own value row (see overlay_model.c) reads
- * and writes this through the getter/setter below, so this is only ever where a fresh install
- * starts, not the whole of what the cheat can be. Clamped on every write into a range wide enough
+/* The two loads of the player record are masked, one mask for both patterns, and each site is
+ * then required to load the player from the cell player_slot found. The pattern still names the
+ * function by its guard, its jump and the descriptor it stores; the mask is what turns the two
+ * operands from a copy of an address into a check against one. */
+static const uint8_t MSK_JUMP_ENTRY[] = {
+    0xFF,
+    0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof MSK_JUMP_ENTRY == sizeof SIG_JUMP_ENTRY &&
+               sizeof MSK_JUMP_ENTRY == sizeof SIG_JEDI_JUMP_ENTRY,
+               "the jump entry patterns and their mask are different lengths");
+#define JUMP_ENTRY_PLAYER_OPERAND_FIRST  4u
+#define JUMP_ENTRY_PLAYER_OPERAND_SECOND 34u
+
+/* The descriptor each pattern ends on, read out of the pattern so the two stay one fact. */
+#define ENTRY_DESCRIPTOR_OFFSET 41u        /* the imm32 of `mov [ecx+0x60],<descriptor>` */
+#define PLAYER_MODE_OFFSET      0x60u
+static uint32_t pattern_descriptor(const uint8_t *pattern)
+{
+    uint32_t value;
+
+    memcpy(&value, pattern + ENTRY_DESCRIPTOR_OFFSET, sizeof value);
+    return value;
+}
+
+/* The original entered its mode, so it wrote the take-off velocity this cheat scales. On the
+ * guard exit at +0x1B it writes nothing and leaves the mode alone, and scaling then multiplied
+ * whatever +0xB4 last held. The descriptor the pattern ends on is the value the success path
+ * stores at +0x60, so the mode pointer reading it is the test. */
+static void scale_take_off(uint32_t descriptor)
+{
+    void *player_record = player_slot_current();
+
+    if (player_record != NULL &&
+        *(const uint32_t *)((const char *)player_record + PLAYER_MODE_OFFSET) == descriptor) {
+        float *vertical_velocity =
+            (float *)((char *)player_record + PLAYER_VERTICAL_VELOCITY_OFFSET);
+        *vertical_velocity *= own_state.jump_boost_scale;
+    }
+}
+
+/* JUMP_BOOST_SCALE_DEFAULT, 1.3 in cheats_openphantom.h, is what install_jump_boost() below seeds
+ * own_state.jump_boost_scale with. Velocity, not height. Jump height scales with velocity SQUARED
+ * under the engine's own linear gravity decay, so 1.3 is roughly a 69% higher jump, not 30%. A
+ * first guess for "noticeably higher, not silly" the same way cheats_openphantom.c's
+ * TINY_PLAYER_SCALE is; no retail precedent either direction. Runtime-adjustable rather than
+ * fixed; the dev panel's own value row (see overlay_model.c) reads and writes this through the
+ * getter and setter in cheats_openphantom.c, so this is only ever where a fresh install starts,
+ * not the limit of what the cheat can be. Clamped on every write into a range wide enough
  * to be useful in both directions (a player weaker than retail is exactly as legitimate an ask as
  * one much stronger) but short of anything that turns a launch into a projectile the level's own
  * collision was never built to catch at the far end, or a no-op at the near one. */
-
-/* Free camera, site one of two: the simulation pause flag.
- *
- * Every fly-mode attempt above fought the player's own state machine one function at a time
- * because the player kept simulating. FUN_0043e9f2, the per-frame pump, gates the entire
- * fixed-timestep substep driver on two cells, confirmed byte-for-byte against the running image:
- *
- *   0043ea13  83 3D 44134838 00     cmp [00881344],0        ; a movie/quit-adjacent state, untouched
- *   0043ea1a  75 13                 jnz past the substep call
- *   0043ea1c  83 3D 00000000 00     cmp [SIM PAUSE FLAG],0  ; THE CELL THIS FEATURE USES
- *   0043ea23  75 0A                 jnz past the substep call
- *   0043ea25  6A 00                 push 0
- *   0043ea27  E8 00000000           call FUN_004756fc       ; the whole substep loop
- *   0043ea2c  83 C4 04              add esp,4
- *
- * FUN_004756fc is the fixed-timestep driver: it is where every registered per-tick callback runs,
- * including FUN_0047582a's table, which is where the player task installs FUN_00447d38 (Plr_
- * RunPhases, the whole player simulation). A non-zero pause flag skips the call to FUN_004756fc
- * entirely, so nothing registered on it runs at all, not just the player, the whole world. That
- * is confirmed as the SAME cell the retail ESC pause menu sets
- * (gameplay_open_pause_menu at 0x0043FAB5 writes it before its own blocking menu loop and clears it
- * after), so this is not a guessed side door, it is the mechanism the game already uses to pause
- * itself. This feature only ever writes the flag directly; it does not call the two
- * task_broadcast_cmd notifications retail's own pause menu also makes (audio ducking and similar),
- * a deliberate, smaller freeze: enough to stop the world moving under a free camera, not a
- * reproduction of the retail pause experience.
- *
- * THE PATTERN FOR THIS GATE IS NOT REPEATED HERE. sim_pause.c, in this same DLL, resolves this
- * exact site, reads the same operand and owns the cell. This feature asks it to hold the pause
- * rather than resolving the address a second time and writing the cell itself. Two resolvers of
- * one address is how the two of them came to fight, and the sequence it produced left the game
- * frozen with nothing holding it. */
-
-/* Free camera, site two of two: the camera object pointer, and its per-frame update.
- *
- * SIG_CAMERA_VIEW is copied verbatim from enhanced_input's camera_sites.c (0x00418EDD, inside
- * updateCam's follow blend: `mov eax,[gView]; fld [eax+0x38]`, the previous camera yaw, read
- * immediately before the offset that feature adds to it). Same retail image, same bytes either
- * way, and that mod's own extensive cross-checking already established what they are; this file
- * resolves its own copy rather than reaching into another mod's DLL, the same independence every
- * other site in this file already keeps.
- *
- * updateCam itself, 0x00418544, is THE proven multi-tenant detour target of this whole project -
- * signature.h's own docs name it as chained by two DLLs already, and the chaining exists
- * specifically so a second detour on the same prologue does not have to scan for bytes the first
- * detour already overwrote. SIG_CAMERA_UPDATE and CAMERA_UPDATE_PROLOGUE_SIZE are copied from
- * camera_sites.c unchanged for exactly that reason: matching bytes, not just a matching address.
- *
- * WHERE THE CAMERA'S OWN POSITION LIVES, DISASSEMBLED DIRECTLY RATHER THAN TAKEN ON TRUST:
- *
- *   0041872f  MOV EAX,[gView]
- *   00418734  ADD EAX,0x14
- *   00418737  MOV ECX,[EBP-0x38] / MOV [EAX],ECX        ; anchor X  = view+0x14
- *   0041873c  MOV EDX,[EBP-0x34] / MOV [EAX+4],EDX       ; anchor Y  = view+0x18
- *   00418742  MOV ECX,[EBP-0x30] / MOV [EAX+8],ECX       ; anchor Z  = view+0x1c
- *   00418748  MOV EDX,[gView] / ADD EDX,0x34
- *   00418751  MOV EAX,[EBP-0x10] / MOV [EDX],EAX         ; euler.x   = view+0x34  (pitch, degrees)
- *   00418756  MOV ECX,[EBP-0xc] / MOV [EDX+4],ECX        ; euler.y   = view+0x38  (yaw, degrees)
- *   0041875c  MOV EAX,[EBP-8] / MOV [EDX+8],EAX          ; euler.z   = view+0x3c  (roll, untouched)
- *
- * written unconditionally, before the state (follow/fixed/world-fixed) dispatch that starts at
- * 0x004187ce even begins, and camera_sites.c only ever traces the follow-state arm, so this is new.
- * The source, traced back further, is SetCamTarget (FUN_004184cc): the player's own per-tick
- * dispatch (FUN_00447d38 case 3) is one of its five call sites, feeding it the player's own
- * position. That is the actual coupling this feature breaks, not the state field, which changing
- * alone does nothing, since every state still re-derives a TARGET offset from the same anchor
- * every call. Freezing the simulation (the site above) stops SetCamTarget from ever being called
- * again, which stops the anchor's own feed cold; nothing then contends with a write made AFTER
- * calling the original updateCam, since this file's write runs strictly after the whole original
- * function, including its own second, later write to yaw alone at 0x00418fa1, part of the
- * follow-blend arm, has already finished. Roll (+0x3c) is left alone; a free camera has no use
- * for it and neither does anything reading euler.x/euler.y elsewhere. */
 
 /* Jump boost is switched OFF across a level change, and back on afterwards.
  *
@@ -222,10 +206,10 @@ void cheats_openphantom_resume_jump_boost(void)
     own_state.cheats[CHEATS_OWN_JUMP_BOOST].on = true;
 }
 
-/* Jump boost. Calling the original FIRST and unconditionally is what makes this a boost and not a
+/* Jump boost. Calling the original FIRST and unconditionally keeps this a boost rather than a
  * reimplementation: the jump still happens exactly as retail built it, guard check and all, and
- * only once it has already decided to jump and written its own velocity does this cheat touch
- * anything, scaling whatever value is now sitting at +0xB4, either the fallback constant or the
+ * only once it has entered its mode and written its own velocity does this cheat touch anything,
+ * scaling whatever value is now sitting at +0xB4, either the fallback constant or the
  * per-character table value, whichever path the original just took. See SIG_JUMP_ENTRY's own
  * comment for why this needs two hooks rather than one. */
 static void __cdecl hook_jump_entry(void)
@@ -233,13 +217,7 @@ static void __cdecl hook_jump_entry(void)
     own_state.jump_entry_original();
 
     if (own_state.cheats[CHEATS_OWN_JUMP_BOOST].on) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
-
-        if (player_record != NULL) {
-            float *vertical_velocity =
-                (float *)((char *)player_record + PLAYER_VERTICAL_VELOCITY_OFFSET);
-            *vertical_velocity *= own_state.jump_boost_scale;
-        }
+        scale_take_off(pattern_descriptor(SIG_JUMP_ENTRY));
     }
 }
 
@@ -248,14 +226,49 @@ static void __cdecl hook_jedi_jump_entry(void)
     own_state.jedi_jump_entry_original();
 
     if (own_state.cheats[CHEATS_OWN_JUMP_BOOST].on) {
-        void *player_record = *(void **)(uintptr_t)PLAYER_RECORD_PTR_ADDR;
-
-        if (player_record != NULL) {
-            float *vertical_velocity =
-                (float *)((char *)player_record + PLAYER_VERTICAL_VELOCITY_OFFSET);
-            *vertical_velocity *= own_state.jump_boost_scale;
-        }
+        scale_take_off(pattern_descriptor(SIG_JEDI_JUMP_ENTRY));
     }
+}
+
+/* One mode entry: found, checked to load the player from the cell every other reader uses, and
+ * only then detoured. The check comes before the detour because a detour cannot be taken out. */
+static bool install_jump_entry(const uint8_t *pattern, size_t size, size_t prologue,
+                               const void *hook, detour_t *detour, const char *what)
+{
+    uintptr_t site = signature_find_detour_target(pattern, MSK_JUMP_ENTRY, size, prologue);
+    uint32_t  first = 0;
+    uint32_t  second = 0;
+    uint8_t   head = 0;
+
+    if (site == 0) {
+        log_warning("%s did not resolve, so that half of jump boost is not offered", what);
+        return false;
+    }
+    /* The second load sits past the prologue and is always checked. The first sits inside the
+     * eight bytes another DLL's detour replaces, so it is checked only while the head is still
+     * the authored push ebp; behind a jump those four bytes are the last byte of the jump's
+     * displacement and whatever the detour left after it. */
+    if (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_SECOND, &second) ||
+        second != player_slot_address()) {
+        log_warning("%s at %08X loads the player from %08X where every other reader uses %08X, "
+                    "so that half of jump boost is not offered", what, (unsigned)site,
+                    (unsigned)second, (unsigned)player_slot_address());
+        return false;
+    }
+    if (memory_read_u8(site, &head) && head == 0x55u &&
+        (!memory_read_u32(site + JUMP_ENTRY_PLAYER_OPERAND_FIRST, &first) || first != second)) {
+        log_warning("%s at %08X loads the player from %08X in its prologue and from %08X after "
+                    "it, so that half of jump boost is not offered", what, (unsigned)site,
+                    (unsigned)first, (unsigned)second);
+        return false;
+    }
+    if (!detour_install(detour, site, hook, prologue)) {
+        log_warning("%s at %08X could not be detoured, that half of jump boost is not offered",
+                    what, (unsigned)site);
+        return false;
+    }
+    log_info("%s hooked at %08X", what, (unsigned)site);
+    return true;
 }
 
 /* Jump boost needs at least one of its two sites; either alone still helps whichever characters
@@ -270,17 +283,18 @@ void install_jump_boost(void)
      * sane the instant the panel can ask for it, not only after a resolve that might still fail. */
     own_state.jump_boost_scale = JUMP_BOOST_SCALE_DEFAULT;
 
-    jump_ok = cheats_install_one(SIG_JUMP_ENTRY, NULL, sizeof SIG_JUMP_ENTRY,
-                          (const void *)&hook_jump_entry, &own_state.jump_entry_detour,
-                          JUMP_ENTRY_PROLOGUE_SIZE, "the Jump mode entry");
+    jump_ok = install_jump_entry(SIG_JUMP_ENTRY, sizeof SIG_JUMP_ENTRY, JUMP_ENTRY_PROLOGUE_SIZE,
+                                 (const void *)&hook_jump_entry, &own_state.jump_entry_detour,
+                                 "the Jump mode entry");
     if (jump_ok) {
         own_state.jump_entry_original = (mode_enter_fn_t)own_state.jump_entry_detour.original;
     }
 
-    jedi_jump_ok = cheats_install_one(SIG_JEDI_JUMP_ENTRY, NULL, sizeof SIG_JEDI_JUMP_ENTRY,
-                               (const void *)&hook_jedi_jump_entry,
-                               &own_state.jedi_jump_entry_detour, JEDI_JUMP_ENTRY_PROLOGUE_SIZE,
-                               "the Jedi Jump mode entry");
+    jedi_jump_ok = install_jump_entry(SIG_JEDI_JUMP_ENTRY, sizeof SIG_JEDI_JUMP_ENTRY,
+                                      JEDI_JUMP_ENTRY_PROLOGUE_SIZE,
+                                      (const void *)&hook_jedi_jump_entry,
+                                      &own_state.jedi_jump_entry_detour,
+                                      "the Jedi Jump mode entry");
     if (jedi_jump_ok) {
         own_state.jedi_jump_entry_original =
             (mode_enter_fn_t)own_state.jedi_jump_entry_detour.original;

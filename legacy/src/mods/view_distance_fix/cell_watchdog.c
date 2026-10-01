@@ -123,6 +123,8 @@ static void lower_cell_limit(bool relocation_active)
 
     immediate = site + OFFSET_GATHER_LIMIT_IMMEDIATE;
     if (!memory_read_u32(immediate, &current)) {
+        log_warning("the cell limit at %08X is not readable, the limit is unchanged",
+                    (unsigned)immediate);
         return;
     }
     if (current != CELL_LIMIT_RETAIL) {
@@ -159,6 +161,8 @@ static bool resolve_cell_counter(void)
     if (!memory_read_u32(site + OFFSET_GATHER_TABLE,  &table_plus_four) ||
         !memory_read_u32(site + OFFSET_GATHER_BUCKET, &bucket) ||
         !memory_read_u32(site + OFFSET_GATHER_COUNT,  &counter)) {
+        log_warning("an operand of the gather site at %08X is not readable, so the cell table "
+                    "is NOT watched", (unsigned)site);
         return false;
     }
     table = table_plus_four - 4;
@@ -195,6 +199,9 @@ static void resolve_vertex_counter(void)
     }
     if (!memory_read_u32(site + OFFSET_VERTEX_CACHE_COUNT, &counter) ||
         !memory_is_inside_image(counter, sizeof(uint32_t))) {
+        log_warning("the vertex cache counter operand at %08X names %08X, which is not a cell "
+                    "inside the image, so the vertex cache is NOT watched",
+                    (unsigned)(site + OFFSET_VERTEX_CACHE_COUNT), (unsigned)counter);
         return;
     }
     watchdog_state.vertex_count = (const uint32_t *)(uintptr_t)counter;
@@ -275,7 +282,7 @@ static void watch_vertex_cache(float *effective_view_scale)
 
     if (used >= limit && !watchdog_state.vertex_warned) {
         watchdog_state.vertex_warned = true;
-        log_error("VERTEX CACHE FULL (%u of %u). From here the geometry is torn, and it stays "
+        log_error("vertex cache full (%u of %u). From here the geometry is torn, and it stays "
                   "torn until the level reloads, gate 2 jumps behind the `touched` reset loop. "
                   "The view scale goes to 1.00 immediately.",
                   (unsigned)used, (unsigned)limit);
@@ -323,7 +330,7 @@ void cell_watchdog_on_frame(float *effective_view_scale)
     if (used > watchdog_state.cell_limit) {
         if (!watchdog_state.overflow_reported) {
             watchdog_state.overflow_reported = true;
-            log_error("CELL COUNTER %u IS ABOVE THE LIMIT %u. The table has already overflowed; "
+            log_error("cell counter %u is above the limit %u. The table has already overflowed; "
                       "gatherCellMovers and emitFace hang on unchecked. From here the bucket list "
                       "heads are destroyed.", (unsigned)used, (unsigned)watchdog_state.cell_limit);
         }

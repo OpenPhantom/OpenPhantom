@@ -4,6 +4,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +30,19 @@ float fov_row_min(void)
 float fov_row_max(void)
 {
     return (float)ini_read_int(FOV_SECTION, SLIDER_MAX_KEY, (int)FOV_ROW_MAX_DEFAULT);
+}
+
+/* The one reader of BaseFov, because fov_row_get() and fov_row_set() both need it and the row's
+ * Default is exactly "the base and no offset". */
+bool fov_row_base(float *degrees)
+{
+    const float base = ini_read_float(FOV_SECTION, BASE_KEY, FOV_NONE);
+
+    if (degrees == NULL || base <= FOV_NONE) {
+        return false;
+    }
+    *degrees = base;
+    return true;
 }
 
 float fov_row_clamp(float degrees)
@@ -97,15 +111,14 @@ void fov_row_format(float degrees, char *out, size_t size)
     if (out == NULL || size == 0u) {
         return;
     }
-    (void)_snprintf(out, size - 1u, "%.0f deg", (double)degrees);
-    out[size - 1u] = '\0';
+    text_format(out, size, "%.0f deg", (double)degrees);
 }
 
 bool fov_row_get(float *degrees)
 {
-    float base = ini_read_float(FOV_SECTION, BASE_KEY, FOV_NONE);
+    float base;
 
-    if (degrees == NULL || base <= FOV_NONE) {
+    if (degrees == NULL || !fov_row_base(&base)) {
         return false;
     }
     /* The width of the picture is the base plus the offset, and both come out of the file. The
@@ -117,9 +130,9 @@ bool fov_row_get(float *degrees)
 
 bool fov_row_set(float degrees)
 {
-    float base = ini_read_float(FOV_SECTION, BASE_KEY, FOV_NONE);
+    float base;
 
-    if (base <= FOV_NONE) {
+    if (!fov_row_base(&base)) {
         return false;                          /* no base to measure an offset against */
     }
     return ini_write_float(FOV_SECTION, EXTRA_KEY, fov_row_clamp(degrees) - base, FOV_DECIMALS);

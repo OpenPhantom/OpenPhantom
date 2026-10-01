@@ -13,7 +13,7 @@ design tried here, and each of the first three taught something the next one kep
    of trying to make touching it cheaper.
 2. Windows' own Media Foundation (`MFPlay`), in a borderless window inside the game's own process,
    flickered black for the whole length of every movie. Five fixes for that, each chasing a real
-   hypothesis, none of them the actual cause: re-asserting `WS_EX_TOPMOST` every 200 ms; minimizing
+   hypothesis, none of them the actual cause: re-asserting `WS_EX_TOPMOST` every 200 ms; minimising
    the game window outright; a real `WM_ERASEBKGND` bug (fixed, not the cause); dropping
    `WS_EX_TOPMOST` and all Z-order reassertion; filtering the game window's own messages out of the
    shared message loop.
@@ -25,20 +25,20 @@ design tried here, and each of the first three taught something the next one kep
    while another process created a window owned by its window deadlocked the whole desktop once,
    not just the game). Once fixed, the overlay rendered on top, but taking foreground on a
    monitor-sized window made Windows' shell treat it as switching to a different fullscreen app and
-   auto-minimize the game, a minimize that persisted, "random" and then immediate, through
+   auto-minimise the game, a minimise that persisted, "random" and then immediate, through
    dropping `SetForegroundWindow` and then `WS_EX_NOACTIVATE`. Separately, standalone VLC playing
    the exact same converted file showed zero flicker from the start, which settled that `MFPlay`
    itself, not the process boundary, was the flicker's real cause; swapping it for libVLC
    (`vlc_playback.c`) fixed the flicker immediately, still running as a separate process, and that
    swap was a single-variable change: same process, same window, same file, different decoder.
    Reading `dxwrapper`'s own source (it is open source; this was checked directly) then settled the
-   minimize too: this game gets a real exclusive-mode Direct3D9 device by default, translated from
-   its own DirectDraw `DDSCL_EXCLUSIVE` request, and exclusive-mode devices auto-minimize on
+   minimise too: this game gets a real exclusive-mode Direct3D9 device by default, translated from
+   its own DirectDraw `DDSCL_EXCLUSIVE` request, and exclusive-mode devices auto-minimise on
    `WM_ACTIVATEAPP(deactivate)` as a decades-old, fundamental part of the D3D9 runtime, unrelated
    to and unaffected by Windows' Fullscreen Optimizations (confirmed by disabling that setting for
    `WMAIN.EXE` directly: no change). `dxwrapper` has a windowed-mode override that avoids this by
    never requesting exclusive mode (`EnableWindowMode=1`), confirmed via its own log to eliminate
-   the minimize, but at a real cost: this game switches its own internal DirectDraw resolution
+   the minimise, but at a real cost: this game switches its own internal DirectDraw resolution
    between menus (640x480) and gameplay constantly, something true exclusive fullscreen never
    exposed because the GPU always scales the backbuffer to fill the physical screen regardless;
    windowed mode instead physically resizes the actual window on every such change, landing on
@@ -47,7 +47,7 @@ design tried here, and each of the first three taught something the next one kep
 4. **The current design.** `WM_ACTIVATEAPP` is specifically a *cross-process* signal; Windows
    sends it when a window belonging to a different process becomes relevant, which a separate host
    process always was, regardless of `WS_EX_NOACTIVATE` (which governs keyboard activation, not
-   process identity). Moving the overlay back in-process, now that libVLC rather than `MFPlay`
+   process identity). Moving the overlay back in-process, now that libVLC and not `MFPlay`
    renders into it, removes that signal at the root: Windows does not raise `WM_ACTIVATEAPP` for a
    window becoming topmost within its own process.
 
@@ -58,7 +58,7 @@ design tried here, and each of the first three taught something the next one kep
    the loop filters on. An Alt-Tab during a movie therefore does reach the engine's window
    procedure, re-entrantly, on the thread parked inside the movie call.
 
-   And the exclusion turned out to cost more than it bought, which is the first fix below.
+   And the exclusion turned out to cost more than it bought, as the first fix below describes.
 
 **The message pump no longer touches the game window's queue at all.** Excluding a window from
 *dispatch* is not the same as leaving its messages alone: `PM_REMOVE` takes a message off the queue
@@ -67,15 +67,14 @@ not deferred, it was **discarded**, and the engine came out of each movie having
 all of it. The pump is now scoped to the overlay window's own handle, so the game's traffic simply
 waits, in order, for the game's own pump to resume.
 
-One thing had to survive that change. The overlay never takes activation, so a close request,
-Alt+F4 as `WM_SYSKEYDOWN`/`VK_F4` or the close box as `WM_NCLBUTTONDOWN`/`HTCLOSE`, is addressed to
-the *game's* window, which a scoped peek never retrieves. Left at that, the game could not be
-closed until the movie ended, which for the credits is minutes and which the retail Bink path does
-not do. So the game's queue is *looked at* with `PM_NOREMOVE` for exactly those two messages, and
-only one of them is ever removed, immediately re-posted so the engine's own window procedure
-honours it once the movie call returns. Nothing else on that queue is touched. `WM_QUIT` needs no
-handling: it is a thread message with no window, a scoped peek never sees it, and it stays queued
-for the game's own pump.
+One thing had to survive that change. The overlay never takes activation, so a close box click,
+`WM_NCLBUTTONDOWN`/`HTCLOSE`, is addressed to the *game's* window, which a scoped peek never
+retrieves, and a loop that ignored it would eat the request on the way past. So the game's queue
+is *looked at* with `PM_NOREMOVE` for that one message, which is then removed and
+immediately re-posted so the engine's own window procedure sees it once the movie call returns.
+Nothing else on that queue is touched. Alt+F4 used to be peeked for as well and is not any more;
+**Closing the game during a movie** below says why. `WM_QUIT` needs no handling: it is a thread
+message with no window, a scoped peek never sees it, and it stays queued for the game's own pump.
 
 **libVLC loads on its own thread.** Locating a 32-bit VLC, loading two DLLs out of it and calling
 `libvlc_new`, which initialises VLC's entire plugin system, is not fast, and doing it at install
@@ -92,9 +91,9 @@ theory held.
 **A stray OS "loading" cursor after the intro movies:** `SetForegroundWindow(game_window)` followed
 by `SetCursor(NULL)`, both immediately after `DestroyWindow()`, once per movie. What explained it:
 launching with `fmv_player` *disabled* visibly flashes the screen several times before the game
-settles, real minimize/restore cycles consistent with this game's exclusive-mode Direct3D9 device
+settles, real minimise/restore cycles consistent with this game's exclusive-mode Direct3D9 device
 reacting to however Bink touches the display, while `fmv_player` *enabled* shows none of that,
-which is this DLL doing exactly what it was built to do. Something early in start-up leaves the OS
+this DLL doing what it was built to do. Something early in start-up leaves the OS
 cursor undone, and the retail path's own incidental flashing was quietly re-triggering a full
 activation handshake and curing it before the player ever saw it. A smooth, flicker-free window
 removes that accidental cure along with the flicker, so the symptom only ever appeared with this
@@ -115,12 +114,18 @@ window procedure does `g_menuCursorX += (client_x - 320)` and then clamps to the
 synthetic move only ever adds a delta to whatever the cells already held, a value this DLL has no
 way to know. The repair writes the two cells directly, to the middle of the island, with no message
 and no prior state involved, after draining the mouse backlog that would otherwise be applied on
-top of it. The four cells are found by pattern rather than hardcoded. They sit at different
+top of it. The four cells are found by pattern, none hardcoded. They sit at different
 addresses in the Edit Tool's own recompile of this engine, so four constants would have written
 into the wrong variables there. `menu_cursor_cells.c` carries the bytes and the measurements.
 
 A movie with no converted file falls straight through to the original Bink playback, unchanged, and
 so does one that arrives before libVLC has finished loading.
+
+## Supported executables
+
+Retail `WMAIN.EXE`. The movie player entry, the two sound sites and the four cells the curtain and
+the menu cursor read resolve by pattern; the addresses are under "Byte basis" below. A site that
+does not match switches off the part that needed it and the log says which.
 
 ## Configuration: `[fmv_player]`
 
@@ -138,15 +143,15 @@ so does one that arrives before libVLC has finished loading.
 
 `Scaling` is applied when the movie plays, not when it is converted, so it works on files you
 already have and changing your mind costs nothing but a restart. Stretch is expressed as the
-overlay window's own ratio rather than a fixed 16:9, so it stays exact on a 16:10, a 21:9 or a
+overlay window's own ratio, not a fixed 16:9, so it stays exact on a 16:10, a 21:9 or a
 rotated panel, where a hard-coded ratio would leave bars on one axis and crop on the other. The
 export it needs is resolved as an optional one: a libVLC without it stays on letterbox and says so
-once, rather than failing the whole load over a preference.
+once; a preference does not fail the whole load.
 
 For a movie named `movie\arena` (the retail engine's own relative name, no extension), this looks
 for `<game>\<MovieDirectory>\arena.<Extension>`; flat, with no extra `movie\` subfolder beyond
 `MovieDirectory` itself, so converting your own files does not mean reproducing the retail path
-structure. If that file is not there, the movie plays exactly as it always did, through Bink.
+structure. If that file is not there, the movie plays as it always did, through Bink.
 
 ## What switches this feature off, and where to read it
 
@@ -155,8 +160,11 @@ order is deliberate: the two cheap checks come before libVLC is loaded, so a mac
 going to play a converted movie does not pay for one during the game's own startup.
 
 1. **The detour site does not resolve.** An unsupported build of the executable.
-2. **`MovieDirectory` does not exist.** Nothing has been converted, so there is nothing to do. This
+2. **`MovieDirectory` does not exist.** Nothing has been converted, so libVLC is never loaded. This
    is the normal state of a fresh installation and it is reported as information, not a warning.
+   The hook is installed all the same, for a multiplayer session only (see below): outside a
+   session it hands every movie to the retail player unchanged, and the log says so with
+   `movie playback is watched at ... for a multiplayer session only`.
 3. **No 32-bit libVLC can be found.** See below.
 
 After that, per movie: no converted file for this one, or playback that never started. Both are
@@ -177,15 +185,15 @@ mode this whole feature is most likely to present as.
    looked for `...\vlc.exe\libvlc.dll`, which meant it could never find anything.
 
 It must be **32-bit**. This is a 32-bit process and a 32-bit process cannot load a 64-bit DLL under
-any circumstances, an architecture wall rather than a version mismatch. Most current VLC downloads
-default to 64-bit, so the installer ships a 32-bit runtime rather than leaving it to the machine.
+any circumstances, an architecture wall and not a version mismatch. Most current VLC downloads
+default to 64-bit, so the installer ships a 32-bit runtime of its own.
 A player who installs the patch without that component, and has only a 64-bit VLC, gets Bink for
 every movie and a log line saying why.
 
 Nothing is linked against libVLC at build time. `LoadLibraryW` and `GetProcAddress` at run time
 mean nobody building this project needs libVLC headers or an import library, and all ten exports
-are required, so a libVLC that renamed or removed any of them switches this feature off rather than
-calling something under a name it no longer means.
+are required, so a libVLC that renamed or removed any of them switches this feature off; nothing
+is called under a name it no longer means.
 
 ## Getting your own movies converted
 
@@ -193,7 +201,7 @@ This project ships no game assets, converted or otherwise; that rule does not ch
 files this DLL reads happen to be `.mp4` instead of `.bik`. `convert_movies.ps1`, in `src\tools\`
 and in `tools\` in an installed copy, is a **tool**, not content: it reads the `.bik` files inside
 your own legally owned copy of the game and writes `.mp4` next to nothing you did not already have
-a license to.
+a licence to.
 
 **Simplest way, no command line:** drag your game folder onto `Convert Movies.bat`. Double-clicking
 it works too; it asks for the folder instead.
@@ -209,7 +217,7 @@ the game keeps its saved games inside it and cannot run otherwise. An `ffmpeg.ex
 this script would therefore be an executable that any user of the machine can replace, and the
 installer offers to run this tool right after installing. Searching there would turn "I can write to
 my own game folder" into "I can choose what runs next". `%LOCALAPPDATA%` belongs to one user.
-For the same reason the installer runs the conversion as the ordinary user rather than with its own
+For the same reason the installer runs the conversion as the ordinary user, without its own
 elevated rights.
 
 ### The default is the source's own resolution, on purpose
@@ -217,7 +225,7 @@ elevated rights.
 Upscaling a ~640x405 Bink source to 1080p with Lanczos adds no detail. It mostly spends bitrate on
 1999 compression artefacts, and the overlay scales whatever it is given to fill the window anyway.
 The real win of this tool is getting *out of Bink*, not the resolution, so the default leaves the
-picture and the frame rate exactly as they are. `-TargetHeight` is there if you want it.
+picture and the frame rate as they are. `-TargetHeight` is there if you want it.
 
 ### It never letterboxes into the file
 
@@ -268,8 +276,11 @@ frame. `render_curtain.c` instead redirects the same call `dev_overlay`'s own ch
 the one that closes the scene right before the page is shown, and draws a full-screen rectangle
 through the engine's own filled-shape primitive (`0x00419660`, byte-identical to
 `dev_overlay/overlay_sites.c`'s own `SIG_DRAW_QUAD`; what the game draws its own letterbox bars and
-screen tint with), packed ARGB with the alpha carrying the fade. That is real content on the frame
-the game actually presents, so any capture method shows exactly what the player sees, and a cheat
+screen tint with), packed ARGB with the alpha carrying the fade. The vertices are our own, through
+`common/screen_fill.c`: the routine's own carry `rhw = 0` and, on a 16-bit depth buffer, `z = 1.0`,
+which an Intel UHD laptop refused to draw, so its player saw the drop-in the curtain exists to
+hide; see that file's header. That is real content on the frame
+the game actually presents, so any capture method shows what the player sees, and a cheat
 panel opened on top of it still draws on top, for the same reason: this file's hook runs as the
 outer wrapper (loading after "dev_overlay" alphabetically), draws its own quad, then calls through
 to dev_overlay's own hook, which paints the panel after.
@@ -301,16 +312,16 @@ well before the level even loads.
 fedship.b3d either: a second live capture, playing as Qui-Gon (`iamquigon`), catches the same
 transient at a DIFFERENT level's own opening (race.b3d) playing `FSUJSND1.wav` instead. Both share
 the same shape: `FS`, a character letter (`M` for Obi-Wan, `U` for Qui-Gon), `J`, then a
-sound-specific suffix. That shape is what `sfx_mute.c` matches on now rather than either exact
-name, so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without
-having to catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
+sound-specific suffix. `sfx_mute.c` now matches on that shape and not on either exact name,
+so Panaka's and the Queen's own versions (unconfirmed, never captured) are covered without having
+to catch each one individually first. `sfx_mute.c` detours `bapsound_play` itself (`0x0041681F`,
 byte-identical to `diagnostics/diag_audio.c`'s own `SIG_SOUND_PLAY`) and skips every call whose
 sound record's own name matches `FS?J*` (case-insensitive, third character a wildcard) while
 suppression is armed, tracking `pPlayer+0xA0` directly so suppression ends the moment the transient
 it exists for actually finishes, or the curtain's own timer as a fallback cap. Every other sound,
 both spoken lines included, passes through untouched.
 
-## Which surface a movie gets, and why it is measured rather than configured
+## Which surface a movie gets, and why it is measured, not configured
 
 A movie has to cover what the player is looking at, and what that is depends on the shape the game's
 window is in.
@@ -348,7 +359,7 @@ once a second, so resizing the window while a cutscene runs leaves that one movi
 started at.
 
 Field confirmed on a Steam Deck in desktop mode: `the movie surface is 1280x800, taken from the
-game window's client area now`, matching the window rather than the panel.
+game window's client area now`, matching the window and not the panel.
 
 ## Why a separate window instead of drawing into the game's own surface
 
@@ -356,20 +367,21 @@ Everything that made the first design slow was on the far side of a DirectDraw s
 `fmv_player.dll` nor `video_overlay.c` owns. A borderless window sized to the game's own client
 rect, owned by the game window (Windows keeps an owned window above its owner in Z-order
 automatically, so no `WS_EX_TOPMOST` is needed) and `WS_EX_NOACTIVATE` (it never needs keyboard
-focus, since Escape-to-skip reads `GetAsyncKeyState`, physical key state, not per-window input), sidesteps that
-surface entirely: libVLC renders into that window directly via `libvlc_media_player_set_hwnd`,
-which is also why `video_overlay.c` has no Direct3D or DXGI code in it at all.
+focus, since Escape-to-skip reads `GetAsyncKeyState`, physical key state, not per-window input),
+sidesteps that surface entirely: libVLC renders into that window directly via
+`libvlc_media_player_set_hwnd`, so `video_overlay.c` has no Direct3D or DXGI code in it at all.
 
 ## Byte basis
 
-All four movie call sites (intro/logo, in-level cutscenes, the arena replay, credits) funnel
-through one function, confirmed by an xref sweep of its four `UNCONDITIONAL_CALL` callers inside
-`0x0043EB2A`:
+All four movie call sites (the two start-up splashes, a level's opening movie and the ending)
+funnel through one function, confirmed by an xref sweep of its four `UNCONDITIONAL_CALL` callers
+inside `0x0043EB2A`. There is no movie inside a level; a cutscene there is the engine's own scene,
+and `movie\arena` is the pod race's opening movie, not a replay:
 
 ```
 0043EB93  LEA EDX,[EBP-0x84]      ; a local buffer already filled with e.g. "movie\arena"
 0043EB99  PUSH EDX
-0043EB9A  CALL 0x0046C35A         ; the movie player - THIS is what this file detours
+0043EB9A  CALL 0x0046C35A         ; the movie player, the call THIS file detours
 0043EB9F  ADD ESP,0xC             ; caller cleans 12 bytes: __cdecl, 3 arguments
 ```
 
@@ -398,21 +410,30 @@ confirmed against a legitimate install: `GAMEDATA\MOVIE\ARENA.BIK`.
 
 The bare `push ebp / mov ebp,esp / sub esp,0x90` prologue shape recurs elsewhere in an 830 KB
 image, so the two-stage detour rule exists and this signature reaches two branches into the
-function rather than stopping at the prologue. Measured against the real retail `WMAIN.EXE`
+function instead of stopping at the prologue. Measured against the real retail `WMAIN.EXE`
 (829,952 bytes): exactly one match, all 72 bytes, at `0x0046C35A`.
 
 **The first gate is honoured.** The retail function refuses and returns 0 whenever `[006d6360]` is
-clear, so the hook hands those calls to the original rather than answering for them. What that cell
+clear, so the hook hands those calls to the original and answers none of them. What that cell
 *means* has not been established; no sweep of its writers was done. That is precisely why
 deferring is the safe direction: it reproduces retail behaviour whatever the answer turns out to
-be. Its address is read out of the matched `cmp` operand rather than written down as a constant.
+be. Its address is read out of the matched `cmp` operand, never written down as a constant.
+
+**The second gate is honoured, and the cell behind it is held.** `[0086a43c]` is what the engine
+means by "a cutscene is on screen": the retail function refuses and returns 0 while it is set, then
+sets it for the length of the movie, and other parts of the engine read it. The display hot keys
+are ignored while it stands and the game's own key hook steps aside. The hook hands a call made
+while it is set to the original, and for a movie it plays itself it sets the cell immediately
+before the picture goes up and clears it immediately after, with nothing in between that can
+return early, so it cannot be left standing. Its address is read out of both the `cmp` and the
+`mov` operand, and the two must agree before either is used.
 
 ### The drawn menu cursor's cells
 
 The one other place this DLL reads or writes engine memory, kept in `menu_cursor_cells.c` so it is
 the only file here that needs a signature at all. The window procedure's `WM_MOUSEMOVE` case, at
 `0x00460BCC` in retail, reached only after the engine's own recentring call at `0x0046A115` has
-confirmed the message is real movement rather than the echo of its own warp:
+confirmed the message is real movement and not the echo of its own warp:
 
 ```
 00460BCC  0F BF 55 14           movsx edx, word ptr [ebp+0x14]   ; client x
@@ -439,35 +460,133 @@ its load and its store, the Y cells must sit four bytes past the X cells in both
 pair must be reachable at a fixed distance with the expected opcode, and every cell must lie inside
 the host image.
 
+### The Bink player's two cells
+
+For a multiplayer client, `bink_cells.c` reads two cells out of the retail movie window's handler
+`0x00497E5D`. The handler is a switch on the message, and the 43 bytes of its head carry no
+address:
+
+```
+00497E67  83 7D FC 20 77 11 83 7D FC 20 74 1F 83 7D FC 10 74 70 E9 85 00 00 00
+00497E7E  81 7D FC 02 01 00 00 74 3F 81 7D FC 00 02 00 00 74 1A EB 71
+00497EC6  83 3D 94 20 86 00 00           cmp [s_bAbortOnKey], 0    head + 0x5F, cell at + 0x61
+00497ECF  C7 05 98 20 86 00 01 00 00 00  mov [s_bAbort], 1         head + 0x68, cell at + 0x6A
+00497EE9  C7 05 98 20 86 00 01 00 00 00  mov [s_bAbort], 1         head + 0x82, cell at + 0x84
+```
+
+`0x102` is `WM_CHAR`: a character key sets the abort cell only while the key skip is set, and the
+player writes the key skip from its own flags argument (`0x497B23`) and nowhere else. `0x10` is
+`WM_CLOSE`, dead on this window because the game's window procedure answers it first, but its
+bytes name the abort cell a second time, and the two encodings are required to agree. The loop
+reads the abort cell at the head of every round (`0x497B66`) and ends once it is set and a frame
+has been shown; it clears the cell once after its first pump (`0x497B12`), which is why the watch
+writes it every round. `WM_ACTIVATEAPP` is not in the switch: **the retail player never ends a
+movie on a lost foreground**, only at its own end or on a key.
+
+Measured on 2026-09-21 with the opcode and immediate around each operand checked: one match in
+each of the six images, `BIN\WMAIN.EXE`, `wmain.exe`, the English and the German retail
+`WMAIN.EXE`, the installed one, and the Edit Tool's `obi.exe`, where the head sits at `0x00497E07`
+and the cells at `0x00862044` and `0x00862048`. No other mod of this tree resolves a pattern
+anywhere in the Bink player, and a sweep of every mod's write ranges finds none over it.
+
+## In a multiplayer session
+
+A movie in a multiplayer session belongs to the host. The two DLLs may not call each other, so they
+talk through two records in `common/movie_note`: the multiplayer files a *gate* (session running,
+this machine a client, host connected, how many of the host's payloads arrived here, whether one
+arrived in the last half second), and this DLL files its *movie state* (movies begun, the newest
+one's name, playing, waiting or ended, and how). Without a multiplayer session there is no gate,
+and every movie plays exactly as it did before: same ways out, same log lines, nothing filed,
+nothing pumped.
+
+| Role | When | Escape / Start | Lost foreground | Close box | Session timer |
+|---|---|---|---|---|---|
+| free | no session | ends it | ends it | ends it | not pumped |
+| host | host of a running session | ends it | counted, ends nothing | counted, ends nothing | pumped |
+| held | client whose host is in its movie | counted | counted | counted | pumped |
+| skip | client whose host's world already moves | not played at all | | | |
+| alone | client whose host is not connected | ends it | ends it | ends it | pumped |
+
+A held movie ends when the host's payload count has grown on the connection the movie began on:
+the host sends payloads only from its substeps, and a host inside its opening movie runs none. When
+the client's own file ends first, the window turns black with "Waiting for the host" in the
+session's language and stays until the host's world moves or the session lets go (not running, not
+connected, another connection, or no gate filed over three seconds of pumping). That last one
+counts only turns that pumped, each for at most a tenth of a second, and every turn pumps before
+it asks, so a stall of the game's thread (a mode switch, a player being stopped) cannot let a
+held client go; it starts again with every loop, a retail loop after libVLC gave a movie back
+included. `g_bInMovie` stays set for the wait, and the game window's queued keys are dropped
+after a held movie, as its mouse traffic always was. On the retail path a held client hands the key
+skip 0 instead of 1 and a thread timer of this DLL's own, dispatched by the player's pump, writes
+the abort cell above once the host is done; should the session let go first, it gives the key skip
+back.
+
+**The session's timer is dispatched during a converted movie.** The overlay-scoped pump never took
+it, so a movie longer than the session's thirty second timeout used to end the session. Only
+`WM_TIMER` with no window (the session's) and the overlay's own are dispatched; a due tick of any
+other window is taken and dropped, because a filtered peek returns the first due timer and a
+foreign one left in place starves the thread timer (measured: 30 against 1 dispatch in half a
+second). `(HWND)-1` returns no thread timer at all. A timer with no window is not necessarily the
+session's: `MSS32.DLL` sets one of its own on one of its driver paths. So this DLL counts thread
+timers, a nought is the failure, and the witness that the multiplayer's own timer ran is the
+multiplayer's report, `timer pump N` in its `the pumps:` line, which has to grow across a movie.
+
+**The close box in a session ends no movie and is not lost.** It is taken, counted, and passed on
+once the movie and any wait for the host are over, however often it was pressed, as
+`WM_SYSCOMMAND`/`SC_CLOSE`, the command a completed click on the box produces. With
+`enhanced_resolution`'s frame that closes the game, as the box would have with no movie on
+screen. Not the click itself: a `WM_NCLBUTTONDOWN`/`HTCLOSE` handed to `DefWindowProc` after the
+button is up enters the modal tracking of the caption button and stays there until real mouse
+input arrives (measured in a test window: still inside after 2.5 s, no `SC_CLOSE`, no `WM_CLOSE`;
+posted mouse moves and a posted button up did not release it), while a posted `SC_CLOSE` gave
+exactly one `WM_CLOSE`.
+
+The reference is Unreal's replicated Level Sequence playback, where the server drives status and
+end and a client's play and stop are ignored; here every side plays its own file and only the end
+comes from the host. The waiting screen is the co-op pattern "waiting for other players".
+
+The lines, per movie, in a session:
+
+* client: `the movie "..." belongs to the host: ... (N host payload(s) seen before it began)`, then
+  `the host's movie is over (its world moved after N ms of playback here): ...`, or
+  `"..." ended here after N ms, before the host's: the picture stays black ...` followed by
+  `the host's world moved after a wait of N ms` or `the wait for the host ended without it ...`;
+* skipped: `the host is already in its level (its world is moving), so "..." is not played here`;
+* host: `the movie "..." is the host's: ...` and `the host's movie "..." ended here ...`;
+* retail: `"..." plays through the retail Bink path as a client of the host's ...` and
+  `the host's movie is over: the Bink player's abort cell was raised after N ms of playback`;
+* close box: `the close box was pressed N time(s) during the session's movie; ... passed on once`;
+* always: `during "..." N thread timer message(s) were dispatched; ...`, or on the retail path
+  `the retail player's own pump ran this DLL's timer N time(s) ...`. **A nought there is the
+  failure**, and so is `Escape ended playback` or `the game lost the foreground during playback`
+  on a held client before a line that says the session let it go.
+
 ## Closing the game during a movie
 
 **This game cannot be closed with Alt+F4 at any time, by the engine's own decision.** Its
 window procedure at `0x0049905E` takes `WM_CLOSE` in the switch and returns zero without reaching
 `DefWindowProcA`, so the default destroy never happens, and because the switch takes it the message
 never reaches the chained handlers either. Only `WM_DESTROY` calls `PostQuitMessage`, and the game's
-own quit path is what raises that. Confirmed in play with no movie involved.
+own quit path raises it. Confirmed in play with no movie involved.
 
 The close box is still read off the game's queue here, because a close request that the engine
 chooses to discard is still a request this loop should not eat on the way past.
 
-**What was actually wrong here**, and an external audit found it: `WM_SYSKEYDOWN` with `VK_F4` was in
-the peeked range and could never match. A filtered peek returns the first message in its range,
-Alt+F4 queues `VK_MENU` before `VK_F4`, and holding Alt autorepeats more `VK_MENU` behind it, so the
-F4 was never examined. That dead branch is gone, along with the comment that described the mechanism
-at length without it being able to work.
+**What was actually wrong here**, and an external audit found it: `WM_SYSKEYDOWN` with `VK_F4`
+was in the peeked range and could never match. A filtered peek returns the first message in its
+range, Alt+F4 queues `VK_MENU` before `VK_F4`, and holding Alt autorepeats more `VK_MENU` behind
+it, so the F4 was never examined. That dead branch is gone, along with the comment that described
+the mechanism at length without it being able to work.
 
 The audit's stated consequence, that a player could not close the game for the length of a movie,
 does not follow: they cannot close it during ordinary gameplay either. Detecting the combination
 properly was tried and did exactly nothing useful, ending the movie and then posting a close the
 engine discarded. Making Alt+F4 genuinely close the game would be overriding a decision the engine
-took for itself, which is a behaviour change rather than a repair and does not belong in the movie
-player.
+took for itself. That is a behaviour change, not a repair, and it does not belong in the
+movie player.
 
 ## Known limitations
 
-* **`[0086a43c]` is not reproduced.** The retail function latches it on entry; the hook does not.
-  It has the shape of a re-entrancy guard, and the hook blocks the game's only thread for the whole
-  movie, so nothing can observe it in between, but that is reasoning, not a sweep.
 * **The success return value is `1`, and only its non-zeroness is evidenced.** All three refusal
   paths above return 0, so zero means "did not play". Which non-zero value the retail function
   returns on success has not been read out of the image, and no caller has been shown to
@@ -486,6 +605,17 @@ player.
 * **`libdirectdraw_plugin.dll` is deliberately not installed** with the bundled runtime. It would
   let libVLC pick a DirectDraw video output, which on this install is the translation layer the
   whole feature exists to route around.
+* **In a session, a lost foreground in exclusive fullscreen.** `dxwrapper` minimises on
+  `WM_ACTIVATEAPP`; with the host and held rules the movie then plays on, minimised and audible.
+  Whether to mute it, and whether the device comes back cleanly, has not been looked at.
+* **In a session, the ending.** `movie\scene8`, the credits and the statistics play on the host
+  only; a client stands in the last level meanwhile. No rule here for it.
+* **In a session, no common start.** A held client begins its movie when it gets there, seconds
+  after the host, and plays its own copy from the beginning until the host's end cuts it off: at a
+  level change the client sees its movie from the start and misses the end. A start together needs
+  the host to wait for its clients, which needs a new message on the wire; not built.
+* **In a session, letting go shows only in the log.** A held client the session lets go (host
+  gone, gate quiet) plays on as its own movie; nothing on screen says why.
 * **No hardware certainty.** libVLC's own choice of decoder depends on the codec of the converted
   file and what the system offers. H.264 has broad hardware decode support; an unusual codec choice
   in the converter may fall back to software.
@@ -494,7 +624,7 @@ player.
 
 Be precise about which claim is which, because these are three different things.
 
-**Design 4 was live-tested on the reporting machine** in its earlier form: no flicker, no minimize,
+**Design 4 was live-tested on the reporting machine** in its earlier form: no flicker, no minimise,
 movies playing at full quality over the game window.
 
 **Three of the later fixes were live-tested, on the reporting machine, in the form they were
@@ -506,12 +636,12 @@ not change); and writing the drawn cursor's cells directly (confirmed to land ce
 launch across repeated testing, where two earlier attempts each looked right once and then were
 not).
 
-**The form in this tree is accepted in game**, in the 1.5.0 build, which was played through by
+**The form in this tree is accepted in game**, in the v0.4.1 build, which was played through by
 hand. It compiles with the configured 32-bit MSVC toolset, `/W4 /WX`, zero warnings, and
 `movie_path.c` is covered by `unittests/movie_path.c`. The two things that had differed from the
 last tested form have both been played since: the close request recognised with `PM_NOREMOVE` on
-the game's queue rather than being lost with the rest of the exclusion, and the four cursor cells
-resolved by pattern rather than written down as constants. That pattern is measured across all
+the game's queue instead of lost with the rest of the exclusion, and the four cursor cells
+resolved by pattern, none written down as a constant. That pattern is measured across all
 six available images, one match each, with all five of its cross-checks passing, including on the
 recompile where the cells move.
 
@@ -521,10 +651,21 @@ startup ordering, the honoured playback gate, the Escape edge trigger and the te
 detour signature is measured against the real retail `WMAIN.EXE` and counted for uniqueness: one
 match, at the address named above.
 
-`video_overlay.c`, `vlc_locate.c`, `vlc_runtime.c` and `vlc_playback.c` have no engine dependency and therefore no
-byte evidence to verify the same way, and no behaviour a unit test can observe without a live
-window and a real video file. They rest on documented Win32 window-ownership and message-delivery
-behaviour and on libVLC's own long-stable C ABI.
+**The multiplayer session rules are compiled, unit tested and played in part.**
+`movie_rule.c` and `movie_text.c` are covered by `unittests/movie_rule.c`, every gate against a
+reference and each rule held by a mutation probe; `movie_session.c` by `unittests/movie_session.c`
+against a gate the test files through the real channel, the quiet over pumped turns and the gate
+taken down included; `movie_close.c` by `unittests/movie_close.c` on a real window's queue; the
+record by `unittests/movie_note.c`; the Bink pattern by the measurement above. In the game, with
+three and with four players through the relay, the session came through the host's movie into
+the next level; a held client's movie ended when the host's world moved, with the lost foreground
+it saw refused, and the host announced the next world as its movie began. The black wait, where a
+client's own file ends first, has not been seen.
+
+`video_overlay.c`, `vlc_locate.c`, `vlc_runtime.c` and `vlc_playback.c` have no engine dependency
+and therefore no byte evidence to verify the same way, and no behaviour a unit test can observe
+without a live window and a real video file. They rest on documented Win32 window-ownership and
+message-delivery behaviour and on libVLC's own long-stable C ABI.
 
 **What to check first in `engine_fixes.log`,** in the order the code actually writes them:
 
@@ -536,7 +677,7 @@ behaviour and on libVLC's own long-stable C ABI.
 3. `libVLC is loading on its own thread ...`, then `using the ... libVLC in ...` and `libVLC ready,
    plugins from ...`. These say which of the three candidates answered and that the plugin set was
    complete enough for libVLC to start. The last one arrives on the background thread, so it may
-   appear after the interception line below rather than before it.
+   appear after the interception line below.
 4. `movie playback intercepted at ...`. The detour took.
 5. Then **one line per movie**: `playing "..." from ...`, or `no converted file for "..." at ...`,
    or, where a converted file does exist but libVLC cannot take it, either `libVLC is still loading
@@ -546,13 +687,15 @@ behaviour and on libVLC's own long-stable C ABI.
    quietly failing.
 
    A machine with nothing converted never mentions libVLC at all: the readiness question is asked
-   only once there is a file to play, which is also why "no usable libVLC" is a warning rather than
-   a note. It means a converted movie was found and could not be used.
+   only once there is a file to play, so "no usable libVLC" is a warning, not a note. It
+   means a converted movie was found and could not be used.
 
 Two deliberate tests are worth doing by hand:
 
-* Press **Alt+F4 during a converted movie.** The game should close, and the log should carry `the
-  player asked to close the game during playback`. If it does not close, the `PM_NOREMOVE` probe is
-  not seeing the request.
+* **Click the game window's close box during a converted movie**, in window mode. The movie should
+  end and the log should carry `the player asked to close the game during playback`. If the movie
+  plays on, the `PM_NOREMOVE` probe is not seeing the request. The game itself does not close, and
+  that is not a fault of this DLL: the engine discards `WM_CLOSE` at all times, and Alt+F4 does
+  nothing during a movie for the same reason it does nothing during play.
 * **Move the mouse during a movie**, then look at where the drawn menu cursor is when the menu comes
   back. It should be in the middle of the menu, every launch, regardless of where the pointer was.

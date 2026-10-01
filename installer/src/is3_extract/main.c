@@ -3,7 +3,7 @@
  * This exists because the game's disc ships GAMEDATA\GOBS\BIG.Z and the game needs big.lab, and
  * the only thing that ever turned one into the other was the disc's own 16-bit installer, which
  * no longer runs. Bundling the expanded archive instead would mean shipping 121 MB of somebody
- * else's game data in an installer, which is exactly what this avoids.
+ * else's game data in an installer, and this avoids that.
  *
  * The exit code is the whole interface for the caller. It is never 0 unless a member was written
  * AND its length matched what the archive recorded, so "the file exists" and "the file is right"
@@ -99,7 +99,8 @@ static int list_members(const char *archive_path)
     return EXIT_OK;
 }
 
-static int extract_member(const char *archive_path, const char *member_name, const char *output_path)
+static int extract_member(const char *archive_path, const char *member_name,
+                          const char *output_path)
 {
     is3_archive_t       archive;
     const is3_member_t *member;

@@ -21,7 +21,7 @@
  * Take the cut if a second anchor ever appears, or when this file reaches the hard limit.
  *
  * ==============================================================================================
- * ONE ANCHOR, NOT SIXTEEN SIGNATURES
+ * One anchor, not sixteen signatures
  *
  * Every one of these lives inside a single retail function, gameplay_open_cheat_console, read in
  * full by decompiling 0x0042fc90. After the eleven-entry toggle loop cheats_original.c already
@@ -29,7 +29,7 @@
  * by whatever that code actually does, whether a function call, a direct write, or both.
  *
  * Rather than write and verify sixteen independent byte patterns, this resolves ONE signature for
- * the function's own prologue and reads everything else as a FIXED BYTE OFFSET from it. That is
+ * the function's own prologue and reads everything else as a fixed byte offset from it. That is
  * sound for the same reason cheats_original.c's OFFSET_NAME_TABLE and OFFSET_FLAG_ARRAY are: the
  * whole function is one compiled unit, so a recompile that relocates it moves every instruction
  * inside it by the same amount, and every address an instruction embeds is read out of the match
@@ -51,7 +51,7 @@
  * function, not estimated, and is the distance from 0x0042fc90 to the instruction in question.
  *
  * ==============================================================================================
- * THE COUNTER, WHAT IT REALLY DOES, AND WHY THE GATE MATCHES RETAIL'S OWN CAP ANYWAY
+ * The counter, what it really does, and why the gate matches retail's own cap anyway
  *
  * Full health and all-weapons-full-ammo both raise DAT_00872efc, capped under the console's own
  * `< 10` guard so the two effects themselves stop giving anything past a point. The first version
@@ -80,13 +80,13 @@
  * a cost of the effect itself, not a defect in how many times this panel lets you pay it.
  *
  * ==============================================================================================
- * TWO LABELS THIS FILE HAD WRONG THE FIRST TIME, CORRECTED FROM WHAT THE CALLEES ACTUALLY DO
+ * Two labels this file had wrong the first time, corrected from what the callees actually do
  *
  * Two of the three codes too short to be catalogued as strings were named from a fan-made cheat
  * sheet before either callee had actually been read, on the assumption that whichever mystery
  * one-shot codes were left over must be whichever screenshot rows were left over. That assumption
  * was wrong: "but i feel so good" and "happy", which the guess leaned on, turned out to already be
- * TOGGLE TABLE entries cheats_original.c covers on its own, not these two at all. Decompiling the
+ * Toggle table entries cheats_original.c covers on its own, not these two at all. Decompiling the
  * real callees:
  *
  *   FUN_0042945f -> FUN_004293e8: cycles DAT_004ac538 through 1..4, copies a 12-dword row out of a
@@ -100,10 +100,13 @@
  * ============================================================================================== */
 #include "cheats_original_actions.h"
 
+#include "overlay_reason.h"
+
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -138,8 +141,9 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
                "the console function pattern and its mask are different lengths");
 
 /* Every offset is `instruction address - 0x0042fc90` in retail, read straight off the disassembly.
- * An "OP_" constant is where an instruction's own address-bearing operand starts, which is what
- * gets read as data; the plain offsets are where a CALL itself sits, for patch_read_call_target. */
+ * An "OP_" constant is where an instruction's own address-bearing operand starts, and that
+ * operand is read as data; the plain offsets are where a CALL itself sits, for
+ * patch_read_call_target. */
 #define OFF_KILL_CALL           0x284u   /* FUN_00459e85(0), also reused for full health's (100) */
 #define OFF_SWAP_CALL           0x3D1u   /* FUN_004302aa(0..3), the four character swaps         */
 #define OFF_LOWER_A_CALL        0x319u   /* FUN_00457eee(), "i stink"                             */
@@ -159,7 +163,7 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
 
 /* The message ids retail's own console passes to FUN_0043dc61 after each effect, read straight off
  * the same disassembly as everything else here. Safe to carry as literals rather than resolve: each
- * is an immediate value baked into the CALL SITE'S OWN bytes, not a movable data address, the same
+ * is an immediate value baked into the call site's own bytes, not a movable data address, the same
  * reasoning the tech bonus case already documents. Graphics detail is the one exception, whose
  * message id is `DAT_004ac538 + 0x37` and has to be read fresh after the level actually changes. */
 #define MSG_KILL_SELF        0x46
@@ -168,7 +172,7 @@ _Static_assert(sizeof(SIG_CONSOLE_FN) == sizeof(MSK_CONSOLE_FN),
 #define MSG_LOWER_DIFFICULTY 0x34   /* both "i stink" and "i really stink" print this same one */
 #define MSG_INCREASE_DIFFICULTY 0x35
 #define MSG_RED_HIGHLIGHT    0x47
-#define MSG_DURATION_BITS    0x40800000   /* 4.0f's bit pattern, the seconds every message shows for */
+#define MSG_DURATION_BITS    0x40800000   /* 4.0f's bits, the seconds every message shows for */
 
 /* String operands, for the three codes too short for the image's own string analysis to have
  * named on its own. Nothing stops a SHORT string being missed the other way, by never being
@@ -184,6 +188,10 @@ typedef void (__cdecl *call2_fn_t)(int32_t, int32_t);
 
 typedef struct action_slot {
     bool     available;
+    /* Set by the three resolve functions that succeed and still refuse to offer their row. It is
+     * not the opposite of `available`: a row that never resolved is also unavailable and is not
+     * held back, and the two look the same to a player until each says which it is. */
+    uint32_t held_back;
     char     label[64];
 } action_slot_t;
 
@@ -207,7 +215,8 @@ typedef struct actions_state {
     volatile int32_t *debug_var;
     volatile int32_t *counter_var;   /* the difficulty-pinning counter, DAT_00872efc */
     const volatile int32_t *ammo_mode_var;
-    const volatile int32_t *graphics_level_var;   /* DAT_004ac538, read after cycling for a message */
+    const volatile int32_t *graphics_level_var;   /* DAT_004ac538, read after cycling, for a
+                                                   * message */
 
     /* -1 means none queued. See the comment above cheats_original_actions_invoke()'s character
      * swap cases for why a swap is queued rather than run immediately. */
@@ -230,11 +239,21 @@ static bool read_call_target(uint32_t offset, void **out)
     return true;
 }
 
+/* An address-bearing operand as far as 0x567 past the anchor, so the two bytes in front of it are
+ * checked before it is believed: a ModRM of mod 00, r/m 101, which is a disp32 with no register
+ * (the 0x05, 0x0D, 0x15 and 0x3D of the sites below all have that shape), behind one of the three
+ * opcodes the console function reaches its globals with, mov [mem],imm32 (C7), mov r32,[mem] (8B)
+ * and cmp [mem],imm8 (83). A build that matched the prologue and laid the body out differently is
+ * refused here rather than written through. */
 static bool read_data_pointer(uint32_t operand_offset, volatile int32_t **out)
 {
     uint32_t addr = 0;
+    uint8_t  head[2];
 
-    if (!memory_read_u32(st.anchor + operand_offset, &addr) ||
+    if (!memory_read(st.anchor + operand_offset - 2u, head, sizeof head) ||
+        (head[1] & 0xC7u) != 0x05u ||
+        (head[0] != 0xC7u && head[0] != 0x8Bu && head[0] != 0x83u) ||
+        !memory_read_u32(st.anchor + operand_offset, &addr) ||
         !memory_is_inside_image(addr, sizeof(int32_t))) {
         return false;
     }
@@ -359,7 +378,7 @@ static void resolve_difficulty(void)
     }
 }
 
-/* HELD BACK AS n/a, THE SAME WAY AND FOR THE SAME REASON AS WAVERING GRAPHICS.
+/* Held back as n/a, the same way and for the same reason as wavering graphics.
  *
  * The site resolves cleanly and the write runs without crashing on its own terms, but field
  * testing found triggering it from this panel, mid level, behaves badly enough to be worth not
@@ -372,6 +391,7 @@ static void resolve_credits(void)
 {
     if (read_data_pointer(OP_CREDITS_VAR, &st.credits_var)) {
         set_label(CHEATS_ACTION_VIEW_CREDITS, "View credits (gurshick)");
+        st.slots[CHEATS_ACTION_VIEW_CREDITS].held_back = (uint32_t)OVERLAY_REASON_HELD_MISBEHAVES;
         log_info("view credits resolved but is held back as n/a: field-confirmed misbehaviour when "
                  "triggered from this panel. See the comment above resolve_credits().");
     } else {
@@ -379,7 +399,7 @@ static void resolve_credits(void)
     }
 }
 
-/* HELD BACK AS n/a ON PURPOSE, NOT BECAUSE IT FAILED TO RESOLVE.
+/* Held back as n/a on purpose, not because it failed to resolve.
  *
  * The site resolves cleanly, the flag and both apply calls all read as valid, in-image addresses,
  * and it runs without crashing. What it does not do, confirmed against the running game rather than
@@ -403,13 +423,14 @@ static void resolve_wavering_graphics(void)
     st.wavering_off = (call1_fn_t)off_target;
     st.wavering_on = (call1_fn_t)on_target;
     set_label(CHEATS_ACTION_WAVERING_GRAPHICS, "Wavering graphics (drop a beat)");
+    st.slots[CHEATS_ACTION_WAVERING_GRAPHICS].held_back = (uint32_t)OVERLAY_REASON_HELD_NO_EFFECT;
     /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
     log_info("wavering graphics resolved (flag and both apply calls all valid) but is held back as "
              "n/a rather than offered: no confirmed visible effect. See the comment above "
              "resolve_wavering_graphics().");
 }
 
-/* HELD BACK AS N/A, the third row in this file that resolves and is still not offered.
+/* Held back as N/A, the third row in this file that resolves and is still not offered.
  *
  * The game's own debug mode draws its frame rate readout through the same text layer this panel
  * draws through, and running it from here breaks the panel: field confirmed, by turning it on and
@@ -431,9 +452,9 @@ static void resolve_debug_mode(void)
         return;
     }
     /* Deliberately not `st.slots[...].available = true`: see the comment above this function. */
+    st.slots[CHEATS_ACTION_DEBUG_MODE].held_back = (uint32_t)OVERLAY_REASON_HELD_BREAKS_MENU;
     if (read_code_text(OP_DEBUG_CODE_TEXT, text, sizeof text)) {
-        _snprintf(label, sizeof label, "Debug mode (%s)", text);
-        label[sizeof label - 1] = '\0';
+        text_format(label, sizeof label, "Debug mode (%s)", text);
         set_label(CHEATS_ACTION_DEBUG_MODE, label);
     } else {
         set_label(CHEATS_ACTION_DEBUG_MODE, "Debug mode");
@@ -462,8 +483,7 @@ static void resolve_graphics_detail(void)
     }
     st.slots[CHEATS_ACTION_GRAPHICS_DETAIL].available = true;
     if (read_code_text(OP_GRAPHICS_DETAIL_CODE_TEXT, text, sizeof text)) {
-        _snprintf(label, sizeof label, "Cycle graphics detail level, 1-4 (%s)", text);
-        label[sizeof label - 1] = '\0';
+        text_format(label, sizeof label, "Cycle graphics detail level, 1-4 (%s)", text);
         set_label(CHEATS_ACTION_GRAPHICS_DETAIL, label);
     } else {
         set_label(CHEATS_ACTION_GRAPHICS_DETAIL, "Cycle graphics detail level, 1-4");
@@ -483,8 +503,7 @@ static void resolve_red_highlight(void)
     st.toggle_red_highlight = (call0_fn_t)target;
     st.slots[CHEATS_ACTION_RED_HIGHLIGHT].available = true;
     if (read_code_text(OP_RED_HIGHLIGHT_CODE_TEXT, text, sizeof text)) {
-        _snprintf(label, sizeof label, "Toggle a red icon highlight (%s)", text);
-        label[sizeof label - 1] = '\0';
+        text_format(label, sizeof label, "Toggle a red icon highlight (%s)", text);
         set_label(CHEATS_ACTION_RED_HIGHLIGHT, label);
     } else {
         set_label(CHEATS_ACTION_RED_HIGHLIGHT, "Toggle a red icon highlight");
@@ -564,6 +583,14 @@ const char *cheats_original_actions_name(cheats_action_id_t id)
     return st.slots[id].label;
 }
 
+uint32_t cheats_original_actions_reason(cheats_action_id_t id)
+{
+    if ((unsigned)id >= (unsigned)CHEATS_ACTION_COUNT) {
+        return (uint32_t)OVERLAY_REASON_NONE;
+    }
+    return st.slots[id].held_back;
+}
+
 bool cheats_original_actions_is_available(cheats_action_id_t id)
 {
     int32_t counter;
@@ -622,12 +649,12 @@ bool cheats_original_actions_invoke(cheats_action_id_t id)
         print_message_if_available(MSG_ALL_WEAPONS_AMMO);
         return true;
 
-    /* QUEUED, NOT RUN HERE. The swap has a precondition read out of FUN_00447d18: a pointer in the
+    /* Queued, not run here. The swap has a precondition read out of FUN_00447d18: a pointer in the
      * player's own state block that reads as "no active controller" while dev_overlay is holding
      * the player suspended, which is the engine's own idle state and is exactly what the panel asks
      * for on every other frame it is open. Calling the swap now can silently do nothing, with no
      * error to show for it. Queuing it instead and applying it once the panel closes and the player
-     * is un-suspended again is what makes it reliable rather than "usually" reliable. Only the last
+     * is un-suspended again makes it reliable rather than "usually" reliable. Only the last
      * press before closing wins; the four are mutually exclusive anyway, so overwriting a pending
      * one rather than queuing several is the honest behaviour, not a limitation of the queue. */
     case CHEATS_ACTION_PLAY_OBI:
@@ -721,7 +748,8 @@ bool cheats_original_actions_is_pending(cheats_action_id_t id)
 const char *cheats_original_actions_pending_label(void)
 {
     if (!st.resolved) {
-        return NULL;      /* see the same zero-vs-sentinel note in cheats_original_actions_is_pending() */
+        /* See the same zero-vs-sentinel note in cheats_original_actions_is_pending(). */
+        return NULL;
     }
     switch (st.pending_character) {
     case 0: return st.slots[CHEATS_ACTION_PLAY_OBI].label;

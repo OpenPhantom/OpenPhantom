@@ -84,7 +84,7 @@ void ending_resolution_install(bool enabled)
     }
 
     log_info("the ending keeps your resolution: the 640x480 switch before the closing cutscene is "
-             "removed at %08X. It belonged to the retail Bink path and graphics_playMovie sets that "
-             "mode itself anyway, so nothing that needed it has lost it",
+             "removed at %08X. It belonged to the retail Bink path and graphics_playMovie sets "
+             "that mode itself anyway, so nothing that needed it has lost it",
              (unsigned)call_site);
 }

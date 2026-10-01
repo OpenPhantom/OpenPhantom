@@ -61,12 +61,13 @@ typedef void(__cdecl *snap_to_ground_fn_t)(uint8_t *actor, void *position);
 static struct {
     detour_t carry;
     detour_t snap;
+    bool     armed;          /* both halves are in; until then each hook passes straight through */
     creeping_mover_set_t creeping;
 } rider;
 
 static bool is_known_creeper(const uint8_t *mover)
 {
-    return creeping_mover_known(&rider.creeping, *(const uint32_t *)(mover + MOVER_ID));
+    return creeping_mover_known(&rider.creeping, *(const uint32_t *)(mover + MOVER_ID), mover);
 }
 
 static bool is_crusher(const uint8_t *mover)
@@ -74,7 +75,7 @@ static bool is_crusher(const uint8_t *mover)
     return mover != NULL && *(const uint32_t *)(mover + MOVER_TYPE) == MOVER_CRUSHER;
 }
 
-/* HALF ONE: a crusher carries nobody.
+/* Half one: a crusher carries nobody.
  *
  * The engine's own body still runs, so every field it maintains is written exactly as before, the
  * deltas included. Only the position it hands back is refused. */
@@ -84,7 +85,8 @@ static void __cdecl hook_carry_rider(void *world, uint8_t *ground)
     float            before;
     float            fell;
 
-    if (ground == NULL || !is_crusher(*(const uint8_t *const *)(ground + GROUND_MOVER))) {
+    if (!rider.armed || ground == NULL ||
+        !is_crusher(*(const uint8_t *const *)(ground + GROUND_MOVER))) {
         original(world, ground);
         return;
     }
@@ -101,21 +103,21 @@ static void __cdecl hook_carry_rider(void *world, uint8_t *ground)
     }
     *(float *)(ground + GROUND_RIDER_Z) = before;
 
-    if (creeping_mover_note(&rider.creeping,
-                            *(const uint32_t *)(
-                                *(const uint8_t *const *)(ground + GROUND_MOVER) + MOVER_ID))) {
+    {
+    const uint8_t *mover = *(const uint8_t *const *)(ground + GROUND_MOVER);
+
+    if (creeping_mover_note(&rider.creeping, *(const uint32_t *)(mover + MOVER_ID), mover)) {
         log_info("crusher %u creeps down at %.5f of a unit a tick and is no longer carrying "
                  "characters. At that rate it is transporting nobody anywhere, and the only "
                  "thing carrying a rider on it achieves is to sink them through the floor. Every "
                  "genuine platform in the shipped levels moves at least twenty times faster and "
                  "is untouched",
-                 (unsigned)*(const uint32_t *)(
-                     *(const uint8_t *const *)(ground + GROUND_MOVER) + MOVER_ID),
-                 (double)fell);
+                 (unsigned)*(const uint32_t *)(mover + MOVER_ID), (double)fell);
+    }
     }
 }
 
-/* HALF TWO, and without it the first half achieves nothing.
+/* Half two, and without it the first half achieves nothing.
  *
  * Refusing the carry only stops one of the two ways a crusher takes a character down with it. The
  * ground snap is the other: it pulls an actor onto any floor within 0.35 units below their feet,
@@ -135,9 +137,9 @@ static void __cdecl hook_snap_to_ground(uint8_t *actor, void *position)
 
     /* The same mover the carry refused, recognised by the set it recorded, and only while the
      * floor is BELOW the feet: a negative distance means the snap would pull the character down
-     * onto the creeping surface, while a positive one would lift them, which is the engine
-     * putting somebody back on top of something and is left alone. */
-    if (actor != NULL &&
+     * onto the creeping surface, while a positive one would lift them; that is the engine putting
+     * somebody back on top of something, and it is left alone. */
+    if (rider.armed && actor != NULL &&
         is_crusher(*(const uint8_t *const *)(actor + CHARACTER_GROUND_MOVER)) &&
         is_known_creeper(*(const uint8_t *const *)(actor + CHARACTER_GROUND_MOVER)) &&
         *(const float *)(actor + CHARACTER_GROUND + GROUND_DISTANCE) < 0.0f) {
@@ -169,9 +171,11 @@ bool rider_floor_install(void)
         return false;
     }
 
-    /* BOTH OR NEITHER. Either half on its own leaves the fault in place, the first because the snap
-     * puts the character back onto the descending polygon and the second because the carry moves it
-     * there first, so a partial install would report success and change nothing. */
+    /* Both or neither. Either half on its own leaves the fault in place, the first because the
+     * snap puts the character back onto the descending polygon and the second because the carry
+     * moves it there first, so a partial install would report success and change nothing. A detour
+     * cannot be taken out, so the half that did go in is left passing every call straight through:
+     * the hooks act only once `armed` says the pair is whole. */
     if (!detour_install(&rider.carry, carry, (const void *)hook_carry_rider,
                         CARRY_RIDER_PROLOGUE)) {
         log_warning("the rider carry at %08X could not be detoured, so a crusher still takes "
@@ -180,11 +184,12 @@ bool rider_floor_install(void)
     }
     if (!detour_install(&rider.snap, snap, (const void *)hook_snap_to_ground,
                         SNAP_TO_GROUND_PROLOGUE)) {
-        log_warning("the ground snap at %08X could not be detoured. The rider carry is already "
-                    "hooked and stays so, which on its own slows the fall rather than stopping it",
-                    (unsigned)snap);
+        log_warning("the ground snap at %08X could not be detoured. The rider carry is hooked and "
+                    "cannot be unhooked, so it passes every call through and a crusher still "
+                    "takes characters down with it", (unsigned)snap);
         return false;
     }
+    rider.armed = true;
 
     log_info("a crusher no longer takes characters down with it, guarded at both places it did: "
              "the rider carry at %08X and the ground snap at %08X. Measured in the final level's "

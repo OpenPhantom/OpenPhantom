@@ -1,7 +1,7 @@
 /* menu_cursor_cells.c: the drawn menu cursor's position, found by pattern and written directly.
  *
  * ==============================================================================================
- * THE DEFECT THIS SERVES
+ * The defect this serves
  *
  * The message pump in vlc_playback.c is scoped to the overlay's own window, so the game window's
  * WM_MOUSEMOVE messages are no longer eaten while a movie plays; they queue up, unprocessed, for
@@ -17,7 +17,7 @@
  * both times, so a resolution mismatch was not the cause either.
  *
  * ==============================================================================================
- * WHY: THE POSITION IS AN ACCUMULATOR
+ * Why: the position is an accumulator
  *
  * The window procedure's WM_MOUSEMOVE case, reached only after the engine's own recentring call
  * at 0x0046A115 has confirmed the message is real movement rather than the echo of its own warp:
@@ -38,14 +38,14 @@
  *   00460C41  8B 15 5C FD 6C 00     mov   edx,[g_menuOriginY]          ; 0x006CFD5C
  *   ...       clamp g_menuCursorY to [originY, originY+0x1BF]
  *
- * So a synthetic move only ever ADDS a delta to whatever the cells already held, which is why
+ * A synthetic move therefore only ever ADDS a delta to whatever the cells already held, and
  * warping could not put the drawn cursor anywhere in particular. Writing the cells does, with no
  * message, no prior value and no resolution-dependent arithmetic involved at all. The two origin
  * cells are the same pair the resolution fix's cursor cage documents, which is a cross-check on
  * all four addresses from a second, independently written direction.
  *
  * ==============================================================================================
- * WHY THIS IS A PATTERN AND NOT FOUR CONSTANTS
+ * Why this is a pattern and not four constants
  *
  * Because the constants are wrong on a build that ships with the game. Measured over every image
  * to hand: the block above sits at 0x00460BCC in all five retail executables, including the German
@@ -118,8 +118,8 @@ _Static_assert(sizeof(SIG_CURSOR_ACCUMULATOR) == sizeof(MSK_CURSOR_ACCUMULATOR),
 #define OFFSET_ORIGIN_X_LOAD   0x39u
 
 /* `mov edx,[originY]`, measured from the match base. The clamp between it and the match is
- * straight-line code of fixed length in every image measured, which is what makes the distance a
- * constant worth checking rather than a constant worth trusting. */
+ * straight-line code of fixed length in every image measured, so the distance is a constant
+ * worth checking rather than a constant worth trusting. */
 #define OFFSET_ORIGIN_Y_SITE   0x75u
 #define ORIGIN_Y_OPERAND       0x02u
 static const uint8_t ORIGIN_Y_HEAD[] = { 0x8B, 0x15 };
@@ -151,13 +151,9 @@ static bool read_cell(uintptr_t site, size_t offset, const char *what, uintptr_t
     uint32_t address = 0;
 
     *out = 0;
-    if (!memory_read_u32(site + offset, &address) || address == 0) {
-        log_warning("the %s operand at %08X could not be read", what, (unsigned)(site + offset));
-        return false;
-    }
-    if (!memory_is_inside_image((uintptr_t)address, sizeof(uint32_t))) {
-        log_warning("the %s operand reads back as %08X, outside the host image, refused", what,
-                    (unsigned)address);
+    if (!memory_read_image_cell(site + offset, sizeof(uint32_t), &address)) {
+        log_warning("the %s operand at %08X does not name a readable cell inside the image, "
+                    "refused", what, (unsigned)(site + offset));
         return false;
     }
     *out = (uintptr_t)address;

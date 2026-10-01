@@ -9,9 +9,10 @@
  * and this DLL adds a third term after that store, mouse look's per-frame view lead, which is
  * reported here as itself.
  *
- * Three terms, so a jump has three possible authors and printing all of them settles it. The line also carries
- * the raw inputs of the first term, because "the interpolated heading moved" has three quite
- * different causes and they are distinguishable only from headPrevious, headCurrent and the alpha:
+ * Three terms, so a jump has three possible authors and printing all of them settles it. The line
+ * also carries the raw inputs of the first term, because "the interpolated heading moved" has
+ * three quite different causes, distinguishable only from headPrevious, headCurrent and the
+ * alpha:
  *
  *   * both headings moved together        -> the body really turned that far
  *   * the headings barely moved           -> the alpha did it, and it left (0,1]
@@ -35,12 +36,15 @@
 
 #define INPUT_SECTION "enhanced_input"
 
-/* Degrees the camera may turn in ONE rendered frame before the turn is worth a line. At 90 frames
- * per second 25 degrees is 2250 deg/s, which no ordinary frame of play reaches: the engine's own
- * turn ceiling is 120 deg/s and the mouse bolt cuts a hand off at 3000. It is deliberately well
- * below the reported symptom, "it whips completely round", so that the smaller swings leading
- * up to one are caught too. */
-#define DEFAULT_JUMP_DEGREES 25.0f
+/* Degrees the camera may turn in ONE rendered frame before the turn is worth a line. Off, the
+ * same as the shipped file and the README both say. It was 25, so an installation whose
+ * engine_fixes.ini predates the key armed a measurement nobody asked for and wrote a line every
+ * time the camera moved that far. 25 is still the number worth typing to turn it on: at 90 frames
+ * per second it is 2250 deg/s, which no ordinary frame of play reaches, since the engine's own
+ * turn ceiling is 120 deg/s and the mouse bolt cuts a hand off at 3000, and it is well below the
+ * reported symptom, "it whips completely round", so the smaller swings leading up to one are
+ * caught too. */
+#define DEFAULT_JUMP_DEGREES 0.0f
 #define MIN_JUMP_DEGREES      1.0f
 #define MAX_JUMP_DEGREES    180.0f
 
@@ -80,7 +84,10 @@ void camera_watch_install(const camera_sites_t *sites)
     }
 
     threshold = ini_read_float(INPUT_SECTION, "CameraJumpWatchDeg", DEFAULT_JUMP_DEGREES);
-    if (threshold <= 0.0f) {          /* also catches NaN: switched off by configuration */
+    /* The NOT is what catches a value that is not a number. Written as `<= 0.0f` this let one
+     * through, and a NaN threshold fails the `fabsf(delta) < threshold` test below on every
+     * frame, so every frame was a camera jump. */
+    if (!(threshold > 0.0f)) {        /* switched off by configuration, or not a number */
         return;
     }
     if (threshold < MIN_JUMP_DEGREES) {
@@ -133,7 +140,7 @@ void camera_watch_sample(void)
     }
 
     view = (const uint8_t *)*watch_state.sites->view;
-    if (view == NULL || !memory_is_readable_range((uintptr_t)view, BAPVIEW_READ_SIZE)) {
+    if (view == NULL || !memory_try_readable((uintptr_t)view, BAPVIEW_READ_SIZE)) {
         /* No camera object this frame, a load, or the front end. The previous yaw is dropped so
          * that the first frame of the next one is not measured against a stale number and reported
          * as a jump it never made. */
@@ -176,7 +183,7 @@ void camera_watch_sample(void)
 
     /* The two terms are printed beside the result they compose, so the line can be checked against
      * itself: wrap360(interp + offset) must be the yaw. Where it is not, the reader is looking at a
-     * third writer, and that is the finding. */
+     * third writer. That is the finding. */
     log_warning("CAMERA JUMP %+.1f deg in one frame -> yaw %.1f. interp %.1f = prev %.1f + "
                 "wrap180(cur %.1f, prev) * alpha %.3f, offset %.1f, view lead %+.2f. Region "
                 "%08X flags %02X, authored yaw %.1f. gOver %d, snap %d, camera state %d. Composed "

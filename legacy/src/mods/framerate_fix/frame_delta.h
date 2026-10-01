@@ -24,4 +24,9 @@
 /* Installs the frame time repair. Safe to call more than once; the second call does nothing. */
 void frame_delta_install(bool enabled);
 
+/* Whether the detour on sys_waitForFrame is in place. The optional sleep ahead of the engine's
+ * wait runs from it, so with PreciseFrameTime=0 or an unresolved site there is nothing to sleep
+ * from. */
+bool frame_delta_hooked(void);
+
 #endif /* FRAME_DELTA_H */

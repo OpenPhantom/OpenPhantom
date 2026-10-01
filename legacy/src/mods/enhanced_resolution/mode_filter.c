@@ -1,7 +1,7 @@
 /* mode_filter.c: keep the engine's 64 mode slots for modes it can actually use.
  *
  * ==============================================================================================
- * THE CEILING, and why it is not the one everybody looks at
+ * The ceiling, and why it is not the one everybody looks at
  *
  * The options screen shows what graphics_buildModeList produced, and that list is capped by this
  * DLL at MaxMenuModes. Every field report about missing resolutions gets blamed on that cap, and
@@ -27,11 +27,11 @@
  *
  * So on a driver that reports 8, 16 and 32 bit, two of every three recorded slots are spent on
  * modes that are thrown away later, and the 64 run out after roughly 21 usable resolutions. Which
- * 21 depends on the order the driver enumerates in, which is why the list differs from machine to
- * machine and why one user sees every resolution and the next sees a third of them.
+ * 21 depends on the order the driver enumerates in, so the list differs from machine to machine,
+ * and one user sees every resolution while the next sees a third of them.
  *
  * ==============================================================================================
- * WHAT THIS DOES
+ * What this does
  *
  * It answers the callback itself for the modes that cannot survive the later test, and returns
  * DDENUMRET_OK without letting them consume a slot:
@@ -43,7 +43,7 @@
  * the engine would have kept is dropped, and the enumeration is never cancelled early by us.
  *
  * "Usable" is doing real work in that second line. A record can be 16-bit RGB and still be turned
- * away by graphics_findMode, which additionally wants five bits in each channel, so a duplicate is
+ * away by graphics_findMode, which also wants five bits in each channel, so a duplicate is
  * only suppressed when the record already holding that size would satisfy that test too. Without
  * it a driver that offered one size twice, narrow first and 565 second, would end up with only
  * the narrow record and a resolution that no longer resolves at all.
@@ -54,7 +54,7 @@
  * per refresh rate as well, and then a single resolution can eat a dozen slots on its own.
  *
  * ==============================================================================================
- * WHAT IT CANNOT DO
+ * What it cannot do
  *
  * Two ceilings sit between this and "every resolution Windows offers", and neither is ours:
  *
@@ -153,7 +153,7 @@ _Static_assert(sizeof(SIG_ENUM_CALLBACK) == sizeof(MSK_ENUM_CALLBACK),
 #include "mode_depth.h"
 
 /* DDENUMRET_OK. Returning this without calling the engine's callback is exactly "I have seen this
- * mode, carry on", which is what skipping means here. */
+ * mode, carry on", the meaning of skipping here. */
 #define DDENUMRET_OK 1
 
 typedef int32_t (__stdcall *enum_callback_fn_t)(void *desc, void *context);
@@ -181,9 +181,9 @@ static mode_filter_state_t filter_state;
  * callback we sit in front of, and the counter is incremented last, after every field of a record
  * is written, so everything below the count is complete.
  *
- * The channel test is what makes "nothing the engine would have kept is dropped" true rather than
- * nearly true. A record too narrow for graphics_findMode does not suppress anything: the next
- * copy of that resolution is allowed through, which is exactly what the engine relies on.
+ * The channel test makes "nothing the engine would have kept is dropped" true rather than nearly
+ * true. A record too narrow for graphics_findMode does not suppress anything: the next copy of
+ * that resolution is allowed through, exactly what the engine relies on.
  *
  * The reads are the faulting kind. The table was range checked once at install, so asking the
  * operating system again on every one of up to 64 records, on every mode the driver offers, would

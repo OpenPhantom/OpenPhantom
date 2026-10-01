@@ -3,10 +3,11 @@
  * The key is [enhanced_input] MouseDegreesPerCount: how far the view turns for one count from the
  * mouse. A slider, because it is the setting in this whole panel that can only be found by feel.
  *
- * IT EXISTS BECAUSE THE GAME'S OWN SCREEN NO LONGER OFFERS IT. Mouse look ships on, which is a real
- * change from the original, and the sensitivity slider that came with it sat on the controls screen
- * the game shipped without one. That screen is vanilla by default now, so the adjustment had to go
- * somewhere, and a feature that ships on with no way to tune it would be worse than either.
+ * It exists because the game's own screen no longer offers it. Mouse look ships on, which is a
+ * real change from the original, and the sensitivity slider that came with it sat on the controls
+ * screen the game shipped without one. That screen is vanilla by default now, so the adjustment
+ * had to go somewhere, and a feature that ships on with no way to tune it would be worse than
+ * either.
  *
  * The ends are the same band the in-game slider used, so the two agree about what is adjustable
  * rather than offering different ranges for one number.

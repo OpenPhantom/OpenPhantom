@@ -1,7 +1,7 @@
 /* cheats_no_fog.c: see cheats_no_fog.h.
  *
  * ==============================================================================================
- * THE SITE, REUSED FROM fog_regime.c RATHER THAN RE-DERIVED
+ * The site, reused from fog_regime.c rather than re-derived
  *
  * view_distance_fix's fog_regime.c already proved, in full, that the live world pointer, g_level,
  * can be read out of bapdraw_setFrameState's own operands with a cross check that costs nothing:
@@ -25,7 +25,7 @@
  * proven correct in one file does not need proving a second time in another, only citing.
  *
  * ==============================================================================================
- * FIRST VERSION CLEARED THE FLAG BIT. FIELD TESTING FOUND THAT BREAKS THE RENDERER.
+ * First version cleared the flag bit. Field testing found that breaks the renderer.
  *
  * The first version of this cheat cleared world+0x210 bit 0 every frame, "this world has fog",
  * off. Field testing found that leaves every moving actor (the player, fish, foliage) drawn as a
@@ -44,14 +44,14 @@
  * authored it, which is the one thing field testing showed matters.
  *
  * ==============================================================================================
- * WHY A PER-FRAME FORCE, NOT ONE WRITE, AND WHY IT REMEMBERS THE BAND RATHER THAN DECLINING
+ * Why a per-frame force, not one write, and why it remembers the band rather than declining
  *
  * Ammunition and health are each spent through one function this project can decline. Fog is not
  * spent through anything: it is two floats the renderer reads directly out of the level record
  * every frame, and the record is freed and replaced whole on every level load, so a single write at
  * the moment the cheat is switched on would last exactly until the next level change undoes it.
  * Holding the band out every frame, through the same common/frame_hook.h tick fog_regime.c already
- * uses for its own easing, is what makes the cheat survive a level change rather than needing to be
+ * uses for its own easing, carries the cheat through a level change rather than needing it
  * pressed again after every one.
  *
  * A first version of THIS file also declined to restore anything on the way back off, the same
@@ -106,7 +106,6 @@ _Static_assert(sizeof(SIG_LEVEL_POINTER) == sizeof(MSK_LEVEL_POINTER),
 #define WORLD_FOG_BIT            0x001u  /* bit 0 = this level authored fog at all */
 #define WORLD_FOG_START          0x218u  /* float, world units; never written past this level's */
 #define WORLD_FOG_END            0x21Cu  /* float, world units; own authored band without asking */
-#define WORLD_PROBE_SIZE         (WORLD_FOG_END + sizeof(float))
 
 /* Comfortably past the world walk's own draw-distance clamp of [2,64] world units, at
  * 0x00404F33. Nothing the renderer still has in view at these depths,
@@ -128,8 +127,8 @@ typedef struct no_fog_state {
     void *volatile  *level_pointer;   /* [g_level], the same site fog_regime.c reads */
 
     /* The level currently remembered, the band it was authored with (captured once, before this
-     * file ever wrote to it), and the band this file itself last wrote, which is what tells the
-     * next frame whether the record still holds ours or has been freed and reallocated under us. */
+     * file ever wrote to it), and the band this file itself last wrote, so the next frame can
+     * tell whether the record still holds ours or has been freed and reallocated under us. */
     void            *remembered_level;
     void            *last_seen_level;   /* only to notice a level change; see the tick */
     bool             have_authored;
@@ -178,16 +177,16 @@ static void tick(void)
         cheats_openphantom_resume_jump_boost();
     }
 
-    if (level == NULL || !memory_is_readable_range((uintptr_t)level, WORLD_PROBE_SIZE)) {
-        forget_level();
-        return;
-    }
-    if (!memory_read_u32((uintptr_t)level + WORLD_RENDER_FLAGS, &flags) ||
+    /* The faulting reads rather than the asking ones. This runs every frame for the life of the
+     * process, cheat on or off, and the asking form was three VirtualQuery walks a frame on a
+     * pointer the engine itself dereferences a moment later. */
+    if (level == NULL ||
+        !memory_try_read_u32((uintptr_t)level + WORLD_RENDER_FLAGS, &flags) ||
         (flags & WORLD_FOG_BIT) == 0) {
         forget_level();                /* this level authored no fog: nothing to remember or push */
         return;
     }
-    if (!memory_read((uintptr_t)level + WORLD_FOG_START, band, sizeof band)) {
+    if (!memory_try_read((uintptr_t)level + WORLD_FOG_START, band, sizeof band)) {
         forget_level();
         return;
     }
@@ -281,7 +280,7 @@ bool cheats_no_fog_toggle(void)
 
     /* Remembered for the next run, and deliberately not conditional on the write succeeding. This
      * is a cheat rather than a setting: its point is the effect on the picture in front of the
-     * player, so a read-only ini costs the memory of the choice and nothing else. The rows that
+     * player, so a read-only ini costs only the memory of the choice. The rows that
      * refuse on a failed write are the ones whose whole effect IS the file. */
     if (!ini_write_int(NO_FOG_SECTION, NO_FOG_KEY, st.on ? 1 : 0)) {
         log_warning("no fog: switched %s, but %s could not be written, so this run is the only one "

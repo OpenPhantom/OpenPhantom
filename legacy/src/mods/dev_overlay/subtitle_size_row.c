@@ -4,6 +4,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/text.h"
 
 #include <stdio.h>
 
@@ -40,8 +41,7 @@ void subtitle_size_row_format(float scale, char *out, size_t size)
     if (out == NULL || size == 0u) {
         return;
     }
-    (void)_snprintf(out, size - 1u, "%.2fx", (double)scale);
-    out[size - 1u] = '\0';
+    text_format(out, size, "%.2fx", (double)scale);
 }
 
 float subtitle_size_row_get(void)
@@ -55,7 +55,7 @@ float subtitle_size_row_get(void)
     if (!subtitle_size_row_parse(buffer, &value)) {
         return SUBTITLE_SIZE_DEFAULT;
     }
-    /* ZERO IS NOT SHOWN AS ZERO. It is enhanced_resolution's spelling for "leave the engine's own
+    /* Zero is not shown as zero. It is enhanced_resolution's spelling for "leave the engine's own
      * shrinking size alone", and it sits outside the band this row offers, so there is no honest
      * place to put a handle for it. The row reports the default instead, and a player who wants the
      * engine's own behaviour back sets 0 in the file, where the comment explains it. */

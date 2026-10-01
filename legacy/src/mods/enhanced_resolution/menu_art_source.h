@@ -10,7 +10,7 @@
  * the originals.
  *
  * The engine mounts a chain of resource sources and asks each in turn, and it already promotes the
- * install root to the head of that chain, which is why a loose file beside WMAIN.EXE beats big.lab.
+ * install root to the head of that chain, so a loose file beside WMAIN.EXE beats big.lab.
  * That was how this worked while it was being proven, and it is a poor thing to ask of somebody's
  * game folder: about seventy loose BMPs with names like `stars.BMP` sitting next to the executable,
  * with no way to tell them from anything else and no clean way to undo it.
@@ -39,7 +39,7 @@
 #define MENU_ART_DEFAULT_DIRECTORY "menu_hd"
 
 /* Arms the mount. `directory` is the MenuArtDirectory ini value; an empty string or NULL means the
- * default above. Passing false for `enabled` declines, which is what a reader gets by setting
+ * default above. Passing false for `enabled` declines, the result of setting
  * MenuArtDirectory= to nothing.
  *
  * The folder is NOT mounted here: this only hooks swmenu_startup, and the mount happens the first

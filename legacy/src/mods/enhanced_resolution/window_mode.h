@@ -1,4 +1,5 @@
-/* window_mode.h: let the player choose the shape of the window, instead of the one the engine picks.
+/* window_mode.h: let the player choose the shape of the window, instead of the one the engine
+ * picks.
  *
  * ==============================================================================================
  * The engine already switches window styles, and the one it picks is wrong on a modern display
@@ -39,7 +40,7 @@
  *
  * That site alone is not enough. It fires once per session, and by the time it does the first
  * device already exists: the same function calls graphics_setResolution fifty one bytes earlier, at
- * 0x0043F50F, and that is where DirectDraw is first asked for anything. A window shaped only from
+ * 0x0043F50F, where DirectDraw is first asked for anything. A window shaped only from
  * the later site is therefore shaped after the first device was built against the shape it
  * replaced. That was observed: a graphics wrapper reported the window as the full desktop at device
  * creation and our rectangle only later, and the movie player, which sizes its child window from
@@ -53,10 +54,11 @@
  * ==============================================================================================
  * What this does NOT do
  *
- * It changes the window and not the device. Whether the device owns the display is WindowedPresent,
- * in windowed_device.h, and the two are independent settings. With WindowedPresent off the device is
- * still exclusive fullscreen, so a borderless window here is a borderless window over a device that
- * owns the screen, and alt-tab still costs a reset and a texture re-upload.
+ * It changes the window and not the device. Whether the device owns the display is
+ * WindowedPresent, in windowed_device.h, and the two are independent settings. With
+ * WindowedPresent off the device is still exclusive fullscreen, so a borderless window here is a
+ * borderless window over a device that owns the screen, and alt-tab still costs a reset and a
+ * texture re-upload.
  */
 #ifndef WINDOW_MODE_H
 #define WINDOW_MODE_H
@@ -93,11 +95,12 @@ typedef enum window_mode_kind {
      *
      * The note above says WS_THICKFRAME is deliberately left out, and until the present started
      * scaling that was right: the window procedure handles no WM_SIZE, the class word at 0x00498F74
-     * is a literal zero so there is no CS_HREDRAW, and the engine publishes its render size once per
-     * mode set, so a dragged edge changed nothing about what was drawn. What changed is underneath.
-     * With WindowedPresent the picture is scaled to the client area at present time, so the client
-     * can be any size and the engine neither knows nor needs to: it keeps rendering its own mode and
-     * the result is stretched to fit. The engine is still not told, and still does not need to be.
+     * is a literal zero so there is no CS_HREDRAW, and the engine publishes its render size once
+     * per mode set, so a dragged edge changed nothing about what was drawn. What changed is
+     * underneath. With WindowedPresent the picture is scaled to the client area at present time,
+     * so the client can be any size and the engine neither knows nor needs to: it keeps rendering
+     * its own mode and the result is stretched to fit. The engine is still not told, and still
+     * does not need to be.
      *
      * The picture will hold still while a drag is in progress, because Windows runs a modal loop
      * inside the drag and the game's own loop is not being serviced. It catches up when the mouse
@@ -135,13 +138,13 @@ typedef struct window_mode_config {
  * broken one. Returns true only when the window really follows the setting from now on. */
 bool window_mode_install(const window_mode_config_t *config);
 
-/* Changes the shape while the game is running, which is what the dev panel's Window group does.
+/* Changes the shape while the game is running, as the dev panel's Window group does.
  * Only the three things a player can choose are settable: whether the device is windowed is not,
  * because that is decided once when the device is built.
  *
  * Returns false when nothing was installed to begin with, so a caller can tell a refused change
  * from one that had no effect. Applying the same values again is allowed and does nothing
- * visible, which is what lets a poll call it without comparing first. */
+ * visible, so a poll can call it without comparing first. */
 bool window_mode_reapply(int32_t mode, int32_t windowed_width, int32_t windowed_height);
 
 /* The client size a mode would ask for, answered against the monitor the window is really on and
@@ -174,7 +177,7 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
                              int32_t wanted_width, int32_t wanted_height,
                              window_mode_rect_t *out);
 
-/* Shrinks a client rectangle until the WINDOW AROUND IT fits the monitor, and recentres it.
+/* Shrinks a client rectangle until the window around it fits the monitor, and recentres it.
  *
  * `frame_width` and `frame_height` are the pixels the border and caption add to a client, which is
  * zero for the borderless modes and about 22 by 56 for a framed one at the usual metrics.
@@ -184,7 +187,7 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
  * answers what will actually fit, and it needs a number that can only be measured from a live
  * window. Keeping them apart is also what lets the second be checked without one.
  *
- * WHY IT MATTERS BEYOND THE WINDOW LOOKING RIGHT. The size that survives this is the size written
+ * Why it matters beyond the window looking right. The size that survives this is the size written
  * into the game's own settings file as the resolution to render at. Without it, choosing the
  * monitor's own resolution in a framed mode wrote a render size the window could never be: the
  * outer window came out larger than the screen, its caption above the top of it, and the picture

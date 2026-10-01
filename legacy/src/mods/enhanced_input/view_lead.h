@@ -142,9 +142,9 @@ bool view_lead_is_active(void);
  *
  * `view_lead_take_substep` is called once per simulation step, at the top of the steering phase
  * and before any gate, exactly where the engine's own per-step drain is called and for the same
- * reason: taking is what marks a step as having consumed. It is passed what that drain already
- * handed over, because the total of the two is what the body is about to turn by and therefore
- * what the camera must stop drawing. It returns the banked degrees, for the caller to add to its
+ * reason: taking marks a step as having consumed. It is passed what that drain already handed
+ * over, because the total of the two is what the body is about to turn by and therefore what the
+ * camera must stop drawing. It returns the banked degrees, for the caller to add to its
  * own step, and answers zero while the feature is off.
  *
  * A step that then declines to turn the body is not a special case and needs no signal. The bank
@@ -163,7 +163,7 @@ void view_lead_release(void);
 float view_lead_current(float alpha);
 
 /* ==============================================================================================
- * The measurement, which is what decides whether any of this worked.
+ * The measurement, and it decides whether any of this worked.
  *
  * It runs whether the feature is on or off, because the number it produces only means anything
  * against the same sweep with the key at the other setting.

@@ -20,10 +20,10 @@
  *   0044A2BA  D835 D0864A00            fdiv [0x4A86D0] = 10.0
  *             ...                      setNodeYaw(hActor, [pPlr+0x54], that)
  *
- * The clamp is the engine's KEYBOARD turn ceiling, and it is kept because it is what sizes the
- * pose: a wrist flick is 1200-1800 deg/s, and without the clamp the chest would twist by hundreds
- * of degrees. With it the twist saturates at the authored maximum, which is what the shipped game
- * shows when a player holds a turn key.                                                        */
+ * The clamp is the engine's KEYBOARD turn ceiling, and it is kept because it sizes the pose: a
+ * wrist flick is 1200-1800 deg/s, and without the clamp the chest would twist by hundreds of
+ * degrees. With it the twist saturates at the authored maximum, as the shipped game does when a
+ * player holds a turn key.                                                                     */
 #define LEAN_CLAMP_DEGREES_PER_SECOND 120.0f
 #define LEAN_CHEST_DIVISOR             12.0f
 #define LEAN_HEAD_DIVISOR              10.0f
@@ -76,7 +76,7 @@ static bool report(const char *status)
     return false;
 }
 
-/* THE BISECTION KNOB, and it exists because a subtle effect cannot be told apart from no effect.
+/* The bisection knob, and it exists because a subtle effect cannot be told apart from no effect.
  *
  * The measurement so far says the ENGINE ITSELF writes this twist every substep the mouse moves,
  * and that it is still not visible. Either something overwrites the two nodes after Plr_Steer, or a
@@ -85,7 +85,7 @@ static bool report(const char *status)
  * miss, so if the body does not visibly twist, the node path is the defect and everything built on
  * top of it is moot.
  *
- * It is a diagnostic, not a feature: it ignores the turn, the damper and the clamp. */
+ * It is a diagnostic, not a feature: it ignores the turn, the hand rate and the clamp. */
 void steer_lean_set_test_degrees(float degrees)
 {
     lean_state.test_degrees = degrees;
@@ -135,29 +135,6 @@ static float clamp_rate(float rate)
     return rate;
 }
 
-bool steer_lean_aim(const uint8_t *record, float degrees)
-{
-    void    *body;
-    uint32_t chest_node;
-
-    if (lean_state.set_node_yaw == NULL || record == NULL || !isfinite(degrees)) {
-        return false;
-    }
-    body       = *(void *const *)(record + PLAYER_ACTOR);
-    chest_node = *(const uint32_t *)(record + PLAYER_CHEST_NODE);
-    if (body == NULL || chest_node == 0u) {
-        return false;               /* index 0 is the finder's failure answer, not a valid node */
-    }
-
-    lean_state.set_node_yaw(body, chest_node, degrees);
-    last_report.status      = "aim";
-    last_report.chest_node  = chest_node;
-    last_report.raw_rate    = degrees;
-    last_report.applied_rate = degrees;
-    last_report.wrote_chest = true;
-    last_report.wrote_head  = false;
-    return true;
-}
 
 bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
                       bool keyboard_is_turning, float substep_seconds)
@@ -211,8 +188,8 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
         return report("no-nodes");
     }
 
-    /* The forced angle short-circuits the whole computation, including the damper, so what lands in
-     * the node is exactly the number in the ini and nothing else can be blamed for it. */
+    /* The forced angle short-circuits the whole computation, the rate choice and the clamp, so
+     * what lands in the node is exactly the number in the ini. */
     if (lean_state.test_degrees != 0.0f) {
         last_report.status      = "FORCED";
         last_report.raw_rate    = lean_state.test_degrees;
@@ -224,12 +201,12 @@ bool steer_lean_apply(const uint8_t *record, float engine_rate, float hand_rate,
         return true;
     }
 
-    /* THE ENGINE'S NUMBER, OR THE HAND'S. It used to be the engine's always, because that value is
+    /* The engine's number, or the hand's. It used to be the engine's always, because that value is
      * authentic by construction. True of a key, false of a mouse, and the difference is one branch:
      *
      *   00449F9C  E8 ..                    call the relative axis reader   ; the mouse turn
      *   00449FA7  D8 1D A4864A00           fcomp 0.0
-     *   0044A068  D8 0D DC864A00           fmul  6.0                       ; THE MOUSE ARM:
+     *   0044A068  D8 0D DC864A00           fmul  6.0                       ; the mouse arm:
      *   0044A077  D8 81 A4020000           fadd  turnWheel                 ;   turnWheel += ax * 6
      *   0044A08E  6A 00 / E8 ..            call the absolute axis reader   ; then the keys
      *   0044A0A6  0F 85 42 01 00 00        jne  0x0044A1EE                 ; neither axis moved

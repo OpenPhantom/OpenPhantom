@@ -1,11 +1,11 @@
 /* sim_pause.h: stop the simulation while the panel is open, using the engine's own pause flag.
  *
- * WHY THIS EXISTS SEPARATELY FROM input_freeze.c. That file answers the two functions the game
+ * Why this exists separately from input_freeze.c. That file answers the two functions the game
  * reads input through with "nothing pressed", which stops the player taking orders. It does not
- * stop the world: NPCs keep walking, movers keep moving and timers keep running behind the panel,
- * which is exactly what a player notices when they open the overlay mid fight.
+ * stop the world: NPCs keep walking, movers keep moving and timers keep running behind the
+ * panel, and a player opening the overlay mid fight notices all of it.
  *
- * WHAT THE ENGINE ALREADY DOES. sys_frame gates its own simulation step on a flag:
+ * What the engine already does. sys_frame gates its own simulation step on a flag:
  *
  *     0043EA13  83 3D <g_disabled> 00   cmp  dword ptr [DAT_00881344],0
  *     0043EA1A  75 13                   jnz  past the step
@@ -19,7 +19,7 @@
  * keeps being drawn and the panel keeps being visible. Nothing has to be hooked: this is a flag the
  * frame function reads for itself every frame, and writing it is all a pause needs.
  *
- * WHAT THIS DELIBERATELY DOES NOT DO. gameplay_open_pause_menu also broadcasts task command 8 on
+ * What this deliberately does not do. gameplay_open_pause_menu also broadcasts task command 8 on
  * the way in and 9 on the way out, which is how it pauses audio as well. This does not, for a
  * specific reason: the pause broadcast only marks a task paused when its handler returns 0, and
  * iMUSE's handler returns 2, so the mark is never set and the matching resume never fires ImResume.
@@ -30,7 +30,7 @@
  * The previous value is remembered and restored rather than cleared to zero, so opening the panel
  * while the game is already paused for its own reasons cannot un-pause it on the way out.
  *
- * WHY THERE ARE HOLDERS RATHER THAN A SINGLE FLAG. Two features in this DLL want the simulation
+ * Why there are holders rather than a single flag. Two features in this DLL want the simulation
  * stopped and they can be on at the same time: the panel while it is open, and the free camera
  * for as long as it is flying. The free camera used to write the cell itself, which is how the
  * two of them broke each other. Turn the free camera on, open the panel so this remembers a 1,
@@ -41,6 +41,19 @@
  * So the cell has exactly one writer now, and callers say who they are. The value underneath is
  * captured when the FIRST holder takes it and put back when the LAST one lets go, which keeps the
  * original promise above and makes it hold for any number of holders rather than only one.
+ *
+ * The animations are a second cell. The puppet tracks are not advanced by the simulation but by
+ * the draw: bapobj's draw pass steps every object's four tracks by the frame delta each frame it
+ * draws them, so with the substeps skipped every walk cycle still runs, on the spot, and every
+ * idle sways. The engine's own pause menu stops that through a latch of its own, g_objDrawPaused
+ * (written by the one-line pair bapobj_drawPause and bapobj_drawResume at 0x00411019 and
+ * 0x0041100A, set from the module's pause message and cleared from its resume), which the draw
+ * pass tests before stepping a track and which also holds the interpolation alpha at its last
+ * value, so the world keeps its exact sub-frame position. This writes the same latch beside the
+ * simulation flag while the pause is in force, when asked to (sim_pause_set_freeze_animation,
+ * off as shipped),
+ * with the same capture and restore as the flag's; an object flagged to animate while paused
+ * still does, as the engine intends for it.
  */
 #ifndef DEV_OVERLAY_SIM_PAUSE_H
 #define DEV_OVERLAY_SIM_PAUSE_H
@@ -66,5 +79,20 @@ typedef enum sim_pause_holder {
  * while any holder has it, and the value from before the first one is restored when the last
  * lets go. */
 void sim_pause_hold(sim_pause_holder_t who, bool held);
+
+/* Whether a pause also stops the animations, through the engine's own draw latch. Off by
+ * default; the row in the Free camera group and [dev_overlay] PauseFreezesAnimation drive it.
+ * Takes effect at once on a pause already in force. */
+void sim_pause_set_freeze_animation(bool freeze);
+bool sim_pause_freeze_animation(void);
+
+/* Whether the draw latch resolved, for the row that has to show why it cannot act. */
+bool sim_pause_freeze_animation_is_available(void);
+
+/* Lets the simulation run under the holders, or stops it again. The free camera's "world runs"
+ * switch: the holders stay as they are, so the accounting above is untouched and the flight's
+ * end and the panel's close still put the right value back; only what the cell says while a
+ * holder has it changes. Idempotent, so a caller may drive it every frame. */
+void sim_pause_let_run(bool run);
 
 #endif /* DEV_OVERLAY_SIM_PAUSE_H */

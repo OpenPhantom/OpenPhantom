@@ -7,7 +7,7 @@
  * Design 1 played movies through Windows' own Media Foundation (MFPlay), in-process, in a window
  * owned by the game. It flickered black for the whole length of every movie. Five fixes for that,
  * each chasing a real hypothesis, each verified insufficient on its own: re-asserting
- * WS_EX_TOPMOST every 200 ms; minimizing the game window outright; a real WM_ERASEBKGND bug (the
+ * WS_EX_TOPMOST every 200 ms; minimising the game window outright; a real WM_ERASEBKGND bug (the
  * overlay's own background fill racing EVR's Direct3D presentation on the same window; fixed, not
  * the cause); dropping WS_EX_TOPMOST and all Z-order reassertion; filtering the game window's own
  * messages out of the shared message loop.
@@ -21,20 +21,20 @@
  * while another process created a window owned by its window deadlocked the whole desktop
  * compositor once, not just the game. Once that was fixed the overlay rendered on top, but taking
  * foreground on a window sized to the whole monitor made Windows' shell treat it as switching to a
- * different fullscreen app and auto-minimize the game underneath, and the game's own WndProc
- * fighting to restore itself raced that minimize, which is what the earlier flicker had actually
- * been. Dropping SetForegroundWindow, then WS_EX_NOACTIVATE, each closed part of that gap without
- * closing it. Disabling Windows' Fullscreen Optimizations for the executable, a genuinely
- * different and independently testable theory, changed nothing, which ruled out DWM's own
- * exclusive-fullscreen heuristics specifically.
+ * different fullscreen app and auto-minimise the game underneath, and the game's own WndProc
+ * fighting to restore itself raced that minimise; that race was the earlier flicker. Dropping
+ * SetForegroundWindow, then WS_EX_NOACTIVATE, each closed part of that gap without closing it.
+ * Disabling Windows' Fullscreen Optimizations for the executable, a genuinely different and
+ * independently testable theory, changed nothing, which ruled out DWM's own exclusive-fullscreen
+ * heuristics specifically.
  *
  * Along the way MFPlay itself was replaced with libVLC. Standalone VLC, playing the exact same
  * converted file on the reporting machine, showed zero flicker from the start, which MFPlay never
  * managed even isolated in its own process. That swap alone fixed the flicker, and it was a
- * single-variable change: same process, same window, same file, different decoder. The minimize
+ * single-variable change: same process, same window, same file, different decoder. The minimise
  * was still separate, and reading the translation layer's own source settled why: a real
- * exclusive-mode Direct3D9 device, which is what this game gets by default, translated from its
- * own DirectDraw DDSCL_EXCLUSIVE request, auto-minimizes on WM_ACTIVATEAPP(deactivate) as a
+ * exclusive-mode Direct3D9 device, the kind this game gets by default, translated from its
+ * own DirectDraw DDSCL_EXCLUSIVE request, auto-minimises on WM_ACTIVATEAPP(deactivate) as a
  * fundamental, decades-old part of the D3D9 runtime, unrelated to and unaffected by Fullscreen
  * Optimizations. That layer has a windowed-mode override which avoids this by never requesting
  * exclusive mode at all, confirmed against the real install to eliminate both symptoms, but at a
@@ -60,9 +60,15 @@
  * traffic, input, timers and paints alike, out of its window procedure while the movie plays,
  * worth having on its own terms and is what it is documented as now.
  * ============================================================================================== */
+/* SIZE NOTE: a little over 600 lines since the game is handed back from two places, a movie and a
+ * wait for the host. The excess is the design history above, which no other file carries. The
+ * next seam is the surface choice, effective_mode with monitor_rect_of and create_surface, about
+ * 130 lines that decide which window a movie is drawn into and nothing else. */
 #include "video_overlay.h"
 
 #include "menu_cursor_cells.h"
+#include "movie_close.h"
+#include "movie_wait.h"
 #include "vlc_playback.h"
 
 #include "common/logging.h"
@@ -111,6 +117,16 @@ static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wp
         SetCursor(NULL);
         return TRUE;
     }
+    if (message == WM_PAINT && movie_wait_text() != NULL) {
+        /* The black wait for the host, the one time this window draws anything itself: libVLC
+         * has let go of it by then, and the line has to survive being covered and uncovered. */
+        PAINTSTRUCT paint;
+        HDC         paint_dc = BeginPaint(window, &paint);
+
+        movie_wait_paint(window, paint_dc, movie_wait_text());
+        EndPaint(window, &paint);
+        return 0;
+    }
     return DefWindowProcW(window, message, wparam, lparam);
 }
 
@@ -119,8 +135,8 @@ static LRESULT CALLBACK overlay_window_proc(HWND window, UINT message, WPARAM wp
  *
  * The class is registered against this rather than against the executable because the window
  * procedure lives here: a class that names the executable while its procedure sits in a DLL is a
- * dangling pointer the moment that DLL goes away. Nothing unregisters it, and nothing needs to -
- * see dll_main.c for why this feature gives none of its process-global state back. */
+ * dangling pointer the moment that DLL goes away. Nothing unregisters it, and nothing needs to;
+ * dll_main.c has why this feature gives none of its process-global state back. */
 static HMODULE own_module(void)
 {
     if (overlay_state.module == NULL) {
@@ -223,6 +239,11 @@ static bool register_overlay_class_once(void)
     return true;
 }
 
+bool video_overlay_register(void)
+{
+    return register_overlay_class_once();
+}
+
 bool video_overlay_start_async_init(void)
 {
     if (!register_overlay_class_once()) {
@@ -287,7 +308,7 @@ void video_overlay_set_surface_mode(const char *mode)
     }
 }
 
-/* The whole monitor the game is on, which is what a movie has to cover.
+/* The whole monitor the game is on, the area a movie has to cover.
  *
  * The client rect was the obvious answer and it was the wrong one, though not for the reason this
  * comment used to give. It said the engine's own movie path forces the display to its minimum mode
@@ -302,7 +323,7 @@ void video_overlay_set_surface_mode(const char *mode)
  * move.
  *
  * That reasoning stops holding the moment something gives the game a window that really is a
- * window, which is what WindowMode in enhanced_resolution does. See the child mode below.
+ * window, as WindowMode in enhanced_resolution does. See the child mode below.
  *
  * The window is not the game's, so this asks which monitor the game is on rather than assuming the
  * primary one: a player with two screens should get the movie on the one the game is on. */
@@ -424,7 +445,7 @@ static HWND create_surface(HWND game_window)
         }
         /* Said once per movie, because the size a movie is drawn at is the one thing about this
          * path nobody can read off the screen with any confidence: a window most of the width of
-         * the monitor and a window the whole of it look the same from a chair. It is also the
+         * the monitor and a window covering all of it look the same from a chair. It is also the
          * number to compare against the shape enhanced_resolution last logged. */
         log_info("the movie surface is %dx%d, taken from the game window's client area now",
                  (int)(rect.right - rect.left), (int)(rect.bottom - rect.top));
@@ -453,14 +474,106 @@ static HWND create_surface(HWND game_window)
                            game_window, NULL, own_module(), NULL);
 }
 
-bool video_overlay_play_blocking(const wchar_t *file_path)
+/* What the game gets back after a movie or a wait for the host: its window's queued mouse
+ * traffic dropped, after a held movie its keys as well, the drawn menu cursor recentred, and the
+ * foreground and the cursor reasserted. */
+static void hand_back_to_the_game(HWND game_window, bool held)
+{
+    /* The pump of a movie is scoped to the overlay, so the game window's own mouse messages were
+     * never touched while the movie ran: they simply queued up. Left alone, that whole backlog
+     * would be delivered to the engine's accumulator the moment the normal pump resumes, adding a
+     * burst of stale deltas AFTER the deliberate recentring below. Draining it first leaves that
+     * write the last thing to touch the drawn cursor before the player's own next real move.
+     *
+     * Only the mouse range is drained, and only for the game's window. What is lost is the pointer
+     * travel that happened while a full-screen movie covered the picture, which is not information
+     * anybody can act on, and a button press made against a movie the player could not see. */
+    {
+        MSG stale;
+        while (PeekMessageW(&stale, game_window, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
+            /* discarded on purpose */
+        }
+    }
+    /* The keys of a held movie go the same way. Escape, and the controller's Start, which arrives
+     * as Escape, were pressed at a movie that was the host's to end, and an Escape left in the
+     * queue reaches the game's own key hook the moment its pump resumes, where by the code it
+     * asks for the pause menu; that is read from the code and has not been seen in the field.
+     * Outside a held movie the keys are left alone, as they always were. */
+    if (held) {
+        MSG stale;
+        while (PeekMessageW(&stale, game_window, WM_KEYFIRST, WM_KEYLAST, PM_REMOVE)) {
+            /* discarded on purpose */
+        }
+    }
+    menu_cursor_cells_recentre();
+
+    /* Field-confirmed repair for a stray OS "loading" cursor left on screen after the intro
+     * movies. Not a hang: the process showed as Running throughout, never Not Responding, which
+     * rules out the shell's own "still starting" heuristic. What explains it is that the RETAIL
+     * Bink path visibly flashes the screen several times before the game settles, real
+     * minimise/restore cycles, consistent with this game's exclusive-mode Direct3D9 device
+     * reacting to however Bink touches the display, while this DLL shows none of that flashing,
+     * which is it doing exactly what it was built to do. Something early in start-up leaves the OS
+     * cursor undone, and the retail path's incidental flashing was re-triggering a full activation
+     * handshake and curing it before anyone saw it. A smooth window removes that accidental cure
+     * along with the flicker, so the symptom only ever appeared with this DLL installed even
+     * though its cause is not in this file. This does not repair that cause; it replaces the
+     * accidental cure with a deliberate one, once per movie.
+     *
+     * Both calls are needed. SetForegroundWindow asks Windows to reconsider which window owns the
+     * foreground but does not itself force a cursor update; SetCursor(NULL) hides it immediately,
+     * on this thread, which is the same answer the overlay's own window procedure gives
+     * WM_SETCURSOR. */
+    SetForegroundWindow(game_window);
+    SetCursor(NULL);
+}
+
+bool video_overlay_hold_for_host(movie_loop_t *loop)
+{
+    HWND            game_window;
+    HWND            overlay_window;
+    movie_verdict_t first;
+
+    if (loop == NULL || loop->poll == NULL) {
+        return false;
+    }
+    /* Asked before any window goes up, so a host that finished first costs no black flash, and
+     * after the session's timer has had its turn, so the gate it reads can have moved. */
+    vlc_playback_pump_timers(NULL, loop);
+    first = loop->poll();
+    if (first == MOVIE_VERDICT_HOST_DONE) {
+        loop->end = MOVIE_END_HOST;
+        return true;
+    }
+    if (first != MOVIE_VERDICT_GO_ON) {
+        return true;
+    }
+    game_window = find_game_window();
+    if (game_window == NULL) {
+        return false;
+    }
+    overlay_window = register_overlay_class_once() ? create_surface(game_window) : NULL;
+    if (overlay_window != NULL) {
+        ShowWindow(overlay_window, SW_SHOW);
+    }
+    movie_wait_hold(overlay_window, overlay_window != NULL ? overlay_window : game_window,
+                    game_window, loop);
+    if (overlay_window != NULL) {
+        DestroyWindow(overlay_window);
+    }
+    (void)movie_close_pass_on();   /* a close asked for during the wait, once, now */
+    hand_back_to_the_game(game_window, true);
+    return true;
+}
+
+bool video_overlay_play_blocking(const wchar_t *file_path, movie_loop_t *loop)
 {
     HWND  game_window;
     HWND  overlay_window;
     HWND  render_window;
     bool  played;
 
-    if (file_path == NULL) {
+    if (file_path == NULL || loop == NULL) {
         return false;
     }
 
@@ -482,48 +595,22 @@ bool video_overlay_play_blocking(const wchar_t *file_path)
         UpdateWindow(overlay_window);
     }
 
-    played = vlc_playback_play_blocking(render_window, file_path, game_window);
+    played = vlc_playback_play_blocking(render_window, file_path, game_window, loop);
+
+    /* A held movie whose file ended first is not over: it is the host's, and this side waits for
+     * the host in the same window, turned black. */
+    if (played && loop->held_for_host && loop->poll != NULL && loop->end == MOVIE_END_NATURAL) {
+        movie_wait_hold(overlay_window, render_window, game_window, loop);
+    }
 
     if (overlay_window != NULL) {
         DestroyWindow(overlay_window);
     }
 
-    /* The pump above is scoped to the overlay, so the game window's own mouse messages were never
-     * touched while the movie ran: they simply queued up. Left alone, that whole backlog would be
-     * delivered to the engine's accumulator the moment the normal pump resumes, adding a burst of
-     * stale deltas AFTER the deliberate recentring below. Draining it first is what makes that
-     * write the last thing to touch the drawn cursor before the player's own next real move.
-     *
-     * Only the mouse range is drained, and only for the game's window. What is lost is the pointer
-     * travel that happened while a full-screen movie covered the picture, which is not information
-     * anybody can act on, and a button press made against a movie the player could not see. */
-    {
-        MSG stale;
-        while (PeekMessageW(&stale, game_window, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
-            /* discarded on purpose */
-        }
-    }
-    menu_cursor_cells_recentre();
-
-    /* Field-confirmed repair for a stray OS "loading" cursor left on screen after the intro
-     * movies. Not a hang: the process showed as Running throughout, never Not Responding, which
-     * rules out the shell's own "still starting" heuristic. What explains it is that the RETAIL
-     * Bink path visibly flashes the screen several times before the game settles, real
-     * minimize/restore cycles, consistent with this game's exclusive-mode Direct3D9 device
-     * reacting to however Bink touches the display, while this DLL shows none of that flashing,
-     * which is it doing exactly what it was built to do. Something early in start-up leaves the OS
-     * cursor undone, and the retail path's incidental flashing was re-triggering a full activation
-     * handshake and curing it before anyone saw it. A smooth window removes that accidental cure
-     * along with the flicker, which is why the symptom only ever appeared with this DLL installed
-     * even though its cause is not in this file. This does not repair that cause; it replaces the
-     * accidental cure with a deliberate one, once per movie.
-     *
-     * Both calls are needed. SetForegroundWindow asks Windows to reconsider which window owns the
-     * foreground but does not itself force a cursor update; SetCursor(NULL) hides it immediately,
-     * on this thread, which is the same answer the overlay's own window procedure gives
-     * WM_SETCURSOR. */
-    SetForegroundWindow(game_window);
-    SetCursor(NULL);
-
+    /* A close asked for in a session is passed on once, now that the movie and its wait are over
+     * and before the game has its window back; outside a session there is never one to pass on,
+     * because the close box has already ended the movie and gone back on the queue. */
+    (void)movie_close_pass_on();
+    hand_back_to_the_game(game_window, loop->held_for_host);
     return played;
 }

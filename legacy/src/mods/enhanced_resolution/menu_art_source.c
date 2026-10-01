@@ -5,7 +5,7 @@
  *
  * res_addSource, retail 0x004719E0. Matched on its prologue, which is unmistakable: it takes the
  * string's length with a REPNE SCASB and then tests the LAST character against 0x5C. That one
- * character is the whole of its behaviour, and it is the reason the path this passes must end in a
+ * character is its entire behaviour, and it is the reason the path this passes must end in a
  * backslash: with one it mounts a DIRECTORY, without one it tries to open the path as an archive.
  * There is no extension test and no probing of the file's contents.
  *
@@ -22,6 +22,7 @@
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -170,8 +171,7 @@ bool menu_art_source_install(bool enabled, const char *directory)
     }
 
     if (directory != NULL && directory[0] != '\0') {
-        _snprintf(art_directory, sizeof art_directory - 1, "%s", directory);
-        art_directory[sizeof art_directory - 1] = '\0';
+        text_format(art_directory, sizeof art_directory, "%s", directory);
     }
 
     /* A trailing separator here would become a double one below, and res_addSource compares the
@@ -181,10 +181,9 @@ bool menu_art_source_install(bool enabled, const char *directory)
         art_directory[--length] = '\0';
     }
     if (length == 0) {
-        _snprintf(art_directory, sizeof art_directory, "%s", MENU_ART_DEFAULT_DIRECTORY);
+        text_format(art_directory, sizeof art_directory, "%s", MENU_ART_DEFAULT_DIRECTORY);
     }
-    _snprintf(art_mount_path, sizeof art_mount_path - 1, "%s\\", art_directory);
-    art_mount_path[sizeof art_mount_path - 1] = '\0';
+    text_format(art_mount_path, sizeof art_mount_path, "%s\\", art_directory);
 
     signature_resolve_table(sites, SITE_COUNT);
 

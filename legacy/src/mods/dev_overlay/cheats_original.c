@@ -1,7 +1,7 @@
 /* cheats_original.c: the eleven codes the shipped game already understands.
  *
  * ==============================================================================================
- * WHERE THE TWO TABLES COME FROM
+ * Where the two tables come from
  *
  * Both are data, and data cannot be searched for. They are read out of the operands of the one
  * piece of code that touches both, the comparison loop inside the game's own cheat console. In the
@@ -10,21 +10,21 @@
  *   0042FE38  8D 55 E0                 lea  edx,[ebp-0x20]        ; what was typed
  *   0042FE3B  52                       push edx
  *   0042FE3C  8B 45 DC                 mov  eax,[ebp-0x24]        ; the row index
- *   0042FE3F  8B 0C 85 10 C8 4A 00     mov  ecx,[eax*4 + 004AC810] ; THE NAME TABLE
+ *   0042FE3F  8B 0C 85 10 C8 4A 00     mov  ecx,[eax*4 + 004AC810] ; the name table
  *   0042FE46  51                       push ecx
  *   0042FE47  E8 04 77 07 00           call the case insensitive compare
  *   0042FE4C  83 C4 08                 add  esp,8
  *   0042FE4F  85 C0                    test eax,eax
  *   0042FE51  75 47                    jnz  next row
  *   0042FE53  8B 55 DC                 mov  edx,[ebp-0x24]
- *   0042FE56  8B 04 95 80 22 88 00     mov  eax,[edx*4 + 00882280] ; THE FLAG ARRAY
+ *   0042FE56  8B 04 95 80 22 88 00     mov  eax,[edx*4 + 00882280] ; the flag array
  *   0042FE5D  83 F0 01                 xor  eax,1                  ; the toggle, and all of it
  *
  * The name table has exactly one reference in the whole code section and the flag array has four,
  * three of them in these few instructions. So this pattern is the only place both can be picked up
- * together, which is why the site was chosen rather than the tidier looking ones nearby.
+ * together, and it was chosen over the tidier looking sites nearby for that reason.
  *
- * `xor eax,1` is the entire operation the console performs ON THE FLAG. It does one more thing
+ * `xor eax,1` is the entire operation the console performs on the flag. It does one more thing
  * afterwards that this does not: it prints a line, taken from a parallel table of message ids
  * beside the names, through the on screen crawl. That is a confirmation for somebody who typed a
  * code blind, and the panel shows the state directly instead, so it is left out on purpose rather
@@ -40,10 +40,12 @@
 #include "common/memory.h"
 #include "common/patch.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* 0x0042FE38, forty bytes ending at the toggle itself. */
 static const uint8_t SIG_CONSOLE_LOOP[] = {
@@ -206,6 +208,58 @@ const char *cheats_original_name(uint32_t index)
         return NULL;
     }
     return original_state.names[index];
+}
+
+/* The eleven codes and what each does, matched by the code's own text and never by its index,
+ * because the index is the image's and the image is what this file refuses to assume. The words
+ * are the ones the published cheat lists use, shortened where a row would not fit the panel:
+ * "but i feel so good" turns the force push red. */
+static const struct {
+    const char *code;
+    const char *what;
+} DESCRIPTIONS[] = {
+    { "turntables",         "Disable cheats"         },
+    { "beyond cinema",      "Letterbox view"         },
+    { "slowmo",             "Slow motion mode"       },
+    { "perfection",         "Auto-fire/attack"       },
+    { "but i feel so good", "Force push turns red"   },
+    { "60fps",              "60 fps frame rate"      },
+    { "perf",               "Wire frame view"        },
+    { "naughty naughty",    "First person view"      },
+    { "from above",         "Overhead view"          },
+    { "happy",              "Weapon 3 more powerful" },
+    { "oldcode",            "Debug mode"             },
+};
+
+uint32_t cheats_original_known_count(void)
+{
+    return (uint32_t)(sizeof DESCRIPTIONS / sizeof DESCRIPTIONS[0]);
+}
+
+const char *cheats_original_known_code(uint32_t index)
+{
+    return (index < cheats_original_known_count()) ? DESCRIPTIONS[index].code : NULL;
+}
+
+void cheats_original_label(uint32_t index, char *out, size_t size)
+{
+    const char *code = cheats_original_name(index);
+    uint32_t    i;
+
+    if (out == NULL || size == 0u) {
+        return;
+    }
+    if (code == NULL) {
+        out[0] = '\0';
+        return;
+    }
+    for (i = 0; i < cheats_original_known_count(); ++i) {
+        if (strcmp(code, cheats_original_known_code(i)) == 0) {
+            text_format(out, size, "%s (%s)", DESCRIPTIONS[i].what, code);
+            return;
+        }
+    }
+    text_format(out, size, "%s", code);
 }
 
 /* Read fresh every time. The console can flip a row behind us, a save game restores the block, and

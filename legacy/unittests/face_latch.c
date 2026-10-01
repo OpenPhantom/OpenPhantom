@@ -107,7 +107,8 @@ static void the_shipped_period_restores_the_thirty_fps_rate(void)
 static void the_counter_wrapping_does_not_break_the_cadence(void)
 {
     /* The substep counter is a live engine cell that starts at a value the game chose and runs for
-     * the life of the process, so the predicate must not assume it starts at zero or stays small. */
+     * the life of the process, so the predicate must not assume it starts at zero or stays
+     * small. */
     uint32_t yields = 0;
     uint32_t step;
 

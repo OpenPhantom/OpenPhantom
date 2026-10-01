@@ -8,8 +8,8 @@
  * signature and writes every byte. Nothing here runs again afterwards. What stayed behind is the
  * work that runs on every frame and on every level load.
  *
- * It writes the same record the rest of the module reads, through fog_regime_internal.h, and that
- * is deliberate rather than a leak: the fog regime is one machine and pretending otherwise would
+ * It writes the same record the rest of the module reads, through fog_regime_internal.h. That is
+ * deliberate rather than a leak: the fog regime is one machine and pretending otherwise would
  * mean inventing accessors for ten functions to reach the same fields.
  *
  * SIZE NOTE: past the 600 line mark, and the byte evidence is the reason. Five signatures sit at
@@ -22,6 +22,7 @@
 #include "fog_regime_internal.h"
 
 #include "fog_band.h"
+#include "fog_owner.h"
 #include "fog_trace.h"
 #include "view_distance_fix.h"
 
@@ -37,27 +38,26 @@
 #include <stdint.h>
 #include <string.h>
 
-/* --- 0x0041F14A  baplight_applyLevelFog: THE FOG BAND ---------------------------------------- *
+/* --- 0x0041F14A  baplight_applyLevelFog: the fog band ---------------------------------------- *
  *   55 / 8B EC / 83 EC 0C             prologue, 6 bytes, clean boundary
  *
  * It reads world+0x214 (the packed fog colour) into std3D_setFogColor 0x00487A30, then pushes
  * world+0x21C and world+0x218 into std3D_setFogRange 0x00487AC0 (0x0041F1B3 / 0x0041F1BD), then
  * turns the device fog state on or off from world+0x210 bit 0.
  *
- * TWO CALLERS, and both matter here: 0x0041CAA7 in the level-load path and 0x00438F77 at the tail
+ * Two callers, and both matter here: 0x0041CAA7 in the level-load path and 0x00438F77 at the tail
  * of the effects fog restore. Without a remembered load value the scale would SQUARE itself on the
- * second run, which is why nothing in this file ever computes from the value currently in the
- * field.
+ * second run, so nothing in this file ever computes from the value currently in the field.
  *
  * The band it hands to the device is not what draws the fog in this regime, see the capability
- * query below, but it is the one place the AUTHORED numbers can be caught, which is what this
- * detour is for. */
+ * query below, but it is the one place the AUTHORED numbers can be caught. This detour is here
+ * to catch them. */
 static const uint8_t SIG_APPLY_LEVEL_FOG[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x08, 0x8B, 0x88, 0x14, 0x02, 0x00, 0x00, 0xC1
 };
 #define APPLY_LEVEL_FOG_PROLOGUE_SIZE 6u
 
-/* --- 0x00487B30  THE FOG REGIME: the engine has two, and the wrong one is in force ------------ *
+/* --- 0x00487B30  the fog regime: the engine has two, and the wrong one is in force ------------ *
  *   A1 6C 59 85 00      mov eax,[0x85596C]     the chosen device record
  *   8B 80 A4 01 00 00   mov eax,[eax+0x1A4]    the record carries a 0xFC-byte D3DDEVICEDESC copy
  *                                              at +0x138, so +0x1A4 = dpcTriCaps.dwRasterCaps
@@ -73,7 +73,7 @@ static const uint8_t SIG_APPLY_LEVEL_FOG[] = {
  * the device evaluates that band against a device-space depth inside [0,1] and never fogs
  * anything, while issuing all five fog states exactly as asked.
  *
- * All three sites or none, and that is not tidiness: with the ramp disarmed the world pass writes
+ * All three sites or none. This is not tidiness: with the ramp disarmed the world pass writes
  * a CONSTANT ZERO into every world vertex's specular (0x00402459), and zero means FULLY FOGGED.
  * Clearing FOGTABLEMODE without arming the ramp paints the world in the fog colour.
  * The 2-D layer is unaffected, sprites and lines carry render-state words without the fog bit
@@ -90,7 +90,8 @@ static const uint8_t SIG_FOG_TABLE_CAP[] = {
 /* The two writers of FOGTABLEMODE, both `6A 03 6A 23` = push D3DFOG_LINEAR, push 0x23. The first
  * is the per-primitive state machine at 0x004884B8, which re-issues the five fog states whenever
  * the fog bit moves; the second is the whole-state commit at 0x00489B5B, which re-issues all
- * thirty-four states on every level load and after every display-mode change. Patching only one of
+ * thirty-four states every time the render flags are set, and the level's fog apply, the effects'
+ * fog and a display-mode change all set them. Patching only one of
  * them leaves the other to put the table back. Both anchors start AFTER the `push 3`, and both
  * wildcard the device-pointer operands so the pattern carries no absolute address. */
 static const uint8_t SIG_FOG_TABLE_MODE_DELTA[] = {
@@ -199,7 +200,7 @@ static bool write_fog_regime_byte(const char *what, uintptr_t address,
     return true;
 }
 
-/* THE DEVICE'S OWN FOG CAPABILITIES, read once the device exists and reported once.
+/* The device's own fog capabilities, read once the device exists and reported once.
  *
  * The engine asks this hardware one question, "can you do table fog", and acts on it. There is a
  * second bit in the same word that decides whether the fog it then configures can work at all:
@@ -253,7 +254,7 @@ void report_device_fog_caps(void)
     }
     /* The device is opened after this DLL installs, so the pointer is null for the first frames.
      * Waiting rather than reporting a zero is the difference between "no device yet" and "a device
-     * that offers nothing", which are not the same answer. */
+     * that offers nothing". */
     record = *(const void *const *)fog_state.device_record_ptr;
     if (record == NULL) {
         return;
@@ -286,8 +287,8 @@ void report_device_fog_caps(void)
  * device measuring fog against w. What decides whether the device measures w or device depth is the
  * projection matrix, and the engine never sets one: SetTransform is not called anywhere in the
  * image, so the runtime sees the identity, calls it affine, and measures depth in [0,1]. A
- * world-unit band against a [0,1] depth fogs nothing, which is why the game looks unfogged on any
- * device that reports table fog.
+ * world-unit band against a [0,1] depth fogs nothing, so the game looks unfogged on any device
+ * that reports table fog.
  *
  * So this does not convert the band. It sets a w-compliant projection and gives the engine its own
  * branch back, which removes the per-vertex ramp and with it the two artefacts the ramp cannot
@@ -390,20 +391,20 @@ void consider_pixel_fog(uint32_t caps)
     fog_state.pixel_fog_active = true;
     fog_state.projection_device = device;
 
-    /* ONE WAY, and that is the reason there is no switch back. Going the other way needs the
-     * device reprogrammed, because this engine only ever sets FOGTABLEMODE from inside
-     * applyLevelFog and that runs at a level load. Reverting the three writes changes what the
-     * NEXT load will push and nothing else, so the engine goes back to computing a per-vertex
-     * factor while the device is still told to ignore it, and nothing is fogged. Reverting the
-     * writes, handing the identity projection back, and calling applyLevelFog's original by hand
-     * were all tried in the game and none of them brought the fog back. So the delivery is chosen
-     * once, at startup, from FogImplementation, and what the panel offers is the band. */
+    /* One way, so there is no switch back. Going the other way was tried in the game three times:
+     * reverting the three writes, handing the identity projection back as well, and calling
+     * applyLevelFog's original by hand on top. None of them brought the fog back, and why is not
+     * known. It is not that the device hears FOGTABLEMODE only at a level load: every render state
+     * commit issues it, and the per face switch does whenever a face turns the fog bit back on. So
+     * the delivery is chosen once, at startup, from FogImplementation, and what the panel offers
+     * is the band. */
     log_info("pixel fog active: the device measures eye-space w, the band goes to it in world "
              "units unconverted, and the engine's own per-vertex ramp is switched back off. No "
              "8-bit fog factor and no interpolation of it across polygons.");
 
-    /* The band only reaches the device through applyLevelFog, and that has already run for this
-     * level. Push what we hold now, or the first level entered this way keeps the authored band. */
+    /* The level's own apply has already put the band into the device's cells, but its commit went
+     * out with the table mode still patched to none. Push now, so the band and the restored table
+     * mode reach the device together rather than with whichever commit happens to come next. */
     push_band_to_device();
 }
 
@@ -562,8 +563,16 @@ static void resolve_tick_cells(void)
     fog_state.tick_active   = true;
 
     if (fog_state.frame_delta == NULL) {
-        log_warning("g_frameDelta did not resolve, the fog tick runs but cannot ease, so every "
-                    "change steps in one frame");
+        /* Turned off rather than left on with no clock. Easing with no seconds does not step in
+         * one frame, it never moves at all: fog_regime_ease answers `current` for a delta that is
+         * not positive, so the band would hold wherever it started, and with LevelOpenSeconds set
+         * that is the fog switched off for the whole session. Stepping is what the fix does
+         * without a settle time, and it is what this line always claimed. */
+        fog_state.config.settle_seconds = 0.0f;
+        fog_state.config.open_seconds   = 0.0f;
+        log_warning("g_frameDelta did not resolve, so the fog tick has no clock to ease against. "
+                    "Easing and the level-opening window are both off and every change steps in "
+                    "one frame");
     }
     log_info("fog tick active, g_level %08X, g_frameDelta %08X, settle %.2f s",
              (unsigned)from_cmp, (unsigned)delta_address,
@@ -587,6 +596,9 @@ static void install_level_fog(void)
                   "coupled to anything", (unsigned)site);
         return;
     }
+    /* The device writes the band push uses, read out of the same function's own calls behind the
+     * six bytes the detour took. */
+    fog_owner_bind(site);
 
     log_info("fog band coupled at %08X: the authored band is scaled by "
              "(cut-%.2f)*cos(hFOV/2) measured against the same expression at the authored "
@@ -631,10 +643,17 @@ void fog_regime_install(const fog_regime_config_t *config)
 
     install_vertex_fog();
 
+    /* Every term the level-fog detour applies has to be in this test, not just the first three.
+     * It was those three alone, and FogBandScale, AuthoredFogBand, FogMinEndFraction and
+     * LevelOpenSeconds were then silently doing nothing whenever the first three were at their
+     * defaults, while the line below said the band was left as authored. Somebody who had set
+     * one of those four asked for the opposite of both. */
     if (!fog_state.config.follow_fov && !fog_state.config.inside_cut &&
-        fog_state.config.fog_scale <= 1.0f) {
-        log_info("FogFollowFov=0, FogInsideCut=0 and FogScale=1, the fog band is left exactly as "
-                 "each level authored it");
+        fog_state.config.fog_scale <= 1.0f && !fog_state.config.authored_band &&
+        fog_state.config.band_scale == 1.0f && fog_state.config.min_end_fraction <= 0.0f &&
+        fog_state.config.open_seconds <= 0.0f) {
+        log_info("nothing here asks for a change to the fog band, so it is left exactly as each "
+                 "level authored it");
         return;
     }
 

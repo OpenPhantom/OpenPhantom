@@ -45,7 +45,7 @@ float fov_horizontal_degrees(aspect_mode_t mode, float base_vertical_degrees,
     tangent_half_vertical = tanf(DEGREES_TO_RADIANS(base_vertical_degrees * 0.5f));
 
     if (mode == ASPECT_MODE_VERT_MINUS) {
-        /* Keep the byte-native horizontal angle; the vertical follows the frame, which is what an
+        /* Keep the byte-native horizontal angle; the vertical follows the frame, as an
          * unpatched engine does on a widescreen buffer (60 deg H, about 36 deg V at 16:9). */
         horizontal = 2.0f * RADIANS_TO_DEGREES(
             atanf(tangent_half_vertical * (AUTHORED_ASPECT_WIDTH / AUTHORED_ASPECT_HEIGHT)));
@@ -97,7 +97,8 @@ float fov_menu_focal_cell(menu_3d_mode_t mode, int width, int height, float foca
     float cell;
 
     if (width <= 0 || height <= 0 || !(focal_pixels > 0.0f)) {
-        return 0.0f;                               /* nothing sensible to say; caller keeps its own */
+        /* nothing sensible to say; the caller keeps its own */
+        return 0.0f;
     }
 
     switch (mode) {

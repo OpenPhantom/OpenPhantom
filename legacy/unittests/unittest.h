@@ -47,8 +47,9 @@ void ut_checkf(int condition, const char *format, ...);
  * and never a default. NaN fails, including when both sides are NaN. */
 void ut_near(double actual, double expected, double tolerance, const char *what);
 
-/* Prints the totals and returns the process exit code: 0 when everything passed, 1 otherwise.
- * `suite` names the thing under test and appears in the summary line. */
+/* Prints the totals and returns the process exit code: 0 when everything passed, 1 otherwise,
+ * and a run with no checks at all is 1: nothing was proved. `suite` names the thing under test
+ * and appears in the summary line. */
 int ut_summary(const char *suite);
 
 /* How many checks have failed so far. For the rare test that has to stop early rather than run on

@@ -23,10 +23,10 @@
  * is still recognised. */
 #define GOVERNOR_RECOVERY_MARGIN 1.15f
 
-/* Impatient about pain, slow about recovery: one bad second is enough to take a step, and it takes
- * thirty good ones in a row to give the FIRST one back. Thirty consecutive good seconds is a much
- * stronger claim than one, and it is what distinguishes "the heavy scene is over" from a lull in
- * the middle of it.
+/* Impatient about pain, slow about recovery: one bad window is enough to take a step, and it takes
+ * thirty good seconds in a row to give the FIRST one back. Thirty consecutive good seconds is a
+ * much stronger claim than one window, and it distinguishes "the heavy scene is over" from a lull
+ * in the middle of it.
  *
  * Once that first step back has been earned, the rest come every ten seconds. The expensive claim
  * is the first one; after it has been made, holding the remaining steps at half a minute each only
@@ -47,6 +47,13 @@
 #define GOVERNOR_DECISION_MS 500u
 #define GOVERNOR_DECISIONS_PER(seconds)     (((seconds) * 1000u) / GOVERNOR_DECISION_MS)
 
+/* A window decides only once it holds this many frames. The window empties at every decision and
+ * the next decision fires on the first frame that arrives half a second later, so a level load
+ * could be the only sample in its window and its own median, and a scale above 1.00 lost a step
+ * at every load. Eight frames is under a fifth of a second at the lowest rate the governor targets
+ * and no number of loads. A window that has not filled keeps its samples and decides later. */
+#define GOVERNOR_MIN_SAMPLES 8u
+
 /* The shortfall at which a whole step is the right answer: 10 % past the frame time the scale is
  * allowed to cost. Below that the step shrinks towards a third of one, above it grows to four
  * times, so the governor eases into the target from a near miss and moves properly when a scene
@@ -66,7 +73,7 @@
 #define GOVERNOR_UNCAPPED_BACKOFF_FPS 50.0f
 
 /* The fraction of a frame cap that counts as missing it. At TargetFps 100 this is 75 fps: not a
- * frame rate anybody would call broken, which is the point. The report this was built for was a
+ * frame rate anybody would call broken. The report this was built for was a
  * drop from 100 to 66, and a governor that only woke at 30 fps would have slept through it. */
 #define GOVERNOR_CAP_FRACTION 0.75f
 
@@ -184,6 +191,8 @@ static void apply(float *effective_view_scale, float configured_scale, float cel
     *effective_view_scale = allowed;
 }
 
+static void decide_on_window(float median, float configured_scale);
+
 void frame_governor_on_frame(float *effective_view_scale, float configured_scale,
                              float cell_ceiling)
 {
@@ -220,71 +229,78 @@ void frame_governor_on_frame(float *effective_view_scale, float configured_scale
         const float median = median_frame_ms();
 
         governor.second_began_at = now.QuadPart;
-        /* The window is spent. Everything below decides on THIS window, and the next one starts
-         * empty so that it describes the next half second rather than the last few. */
-        governor.sample_count = 0;
-        governor.cursor = 0;
-
-        switch (frame_governor_decide(median, governor.lower_above_ms, governor.raise_below_ms,
-                                      governor.healthy_seconds, governor.healthy_needed)) {
-        case FRAME_GOVERNOR_LOWER:
-            governor.healthy_seconds = 0;
-            /* Back to the patient count: whatever this scene is, it has just proved it is not over,
-             * and the first step back out of it has to be earned the hard way again. */
-            governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS);
-
-            if (governor.ceiling > GOVERNOR_SCALE_FLOOR) {
-                const float previous = governor.ceiling;
-                const float step = frame_governor_step_size(median, governor.lower_above_ms,
-                                                            GOVERNOR_SCALE_STEP,
-                                                            GOVERNOR_FULL_STEP_SHORTFALL);
-
-                governor.ceiling -= step;
-                if (governor.ceiling < GOVERNOR_SCALE_FLOOR) {
-                    governor.ceiling = GOVERNOR_SCALE_FLOOR;
-                }
-                log_info("frame governor: %.1f ms a frame (%.0f fps), %.0f%% past the %.1f ms this "
-                         "is allowed to cost. View scale %.2f -> %.2f (step %.3f).",
-                         (double)median, (double)(1000.0f / median),
-                         (double)(((median / governor.lower_above_ms) - 1.0f) * 100.0f),
-                         (double)governor.lower_above_ms,
-                         (double)previous, (double)governor.ceiling, (double)step);
-            }
-            break;
-
-        case FRAME_GOVERNOR_RAISE:
-            governor.healthy_seconds = 0;
-            if (governor.ceiling < configured_scale) {
-                const float previous = governor.ceiling;
-
-                governor.ceiling += GOVERNOR_SCALE_STEP;
-                if (governor.ceiling > configured_scale) {
-                    governor.ceiling = configured_scale;
-                }
-                log_info("frame governor: %u s at %.1f ms a frame (%.0f fps), so the view distance "
-                         "is given a step back. View scale %.2f -> %.2f, ceiling %.2f.",
-                         governor.healthy_needed * GOVERNOR_DECISION_MS / 1000u,
-                         (double)median, (double)(1000.0f / median),
-                         (double)previous, (double)governor.ceiling, (double)configured_scale);
-                governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS_AGAIN);
-            }
-            break;
-
-        case FRAME_GOVERNOR_HOLD:
-        default:
-            /* Healthy seconds only accumulate while there is something to give back. Counting
-             * them at the configured scale would mean the first slow second after a long quiet
-             * stretch was answered by an immediate raise. */
-            if (median < governor.raise_below_ms && governor.ceiling < configured_scale) {
-                governor.healthy_seconds++;
-            } else if (median >= governor.raise_below_ms) {
-                governor.healthy_seconds = 0;
-            }
-            break;
+        if (governor.sample_count >= GOVERNOR_MIN_SAMPLES) {
+            decide_on_window(median, configured_scale);
         }
     }
 
     apply(effective_view_scale, configured_scale, cell_ceiling);
+}
+
+/* One decision on a spent window. The next window starts empty so that it describes the next half
+ * second rather than the last few. */
+static void decide_on_window(float median, float configured_scale)
+{
+    governor.sample_count = 0;
+    governor.cursor = 0;
+
+    switch (frame_governor_decide(median, governor.lower_above_ms, governor.raise_below_ms,
+                                  governor.healthy_seconds, governor.healthy_needed)) {
+    case FRAME_GOVERNOR_LOWER:
+        governor.healthy_seconds = 0;
+        /* Back to the patient count: whatever this scene is, it has just proved it is not over,
+         * and the first step back out of it has to be earned the hard way again. */
+        governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS);
+
+        if (governor.ceiling > GOVERNOR_SCALE_FLOOR) {
+            const float previous = governor.ceiling;
+            const float step = frame_governor_step_size(median, governor.lower_above_ms,
+                                                        GOVERNOR_SCALE_STEP,
+                                                        GOVERNOR_FULL_STEP_SHORTFALL);
+
+            governor.ceiling -= step;
+            if (governor.ceiling < GOVERNOR_SCALE_FLOOR) {
+                governor.ceiling = GOVERNOR_SCALE_FLOOR;
+            }
+            log_info("frame governor: %.1f ms a frame (%.0f fps), %.0f%% past the %.1f ms this "
+                     "is allowed to cost. View scale %.2f -> %.2f (step %.3f).",
+                     (double)median, (double)(1000.0f / median),
+                     (double)(((median / governor.lower_above_ms) - 1.0f) * 100.0f),
+                     (double)governor.lower_above_ms,
+                     (double)previous, (double)governor.ceiling, (double)step);
+        }
+        break;
+
+    case FRAME_GOVERNOR_RAISE:
+        governor.healthy_seconds = 0;
+        if (governor.ceiling < configured_scale) {
+            const float previous = governor.ceiling;
+
+            governor.ceiling += GOVERNOR_SCALE_STEP;
+            if (governor.ceiling > configured_scale) {
+                governor.ceiling = configured_scale;
+            }
+            log_info("frame governor: %u s at %.1f ms a frame (%.0f fps), so the view distance "
+                     "is given a step back. View scale %.2f -> %.2f, ceiling %.2f.",
+                     governor.healthy_needed * GOVERNOR_DECISION_MS / 1000u,
+                     (double)median, (double)(1000.0f / median),
+                     (double)previous, (double)governor.ceiling, (double)configured_scale);
+            governor.healthy_needed = GOVERNOR_DECISIONS_PER(GOVERNOR_HEALTHY_SECONDS_AGAIN);
+        }
+        break;
+
+    case FRAME_GOVERNOR_HOLD:
+    default:
+        /* Healthy windows only accumulate while there is something to give back. Counting
+         * them at the configured scale would mean the first slow window after a long quiet
+         * stretch was answered by an immediate raise. */
+        if (median < governor.raise_below_ms && governor.ceiling < configured_scale) {
+            governor.healthy_seconds++;
+        } else if (median >= governor.raise_below_ms) {
+            governor.healthy_seconds = 0;
+        }
+        break;
+    }
 }
 
 /* ============================================================================================ */
@@ -339,15 +355,22 @@ void frame_governor_configure(bool enabled, float backoff_fps, float configured_
     }
 
     if (!(target_fps > 0.0f)) {
-        /* framerate_fix owns the cap, and its own section is where the number lives. Reading
+        /* framerate_fix owns the cap, and its own section is where the numbers live. Reading
          * across sections is not new here: [diagnostics] Spawns is read by this same DLL, for the
-         * same reason: the setting belongs where its subject is, not where its reader is. */
-        const float cap = ini_read_float("framerate_fix", "TargetFps", 0.0f);
+         * same reason: the setting belongs where its subject is, not where its reader is.
+         *
+         * With MatchDisplayRefresh on, which it is when the key is absent, TargetFps is not the
+         * cap: the cap follows the display and steps between fractions of it on its own, so
+         * there is no fixed number to take three quarters of, and the floor is the threshold. */
+        const bool  matching = ini_read_bool("framerate_fix", "MatchDisplayRefresh", true);
+        const float cap      = matching ? 0.0f
+                                        : ini_read_float("framerate_fix", "TargetFps", 0.0f);
 
         target_fps = (cap > 0.0f) ? (cap * GOVERNOR_CAP_FRACTION) : GOVERNOR_UNCAPPED_BACKOFF_FPS;
         log_info("frame governor: BackoffFps is automatic -> %.0f fps (%s).", (double)target_fps,
-                 (cap > 0.0f) ? "three quarters of framerate_fix's TargetFps"
-                              : "no frame cap set, so the uncapped default");
+                 matching      ? "the cap follows the display and steps by itself, so the floor"
+                 : (cap > 0.0f) ? "three quarters of framerate_fix's TargetFps"
+                                : "no frame cap set, so the uncapped default");
     }
 
     governor.lower_above_ms = 1000.0f / target_fps;
@@ -355,9 +378,9 @@ void frame_governor_configure(bool enabled, float backoff_fps, float configured_
 
     log_info("frame governor active: the view distance backs off below %.0f fps (%.1f ms a frame) "
              "and is given a step back after %u s above %.0f fps (%.1f ms), then every %u s. Steps "
-             "of about %.2f, sized by how far off target the second was, never below %.2f and "
-             "never above the configured %.2f. It measures the MEDIAN frame of each second, so a "
-             "level load cannot move it.",
+             "of about %.2f, sized by how far off target the window was, never below %.2f and "
+             "never above the configured %.2f. It decides every half second on the MEDIAN frame "
+             "of a window of at least eight frames, so a level load cannot move it.",
              (double)target_fps, (double)governor.lower_above_ms,
              GOVERNOR_HEALTHY_SECONDS, (double)(target_fps * GOVERNOR_RECOVERY_MARGIN),
              (double)governor.raise_below_ms, GOVERNOR_HEALTHY_SECONDS_AGAIN,

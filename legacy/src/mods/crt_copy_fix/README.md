@@ -16,6 +16,15 @@ and version-agnostic. If the pattern is absent, nothing is changed and the log s
 |---|---|---|
 | `Enabled` | `1` | `0` installs nothing and the log says so. |
 
+## Engine locations
+
+| Site | Retail VA | What |
+|---|---|---|
+| the inlined copy loop | `0x00492206` and 39 more | a 44 byte window, the same bytes at every one of the 40; 25 bytes of each are rewritten with a loop that reads nothing before its source |
+
+The window carries no address and no `rel32`, so the 40 are found by counting matches rather than
+by a unique pattern, and every one is read back and compared before it is written.
+
 ## The defect
 
 MSVC inlined a hand-written, backwards-running copy loop that **loads before it checks the bound**:
@@ -28,7 +37,7 @@ MSVC inlined a hand-written, backwards-running copy loop that **loads before it 
 It reads `[-4 .. N-4]` and writes `[0 .. N-4]`. On the first row that read is `pixels - 4`.
 
 On heap memory this never shows, because `mem_alloc` puts a `0x10`-byte header in front. It becomes
-fatal exactly when the source is a locked DirectDraw surface whose preceding page is not mapped:
+fatal when the source is a locked DirectDraw surface whose preceding page is not mapped:
 
 ```
 ACCESS_VIOLATION at 0049222D, READ at 09BEEFFC
@@ -43,8 +52,8 @@ as well; this repairs a picture, not only a crash.
 
 Not an insertion: the whole loop is replaced. 25 bytes are available, 11 are needed. The result
 reads `[0 .. N-4]`, writes `[0 .. N-4]`, runs `N/4` iterations and descends in steps of four, **the
-same order as the original**, which matters because the backwards direction keeps overlapping
-ranges safe. The only difference is the removed load at -4.
+same order as the original**; the backwards direction keeps overlapping ranges safe. The only
+difference is the removed load at -4.
 
 ## Why the site is deliberately not unique
 

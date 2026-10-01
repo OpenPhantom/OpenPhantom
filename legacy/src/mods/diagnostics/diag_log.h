@@ -4,7 +4,7 @@
  * engine_fixes.log would make the install record unreadable, and one wants to be able to throw
  * the observation away between two attempts. What was INSTALLED still goes to the shared log.
  *
- * FLOOD PROTECTION. The simulation runs at 32 substeps/s and the renderer at up to 240 frames/s.
+ * Flood protection. The simulation runs at 32 substeps/s and the renderer at up to 240 frames/s.
  * Events that fire per frame (a mover opening under a pressure plate, the player mode, a channel
  * update) are DEBOUNCED at the call site, only the CHANGE is logged. Above that sit two generic
  * brakes here:

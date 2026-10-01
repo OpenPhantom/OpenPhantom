@@ -29,19 +29,19 @@ typedef void(__cdecl *sw3d_draw_fn_t)(void *widget);
 /* 320 / tan(30 deg): the focal length, in pixels, of the lens the menus were authored under. */
 #define SW3D_AUTHORED_FOCAL 554.256f
 
-/* HOW FAR THE SIZE COMPENSATION IS ALLOWED TO GO, and it has to stop somewhere.
+/* How far the size compensation is allowed to go. It has to stop somewhere.
  *
- * Holding a model's apparent size while the lens widens means growing it at a fixed distance, and a
- * model that grows far enough pushes its own front face through the near plane and is culled
+ * Holding a model's apparent size while the lens widens means growing it at a fixed distance, and
+ * a model that grows far enough pushes its own front face through the near plane and is culled
  * entirely. Moving it further away does not rescue it: the compensation grows the model in
- * proportion to the extra distance, so the two cancel and the sign of the near margin never changes.
- * Past some lens the model cannot be both the right size and in front of the camera.
+ * proportion to the extra distance, so the two cancel and the sign of the near margin never
+ * changes. Past some lens the model cannot be both the right size and in front of the camera.
  *
  * Measured rather than guessed: at a field of view above about 108 degrees the hero and the
  * inventory vanished. That works out at a factor near 1.79, and this sits below it with room.
  *
- * The factor depends only on the field of view, not on the resolution, which is why one number
- * serves every setup: with a fixed vertical field of view the focal length is proportional to the
+ * The factor depends only on the field of view, not on the resolution, so one number serves
+ * every setup: with a fixed vertical field of view the focal length is proportional to the
  * screen height, and so is the reference above, so the ratio cancels the resolution out.
  *
  * Past the clamp the models resume shrinking as the lens widens, which is the shipped behaviour and
@@ -57,8 +57,8 @@ float menu_sw3d_model_scale = 1.0f;
 void __cdecl hook_sw3d_draw(void *widget)
 {
     sw3d_draw_fn_t original = (sw3d_draw_fn_t)scale_state.sw3d_draw_detour.original;
-    float          engine_scale = *(const float *)(uintptr_t)ENGINE_MENU_SCALE_CELL;
-    float          projection   = *(const float *)(uintptr_t)ENGINE_PROJ_SCALE_CELL;
+    float          engine_scale = *menu_cells.menu_scale;
+    float          projection   = *menu_cells.proj_scale;
 
     if (original == NULL) {
         return;
@@ -75,8 +75,8 @@ void __cdecl hook_sw3d_draw(void *widget)
                 scale_state.warned_compensation = true;
                 log_info("the field of view is wide enough that holding the 3-D models at their "
                          "authored size would push them through the near plane and cull them, so "
-                         "the compensation stops at %.2f. Past this they shrink as the lens widens, "
-                         "which is what the unpatched game does",
+                         "the compensation stops at %.2f. Past this they shrink as the lens "
+                         "widens, as the unpatched game does",
                          (double)SW3D_MAX_SIZE_COMPENSATION);
             }
         }
@@ -99,17 +99,17 @@ void __cdecl hook_sw3d_draw(void *widget)
  *
  *     offset = (canvas pixel - canvas centre) * depth / focalPx
  *
- * which is what this computes, with the canvas centre being the scaled one and focalPx read from the
- * camera AT THIS INSTANT.
+ * This computes exactly that, with the canvas centre being the scaled one and focalPx read from
+ * The camera at this instant.
  *
- * WHY NOT KEEP REPOINTING THE CONSTANTS. That was the first version and it was wrong in a way no
- * amount of care about the arithmetic would have fixed: the cell holding the focal has to be written
- * before the placement happens, and the placement happens after the camera has been rebuilt for the
- * frame. Refreshing it once per menu frame sampled a lens that had not changed yet, so dragging the
- * field of view slider slid the hero sideways, out by exactly the ratio between the lens we had
- * sampled and the one actually projecting. A probe proved it: the lens was logged once, at startup,
- * and never again while the slider moved. Reading it here removes the ordering question entirely,
- * because there is no longer a stored value to be stale.
+ * Why not keep repointing the constants. That was the first version and it was wrong in a way no
+ * amount of care about the arithmetic would have fixed: the cell holding the focal has to be
+ * written before the placement happens, and the placement happens after the camera has been
+ * rebuilt for the frame. Refreshing it once per menu frame sampled a lens that had not changed
+ * yet, so dragging the field of view slider slid the hero sideways, out by exactly the ratio
+ * between the lens we had sampled and the one actually projecting. A probe proved it: the lens was
+ * logged once, at startup, and never again while the slider moved. Reading it here removes the
+ * ordering question entirely, because there is no longer a stored value to be stale.
  *
  * It also hands the [0x4A8888] operand back to variable_fov, which wants it for the same reason and
  * whose own compensation is now harmless: nothing here reads that constant any more.
@@ -119,7 +119,6 @@ void __cdecl hook_sw3d_draw(void *widget)
 void __cdecl hook_sw3d_project(float *offset, const int32_t *rect)
 {
     sw3d_project_fn_t  original = (sw3d_project_fn_t)scale_state.sw3d_project_detour.original;
-    const char *const *camera_slot = (const char *const *)(uintptr_t)ENGINE_CURRENT_CAMERA;
     const char        *camera = NULL;
     float              focal;
     float              depth;
@@ -129,9 +128,9 @@ void __cdecl hook_sw3d_project(float *offset, const int32_t *rect)
     }
     /* g_projScale first, because it is what will be multiplied by. The camera is the fallback for
      * the first frame, before render_prepareFrame has copied anything into it. */
-    focal = *(const float *)(uintptr_t)ENGINE_PROJ_SCALE_CELL;
+    focal = *menu_cells.proj_scale;
     if (!(focal > 0.0f)) {
-        camera = *camera_slot;
+        camera = *menu_cells.current_camera;
         focal  = (camera != NULL) ? *(const float *)(camera + CAMERA_FOCAL_PIXELS) : 0.0f;
     }
 

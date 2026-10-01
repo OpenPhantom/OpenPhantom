@@ -4,21 +4,21 @@
  * second time rather than shared, the same way sfx_mute.c, spawn_census.c and diag_flow.c each
  * carry their own copy of Plr_RunPhases' signature:
  *
- *   - the call that closes the scene, identical to dev_overlay.c's own SIG_SCENE_END. Redirected
- *     the same way it is there: read whatever is CURRENTLY at this call site as `original` (the
- *     true engine function, or another DLL's own hook if it loaded first), point the call at this
- *     file's own hook instead. Both hooks run; whichever installed later becomes the outer one, and
- *     nothing here assumes it is the only DLL that wants this instant.
- *   - the engine's own filled-shape drawer (0x00419660), identical to
- *     dev_overlay/overlay_sites.c's own SIG_DRAW_QUAD, what the game draws its own letterbox bars
- *     and screen tint with, four screen coordinates plus a packed ARGB.
- *   - the screen size cells, identical to overlay_sites.c's own SIG_SCREEN_SIZE.
+ *   1. the call that closes the scene, identical to dev_overlay.c's own SIG_SCENE_END. Redirected
+ *      the same way it is there: read whatever is CURRENTLY at this call site as `original` (the
+ *      true engine function, or another DLL's own hook if it loaded first), point the call at this
+ *      file's own hook instead. Both hooks run; whichever installed later becomes the outer one,
+ *      and nothing here assumes it is the only DLL that wants this instant.
+ *   2. the engine's own filled-shape drawer (0x00419660), identical to
+ *      dev_overlay/overlay_sites.c's own SIG_DRAW_QUAD, what the game draws its own letterbox bars
+ *      and screen tint with, four screen coordinates plus a packed ARGB.
+ *   3. the screen size cells, identical to overlay_sites.c's own SIG_SCREEN_SIZE.
  *
  * Drawn every real frame while armed, right before the scene closes and the page is shown, so the
- * same instant dev_overlay's own panel paints into, which is why a panel opened on top of this
- * still shows on top of it: this file's hook runs as the outer wrapper (loading after
- * "dev_overlay" alphabetically), draws its own quad, THEN calls original, which is what reaches
- * dev_overlay's own hook and its own, later paint.
+ * same instant dev_overlay's own panel paints into. A panel opened on top of this still shows on
+ * top of it: this file's hook runs as the outer wrapper (loading after "dev_overlay"
+ * alphabetically), draws its own quad, THEN calls original, and that call reaches dev_overlay's
+ * own hook and its own, later paint.
  */
 #include "render_curtain.h"
 
@@ -27,6 +27,7 @@
 #include "common/logging.h"
 #include "common/memory.h"
 #include "common/patch.h"
+#include "common/screen_fill.h"
 #include "common/signature.h"
 
 #include <windows.h>
@@ -52,6 +53,8 @@ static const uint8_t MSK_SCENE_END[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_SCENE_END == sizeof MSK_SCENE_END,
+               "the scene end pattern and its mask are different lengths");
 #define OFFSET_SCENE_END_CALL 20u
 
 /* --- 0x00419660, the engine's own filled shape, byte-identical to overlay_sites.c's own
@@ -66,6 +69,8 @@ static const uint8_t MSK_DRAW_QUAD[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_DRAW_QUAD == sizeof MSK_DRAW_QUAD,
+               "the filled shape pattern and its mask are different lengths");
 
 /* --- 0x00439476, the screen size, byte-identical to overlay_sites.c's own SIG_SCREEN_SIZE. */
 static const uint8_t SIG_SCREEN_SIZE[] = {
@@ -82,14 +87,15 @@ static const uint8_t MSK_SCREEN_SIZE[] = {
     0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_SCREEN_SIZE == sizeof MSK_SCREEN_SIZE,
+               "the screen size pattern and its mask are different lengths");
 #define OFFSET_SCREEN_HEIGHT 1u
 #define OFFSET_SCREEN_WIDTH  8u
 
-#define OVERLAY_DRAW_NOW 1
 #define CALL_REL32_OPCODE 0xE8u
 #define CALL_REL32_LENGTH  5u
 
-/* patch_read_call_target() refuses a target outside WMAIN.EXE's own image, which is exactly right
+/* patch_read_call_target() refuses a target outside WMAIN.EXE's own image. That is exactly right
  * for validating an UNTOUCHED site, and exactly wrong here. dev_overlay.dll already redirects this
  * same call site to its own hook, in its own module, well outside WMAIN.EXE's image, whenever it
  * loads first (alphabetically, "dev_overlay" sorts before "fmv_player"). Reading THAT as garbage
@@ -186,8 +192,7 @@ static void __cdecl hook_scene_end(void)
                   *curtain_state.screen_h > 0.0f) {
             uint32_t argb = curtain_state.fading ? fade_argb(now) : 0xFF000000u;
 
-            curtain_state.quad(0.0f, 0.0f, *curtain_state.screen_w, *curtain_state.screen_h, argb,
-                               OVERLAY_DRAW_NOW);
+            screen_fill(0.0f, 0.0f, *curtain_state.screen_w, *curtain_state.screen_h, argb);
         }
     }
     curtain_state.scene_end_original();
@@ -216,17 +221,15 @@ void render_curtain_install(void)
     uint32_t  width_cell = 0;
     uint32_t  height_cell = 0;
 
-    /* sfx_mute.c has nothing of its own to be installed FOR outside of this curtain, so this is
-     * the one place that brings it up rather than making every caller remember both. */
-    sfx_mute_install();
-
     scene_end_site = signature_find_unique(SIG_SCENE_END, MSK_SCENE_END, sizeof SIG_SCENE_END);
     if (scene_end_site == 0) {
         log_warning("render_curtain: the end of the scene did not resolve, the post-movie curtain "
                     "cannot be drawn into the picture");
         return;
     }
-    quad_site = signature_find_unique(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD);
+    /* Looked for the way a detoured site is: render_guard replaces the routine whole. */
+    quad_site = signature_find_detour_target(SIG_DRAW_QUAD, MSK_DRAW_QUAD, sizeof SIG_DRAW_QUAD,
+                                             6u);
     if (quad_site == 0) {
         log_warning("render_curtain: the engine's own filled-shape drawer did not resolve, the "
                     "post-movie curtain cannot be drawn");
@@ -255,6 +258,7 @@ void render_curtain_install(void)
     }
 
     curtain_state.quad = (draw_quad_fn_t)quad_site;
+    (void)screen_fill_resolve(quad_site);
     curtain_state.screen_w = (const volatile float *)(uintptr_t)width_cell;
     curtain_state.screen_h = (const volatile float *)(uintptr_t)height_cell;
     curtain_state.resolved = true;
@@ -263,4 +267,15 @@ void render_curtain_install(void)
              "the scene closes at %08X, part of the real rendered frame, so any capture of the "
              "game shows it the same way the player's own screen does",
              (unsigned)quad_site, (unsigned)call);
+
+    /* sfx_mute.c has nothing of its own to be installed FOR outside of this curtain, so this is
+     * the one place that brings it up rather than making every caller remember both. Last, and
+     * only once the curtain is known to work and the setting asks for it: the mute is a detour,
+     * and a detour that nothing will ever switch on is a hook with no purpose. */
+    if (mute_enabled && hold_ms != 0) {
+        sfx_mute_install();
+    } else {
+        log_info("render_curtain: %s, so the sound suppression behind the curtain is not "
+                 "installed", mute_enabled ? "the hold is zero" : "MutePostMovieAudio=0");
+    }
 }

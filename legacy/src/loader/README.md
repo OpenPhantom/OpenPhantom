@@ -3,7 +3,9 @@
 **Produces:** `dinput.dll`, goes **next to `WMAIN.EXE`**, not into `mods\`.
 
 The loader patches nothing. It is a jumping-off point: it loads every DLL in `mods\` and hands
-each one its entry point.
+each one its entry point. A file is a DLL when its name ends in `.dll`; renaming one to
+`feature.dll.disabled` takes it out of the set. The search pattern alone did not do that, because
+the file system matches it against the 8.3 short name as well, and `FEATUR~1.DLL` matched.
 
 ## Supported executables
 
@@ -43,7 +45,7 @@ whichever trigger fires first wins.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `Enabled` | `1` | `0` loads nothing at all; the game runs exactly as before |
+| `Enabled` | `1` | `0` loads nothing at all; the game runs as before |
 | `ModDirectory` | `mods` | Relative to `WMAIN.EXE` |
 | `ChainDll` | *(empty)* | Explicit forward target, absolute or relative to the game folder |
 
@@ -57,12 +59,12 @@ each step logged:
 3. `<system directory>\dinput.dll`
 
 **If your game folder already has a `dinput.dll`**, a graphics wrapper, an ASI loader, rename
-it to `dinput_orig.dll` rather than overwriting it. Every export is forwarded to it and it keeps
+it to `dinput_orig.dll`; do not overwrite it. Every export is forwarded to it and it keeps
 working.
 
 ## Load order
 
-Alphabetical, so the sequence is reproducible rather than dependent on the file system.
+Alphabetical, so the sequence is reproducible whatever the file system returns.
 **Order encodes no dependencies:** no feature calls into another, and where two of them detour the
 same engine function, `common/detour.c` chains them so the result is identical either way.
 
@@ -81,4 +83,4 @@ Built and linked (MSVC x86, `/W4 /WX`, clean). Exports verified against the buil
 present, PE32. The entry-point stub was disassembled out of the built DLL and is exactly
 `pushad / pushfd / call restore_and_load / popfd / popad / jmp dword ptr [saved entry]`.
 **Accepted in game.** Every DLL in the patch reaches the process through this loader, so any
-played build exercises it by definition, and the 1.5.0 build was played through by hand.
+played build exercises it by definition, and the v0.4.1 build was played through by hand.

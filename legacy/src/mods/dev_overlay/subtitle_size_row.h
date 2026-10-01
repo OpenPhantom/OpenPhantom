@@ -4,9 +4,9 @@
  * the display goes. enhanced_resolution holds them at the size they have on the game's authored
  * 640x480 screen instead; this row is how that size is chosen without leaving the game.
  *
- * A TRACK IS RIGHT HERE, unlike the panel's own size. That one moved the panel being dragged, which
- * is why it was tried and taken out again. This changes text somewhere else on the screen, which is
- * exactly what a slider is good for: pick a line of dialogue, drag, and read it.
+ * A track is right here, unlike the panel's own size. That one moved the panel being dragged,
+ * so it was tried and taken out again. This changes text somewhere else on the screen, the case
+ * a slider is good for: pick a line of dialogue, drag, and read it.
  *
  * It goes through the ini for the same reason the rows beside it do. The setting belongs to
  * enhanced_resolution.dll, feature DLLs here never depend on each other at run time, and either can

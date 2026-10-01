@@ -26,7 +26,7 @@ static void test_which_modes_skip_collision(void)
              "mode 0 is collision tested, which is every ordinary NPC and the character standing "
              "beside the one that sinks");
     ut_check(move_mode_skips_collision(MODE_SEATED),
-             "mode 3 is not, and that is the mode the sinking character is actually in");
+             "mode 3 is not, and the sinking character is actually in mode 3");
     ut_check(move_mode_skips_collision(MODE_PROP), "mode 1 is not either, bit 0 alone");
     ut_check(move_mode_skips_collision(MODE_OBSERVED_5),
              "mode 5 is not, because only bit 0 is read and the other bits mean something else");
@@ -44,8 +44,8 @@ static void test_a_ship_keeps_flying(void)
 
     /* A ship, a bird or a droid on a flying platform is exempt from collision PRECISELY because it
        flies, and it moves by velocity like anything else. The first version of this fix cleared
-       the velocity of every exempt character and froze all of them, which is why the test for it
-       comes before the test for the bug. */
+       the velocity of every exempt character and froze all of them, so the test for it comes
+       before the test for the bug. */
     ut_check(!move_mode_contact_pushed(MODE_SEATED, flying, flying),
              "a character whose velocity is the same before and after the contact handler was not "
              "pushed by it, so a ship holding its course is left alone even though nothing will "

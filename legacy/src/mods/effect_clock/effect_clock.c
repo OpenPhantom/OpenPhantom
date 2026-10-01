@@ -11,8 +11,8 @@
  * The seam that was taken is substep_noise.c, which holds the arithmetic the two replacements
  * answer with and the seed the arc bracket pins. That part is a pure function of a substep number
  * and an object's place in the draw order, it has no engine in it, and it can therefore be checked
- * without the game, which is what earned it a file of its own. What is left here is everything that
- * touches the process: the patterns, the resolved cells, the hooks and the per frame reset.
+ * without the game, so it has a file of its own. What is left here is everything that touches the
+ * process: the patterns, the resolved cells, the hooks and the per frame reset.
  *
  * The seam that was measured and rejected is a split by site, one file for the arcs and one for the
  * object draw. All three share the generator, the substep counter and the per frame reset, so that
@@ -25,17 +25,17 @@
  * Three things on the drawing path draw a fresh random number every time they are drawn, and the
  * drawing path runs at whatever rate the display does.
  *
- *   THE LIGHTNING ARCS have no geometry state at all. Every time the pool is drawn, every bolt is
+ *   The lightning arcs have no geometry state at all. Every time the pool is drawn, every bolt is
  *   rebuilt from scratch by recursive midpoint displacement, and every displacement is a fresh
  *   draw. At the 30 frames a second this was authored for that is the intended crackle; at 240 it
  *   is eight times too fast and the eye reads it as static rather than as lightning.
  *
- *   THE FLICKER FLAG. An object carrying flag bit 0x40 draws a number each time it is drawn, and
+ *   The flicker flag. An object carrying flag bit 0x40 draws a number each time it is drawn, and
  *   when the number lands under 0.2 the whole object is skipped: no draw, no animation advance, no
  *   reflection, no shadow. Authored, that is dark six times a second. At 240 frames a second it is
  *   dark forty eight times a second.
  *
- *   THE HALO BRIGHTNESS takes a random addition of up to 0.4 and is then clamped into 0 to 1, once
+ *   The halo brightness takes a random addition of up to 0.4 and is then clamped into 0 to 1, once
  *   per object per drawn frame. At the authored rate that is a twinkle. Four or eight times faster
  *   the additions average out and it settles into a steady blur.
  *
@@ -85,11 +85,11 @@
  *     0x0043ABF0  reached from the enemy code through aiext    simulation
  *     0x0043A229  reached from the SW_TEXT widget              user interface
  *
- * THE BODY SPHERE is the entry worth recording. It lives in the same module as the arcs, three of
+ * The body sphere is the entry worth recording. It lives in the same module as the arcs, three of
  * the eighteen sites are in it across its two functions, and from the outside it looks exactly
  * like the arcs: a random shape rebuilt around a body. It sits on message 0x0E, the substep
  * broadcast, so it is already clocked correctly and pacing it would have made it worse. Reading
- * the jump table rather than assuming from the resemblance is what caught that.
+ * the jump table, rather than assuming from the resemblance, caught that.
  *
  * 0x0041FB9E IS NOT A TARGET EITHER, and for a reason that changes what it is rather than merely
  * ruling it out. It is bgl_randomUnitXYZ, with its wrapper bgl_randomUnit at 0x0041FC2C, and its
@@ -111,12 +111,12 @@
  * would have seen, because the effect's draws are undone rather than inserted.
  *
  * The flicker and the halo cannot use that bracket. Both sit inside the object draw, and pinning
- * the generator across the whole of bapobj_drawAll would freeze the halo pool at 0x00439AB6 and
+ * the generator across all of bapobj_drawAll would freeze the halo pool at 0x00439AB6 and
  * everything else that is drawn inside that call. So for those two the single `call` is redirected
  * instead, to a replacement that answers in the same 0 to 32767 range the generator does, which
  * leaves the engine's own comparison and scaling untouched.
  *
- * ONE DELIBERATE DEVIATION, written down rather than buried. Those two replacements do not call
+ * One deliberate deviation, written down rather than buried. Those two replacements do not call
  * the engine's generator at all, so the drawing path stops advancing it. The simulation's random
  * sequence therefore stops depending on how many frames were drawn. The original behaviour was
  * already frame rate dependent at exactly that point, so there is no single authentic behaviour
@@ -156,9 +156,9 @@
  * The shift and add chain folds out to a multiply by 214013 and the displacement is 2531011: the
  * compiler runtime's own `rand` constants, returning bits 16 to 30. ONE WORD of state at
  * 0x004BA61C is the whole reason the arc repair is three lines of logic. On the Edit Tool's
- * recompile that cell is at 0x004BA5CC, which is why the address is read out of the operand here
- * and not written down. Both absolute operands name the same cell, both are wildcarded, and the
- * value is taken from the first. */
+ * recompile that cell is at 0x004BA5CC, so the address is read out of the operand here and not
+ * written down. Both absolute operands name the same cell, both are wildcarded, and the value is
+ * taken from the first. */
 static const uint8_t SIG_RAND_SEED[] = {
     0xA1, 0x00, 0x00, 0x00, 0x00,
     0x8D, 0x0C, 0x40,
@@ -181,6 +181,8 @@ static const uint8_t MSK_RAND_SEED[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF
 };
+_Static_assert(sizeof SIG_RAND_SEED == sizeof MSK_RAND_SEED,
+               "the random seed pattern and its mask are different lengths");
 #define OFFSET_SEED_OPERAND      1u
 
 /* --- the substep counter --------------------------------------------------------------------- *
@@ -208,6 +210,8 @@ static const uint8_t MSK_SUBSTEP_COUNTER[] = {
     0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_SUBSTEP_COUNTER == sizeof MSK_SUBSTEP_COUNTER,
+               "the substep counter pattern and its mask are different lengths");
 #define OFFSET_COUNTER_OPERAND   1u
 
 /* --- 0x00438D94  the one call to the arc pool ------------------------------------------------ *
@@ -220,7 +224,7 @@ static const uint8_t MSK_SUBSTEP_COUNTER[] = {
  * 0x0043D8BE, and it is reached from inside the pool loop, so bracketing the one call covers its
  * three draws too.
  *
- * WHY THE CALL SITE AND NOT THE PROLOGUE. 0x0043D095 opens `55 8B EC 83 EC 70 56`, so its prologue
+ * Why the call site and not the prologue. 0x0043D095 opens `55 8B EC 83 EC 70 56`, so its prologue
  * is six bytes, and a scan of every relative branch between it and the next function finds none
  * that targets those six bytes. A prologue detour would therefore have been legal here, unlike the
  * display flip elsewhere in this engine where a retry jumps back into its own second instruction.
@@ -252,6 +256,8 @@ static const uint8_t MSK_ARC_CALL_SITE[] = {
     0xFF, 0xFF,
     0xFF
 };
+_Static_assert(sizeof SIG_ARC_CALL_SITE == sizeof MSK_ARC_CALL_SITE,
+               "the arc call site pattern and its mask are different lengths");
 #define OFFSET_ARC_CALL          9u
 
 /* --- 0x00411438  the flicker test inside the object draw ------------------------------------- *
@@ -269,7 +275,7 @@ static const uint8_t MSK_ARC_CALL_SITE[] = {
  *   00411455  DF E0                 fnstsw ax
  *   00411457  F6 C4 01              test ah,1
  *   0041145A  74 05                 je   carry on
- *   0041145C  E9 B5 FC FF FF        jmp  0x00411116          SKIP THE WHOLE OBJECT
+ *   0041145C  E9 B5 fc ff ff        jmp  0x00411116          skip the whole object
  *
  * The jump at the end goes back to the loop head, so a flickering object loses its draw, its four
  * animation track updates, its reflections and its shadow for that frame. The threshold 0.2 at
@@ -303,6 +309,8 @@ static const uint8_t MSK_FLICKER_TEST[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_FLICKER_TEST == sizeof MSK_FLICKER_TEST,
+               "the flicker test pattern and its mask are different lengths");
 #define OFFSET_FLICKER_CALL      7u
 
 /* --- 0x00439FBD  the halo brightness jitter -------------------------------------------------- *
@@ -319,8 +327,7 @@ static const uint8_t MSK_FLICKER_TEST[] = {
  *
  * So the addition is at most 0.4 and the result is clamped into 0 to 1. All four constants are
  * read out of the image. The site is reached per object per drawn frame, through 0x00438E78 from
- * the object draw, which is what makes it twinkle at the authored rate and average into a steady
- * blur above it.
+ * the object draw, so it twinkles at the authored rate and averages into a steady blur above it.
  *
  *   retail WMAIN.EXE   call at 0x00439FBD -> 0x0049A580
  *   obi.exe            call at 0x00439FBD -> 0x0049A520
@@ -345,6 +352,8 @@ static const uint8_t MSK_HALO_JITTER[] = {
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
     0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_HALO_JITTER == sizeof MSK_HALO_JITTER,
+               "the halo jitter pattern and its mask are different lengths");
 #define OFFSET_HALO_CALL         6u
 
 #define SUBSTEPS_PER_SECOND      32u   /* the simulation rate the substep counter advances at */
@@ -362,8 +371,8 @@ typedef struct effect_clock_state {
 
     /* The flicker replacement. `sequence` counts the calls WITHIN one drawn frame and is reset at
      * the end of each frame, so the Nth flickering object of a frame asks the same question in
-     * every frame until the simulation steps. That is what makes the answer stable inside a
-     * substep without the replacement needing to know which object is asking. */
+     * every frame until the simulation steps. The answer is therefore stable inside a substep
+     * without the replacement needing to know which object is asking. */
     bool                     flicker_paced;
     uint32_t                 sequence;
 
@@ -382,9 +391,9 @@ static uint32_t current_tick(void)
     return substep_noise_tick(*clock_state.counter, clock_state.substeps_per_roll);
 }
 
-/* Pin, call, restore. The restore is what keeps the simulation's own stream untouched: whatever
- * the effect drew is discarded, so the next simulation draw continues exactly where it would
- * have, and no part of the game outside this call can tell that the arcs were drawn at all. */
+/* Pin, call, restore. The restore keeps the simulation's own stream untouched: whatever the effect
+ * drew is discarded, so the next simulation draw continues exactly where it would have, and no
+ * part of the game outside this call can tell that the arcs were drawn at all. */
 static void __cdecl hook_arc_pool(void)
 {
     uint32_t saved = *clock_state.seed;

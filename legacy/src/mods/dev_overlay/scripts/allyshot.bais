@@ -1,0 +1,51 @@
+# title: Help the player, with a gun
+# about: The shooter's half of Help, for a model with a fire clip and no swing: follows the
+# about: player as Follow does until an enemy, the nearest class 2 actor (target kind 2), is
+# about: within twelve units, then stands and fires its record's first weapon at it as the
+# about: shooter does, and follows again when none is left within twelve; the following stops
+# about: within a unit and a half and starts again past three, as Follow's. Clip 1 stands in for
+# about: the walk, 13 for the fire clip, 30 for the death; 3.0 for the walk. Dies with its own
+# about: death clip and fades eight seconds later.
+script "alys":
+    if check_death():
+        set_ai_mode(1)
+        mode_jmp()
+    mode_jmp()
+
+mode "folw":
+    if range_check(2, 2, 12.0f):
+        move_speed(0.0f)
+        shootemup(8, 0, 2, 13)
+        end_cycle()
+    if range_check(0, 2, 1.5f):
+        set_ai_mode(3)
+        end_cycle()
+    move_speed(3.0f)
+    when move_to(3, 1, 1.5f) completes:
+        end_cycle()
+    end_cycle()
+
+mode "die":
+    when animation(0, 30, 0) completes:
+        start_timer()
+        set_ai_mode(2)
+        end_cycle()
+    end_cycle()
+
+mode "gone":
+    if check_timer(1, 8.0f):
+        ai_killed(0)
+        end_cycle()
+    end_cycle()
+
+mode "near":
+    if range_check(2, 2, 12.0f):
+        set_ai_mode(0)
+        end_cycle()
+    if range_check(0, 2, 3.0f):
+        move_speed(0.0f)
+        when move_to(3, 0, 0.5f) completes:
+            end_cycle()
+        end_cycle()
+    set_ai_mode(0)
+    end_cycle()

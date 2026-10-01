@@ -18,7 +18,7 @@
  *      DirectSound buffer the music streams through is a LOOPING buffer that is never stopped,
  *      the audible result is the last second of PCM circling forever rather than silence.
  *
- *   3. NAME EVERY CHANGE. One line per TRANSITION, never one per frame.
+ *   3. Name every change. One line per TRANSITION, never one per frame.
  *
  * ---- What it is not ---------------------------------------------------------------------------
  * There is a well-travelled claim that the music bug is a return value: the module handler's
@@ -31,7 +31,7 @@
  * The live pause path is the pause menu, and it uses the OTHER dispatcher: it walks the module
  * list, calls each handler and drops the result into a local nobody reads. `ImPause` and
  * `ImResume` are balanced across it. Patching those two return values changes nothing that
- * executes, which is why this file does not do it. The guard in point 2 is the honest version of
+ * executes, so this file does not do it. The guard in point 2 is the honest version of
  * the same worry: instead of predicting how the latch might get stuck, it watches whether it IS
  * stuck, repairs it, and says so, so a log without that line is evidence, not silence.
  *
@@ -45,12 +45,15 @@
 #include "imuse_fix.h"
 
 #include "music_probe.h"
+#include "music_volume.h"
 #include "music_sites.h"
 
 #include "common/frame_hook.h"
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+#include "common/platform.h"
+#include "common/text.h"
 
 #include <windows.h>
 
@@ -87,8 +90,6 @@ typedef struct imuse_fix_state {
     music_sites_t sites;
     music_latch_fn_t pause_music;
     music_latch_fn_t resume_music;
-
-    DWORD process_id;
 
     /* Did WE pause it? Nothing else may be resumed by the guard. */
     bool we_paused;
@@ -138,18 +139,6 @@ static void load_configuration(void)
 }
 
 /* ============================================================================================ */
-static bool foreground_belongs_to_us(void)
-{
-    HWND  foreground = GetForegroundWindow();
-    DWORD owner = 0;
-
-    if (foreground == NULL) {
-        return false;
-    }
-    GetWindowThreadProcessId(foreground, &owner);
-    return owner == state.process_id;
-}
-
 static int32_t read_cell(const volatile int32_t *cell, int32_t absent)
 {
     if (cell == NULL) {
@@ -158,17 +147,16 @@ static int32_t read_cell(const volatile int32_t *cell, int32_t absent)
     return *cell;
 }
 
-/* The two cue latches, for the log only. They are what says WHICH piece of music was in force at
- * the moment something went wrong, and the engine reports its NULL cues as 1000 and 2000. */
+/* The two cue latches, for the log only. They say WHICH piece of music was in force at the moment
+ * something went wrong, and the engine reports its NULL cues as 1000 and 2000. */
 static void describe_cues(char *buffer, size_t size)
 {
     if (state.sites.state_latch == NULL || state.sites.sequence_latch == NULL) {
         buffer[0] = '\0';
         return;
     }
-    _snprintf(buffer, size, ", cue state=%d sequence=%d",
-              (int)*state.sites.state_latch, (int)*state.sites.sequence_latch);
-    buffer[size - 1] = '\0';
+    text_format(buffer, size, ", cue state=%d sequence=%d",
+                (int)*state.sites.state_latch, (int)*state.sites.sequence_latch);
 }
 
 static void log_transition(int32_t attached, int32_t paused, int32_t sys_pause, bool foreground,
@@ -203,8 +191,8 @@ static void note_state(int32_t attached, int32_t paused, int32_t sys_pause, bool
      * Both setters write their latch BEFORE they hand the cue to the music DLL and neither takes
      * it back if the DLL refuses it, and the setters' own `cue == latch` guard then swallows
      * every later attempt at that same cue. So a cue the DLL cannot honour parts the latch from
-     * what is audible permanently. Logging every cue change is what makes the LAST cue before the
-     * music stopped readable, and that is the one worth knowing. */
+     * what is audible permanently. Logging every cue change keeps the LAST cue before the music
+     * stopped readable, and an investigation needs exactly that cue. */
     int32_t state_cue = read_cell(state.sites.state_latch, 0);
     int32_t sequence_cue = read_cell(state.sites.sequence_latch, 0);
 
@@ -258,7 +246,7 @@ static bool service_focus(int32_t paused, int32_t sys_pause, bool foreground)
     }
 
     /* The order the two pauses arrived in decides this, and getting it wrong plays music over the
-     * PAUSE MENU. The player can alt-tab away, we pause, and the pause menu can then open
+     * Pause menu. The player can alt-tab away, we pause, and the pause menu can then open
      * while the game is in the background, which sets the same latch a second time from the other
      * owner. Resuming on the way back would clear a latch the menu still believes it holds, and
      * the menu's own resume on the way out is then a no-op: music under an open pause menu until
@@ -348,14 +336,14 @@ static void imuse_fix_frame(void)
         }
         state.orphan_frames = 0;
         note_state(attached, read_cell(state.sites.paused, 0),
-                   read_cell(state.sites.sys_pause_on, 0), foreground_belongs_to_us(),
+                   read_cell(state.sites.sys_pause_on, 0), platform_foreground_is_ours(),
                    "system is not attached");
         return;
     }
 
     paused = read_cell(state.sites.paused, 0);
     sys_pause = read_cell(state.sites.sys_pause_on, 0);
-    foreground = foreground_belongs_to_us();
+    foreground = platform_foreground_is_ours();
 
     note_state(attached, paused, sys_pause, foreground, "state changed");
 
@@ -370,8 +358,8 @@ static void imuse_fix_frame(void)
 static void describe_installation(void)
 {
     log_info("music service watch is live: pause on focus loss %s, orphan guard %s (grace %d "
-             "frames), transition log %s. The engine itself never pauses music on a focus change "
-             "- its WM_ACTIVATEAPP handler only captures and releases the mouse pointer.",
+             "frames), transition log %s. The engine itself never pauses music on a focus change: "
+             "its WM_ACTIVATEAPP handler only captures and releases the mouse pointer.",
              config.pause_on_focus_loss ? "ON" : "off",
              config.resume_orphaned_pause && state.sites.sys_pause_on != NULL ? "ON" : "off",
              (int)config.orphan_grace_frames,
@@ -384,7 +372,6 @@ void imuse_fix_install(void)
         return;
     }
     state.installed = true;
-    state.process_id = GetCurrentProcessId();
 
     log_init("imuse_fix", false);
 
@@ -411,6 +398,9 @@ void imuse_fix_install(void)
      * arm and fail independently and neither is a precondition for the other. The probe is armed
      * first because it is the one being used to chase an open defect. */
     state.probe_active = music_probe_install();
+    /* Independent of everything above it: its own three sites, its own key, and it
+     * declines on its own terms without touching the pause work. */
+    (void)music_volume_install();
 
     if (config.pause_on_focus_loss || config.resume_orphaned_pause || config.log_transitions) {
         if (music_sites_resolve(&state.sites)) {
@@ -425,13 +415,13 @@ void imuse_fix_install(void)
     }
 
     if (!state.active && !state.probe_active) {
-        log_info("nothing in this DLL is switched on, or nothing it needs could be resolved - "
+        log_info("nothing in this DLL is switched on, or nothing it needs could be resolved, so "
                  "not one byte is touched this session");
         return;
     }
 
     /* One frame hook drives both halves. render_frameEnd also runs inside the blocking menu
-     * loops, which is what makes the orphan guard able to see a pause taken by a menu screen. */
+     * loops, so the orphan guard can see a pause taken by a menu screen. */
     if (!frame_hook_add(imuse_fix_frame)) {
         log_warning("the per-frame hook could not be installed, nothing in this DLL runs. There "
                     "is no degraded mode worth having: every part of this feature is a decision "

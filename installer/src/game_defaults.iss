@@ -9,7 +9,7 @@
 ; through a menu that is easy to miss:
 ;
 ;   The display mode starts at 640x480 on a fresh installation, because that is what the 1999 engine
-;   defaults to and nothing else writes the key. enhanced_resolution offers wider modes but does not
+;   defaults to, and no other writer of the key exists. enhanced_resolution offers wider modes but does not
 ;   choose one, so a first run is a small window until somebody opens the video options.
 ;
 ;   The joystick bindings start unset and JOYENABLE starts off, so a pad does nothing at all until

@@ -53,7 +53,7 @@
  *     backward + right    +45        backward + left     -45
  *
  * ==============================================================================================
- * The angle is damped, and that is the whole of how this feels
+ * The angle is damped, and that damping decides how this feels
  *
  * The raw angle above only ever takes five values: 0, +-45 and +-90. Stepping straight between
  * them moves the model 90 degrees in one substep, 2880 degrees per second, and no amount of
@@ -89,8 +89,8 @@
  * someone writes something else. Two consequences, and both are load-bearing. The value is written
  * on EVERY driven substep, zero included, because a one-shot clear can be missed; it would be
  * missed exactly when a hit lands as the key is released, and the body would stay turned for good.
- * And a non-zero value has to be walked back down when the walk stops being driven at all, which
- * is what strafe_walk_release exists for.
+ * And a non-zero value has to be walked back down when the walk stops being driven at all, and
+ * strafe_walk_release exists for that.
  */
 #include "strafe_walk.h"
 
@@ -99,6 +99,7 @@
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
+#include "common/numeric.h"
 #include "common/signature.h"
 
 #include <math.h>
@@ -118,16 +119,16 @@ typedef int32_t (__cdecl *object_draw_fn_t)(void *argument);
 
 /* Past a right angle the walk cycle's leg swing is visibly along the body axis rather than the
  * travel axis. The digital keys cannot ask for more than this, so the clamp only ever catches a
- * bad reading, which is why it is a limit and not a scale.
+ * bad reading, so it is a limit and not a scale.
  *
- * It is also what keeps strafe_walk_restore_heading's single-step fold correct: the phase-7 thunk
+ * It also keeps strafe_walk_restore_heading's single-step fold correct: the phase-7 thunk
  * adds this angle to heading and this function takes it off again, and one conditional +-360 step
  * only lands inside [0, 360) while every contribution stays well under a full turn. */
 #define MAX_BODY_YAW_DEGREES 90.0f
 
 /* The engine's own angular lerp returns the target outright once the two are within a thousandth
- * of a degree. Copied deliberately: it is what makes the value LAND rather than approach forever,
- * and landing on exactly zero is what lets the latch be given up. */
+ * of a degree. Copied deliberately: it makes the value LAND rather than approach forever, and
+ * landing on exactly zero is what lets the latch be given up. */
 #define DAMP_DEAD_BAND_DEGREES 0.001f
 
 /* Ninety per cent of the gap per settle time. 0.1 is the "90 %" in that sentence. */
@@ -148,7 +149,7 @@ typedef struct strafe_walk_state {
      * model root is ours and has to be brought home before we stop writing it. */
     float             theta_degrees;
 
-    /* THE DRAWN HALF. The angle above is a simulation quantity, damped once per substep, and until
+    /* The drawn half. The angle above is a simulation quantity, damped once per substep, and until
      * this existed it was also what got drawn: the pose compositor multiplies the node euler in
      * after the animation blend, so whatever stands in the node is exactly what appears. At 240
      * frames a second that is one new orientation every seven or eight frames, and the quarter
@@ -160,7 +161,9 @@ typedef struct strafe_walk_state {
     bool              damped_this_substep; /* whether our damper actually ran in it            */
     bool              owns_node;           /* whether the model root is ours to write at all   */
     uint32_t          previous_tick;       /* the substep counter as of the last drawn frame   */
+    uint32_t          opened_tick;         /* the substep counter when the damper last ran     */
     uint8_t          *record;              /* the player record, captured where it is known    */
+    uint8_t   *const *player_cell;         /* pPlayer: what the engine itself follows          */
 
     /* Resolved once at install. Plain pointers rather than reads through the memory helper: this
      * runs once per rendered frame and the cells are inside the host image, which is never
@@ -190,17 +193,6 @@ static void write_field(uint8_t *record, int offset, float value)
     *(float *)(record + offset) = value;
 }
 
-static float clamp_float(float value, float minimum, float maximum)
-{
-    if (!(value >= minimum)) {          /* also catches NaN */
-        return minimum;
-    }
-    if (value > maximum) {
-        return maximum;
-    }
-    return value;
-}
-
 /* Called at the top of every substep in which our damper is about to run. It records the angle the
  * substep starts from, which is one half of what the drawn frames interpolate between, and it says
  * that the damper really ran. The second part is not bookkeeping, it is the guard described at the
@@ -211,12 +203,18 @@ static void open_substep(uint8_t *record)
     strafe_state.damped_this_substep = true;
     strafe_state.owns_node           = true;
     strafe_state.record              = record;
+    /* Guarded, unlike the read in the draw path: that one only runs from a detour the install
+     * placed, and the counter is resolved in the same function. This runs from the damper, which
+     * works whether or not the drawn half resolved anything. */
+    strafe_state.opened_tick         = (strafe_state.substep_counter != NULL)
+                                     ? *strafe_state.substep_counter : 0u;
 }
 
-void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, bool turns_body,
-                      float settle_seconds, float max_rate_deg_per_second)
+void strafe_walk_bind(set_node_yaw_fn_t set_node_yaw, uint8_t *const *player_cell,
+                      bool turns_body, float settle_seconds, float max_rate_deg_per_second)
 {
     strafe_state.set_node_yaw            = set_node_yaw;
+    strafe_state.player_cell             = player_cell;
     strafe_state.turns_body              = turns_body;
     strafe_state.settle_seconds          = settle_seconds;
     strafe_state.max_rate_deg_per_second = max_rate_deg_per_second;
@@ -230,6 +228,7 @@ void strafe_walk_reset(void)
     strafe_state.theta_previous      = 0.0f;
     strafe_state.damped_this_substep = false;
     strafe_state.owns_node           = false;
+    strafe_state.record              = NULL;
 }
 
 float strafe_walk_travel_offset(float strafe, float forward, float drive_sign)
@@ -284,7 +283,7 @@ float strafe_walk_damp_step(float current, float target, float substep_seconds,
     next = (1.0f - keep) * target + keep * current;
 
     /* The rate cap is a rate, so it is multiplied by the same live substep. Written flat it would
-     * double when the substep halves, which is exactly the trap the exponent above avoids. */
+     * double when the substep halves, exactly the trap the exponent above avoids. */
     max_step = max_rate_deg_per_second * substep_seconds;
     gap      = next - current;
     if (gap > max_step) {
@@ -346,14 +345,14 @@ void strafe_walk_apply_stick_move(uint8_t *record, float forward, float strafe)
         return;
     }
 
-    /* THE ENGINE'S OWN READ OF THE PAD HAS ALREADY RUN AND IS WRONG, which is why this writes
-     * rather than adds. Its axis 1 is cut by a thirty per cent square deadzone, so a light push
+    /* The engine's own read of the pad has already run and is wrong, so this writes rather than
+     * adds. Its axis 1 is cut by a thirty per cent square deadzone, so a light push
      * sets no move bit and no drive at all and the player simply does not move; and past half
      * the stick's travel it is saturated, so it cannot tell a walk from a run either. This
      * replaces both bits and the drive from the vector pad_stick.c read straight from the
      * device. It runs after the original steer, so there is nothing to undo.
      *
-     * The drive is FULL whichever gait is chosen, and that is deliberate. The clips play at a
+     * The drive is FULL whichever gait is chosen, and deliberately so. The clips play at a
      * fixed rate with nothing scaling them by speed, so a continuously variable pace would slide
      * the feet along the ground. Two gaits at their authored speeds keep the feet planted, and
      * the speed cap that separates them is the engine's own: 2.0 for a walk, 3.5 for a run. */
@@ -373,9 +372,21 @@ void strafe_walk_apply_stick_move(uint8_t *record, float forward, float strafe)
 
     *(uint32_t *)(record + PLAYER_MOVE_INPUT) = move_input;
 
-    /* THE DRIVE CARRIES THE SIGN, and leaving it positive for a backward push is a whole broken
+    /* No bit means no drive, and this has to be written rather than left alone. The engine's own
+     * read of the pad has already put a drive there from its own axis, so leaving it standing is
+     * not neutral. Without this the player accelerates with the standing animation playing and
+     * slides across the floor: no clip is chosen, because no move bit is set, but the speed delta
+     * is applied anyway. Reachable whenever the stick is live and neither component asks to move,
+     * which is a sideways push with the sideways walk off, and the same push on a level that owns
+     * its own camera. */
+    if ((move_input & 3u) == 0u) {
+        write_field(record, PLAYER_MOVE_DRIVE, 0.0f);
+        return;
+    }
+
+    /* The drive carries the sign, and leaving it positive for a backward push is a whole broken
      * half of the stick. The engine writes dtScale30 * 0.6 * axis with a SIGNED axis, and that sign
-     * is what takes curSpeed negative; the backward move bit only chooses the clip and the speed
+     * takes curSpeed negative; the backward move bit only chooses the clip and the speed
      * cap. Written positive with the backward bit set, the player plays the back-pedal clip while
      * travelling forwards, and the travel angle is negated on top of it by the drive sign, so the
      * lower half of the stick went somewhere between wrong and nowhere.
@@ -398,15 +409,15 @@ float strafe_walk_drive(uint8_t *record, float strafe, float substep_seconds)
      *
      * Deliberately keyed on the RAW input and not on the damped angle: once the key is released
      * the bit stops being forced immediately, the engine's own decay takes the speed down, and the
-     * angle coasting back to zero over the same interval is what carries the travel direction
-     * through the stop. */
+     * angle coasting back to zero over the same interval carries the travel direction through
+     * the stop. */
     if (strafe != 0.0f && forward == 0.0f) {
         strafe_walk_force_forward(record, false);
         drive_sign = 1.0f;
     }
 
     target = strafe_walk_travel_offset(strafe, forward, drive_sign);
-    target = clamp_float(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
+    target = numeric_clamp(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
 
     open_substep(record);
     strafe_state.theta_degrees = strafe_walk_damp_step(
@@ -423,7 +434,7 @@ float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
     float drive_sign = (forward < 0.0f) ? -1.0f : 1.0f;
     float target;
 
-    /* THE ONLY DIFFERENCE FROM strafe_walk_drive IS THAT `forward` IS REAL, and it is the whole
+    /* The only difference from strafe_walk_drive is that `forward` is real, the whole
      * point of the pad path. The other one rebuilds it as exactly +1, -1 or 0 from the move
      * bits, because a keyboard has nothing finer to give. Handing atan2 a quantised 1 against an
      * analogue sideways value pulls every diagonal toward forward: a true forty five degree push
@@ -434,7 +445,7 @@ float strafe_walk_drive_vector(uint8_t *record, float strafe, float forward,
     }
 
     target = strafe_walk_travel_offset(strafe, forward, drive_sign);
-    target = clamp_float(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
+    target = numeric_clamp(target, -MAX_BODY_YAW_DEGREES, MAX_BODY_YAW_DEGREES);
 
     open_substep(record);
     strafe_state.theta_degrees = strafe_walk_damp_step(
@@ -471,23 +482,19 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
     /* The engine's own formula, its own two fields, its own order of operations, so the result is
      * the number it would have written rather than an approximation of it.
      *
-     * The fold is a comparison rather than a modulo because one step either way is provably
-     * enough: it lands inside [0, 360) for any input in (-360, 720). Heading was inside [0, 360)
-     * at the top of the substep, and two things are added to it before this point: the mouse step,
-     * which the caller has clamped to well under a quarter turn, and the term below.
-     *
-     * That term is no longer zero. Phase 2 leaves the turn rate in the cell instead of a zero, so
-     * the engine's own formula really does contribute here now. It stays inside the single-step
-     * fold regardless: the rate is clamped to the engine's own 120 deg/s and the substep is at most
-     * 1/32 s, so the term cannot exceed 3.75 degrees. */
+     * Folded into [0, 360) by a whole number of turns rather than by one step. One step used to
+     * be argued enough because the mouse step was "well under a quarter turn"; it is not. The
+     * spike limit that bounds it is 3000 deg/s as shipped and 20000 at the key's ceiling, which is
+     * 93.75 and 625 degrees in one 1/32 s substep, and one subtraction left the heading past 360
+     * at the second. The other term is small: phase 2 leaves the turn rate in the cell, clamped
+     * to the engine's own 120 deg/s, so it is at most 3.75 degrees a substep. */
     float turned = read_field(record, PLAYER_TURN_WHEEL) * read_field(record, PLAYER_FRAME_DELTA)
                  + heading_before;
     float radians;
 
-    if (turned >= 360.0f) {
-        turned -= 360.0f;
-    } else if (turned < 0.0f) {
-        turned += 360.0f;
+    turned -= 360.0f * floorf(turned / 360.0f);
+    if (!(turned >= 0.0f && turned < 360.0f)) {
+        turned = 0.0f;                          /* not a number, or the fold's own rounding edge */
     }
     write_field(record, PLAYER_HEADING, turned);
 
@@ -501,9 +508,9 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
 }
 
 /* ==============================================================================================
- * THE DRAWN ANGLE
+ * The drawn angle
  *
- * Everything above runs on the simulation clock, once every 1/32 s, and that is right: a damper is
+ * Everything above runs on the simulation clock, once every 1/32 s, rightly: a damper is
  * a simulation quantity. What was wrong is that the damped value was also the DRAWN value. The pose
  * compositor multiplies the node euler in after the animation blend, so whatever stands in the node
  * is exactly what appears on screen, with nothing to smooth it. At 240 frames a second the body
@@ -514,11 +521,11 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
  * the previous and the current simulation value, on the engine's own weight, once per rendered
  * frame. The engine even hands us the weight, so nothing here has to invent a clock.
  *
- * WHERE. bapobj_drawAll, entered once per rendered frame before any pose is composed, which is what
- * makes a write here land in the SAME frame. Writing at frame end instead would buy the smoothness
- * and pay a frame of latency for it.
+ * Where. bapobj_drawAll, entered once per rendered frame before any pose is composed, so a write
+ * here lands in the SAME frame. Writing at frame end instead would buy the smoothness and pay a
+ * frame of latency for it.
  *
- * THE EVIDENCE FOR THE HOOK POINT. bapobj_drawAll is reached once per rendered frame, and the
+ * The evidence for the hook point. bapobj_drawAll is reached once per rendered frame, and the
  * argument shape is read out of its only call site rather than assumed:
  *
  *     00410908  mov eax, [ebp+0x10]
@@ -535,14 +542,14 @@ void strafe_walk_restore_heading(uint8_t *record, float heading_before)
  * executables, including the recompiled one, where the functions sit at the same addresses but
  * every cell has moved.
  *
- * THE GUARD THAT IS NOT OPTIONAL. Our damper runs inside the player phases, and three of the
+ * The guard that is not optional. Our damper runs inside the player phases, and three of the
  * fourteen player modes skip both of those phases, and two more skip one of them, while the
  * engine's substep counter and its
  * interpolation weight keep running. Without the guard the pair stays frozen apart while the weight
  * sweeps zero to one every 1/32 s, and the body sweeps the same few degrees thirty-two times a
  * second, for as long as that mode lasts. That is worse than the staircase it replaces. Collapsing
- * the pair on any substep our damper did not run in is what prevents it, and it has to happen
- * before any early return, or a frame we decline to write still leaves the pair open.
+ * the pair on any substep our damper did not run in prevents it, and it has to happen before any
+ * early return, or a frame we decline to write still leaves the pair open.
  * ============================================================================================== */
 
 /* bapobj_drawAll's own prologue and the first block of its frame set-up. The five absolute operands
@@ -579,6 +586,8 @@ static const uint8_t MSK_OBJECT_DRAW_ALL[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_OBJECT_DRAW_ALL == sizeof MSK_OBJECT_DRAW_ALL,
+               "the thing draw pattern and its mask are different lengths");
 #define OBJECT_DRAW_ALL_PROLOGUE   9u
 #define OFFSET_ALPHA_GLOBAL     0x3Cu    /* behind A1     mov eax,[abs32]   */
 #define OFFSET_ALPHA_GATE       0x48u    /* behind 83 3D  cmp dword [abs32] */
@@ -610,6 +619,8 @@ static const uint8_t MSK_POSE_CLOCK[] = {
     0xFF, 0xFF,
     0xFF, 0x00, 0x00, 0x00, 0x00
 };
+_Static_assert(sizeof SIG_POSE_CLOCK == sizeof MSK_POSE_CLOCK,
+               "the pose clock pattern and its mask are different lengths");
 #define OFFSET_SUBSTEP_COUNTER  0x02u
 #define OFFSET_THROTTLE_BYTES   0x15u
 
@@ -654,6 +665,10 @@ static float current_alpha(void)
     return (alpha > 1.0f) ? 1.0f : alpha;
 }
 
+/* At 32 substeps a second this is a quarter of a second, which is longer than the settle itself
+ * and far longer than any gap the damper leaves while it is genuinely running. */
+#define CLAIM_STALE_SUBSTEPS 8u
+
 static void draw_interpolated_angle(void)
 {
     uint8_t *record;
@@ -675,8 +690,45 @@ static void draw_interpolated_angle(void)
         strafe_state.previous_tick       = tick;
     }
 
+    /* The record belongs to the substep that handed it over, and the damper runs in every substep
+     * it owns the node for, including the whole settle back to zero. So more than a handful of
+     * substeps since the last one is not a slow settle, it is the damper having stopped: a level
+     * opened, or the player left the ground into something that owns the root itself. The record
+     * from before that is a pointer into memory the engine may have freed, and this runs on every
+     * drawn frame, so the claim is dropped rather than followed. The difference is unsigned, so a
+     * counter that restarted with the level reads as a very large gap.
+     *
+     * Nothing is lost by dropping it: the next substep that drives a strafe opens a new one. */
+    if ((uint32_t)(tick - strafe_state.opened_tick) > CLAIM_STALE_SUBSTEPS) {
+        strafe_state.owns_node = false;
+        strafe_state.record    = NULL;
+        return;
+    }
+
     record = strafe_state.record;
     if (record == NULL || strafe_state.set_node_yaw == NULL || !strafe_state.turns_body) {
+        return;
+    }
+    /* The substep count above only ages the claim while substeps run. Between a level being torn
+     * down and its loading screen ticking the counter the simulation is stopped, frames are still
+     * drawn, and the record is a pointer into memory the engine may have given back.
+     *
+     * Two tests, and the readable one is not enough on its own. Readable is not live: a record
+     * the engine has released but whose page is still committed reads fine, and the body pointer
+     * read out of it is then whatever the allocator left there. So the claim is first held
+     * against the cell the engine itself loads the record from, pPlayer, read out of Plr_Steer's
+     * own operand at install and inside the image, so a plain read is the whole check. A record
+     * that is not what pPlayer holds now is not the player, whatever it reads as. Then the guarded
+     * read, which costs no system call, for the case where the cell still names memory that has
+     * since been unmapped. */
+    if (strafe_state.player_cell != NULL && *strafe_state.player_cell != record) {
+        strafe_state.owns_node = false;
+        strafe_state.record    = NULL;
+        return;
+    }
+    if (!memory_try_readable((uintptr_t)record, PLAYER_DROP_TIMER + sizeof(float))) {
+        strafe_state.owns_node = false;
+        strafe_state.record    = NULL;
         return;
     }
     if (read_field(record, PLAYER_DROP_TIMER) != 0.0f) {

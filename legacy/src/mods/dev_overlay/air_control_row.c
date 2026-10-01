@@ -21,7 +21,7 @@ bool air_control_row_set(bool enabled)
     /* Both keys are written and neither feature is called, exactly as the passive camera's row
      * does it. enhanced_input re-reads these once a second and applies them in its own order with
      * its own refusals; asking free look directly from here cannot work, because it declines while
-     * the player phases are stopped and that is the state the game is in while this menu is open. */
+     * the player phases are stopped, the state the game is in while this menu is open. */
     if (enabled && !free_look_row_get() && !free_look_row_set(true)) {
         return false;
     }
@@ -32,8 +32,8 @@ bool air_control_row_available(void)
 {
     /* Either scheme, because either one is enough to take the engine's own jump steering away.
      *
-     * The engine steers a jump on its own, and that is the fact this row exists around. Both the
-     * Jump and Fall descriptors carry the ordinary steer phase, so in the shipped game the turn
+     * This row exists because the engine steers a jump on its own. Both the Jump and Fall
+     * descriptors carry the ordinary steer phase, so in the shipped game the turn
      * input turns the body while the player is off the ground, and always did. What removes it is
      * free look: outside Stand our own steering handles the substep and the engine's turn no
      * longer reaches the body, because the mouse is the camera there and a turn rate left standing

@@ -19,6 +19,22 @@
 #define DETOUR_PROLOGUE_MAX 16u
 #define TRAMPOLINE_BYTES    64u
 
+/* Trampolines are carved out of one page per DLL rather than allocated one each. A VirtualAlloc
+ * reserves 64 KB and commits a page however few bytes are asked for, and the tree places nearly a
+ * hundred detours across its DLLs, so one allocation each was a hundred pages that stayed
+ * writable and executable together for the life of the process. Executable memory that is also
+ * writable is what a heuristic scanner counts first. Here a page is writable only while a
+ * trampoline is being written into it and executable, never both, the rest of the time. A page
+ * holds 64 trampolines; a DLL that fills one starts another. */
+#define TRAMPOLINE_PAGE_BYTES 4096u
+
+typedef struct trampoline_page {
+    uint8_t *base;
+    size_t   used;
+} trampoline_page_t;
+
+static trampoline_page_t trampoline_page;
+
 static uint32_t relative_displacement(uintptr_t from_end, uintptr_t to)
 {
     return (uint32_t)(to - from_end);
@@ -69,13 +85,47 @@ static bool chain_onto_existing_hook(detour_t *detour, uintptr_t target, const v
     return true;
 }
 
+/* The next free trampoline slot, on a page that is writable when this returns. NULL when no page
+ * can be had. */
+static uint8_t *claim_trampoline(void)
+{
+    DWORD    previous;
+    uint8_t *slot;
+
+    if (trampoline_page.base == NULL ||
+        trampoline_page.used + TRAMPOLINE_BYTES > TRAMPOLINE_PAGE_BYTES) {
+        trampoline_page.base = (uint8_t *)VirtualAlloc(NULL, TRAMPOLINE_PAGE_BYTES,
+                                                       MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        trampoline_page.used = 0;
+        if (trampoline_page.base == NULL) {
+            return NULL;
+        }
+    } else if (!VirtualProtect(trampoline_page.base, TRAMPOLINE_PAGE_BYTES, PAGE_READWRITE,
+                               &previous)) {
+        return NULL;
+    }
+
+    slot = trampoline_page.base + trampoline_page.used;
+    trampoline_page.used += TRAMPOLINE_BYTES;
+    return slot;
+}
+
+/* Makes the page executable and no longer writable. Called once the slot is filled, and also
+ * when the fill was abandoned, so the page is never left writable. */
+static bool seal_trampoline_page(void)
+{
+    DWORD previous;
+
+    return VirtualProtect(trampoline_page.base, TRAMPOLINE_PAGE_BYTES, PAGE_EXECUTE_READ,
+                          &previous) != 0;
+}
+
 static uint8_t *build_trampoline(uintptr_t target, size_t prologue_size)
 {
     uint8_t *trampoline;
     uint32_t displacement;
 
-    trampoline = (uint8_t *)VirtualAlloc(NULL, TRAMPOLINE_BYTES, MEM_COMMIT | MEM_RESERVE,
-                                         PAGE_EXECUTE_READWRITE);
+    trampoline = claim_trampoline();
     if (trampoline == NULL) {
         return NULL;
     }
@@ -87,6 +137,11 @@ static uint8_t *build_trampoline(uintptr_t target, size_t prologue_size)
                                          target + prologue_size);
     memcpy(trampoline + prologue_size + 1, &displacement, sizeof(displacement));
 
+    if (!seal_trampoline_page()) {
+        /* Unsealed, the slot would run from a page that is not executable. The slot stays
+         * claimed, since nothing else will be written there, and the caller declines. */
+        return NULL;
+    }
     FlushInstructionCache(GetCurrentProcess(), trampoline, TRAMPOLINE_BYTES);
     return trampoline;
 }
@@ -138,7 +193,8 @@ bool detour_install(detour_t *detour, uintptr_t target, const void *hook, size_t
     }
 
     if (patch_write_bytes(target, patch_bytes, prologue_size) != PATCH_RESULT_OK) {
-        VirtualFree(trampoline, 0, MEM_RELEASE);
+        /* The slot is left claimed: 64 bytes of a page this DLL owns, against a write that has
+         * already been refused once and logged. */
         log_error("detour: could not write the branch at %08X", (unsigned)target);
         return false;
     }

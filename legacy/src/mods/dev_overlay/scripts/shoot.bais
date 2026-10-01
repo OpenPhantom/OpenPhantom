@@ -1,0 +1,39 @@
+# title: Shoot the player
+# about: The other half of Attack, for a model with a fire clip and no swing: closes to five
+# about: units at a walk, then stands and fires at the player, the call the retail scripts
+# about: make (shootemup with attack kind 8, the record's first weapon, which the spawner
+# about: fills with the source's own or the blaster bolt, aimed at the player), and walks again
+# about: when they draw off past six. The fire op turns the body to the player itself and fires
+# about: only when the aim is within the record's field of view, so a shooter the player
+# about: circles behind turns first and fires next tick; the reload is the record's fire
+# about: interval, which the spawner raises to the weapon's floor. Clip 1 stands in for the
+# about: walk, 13 for the fire clip, 30 for the death. Dies with its own death clip and fades
+# about: eight seconds later.
+script "shot":
+    if check_death():
+        set_ai_mode(1)
+        mode_jmp()
+    mode_jmp()
+
+mode "shot":
+    if range_check(0, 2, 6.0f):
+        move_speed(0.0f)
+        shootemup(8, 0, 0, 13)
+        end_cycle()
+    move_speed(3.0f)
+    when move_to(3, 1, 5.0f) completes:
+        end_cycle()
+    end_cycle()
+
+mode "die":
+    when animation(0, 30, 0) completes:
+        start_timer()
+        set_ai_mode(2)
+        end_cycle()
+    end_cycle()
+
+mode "gone":
+    if check_timer(1, 8.0f):
+        ai_killed(0)
+        end_cycle()
+    end_cycle()

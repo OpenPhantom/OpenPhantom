@@ -12,7 +12,7 @@ Retail `WMAIN.EXE` (EN/DE) and the Fix Pack build. On `obi.exe` the patterns do 
 
 | Key | Default | Range | Meaning |
 |---|---|---|---|
-| `Mode` | `0` | 0-2 | 0 off, 1 correct the node only, 2 also sever on the killing blow. Ships off: severing on the killing blow changes how the game plays rather than repairing it, so it is a switch with a default that leaves the game alone. The developer panel's Utilities page has a row that writes this key, and this DLL re-reads it while the game runs |
+| `Mode` | `0` | 0-2 | 0 off, 1 correct the node only, 2 also sever on the killing blow. Ships off: severing on the killing blow changes how the game plays rather than repairing it, so it is a switch with a default that leaves the game alone. The developer panel's Utilities page has a row that writes this key, and this DLL re-reads it while the game runs. In a multiplayer session a client runs the host's mode from memory (`common/host_settings_note`), files `host_taken_dismemberment` for the multiplayer's report, and never writes the key; its own mode applies again after the session |
 | `SpinScale` | `0.35` | 0-2 | the tumble of the flying piece |
 | `GravityScale` | `0.40` | 0.1-2 | its gravity |
 | `YawScale` | `0.12` | 0-2 | the 90 degree per substep yaw kick in the flight arm |
@@ -57,6 +57,8 @@ live switch is lost, and the log says so.
 | the `hideMeshesBelow` call | `0x41441D + 0x19` | redirected through a translating thunk |
 | `candy_stuntTick` | `0x42F64C` | detoured, 6-byte prologue |
 | `candy_stuntOnContact` | `0x42FB2D` | detoured, 6-byte prologue |
+| `bapobj_sendMessage` | `0x414C99` | resolved, not patched; the five mailbox cells the gates read come out of its store operands |
+| the two node posts in `bapobj_collidePairs` | `0x41216C`, `0x4121CF` | resolved, not patched; the contact node cell comes out of their store operand, and both have to name the same cell |
 | four tumble constants, gravity, the yaw kick | in `.data` | both the shipped and the tuned value are read once at install; every later write is one of those two absolutes. Readers only in the flight code |
 
 ## The two defects
@@ -92,9 +94,9 @@ seconds, with 112 of 120 samples in the damping arm. **The piece lies still in t
 
 The cause is in `bapobj_drawAll`: the drawn attitude is interpolated between `prevRot` and `rot`,
 and `candy_stuntTick` maintains `prevPos` by hand but `prevRot` **never**. So `prevRot` stays at its
-creation value while `rot` runs to -29 degrees, and the drawn yaw saws 32 times a second. **That is a
-defect of the original engine**; this DLL maintains the field the way the engine already maintains
-`prevPos`.
+creation value while `rot` runs to -29 degrees, and the drawn yaw saws 32 times a second. **That is
+a defect of the original engine**; this DLL maintains the field the way the engine already
+maintains `prevPos`.
 
 Three earlier diagnoses, the contact re-roll, the undamped arm, the distance-inverse impulse, were
 each byte-correct descriptions and **none** was the cause. The rule that came out of it: a byte path
@@ -110,6 +112,17 @@ that *could* produce the symptom is not a cause; only a measurement that sees it
 * At most 12 pieces are tracked for `prevRot` maintenance and 3 for the diagnostics; beyond that the
   surplus is equalised (a hard frame, never the sawtooth) or stays silent.
 
+## Switching it off left the rotation slots holding dead pieces
+
+Each piece in flight holds a slot recording the attitude it had last frame, and a slot is released
+as soon as the piece disappears. Without that the table keeps a pointer to a freed block and the
+next piece allocated at the same address inherits a foreign attitude, which is a limb that starts
+its flight already turned.
+
+The tick returned early when the feature was switched off, before it reached the release, so the
+slots kept whatever the last severing had put in them. The table is now cleared once on the way out,
+and the release on the way in is unchanged.
+
 ## Testing status
 
 Built and linked, `/W4 /WX` clean. Offline verification passes on both retail builds.
@@ -118,3 +131,17 @@ Built and linked, `/W4 /WX` clean. Offline verification passes on both retail bu
 To re-check the `prevRot` fix after any change here: decapitate an enemy and watch without
 moving. The piece must fall, tumble briefly, and then **really** lie still. Then set
 `Diagnostics=0`.
+
+The host's mode in a multiplayer session is newer than the v0.4.1 build: built and linked,
+`/W4 /WX` clean, **not yet played**. In a session a client runs the host's `Mode` in place of its
+own, from memory, and its own ini is not written (see the table above). `limb_mode_pick_test`
+covers the choice: the host's mode while the host names a whole number this DLL knows as a mode,
+this machine's own otherwise, a fraction, a 3 or a NaN from the host refused, and a mode in the
+ini this DLL does not know leaving the own one standing. It also holds the table the multiplayer
+checks a host's mode against to this DLL's modes: 0 to 2, whole numbers only, off when the key is
+missing. The lines to look for on a client:
+
+```
+[dismemberment] the host's dismemberment Mode 2 is used for this session; this machine's own 0 stays in engine_fixes.ini
+[dismemberment] the host's dismemberment Mode no longer applies: back to this machine's own 0 from engine_fixes.ini
+```

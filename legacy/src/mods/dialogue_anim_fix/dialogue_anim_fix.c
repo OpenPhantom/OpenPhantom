@@ -1,5 +1,11 @@
-/* dialogue_anim_fix.c: stop Obi-Wan's leftover talk animation during the Mos Espa opening exchange
- * with Qui-Gon.
+/* dialogue_anim_fix.c: stop a character's talk animation carrying on after their line, in the
+ * scenes where the script leaves it parked.
+ *
+ * SIZE NOTE: over the 600 line mark, and most of it is the account below of what is actually
+ * broken and the two mistakes already made here, with the five patterns and their evidence. The
+ * code is three small hooks and one per-frame pass, and the reason each exists is not recoverable
+ * from the code alone. The scene table and the actor identity reads took the seam to
+ * scene_scope.c when this file reached the hard limit.
  *
  * ============================== What is actually broken =======================================
  *
@@ -8,11 +14,11 @@
  * if he were still talking. Confirmed live with a diagnostics build that watched both actors'
  * internal state frame by frame.
  *
- * The dialogue system itself is clean: the single global "who is speaking" cell (Dialog_SpeakSingle,
- * 0x00430D12) latches and clears correctly for every line, with no stale value and no skipped
- * switch. The head motion is not driven by dialogue state at all. It is a SEPARATE animation
- * channel, script opcode 0x202 "Animation" (the FSM interpreter's own case for it, inside
- * 0x00433D0B):
+ * The dialogue system itself is clean: the single global "who is speaking" cell
+ * (Dialog_SpeakSingle, 0x00430D12) latches and clears correctly for every line, with no stale
+ * value and no skipped switch. The head motion is not driven by dialogue state at all. It is a
+ * SEPARATE animation channel, script opcode 0x202 "Animation" (the FSM interpreter's own case for
+ * it, inside 0x00433D0B):
  *
  *   case 0x202:
  *     actor+0x1C0 = local_c[1];         <- ALWAYS rewritten, every time this node is visited
@@ -33,37 +39,58 @@
  *
  * ============================== What this does, and how narrowly ===============================
  *
- * A per-frame correction while it is armed, and it is ONLY EVER armed for this one conversation:
+ * A per-frame correction while it is armed, and it is ONLY EVER armed for the scenes in the scope
+ * table below, each a level file and the model names of the actors reported in it:
  *
  *   1. campaign_loadLevel (0x0043F70A, hooked below) names the level file being loaded. Arming
- *      requires "espa.b3d" (case-sensitive; every level path this engine loads is already lower
- *      case, so no fold is needed) - any other level disarms and forgets everything.
- *   2. Even while armed, an actor is only ever watched if their own body resolves (through the same
- *      body -> rdThing -> model3 name-string chain the earlier diagnostics build used) to a name
- *      starting "obinpc" or "pquigon". No other actor in Mos Espa, dialogue or not, is ever touched.
- *   3. Once armed and watching, an actor who is not the current global speaker and whose own talk-
- *      animation target is still non-idle is switched to idle through FUN_0042E3AD, the engine's
- *      own debounce and trigger - exactly what a correctly authored "Animation: idle" node would
- *      do - but only ONCE per stale streak, not every frame. actor+0x1BC (the id FUN_0042E3AD
- *      believes is already playing) is then kept in sync with whatever actor+0x1C0 the superseded
- *      actor's own script node keeps rewriting every frame, WITHOUT calling the trigger again, so
- *      their own next visit to that node sees no change and does not retrigger anything itself
- *      either. The idle animation switched to on the first frame is left alone after that, free to
- *      keep playing and looping normally. Calling the real trigger every frame instead (an earlier
- *      version of this fix did) restarts both animations from their own first frame every single
- *      frame forever, in an endless tug of war with the actor's own script node, which is what "he
- *      just pauses in place entirely" was: neither pose ever gets past its opening frame. This runs
- *      late enough in the frame (the shared render_frameEnd hook every other fix in this project's
- *      DLL set already uses) to land after that frame's own FSM tick, so the idle pose it forces is
- *      the one that actually gets drawn, even though the superseded actor's own node re-asserts its
- *      stale target moments earlier in the very same frame.
- *   4. The moment nobody has actually been speaking for HoldSeconds (the same single speaker cell
- *      and the dialogue-active flag Dialog_SpeakSingle's own timeout handler already clears between
- *      lines, so no extra bookkeeping is needed), this DISARMS itself completely: not just released
- *      until the next line, but off for the rest of this level, until the next campaign_loadLevel
- *      re-arms it. Those two globals blink to "nobody" for a moment between every line of the SAME
- *      exchange too, not only at its end, which is why this needs an actual hold timer rather than
- *      reacting to the first gap it sees.
+ *      requires the path to contain a scope's level name (case-sensitive; every level path this
+ *      engine loads is already lower case, so no fold is needed); any other level disarms and
+ *      forgets everything.
+ *   2. Even while armed, an actor is only ever watched if their own body resolves (through the
+ *      same body -> rdThing -> model3 name-string chain the earlier diagnostics build used) to a
+ *      name starting with one of that scope's prefixes. No other actor in the level, dialogue or
+ *      not, is ever touched.
+ *   3. While a watched actor is the current global speaker, the id their own script keeps
+ *      asking for in actor+0x1C0 is remembered: that is the animation their line was played
+ *      with, and the only one ever held off. The frame their line ends, if their script is
+ *      still asking for that same id, they are switched to the scene's rest animation through
+ *      FUN_0042E3AD, the engine's own debounce and trigger, exactly what a correctly authored
+ *      "Animation: idle" node would do, ONCE. actor+0x1BC (the id FUN_0042E3AD believes is
+ *      already playing) is then kept at the remembered id every frame, WITHOUT calling the
+ *      trigger again, so their own next visit to the parked node sees no change and does not
+ *      retrigger anything itself either. The rest clip switched to on the first frame is left
+ *      alone after that until its track reports complete, and then started again, as the
+ *      engine's own idle mode does with a clip: the stand and talk clips on these models are
+ *      authored as one pass of a few seconds, and FUN_0042E3AD itself returns 1 on that same
+ *      flag so a script can move on. Clips 0, 3 and 7 all played once and froze until
+ *      the replay was added. Calling the real trigger every frame instead (an earlier version of
+ *      this fix did) restarts both animations from their own first frame every single frame
+ *      forever, in an endless tug of war with the actor's own script node. That was the "he just
+ *      pauses in place entirely" report: neither pose ever gets past its opening frame. Both
+ *      cells go back to the held id straight after a trigger, because the script only visits its
+ *      node on a simulation step and a rest id left in actor+0x1C0 over a rendered frame without
+ *      one reads as the script moving on. This runs late enough in the frame
+ *      (the shared render_frameEnd hook every other fix in this project's DLL set already uses)
+ *      to land after that frame's own FSM tick, so the rest pose it forces is the one that
+ *      actually gets drawn, even though the actor's own node re-asserts its stale target moments
+ *      earlier in the very same frame.
+ *   4. The hold ends the moment the script asks for anything else. actor+0x1BC still names the
+ *      held id, so the new request reads as a change to FUN_0042E3AD and plays for real; a walk,
+ *      a gesture, or the actor's next line all go through untouched. A version that held off
+ *      every non-idle id an actor asked for while somebody else spoke idled the jail prisoner's
+ *      walk between his two lines, which was "when he's running he has no animation". Only the
+ *      id seen during the actor's own line is ever held, and only while the script keeps
+ *      asking for exactly that.
+ *   5. A scene whose exchange ends, like the Mos Espa cutscene, disarms itself completely the
+ *      moment nobody has been speaking for HoldSeconds (the same single speaker cell and the
+ *      dialogue-active flag Dialog_SpeakSingle's own timeout handler already clears between
+ *      lines, so no extra bookkeeping is needed): not just released until the next line, but off
+ *      for the rest of this level, until the next campaign_loadLevel re-arms it. Those two
+ *      globals blink to "nobody" for a moment between every line of the SAME exchange too, not
+ *      only at its end, so this needs an actual hold timer rather than reacting to the first gap
+ *      it sees. A scene whose script parks on the talk node for the rest of the level, like the
+ *      jail, says so in its row and stays armed, because the parked node keeps asking every
+ *      frame for as long as the level lasts.
  *
  * FUN_0042E3AD is never detoured, only called: this fix does not want to run every time the game's
  * own script evaluates that opcode, only once a frame, and only while armed. Nothing here touches
@@ -75,13 +102,20 @@
  * The first build of this fix was a GENERIC rule: any actor who had ever spoken, anywhere, held
  * their own talk-animation channel hostage for the rest of the session whenever they were not the
  * current speaker, which is true of them forever after their one line. Opcode 0x202 "Animation" is
- * not dialogue-specific - a level's own script reaches for it for ordinary gameplay animation too -
- * and that generic rule was overwriting THAT the instant it landed on actor+0x1C0, which is what
- * "some characters completely stop animating at all" was. Scoping arming to one level file and
- * watching by name to two specific actors means this can only ever act on the one conversation it
- * was written for; it does nothing anywhere else in the game, on purpose.
+ * not dialogue-specific; a level's own script reaches for it for ordinary gameplay animation too,
+ * and that generic rule was overwriting THAT the instant it landed on actor+0x1C0. That was the
+ * "some characters completely stop animating at all" report. Scoping arming to a level file and
+ * watching by name means this can only ever act on the conversations it was written for, and
+ * holding only the id seen during the actor's own line means it cannot act on any other animation
+ * even there; it does nothing anywhere else in the game, on purpose.
  */
 #include "dialogue_anim_fix.h"
+
+#include "scene_scope.h"
+#include "idle_clip.h"
+#include "speaker_gesture.h"
+#include "speaker_rest.h"
+#include "stand_in.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -136,8 +170,8 @@ static const uint8_t MSK_DIALOG_BOX_START[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF
 };
-_Static_assert(sizeof(SIG_DIALOG_BOX_START) == sizeof(MSK_DIALOG_BOX_START),
-               "the dialog-box-start pattern and its mask are different lengths");
+_Static_assert(sizeof SIG_DIALOG_BOX_START == sizeof MSK_DIALOG_BOX_START,
+               "the dialog box start pattern and its mask are different lengths");
 #define DIALOG_BOX_START_PROLOGUE 13u
 
 /* --- opcode 0x504 "Statement" 0x00435A0A, no absolute address in this stretch, no masking
@@ -175,33 +209,108 @@ static const uint8_t SIG_ANIM_RECHECK[] = {
     0x7E, 0x19                             /* jle +0x19                     */
 };
 
+/* --- Dialog_SpeakSingle 0x00430D12, the owner of the two cells the per-frame pass reads ---------
+ * Resolved and never detoured by THIS DLL, and declared as a detour target all the same, because
+ * camera_handback_fix and diagnostics both detour it and both load first: by the time this looks,
+ * the six byte prologue is a jump, and a plain pattern found nothing. The two cells used to be
+ * written down as addresses; they are read out of this function's own operands now, since it is
+ * the one place both are written from:
+ *
+ *   +0x1C  8B 0D <speaker>       mov ecx,[g_dialogSpeaker]     is this actor already speaking
+ *   +0x3D  89 15 <speaker>       mov [g_dialogSpeaker],edx     no: they are now
+ *   +0x78  C7 05 <active> 01..   mov [g_dialogActive],1        and a line is in progress
+ *
+ * The speaker cell appears twice and the two operands have to agree, which is the check that the
+ * pattern matched the function and not merely its shape. Every displacement and every other
+ * absolute operand is masked; the 130 bytes are unique on what is left. */
+static const uint8_t SIG_SPEAK_SINGLE[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C,                  /* push ebp / mov ebp,esp / sub esp,0xC */
+    0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00, 0x00,            /* mov [ebp-8],0                        */
+    0x8B, 0x45, 0x10, 0x50,                              /* push [ebp+0x10]                      */
+    0xE8, 0x00, 0x00, 0x00, 0x00,                        /* call (the line's duration)           */
+    0x83, 0xC4, 0x04, 0xD9, 0x5D, 0xFC,                  /* add esp,4 / fstp [ebp-4]             */
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00,                  /* mov ecx,[g_dialogSpeaker]            */
+    0x3B, 0x4D, 0x08, 0x75, 0x09,                        /* cmp ecx,[ebp+8] / jne                */
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x74, 0x59, /* cmp [a third cell],0 / je */
+    0x6A, 0x00, 0xE8, 0x00, 0x00, 0x00, 0x00,            /* push 0 / call (stop the last line)   */
+    0x83, 0xC4, 0x04, 0x8B, 0x55, 0x08,                  /* add esp,4 / mov edx,[ebp+8]          */
+    0x89, 0x15, 0x00, 0x00, 0x00, 0x00,                  /* mov [g_dialogSpeaker],edx            */
+    0x8B, 0x45, 0x14, 0x50, 0x6A, 0x00, 0x8B, 0x4D, 0x10, /* push [ebp+0x14] / push 0 / */
+    0x51, 0xE8, 0x00, 0x00, 0x00, 0x00,                  /* push [ebp+0x10] / call (play it)     */
+    0x83, 0xC4, 0x0C, 0x83, 0x7D, 0x0C, 0x00, 0x7C, 0x0C, /* add esp,0xC / cmp [ebp+0xC],0 / jl */
+    0x8B, 0x55, 0x0C, 0x52, 0xE8, 0x00, 0x00, 0x00, 0x00, /* push [ebp+0xC] / call (camera) */
+    0x83, 0xC4, 0x04, 0xA1, 0x00, 0x00, 0x00, 0x00,      /* add esp,4 / mov eax,[the clock]      */
+    0xD9, 0x40, 0x54, 0xD8, 0x45, 0xFC,                  /* fld [eax+0x54] / fadd [ebp-4]        */
+    0xD9, 0x1D, 0x00, 0x00, 0x00, 0x00,                  /* fstp [the line's end time]           */
+    0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00  /* mov [g_dialogActive],1        */
+};
+static const uint8_t MSK_SPEAK_SINGLE[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SPEAK_SINGLE == sizeof MSK_SPEAK_SINGLE,
+               "the Dialog_SpeakSingle pattern and its mask are different lengths");
+#define SPEAK_SINGLE_PROLOGUE              6u      /* push ebp / mov ebp,esp / sub esp,0xC */
+/* anim_recheck is called, never hulled here, but framerate_fix hulls the same head on six for the
+ * facing latch: push ebp, mov ebp esp, mov eax [ebp+8]. The prologue lets the search step over
+ * that. */
+#define ANIM_RECHECK_PROLOGUE              6u
+#define SPEAK_SINGLE_SPEAKER_READ_OPERAND  0x1Eu
+#define SPEAK_SINGLE_SPEAKER_WRITE_OPERAND 0x3Fu
+#define SPEAK_SINGLE_ACTIVE_OPERAND        0x7Au
+
 enum {
     SITE_LEVEL_LOAD,
     SITE_DIALOG_BOX_START,
     SITE_DIALOG_STATEMENT,
     SITE_ANIM_RECHECK,
+    SITE_SPEAK_SINGLE,
     SITE_COUNT
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("level_load",         SIG_LEVEL_LOAD),
-    SIGNATURE_ENTRY_MASKED("dialog_box_start", SIG_DIALOG_BOX_START, MSK_DIALOG_BOX_START),
-    SIGNATURE_ENTRY("dialog_statement",   SIG_DIALOG_STATEMENT),
-    SIGNATURE_ENTRY("anim_recheck",       SIG_ANIM_RECHECK)
+    SIGNATURE_ENTRY_DETOUR("level_load", SIG_LEVEL_LOAD, LEVEL_LOAD_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("dialog_box_start", SIG_DIALOG_BOX_START, MSK_DIALOG_BOX_START,
+                                  DIALOG_BOX_START_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("dialog_statement", SIG_DIALOG_STATEMENT, DIALOG_STATEMENT_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("anim_recheck", SIG_ANIM_RECHECK, ANIM_RECHECK_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_MASKED("speak_single", SIG_SPEAK_SINGLE, MSK_SPEAK_SINGLE,
+                                  SPEAK_SINGLE_PROLOGUE)
 };
 
 #define ACTOR_OWN_BODY_OFFSET       0x34u    /* actor record -> its own body pointer */
 #define ACTOR_ANIM_TARGET_OFFSET    0x1C0u   /* the id last requested for the primary anim */
 #define ACTOR_ANIM_CURRENT_OFFSET   0x1BCu   /* the id FUN_0042E3AD believes is already playing */
-#define ANIM_ID_IDLE                    0
-#define ANIM_ID_NONE                   -1    /* never a real id, forces a clean retrigger on sight */
-#define DIALOG_CURRENT_SPEAKER_ADDR 0x00882180u  /* Dialog_SpeakSingle's own single-slot cell */
-#define DIALOG_ACTIVE_FLAG_ADDR     0x00882184u  /* cleared between lines AND at the real end */
+#define ANIM_ID_NONE                   -1    /* never a real id, forces a clean retrigger on
+                                              * sight */
 #define BODY_THING_OFFSET           0x9Cu    /* body -> rdThing*, same offset dismemberment.c and
                                               * the earlier diagnostics build both already read */
-#define THING_MODEL3_OFFSET         0x04u    /* rdThing -> model3* */
-#define MAX_TRACKED_ACTORS               4u  /* Obi-Wan and Qui-Gon, with headroom to spare */
-#define LEVEL_FILE_NAME             "espa.b3d"
+#define THING_PUPPET_OFFSET         0x18u    /* rdThing -> rdPuppet* */
+#define BODY_CURRENT_CLIP_OFFSET    0xE8u    /* body -> the clip last put on its base layer */
+#define BODY_PRIMARY_SLOT_OFFSET    0xECu    /* body -> the puppet track its base clip is on */
+#define PUPPET_TRACKS_OFFSET        0x08u    /* rdPuppet -> tracks[], 0x14C bytes each */
+#define PUPPET_TRACK_STRIDE         0x14Cu
+#define TRACK_COMPLETE_OFFSET       0x140u   /* int, raised when the clip has played through */
+#define PUPPET_TRACK_LIMIT             8     /* a slot index past this is not a slot */
+#define MAX_TRACKED_ACTORS               4u  /* two speakers, with headroom to spare */
+
 #define DEFAULT_HOLD_SECONDS           3.0f   /* longer than the gap between two lines of the SAME
                                                * exchange, short enough to let go promptly once it
                                                * is genuinely over */
@@ -221,17 +330,27 @@ typedef struct dialogue_anim_fix_state {
 
     anim_recheck_fn_t anim_recheck;   /* resolved address, called directly, never detoured */
 
-    bool     armed;    /* only true while the current level is LEVEL_FILE_NAME */
+    /* Dialog_SpeakSingle's own single-slot "who is speaking" cell, and the flag it raises for a
+     * line in progress and clears between lines and at the real end. Both read out of that
+     * function's operands at install. */
+    const volatile uint32_t *current_speaker;
+    const volatile uint32_t *dialogue_active;
+
+    bool                 armed;     /* only true while the current level has a scene row */
+    const scene_scope_t *scope;     /* the row this level matched, NULL when none */
 
     int32_t  tracked_actors[MAX_TRACKED_ACTORS];
     uint32_t tracked_count;
-    bool     forcing[MAX_TRACKED_ACTORS];   /* was this actor being corrected last frame */
+    int32_t  spoken_id[MAX_TRACKED_ACTORS]; /* the id asked for during their line, NONE between */
+    int32_t  held_id[MAX_TRACKED_ACTORS];   /* the id being held off, NONE when none */
 
     uint32_t hold_ms;
-    DWORD    last_dialogue_activity_tick;   /* 0 = no dialogue observed since the last arm/release */
+    bool     speaker_gesture;     /* SpeakerGestureRepeat: a speaker animates for a whole line */
+    bool     speaker_rest;        /* SpeakerRest: a parked speaker in a scene goes to clip 0 */
+    bool     speaker_stand_in;    /* SpeakerStandIn: an anchor's line is gestured by its face */
+    DWORD    last_dialogue_activity_tick;   /* 0 = no dialogue observed since the last arm or
+                                             * release */
 
-    uint32_t corrections_this_second;
-    DWORD    corrections_log_tick;
 } dialogue_anim_fix_state_t;
 
 static dialogue_anim_fix_state_t fix_state;
@@ -243,56 +362,34 @@ static void load_config(void)
     fix_state.enabled = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "Enabled", true);
 
     hold_seconds = ini_read_float(DIALOGUE_ANIM_FIX_SECTION, "HoldSeconds", DEFAULT_HOLD_SECONDS);
-    if (hold_seconds < 0.5f) {
+    /* Written as a NOT so that a value which is not a number lands on the floor rather than
+     * through both arms: every comparison against a NaN is false, and the cast of one to an
+     * unsigned is undefined. On x86 it produced 0x80000000, which is a hold of 24 days and no
+     * disarm for the rest of the session. */
+    if (!(hold_seconds >= 0.5f)) {
         hold_seconds = 0.5f;
     } else if (hold_seconds > 30.0f) {
         hold_seconds = 30.0f;
     }
     fix_state.hold_ms = (uint32_t)(hold_seconds * 1000.0f);
+    fix_state.speaker_gesture = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerGestureRepeat",
+                                              true);
+    fix_state.speaker_rest    = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerRest", true);
+    fix_state.speaker_stand_in = ini_read_bool(DIALOGUE_ANIM_FIX_SECTION, "SpeakerStandIn",
+                                               true);
 }
 
 /* Every tracked actor is let go: this fix's hands come off them completely until the level is
  * loaded again (which re-arms) or, while still armed, one of the two watched names next speaks. */
 static void release_all_tracked_actors(void)
 {
+    uint32_t i;
+
     fix_state.tracked_count = 0;
-    memset(fix_state.forcing, 0, sizeof(fix_state.forcing));
-}
-
-/* model3's own first bytes ARE a short name string - the same technique retail's own giant-model
- * special case in rdThing_Draw uses, and the same one the diagnostics build that first isolated
- * this bug already relied on. Returns false on any unreadable link in the chain, which reads as
- * "not a name we recognise" and leaves the actor untouched, the safe default. */
-static bool actor_name_starts_with(int32_t actor_record, const char *prefix)
-{
-    void  *body = NULL;
-    void  *thing = NULL;
-    void  *model3 = NULL;
-    char   name[9] = {0};
-    size_t prefix_len = strlen(prefix);
-
-    if (!memory_read((uintptr_t)actor_record + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
-        body == NULL) {
-        return false;
+    for (i = 0; i < MAX_TRACKED_ACTORS; ++i) {
+        fix_state.spoken_id[i] = ANIM_ID_NONE;
+        fix_state.held_id[i]   = ANIM_ID_NONE;
     }
-    if (!memory_read((uintptr_t)body + BODY_THING_OFFSET, &thing, sizeof(thing)) || thing == NULL) {
-        return false;
-    }
-    if (!memory_read((uintptr_t)thing + THING_MODEL3_OFFSET, &model3, sizeof(model3)) ||
-        model3 == NULL) {
-        return false;
-    }
-    if (prefix_len >= sizeof(name) ||
-        !memory_read((uintptr_t)model3, name, prefix_len)) {
-        return false;
-    }
-    return memcmp(name, prefix, prefix_len) == 0;
-}
-
-static bool actor_is_conversation_participant(int32_t actor_record)
-{
-    return actor_name_starts_with(actor_record, "obinpc") ||
-           actor_name_starts_with(actor_record, "pquigon");
 }
 
 /* Remember an actor only while armed and only when their own name matches this one conversation.
@@ -301,7 +398,7 @@ static void track_actor(int32_t actor_record)
 {
     uint32_t i;
 
-    if (!fix_state.armed || actor_record == 0 || !actor_is_conversation_participant(actor_record)) {
+    if (!fix_state.armed || !scene_scope_actor_matches(fix_state.scope, actor_record)) {
         return;
     }
     for (i = 0; i < fix_state.tracked_count; ++i) {
@@ -316,19 +413,27 @@ static void track_actor(int32_t actor_record)
     fix_state.last_dialogue_activity_tick = timeGetTime();
 }
 
-/* Arm only for espa.b3d; anything else disarms and forgets whatever was being watched before,
- * which also covers leaving Mos Espa and coming back later - a fresh load re-arms from nothing. */
+/* Arm only for a level in the scope table; anything else disarms and forgets whatever was being
+ * watched before, which also covers leaving the level and coming back later; a fresh load re-arms
+ * from nothing. */
 static int32_t __cdecl hook_level_load(const char *path)
 {
     level_load_fn_t original = (level_load_fn_t)fix_state.level_load.original;
-    bool            is_espa = (path != NULL) && (strstr(path, LEVEL_FILE_NAME) != NULL);
     int32_t         result;
 
-    fix_state.armed = is_espa;
+    fix_state.scope = scene_scope_for_level(path);
+    fix_state.armed = (fix_state.scope != NULL);
     release_all_tracked_actors();
+    speaker_gesture_level_changed();
+    stand_in_level_changed();
     fix_state.last_dialogue_activity_tick = 0;
-    if (is_espa) {
-        log_info("dialogue_anim_fix: armed for \"%s\", watching for obinpc/pquigon", path);
+    if (fix_state.armed) {
+        log_info("dialogue_anim_fix: armed for \"%s\", watching for %s%s%s%s%s", path,
+                 fix_state.scope->prefixes[0],
+                 fix_state.scope->prefixes[1] ? "/" : "",
+                 fix_state.scope->prefixes[1] ? fix_state.scope->prefixes[1] : "",
+                 fix_state.scope->placement ? " placed as " : "",
+                 fix_state.scope->placement ? fix_state.scope->placement : "");
     }
 
     result = original(path);
@@ -352,105 +457,247 @@ static void __cdecl hook_dialog_statement(int32_t actor_record, void *node, int3
 
     original(actor_record, node, data);
     track_actor(actor_record);
+    if (fix_state.speaker_stand_in && data != NULL) {
+        stand_in_note_line(actor_record, data[1]);   /* A[1] is the line, as say_line reads it */
+    }
 }
 
-/* Once a rendered frame, after that frame's own FSM tick has already run: every tracked actor who
- * is not the current speaker and whose own talk-animation target is still non-idle gets forced
- * back to idle. Their own script node will rewrite it again on the NEXT frame if it is still
- * parked there, which is exactly why this has to run every frame rather than once.
- *
- * Before any of that: if nobody has actually been speaking for HoldSeconds, this DISARMS - not
- * just a release until the next line, but off for the rest of this level, same as if a different
- * level had just loaded. The two globals blink to "nobody" for a moment between every line of the
- * same exchange too, not only at its end, which is why this needs an actual hold timer. */
+/* The clip on the body's base layer right now, or NONE when the body does not read. The engine
+ * puts a clip there on paths that never pass through actor+0x1C0: a death is one, played
+ * straight onto the body by the hit handling while the parked script node still asks for its
+ * talk id every step. */
+static int32_t body_current_clip(int32_t actor)
+{
+    uint32_t body = 0;
+    int32_t  clip = ANIM_ID_NONE;
+
+    if (!memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
+        body == 0 ||
+        !memory_try_read((uintptr_t)body + BODY_CURRENT_CLIP_OFFSET, &clip, sizeof(clip))) {
+        return ANIM_ID_NONE;
+    }
+    return clip;
+}
+
+/* The base clip's track has played through. The rest clips are authored as one pass, a few
+ * seconds of standing, and the engine's own idle replays them from this flag; a script parked
+ * on a talk node never gets there, so the hold does it instead. */
+static bool rest_clip_has_finished(int32_t actor)
+{
+    uint32_t body = 0;
+    uint32_t thing = 0;
+    uint32_t puppet = 0;
+    int32_t  slot = -1;
+    int32_t  complete = 0;
+
+    return memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) &&
+           body != 0 &&
+           memory_try_read((uintptr_t)body + BODY_THING_OFFSET, &thing, sizeof(thing)) &&
+           thing != 0 &&
+           memory_try_read((uintptr_t)thing + THING_PUPPET_OFFSET, &puppet, sizeof(puppet)) &&
+           puppet != 0 &&
+           memory_try_read((uintptr_t)body + BODY_PRIMARY_SLOT_OFFSET, &slot, sizeof(slot)) &&
+           slot >= 0 && slot < PUPPET_TRACK_LIMIT &&
+           memory_try_read((uintptr_t)puppet + PUPPET_TRACKS_OFFSET +
+                           (uint32_t)slot * PUPPET_TRACK_STRIDE + TRACK_COMPLETE_OFFSET,
+                           &complete, sizeof(complete)) &&
+           complete != 0;
+}
+
+/* The one real switch: the actor is put at the scene's rest animation through the engine's own
+ * debounce and trigger, and then the id their script keeps asking for is written back as the
+ * one already playing, so the parked node's next visit sees no change. Called once when the hold
+ * begins and again each time the rest clip has played through. */
+static void play_rest_clip(int32_t actor, int32_t held)
+{
+    *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_CURRENT_OFFSET) = ANIM_ID_NONE;
+    *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET) = fix_state.scope->rest_anim;
+    fix_state.anim_recheck(actor, 0);
+    /* Both cells back to the held id: the trigger has already fired, and the script only visits
+     * its node on a simulation step, so a rest id left in actor+0x1C0 over a rendered frame
+     * without one reads as the script moving on and drops the hold. */
+    *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET) = held;
+    *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_CURRENT_OFFSET) = held;
+}
+
+static void begin_hold(uint32_t i, int32_t actor, int32_t id)
+{
+    uint32_t body = 0;
+
+    if (fix_state.scope->generate_idle &&
+        memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof body) &&
+        body != 0) {
+        (void)idle_clip_install(body, fix_state.scope->rest_anim);
+    }
+    play_rest_clip(actor, id);
+    fix_state.held_id[i] = id;
+    log_info("dialogue_anim_fix: actor %08X's line is over and their script still asks for "
+             "animation %d every frame, so they are put at rest (%d) and that request is "
+             "answered without a retrigger until it changes", (unsigned)actor, id,
+             fix_state.scope->rest_anim);
+}
+
+/* If nobody has actually been speaking for HoldSeconds in a scene whose exchange ends, this
+ * DISARMS: not just a release until the next line, but off for the rest of this level, same as
+ * if a different level had just loaded. Returns true when it did. */
+static bool disarm_if_exchange_over(DWORD now, bool anyone_speaking)
+{
+    if (anyone_speaking) {
+        fix_state.last_dialogue_activity_tick = now;
+        return false;
+    }
+    if (!fix_state.scope->exchange_ends || fix_state.last_dialogue_activity_tick == 0 ||
+        (uint32_t)(now - fix_state.last_dialogue_activity_tick) <= fix_state.hold_ms) {
+        return false;
+    }
+    log_info("dialogue_anim_fix: no dialogue activity for %.1f s, the exchange is over, so "
+             "this disarms for the rest of this level", (double)fix_state.hold_ms / 1000.0);
+    fix_state.armed = false;
+    release_all_tracked_actors();
+    fix_state.last_dialogue_activity_tick = 0;
+    return true;
+}
+
+/* Once a rendered frame, after that frame's own FSM tick has already run. For every tracked
+ * actor: while they speak, remember what their script asks for; the frame their line ends, if it
+ * is still asking for that, hold it off; while held, answer the parked node every frame without
+ * a retrigger; the moment it asks for anything else, or they speak again, let go. */
 static void on_frame_correct_stale_speakers(void)
 {
-    uint32_t current_speaker = 0;
-    uint32_t dialogue_active = 0;
-    DWORD    now;
+    uint32_t current_speaker;
+    uint32_t dialogue_active;
     uint32_t i;
-    uint32_t corrected_now = 0;
 
     if (!fix_state.armed || fix_state.anim_recheck == NULL || fix_state.tracked_count == 0) {
         return;
     }
-    memory_read_u32(DIALOG_CURRENT_SPEAKER_ADDR, &current_speaker);
-    memory_read_u32(DIALOG_ACTIVE_FLAG_ADDR, &dialogue_active);
-
-    now = timeGetTime();
-    if (current_speaker != 0 || dialogue_active != 0) {
-        fix_state.last_dialogue_activity_tick = now;
-    } else if (fix_state.last_dialogue_activity_tick != 0 &&
-              (uint32_t)(now - fix_state.last_dialogue_activity_tick) > fix_state.hold_ms) {
-        log_info("dialogue_anim_fix: no dialogue activity for %.1f s, the exchange is over - "
-                 "disarming for the rest of this level",
-                 (double)fix_state.hold_ms / 1000.0);
-        fix_state.armed = false;
-        release_all_tracked_actors();
-        fix_state.last_dialogue_activity_tick = 0;
+    current_speaker = *fix_state.current_speaker;
+    dialogue_active = *fix_state.dialogue_active;
+    if (disarm_if_exchange_over(timeGetTime(), current_speaker != 0 || dialogue_active != 0)) {
         return;
     }
 
     for (i = 0; i < fix_state.tracked_count; ++i) {
-        int32_t  actor = fix_state.tracked_actors[i];
-        uint32_t body = 0;
-        int32_t  target = 0;
+        int32_t         actor = fix_state.tracked_actors[i];
+        uint32_t        body = 0;
+        int32_t         wanted = 0;
+        speaker_actor_t who;
+        rest_verdict_t  verdict;
 
-        if (!memory_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body))) {
-            fix_state.forcing[i] = false;
+        if (!memory_try_read((uintptr_t)actor + ACTOR_OWN_BODY_OFFSET, &body, sizeof(body)) ||
+            !memory_try_read((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET, &wanted,
+                             sizeof(wanted))) {
+            fix_state.spoken_id[i] = ANIM_ID_NONE;
+            fix_state.held_id[i]   = ANIM_ID_NONE;
             continue;
         }
         if (body == current_speaker) {
-            if (fix_state.forcing[i]) {
+            if (fix_state.held_id[i] != ANIM_ID_NONE) {
                 /* they are speaking for real again: leave a value behind that can never match a
                  * real animation id, so their own script's next Animation node is guaranteed to
                  * read as a CHANGE and retrigger for real, even on the unlikely chance it reuses
-                 * the exact id this fix was holding them at idle against. */
+                 * the exact id this fix was holding off. */
                 *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_CURRENT_OFFSET) = ANIM_ID_NONE;
-                fix_state.forcing[i] = false;
+                fix_state.held_id[i] = ANIM_ID_NONE;
             }
+            fix_state.spoken_id[i] = wanted;
             continue;
         }
-        if (!memory_read((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET, &target, sizeof(target)) ||
-            target == ANIM_ID_IDLE) {
-            fix_state.forcing[i] = false;
+        if (fix_state.spoken_id[i] != ANIM_ID_NONE) {
+            /* their line ended this frame */
+            if (wanted == fix_state.spoken_id[i] && wanted != fix_state.scope->rest_anim &&
+                speaker_rest_record_verdict((uintptr_t)actor, &who) == REST_MAY) {
+                /* A death cry goes through the same say path as a line, with the die clip
+                 * asked for throughout, and the jail prisoner was stood back up out of his
+                 * own death by a hold that did not look. A dead actor is never held, and nor
+                 * is one out of its script: the rule every body this DLL moves is held to. */
+                begin_hold(i, actor, wanted);
+            }
+            fix_state.spoken_id[i] = ANIM_ID_NONE;
             continue;
         }
-
-        if (!fix_state.forcing[i]) {
-            /* First frame of this correction: do the real switch, through the engine's own
-             * debounce and trigger, exactly once. */
-            *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_TARGET_OFFSET) = ANIM_ID_IDLE;
-            fix_state.anim_recheck(actor, 0);
-            fix_state.forcing[i] = true;
-            ++fix_state.corrections_this_second;
+        if (fix_state.held_id[i] == ANIM_ID_NONE) {
+            continue;
         }
-        /* Every frame, forced or not: their own script node keeps rewriting actor+0x1C0 back to
-         * the stale id on its OWN next visit (earlier in this same frame, before this hook runs),
-         * and would retrigger it for real the moment it next sees a mismatch against actor+0x1BC.
-         * Keeping actor+0x1BC in sync with whatever their script just wrote satisfies that check
-         * WITHOUT calling the trigger again, so the idle animation this fix switched to on the
-         * first frame is left alone to keep playing and looping normally instead of being
-         * restarted from its own first frame every single frame, which is what "he just pauses in
-         * place entirely" was: two animations endlessly restarting each other, neither ever
-         * getting past its opening pose. */
-        *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_CURRENT_OFFSET) = target;
-        ++corrected_now;
-    }
-
-    if (corrected_now == 0) {
-        return;
-    }
-    {
-        if (fix_state.corrections_log_tick == 0 ||
-            (int32_t)(now - fix_state.corrections_log_tick) >= 0) {
-            log_info("dialogue_anim_fix: %u actor(s) held off their own stale talk animation this "
-                     "second (%u new transitions caught)",
-                     (unsigned)corrected_now, (unsigned)fix_state.corrections_this_second);
-            fix_state.corrections_this_second = 0;
-            fix_state.corrections_log_tick = now + 1000u;
+        if (wanted != fix_state.held_id[i]) {
+            /* actor+0x1BC still names the held id, so this request already read as a change to
+             * the engine's own debounce this frame and is playing; nothing to hand back. */
+            log_info("dialogue_anim_fix: actor %08X's script moved on to animation %d, the hold "
+                     "on %d is released", (unsigned)actor, wanted, fix_state.held_id[i]);
+            fix_state.held_id[i] = ANIM_ID_NONE;
+            continue;
+        }
+        /* A death that changes neither the clip asked for nor the clip on the body passes the
+         * test above and the one below, and the replay below would stand the corpse back up. An
+         * actor alive and out of its script is left to the engine arm that holds its body. */
+        verdict = speaker_rest_record_verdict((uintptr_t)actor, &who);
+        if (verdict == REST_NEVER) {
+            speaker_rest_leave_corpse(body, &who, body_current_clip(actor),
+                                      "the hold on its line's clip is released");
+            fix_state.held_id[i] = ANIM_ID_NONE;
+            continue;
+        }
+        if (verdict == REST_NOT_NOW) {
+            continue;
+        }
+        if (body_current_clip(actor) != fix_state.scope->rest_anim) {
+            /* The engine put something else on the body itself, a death the first time this was
+             * seen: the die clip raises the complete flag at its marker frame, and the replay
+             * below stood him back up in the middle of it. Both cells stay at the held id, so
+             * the parked node still does not retrigger, and the clip the engine chose plays out. */
+            log_info("dialogue_anim_fix: actor %08X's body is playing clip %d, put there by the "
+                     "engine itself, so the hold on %d is released", (unsigned)actor,
+                     body_current_clip(actor), fix_state.held_id[i]);
+            fix_state.held_id[i] = ANIM_ID_NONE;
+            continue;
+        }
+        /* Their own script node rewrote actor+0x1C0 back to the held id on its OWN visit earlier
+         * this frame, and would retrigger it the moment it next sees a mismatch against
+         * actor+0x1BC. Keeping that in step satisfies the check WITHOUT calling the trigger, so
+         * the rest animation switched to when the hold began keeps playing; when it has played
+         * through it is started again, as the engine's own idle mode does with a clip. */
+        if (rest_clip_has_finished(actor)) {
+            play_rest_clip(actor, fix_state.held_id[i]);
+        } else {
+            *(int32_t *)((uintptr_t)actor + ACTOR_ANIM_CURRENT_OFFSET) = fix_state.held_id[i];
         }
     }
+}
+
+/* The two cells the per-frame pass reads, out of Dialog_SpeakSingle's own operands. The speaker
+ * cell is read from both of its operands and the two have to agree; a build in which they did not
+ * has matched something that is not this function, and the fix stays off rather than watch a
+ * cell that is not the speaker. */
+static bool resolve_dialogue_cells(void)
+{
+    uintptr_t site = sites[SITE_SPEAK_SINGLE].address;
+    uint32_t  speaker_read = 0;
+    uint32_t  speaker_write = 0;
+    uint32_t  active = 0;
+
+    if (site == 0) {
+        log_warning("Dialog_SpeakSingle did not resolve, so the speaker and the line-in-progress "
+                    "cells are unknown and this fix stays off");
+        return false;
+    }
+    if (!memory_read_u32(site + SPEAK_SINGLE_SPEAKER_READ_OPERAND, &speaker_read) ||
+        !memory_read_u32(site + SPEAK_SINGLE_SPEAKER_WRITE_OPERAND, &speaker_write) ||
+        !memory_read_u32(site + SPEAK_SINGLE_ACTIVE_OPERAND, &active) ||
+        speaker_read != speaker_write ||
+        !memory_is_inside_image(speaker_read, sizeof(uint32_t)) ||
+        !memory_is_inside_image(active, sizeof(uint32_t))) {
+        log_warning("Dialog_SpeakSingle at %08X reads the speaker from %08X and writes it at "
+                    "%08X, with the line flag at %08X, which is not the shape expected, so this "
+                    "fix stays off", (unsigned)site, (unsigned)speaker_read,
+                    (unsigned)speaker_write, (unsigned)active);
+        return false;
+    }
+    fix_state.current_speaker = (const volatile uint32_t *)(uintptr_t)speaker_read;
+    fix_state.dialogue_active = (const volatile uint32_t *)(uintptr_t)active;
+    log_info("the speaker cell is at %08X and the line-in-progress flag at %08X, both read out "
+             "of Dialog_SpeakSingle at %08X", (unsigned)speaker_read, (unsigned)active,
+             (unsigned)site);
+    return true;
 }
 
 void dialogue_anim_fix_install(void)
@@ -480,6 +727,25 @@ void dialogue_anim_fix_install(void)
     } else {
         log_warning("the primary-animation trigger did not resolve, this fix stays off");
         return;
+    }
+    if (!resolve_dialogue_cells()) {
+        return;
+    }
+    if (!fix_state.speaker_gesture) {
+        log_info("SpeakerGestureRepeat=0, a gesture on a speaker's line holds its last frame "
+                 "once it has played through, as the engine shipped");
+    }
+    if (!fix_state.speaker_rest) {
+        log_info("SpeakerRest=0, a speaker parked on that last frame in a scene stays there, as "
+                 "the scripts shipped");
+    }
+    (void)speaker_gesture_install(fix_state.current_speaker, fix_state.speaker_gesture,
+                                  fix_state.speaker_rest);
+    if (fix_state.speaker_stand_in) {
+        fix_state.speaker_stand_in = stand_in_install(fix_state.current_speaker);
+    } else {
+        log_info("SpeakerStandIn=0, a line spoken by a script anchor with no body leaves the "
+                 "body it stands for wherever its own cycle is, as the scripts shipped");
     }
 
     if (sites[SITE_LEVEL_LOAD].address != 0) {
@@ -518,7 +784,8 @@ void dialogue_anim_fix_install(void)
         log_warning("opcode 0x504 Statement did not resolve");
     }
 
-    if (fix_state.dialog_box_start.original == NULL && fix_state.dialog_statement.original == NULL) {
+    if (fix_state.dialog_box_start.original == NULL &&
+        fix_state.dialog_statement.original == NULL) {
         log_warning("neither dialogue trigger hooked, this fix cannot do anything this session");
         return;
     }
@@ -529,7 +796,9 @@ void dialogue_anim_fix_install(void)
         return;
     }
 
-    log_info("armed only for \"%s\": while there, Obi-Wan or Qui-Gon's leftover talk animation is "
-             "held at idle every frame the other one is actually speaking, and this disarms itself "
-             "for good once their exchange is over", LEVEL_FILE_NAME);
+    log_info("armed only in %u scenes, %s and %s: while there, the one animation a named "
+             "speaker's line was played with is held off after that line for as long as their "
+             "script keeps asking for it",
+             (unsigned)scene_scope_count(), scene_scope_at(0)->level_file,
+             scene_scope_at(1)->level_file);
 }

@@ -6,8 +6,8 @@
  * the single most load-bearing piece of shared code in the tree, and until now it had no test,
  * because the only way to reach it was through the host executable's own code section.
  *
- * signature_count_in_buffer() is the same search over a caller-supplied buffer, which is what the
- * host version is built on. Given a buffer the answers are fixed and the interesting properties
+ * signature_count_in_buffer() is the same search over a caller-supplied buffer; the host version
+ * is built on it. Given a buffer the answers are fixed and the interesting properties
  * become ordinary arithmetic: wildcards, overlapping hits, and counting them all rather than
  * stopping once the answer is known to be "more than one".
  */
@@ -113,7 +113,8 @@ int main(void)
              "a null buffer is refused");
     ut_check(signature_count_in_buffer(HAYSTACK, sizeof(HAYSTACK), NULL, NULL, 2, offsets, 8) == 0,
              "a null pattern is refused");
-    ut_check(signature_count_in_buffer(HAYSTACK, sizeof(HAYSTACK), NEEDLE, NULL, 0, offsets, 8) == 0,
+    ut_check(signature_count_in_buffer(HAYSTACK, sizeof(HAYSTACK), NEEDLE, NULL, 0,
+                                       offsets, 8) == 0,
              "an empty pattern is refused rather than matching everywhere");
 
     return ut_summary("signature");

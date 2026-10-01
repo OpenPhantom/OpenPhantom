@@ -41,7 +41,7 @@
  *
  * The loop exits with an overshoot of at most one step, so alpha lies in (0, 1], and the heading
  * pair is rotated only in bapview_setCamTarget at 0x4184cc, once per step. Within a step the alpha
- * therefore sweeps from 1/n to 1 against a frozen pair, which is what `play` below reproduces.
+ * therefore sweeps from 1/n to 1 against a frozen pair, and `play` below reproduces that.
  *
  * The second test is the regression. Adding only what is banked, which is the obvious way to write
  * this and was the first design, double counts: the interpolation is already paying the previous
@@ -153,8 +153,8 @@ static void the_body_receives_every_degree(void)
 
     ut_section("the body");
 
-    /* Six steps of five frames at a fixed speed. The drawn angle at the end is the whole of the
-     * hand movement: the body has had all but the last step's worth and the lead carries the rest,
+    /* Six steps of five frames at a fixed speed. The drawn angle at the end is the whole hand
+     * movement: the body has had all but the last step's worth and the lead carries the rest,
      * so nothing is invented and nothing is lost. */
     drawn = play(true, NULL, 0);
     ut_near((double)drawn, (double)HAND_PER_FRAME * STEPS * FRAMES_PER_STEP, 1.0e-3,
@@ -200,7 +200,7 @@ static void an_alpha_of_one_leaves_only_the_bank(void)
 {
     ut_section("the boundaries");
 
-    /* At the last frame of a step the interpolation has paid the whole of the step out, so there is
+    /* At the last frame of a step the interpolation has paid the whole step out, so there is
      * nothing left to cancel and the lead is what the hand has done since. */
     ut_near((double)view_lead_degrees(0.4f, 3.0f, 1.0f), 0.4, 1.0e-6,
             "alpha 1 leaves the bank alone");

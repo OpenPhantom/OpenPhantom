@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* One line per CHANGE of free look's arming gate, and nothing else.
+/* One line per CHANGE of free look's arming gate; nothing is written between changes.
  *
  * A release is the one event in this feature that a player can see and nobody can name. It writes
  * no byte, changes no setting and produces no message: the feature simply stops writing, the
@@ -31,7 +31,7 @@ void free_look_log_init(const camera_sites_t *camera, bool enabled);
 bool free_look_log_is_new(bool armed, free_look_release_t reason);
 
 /* Writes the line. `note` is never NULL, pass "" for none. `wanted_yaw` is what free look is
- * asking for and is ignored when `wanted_valid` is false, which is what a dropped yaw looks like.
+ * asking for and is ignored when `wanted_valid` is false, the case of a dropped yaw.
  * `region` may be NULL. */
 void free_look_log_transition(bool armed, free_look_release_t reason, const char *note,
                               const free_look_gate_t *gate, const uint8_t *region,

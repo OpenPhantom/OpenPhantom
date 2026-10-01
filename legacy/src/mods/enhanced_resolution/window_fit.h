@@ -57,8 +57,8 @@
  * kind == 1 && bpp == 0x10 is accepted, which is one of the three sites mode_depth.h describes.
  *
  * They live in this header because two places read that table, the fit below, to learn how big a
- * REQUESTED mode is, and the mode dump in enhanced_resolution.c, and one layout written down twice is
- * one layout that can disagree with itself. */
+ * REQUESTED mode is, and the mode dump in enhanced_resolution.c, and one layout written down twice
+ * is one layout that can disagree with itself. */
 #define RAW_MODE_STRIDE 0x54
 #define RAW_MODE_WIDTH  0x08
 #define RAW_MODE_HEIGHT 0x0C

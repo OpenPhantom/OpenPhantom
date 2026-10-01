@@ -230,6 +230,7 @@ void menu_scale_apply_trimmings(bool verbose)
 
         if (patch_write_u8(site + DRAW_CURSOR_WIDTH,  (uint8_t)size) == PATCH_RESULT_OK &&
             patch_write_u8(site + DRAW_CURSOR_HEIGHT, (uint8_t)size) == PATCH_RESULT_OK) {
+            scale_state.cursor_size = size;
             if (verbose) {
                 log_info("the drawn menu pointer is %d pixels instead of %d%s", (int)size,
                          DRAW_CURSOR_SHIPPED,
@@ -246,7 +247,14 @@ void menu_scale_apply_trimmings(bool verbose)
     if (menu_scale_sites[SITE_LISTBOX_DRAW].address != 0) {
         uintptr_t draw = menu_scale_sites[SITE_LISTBOX_DRAW].address;
 
-        if (patch_write_u8(draw + LISTBOX_DRAW_X_INSET, (uint8_t)inset_x) == PATCH_RESULT_OK &&
+        static const uint8_t ADD_ECX_IMM8[2] = { 0x83, 0xC1 };
+        static const uint8_t ADD_EAX_IMM8[2] = { 0x83, 0xC0 };
+
+        /* Both insets sit far past the matched pattern, so the instruction each is the immediate
+         * of is checked first; a body laid out differently is left alone rather than written. */
+        if (patch_validate_bytes(draw + LISTBOX_DRAW_X_INSET - 2u, ADD_ECX_IMM8, 2u) &&
+            patch_validate_bytes(draw + LISTBOX_DRAW_Y_INSET - 2u, ADD_EAX_IMM8, 2u) &&
+            patch_write_u8(draw + LISTBOX_DRAW_X_INSET, (uint8_t)inset_x) == PATCH_RESULT_OK &&
             patch_write_u8(draw + LISTBOX_DRAW_Y_INSET, (uint8_t)inset_y) == PATCH_RESULT_OK) {
             if (verbose) {
                 log_info("list box text insets: %d -> %d across, %d -> %d down (the top one is "
@@ -264,16 +272,22 @@ void menu_scale_apply_trimmings(bool verbose)
     }
 }
 
-void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y)
+bool menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y)
 {
-    float   screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
-    float   screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
+    float   screen_width  = *menu_cells.screen_width;
+    float   screen_height = *menu_cells.screen_height;
     int32_t origin_x;
     int32_t origin_y;
     float   scale;
 
+    /* Written before the one refusal below, so a caller that logs them cannot print whatever was
+     * on its stack. One did: it announced an origin it had never been given and said the glyph
+     * scale had been put back, on the one path where neither had happened. */
+    if (out_origin_x != NULL) { *out_origin_x = 0; }
+    if (out_origin_y != NULL) { *out_origin_y = 0; }
+
     if (!(screen_width > 0.0f) || !(screen_height > 0.0f)) {
-        return;                       /* no mode yet: the engine's own block has not run either */
+        return false;                 /* no mode yet: the engine's own block has not run either */
     }
 
     origin_x = ((int32_t)screen_width  - scale_state.canvas_width)  / 2;
@@ -286,26 +300,26 @@ void menu_scale_derive_engine_cells(int32_t *out_origin_x, int32_t *out_origin_y
      * the frame buffer. */
     if (origin_x < 0) { origin_x = 0; }
     if (origin_y < 0) { origin_y = 0; }
-    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_X_CELL = origin_x;
-    *(int32_t *)(uintptr_t)ENGINE_MENU_ORIGIN_Y_CELL = origin_y;
+    *menu_cells.origin_x = origin_x;
+    *menu_cells.origin_y = origin_y;
 
     /* The same three instructions the engine's block ends with. The numerator is the cell its own
      * fld was repointed at, so this is its arithmetic on its own operands and not a second opinion
      * about what the scale should be. */
     scale = menu_text_scale_numerator / screen_width;
-    *(float *)(uintptr_t)ENGINE_MENU_SCALE_CELL = scale;
-    *(float *)(uintptr_t)ENGINE_MENU_TEXT_SCALE_CELL =
-        scale * *(const float *)(uintptr_t)ENGINE_MENU_BASE_TEXT_CELL;
+    *menu_cells.menu_scale      = scale;
+    *menu_cells.menu_text_scale = scale * *menu_cells.base_text;
 
     if (out_origin_x != NULL) { *out_origin_x = origin_x; }
     if (out_origin_y != NULL) { *out_origin_y = origin_y; }
+    return true;
 }
 
 /* ============================================================================================ */
 /* The engine's own bitmap cache, dropped so the pictures are loaded again at the new canvas. Every
  * slot it clears is refilled by name on the next draw, and the load hook resamples each one on the
  * way through. */
-static void drop_bitmaps(const void *menu)
+void menu_scale_drop_bitmaps(const void *menu)
 {
     free_bitmaps_fn_t free_bitmaps =
         (free_bitmaps_fn_t)menu_scale_sites[SITE_FREE_BITMAPS].address;
@@ -322,7 +336,7 @@ static void reset_list_boxes(const void *menu, char *widgets, size_t count)
     send_widget_fn_t send = (send_widget_fn_t)menu_scale_sites[SITE_SEND_WIDGET].address;
     size_t           index;
 
-    if (send == NULL || menu != *(void *const *)(uintptr_t)ENGINE_CURRENT_MENU_CELL) {
+    if (send == NULL || menu != *menu_cells.current_menu) {
         return;
     }
     for (index = 0; index < count; ++index) {
@@ -387,7 +401,7 @@ static void refit_menu(scaled_menu_t *tracked, float previous_x, float previous_
     }
 
     reset_list_boxes(tracked->menu, widgets, tracked->widgets);
-    drop_bitmaps(tracked->menu);
+    menu_scale_drop_bitmaps(tracked->menu);
 }
 
 static void refit(float ratio_x, float ratio_y, int32_t screen_width, int32_t screen_height)
@@ -406,7 +420,9 @@ static void refit(float ratio_x, float ratio_y, int32_t screen_width, int32_t sc
         return;
     }
     menu_scale_apply_trimmings(false);
-    menu_scale_derive_engine_cells(&origin_x, &origin_y);
+    /* The screen cells were read at the top of this function, so the derive cannot decline here
+     * and the result is nothing this path can act on. */
+    (void)menu_scale_derive_engine_cells(&origin_x, &origin_y);
 
     for (index = 0; index < scale_state.scaled_menu_count; ++index) {
         refit_menu(&scale_state.scaled_menus[index], previous_x, previous_y);
@@ -419,7 +435,8 @@ static void refit(float ratio_x, float ratio_y, int32_t screen_width, int32_t sc
     /* The three that were sized from the canvas when they were installed. The cage matters most:
      * it is the reason the scale refuses to install without it, because a canvas larger than the
      * cage leaves every widget outside the cage unreachable. */
-    pointer_cage_resize(scale_state.canvas_width, scale_state.canvas_height);
+    pointer_cage_resize(scale_state.canvas_width, scale_state.canvas_height,
+                        menu_scale_cursor_size());
     menu_island_clip_resize(scale_state.canvas_width, scale_state.canvas_height);
     (void)menu_loading_bar_resize(scale_state.canvas_width, scale_state.canvas_height);
 
@@ -448,8 +465,8 @@ void menu_scale_follow_display(void)
         return;
     }
 
-    screen_width  = *(const float *)(uintptr_t)ENGINE_SCREEN_WIDTH_CELL;
-    screen_height = *(const float *)(uintptr_t)ENGINE_SCREEN_HEIGHT_CELL;
+    screen_width  = *menu_cells.screen_width;
+    screen_height = *menu_cells.screen_height;
     if (!(screen_width >= (float)MENU_SCALE_CANVAS_WIDTH) ||
         !(screen_height >= (float)MENU_SCALE_CANVAS_HEIGHT) ||
         screen_width > (float)PLAUSIBLE_SCREEN_EXTENT ||

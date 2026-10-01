@@ -19,12 +19,17 @@ never stops, so with nothing refilling it the buffer circles its last second of 
 
 **Names every change**, on request, one line per transition.
 
+Two later repairs live in the same DLL because they are the same subsystem: the heartbeat lock
+inside `IMUSE.DLL` that gets stuck and leaves the music looping one fragment (**The "one second on
+a loop" defect**), and the audio screen's provider change throwing away a music slider move (**The
+provider change discards a slider move**).
+
 ## What it is NOT: the return-value patch
 
 There is a well-travelled explanation of this game's music defect: the music module's command
 handler leaves its result at `2` ("not handled") for `case 8` (pause) and `case 9` (resume) where
 every other implemented case sets it to `0`, and a dispatcher pair in this engine gates its
-suspend/resume bookkeeping on exactly that result, pause sets a "suspended" bit only when the
+suspend/resume bookkeeping on that result, pause sets a "suspended" bit only when the
 handler returned 0, and resume skips any module whose bit is clear. The chain is real and the
 reading of those two dispatchers is correct.
 
@@ -41,12 +46,11 @@ The orphan guard is the honest version of the same worry. Instead of predicting 
 get stuck it watches whether it *is* stuck, repairs it and says so, which means a log **without**
 that line is evidence rather than silence.
 
-## This is not known to fix the "one second on a loop" defect
+## The "one second on a loop" defect
 
 The reported symptom, music suddenly hangs and repeats a short fragment endlessly while the game
-carries on running normally, has **not** been traced to a cause. It is reported to occur without
-any mods installed, so it is not something this project introduced. Three things are ruled out by
-bytes rather than by argument:
+carries on running normally, occurs without any mods installed, so it is not something this project
+introduced. Three things in the host image are ruled out by bytes rather than by argument:
 
 * it is not the return value above (that path does not gate on it);
 * it is not the per-frame music service failing to be sent, the pause menu is the only thing that
@@ -54,11 +58,19 @@ bytes rather than by argument:
 * it is not the module re-entrancy counter, which has 36 references image-wide and not one of them
   is a `cmp` or a `test`.
 
-Set `MusicLog=1` for one session when it happens. If the guard's repair line appears, a stuck pause
-was the cause after all and the mechanism that set it is worth finding. If it never appears while
-the music is looping, the pause latch is innocent and the defect is inside `IMUSE.DLL` or below it
-in the DirectSound path; this installation has DSOAL in the `dsound.dll` slot, which the engine
-cannot see and this DLL cannot repair.
+The cause is inside `IMUSE.DLL`, in the counter that gates its heartbeat. The heartbeat is the only
+thing that refills the music buffer, the buffer plays looping, and the counter is raised and lowered
+by two threads with plain uninterlocked instructions whose floor test means it can only ever get
+stuck too high. There is a second, deterministic way in: `ImSetParam` takes that lock before it
+range-checks and five of its refusals return without releasing it. Both are closed by
+`MusicLockFix`, the watchdog behind it is `MusicHeartbeatWatchdog`, and **Patching code another
+thread may be running** below says how the write is made safe.
+
+`MusicProbe=1` states the failure as two numbers, the heartbeat count and the lock, and writes
+nothing. If the count keeps advancing while the music is stuck, the lock is innocent and the defect
+is below it in the DirectSound path; this installation has DSOAL in the `dsound.dll` slot, which
+the engine cannot see and this DLL cannot repair. `MusicLog=1` separately reports a stuck pause
+latch, which is a different fault with the same sound.
 
 ## Supported executables
 
@@ -76,11 +88,22 @@ the music latch pair from `005BAB90/94` to `005BAB40/44` and the pause-menu latc
 | `ResumeOrphanedPause` | `1` | | resume a pause with no owner. Switches itself **off** when the pause-menu latch cannot be resolved, because without it an owned pause and an orphan look the same |
 | `OrphanGraceFrames` | `120` | 12-6000 | consecutive frames the ownerless state must persist first |
 | `MusicLog` | `0` | | one line per **change** of the music state, capped at 400 a session |
+| `MusicVolumeAcrossProvider` | `1` | | keep the music volume across a 3-D provider change. See **The provider change discards a slider move** |
+| `MusicHeartbeatWatchdog` | `1` shipped, `0` for a file without the key | | the net behind the lock repair, and it only ever releases: when no heartbeat body has run for the time below while the timer keeps firing and the lock is held, the lock is written back to zero. Neither it nor the stall report judges anything until the heartbeat has been seen to run once, because the baseline is stamped at process start and the first frame can arrive seconds later, before the music has attached |
+| `MusicHeartbeatWatchdogMs` | `400` | 200-10000 | how long the body has to be silent first. Its own threshold: it used to be reachable only from inside the 1500 ms stall report, so every value under 1500 was dead, the shipped 400 included |
+| `MusicLockFix` | `1` | | the repair itself: both sides of the heartbeat lock made atomic, and the five parameter ranges whose refusal inside the DLL keeps the lock forever refused before they reach it. Three writes into the mapped DLL: the `lock` prefix over `ImLock`, a detour replacing `ImUnlock`, and a detour in front of `ImSetParam`. The first two are a pair: if the second refuses the first is rolled back, and if that rollback is refused too the lock is raised atomically and lowered as it shipped for the session, which the log says. The third stands alone: if it refuses the atomic pair stays installed and the parameter leak stays open, with the watchdog as the only net for it |
+| `MusicProbe` | `0` | | measurement: reads the heartbeat count and the lock once a frame and writes nothing, so a stall shows as two numbers |
+| `MusicProbeSeconds` | `10` | | seconds between the probe's routine lines; 0 says nothing unless the heartbeat stalls |
+| `MusicTrace` | `0` | | measurement: copies the DLL's own running commentary into the log, each line stamped with the heartbeat count and the lock. Makes the log large |
+| `MusicStressHz` | `0` | | a reproduction tool: drives music changes this many times a second to provoke the stall on purpose. The music stutters and cuts while it is on |
 
 ## Engine locations
 
-Nothing is patched and nothing is detoured. Five sites are located by signature; two are **called**,
-five cells are **read**, and no byte of the image is written.
+The pause and the orphan guard patch nothing and detour nothing. Five sites are located by
+signature; two are **called**, five cells are **read**, and no byte of the host image is written
+for them. The two other things this DLL does are not so restrained: the volume restore places three
+detours in the host image, and the lock repair writes into the mapped `IMUSE.DLL`. Each has its own
+section below.
 
 | Site | What it gives |
 |---|---|
@@ -91,9 +114,10 @@ five cells are **read**, and no byte of the image is written.
 | `sys_pause` | read: the pause menu's own latch, which distinguishes an owned pause from an orphan |
 
 Cross-checks before any of it is believed: the pause latch is named by two independent patterns, the
-attached flag by three, and the re-entrancy counter by three. A disagreement refuses the whole
-install rather than picking a winner. Every resolved cell must also lie inside the host image and be
-readable.
+attached flag by three, and the re-entrancy counter by three. A disagreement about a cell the
+feature needs refuses the whole install rather than picking a winner; one about the optional cue
+getters drops the getters and says so. Every resolved cell must also lie inside the host image and
+be readable.
 
 Neither `bapMusicPause` nor `bapMusicResume` checks whether the music system is up; both call into
 `IMUSE.DLL` unconditionally. Nothing here calls either of them unless the attached flag reads
@@ -122,7 +146,7 @@ It matters for `ImLock` specifically because the patch **moves an instruction bo
 return, would resume inside the address operand and run whatever it decoded as. Every other
 thread is therefore suspended and asked where its instruction pointer is, and the write happens
 only when none of them is inside the function. If one is, they are resumed and it is retried;
-after eight attempts the patch declines, and a declined lock is rolled back exactly as any other
+after eight attempts the patch declines, and a declined lock is rolled back as any other
 failure is.
 
 Nothing is allocated while threads are suspended, so the `ImUnlock` detour is installed
@@ -151,5 +175,65 @@ every pattern resolves with the expected match count on both retail builds.
 `host_image_resolve()`, `common/` is a static library, so each DLL owns that state and the loader
 resolving it does not carry over. The scanner searched an empty range. The refusal itself was
 correct and the game was left untouched, which is precisely why it was not obvious. Fixed; **the
-corrected build has still not been observed doing anything**, and no claim is made that it repairs
-the looping-music defect, see the warning above.
+corrected build has still not been observed doing anything**. The account of the looping defect
+under **The "one second on a loop" defect** rests on the bytes of `IMUSE.DLL`, not on a session in
+which `MusicLockFix` was seen to stop it.
+
+## The provider change discards a slider move
+
+Changing the 3-D provider on the audio screen throws away a music slider move made in the same
+visit. The screen does this, at `0x004427AF` and the calls after it:
+
+    bapMusicSetVolume(0.0f);      silence the music for the switch
+    bapMusicDetach();
+    bapsnd3d_openProvider(pick);
+    bapMusicAttach();             ends by reloading MVOL from obi.ini and applying it
+
+The slider's new position has not reached `obi.ini` yet, because the screen only writes it on the
+way out. So the re-attach puts the file's old value back, and the exit write then saves that
+instead of what was dragged. Move the slider and switch provider, and the move is gone; switch
+first and then move, and it holds. That order dependence is why it reads as intermittent.
+
+If music was already detached the re-attach is skipped, so the `0.0f` from the first line survives
+and `MVOL=0` is written.
+
+The SFX slider is immune to this one: nothing on that path zeroes or re-reads `SVOL`, and its exit
+write takes an integer straight from the getter without a trip through the file. It has a separate
+fault of its own, which `sfx_volume_save_fix` covers.
+
+### How it is put back
+
+`bapMusicSetVolume` is detoured and keeps the current value and the one before it. `bapMusicDetach`
+sees a zero standing in front of it and remembers the previous value as the player's.
+`bapMusicAttach` puts that value back after the original has run, because the original's last act
+is the reload being corrected.
+
+The two-deep history removes the guesswork. A player who drags to silence has already put their
+own zero into the previous slot before the screen's zero arrives, so zero comes back and the rule
+needs no opinion about what a zero means.
+
+### Engine locations
+
+| What | Where | Prologue |
+|---|---|---|
+| `bapMusicAttach` | `0x00410331` | 6 |
+| `bapMusicDetach` | `0x0041046C` | 10 |
+| `bapMusicSetVolume` | `0x004106CC` | 11 |
+
+All three patterns mask their absolute operands, so they survive a build that relinked its data
+section rather than resolving to nothing there. All three or none: a detour cannot be taken back
+out, so a half-installed feature would leave hooks belonging to something that reports itself
+absent.
+
+### Testing status
+
+Unit tested, `legacy/unittests/music_volume.c`, against `music_volume_latch.c`, the file the
+three hooks feed and read. It drives the rule as the screen does: a drag then a switch, chosen
+silence then a switch, two switches in one visit, an ordinary detach that must not override the
+file, a detach before any volume was set, a first call of zero, a negative zero, and a value that
+is not a number. The hooks themselves are not linked, since each calls a trampoline that only
+exists in a patched process.
+
+**Not yet seen to fire in the game.** On the machine it was written on, the provider change never
+reaches `bapMusicDetach`, so the fault is real in the code and latent there. The restore writes one
+log line the first time it acts, so that is the line to look for.

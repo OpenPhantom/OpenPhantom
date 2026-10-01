@@ -21,9 +21,9 @@
  *   74 02 / EB E9     until it hits one
  *
  * The count matters because the engine's own lookup checks only that an index is not negative,
- * `cmp [index],0 / jge` and nothing else, so one index too far is an unchecked read that ends in
- * a file loader. This is the same class of defect as the unbounded string-table index, which is
- * already guarded a layer up. */
+ * `cmp [index],0 / jge`, so one index too far is an unchecked read that ends in a file loader.
+ * This is the same class of defect as the unbounded string-table index, which is already guarded
+ * a layer up. */
 #define BITMAP_NAME_STRIDE 8u
 #define MAX_BITMAP_NAMES   256u
 
@@ -65,7 +65,8 @@ static size_t count_bitmap_names(uintptr_t table_address)
 
 /* Every bitmap index an append writes goes through here first. `highest` is the largest index the
  * widget can ever ASK for, which is not always the one supplied: a check box draws
- * `parameter + state` and its state reaches 1, so the frame after the one named has to exist too. */
+ * `parameter + state` and its state reaches 1, so the frame after the one named has to exist
+ * too. */
 static bool bitmap_index_is_usable(const menu_patch_context_t *context, int32_t index,
                                    int32_t highest, const char *what)
 {
@@ -235,7 +236,7 @@ bool menu_patcher_append_slider(menu_patch_context_t *context,
 
     slot->type       = SW_TYPE_SLIDER;
     /* NOT decoration and NOT merely "select": the hit test and the focus walk both refuse any
-     * widget whose action IS SW_ACTION_STATIC (-29), and both additionally require visible == 1
+     * widget whose action IS SW_ACTION_STATIC (-29), and both also require visible == 1
      * compared against that literal. Any non-static action would do; SELECT is the authored one. */
     slot->action     = SW_ACTION_SELECT;
     slot->visible    = 1;                  /* 1, not "non-zero": see above */
@@ -245,7 +246,7 @@ bool menu_patcher_append_slider(menu_patch_context_t *context,
     slot->parameter  = gauge_bitmap;
     slot->rect.x     = x;
     slot->rect.y     = y;
-    /* DECLARED INTENT ONLY. Every screen open broadcasts a RESET, and the slider answers it by
+    /* Declared intent only. Every screen open broadcasts a RESET, and the slider answers it by
      * overwriting both of these from the gauge bitmap, 250x50 in the retail data. What the
      * layout really controls is x and y. */
     slot->rect.width  = width;
@@ -361,8 +362,8 @@ bool menu_patcher_append_pic(menu_patch_context_t *context,
     slot->type       = SW_TYPE_PIC;
     slot->action     = SW_ACTION_STATIC;   /* a backdrop: never focused, never hit-tested */
     slot->visible    = 1;
-    /* The bitmap index a picture draws is `start + state`, not `state` alone. Writing 0 into
-     * `start` is what makes putting the index in `state` correct, so the two lines below are one
+    /* The bitmap index a picture draws is `start + state`, not `state` alone. Putting the index
+     * in `state` is only correct because `start` is written 0, so the two lines below are one
      * decision and must not be separated. Read out of all three authored pictures on the shipped
      * controls screen, whose `start` is 0 and whose `state` fields are 11, 7 and 17,
      * splashol.bmp, controls.bmp and popup.bmp, in the order that table lists them. */
@@ -405,8 +406,11 @@ bool menu_patcher_commit(menu_patch_context_t *context)
     terminator->type   = SW_TYPE_TERMINATOR;
     terminator->action = SW_ACTION_STATIC;  /* build writes this itself; pre-set for clarity */
 
-    if (patch_write_pointer32(context->table_pointer_address, context->widgets)
-        != PATCH_RESULT_OK) {
+    /* The operand has to hold the authored table it was resolved with, so a second run and a
+     * screen somebody else has already repointed are both refused. */
+    if (patch_repoint_operand(context->table_pointer_address,
+                              (uint32_t)context->source_table_address,
+                              (uint32_t)(uintptr_t)context->widgets) != PATCH_RESULT_OK) {
         log_error("menu: could not repoint the widget table at %08X; the screen keeps its own "
                   "%u widgets and nothing we built is reachable",
                   (unsigned)context->table_pointer_address, (unsigned)context->original_count);

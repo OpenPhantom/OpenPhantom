@@ -1,7 +1,16 @@
 /* spawn_census.c: count the spawns the engine refuses, because nothing else does.
  *
+*
+ * SIZE NOTE: just past the six hundred line mark. It crossed when the world pointer stopped being
+ * a literal and became a pattern with its disassembly beside it, about fifty lines of evidence for
+ * one address. That evidence is what lets the address be trusted on a build where the globals
+ * moved, so it stays.
+ *
+ * The seam, if this grows again, is the player position log. dump_nearby_placements,
+ * player_position_log_tick and the switch that arms them share only their throttle with the spawn
+ * refusal census and the destroy observer, and none of the three reads the state of another.
  * ==============================================================================================
- * THE SILENT FAILURE, walked from the report to the bytes
+ * The silent failure, walked from the report to the bytes
  *
  * enemy_activationScan decides per placement whether the actor should exist. Once the distance
  * test, the difficulty band and the type test have all passed, it calls the spawn:
@@ -30,7 +39,7 @@
  * everything worked. This file is the only thing that can tell those two apart.
  *
  * ==============================================================================================
- * WHY IT MATTERS EVEN THOUGH THE ENGINE RETRIES
+ * Why it matters even though the engine retries
  *
  * The scan runs every AI tick, so a refused placement is tried again and usually succeeds once a
  * slot frees. That makes the ordinary case "appears late" rather than "never appears". What turns
@@ -43,7 +52,7 @@
  * the actors alive at one time, against 128 slots.
  *
  * ==============================================================================================
- * WHAT THIS DOES NOT SAY
+ * What this does not say
  *
  * The two refusal paths are inside the spawn and look identical from the call site, so this
  * cannot tell an exhausted actor pool from an exhausted thing pool. It reports that the engine
@@ -67,9 +76,8 @@
  * `param_1 + 0x2e`, but param_1 decompiles as `int *`, so that expression is already scaled by 4:
  * the real byte offset is 0x2e * 4 = 0xB8. (First attempt at this offset, left unscaled, printed
  * floating-point bit patterns instead of names, which is the tell that gave the x4 away.)
- * Temporary: logs
- * every SUCCESSFUL spawn by name, not just refusals, so a specific encounter's placements can be
- * identified live rather than guessed at. */
+ * With Spawns on, every SUCCESSFUL spawn is logged by name as well, not just refusals, so a
+ * specific encounter's placements can be identified live rather than guessed at. */
 #define PLACEMENT_NAME_OFFSET 0xB8u
 #define PLACEMENT_NAME_MAX    32u
 
@@ -83,11 +91,12 @@
  * else this hook also sees. */
 #define PLACEMENT_POSITION_OFFSET 0xACu
 
-/* TEMPORARY: two guesses at which placement is one of the field report's three lift droids, by
- * loose position matching against a list of everything the activation scan happened to create,
- * both wrong (enemy091 and enemy092 turned out not to be visible in that lift at all). Guessing
- * off a list is out; this logs the PLAYER's own position periodically instead, so the next capture
- * says directly where the lift actually is and what is actually near it, rather than inferring it.
+/* The player position log, behind LogPlayerPosition, which ships off. It exists because two
+ * guesses at which placement was one of the field report's three lift droids, by loose position
+ * matching against a list of everything the activation scan happened to create, were both wrong
+ * (enemy091 and enemy092 turned out not to be visible in that lift at all). Guessing off a list
+ * is out; this logs the PLAYER's own position periodically instead, so a capture says directly
+ * where the lift actually is and what is actually near it, rather than inferring it.
  *
  * --- Plr_RunPhases 0x00448297, used only to derive the player pointer slot; never detoured. Byte-
  * identical to diag_flow.c's, video_overlay.c's and sfx_mute.c's own reasoning for this site.
@@ -99,13 +108,19 @@ static const uint8_t SIG_PLAYER_RUN_PHASES[] = {
     0x00, 0x8B, 0x0D, 0x20, 0x52, 0x4B, 0x00
 };
 #define OFFSET_PLAYER_POINTER     0x27u
+
+/* Six bytes: push ebp; mov ebp,esp; sub esp,8. Nothing here detours this function, but three other
+ * DLLs do, and the first of them replaces those six bytes with a jump. A plain pattern would then
+ * find nothing and this feature would switch itself off reporting an unsupported executable. */
+#define PLAYER_RUN_PHASES_PROLOGUE 6u
+
 #define PLAYER_ACTOR_OFFSET       0x0Cu   /* the same +0xC FUN_00447d18 itself reads */
 #define PLAYER_CURRENT_POS_OFFSET 0x18u
 
 #define PLAYER_POSITION_LOG_EVERY_FRAMES 10u   /* rough, and small on purpose: a 90-frame throttle
                                                  * turned into one sample per ~13 real seconds
-                                                 * during a 7 fps stall, which is exactly the
-                                                 * window this needs to resolve precisely */
+                                                 * during a 7 fps stall, the very window this
+                                                 * needs to resolve precisely */
 
 typedef struct player_position_log_state {
     bool      armed;
@@ -121,7 +136,9 @@ static uint32_t *resolve_player_pointer_slot(void)
 {
     uintptr_t   site;
     uint32_t    address = 0;
-    signature_t sig = SIGNATURE_ENTRY("spawn_census_player_run_phases", SIG_PLAYER_RUN_PHASES);
+    signature_t sig = SIGNATURE_ENTRY_DETOUR("spawn_census_player_run_phases",
+                                             SIG_PLAYER_RUN_PHASES,
+                                             PLAYER_RUN_PHASES_PROLOGUE);
 
     signature_resolve_table(&sig, 1);
     site = sig.address;
@@ -189,17 +206,43 @@ static uint32_t *resolve_camera_view_pointer_slot(void)
     return (uint32_t *)(uintptr_t)address;
 }
 
-/* TEMPORARY: dumps every LEVEL PLACEMENT within range of the player, not just ones that happened
- * to fire a "created" log during this capture. Matching by "recently created nearby" turned out to
- * miss the actual droids twice in a row: they can be actors that were already active before this
- * session's own capture window started, which never emit a fresh "created" line at all. This walks
- * the SAME placement table FUN_00437161 (the activation scan) itself iterates: world = *(0x8A0060),
- * count = *(world+0x204), array = *(world+0x20C), each entry the same placement record everything
- * else in this file already reads by the same offsets. 0x008A0060 is used directly rather than
- * resolved by signature: it is a fixed global read as a literal absolute operand at several
- * already-confirmed sites this session (FUN_0040be00, FUN_0040c2be among them), not a relocatable
- * target, and this is a one-off diagnostic rather than something meant to ship. */
-#define WORLD_POINTER_ADDRESS          0x008A0060u
+/* The placement dump, the second half of LogPlayerPosition: every LEVEL PLACEMENT within range
+ * of the player, not just ones that happened to fire a "created" log during this capture.
+ * Matching by "recently created nearby" turned out to miss the actual droids twice in a row: they
+ * can be actors that were already active before this session's own capture window started, which
+ * never emit a fresh "created" line at all. This walks the SAME placement table FUN_00437161 (the
+ * activation scan) itself iterates: world = *(g_world), count = *(world+0x204),
+ * array = *(world+0x20C), each entry the same placement record everything else in this file
+ * already reads by the same offsets. The world pointer cell is read out of the operand of the
+ * pattern below, not written down. */
+/* --- 0x00406BE3, a function that opens by loading the world pointer ---------------------------
+ *   55 8B EC              push ebp / mov ebp,esp
+ *   83 EC 24              sub  esp, 0x24
+ *   A1 <world>            mov  eax, [g_world]
+ *   89 45 F8              mov  [ebp-8], eax
+ *   8B 4D F8 / 8B 51 50   mov  ecx,[ebp-8] / mov edx,[ecx+0x50]
+ *
+ * This was a literal, argued for on the grounds that the cell is a fixed global and this is a
+ * one-off diagnostic. The objection that stands is the recompile: three builds ship at the same
+ * file size and the globals move, so a literal there reads a different cell and the census reports
+ * placements that were never placed. Twenty bytes, the operand masked, and with it wildcarded the
+ * pattern matches exactly once in the retail image and yields 0x008A0060, the value that used to
+ * be written here. */
+static const uint8_t SIG_WORLD_POINTER[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x24, 0xA1, 0x00, 0x00, 0x00,
+    0x00, 0x89, 0x45, 0xF8, 0x8B, 0x4D, 0xF8, 0x8B, 0x51, 0x50
+};
+static const uint8_t MSK_WORLD_POINTER[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_WORLD_POINTER == sizeof MSK_WORLD_POINTER,
+               "the world pointer pattern and its mask are different lengths");
+#define OFFSET_WORLD_POINTER_OPERAND 7u
+
+/* Filled in at install from the operand above; 0 means the site did not resolve and the placement
+ * dump declines rather than reading a cell it guessed at. */
+static uintptr_t world_pointer_cell;
 #define WORLD_PLACEMENT_COUNT_OFFSET   0x204u
 #define WORLD_PLACEMENT_ARRAY_OFFSET   0x20Cu
 #define PLACEMENT_ACTIVE_FLAG_BIT      0x1u
@@ -215,7 +258,8 @@ static void dump_nearby_placements(const float *player_position)
     uint32_t array;
     int32_t  index;
 
-    if (!memory_read(WORLD_POINTER_ADDRESS, &world, sizeof(world)) || world == 0) {
+    if (world_pointer_cell == 0 ||
+        !memory_read(world_pointer_cell, &world, sizeof(world)) || world == 0) {
         return;
     }
     if (!memory_read((uintptr_t)world + WORLD_PLACEMENT_COUNT_OFFSET, &count, sizeof(count)) ||
@@ -233,14 +277,14 @@ static void dump_nearby_placements(const float *player_position)
         float    position[3];
         float    dx, dy, dz;
 
-        if (!memory_read((uintptr_t)array + (uint32_t)index * 4u, &placement,
+        if (!memory_try_read((uintptr_t)array + (uint32_t)index * 4u, &placement,
                          sizeof(placement)) || placement == 0) {
             continue;
         }
-        if (!memory_read((uintptr_t)placement, &flags, sizeof(flags))) {
+        if (!memory_try_read((uintptr_t)placement, &flags, sizeof(flags))) {
             continue;
         }
-        if (!memory_read((uintptr_t)placement + PLACEMENT_POSITION_OFFSET, position,
+        if (!memory_try_read((uintptr_t)placement + PLACEMENT_POSITION_OFFSET, position,
                          sizeof(position))) {
             continue;
         }
@@ -256,7 +300,7 @@ static void dump_nearby_placements(const float *player_position)
         {
             uint32_t created = 0;
 
-            (void)memory_read((uintptr_t)placement + PLACEMENT_CREATED_FLAG_OFFSET, &created,
+            (void)memory_try_read((uintptr_t)placement + PLACEMENT_CREATED_FLAG_OFFSET, &created,
                               sizeof(created));
             log_info("spawn census: NEARBY \"%.*s\" at (%.1f, %.1f, %.1f), active=%d created=%u",
                      (int)PLACEMENT_NAME_MAX,
@@ -283,15 +327,15 @@ static void player_position_log_tick(void)
     }
     player_position_log.frame_count = 0;
 
-    if (!memory_read((uintptr_t)player_position_log.player_pointer_slot, &player_record,
+    if (!memory_try_read((uintptr_t)player_position_log.player_pointer_slot, &player_record,
                      sizeof(player_record)) || player_record == 0) {
         return;
     }
-    if (!memory_read((uintptr_t)player_record + PLAYER_ACTOR_OFFSET, &player_actor,
+    if (!memory_try_read((uintptr_t)player_record + PLAYER_ACTOR_OFFSET, &player_actor,
                      sizeof(player_actor)) || player_actor == 0) {
         return;
     }
-    if (!memory_read((uintptr_t)player_actor + PLAYER_CURRENT_POS_OFFSET, position,
+    if (!memory_try_read((uintptr_t)player_actor + PLAYER_CURRENT_POS_OFFSET, position,
                      sizeof(position))) {
         return;
     }
@@ -300,11 +344,11 @@ static void player_position_log_tick(void)
         uint32_t camera_view;
         float    pitch, yaw;
 
-        if (memory_read((uintptr_t)player_position_log.camera_view_pointer_slot, &camera_view,
+        if (memory_try_read((uintptr_t)player_position_log.camera_view_pointer_slot, &camera_view,
                         sizeof(camera_view)) && camera_view != 0 &&
-            memory_read((uintptr_t)camera_view + BAPVIEW_EULER_PITCH_OFFSET, &pitch,
+            memory_try_read((uintptr_t)camera_view + BAPVIEW_EULER_PITCH_OFFSET, &pitch,
                         sizeof(pitch)) &&
-            memory_read((uintptr_t)camera_view + BAPVIEW_EULER_YAW_OFFSET, &yaw, sizeof(yaw))) {
+            memory_try_read((uintptr_t)camera_view + BAPVIEW_EULER_YAW_OFFSET, &yaw, sizeof(yaw))) {
             log_info("spawn census: player at (%.1f, %.1f, %.1f), camera yaw %.1f pitch %.1f",
                      (double)position[0], (double)position[1], (double)position[2], (double)yaw,
                      (double)pitch);
@@ -382,8 +426,8 @@ static int32_t __cdecl hook_spawn(void *a, void *b, void *c)
     if (census.original == NULL) {
         /* Not the window detour.c has: here the target is stored BEFORE the call is redirected,
          * so by the time this hook can run it is set. The guard stands because a null call would
-         * take the process down, and it must not be mistaken for a refusal, which is why nothing
-         * is counted on this path. */
+         * take the process down, and it must not be mistaken for a refusal, so nothing is
+         * counted on this path. */
         return 0;
     }
 
@@ -426,6 +470,25 @@ bool spawn_census_install(uintptr_t activation_scan, bool enabled)
         return census.original != NULL;
     }
     census.installed = true;
+
+    /* The world pointer, read out of an instruction rather than written down. Without it the
+     * nearby placement dump declines; the count of refused spawns above it does not need it. */
+    {
+        uintptr_t site = signature_find_unique(SIG_WORLD_POINTER, MSK_WORLD_POINTER,
+                                               sizeof SIG_WORLD_POINTER);
+        uint32_t  address = 0;
+
+        if (site != 0 && memory_read_u32(site + OFFSET_WORLD_POINTER_OPERAND, &address) &&
+            memory_is_inside_image(address, sizeof(uint32_t))) {
+            world_pointer_cell = (uintptr_t)address;
+            log_info("[diagnostics] the world pointer is at %08X, read from the operand at "
+                     "%08X", (unsigned)world_pointer_cell, (unsigned)site);
+        } else {
+            log_warning("[diagnostics] the world pointer did not resolve, so the nearby "
+                        "placement dump is off. It would otherwise read a guessed address "
+                        "and list placements that were never placed.");
+        }
+    }
 
     if (!enabled) {
         log_info("[diagnostics] Spawns=0, refused NPC spawns are not counted. The engine's own "
@@ -474,7 +537,7 @@ bool spawn_census_install(uintptr_t activation_scan, bool enabled)
  * sets it to 0 UNLESS the actor's own state field (actor+0x20) reads 14, in which case that too is
  * immediately overwritten back to 2. Zero is also activation_scan's own "not yet created" gate, so
  * a reason that lands on the zero path is a placement that will be recreated on the very next
- * scan tick, which is exactly the shape of what the field report described. */
+ * scan tick, exactly the shape the field report described. */
 static const uint8_t SIG_ACTOR_DESTROY[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x8B, 0x45, 0x08, 0x8B, 0x48, 0x14,
     0x81, 0xE1, 0x00, 0x20, 0x00, 0x00, 0x85, 0xC9
@@ -499,7 +562,7 @@ static destroy_census_state_t destroy_census;
  * identical to the placement's own), so the level data is not at fault, and reason 0 is the only
  * reason this mechanism ever produces.
  *
- * SUPPRESSION WAS TRIED FOUR WAYS FROM THIS HOOK AND ALL OF IT IS GONE NOW. The account is kept
+ * Suppression was tried FOUR ways from this hook and all of it is gone now. The account is kept
  * because the mechanism above is still real and someone will find it again.
  *
  *   1. Re-check the activation radius before forwarding a reason-0 destroy. Field-tested at zero
@@ -514,7 +577,7 @@ static destroy_census_state_t destroy_census;
  *   4. A general version keyed on actor+0x108, a per-tick-refreshed field that decompiled as a
  *      pointer to whichever mover an actor is riding, refreshed by FUN_00435c67/FUN_0040be00 ahead
  *      of the deactivation check. Refusing the destroy whenever it was non-null would have covered
- *      any actor on any mover. It shipped, reviewed clean, and FIELD-TESTED AT ZERO SUPPRESSIONS:
+ *      any actor on any mover. It shipped, reviewed clean, and field-tested at ZERO suppressions:
  *      a played session logged 2,014 reason-0 destroys for the five known placements and it refused
  *      none of them. Whatever that field is, it did not behave as the decompile suggested. Do not
  *      re-attempt it on the strength of the decompile alone.
@@ -524,7 +587,7 @@ static destroy_census_state_t destroy_census;
  * label): enemy045 (127.1, 80.5, 23.1), enemy046 (126.5, 79.7, 23.1) and enemy048 (126.3, 80.9,
  * 23.1) on one lift; enemy076 (122.4, 64.0, 23.0) and enemy077 (122.5, 64.5, 23.0) on a second.
  *
- * WHY NONE OF IT SURVIVES. The stall it was built for was never this race. It was a VirtualQuery
+ * Why none of it survives. The stall it was built for was never this race. It was a VirtualQuery
  * guard on a hook in framerate_fix, since repaired. With that fixed, a session with no suppression
  * at all logged 128 reason-0 destroys across those five placements and held a flat 60 fps through
  * both lifts, with each of the five dying once, properly, by reason 1. The thrashing is real and
@@ -537,7 +600,7 @@ static void __cdecl hook_actor_destroy(void *actor, int32_t reason)
     void        *placement;
     bool         have_placement;
 
-    have_placement = memory_read((uintptr_t)actor + 0x10u, &placement, sizeof(placement)) &&
+    have_placement = memory_try_read((uintptr_t)actor + 0x10u, &placement, sizeof(placement)) &&
                      placement != NULL;
 
     if (destroy_census.log_enabled) {

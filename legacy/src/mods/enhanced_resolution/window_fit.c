@@ -2,7 +2,7 @@
  * actually sees every mode change.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  * --- 0x0046BC85  graphics_setMode(rawModeIndex) -----------------------------------------------
  *   0046BC85  55 8B EC 83 EC 10      push ebp / mov ebp,esp / sub esp,0x10   (6-byte prologue)
@@ -30,8 +30,8 @@
  *
  *   0045F7A7  E8 <rel32>   call graphics_getWidth
  *   0045F7AC  3B 05 ...    cmp  eax,[max_menu_Width]
- *   0045F7C8  E8 <rel32>   call graphics_setResolution(640,480)  ENTERING a menu: the mode goes DOWN
- *   0045F7F4  E8 <rel32>   call graphics_setMode(savedIndex)     LEAVING  a menu: the mode goes UP
+ *   0045F7C8  E8 <rel32>   call graphics_setResolution(640,480)  ENTERING a menu: mode goes DOWN
+ *   0045F7F4  E8 <rel32>   call graphics_setMode(savedIndex)     LEAVING  a menu: mode goes UP
  *
  * and the options screen's own apply calls graphics_setMode directly too, twice (0x0044162C and
  * 0x0044163C). A window fit driven from graphics_setResolution therefore heard the mode drop to
@@ -59,8 +59,8 @@
  *   8B 90 48278600                  mov  edx,[eax + g_aRawMode + 0x08]   <- operand wildcarded
  *
  * Called, never patched. It is how the size that is REALLY set can be read back after the call,
- * which is what makes the hook correct on all three of the engine's exits: a real change, the
- * shortcut for a mode already in use, and a failure that leaves the previous mode standing.
+ * so the hook is correct on all three of the engine's exits: a real change, the shortcut for a
+ * mode already in use, and a failure that leaves the previous mode standing.
  *
  * WARNING: we may be arguing with a wrapper that owns the same window. The correction is therefore
  * repeated for a few frames after the mode change, but only while it is still needed and at most
@@ -116,7 +116,7 @@ static const uint8_t SIG_SET_MODE_ENTRY[] = {
  * test, the `imul eax,0x54` stride and the two loads either side of it, and not where the mode
  * table happens to live. That keeps it resolving under forced ASLR and on the recompiled build,
  * where the same three instructions sit 0x60 lower and the operands have moved with them. It stays
- * unique in all three builds, which is what makes wildcarding them safe here. */
+ * unique in all three builds, so wildcarding them is safe here. */
 static const uint8_t SIG_MODE_SIZE_ACCESSOR[] = {
     0x55, 0x8B, 0xEC, 0x83, 0x7D, 0x08, 0x00, 0x74, 0x13,
     0xA1, 0x00, 0x00, 0x00, 0x00, 0x6B, 0xC0, 0x54, 0x8B, 0x4D, 0x08,
@@ -165,8 +165,8 @@ typedef struct window_fit_state {
     int                 retries_left;
 
     /* The size the window was last fitted to. It is the guard against the shortcut that reports
-     * success for a mode that was already set, and it is what makes the hook idempotent when a
-     * caller retries, which the resolution path does. */
+     * success for a mode that was already set, and it keeps the hook idempotent when a caller
+     * retries, which the resolution path does. */
     int                 last_fit_width;
     int                 last_fit_height;
 
@@ -218,7 +218,7 @@ HWND window_fit_game_window(void)
 }
 
 /* ============================================================================================
- * THE MONITOR CHOICE
+ * The monitor choice
  *
  * Pure, so that the rule can be checked without a second physical display. The order of the three
  * arms is the whole content of the decision:
@@ -339,7 +339,7 @@ static const char *monitor_reason(int chosen, int current)
 }
 
 /* Returns true when a connected monitor can show the mode at all. `source` names whatever drove
- * this fit and appears in the log line; NULL stays silent, which is what the retries do. */
+ * this fit and appears in the log line; NULL stays silent, as the retries do. */
 static bool apply_fit(uint32_t width, uint32_t height, const char *source)
 {
     HWND           window = window_fit_game_window();

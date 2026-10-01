@@ -22,8 +22,8 @@ static struct {
     bool               reported_lie;
 } clip_state;
 
-/* True when the client area covers the whole of the rendered rectangle, which is the borderless
- * window at the monitor's origin. Nothing is clipped in that case and nothing needs correcting. */
+/* True when the client area covers all of the rendered rectangle, the borderless window at the
+ * monitor's origin. Nothing is clipped in that case and nothing needs correcting. */
 static bool client_covers_render(const RECT *client, int render_width, int render_height)
 {
     return client->left <= 0 && client->top <= 0 &&
@@ -49,11 +49,13 @@ static BOOL WINAPI corrected_get_client_rect(HWND window, LPRECT rect)
         return answered;
     }
     if (window != window_fit_game_window()) {
-        return answered;                     /* some other window of the process, not ours to touch */
+        /* some other window of the process, not ours to touch */
+        return answered;
     }
     if (!window_fit_current_mode_size(&render_width, &render_height) ||
         render_width <= 0 || render_height <= 0) {
-        return answered;                     /* no mode yet, so there is nothing to compare against */
+        /* no mode yet, so there is nothing to compare against */
+        return answered;
     }
 
     /* The wrapper does this same mapping immediately after this call returns, and compares the
@@ -81,8 +83,8 @@ static BOOL WINAPI corrected_get_client_rect(HWND window, LPRECT rect)
         clip_state.reported_lie = true;
         log_info("the window's client area overlaps the rendered rectangle in part, which is the "
                  "case the wrapper clips wrongly, so it is being given an empty client rectangle "
-                 "and takes its whole-surface path instead. The picture fills the window from here. "
-                 "Client %d,%d to %d,%d on the desktop; the engine renders %dx%d.",
+                 "and takes its whole-surface path instead. The picture fills the window from "
+                 "here. Client %d,%d to %d,%d on the desktop; the engine renders %dx%d.",
                  (int)desktop_client.left, (int)desktop_client.top,
                  (int)desktop_client.right, (int)desktop_client.bottom,
                  render_width, render_height);

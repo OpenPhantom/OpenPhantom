@@ -11,7 +11,14 @@
 #     cmake -S . -B build -A Win32
 #     cmake --build build --config Release
 #     ctest --test-dir build -C Release
-#     copy build\dist\ here, plus dist\engine_fixes.ini and dist\THIRD-PARTY-NOTICES.txt
+#     copy build\dist\ here without obi_dedicated.exe, plus everything in dist\:
+#     engine_fixes.ini, characters.ini, THIRD-PARTY-NOTICES.txt and the licence texts it
+#     names, dxwrapper-License.txt, hacl-License.txt and mbedtls-License.txt
+#
+# obi_dedicated.exe is the dedicated server. The build makes it, but it is not part of a patch
+# release. Anything else in build\dist that the build did not write, such as a file copied in by
+# hand for an earlier test, does not belong in the release either; a fresh build directory has
+# none.
 #
 # build\dist is already laid out the way an installation is: dinput.dll beside the executable,
 # mods\ and tools\ under it. tools\ holds the standalone scripts, which have no build step and are

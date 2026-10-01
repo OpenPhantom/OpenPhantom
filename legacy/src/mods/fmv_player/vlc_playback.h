@@ -9,11 +9,13 @@
  *
  * This replaces a Media Foundation backend that flickered black through six different fixes. The
  * one thing every one of those attempts shared was MFPlay and its EVR renderer; VLC, standalone,
- * played the same converted file with no flicker at all, which is why its engine was tried rather
- * than a seventh round of window management around MFPlay.
+ * played the same converted file with no flicker at all, so its engine was tried rather than a
+ * seventh round of window management around MFPlay.
  */
 #ifndef VLC_PLAYBACK_H
 #define VLC_PLAYBACK_H
+
+#include "movie_rule.h"
 
 #include <windows.h>
 
@@ -21,7 +23,7 @@
 
 /* Starts locating a 32-bit libVLC, loading libvlccore.dll and libvlc.dll out of it, resolving the
  * handful of exports this file calls, pointing VLC_PLUGIN_PATH at that install's plugins folder,
- * and creating one shared instance for the life of the process, ALL OF IT on a background thread,
+ * And creating one shared instance for the life of the process, all of it on a background thread,
  * started once and never joined.
  *
  * Call as early as possible, at install time, so it has the most time to finish before the first
@@ -45,7 +47,7 @@ void vlc_playback_init_async(void);
  * A libVLC without the export it needs stays on letterbox and says so once. */
 void vlc_playback_set_stretch(bool stretch);
 
-/* WHICH VIDEO OUTPUT LIBVLC USES. An empty name, which is the default, leaves libVLC to choose, so
+/* Which video output libvlc uses. An empty name, which is the default, leaves libVLC to choose, so
  * an installation that says nothing behaves exactly as it always has.
  *
  * This exists for the same Wine defect video_overlay.h describes: the cutscenes play and the menu
@@ -55,8 +57,8 @@ void vlc_playback_set_stretch(bool stretch);
  *
  * What is left is the DEVICE. libVLC's default video output on Windows is Direct3D, so playing a
  * movie creates a SECOND Direct3D device while the engine is holding an exclusive mode one through
- * dxwrapper. That is window independent, which is exactly the shape of what was measured. An output
- * that paints through GDI instead creates no device and cannot take the engine's away.
+ * dxwrapper. That is window independent, the shape of what was measured. An output that paints
+ * through GDI instead creates no device and cannot take the engine's away.
  *
  * Passed straight to libVLC as --vout=NAME, so the names are libVLC's own: "gdi" for the plain
  * Windows blitter, "opengl" or "gl", "direct3d9", "direct3d11". A name libVLC does not know makes
@@ -102,10 +104,13 @@ bool vlc_playback_is_still_loading(void);
  * the one message that BEGINS a close, the close box as WM_NCLBUTTONDOWN/HTCLOSE, which is then
  * removed and immediately re-posted, so the request survives to be honoured by the engine's own
  * window procedure once this returns. Alt+F4 was handled here too and is not any more; see
- * vlc_playback.c for what went wrong with it.
- * Without it the game cannot be closed until the movie ends, which for the credits is minutes and
- * which the retail Bink path does not do. WM_QUIT needs no handling here: it is a thread message
- * with no window, a scoped peek never retrieves it, and it stays queued for the game's own pump.
+ * movie_close.c for what went wrong with it. The engine's own window procedure discards
+ * WM_CLOSE; enhanced_resolution answers it with a shutdown once it gives the window a frame with
+ * a close box. Either way the loop does not eat a request on the way past: outside a session it
+ * ends the movie and goes back at once, in a session it ends nothing and is passed on once the
+ * movie is over (movie_close.c). WM_QUIT needs no handling here: it is a thread
+ * message with no window, a scoped peek never retrieves it, and it stays queued for the game's own
+ * pump.
  *
  * What none of this touches, because it has been claimed here before and is worth stating plainly:
  * SENT messages. The MSG that PeekMessageW fills in only ever carries queued messages, while a
@@ -114,7 +119,29 @@ bool vlc_playback_is_still_loading(void);
  * call itself and never appears in the MSG at all. So an Alt-Tab during a movie does reach the
  * engine's window procedure, re-entrantly, on the thread that is parked here, and no peek filter
  * of any shape changes that. The reason this design holds is that the overlay is in-process, so
- * Windows raises no WM_ACTIVATEAPP for it becoming topmost; that is one reason, not two. */
-bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window);
+ * Windows raises no WM_ACTIVATEAPP for it becoming topmost; that is one reason, not two.
+ *
+ * `loop` says which of those ways out end the movie, and what the loop does besides. Outside a
+ * multiplayer session every one of them does, as it always has, and nothing else happens. In a
+ * session the loop also dispatches the session's thread timer, which would otherwise not run for
+ * the length of the movie; the host's movie is not ended by a lost foreground or the close box;
+ * and a movie held for the host is ended by none of the three, each one refused being counted,
+ * but by `loop->poll` saying the host is done, asked every turn after the turn has pumped. A close
+ * request refused in a session is remembered (movie_close.c) and passed on once the movie is over.
+ * `loop->end` comes back as the reason the loop stopped. */
+bool vlc_playback_play_blocking(HWND window, const wchar_t *file_path, HWND game_window,
+                                movie_loop_t *loop);
+
+/* The black wait of a held client whose movie ended before the host's: the same pump over
+ * `window`, with no player, until `loop->poll` says the host is done (MOVIE_END_HOST) or that
+ * the session let the player go (MOVIE_END_ALONE). Escape, a lost foreground and the close box
+ * are counted and end nothing, because the movie they would end is the host's. */
+void vlc_playback_hold_blocking(HWND window, HWND game_window, movie_loop_t *loop);
+
+/* The thread timers of one turn, when `loop` pumps the session: every timer with no window, and
+ * `window`'s own, dispatched; a due tick of any other window taken and dropped. Each timer with no
+ * window is counted into `loop->counts.thread_timers`. For the one question a wait asks before
+ * its loop has turned, so that it, too, is asked after a pump. */
+void vlc_playback_pump_timers(HWND window, movie_loop_t *loop);
 
 #endif /* VLC_PLAYBACK_H */

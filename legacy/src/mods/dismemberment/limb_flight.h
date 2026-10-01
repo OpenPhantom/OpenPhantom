@@ -14,7 +14,7 @@
  * effect on anything else. NOT touched: the normaliser [0x4A8384] = 1/32768, which has four
  * readers and is the rand15() conversion, not a flight constant.
  *
- * NOT FIXED, named honestly: the DIRECTION. enemy_detachPiece computes
+ * Not fixed, named honestly: the DIRECTION. enemy_detachPiece computes
  * `dir = nodeMat[0].t, nodeMat[n].t` (root minus joint) and from it the impulse with
  * `dz*0.25 + 0.15`; candy_stuntTick then rotates it out of the object's LOCAL frame into the
  * world. For a high node (head, neck) `dir` points DOWN, so the upward part flips negative. Fixing
@@ -34,8 +34,5 @@ void limb_flight_install(void);
  * matters because the engine severs seven authored pieces of its own and those fly through the
  * same numbers. */
 void limb_flight_set_active(bool active);
-
-/* Whether the tuned values are the ones in the image now. */
-bool limb_flight_is_active(void);
 
 #endif /* LIMB_FLIGHT_H */

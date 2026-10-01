@@ -6,8 +6,8 @@
  * each site and the arithmetic itself.
  *
  * SIZE NOTE. Back under the 600 line mark. The note stays because how it got there still matters.
- * Most of what is left is byte evidence at each site rather than code, and that is where the
- * evidence belongs.
+ * Most of what is left is byte evidence at each site rather than code. Evidence belongs at the
+ * site it came from.
  *
  * It was once past the hard limit, carrying four jobs its section banners named. Two have gone:
  * the arithmetic to fog_band.c, which needed no engine memory and is the half a unit test can
@@ -19,6 +19,7 @@
 
 #include "cell_watchdog.h"
 #include "fog_band.h"
+#include "fog_owner.h"
 #include "fog_trace.h"
 #include "view_distance_fix.h"
 
@@ -54,8 +55,8 @@
  * Why a level opens with no fog: a level load hands the engine the level's authored band, and the
  * coupling then recomputes the end from the cut edge the renderer reports on the first walked
  * frame. Those two are not the same number: Mos Espa authors 32 and its draw edge is 21.3, so the
- * fog visibly closes in by a third over the first seconds of the level. Easing it is what makes
- * that a slow slide rather than a jump, and on a level whose opening is an establishing camera a
+ * fog visibly closes in by a third over the first seconds of the level. Easing it turns that into
+ * a slow slide rather than a jump, and on a level whose opening is an establishing camera a
  * long way from the player, which is most of them, the slide is the most conspicuous thing on
  * screen. Reported on the podrace, twice.
  *
@@ -73,8 +74,8 @@
  * position instead, and the ordinary easing brings it in over FogSettleSeconds. Where it starts
  * from is the constant below. */
 
-/* The fade starts from the LEVEL'S OWN band, not from the one the coupling is heading for, and
- * that choice is what makes this independent of when anything else happens.
+/* The fade starts from the LEVEL'S OWN band, not from the one the coupling is heading for. That
+ * choice makes this independent of when anything else happens.
  *
  * Three attempts read the target at the moment the window closed, and all three read it against
  * the RAISED draw distance, because the scale is applied at the end of a frame and governs the
@@ -143,12 +144,12 @@ void fog_regime_note_cut(int32_t reference_range, int32_t effective_range)
  * the level's own authored view distance: the reference is that distance, and the live side is
  * where this DLL's own scale and radius cap put it, asked of the one function that owns that
  * arithmetic. The prediction is exact wherever the level has no per-cell override, which is the
- * ordinary case, and it is what lets a level open on the band it is going to keep.
+ * ordinary case, and it lets a level open on the band it is going to keep.
  *
  * It used to use the authored distance for BOTH sides, a ratio of one, which is only the same
  * answer at ViewRangeScale=1. RACE authors 22 and the real cut at 2.5 is 39, and a band computed
  * from 22 sits far nearer the camera than it belongs; that was reported, and predicting the live
- * side rather than assuming it is what stops it coming back. */
+ * side rather than assuming it keeps that from coming back. */
 static void current_cut(float *reference, float *live)
 {
     if (fog_state.cut_observed) {
@@ -170,8 +171,8 @@ static void target_now(fog_regime_band_t *out)
      * at a wide field of view they are not: the edge limit takes a band ending at 32 down to 21.3
      * on a level that draws to 22, so the level opened on almost no fog and the ease then drove
      * the fog wall in at 19 units a second, in a world 22 units deep. Measured over 442 frames
-     * with everything else on that path constant, which is what the reports of flashing at the
-     * start of a level turned out to be.
+     * with everything else on that path constant. The reports of flashing at the start of a level
+     * turned out to be this.
      *
      * current_cut predicts both sides instead, so the band a level opens on is the band it keeps
      * and there is nothing to travel. Whatever the first real cut then reports is a correction,
@@ -184,26 +185,43 @@ static void target_now(fog_regime_band_t *out)
 /* ==============================================================================================
  * C, the level record
  * ============================================================================================ */
-/* With the per-vertex ramp the engine re-reads the band from the world record every frame, so
- * writing those two floats was enough. The device path does not: FOGSTART and FOGEND only move when
- * applyLevelFog runs. That function is already detoured here, so its original is called directly,
- * which reprograms the device from the fields just written and re-enters nothing. */
+/* One push of the band the record holds, when the device is this module's to write. The two
+ * places that write the device both come through here and nowhere else.
+ *
+ * The per-vertex ramp re-reads the band from the record every frame; the device path does not.
+ * FOGSTART and FOGEND go out from two cells on every render state commit, and the record's band
+ * reaches those cells only through applyLevelFog, which writes the level's colour with it. So the
+ * band is pushed, and fog_owner.c decides whether it may be: not while the effects' colour is on
+ * the device, and not in the one substep after they set a band of their own. It writes the band
+ * cells and commits, never the colour; applyLevelFog's original is the push only where those
+ * writes did not bind.
+ *
+ * The commit reads the device pointer without looking at it, hence the device check. */
+static void push_record_band(void)
+{
+    const float      *live;
+    fog_regime_band_t band;
+
+    if (!fog_state.pixel_fog_active || fog_state.level == NULL || fog_regime_device() == NULL) {
+        return;
+    }
+    live       = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+    band.start = live[0];
+    band.end   = live[1];
+    if (fog_owner_push(fog_state.level, &band, &fog_state.device_band,
+                       (fog_apply_fn_t)fog_state.apply_detour.original)) {
+        fog_state.device_band = band;
+    }
+}
+
 void push_band_to_device(void)
 {
-    apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
-
     /* Not while the detour below is running. That function ends by calling the original itself, so
      * pushing here as well would reprogram the device twice for one engine call. */
     if (fog_state.inside_apply) {
         return;
     }
-    if (fog_state.pixel_fog_active && original != NULL && fog_state.level != NULL) {
-        const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
-
-        original(fog_state.level);
-        fog_state.device_band.start = live[0];
-        fog_state.device_band.end   = live[1];
-    }
+    push_record_band();
 }
 
 static void write_band(const fog_regime_band_t *band)
@@ -216,7 +234,7 @@ static void write_band(const fog_regime_band_t *band)
 
     /* The one invariant the renderer cannot survive being wrong about: bapdraw_setFrameState
      * disarms the ramp on a negative span and the emitter then writes a zero specular, which is
-     * FULLY FOGGED, not "no fog". Refusing here leaves the level exactly as authored. */
+     * Fully fogged, not "no fog". Refusing here leaves the level exactly as authored. */
     if (!(band->end > band->start)) {
         if (!fog_state.span_refused) {
             fog_state.span_refused = true;
@@ -292,6 +310,8 @@ static bool remember_level(void *level)
     if (level == fog_state.level_without_fog) {
         return false;
     }
+    /* Whatever this record turns out to be, the level before it is left. */
+    fog_owner_level_ends();
 
     if (!memory_is_readable_range((uintptr_t)level, WORLD_PROBE_SIZE)) {
         /* Forget the previous level too: the per-frame tick must not keep writing through a
@@ -349,6 +369,7 @@ static bool remember_level(void *level)
     /* And the opening window starts here, which is the one place that knows a level is new. */
     fog_state.open_left = fog_state.config.open_seconds;
     fog_trace_begin();
+    fog_owner_level_begins();
     return true;
 }
 
@@ -391,16 +412,109 @@ void __cdecl hook_apply_fog(void *level)
 
     fog_state.inside_apply = false;
     original(level);
+
+    /* The original has just given the device the record's band, ours or the cheat's, with the
+     * level's colour. That is a band this module stands behind, not one the effects set. */
+    if (level == fog_state.level) {
+        const float *live = (const float *)((const char *)level + WORLD_FOG_START);
+
+        fog_state.device_band.start = live[0];
+        fog_state.device_band.end   = live[1];
+    }
 }
 
 /* report_device_fog_caps and consider_pixel_fog are defined in fog_regime_install.c and declared
  * in fog_regime_internal.h. The tick below is where they are first called. */
+
+/* Somebody else is holding the band, and they are entitled to. The no-fog cheat pushes it past
+ * everything the renderer still has in view, every frame, and the tick stands aside for exactly
+ * that.
+ *
+ * On the per-vertex path standing aside was enough, because the engine re-read these two fields
+ * every frame and whatever was in them took effect. The device path does not: the record's band
+ * reaches the device's band cells only through applyLevelFog. So a writer who is not us would be
+ * writing into a record nobody reads, and their fog would never change. Pushing their value, not
+ * ours, keeps that promise.
+ *
+ * Not while the effects hold the device. The cheat does nothing inside a green room: letting it
+ * through would lose the room's band, whose end the effects keep no copy of, and the background,
+ * which is cleared to the fog colour, would stay green. The room's restore runs applyLevelFog,
+ * which puts the cheat's band on the device with the level's colour. */
+static void stand_aside_for_the_other_writer(fog_holder_t holder)
+{
+    const float      *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
+    fog_regime_band_t theirs;
+
+    fog_trace_aside('f', live[0], live[1]);
+
+    theirs.start = live[0];
+    theirs.end   = live[1];
+    if (!fog_owner_band_settled(&theirs, &theirs, fog_state.pixel_fog_active, holder,
+                                fog_owner_device_shows(&theirs, &fog_state.device_band))) {
+        push_record_band();
+    }
+}
+
+/* The opening window; see FOG_OPEN_HIDDEN_START. True while the window owns the frame, so the
+ * caller does no easing; false once it is over, the frame it ends on included, since that frame
+ * writes the band the fade starts from and there is nothing to ease yet. */
+static bool run_opening_window(float seconds)
+{
+    fog_regime_band_t open_band;
+
+    if (!(fog_state.open_left > 0.0f)) {
+        return false;
+    }
+    /* A loading hitch must not spend the whole window in one frame, which is the same reason
+     * the easing clamps its own delta. A window measured in seconds and a frame that claims to
+     * have taken one are not compatible claims. */
+    if (seconds > 0.0f) {
+        fog_state.open_left -= (seconds > FOG_MAX_TRUSTED_SECONDS)
+                             ? FOG_MAX_TRUSTED_SECONDS : seconds;
+    }
+    if (fog_state.open_left > 0.0f) {
+        if (fog_state.config.open_fog_end > fog_state.config.open_fog_start) {
+            /* Our own band, at the distances asked for, derived from nothing. The draw distance
+             * is raised for this window and the engine culls whole cells at that edge, so a cell
+             * arriving there takes its near end with it and no band placed at the edge can cover
+             * it. A band laid well inside the raised cut can, and laying it absolutely stops it
+             * moving while the window runs. */
+            open_band.start = fog_state.config.open_fog_start;
+            open_band.end   = fog_state.config.open_fog_end;
+        } else {
+            open_band.start = FOG_OPEN_HIDDEN_START;
+            open_band.end   = FOG_OPEN_HIDDEN_END;
+        }
+        if (open_band.start != fog_state.written.start ||
+            open_band.end != fog_state.written.end) {
+            fog_state.current = open_band;
+            write_band(&open_band);
+        }
+        /* 'o' for the opening window. The caller samples nothing while this runs, so without
+         * this the capture has a hole exactly where the window runs. */
+        fog_trace_aside('o', fog_state.written.start, fog_state.written.end);
+        return true;
+    }
+    /* See FOG_OPEN_FADE_FROM_AUTHORED. The cut is marked unobserved so the first report at the
+     * restored scale is snapped to rather than eased towards: the settled cut spent the window
+     * climbing to the raised value, and easing back down from it would be the same slow slide
+     * this window exists to prevent. */
+    fog_state.open_left     = 0.0f;
+    fog_state.cut_observed  = false;
+    fog_state.current.start = fog_state.authored.start * FOG_OPEN_FADE_FROM_AUTHORED;
+    fog_state.current.end   = fog_state.authored.end * FOG_OPEN_FADE_FROM_AUTHORED;
+    write_band(&fog_state.current);
+    log_info("the opening window is over, fog fades in from %.1f..%.1f towards this level's",
+             (double)fog_state.current.start, (double)fog_state.current.end);
+    return true;
+}
 
 void fog_regime_on_frame(void)
 {
     fog_regime_band_t target;
     float             seconds;
     bool              settled;
+    fog_holder_t      holder;
 
     if (!fog_state.tick_active || fog_state.level == NULL) {
         return;
@@ -411,6 +525,8 @@ void fog_regime_on_frame(void)
         fog_trace_aside('p', 0.0f, 0.0f);
         return;
     }
+    /* Whose fog the device shows, looked at once a frame before anything decides to write. */
+    holder = fog_owner_observe(fog_state.level, &fog_state.device_band, &fog_state.current);
     /* And the record still has to hold what we last put there. Two things ride on this. A level
      * loaded into the address the previous one had would otherwise be ticked with the previous
      * level's remembered band for however many frames pass before the fog apply reaches us. And
@@ -418,34 +534,7 @@ void fog_regime_on_frame(void)
      * future patch might, gets to keep its value instead of being overwritten sixty times a
      * second by ours. */
     if (!the_band_is_still_ours(fog_state.level)) {
-        {
-            const float *seen = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
-
-            fog_trace_aside('f', seen[0], seen[1]);
-        }
-        /* Somebody else is holding the band, and they are entitled to. The no-fog cheat pushes it
-         * past everything the renderer still has in view, every frame, and this tick stands aside
-         * for exactly that.
-         *
-         * On the per-vertex path standing aside was enough, because the engine re-read these two
-         * fields every frame and whatever was in them took effect. The device path does not: the
-         * band only reaches FOGSTART and FOGEND through applyLevelFog. So a writer who is not us
-         * would be writing into a record nobody reads, and their fog would never change. Pushing
-         * their value, not ours, is what keeps that promise. */
-        if (fog_state.pixel_fog_active) {
-            const float *live = (const float *)((const char *)fog_state.level + WORLD_FOG_START);
-
-            if (live[0] != fog_state.device_band.start ||
-                live[1] != fog_state.device_band.end) {
-                apply_fog_fn_t original = (apply_fog_fn_t)fog_state.apply_detour.original;
-
-                if (original != NULL) {
-                    original(fog_state.level);
-                    fog_state.device_band.start = live[0];
-                    fog_state.device_band.end   = live[1];
-                }
-            }
-        }
+        stand_aside_for_the_other_writer(holder);
         return;
     }
 
@@ -453,52 +542,7 @@ void fog_regime_on_frame(void)
     consider_pixel_fog(fog_state.device_caps);
 
     seconds = (fog_state.frame_delta != NULL) ? *fog_state.frame_delta : 0.0f;
-
-    /* The opening window. See FOG_OPEN_HIDDEN_START. */
-    if (fog_state.open_left > 0.0f) {
-        /* A loading hitch must not spend the whole window in one frame, which is the same reason
-         * the easing clamps its own delta. A window measured in seconds and a frame that claims to
-         * have taken one are not compatible claims. */
-        if (seconds > 0.0f) {
-            fog_state.open_left -= (seconds > FOG_MAX_TRUSTED_SECONDS)
-                                 ? FOG_MAX_TRUSTED_SECONDS : seconds;
-        }
-        if (fog_state.open_left > 0.0f) {
-            fog_regime_band_t open_band;
-
-            if (fog_state.config.open_fog_end > fog_state.config.open_fog_start) {
-                /* Our own band, at the distances asked for, derived from nothing. The draw
-                 * distance is raised for this window and the engine culls whole cells at that
-                 * edge, so a cell arriving there takes its near end with it and no band placed at
-                 * the edge can cover it. A band laid well inside the raised cut can, and laying it
-                 * absolutely is what stops it moving while the window runs. */
-                open_band.start = fog_state.config.open_fog_start;
-                open_band.end   = fog_state.config.open_fog_end;
-            } else {
-                open_band.start = FOG_OPEN_HIDDEN_START;
-                open_band.end   = FOG_OPEN_HIDDEN_END;
-            }
-            if (open_band.start != fog_state.written.start ||
-                open_band.end != fog_state.written.end) {
-                fog_state.current = open_band;
-                write_band(&open_band);
-            }
-            /* 'o' for the opening window. This branch returns before the sample at the bottom, so
-               without this the capture has a hole exactly where the window runs. */
-            fog_trace_aside('o', fog_state.written.start, fog_state.written.end);
-            return;
-        }
-        /* See FOG_OPEN_FADE_FROM_AUTHORED. The cut is marked unobserved so the first report at
-         * the restored scale is snapped to rather than eased towards: the settled cut spent the
-         * window climbing to the raised value, and easing back down from it would be the same slow
-         * slide this window exists to prevent. */
-        fog_state.open_left     = 0.0f;
-        fog_state.cut_observed  = false;
-        fog_state.current.start = fog_state.authored.start * FOG_OPEN_FADE_FROM_AUTHORED;
-        fog_state.current.end   = fog_state.authored.end * FOG_OPEN_FADE_FROM_AUTHORED;
-        write_band(&fog_state.current);
-        log_info("the opening window is over, fog fades in from %.1f..%.1f towards this level's",
-                 (double)fog_state.current.start, (double)fog_state.current.end);
+    if (run_opening_window(seconds)) {
         return;
     }
 
@@ -513,7 +557,7 @@ void fog_regime_on_frame(void)
      * to ours is EASED rather than snapped. It used to snap, and correctly: the starting point was
      * then a value computed from an assumed cut, and sliding away from a wrong number only draws
      * attention to it. Now that the starting point is the level's own, a snap is a visible jump on
-     * the first frame of every level, which is what a couple of them were reported flashing on. */
+     * the first frame of every level, and a couple of them were reported flashing on it. */
     fog_state.cut_first_seen = false;
 
     target_now(&target);
@@ -524,15 +568,19 @@ void fog_regime_on_frame(void)
                                               fog_state.config.settle_seconds);
 
     /* Settled means OUR band has not moved AND the device is showing it. The second half matters
-     * only on the device path, and it is what lets fog come back after another feature has held
-     * the band: the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping
-     * sees nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the
-     * fog can be switched off and never on again. */
-    settled = fog_state.current.start == fog_state.written.start &&
-              fog_state.current.end == fog_state.written.end &&
-              (!fog_state.pixel_fog_active ||
-               (fog_state.device_band.start == fog_state.current.start &&
-                fog_state.device_band.end == fog_state.current.end));
+     * only on the device path, and it lets fog come back after another writer has held the band:
+     * the no-fog cheat restores exactly the value we last wrote, so our own bookkeeping sees
+     * nothing to do while FOGSTART and FOGEND still hold the cheat's band. Without this the fog
+     * can be switched off and never on again.
+     *
+     * "Showing it" is read from the device's band cells, not from what this module remembers
+     * pushing: a savegame puts its own band back into those cells and this module's copy never
+     * hears of it. While the effects hold the device the second half is not asked; a band that
+     * moves then is written into the record and its push is held back. */
+    settled = fog_owner_band_settled(&fog_state.current, &fog_state.written,
+                                     fog_state.pixel_fog_active, holder,
+                                     fog_owner_device_shows(&fog_state.current,
+                                                            &fog_state.device_band));
 
     fog_trace_sample(fog_state.horizontal_fov_degrees, fog_state.reference_cut,
                      fog_state.live_cut, fog_state.settled_live_cut, fog_state.cut_observed,

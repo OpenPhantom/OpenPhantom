@@ -23,8 +23,8 @@ void overlay_key_name(int32_t vk, char *out, size_t out_size);
  * situation where this setting matters most, so the file has to be typeable: "F8", "numpad +",
  * "backtick", "A". Case, spaces and underscores are ignored.
  *
- * A bare number is still a virtual key code, which is what this setting has always been and what
- * every file written before this understood. That is also the way to reach a key with no name in
+ * A bare number is still a virtual key code, as this setting has always been and as every file
+ * written before this understood. That is also the way to reach a key with no name in
  * the table, including the number row: 53 is the 5 key.
  *
  * False when the text is not a key, which the caller reports rather than guessing at. */

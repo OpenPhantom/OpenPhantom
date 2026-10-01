@@ -10,7 +10,6 @@
 #include "common/memory.h"
 #include "common/signature.h"
 
-#include <intrin.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -41,7 +40,7 @@ static const uint8_t SIG_OVERRIDE_ON[] = {
  *   55 8B EC / C7 05 E8 B4 5B 00 00000000 / 5D C3    the same shape, storing zero.
  *
  * Fifteen bytes, all taken, unique at thirteen. It takes no argument and leaves the forced region
- * cell alone, which is why the flag rather than that cell is what everything here reads. */
+ * cell alone, so everything here reads the flag and not that cell. */
 static const uint8_t SIG_OVERRIDE_OFF[] = {
     0x55, 0x8B, 0xEC, 0xC7, 0x05, 0xE8, 0xB4, 0x5B, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x5D, 0xC3
@@ -54,15 +53,26 @@ static const uint8_t SIG_OVERRIDE_OFF[] = {
  *   C7 45 F8 00000000     mov dword [ebp-8],0
  *   8B 45 10              mov eax,[ebp+0x10]
  *
- * Sixteen bytes are unique, twenty are taken. NOT detoured: it is resolved only so the address
- * control returns to after its call to the setter can be derived from it, which is what attributes
- * a take to the dialogue without writing that address down. */
+ * Sixteen bytes are unique, twenty are taken. Detoured, and that detour does the attribution on
+ * its own: the setter is called from inside this function, so a take that happens while this is on
+ * the stack is the dialogue's and one that happens outside it is somebody else's.
+ *
+ * It used to be attributed by the address control returned to, derived from this site. That only
+ * works while this module's hook is the OUTERMOST link of the detour chain. The loader installs
+ * in name order, so diagnostics installs after this module and chains in front of it, and with
+ * [diagnostics] CameraOwner=1 the return address is inside diagnostics.dll: the take was credited
+ * to nobody, and the fix installed, logged success and never fired, in exactly the session
+ * somebody was instrumenting the fault in. Being on the stack does not care who chained where.
+ *
+ * The signature is `int Dialog_SpeakSingle(void *speaker, int cameraGroup, i32 lineId,
+ * const void *pos)`, cdecl, and the call it makes is `if (cameraGroup >= 0)
+ * bapview_overrideOn(cameraGroup)`. */
 static const uint8_t SIG_DIALOG_SPEAK_SINGLE[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0xC7, 0x45, 0xF8, 0x00, 0x00, 0x00,
     0x00, 0x8B, 0x45, 0x10, 0x50, 0xE8, 0x27, 0x04
 };
-/* Its call to the setter sits at +0x5F and is five bytes, so control comes back at +0x64. */
-#define DIALOG_SPEAK_TAKE_RETURN 0x64u
+/* Six bytes: push ebp; mov ebp,esp; sub esp,0x0C. diagnostics detours this one too. */
+#define DIALOG_SPEAK_SINGLE_PROLOGUE 6u
 
 /* --- Dialog_Close 0x00430E82 ------------------------------------------------------------------ *
  *   55 8B EC              push ebp / mov ebp,esp
@@ -90,6 +100,8 @@ static const uint8_t SIG_DIALOG_LEAVE_LOCK[] = {
     0x3D, 0x8C, 0x4D, 0x6C, 0x00, 0x00, 0x7E, 0x25
 };
 #define DIALOG_LEAVE_LOCK_OPERAND 0x0Du
+/* Eleven bytes, ending before the compare whose operand is read at 13. Same reason as above. */
+#define DIALOG_LEAVE_LOCK_PROLOGUE 11u
 
 enum {
     SITE_OVERRIDE_ON,
@@ -101,16 +113,25 @@ enum {
 };
 
 static signature_t sites[SITE_COUNT] = {
-    SIGNATURE_ENTRY("bapview_overrideOn",    SIG_OVERRIDE_ON),
-    SIGNATURE_ENTRY("bapview_overrideOff",   SIG_OVERRIDE_OFF),
-    SIGNATURE_ENTRY("Dialog_SpeakSingle",    SIG_DIALOG_SPEAK_SINGLE),
-    SIGNATURE_ENTRY("Dialog_Close",          SIG_DIALOG_CLOSE),
-    SIGNATURE_ENTRY("Dialog_LeaveInputLock", SIG_DIALOG_LEAVE_LOCK)
+    /* The four that are detoured are declared as detour targets, so a pattern still matches
+     * after another DLL has replaced the prologue with its jump. diagnostics detours the same
+     * functions, so whichever of the two loaded second used to find nothing at all. The last
+     * entry stays plain because nothing detours it; it is read for an operand. */
+    SIGNATURE_ENTRY_DETOUR("bapview_overrideOn",  SIG_OVERRIDE_ON,  OVERRIDE_ON_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR_AFTER("bapview_overrideOff", SIG_OVERRIDE_OFF,
+                                OVERRIDE_OFF_PROLOGUE, 1u, sizeof SIG_OVERRIDE_ON),
+    SIGNATURE_ENTRY_DETOUR("Dialog_SpeakSingle", SIG_DIALOG_SPEAK_SINGLE,
+                           DIALOG_SPEAK_SINGLE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("Dialog_Close",        SIG_DIALOG_CLOSE, DIALOG_CLOSE_PROLOGUE),
+    SIGNATURE_ENTRY_DETOUR("Dialog_LeaveInputLock", SIG_DIALOG_LEAVE_LOCK,
+                           DIALOG_LEAVE_LOCK_PROLOGUE)
 };
 
 typedef void(__cdecl *override_on_fn_t)(int32_t group);
 typedef void(__cdecl *override_off_fn_t)(void);
 typedef void(__cdecl *dialog_close_fn_t)(int32_t from_op);
+typedef int(__cdecl *dialog_speak_fn_t)(void *speaker, int32_t camera_group, int32_t line_id,
+                                        const void *pos);
 
 static struct {
     detour_t       on;
@@ -118,10 +139,11 @@ static struct {
     detour_t       close;
     const int32_t *flag;        /* the scripted-camera flag                       */
     const int32_t *lock;        /* the cinematic input lock                       */
-    uintptr_t      dialogue_take_return;
-    bool           took_it;     /* the dialogue is what set the flag, not somebody else */
-    bool           reported;    /* the repair says what it did once, not per line  */
-    bool           declined;    /* and says once why it did nothing, which is rarer */
+    detour_t       speak;
+    int            speaking;    /* how deep inside a spoken line this thread is   */
+    bool           took_it;     /* the dialogue set the flag, not somebody else   */
+    bool           reported;    /* the repair says what it did once, not per line */
+    bool           declined;    /* and the rarer case, why it did nothing, once   */
 } fix;
 
 /* Reads a 32-bit absolute operand out of a resolved site, refusing anything outside the image. */
@@ -139,14 +161,27 @@ static const int32_t *cell_at(int index, uint32_t offset, const char *what)
     return (const int32_t *)(uintptr_t)address;
 }
 
+/* Counted rather than set, so a line that somehow starts another one leaves this above zero for
+ * as long as any of them is still running. */
+static int __cdecl hook_dialog_speak_single(void *speaker, int32_t camera_group, int32_t line_id,
+                                            const void *pos)
+{
+    int result;
+
+    ++fix.speaking;
+    result = ((dialog_speak_fn_t)fix.speak.original)(speaker, camera_group, line_id, pos);
+    --fix.speaking;
+    return result;
+}
+
 /* Attribution, and the only place it happens. The engine's flag says a script owns the camera; it
  * does not say WHICH, and everything this file refuses to do rests on knowing that. */
 static void __cdecl hook_override_on(int32_t group)
 {
-    uintptr_t ret = (uintptr_t)_ReturnAddress();
+    bool from_a_spoken_line = fix.speaking > 0;
 
     ((override_on_fn_t)fix.on.original)(group);
-    fix.took_it = (ret == fix.dialogue_take_return);
+    fix.took_it = from_a_spoken_line;
 }
 
 static void __cdecl hook_override_off(void)
@@ -162,8 +197,8 @@ static void __cdecl hook_dialog_close(int32_t from_op)
     if (!handback_rule_owes_camera(fix.took_it, *fix.flag, *fix.lock)) {
         /* Said once, and only for the case that is not obviously fine: the dialogue closed still
          * holding a camera it took and this declined anyway, which can only be the lock. That is
-         * a cutscene above the dialogue, and its own opcode is what owes the camera back. Without
-         * this line the two reasons for doing nothing are indistinguishable in the log. */
+         * a cutscene above the dialogue, and its own opcode owes the camera back. Without this
+         * line the two reasons for doing nothing are indistinguishable in the log. */
         if (fix.took_it && *fix.flag != 0 && !fix.declined) {
             fix.declined = true;
             log_info("a dialogue closed still holding the camera and it was LEFT alone, because "
@@ -171,8 +206,8 @@ static void __cdecl hook_dialog_close(int32_t from_op)
                      "still running and the camera is its business, not this module's. Reported "
                      "once", (int)*fix.lock);
         }
-        /* A dialogue whose camera the engine released on its own owes nothing, and this is the
-         * common case: it is what happens every time a choice menu was open. */
+        /* A dialogue whose camera the engine released on its own owes nothing. That is the common
+         * case; it happens every time a choice menu was open. */
         fix.took_it = (*fix.flag != 0) && fix.took_it;
         return;
     }
@@ -213,15 +248,16 @@ void camera_handback_fix_install(void)
     }
 
     resolved = signature_resolve_table(sites, SITE_COUNT);
+
+
     if (resolved != SITE_COUNT) {
         log_warning("%u of %u sites resolved, so the camera hand-back stays off. Every one of "
                     "them is needed: two to see the camera change hands, one to know the dialogue "
                     "was the one that took it, one to act when it closes, and one to read the lock "
-                    "that says whether anybody above it is still running. If the diagnostics DLL "
-                    "got here first with CameraOwner=1, that is the reason: it takes the same two "
-                    "camera functions, they are fifteen and twenty three bytes long, and there is "
-                    "no room in either for a second detour to anchor behind the first. Switch the "
-                    "census off to run the repair",
+                    "that says whether anybody above it is still running. Another DLL reaching "
+                    "these functions first is no longer a reason for this: every pattern here is "
+                    "declared as a detour target and the one function too short to anchor on its "
+                    "own is found behind its neighbour",
                     (unsigned)resolved, (unsigned)SITE_COUNT);
         return;
     }
@@ -231,26 +267,27 @@ void camera_handback_fix_install(void)
     if (fix.flag == NULL || fix.lock == NULL) {
         return;
     }
-    fix.dialogue_take_return = sites[SITE_DIALOG_SPEAK_SINGLE].address + DIALOG_SPEAK_TAKE_RETURN;
-
-    /* ALL THREE OR NONE. Without the setter nothing knows whose camera it is and the repair would
-     * reach for anybody's; without the clearer it would go on thinking the dialogue holds a camera
-     * the engine has already given back; and the close is the only moment the repair acts at. Any
-     * two of them is not a smaller version of this fix, it is a wrong one. */
-    if (!detour_install(&fix.on, sites[SITE_OVERRIDE_ON].address,
+    /* All four or none. Without the spoken line nothing knows whose camera it is and the repair
+     * would reach for anybody's; without the setter and the clearer it would go on thinking the
+     * dialogue holds a camera the engine has already given back; and the close is the only moment
+     * the repair acts at. Any three of them is not a smaller version of this fix; it is a wrong
+     * one. Ordered so that the attribution is live before anything that reads it. */
+    if (!detour_install(&fix.speak, sites[SITE_DIALOG_SPEAK_SINGLE].address,
+                        (const void *)hook_dialog_speak_single, DIALOG_SPEAK_SINGLE_PROLOGUE) ||
+        !detour_install(&fix.on, sites[SITE_OVERRIDE_ON].address,
                         (const void *)hook_override_on, OVERRIDE_ON_PROLOGUE) ||
         !detour_install(&fix.off, sites[SITE_OVERRIDE_OFF].address,
                         (const void *)hook_override_off, OVERRIDE_OFF_PROLOGUE) ||
         !detour_install(&fix.close, sites[SITE_DIALOG_CLOSE].address,
                         (const void *)hook_dialog_close, DIALOG_CLOSE_PROLOGUE)) {
-        log_warning("the camera hand-back could not place all three of its detours, so it is off. "
+        log_warning("the camera hand-back could not place all four of its detours, so it is off. "
                     "A partial install would attribute the camera wrongly rather than do less");
         return;
     }
 
     log_info("a dialogue now gives the camera back when it closes, unless a cutscene above it is "
              "still holding the input lock. Flag at %08X, lock at %08X, and a take is credited to "
-             "the dialogue by the return at %08X, so no other camera is ever touched",
-             (unsigned)(uintptr_t)fix.flag, (unsigned)(uintptr_t)fix.lock,
-             (unsigned)fix.dialogue_take_return);
+             "the dialogue by the spoken line being on the stack at the time, so no other camera "
+             "is ever touched and no other DLL reaching these functions first can change that",
+             (unsigned)(uintptr_t)fix.flag, (unsigned)(uintptr_t)fix.lock);
 }

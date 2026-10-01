@@ -5,7 +5,7 @@
  * engine ship in one installation and the recompile moves code by more than 0x1E000, so an address
  * table would have written silently into a different function.
  *
- * About half of this file is disassembly rather than code, and that is deliberate: a pattern
+ * About half of this file is disassembly rather than code, deliberately: a pattern
  * without its listing is a magic number, and splitting the two apart would put every proof one
  * file away from the code that depends on it.
  */
@@ -140,7 +140,7 @@ static const uint8_t SIG_PLAYER_KEYBOARD_AXIS[] = {
  *   8B 55 10
  *   89 54 08 04                pNodeRot[idx].y = degrees  <- +4 is the YAW component
  *
- * The pattern has to run this far, and that is not thoroughness. bapobj_setNodePitch at 0x00414789
+ * The pattern has to run this far, and not out of thoroughness. bapobj_setNodePitch at 0x00414789
  * is byte-identical to this function except for two places: its `jae` displacement is 0x19 rather
  * than 0x1A, and its store is `89 14 08`, component [0], the PITCH, rather than `89 54 08 04`.
  * A pattern that stopped before the store would match both and could resolve to the wrong one.
@@ -172,7 +172,11 @@ enum {
 
 static signature_t sites[SITE_COUNT] = {
     SIGNATURE_ENTRY("player_phase_table",   SIG_PLAYER_PHASE_TABLE),
-    SIGNATURE_ENTRY_MASKED("player_save_head", SIG_PLAYER_SAVE_HEAD, MSK_PLAYER_SAVE_HEAD),
+    /* Nine is push ebp, mov ebp esp, push ecx, mov eax [abs], the first instruction
+     * boundary past five. multiplayer hulls this same head on nine, so without a
+     * prologue here the day it loads first this site finds nothing. */
+    SIGNATURE_ENTRY_DETOUR_MASKED("player_save_head", SIG_PLAYER_SAVE_HEAD,
+                                  MSK_PLAYER_SAVE_HEAD, 9u),
     SIGNATURE_ENTRY("player_mouse_axis",    SIG_PLAYER_MOUSE_AXIS),
     SIGNATURE_ENTRY("player_keyboard_axis", SIG_PLAYER_KEYBOARD_AXIS),
     SIGNATURE_ENTRY("set_node_yaw",         SIG_SET_NODE_YAW)
@@ -332,7 +336,7 @@ uint8_t *player_sites_record(const player_sites_t *resolved)
         return NULL;
     }
     record = *resolved->player_pointer;
-    if (record == NULL || !memory_is_readable_range((uintptr_t)record, PLAYER_RECORD_SIZE)) {
+    if (record == NULL || !memory_try_readable((uintptr_t)record, PLAYER_RECORD_SIZE)) {
         return NULL;
     }
     return record;

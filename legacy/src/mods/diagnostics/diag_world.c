@@ -30,6 +30,7 @@
 
 #include "common/detour.h"
 #include "common/signature.h"
+#include "common/text.h"
 
 #include <intrin.h>
 
@@ -40,8 +41,8 @@
 
 /* --- bapmap_openMover 0x00408B50 -------------------------------------------------------------- *
  * The open command. It fires EVERY FRAME while a body stands on a pressure plate
- * (bapmap_firePlate has no rising edge), which is why the hook snapshots the mover BEFORE and
- * AFTER the call and stays quiet when nothing changed.
+ * (bapmap_firePlate has no rising edge), so the hook snapshots the mover BEFORE and AFTER the
+ * call and stays quiet when nothing changed.
  *   world+0x620 = numMovers, world+0x624 = ppMover[] (an INLINE array, not a pointer to one)
  *   mover+0x00 = active, +0x04 = type, +0x08 = id, +0x2C = pose, +0x34 = dir */
 static const uint8_t SIG_MOVER_OPEN[] = {
@@ -66,7 +67,7 @@ static const uint8_t SIG_MOVER_CLOSE[] = {
  *
  * It is NOT called once per frame from one place. It has nine call sites, one of which is reached
  * from inside the world draw, so which one reaches a given mover first decides where that mover
- * actually integrates. Measured, it is the per-frame one that does essentially all of it. That is
+ * actually integrates. Measured, it is the per-frame one that does nearly all of it. That is
  * the question level 3 exists to answer, and it is why the pattern's gate cell matters: the opening
  * run of the function, read as bytes on retail WMAIN.EXE, contains two independent early returns.
  *
@@ -125,7 +126,7 @@ static const uint8_t SIG_AI_RETURN_MODE[] = {
  * The only site in the whole DLL that does not sit on a function entry. The opcode dispatcher was
  * inlined by MSVC INTO ai_run (0x433D0B); it has no symbol and no frame of its own. There is
  * therefore no way to observe "which opcode is running" with an ordinary detour. What follows is a
- * detour INTO THE MIDDLE of a function, and that is deliberately tied to three conditions:
+ * Detour into the middle of a function, deliberately tied to three conditions:
  *
  *   (1) the pattern is the proof. The two stolen instructions
  *         0F BF 4D E4          movsx ecx, word ptr [ebp-0x1C]   ; the resolved opcode
@@ -174,13 +175,13 @@ static const uint8_t SIG_TRANSFORM_WORLD[] = {
 
 /* --- FUN_0040be00 0x0040be00 --------------------------------------------------------------------
  * The general line trace: clears a 0x22-dword result structure, then walks the SAME broadphase
- * candidate iterator (FUN_0040d7bf/FUN_0040d7dd) bapmap_polyToWorld's own callers were found sitting
- * behind, testing each candidate through FUN_0040e06b, the distance-along-a-ray-to-a-plane helper
- * that call site 0x0040e081 in the poly-to-world census names as the dominant one during the stall.
- * The result structure carries a hit mover pointer and subnode index (result+0x20, result+0x24) as
- * well as the hit distance, so this is mover-aware: it is what a sweep against the world, including
- * a moving lift, has to be. Decompiled as `void FUN_0040be00(undefined4 context, float *result)`,
- * plain cdecl, two arguments. */
+ * candidate iterator (FUN_0040d7bf/FUN_0040d7dd) bapmap_polyToWorld's own callers were found
+ * sitting behind, testing each candidate through FUN_0040e06b, the distance-along-a-ray-to-a-plane
+ * helper that call site 0x0040e081 in the poly-to-world census names as the dominant one during
+ * the stall. The result structure carries a hit mover pointer and subnode index (result+0x20,
+ * result+0x24) as well as the hit distance, so this is mover-aware, as a sweep against the world,
+ * including a moving lift, has to be. Decompiled as `void FUN_0040be00(undefined4 context,
+ * float *result)`, plain cdecl, two arguments. */
 static const uint8_t SIG_TRACE_GENERAL[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x7C, 0x57, 0xC7, 0x45, 0xC8, 0x00, 0x00, 0x00, 0x00,
     0x8B, 0x45, 0x0C, 0x8B, 0x48, 0x18
@@ -192,7 +193,8 @@ static const uint8_t SIG_TRACE_GENERAL[] = {
  * whose own type nibble at +0x3e is exactly 0xE before it is even tested, and it stops at the first
  * one rather than keeping the closest. A single-purpose "what floor polygon is under this point"
  * query built out of the same shared iterator and the same FUN_0040e06b distance helper. Decompiled
- * as `float10 FUN_0040c2be(undefined4 context)`, plain cdecl, one argument, returns through ST(0). */
+ * as `float10 FUN_0040c2be(undefined4 context)`, plain cdecl, one argument, returns through
+ * ST(0). */
 static const uint8_t SIG_TRACE_FLOOR[] = {
     0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44, 0x6A, 0x00, 0x8B, 0x45, 0x08, 0x50,
     0x8B, 0x0D, 0x60, 0x00, 0x8A, 0x00
@@ -244,6 +246,7 @@ static signature_t sites[SITE_COUNT] = {
 #define MOVER_ID          0x08
 #define MOVER_POSE        0x2C
 #define MOVER_DIRECTION   0x34
+#define MOVER_TIME_BASE   0x30
 
 #define CHARACTER_NAME       0x04   /* char[12] */
 #define CHARACTER_ENMY_INDEX 0x18
@@ -363,12 +366,33 @@ static void __cdecl hook_mover_close(void *world, int32_t index)
     }
 }
 
+/* A mover's step is now minus the time it last ticked, and the integrator then makes that its new
+ * base, so an ordinary step is one frame. A step of seconds means the mover did not tick for that
+ * long and is about to integrate the whole interval at once, which is a door or a platform arriving
+ * at its far end in a single frame. That is what this looks for: the size of the step, before the
+ * original has a chance to overwrite the base it came from. */
+#define MOVER_STEP_SUSPICIOUS 0.25f
+
 static void __cdecl hook_mover_tick(void *mover, float now)
 {
     mover_tick_fn_t original = (mover_tick_fn_t)world_state.mover_tick.original;
     uint8_t *record = (uint8_t *)mover;
     int32_t  direction_before = (record != NULL)
                               ? *(const int32_t *)(record + MOVER_DIRECTION) : -1;
+    float    time_base = (record != NULL)
+                       ? *(const float *)(record + MOVER_TIME_BASE) : now;
+    float    step      = now - time_base;
+
+    if (record != NULL && step > MOVER_STEP_SUSPICIOUS) {
+        diag_log_write("trg  mover %d (%s) is about to step %.3f s in one tick: now %.3f, last "
+                       "ticked %.3f, pose %.3f, dir %s. An ordinary step is one frame",
+                       (int)*(const int32_t *)(record + MOVER_ID),
+                       diag_numbered_name(diag_mover_types,
+                                          *(const int32_t *)(record + MOVER_TYPE)),
+                       (double)step, (double)now, (double)time_base,
+                       (double)*(const float *)(record + MOVER_POSE),
+                       diag_numbered_name(diag_mover_directions, direction_before));
+    }
 
     /* Taken first, and before the original runs, because both of the function's early returns are
      * decided on state the call itself may change. The detour replaced the prologue with a branch,
@@ -438,14 +462,14 @@ static const char *actor_tag(const void *actor)
     buffer = buffers[turn];
 
     if (record == NULL) {
-        _snprintf(buffer, sizeof(buffers[0]), "%s", "(null)");
+        text_format(buffer, sizeof(buffers[0]), "%s", "(null)");
         buffer[sizeof(buffers[0]) - 1] = '\0';
         return buffer;
     }
-    _snprintf(buffer, sizeof(buffers[0]), "#%d \"%s\" [%s]",
-              (int)*(const int32_t *)(record + CHARACTER_ENMY_INDEX),
-              diag_safe_string((const char *)(record + CHARACTER_NAME), 12),
-              diag_numbered_name(diag_enemy_states,
+    text_format(buffer, sizeof(buffers[0]), "#%d \"%s\" [%s]",
+                (int)*(const int32_t *)(record + CHARACTER_ENMY_INDEX),
+                diag_safe_string((const char *)(record + CHARACTER_NAME), 12),
+                diag_numbered_name(diag_enemy_states,
                                  *(const int32_t *)(record + CHARACTER_STATE)));
     buffer[sizeof(buffers[0]) - 1] = '\0';
     return buffer;
@@ -504,11 +528,11 @@ static __declspec(naked) void hook_ai_opcode(void)
         pushfd
         sub     esp, 112
         fnsave  [esp]
-        movsx   eax, word ptr [ebp - 01Ch]     /* the resolved opcode, offset proven by the pattern */
-        mov     ecx, [ebp + 8]                 /* ai_run(character *actor)                            */
+        movsx   eax, word ptr [ebp - 01Ch]  /* the resolved opcode, offset proven by the pattern */
+        mov     ecx, [ebp + 8]              /* ai_run(character *actor)                          */
         push    ecx
         push    eax
-        call    diag_on_ai_opcode              /* __stdcall: cleans up after itself                   */
+        call    diag_on_ai_opcode           /* __stdcall: cleans up after itself                 */
         frstor  [esp]
         add     esp, 112
         popfd

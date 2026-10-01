@@ -13,8 +13,8 @@
  * and never gives the camera back. Measured in the field: the flag went up on one such line and
  * the next write to it was the level tearing down.
  *
- * The lock half of that test is not the bug and is kept, in the form below. It is what stops this
- * from stealing a camera that a CUTSCENE is holding: a cutscene takes the input lock to level 5,
+ * The lock half of that test is not the bug and is kept, in the form below. It stops this from
+ * stealing a camera that a CUTSCENE is holding: a cutscene takes the input lock to level 5,
  * `Dialog_LeaveInputLock(1)` refuses to unwind anything above 1, and the lock is therefore still
  * standing when a dialogue nested inside it closes.
  */
@@ -27,7 +27,7 @@
 /* True when the camera has to be handed back, given the three things known at the moment a
  * dialogue has finished closing:
  *
- *   `took_it`   the dialogue itself is what set the flag, rather than a cutscene, a menu, the
+ *   `took_it`   the dialogue itself set the flag, rather than a cutscene, a menu, the
  *               tripod gun or the fall-death camera. Nothing else's camera is ever touched.
  *   `flag`      the scripted-camera flag now. Zero means the engine gave it back on its own,
  *               which happens whenever a choice menu was open, and there is nothing owing.

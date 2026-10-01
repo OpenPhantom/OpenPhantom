@@ -9,7 +9,7 @@
  * Off is the shipped setting. Severing a limb on the killing blow changes how the game plays rather
  * than repairing it, and anything in that class ships at the value that leaves the game alone.
  *
- * WHY THIS IS A SWITCH AND NOT THREE ROWS. The key takes 0, 1 and 2, where 1 corrects which limb
+ * Why this is a switch and not three rows. The key takes 0, 1 and 2, where 1 corrects which limb
  * the engine's own seven authored severings take and 2 also severs on the killing blow. Nobody
  * wants 1 on purpose: it is the half of the feature that exists so the other half can be tested.
  * So the row writes 2 or 0, and a reader who has set 1 by hand sees the row lit and keeps their

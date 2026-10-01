@@ -139,7 +139,7 @@ static void test_chain_unwinds_in_reverse_install_order(void)
     answer = call_engine(engine);
     ut_check(answer == ENGINE_ANSWER, "through three hooks the answer still comes back");
     ut_check(strcmp(trail, "cba") == 0,
-          "all three ran in reverse install order, which is what proves the chain unwinds rather "
+          "all three ran in reverse install order, proving the chain unwinds rather "
           "than looping");
 
     VirtualFree(engine, 0, MEM_RELEASE);

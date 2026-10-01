@@ -18,17 +18,17 @@
  *     heartbeat ticks stop advancing   AND   the gate is not zero
  *
  * and this file logs exactly that. It writes NOTHING into the music DLL. If the ticks keep
- * advancing while the music is stuck, the theory above is dead and the log says so plainly,
- * which is worth as much as a confirmation.
+ * advancing while the music is stuck, the theory above is dead and the log says so plainly; a
+ * refutation is worth as much as a confirmation.
  *
- * ---- THE STRESS MODE -------------------------------------------------------------------------
+ * ---- The stress mode -------------------------------------------------------------------------
  * A defect that appears once an hour cannot be worked on. `MusicStressHz` drives cue changes far
  * faster than any level does, which raises the collision rate on BOTH sides at once: the game
  * thread takes the gate on every cue, and the timer thread takes it while it ramps group volume,
- * which is exactly what a cue change makes it do.
+ * exactly what a cue change makes it do.
  *
- * It calls ImSetState DIRECTLY rather than through the engine's own setter, and that is
- * deliberate: the engine latches a cue before handing it over and refuses a repeat of the same
+ * It calls ImSetState DIRECTLY rather than through the engine's own setter, deliberately: the
+ * engine latches a cue before handing it over and refuses a repeat of the same
  * value, so driving it through the engine would both fight the latch and leave the game's music
  * state machine somewhere the game did not put it. Going straight to the DLL exercises precisely
  * the traffic the race needs and leaves the game's own latch untouched, so ordinary music resumes
@@ -87,7 +87,9 @@ typedef struct probe_state {
 
     DWORD   last_report_ms;
     DWORD   last_tick_change_ms;
-    int32_t last_ticks;
+    int32_t last_ticks;         /* the tick counter as last sampled, whatever is switched on */
+    int32_t report_ticks;       /* the tick counter at the last routine line */
+    bool    timer_ticked;       /* the counter moved between the previous frame and this one */
 
     /* The stamp iMUSE writes when a heartbeat BODY runs, and when we last saw it move. The tick
      * counter above only says the Windows timer fired; this says work was done. */
@@ -97,13 +99,21 @@ typedef struct probe_state {
     int32_t watchdog_releases;
 
     /* The highest gate value seen since the last report. Sampling the gate once per frame FROM THE
-     * GAME THREAD almost always reads 0, because the game thread is not inside ImLock at the
+     * Game thread almost always reads 0, because the game thread is not inside ImLock at the
      * moment we look, so `gate=0` on a routine line is not a health certificate, it is the
      * expected reading. What the sample can see reliably is the value that never comes back down,
-     * and the maximum is what shows a transient overlap on the way there. */
+     * and the maximum shows a transient overlap on the way there. */
     int32_t gate_max;
 
     bool    stall_reported;
+    /* The heartbeat has been seen to run at least once since the probe started. Until then there
+     * is nothing to have stalled: the baseline is stamped at install, which is process start, and
+     * the first frame can arrive seconds later on a slow disk, before the music has attached. A
+     * detector without this printed a stall and a recovery on a healthy launch and the watchdog
+     * released a gate nothing had stuck. */
+    bool    heartbeat_seen;
+    bool    trace_retaken;      /* the commentary pointer was found replaced once, and said so */
+    DWORD   trace_tls;          /* per-thread "inside the hand-on" flag, see trace_thunk */
     int32_t stalls_seen;
 
     DWORD    last_stress_ms;
@@ -170,26 +180,26 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
     state.stalls_seen++;
 
     if (!timer_alive) {
-        verdict = "THE WINDOWS TIMER ITSELF STOPPED - the callback is not being fired at all, "
+        verdict = "the Windows timer itself stopped: the callback is not being fired at all, "
                   "which is not an iMUSE fault and not something the gate can explain";
     } else if (gate != 0) {
-        verdict = "THE GATE IS HELD BY NOBODY. This is the predicted failure: the counter that "
+        verdict = "the gate is held by nobody. This is the predicted failure: the counter that "
                   "guards the heartbeat is raised and lowered with plain, uninterlocked "
                   "instructions from two threads, and its own floor test means a lost decrement "
                   "can only ever leave it stuck HIGH. Nothing then refills the music buffer, and "
                   "because that buffer is played LOOPING it circles its last fragment forever "
                   "instead of falling silent";
     } else if (reentry != 0) {
-        verdict = "THE GATE IS CLEAR BUT THE RE-ENTRANCY FLAG IS SET - the last heartbeat body "
+        verdict = "the gate is clear but the re-entrancy flag is set: the last heartbeat body "
                   "was entered and never returned. That is a DIFFERENT fault from a lost "
                   "decrement and it is not repaired by releasing the gate";
     } else {
-        verdict = "NEITHER THE GATE NOR THE RE-ENTRANCY FLAG EXPLAINS IT - both read zero while "
+        verdict = "neither the gate nor the re-entrancy flag explains it: both read zero while "
                   "the body still is not running. The remaining test is the 20 ms rate limit "
                   "against a clock, and this analysis does not cover that case";
     }
 
-    log_error("MUSIC HEARTBEAT STALLED for %u ms. timer ticks %d (%s), gate %d (highest seen %d), "
+    log_error("music heartbeat stalled for %u ms. timer ticks %d (%s), gate %d (highest seen %d), "
               "re-entrancy %d. %s. Occurrence #%d.",
               (unsigned)stalled_ms, (int)ticks, timer_alive ? "still firing" : "FROZEN",
               (int)gate, (int)state.gate_max, (int)reentry, verdict, (int)state.stalls_seen);
@@ -203,10 +213,10 @@ static void report_stall(int32_t ticks, int32_t gate, int32_t reentry, bool time
  * could, the blocking file read, deliberately drops it around the read. And the underflow that
  * would normally worry you cannot happen, because the release side tests for zero before it
  * decrements: a holder that unlocks after us finds 0 and leaves it at 0. */
-static void run_watchdog(int32_t gate, DWORD stalled_ms)
+static void run_watchdog(int32_t gate, DWORD stalled_ms, bool timer_alive)
 {
-    if (!config.watchdog || gate == 0) {
-        return;
+    if (!config.watchdog || gate == 0 || !timer_alive) {
+        return;         /* a dead timer is not a held lock, and releasing one would not start it */
     }
     if (stalled_ms < (DWORD)config.watchdog_ms) {
         return;
@@ -225,14 +235,14 @@ static void run_watchdog(int32_t gate, DWORD stalled_ms)
 static void report_recovered(int32_t ticks, DWORD stalled_ms)
 {
     log_warning("the music heartbeat is running again after %u ms (tick counter now %d). A stall "
-                "that ENDS by itself does not match a lost decrement, which can only get stuck - "
+                "that ENDS by itself does not match a lost decrement, which can only get stuck, "
                 "so this one was a long frame or a suspended thread, not the defect.",
                 (unsigned)stalled_ms, (int)ticks);
 }
 
 static void report_routine(int32_t ticks, int32_t gate, DWORD elapsed_ms)
 {
-    int32_t  delta = ticks - state.last_ticks;
+    int32_t  delta = ticks - state.report_ticks;
     uint32_t stress_delta = state.stress_calls - state.stress_calls_reported;
     unsigned rate = 0;
     unsigned stress_rate = 0;
@@ -280,6 +290,15 @@ static void report_routine(int32_t ticks, int32_t gate, DWORD elapsed_ms)
  * was doing and what the gate stood at while it did it. */
 static void __cdecl trace_thunk(const char *text)
 {
+    /* A line this thread is already handing on has come back through a writer that kept the
+     * thunk as its own previous and calls it: the slot is retaken every frame in front of
+     * whatever the game wrote there. It was logged on the way in, and handing it on again would
+     * not end, so it is dropped here. The flag is per thread because the game thread and the
+     * timer thread both reach this, and one global word would have the other thread's line
+     * skipped while this one was inside the handler. */
+    if (state.trace_tls != TLS_OUT_OF_INDEXES && TlsGetValue(state.trace_tls) != NULL) {
+        return;
+    }
     if (text != NULL && !state.trace_capped) {
         if (state.trace_lines >= TRACE_LINE_LIMIT) {
             state.trace_capped = true;
@@ -303,7 +322,13 @@ static void __cdecl trace_thunk(const char *text)
 
     /* Always hand it on: the game registered this pointer and may be doing something with it. */
     if (state.original_trace != NULL) {
+        if (state.trace_tls != TLS_OUT_OF_INDEXES) {
+            TlsSetValue(state.trace_tls, (LPVOID)1);
+        }
         state.original_trace(text);
+        if (state.trace_tls != TLS_OUT_OF_INDEXES) {
+            TlsSetValue(state.trace_tls, NULL);
+        }
     }
 }
 
@@ -315,6 +340,13 @@ static void install_trace(void)
     if (state.sites.trace_slot == NULL) {
         log_warning("MusicTrace=1 but iMUSE's commentary pointer did not resolve, no capture");
         return;
+    }
+    /* Never freed: there is no uninstall, and the slot is a few bytes for the life of the
+     * process. Without one the capture still works and a chaining writer is no longer caught. */
+    state.trace_tls = TlsAlloc();
+    if (state.trace_tls == TLS_OUT_OF_INDEXES) {
+        log_warning("no thread-local slot for the commentary capture, so a handler that chains "
+                    "back into it would recurse; the capture is installed without that guard");
     }
     state.original_trace = *state.sites.trace_slot;
     *state.sites.trace_slot = trace_thunk;
@@ -348,12 +380,34 @@ static void drive_stress(DWORD now)
     state.stress_calls++;
 }
 
+/* The commentary pointer was taken at install, which is before the game has run a line, and
+ * nothing here knows whether iMUSE's own start-up writes that slot afterwards. Rather than
+ * assume either way, the slot is looked at every frame: a pointer that is no longer the thunk is
+ * whoever came later, and the thunk goes back in front of it. */
+static void retake_trace_slot(void)
+{
+    if (!config.trace || state.sites.trace_slot == NULL ||
+        *state.sites.trace_slot == trace_thunk) {
+        return;
+    }
+    state.original_trace = *state.sites.trace_slot;
+    *state.sites.trace_slot = trace_thunk;
+    if (!state.trace_retaken) {
+        state.trace_retaken = true;
+        log_info("iMUSE's commentary pointer was replaced after the capture was installed "
+                 "(new handler %08X), so the capture is put back in front of it. That answers "
+                 "whether the game writes this slot at start-up: it does",
+                 (unsigned)(uintptr_t)state.original_trace);
+    }
+}
+
 void music_probe_frame(void)
 {
     int32_t ticks;
     int32_t gate;
     DWORD   now;
 
+    retake_trace_slot();
     if (!state.active) {
         return;
     }
@@ -366,8 +420,16 @@ void music_probe_frame(void)
         state.gate_max = gate;
     }
 
+    /* Whether the Windows timer fired since the last frame is read here and nowhere else, so
+     * the "timer still firing" half of a stall verdict is a measurement whatever else is on. An
+     * earlier version moved last_ticks only when a routine line was due, so with the probe off
+     * the counter compared unequal on every frame and the timer could never be found dead. */
     if (ticks != state.last_ticks) {
         state.last_tick_change_ms = now;
+        state.last_ticks          = ticks;
+        state.timer_ticked        = true;
+    } else {
+        state.timer_ticked = false;
     }
 
     /* The signal is the body, not the callback. The timer can keep firing perfectly while the
@@ -385,36 +447,43 @@ void music_probe_frame(void)
                 report_recovered(ticks, now - state.last_body_change_ms);
                 state.stall_reported = false;
             }
+            state.heartbeat_seen = true;
             state.last_body_stamp = body;
             state.last_body_change_ms = now;
-        } else if (now - state.last_body_change_ms > STALL_DECLARED_AFTER_MS) {
-            if (!state.stall_reported) {
+        } else if (state.heartbeat_seen) {
+            DWORD stalled = now - state.last_body_change_ms;
+
+            /* The report waits for the stall to be beyond argument. The REPAIR does not, and used
+             * to: it was called from inside the branch below, so its own threshold could never
+             * name a moment earlier than that one and every value under 1500 ms was dead, the
+             * shipped 400 and the documented floor of 200 among them. They answer two different
+             * questions and now have two different thresholds. */
+            if (stalled > STALL_DECLARED_AFTER_MS && !state.stall_reported) {
                 state.stall_reported = true;
-                report_stall(ticks, gate, reentry, timer_alive,
-                             now - state.last_body_change_ms);
+                report_stall(ticks, gate, reentry, timer_alive, stalled);
             }
-            run_watchdog(gate, now - state.last_body_change_ms);
+            run_watchdog(gate, stalled, timer_alive);
         }
-    } else if (ticks == state.last_ticks &&
+    } else if (state.timer_ticked && !state.heartbeat_seen) {
+        state.heartbeat_seen = true;
+    } else if (state.heartbeat_seen && !state.timer_ticked &&
                now - state.last_tick_change_ms > STALL_DECLARED_AFTER_MS) {
         if (!state.stall_reported) {
             state.stall_reported = true;
             report_stall(ticks, gate, 0, false, now - state.last_tick_change_ms);
         }
-    } else if (ticks != state.last_ticks && state.stall_reported) {
+    } else if (state.timer_ticked && state.stall_reported) {
         report_recovered(ticks, now - state.last_tick_change_ms);
         state.stall_reported = false;
     }
 
     /* The routine line is the probe's, not the watchdog's. A session that only asked for the
-     * repairs gets the stall and recovery lines, which report a fault, and nothing else. */
+     * repairs gets the stall and recovery lines, which report a fault, and no routine lines. */
     if (config.probe && config.report_seconds > 0 &&
         now - state.last_report_ms >= (DWORD)config.report_seconds * 1000u) {
         report_routine(ticks, gate, now - state.last_report_ms);
         state.last_report_ms = now;
-        state.last_ticks = ticks;
-    } else if (ticks != state.last_ticks && config.report_seconds == 0) {
-        state.last_ticks = ticks;
+        state.report_ticks   = ticks;
     }
 
     drive_stress(now);
@@ -449,6 +518,8 @@ bool music_probe_install(void)
     }
 
     state.last_ticks = *state.sites.heartbeat_ticks;
+    state.report_ticks = state.last_ticks;
+    state.trace_tls = TLS_OUT_OF_INDEXES;
     state.last_tick_change_ms = GetTickCount();
     state.last_report_ms = state.last_tick_change_ms;
     state.last_stress_ms = state.last_tick_change_ms;
@@ -461,8 +532,8 @@ bool music_probe_install(void)
     state.stress_cue = 1;
 
     /* The per-frame tick carries the stall detection, the watchdog that acts on it, and the
-     * stress driver. The lock fix and the trace need none of it, so a session that only wants
-     * those two does not pay for a tick. */
+     * stress driver. The lock fix needs none of it, and the trace uses it only to retake its
+     * slot, one compare a frame, which runs before the test on this flag. */
     state.active = config.probe || config.watchdog || config.stress_hz > 0;
 
     /* After state.active, so a line that arrives during installation already finds the two cells
@@ -481,8 +552,8 @@ bool music_probe_install(void)
     }
 
     if (config.stress_hz > 0) {
-        log_warning("MusicStressHz=%d - THE MUSIC IS BEING DELIBERATELY THRASHED to reproduce the "
-                    "heartbeat stall. It will stutter and cut, and that is this setting working, "
+        log_warning("MusicStressHz=%d: the music is being deliberately thrashed to reproduce the "
+                    "heartbeat stall. It will stutter and cut, which is this setting working, "
                     "not a new fault. Set MusicStressHz=0 for normal play.",
                     (int)config.stress_hz);
     }

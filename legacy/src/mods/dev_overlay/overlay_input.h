@@ -17,16 +17,30 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Places the detour and reads the modal cell out of the matched bytes. False when the site did not
- * resolve, and then nothing is patched and the overlay never opens. */
+/* Finds the window message hook and reads the modal cell out of the matched bytes, writing
+ * nothing. False when the site did not resolve, and then the overlay can never open, which the
+ * caller wants to know before it places anything else. */
+bool overlay_input_resolve(void);
+
+/* Places the detour on the site the resolve found, resolving first if nobody has. False when the
+ * site did not resolve or could not be detoured, and then the overlay never opens. */
 bool overlay_input_install(void);
 
-/* The virtual key that opens the panel. Zero, the default, accepts whichever key sits below Escape
- * on this keyboard, which is the caret on a German layout and the backtick on a British one. */
+/* The virtual key that opens the panel. Zero, the default, accepts F6 and whichever key sits
+ * below Escape on this keyboard, which is the caret on a German layout and the backtick on a
+ * British one. */
 void overlay_input_set_key(int32_t virtual_key);
+
+/* Whether `virtual_key` opens the panel, the configured key or, with none, the defaults. */
+bool overlay_input_opens_on(int32_t virtual_key);
 
 /* Whether the panel is open right now. The frame hook asks this to decide whether to paint. */
 bool overlay_input_is_open(void);
+
+/* Whether an open panel is hidden: not drawn, while everything else about it stays. The free
+ * camera's flight hides it when the player asks, and the entity spawner's placement mode hides it
+ * while it is on; the answer is input_owner.c's, and the end of a flight is noticed there. */
+bool overlay_input_is_hidden(void);
 
 /* Closes the panel and releases the player. Called from the paint when the frame it would draw into
  * is not the one the player sees, so a level ending, a cutscene or a movie cannot leave the game
@@ -49,19 +63,21 @@ void overlay_input_pointer(float *out_x, float *out_y);
  * asks this to show which state the field is in. */
 bool overlay_input_search_focused(void);
 
-/* The slider being dragged right now and where the pointer has it, or false when nothing is being
- * dragged.
- *
- * The drawer asks this so the handle follows the pointer every frame while the setting behind it is
- * only written thirty times a second. Reading the handle's position back out of the settings file
- * instead would move it in the same thirty steps, against a pointer moving in sixty, which reads as
- * a slider that sticks. */
-bool overlay_input_drag(int32_t *row, float *fraction);
+/* The pad's way in, from pad_panel.c; each is what the mouse or a key already does. The press
+ * is the left button, down or up, so held it drags a slider; the escape is the Escape key's
+ * steps; the toggle is the open key's, opening, closing, or hiding while the camera flies. The
+ * window is the game's, for the pad to move the cursor in, NULL while the panel is shut. */
+void *overlay_input_window(void);
+void overlay_input_pad_press(bool down);
 
-/* Notches scrolled since the last take, positive away from the player, negative towards. Observed
- * from every message this DLL's hook sees, whether or not the panel is open, unlike everything
- * else here, which only runs while it is. Consumes: what it returns has been taken out of the
- * accumulator. */
-int32_t overlay_input_take_wheel_delta(void);
+/* The pointer and the hover hidden, while the pad's right stick is over: its sideways half
+ * reaches the cursor as mouse motion faked by controller_input for the game's camera, so the
+ * pointer wanders while the stick scrolls the list, and a wandering pointer with a hover under
+ * it reads as a choice being made. Hidden it is still there, and the next D-pad step or a
+ * touch of the mouse puts it where it should be and shows it again. */
+void overlay_input_set_pointer_hidden(bool hidden);
+bool overlay_input_pointer_hidden(void);
+void overlay_input_pad_escape(void);
+void overlay_input_pad_toggle_open(void);
 
 #endif /* OVERLAY_INPUT_H */

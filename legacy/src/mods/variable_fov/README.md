@@ -30,24 +30,24 @@ patterns do not resolve and the feature disables itself with a log line.
 ### The slider is now an absolute angle
 
 It used to select an **offset** on top of whatever the aspect mode computed, so notch 0 was "the
-unmodified view". That reads well at 4:3, where the authored horizontal really is 60 degrees, and badly
-anywhere else: on a 16:9 frame the Hor+ correction already puts the horizontal near 75 degrees, and an
-offset that can only add cannot come back down. There was no way to ask for 60.
+unmodified view". That reads well at 4:3, where the authored horizontal really is 60 degrees, and
+badly anywhere else: on a 16:9 frame the Hor+ correction already puts the horizontal near 75
+degrees, and an offset that can only add cannot come back down. There was no way to ask for 60.
 
-Now notch *n* means an absolute `SliderMinFovDegrees + n times 2` degrees, the number on the slider is
-the number in the caption. The offset is still what is stored and applied; it is simply computed
-from the angle picked, so the same notch is the same **angle** at every resolution and the offset
-behind it differs.
+Now notch *n* means an absolute `SliderMinFovDegrees + n times 2` degrees, so the number on the
+slider is the number in the caption. The offset is still what is stored and applied; it is simply
+computed from the angle picked, so the same notch is the same **angle** at every resolution and the
+offset behind it differs.
 
-Two consequences worth naming. `ExtraDegrees` **can now be negative**, and it has to be for this to
-work at all. And choosing less than the aspect mode's own answer costs vertical view: at 16:9 an
-absolute 60 degrees horizontal gives about 36 degrees vertical against the authored 46.8 degrees, i.e. narrower than the
-original game. That is a legitimate choice and it is not the default, the default range simply
-starts there.
+Two consequences follow. `ExtraDegrees` **can now be negative**, and it has to be for this to work
+at all. And choosing less than the aspect mode's own answer costs vertical view: at 16:9 an
+absolute 60 degrees horizontal gives about 36 degrees vertical against the authored 46.8 degrees,
+i.e. narrower than the original game. That is a legitimate choice, and it is not the default; the
+default range simply starts there.
 
-`SliderMaxDegrees` is **no longer read**. It was renamed rather than reinterpreted: a tuned `40`
-read as an absolute angle would have meant 40 degrees of view. A file still carrying it is told once in
-the log.
+`SliderMaxDegrees` is **no longer read**. It was renamed, not reinterpreted: a tuned `40`
+read as an absolute angle would have meant 40 degrees of view. A file still carrying it is told
+once in the log.
 
 ## Engine locations
 
@@ -78,7 +78,7 @@ Slider at (0, 376, 250, 50) with its caption at (0, 426, 250, 50), **stacked, ba
 flush to the left edge** of the 640x480 canvas, on the free strip along the bottom of the screen.
 
 The pair was side by side first (caption at 20,392 with the gauge to its right) and that was
-rejected on the picture rather than on the numbers: the caption sat in the middle of an otherwise
+rejected on the picture, not on the numbers: the caption sat in the middle of an otherwise
 empty strip with the bar floating beside it, and the two read as two unrelated things. Stacked and
 hard left they read as one control, and the eye reaches the bar before the words naming it, the
 order the authored screen already uses for gamma.
@@ -125,16 +125,26 @@ audio screen's panel art sits on the **right**, where this screen already has it
 * **Up/Down do not reach the slider.** `options_video`'s arrow navigation is a hand-written graph
   over the authored ids and everything else falls into `default: break`. Tab, the mouse and Escape
   all work. Moving that switch means rewriting a jump table for a convenience, so it is stated
-  rather than patched around.
+  here and left alone.
 * The clamp is 5-170 degrees, deliberately below the engine's own 179: `bapdraw_drawWorld` computes
   `tan((fovDeg + 3)/2)`, which goes negative from 177 and collects **nothing**.
-* Changing `ExtraDegrees` in the ini while the game runs does nothing until the next canvas
-  rebuild. The slider does not have that problem: it calls the rebuild itself.
+* A change to `ExtraDegrees` in the ini while the game runs is picked up by a poll from the frame
+  hook, which asks the file's write time first and reads the key only when it moved. The write
+  time is asked at most once every 30 ms rather than on every frame: the query was measured at
+  11.7 microseconds, paid on every one of up to 240 frames a second for a number a person drags by
+  hand. The one visible price is the developer menu's field of view row, whose drag now previews
+  about 33 times a second instead of once a frame. The log says so on the first look and every
+  8000 looks after it, about every four minutes, in this shape:
+
+      ExtraDegrees is looked for on disk every 30 ms rather than every frame: N look(s), N
+      change(s) taken
+
+  The options screen's own slider does not go through the file: it calls the rebuild itself.
 
 ## Fallback behaviour
 
 If the per-frame hook cannot be installed, live preview is unavailable and the log says so. The
-slider's final value is still read, applied and saved when the screen closes, the same apply path
+slider's final value is still read, applied and saved when the screen closes; the same apply path
 is used for both.
 
 If the camera hook fails, the slider is **not** added at all: a slider that drives nothing is
@@ -142,16 +152,18 @@ worse than no slider.
 
 If the screen's bitmap-name table cannot be read or an index would fall past its end, the slider is
 **not** added either. The engine's own bitmap lookup checks only that an index is not negative, so
-an index one past that table is an unchecked read that ends in a file loader, refusing is the only
+an index one past that table is an unchecked read that ends in a file loader; refusing is the only
 honest answer.
 
 ## Testing status
 
-Built and linked, `/W4 /WX` clean. `unittests/fov_math.c`, 43 checks, all passing, including two
-cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000 degrees,
-and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded 3-D menu constant.
-Offline verification of every pattern passes on both retail builds. **Accepted in game**, at
-3840x2160 with a non zero `ExtraDegrees`, which is the configuration it is played in.
+Built and linked, `/W4 /WX` clean. `unittests/fov_poll.c` pins the 30 ms throttle: the first look,
+the period, the tick count's wrap and the rate at several frame rates. The throttle has not been
+seen in a game log yet. `unittests/fov_math.c`, 43 checks, all passing, including two
+cross-checks against retail data: a 4:3 canvas at the authored vertical must yield exactly 60.000
+degrees, and a 640x480 canvas at 60 degrees must yield a focal length of 554.256, the hard-coded
+3-D menu constant. Offline verification of every pattern passes on both retail builds. **Accepted
+in game**, at 3840x2160 with a non zero `ExtraDegrees`, the configuration it is played in.
 
 To check in game: open Options -> Video, confirm the slider is under the check boxes, that dragging
 it changes the view live, that the caption names both angles, and that leaving the screen writes

@@ -68,7 +68,7 @@
  * 0x00409191 tests equality only; a clock that moved backwards is not equal, so the body runs. The
  * delta it then computes is negative and is clamped to zero at 0x004091A3, and mover+0x30 is
  * restamped at 0x004091BD whichever way that clamp went. So a backwards world clock would cost one
- * zero length tick per mover and not a freeze, which is what the earlier reading claimed.
+ * zero length tick per mover, not the freeze the earlier reading claimed.
  *
  * What it would really cost is every absolute deadline stamped from world+0x54. Those would be
  * extended by the rebase and would never expire. So the offset is added back inside the hook, the
@@ -106,6 +106,10 @@
  */
 #include "sim_clock.h"
 
+#include "frame_cap.h"
+
+#include "world_clock.h"
+
 #include "common/detour.h"
 #include "common/logging.h"
 #include "common/memory.h"
@@ -138,7 +142,7 @@ static const uint8_t SIG_SIM_CLOCK_PAIR[] = {
  *     0041F0E1  D8 0D 14824A00        fmul dword [0x004A8214]   1000.0, on the way to the tick
  *
  * The pattern reaches past the prologue into the two loads of the world pointer and the copy of the
- * previous millisecond tick, which is what makes it unique. */
+ * previous millisecond tick, which makes it unique. */
 static const uint8_t SIG_SET_WORLD_CLOCK[] = {
     0x55, 0x8B, 0xEC, 0x83, 0x7D, 0x08, 0x00, 0x74, 0x38,
     0x8B, 0x45, 0x08, 0x8B, 0x4D, 0x08, 0x8B, 0x51, 0x50, 0x89, 0x50, 0x58
@@ -157,6 +161,11 @@ typedef void (__cdecl *set_world_clock_fn_t)(void *world, float time);
 typedef struct sim_clock_state {
     bool            installed;
     bool            active;
+    /* The rebase and the un-clamping are independent, and both need this one detour. Either on
+     * its own places it, so neither can be switched off by the other being off. */
+    bool            substep_clock;
+    float           last_world_clock;
+    bool            have_world_clock;
     detour_t        set_world_clock;
     volatile float *target;
     volatile float *time;
@@ -168,24 +177,95 @@ typedef struct sim_clock_state {
 
 static sim_clock_state_t sim_state;
 
+/* The engine zeroes both clocks itself when a level opens, at 0x00475621 and 0x0047562B, and an
+ * offset carried across that boundary would make the new level's world clock start at the previous
+ * level's duration. A clock that went backwards is that event, and no other path here can make
+ * it go backwards.
+ *
+ * WHERE this runs is a defect that shipped. It used to run only at frame end, and the
+ * substeps of the opening frame had already been handed time + offset by the hook below. The world
+ * clock therefore started the new level two seconds in, while every mover had just been primed with
+ * a timeBase near zero. A mover's step is now minus the time it last ticked, so each one swallowed
+ * the entire banked offset on its first tick. Movers at rest absorbed it invisibly; a platform in
+ * mid journey crossed its whole gap in a single frame and left the characters standing in the air.
+ * Measured on a Coruscant quicksave: 59 movers each stepping 2.031 s at once, and none at all once
+ * the offset was dropped in time. So both callers use this, and the hook calls it first. */
+static void drop_offset_if_level_opened(void)
+{
+    float live = *sim_state.time;
+
+    if (!(live < sim_state.last_seen)) {
+        return;
+    }
+    ++sim_state.resets;
+    log_info("the simulation clock went backwards, %.3f s to %.3f s, so a level has opened "
+             "(level boundary %u, %u rebases so far). The %.0f s of accumulated offset is dropped "
+             "and the world clock restarts with the level.",
+             (double)sim_state.last_seen, (double)live, (unsigned)sim_state.resets,
+             (unsigned)sim_state.rebases, sim_state.offset);
+    sim_state.offset    = 0.0;
+    sim_state.last_seen = live;
+}
+
 /* The world must never see the rebase, so the offset goes back on before the engine writes its
  * clock and its millisecond tick. */
 static void __cdecl hook_set_world_clock(void *world, float time)
 {
     set_world_clock_fn_t original = (set_world_clock_fn_t)sim_state.set_world_clock.original;
+    double               adjusted;
 
-    if (!sim_state.active) {
-        original(world, time);
-        return;
+    if (sim_state.active) {
+        /* Before the addition, and inside the substep loop, because this is where a level
+         * actually opens. Everything the opening frame ticks then reads a world clock that
+         * restarts with the level rather than one carrying the last level's duration. */
+        drop_offset_if_level_opened();
+        adjusted = (double)time + sim_state.offset;
+    } else {
+        adjusted = (double)time;
     }
-    original(world, (float)((double)time + sim_state.offset));
+
+    /* The cap's restart at the refresh is signalled from here and not from the rebase's test
+     * above, because that test reads the simulation clock pair, which is resolved only with
+     * RebaseSimClock on, and the restart was promised without that condition. This detour is
+     * placed by either feature. Within a level the value handed over never goes backwards: the
+     * loop passes whole steps and one clamped value per frame, each at or past the last, and
+     * the un-clamped answer below is a whole step past its predecessor, which the next request
+     * never falls behind (world_clock.c makes the same comparison for the same reason). With
+     * both features off nothing runs here and the cap keeps the fraction it had. */
+    if (sim_state.have_world_clock && (float)adjusted < sim_state.last_world_clock) {
+        frame_cap_level_opened();
+    }
+
+    /* MoverSubstepClock. The loop clamps the last substep of every frame to the frame's own
+     * target, which puts a mover's sample pair on the frame lattice while the alpha that blends
+     * it is a phase within a simulation step; world_clock.h has the arithmetic and what it costs.
+     * This runs after the rebase because it works on whatever the engine is actually going to
+     * store, and the value it remembers has to be that same one. */
+    if (sim_state.substep_clock) {
+        adjusted = (double)world_clock_substep_time((float)adjusted, sim_state.last_world_clock,
+                                                    sim_state.have_world_clock,
+                                                    WORLD_CLOCK_SUBSTEP_SECONDS);
+    }
+
+    /* Remembered for the next call's un-clamping, which measures a whole step from it. The value
+     * stored is the one the engine will actually hold, rebase included, so the step is taken from
+     * where the engine really is. */
+    sim_state.last_world_clock = (float)adjusted;
+    sim_state.have_world_clock = true;
+
+    original(world, (float)adjusted);
 }
 
 /* The largest power of two at or below the live value, or 0 while the clock is still small enough
- * that its resolution is not a problem. Being a power of two is what makes both subtractions exact:
+ * that its resolution is not a problem. Being a power of two makes both subtractions exact:
  * it is a whole multiple of the unit in the last place of anything at least as large, so nothing
  * rounds and the difference between the two clocks, which is all the interpolation depends on,
  * survives bit for bit. */
+double sim_clock_rebase_offset(void)
+{
+    return sim_state.offset;
+}
+
 double sim_clock_rebase_step(float live)
 {
     int    exponent;
@@ -210,22 +290,11 @@ void sim_clock_sample(void)
     if (!sim_state.active) {
         return;
     }
-    live = *sim_state.time;
+    /* Still checked here as well as in the hook. A level that opens without the substep loop
+     * running would otherwise leave the offset banked until the loop resumed. */
+    drop_offset_if_level_opened();
 
-    /* The engine zeroes both clocks itself when a level opens, at 0x00475621 and 0x0047562B, and an
-     * offset carried across that boundary would make the new level's world clock start at the
-     * previous level's duration. The reconstructed time would then grow with the session rather
-     * than with the level, which is the opposite of what this feature is for. A clock that went
-     * backwards is that event, and nothing else here can make it go backwards. */
-    if (live < sim_state.last_seen) {
-        ++sim_state.resets;
-        log_info("the simulation clock went backwards, %.3f s to %.3f s, so a level has opened "
-                 "(level boundary %u, %u rebases so far). The %.0f s of accumulated offset is "
-                 "dropped and the world clock restarts with the level.",
-                 (double)sim_state.last_seen, (double)live, (unsigned)sim_state.resets,
-                 (unsigned)sim_state.rebases, sim_state.offset);
-        sim_state.offset = 0.0;
-    }
+    live = *sim_state.time;
     sim_state.last_seen = live;
 
     step = sim_clock_rebase_step(live);
@@ -243,51 +312,67 @@ void sim_clock_sample(void)
     ++sim_state.rebases;
 
     /* One line the first time it happens. Without it the log cannot tell a feature that is working
-     * from one that resolved its sites and then never fired, and that is the failure that reads
-     * most like success. Afterwards it happens about every two seconds and is not worth a line. */
+     * from one that resolved its sites and then never fired, the failure that reads most like
+     * success. Afterwards it happens about every two seconds and is not worth a line. */
     if (sim_state.rebases == 1u) {
         log_info("first rebase at %.3f s of level time, %.0f s taken off both clocks and added "
                  "back to the world clock", (double)live, step);
     }
 }
 
-void sim_clock_install(bool enabled)
+void sim_clock_install(bool enabled, bool substep_clock)
 {
     uintptr_t pair;
     uintptr_t site;
     uint32_t  address;
+    bool      rebase_wanted;
 
     if (sim_state.installed) {
         return;
     }
-    sim_state.installed = true;
+    sim_state.installed   = true;
+    sim_state.substep_clock = substep_clock;
 
     if (!enabled) {
         log_info("RebaseSimClock=0, the interpolation phase keeps precessing as the level clock "
                  "grows");
+    }
+    if (!enabled && !substep_clock) {
         return;
     }
 
-    pair = signature_find_unique(SIG_SIM_CLOCK_PAIR, NULL, sizeof(SIG_SIM_CLOCK_PAIR));
-    if (pair == 0) {
+    /* The clock pair is the rebase's alone. The un-clamping reads neither cell, so a pair that
+     * does not resolve costs the rebase and leaves the other feature usable. */
+    rebase_wanted = enabled;
+    pair = enabled ? signature_find_unique(SIG_SIM_CLOCK_PAIR, NULL, sizeof(SIG_SIM_CLOCK_PAIR))
+                   : 0;
+    if (enabled && pair == 0) {
         log_warning("the simulation clock pair did not resolve, no rebase");
+        rebase_wanted = false;
+    }
+    if (rebase_wanted) {
+        if (!memory_read_u32(pair + OFFSET_SIM_TARGET, &address) ||
+            !memory_is_inside_image(address, sizeof(float))) {
+            log_warning("the simulation target operand reads %08X, outside the image, refused",
+                        (unsigned)address);
+            rebase_wanted = false;
+        } else {
+            sim_state.target = (volatile float *)(uintptr_t)address;
+        }
+    }
+    if (rebase_wanted) {
+        if (!memory_read_u32(pair + OFFSET_SIM_TIME, &address) ||
+            !memory_is_inside_image(address, sizeof(float))) {
+            log_warning("the simulation time operand reads %08X, outside the image, refused",
+                        (unsigned)address);
+            rebase_wanted = false;
+        } else {
+            sim_state.time = (volatile float *)(uintptr_t)address;
+        }
+    }
+    if (!rebase_wanted && !substep_clock) {
         return;
     }
-    if (!memory_read_u32(pair + OFFSET_SIM_TARGET, &address) ||
-        !memory_is_inside_image(address, sizeof(float))) {
-        log_warning("the simulation target operand reads %08X, outside the image, refused",
-                    (unsigned)address);
-        return;
-    }
-    sim_state.target = (volatile float *)(uintptr_t)address;
-
-    if (!memory_read_u32(pair + OFFSET_SIM_TIME, &address) ||
-        !memory_is_inside_image(address, sizeof(float))) {
-        log_warning("the simulation time operand reads %08X, outside the image, refused",
-                    (unsigned)address);
-        return;
-    }
-    sim_state.time = (volatile float *)(uintptr_t)address;
 
     /* The world clock detour goes on first, and the feature is abandoned if it cannot be placed. A
      * rebase without it would move the time every mover compares for equality and would extend
@@ -295,22 +380,41 @@ void sim_clock_install(bool enabled)
     site = signature_find_detour_target(SIG_SET_WORLD_CLOCK, NULL, sizeof(SIG_SET_WORLD_CLOCK),
                                         SET_WORLD_CLOCK_PROLOGUE);
     if (site == 0) {
-        log_warning("bapmap_setWorldClock did not resolve, so no rebase is performed. Moving the "
-                    "clocks without restoring the world time would extend every absolute deadline "
-                    "stamped from it, and those would never expire");
+        log_warning("bapmap_setWorldClock did not resolve, so neither the rebase nor the mover "
+                    "substep clock is performed. Moving the clocks without restoring the world "
+                    "time would extend every absolute deadline stamped from it, and those would "
+                    "never expire");
+        sim_state.substep_clock = false;
         return;
     }
     if (!detour_install(&sim_state.set_world_clock, site, (const void *)hook_set_world_clock,
                         SET_WORLD_CLOCK_PROLOGUE)) {
-        log_warning("bapmap_setWorldClock could not be detoured, no rebase");
+        log_warning("bapmap_setWorldClock could not be detoured, so neither the rebase nor the "
+                    "mover substep clock is performed");
+        sim_state.substep_clock = false;
         return;
     }
 
-    sim_state.active = true;
-    log_info("simulation clock rebasing active (target %08X, time %08X, world clock restored at "
-             "%08X). Alpha depends on the difference of the pair, which a shared subtraction "
-             "leaves bit for bit, and the world keeps the absolute time every mover compares "
-             "against.",
-             (unsigned)(uintptr_t)sim_state.target, (unsigned)(uintptr_t)sim_state.time,
-             (unsigned)site);
+    sim_state.active = rebase_wanted;
+    if (rebase_wanted) {
+        log_info("simulation clock rebasing active (target %08X, time %08X, world clock restored "
+                 "at %08X). Alpha depends on the difference of the pair, which a shared "
+                 "subtraction leaves bit for bit, and the world keeps the absolute time every "
+                 "mover compares against.",
+                 (unsigned)(uintptr_t)sim_state.target, (unsigned)(uintptr_t)sim_state.time,
+                 (unsigned)site);
+    }
+    if (sim_state.substep_clock) {
+        log_warning("MoverSubstepClock=1 at %08X. The substep loop's clamp of the world clock to "
+                    "the frame's target is removed, so every mover integrates exactly one "
+                    "simulation step per substep and its sample pair spans one step instead of "
+                    "the gap between frames. The substep alpha is then the right "
+                    "weight for a mover and for a character riding one. This changes how movers "
+                    "MOVE rather than only how they are drawn: the clock runs up to one step "
+                    "ahead of the frame time, which shifts the phase of every other reader of it "
+                    "by under 31 ms, and the average rate is unchanged. It ships ON: without it "
+                    "a mover's drawn step disagrees with its neighbours on about one frame in "
+                    "three, and with it on about one in eighty. MoverSubstepClock=0 reverts it.",
+                    (unsigned)site);
+    }
 }

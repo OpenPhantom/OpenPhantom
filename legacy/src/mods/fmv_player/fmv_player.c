@@ -2,7 +2,7 @@
  * exists, falling back to the original retail path unchanged when it does not.
  *
  * ==============================================================================================
- * WHY THIS EXISTS, AND WHAT IT REPLACES
+ * Why this exists, and what it replaces
  *
  * The DLL this one replaces tried three designs to make movies fill a chosen display resolution
  * without the retail engine's own per-frame surface access costing whole seconds of it at 4K: a
@@ -23,11 +23,11 @@
  * game plays exactly as it always did until you convert something.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
- * All four movie call sites (intro/logo, in-level cutscenes, the arena replay, credits) funnel
- * through one function, confirmed by an xref sweep of its four UNCONDITIONAL_CALL callers inside
- * 0x0043EB2A:
+ * All four movie call sites (the two start-up splashes, a level's opening movie and the ending)
+ * funnel through one function, confirmed by an xref sweep of its four UNCONDITIONAL_CALL callers
+ * inside 0x0043EB2A. There is no movie inside a level; a cutscene there is the engine's own scene:
  *
  *   0043EB93  LEA EDX,[EBP-0x84]      ; a local buffer already filled with e.g. "movie\arena"
  *   0043EB99  PUSH EDX
@@ -43,8 +43,8 @@
  * either, because when it takes over it never runs any of the retail code that would have.
  *
  * The signature is the function's own prologue plus enough of its body to be unique: the bare
- * `push ebp / mov ebp,esp / sub esp,0x90` shape recurs elsewhere in an 830 KB image, which is
- * exactly why the two-stage detour rule exists, and why this signature reaches two branches into
+ * `push ebp / mov ebp,esp / sub esp,0x90` shape recurs elsewhere in an 830 KB image, the reason
+ * the two-stage detour rule exists and the reason this signature reaches two branches into
  * the function rather than stopping at the prologue. Measured against the real retail WMAIN.EXE
  * (829,952 bytes): exactly one match, all 72 bytes, at 0x0046C35A.
  *
@@ -53,9 +53,15 @@
  * tree already share this chaining convention for functions more than one feature might reasonably
  * want to sit in front of.
  * ============================================================================================== */
+/* SIZE NOTE: a little over 600 lines since a movie of a multiplayer session goes through this hook
+ * as well. The code is inside the normal band; the excess is the byte evidence above and at the
+ * pattern. The next seam is the converted path, play_converted and its five checks, which answer
+ * one question, whether this DLL can play this file, and would move whole. */
 #include "fmv_player.h"
 
+#include "bink_cells.h"
 #include "movie_path.h"
+#include "movie_session.h"
 #include "render_curtain.h"
 #include "video_overlay.h"
 #include "vlc_playback.h"
@@ -97,7 +103,8 @@
  *   0046C398  C7 05 3C A4 86 00 01 00 00 00  mov [0086a43c],1
  */
 static const uint8_t SIG_MOVIE_PLAY[] = {
-    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00,         /* push ebp; mov ebp,esp; sub esp,0x90 */
+    /* push ebp; mov ebp,esp; sub esp,0x90 */
+    0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00,
     0xA1, 0xF0, 0x77, 0x4B, 0x00,                                 /* mov eax,[004b77f0]      */
     0x89, 0x85, 0x74, 0xFF, 0xFF, 0xFF,                           /* mov [ebp-0x8c],eax      */
     0xC7, 0x85, 0x78, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x00, 0x00,   /* mov [ebp-0x88],1        */
@@ -123,8 +130,8 @@ static const uint8_t SIG_MOVIE_PLAY[] = {
  * nothing and it is the cheapest possible check that the pattern really did land where it was
  * meant to: two independent encodings of the same address in one matched run.
  *
- * The cells are read out of the matched bytes rather than written down as constants, which is what
- * keeps them right under forced ASLR and after another patch has edited a nearby immediate. All
+ * The cells are read out of the matched bytes rather than written down as constants, so they stay
+ * right under forced ASLR and after another patch has edited a nearby immediate. All
  * three offsets are past the nine bytes a detour overwrites, so they survive this file's own hook
  * and one another DLL placed there first. */
 #define GFX_UP_OPERAND_OFFSET      32u
@@ -149,6 +156,7 @@ typedef struct fmv_player_state {
     char            movie_directory[MAX_PATH];
     char            extension[16];
     bool            stretch_movies;     /* Scaling=stretch; letterbox otherwise */
+    bool            converted_folder;   /* the folder of converted movies is there */
     detour_t        detour;
 
     /* The engine's own two movie cells, both read out of the matched signature.
@@ -157,10 +165,10 @@ typedef struct fmv_player_state {
      * act is to refuse and return 0 while it is clear.
      *
      * `in_movie` is what the engine means by "a cutscene is on screen". Retail sets it for the
-     * whole of a movie, and other parts of the engine read it: the display hot keys are ignored
+     * length of a movie, and other parts of the engine read it: the display hot keys are ignored
      * while it is set, and the game's own key hook steps aside entirely. Holding it for the length
-     * of OUR playback is what makes the rest of the engine behave the way it does during a retail
-     * movie rather than the way it does during gameplay. */
+     * of OUR playback makes the rest of the engine behave as it does during a retail movie
+     * rather than as it does during gameplay. */
     const int32_t  *graphics_up;
     int32_t        *in_movie;
 } fmv_player_state_t;
@@ -207,12 +215,12 @@ static void load_config(void)
 
     /* Which video output libVLC uses.
      *
-     * The default DEPENDS ON WHERE this is running, and that is the whole point. On Windows the
-     * choice is left to libVLC, exactly as it always has been, so nothing about a Windows
-     * installation changes. Under Wine the default is gdi, because libVLC's own choice there is
-     * Direct3D and building a second Direct3D device takes the engine's exclusive mode one away:
-     * the cutscenes play, and every frame after them is drawn into nothing. FIELD CONFIRMED on
-     * Linux Mint under Lutris, where gdi fixed it and the window based theories did not.
+     * The default depends on WHERE this is running. On Windows the choice is left to libVLC,
+     * exactly as it always has been, so nothing about a Windows installation changes. Under Wine
+     * the default is gdi, because libVLC's own choice there is Direct3D and building a second
+     * Direct3D device takes the engine's exclusive mode one away: the cutscenes play, and every
+     * frame after them is drawn into nothing. FIELD CONFIRMED on Linux Mint under Lutris, where
+     * gdi fixed it and the window based theories did not.
      *
      * The ini still wins if it names an output, so this is a better default and not a decision
      * taken away from anybody. See vlc_playback.h. */
@@ -223,8 +231,8 @@ static void load_config(void)
         ini_read_string(FMV_PLAYER_SECTION, "VideoOutput", default_output,
                         video_output, sizeof video_output);
         /* Present and empty is not absent: see the note by MovieSurface above. Without this the
-         * shipped ini would hand libVLC no video output at all on Linux, which is exactly the
-         * black menu this setting exists to prevent. */
+         * shipped ini would hand libVLC no video output at all on Linux, the black menu this
+         * setting exists to prevent. */
         const char *chosen_output = (video_output[0] != 0) ? video_output : default_output;
 
         vlc_playback_set_video_output(chosen_output);
@@ -247,12 +255,13 @@ static void load_config(void)
 
     /* A live probe on the player's own body around the level 6 opening cutscene measured a real
      * position-settle transient, the player's authoritative position rather than its render
-     * blend, overshooting by 1.48 units and taking about 650 ms to read flat again, entirely under an
-     * engine position-override flag that retail's own resolution switch around every movie
-     * incidentally outlives before its picture is ever shown. This DLL's own faster transition does
-     * not spend that time, so this holds the picture back, still solid black, for a short beat after
-     * the movie itself has already finished, buying the same runway back without switching
-     * anything. Zero disables it outright. See render_curtain.c for how it is actually drawn. */
+     * blend, overshooting by 1.48 units and taking about 650 ms to read flat again, entirely
+     * under an engine position-override flag that retail's own resolution switch around every
+     * movie incidentally outlives before its picture is ever shown. This DLL's own faster
+     * transition does not spend that time, so this holds the picture back, still solid black,
+     * for a short beat after the movie itself has already finished, buying the same runway back
+     * without switching anything. Zero disables it outright. See render_curtain.c for how it is
+     * actually drawn. */
     post_movie_hold_ms = ini_read_int(FMV_PLAYER_SECTION, "PostMovieHoldMs", 2500);
     if (post_movie_hold_ms < 0) {
         post_movie_hold_ms = 0;
@@ -300,7 +309,7 @@ static bool movie_directory_exists(void)
     attributes = GetFileAttributesA(path);
     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
         log_info("no converted movies: \"%s\" is not a folder. Every movie uses the retail Bink "
-                 "path, which is what an installation with nothing converted is supposed to do.",
+                 "path, as an installation with nothing converted is supposed to.",
                  path);
         return false;
     }
@@ -367,7 +376,8 @@ static void resolve_engine_cells(uintptr_t site)
  * happen once a level and its player object already exist. The two startup splash movies play
  * before any level is loaded, so there is nothing for the curtain to hide, only an unwanted
  * extra pause on every single launch. `name` is still the retail backslash-relative name at this
- * point ("movie\\logo", "movie\\bigape", "movie\\scene1", ...), so only its own base is compared. */
+ * point ("movie\\logo", "movie\\bigape", "movie\\scene1", ...), so only its own base is
+ * compared. */
 static bool movie_wants_post_movie_curtain(const char *name)
 {
     const char *base = name;
@@ -385,36 +395,33 @@ static bool movie_wants_post_movie_curtain(const char *name)
 }
 
 /* ============================================================================================ */
-static int __cdecl hook_play_movie(const char *name, int param2, int param3)
+/* The engine's cell that says a movie is on screen, held for the length of a movie this DLL plays
+ * and of a wait for the host that follows one. The state's own comment says what reads it. */
+static void hold_in_movie(bool on_screen)
 {
-    movie_play_fn_t original = (movie_play_fn_t)fmv_player_state.detour.original;
-    char            ansi_path[MAX_PATH];
-    wchar_t         modern_path[MAX_PATH];
-    bool            played;
-
-    /* The retail function's own first two acts are to refuse and return 0: once when the graphics
-     * device is not up, and once when a movie is already on screen. Both are reproduced here by
-     * handing the call to the original rather than by answering for it, so the refusal is the
-     * engine's own rather than an imitation of it.
-     *
-     * The second one is not theoretical. This function has four call sites and nothing stops one
-     * of them running while another movie is up; retail answers 0 and plays nothing, and a hook
-     * that skipped the check would start a second overlay on top of the first. */
-    if (fmv_player_state.graphics_up != NULL && *fmv_player_state.graphics_up == 0) {
-        return original(name, param2, param3);
+    if (fmv_player_state.in_movie != NULL) {
+        *fmv_player_state.in_movie = on_screen ? 1 : 0;
     }
-    if (fmv_player_state.in_movie != NULL && *fmv_player_state.in_movie != 0) {
-        return original(name, param2, param3);
-    }
+}
 
-    /* Every branch below reaches a log line, and that is a property worth keeping deliberately.
+/* A movie with a converted file, through libVLC. False when this DLL does not play it after all,
+ * with the reason logged, and the caller hands it to the retail player; otherwise `*result` is
+ * what the engine is answered. */
+static bool play_converted(const char *name, int *result)
+{
+    char         ansi_path[MAX_PATH];
+    wchar_t      modern_path[MAX_PATH];
+    movie_loop_t loop;
+    bool         played;
+
+    /* Every branch below reaches a log line, deliberately.
      * A movie that quietly used Bink is indistinguishable, from outside, from a feature that was
      * never armed, and a log that says "intercepted" at startup and then nothing at all is the
      * failure this whole DLL is most likely to present as. So the name is resolved into a path in
      * two steps rather than one long condition, and the step that fails says which one it was. */
     if (name == NULL) {
         log_warning("the engine asked for a movie with no name, using the retail Bink path");
-        return original(name, param2, param3);
+        return false;
     }
 
     if (!movie_path_build(host_directory(), fmv_player_state.movie_directory, name,
@@ -423,19 +430,19 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
                     "the configuration is not usable, so the retail Bink path is used", name,
                     host_directory(), fmv_player_state.movie_directory,
                     fmv_player_state.extension);
-        return original(name, param2, param3);
+        return false;
     }
 
     if (MultiByteToWideChar(CP_ACP, 0, ansi_path, -1, modern_path, ARRAYSIZE(modern_path)) == 0) {
         log_warning("%s could not be converted to wide characters (error %u), using the retail "
                     "Bink path", ansi_path, (unsigned)GetLastError());
-        return original(name, param2, param3);
+        return false;
     }
 
     if (GetFileAttributesW(modern_path) == INVALID_FILE_ATTRIBUTES) {
         log_info("no converted file for \"%s\" at %s, using the retail Bink movie", name,
                  ansi_path);
-        return original(name, param2, param3);
+        return false;
     }
 
     /* There is a file to play, so now it matters whether libVLC can play it. This is a live,
@@ -458,27 +465,26 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
                         "libVLC line earlier in this log for where it looked. Reported once.",
                         name);
         }
-        return original(name, param2, param3);
+        return false;
     }
 
     log_info("playing \"%s\" from %s", name, ansi_path);
+    movie_session_begin(MOVIE_PATH_VLC);
+    movie_session_loop(&loop);
 
-    /* Held for exactly as long as the picture is on screen, which is what the retail function does
-     * with the same cell. It is not bookkeeping: the engine's display hot keys check it before
-     * changing resolution or gamma, and the game's own key hook steps aside entirely while it is
-     * set. Without it a cutscene played by this DLL is, to the rest of the engine, ordinary
-     * gameplay with a window over it, which is what "it does not feel like the game" is made of.
+    /* Held for exactly as long as the picture is on screen, a black wait for the host included,
+     * as the retail function holds the same cell for its movie. It is not bookkeeping: the
+     * engine's display hot keys check it before changing resolution or gamma, and the game's own
+     * key hook steps aside entirely while it is set. Without it a cutscene played by this DLL is,
+     * to the rest of the engine, ordinary gameplay with a window over it. That is what "it does
+     * not feel like the game" is made of.
      *
      * Set immediately before and cleared immediately after, with nothing in between that can
      * return early, so it cannot be left standing. A stuck value would make the engine refuse
      * every later movie, including its own. */
-    if (fmv_player_state.in_movie != NULL) {
-        *fmv_player_state.in_movie = 1;
-    }
-    played = video_overlay_play_blocking(modern_path);
-    if (fmv_player_state.in_movie != NULL) {
-        *fmv_player_state.in_movie = 0;
-    }
+    hold_in_movie(true);
+    played = video_overlay_play_blocking(modern_path, &loop);
+    hold_in_movie(false);
 
     /* Only a movie that actually played leaves anything worth hiding a runway for, and only for the
      * movies the runway is actually needed for: a level and its player already exist. The two
@@ -489,15 +495,80 @@ static int __cdecl hook_play_movie(const char *name, int param2, int param3)
     }
 
     if (played) {
+        movie_session_end(&loop);
         /* Non-zero because all three refusal paths in the retail function return 0, which is byte
          * evidence that zero means "did not play". The exact value it returns when it DID play has
          * not been read out of the image, and no caller has been shown to distinguish one non-zero
          * value from another. */
-        return 1;
+        *result = 1;
+        return true;
     }
 
     log_warning("playback of \"%s\" did not start, falling back to the retail Bink movie", name);
-    return original(name, param2, param3);
+    return false;
+}
+
+/* The retail player, for every movie this DLL does not play itself. Outside a session it is the
+ * engine's own call and nothing else. In one, a watch of this DLL's own runs around it, and a
+ * client whose movie ended before the host's waits behind black after it. */
+static int play_retail(const char *name, int param2, int param3, movie_role_t role)
+{
+    movie_play_fn_t original = (movie_play_fn_t)fmv_player_state.detour.original;
+    movie_loop_t    loop;
+    int             result;
+
+    if (role == MOVIE_ROLE_FREE) {
+        return original(name, param2, param3);
+    }
+    movie_session_begin(MOVIE_PATH_BINK);
+    movie_session_loop(&loop);
+    result = bink_cells_play(original, name, param2, param3, &loop);
+    if (loop.end == MOVIE_END_RETAIL && loop.poll != NULL) {
+        /* The retail player cleared the in-movie cell on its way out, and for the engine a movie
+         * is still on screen for as long as this side waits for the host. */
+        hold_in_movie(true);
+        if (!video_overlay_hold_for_host(&loop)) {
+            log_warning("no window of the game was found to wait in, so \"%s\" does not wait "
+                        "for the host", name != NULL ? name : "");
+        }
+        hold_in_movie(false);
+    }
+    movie_session_end(&loop);
+    return result;
+}
+
+static int __cdecl hook_play_movie(const char *name, int param2, int param3)
+{
+    movie_play_fn_t original = (movie_play_fn_t)fmv_player_state.detour.original;
+    movie_role_t    role;
+    int             result = 0;
+
+    /* The retail function's own first two acts are to refuse and return 0: once when the graphics
+     * device is not up, and once when a movie is already on screen. Both are reproduced here by
+     * handing the call to the original rather than by answering for it, so the refusal is the
+     * engine's own rather than an imitation of it.
+     *
+     * The second one is not theoretical. This function has four call sites and nothing stops one
+     * of them running while another movie is up; retail answers 0 and plays nothing, and a hook
+     * that skipped the check would start a second overlay on top of the first. */
+    if (fmv_player_state.graphics_up != NULL && *fmv_player_state.graphics_up == 0) {
+        return original(name, param2, param3);
+    }
+    if (fmv_player_state.in_movie != NULL && *fmv_player_state.in_movie != 0) {
+        return original(name, param2, param3);
+    }
+
+    /* What a multiplayer session makes of this movie, decided before anything else is done with
+     * it: a client whose host is already in its level does not play it at all. With no session
+     * the answer is FREE, and everything below is what it always was. */
+    role = movie_session_decide(name);
+    if (role == MOVIE_ROLE_SKIP) {
+        return 0;   /* what the engine's own refusals answer; its four callers discard it */
+    }
+    if (fmv_player_state.converted_folder && play_converted(name, &result)) {
+        return result;
+    }
+    return play_retail(name, param2, param3, role);
 }
 
 static bool install_movie_hook(void)
@@ -511,6 +582,12 @@ static bool install_movie_hook(void)
         return false;
     }
 
+    if (!fmv_player_state.converted_folder) {
+        log_info("movie playback is watched at %08X for a multiplayer session only: with no "
+                 "converted movies every movie keeps the retail Bink path, and outside a "
+                 "session exactly as before", (unsigned)site);
+        return true;
+    }
     log_info("movie playback intercepted at %08X. Any movie with a matching file in \"%s%s\" "
              "plays through libVLC instead of Bink; everything else falls through to the original "
              "path unchanged.", (unsigned)site, host_directory(),
@@ -542,7 +619,8 @@ void fmv_player_install(void)
     }
 
     /* Resolving the site and checking the folder both come BEFORE libVLC is brought up, and the
-     * order is the point: each of them can rule the whole feature out, and neither costs anything.
+     * order is the point: the site can rule the whole feature out and the folder rules libVLC out,
+     * and neither costs anything.
      * Loading libVLC first meant its plugin bank was built and its threads started during the
      * game's own startup even when the very next step was going to switch the feature off. */
     signature_resolve_table(sites, SITE_COUNT);
@@ -552,23 +630,32 @@ void fmv_player_install(void)
                     "path");
         return;
     }
-    if (!movie_directory_exists()) {
-        return;
-    }
-
+    /* No folder no longer means no hook. In a multiplayer session the retail path needs the same
+     * rules as a converted movie, the host deciding when everybody's movie ends, and outside a
+     * session the hook hands every movie to the retail player unchanged. What the folder still
+     * decides is whether libVLC is brought up at all. */
+    fmv_player_state.converted_folder = movie_directory_exists();
     resolve_engine_cells(site);
-    render_curtain_install();
+    (void)bink_cells_resolve();
 
     /* Started here, as early as this DLL's own install runs, so the background load has the most
      * possible time to finish before the first movie needs it. It is not waited on: the hook polls
      * video_overlay_is_ready() per movie and falls through to the retail path while the answer is
      * no. What IS answered here is the window class, because that part is immediate, and without
      * it there is nothing to play into at all. */
-    if (!video_overlay_start_async_init()) {
-        log_error("the video overlay's window class could not be registered, every movie keeps "
-                  "using the retail Bink path");
-        return;
+    if (fmv_player_state.converted_folder) {
+        render_curtain_install();
+        if (!video_overlay_start_async_init()) {
+            log_error("the video overlay's window class could not be registered, every movie "
+                      "keeps using the retail Bink path");
+            fmv_player_state.converted_folder = false;
+        }
+    } else if (!video_overlay_register()) {
+        log_warning("the video overlay's window class could not be registered, so a client that "
+                    "waits for its host waits in the game's own window");
     }
 
-    install_movie_hook();
+    if (install_movie_hook()) {
+        movie_session_install();
+    }
 }

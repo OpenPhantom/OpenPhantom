@@ -1,13 +1,12 @@
 /* focus_guard.c: the window changes hands and the engine is never told.
  *
  * ==============================================================================================
- * BYTE BASIS 1. what the engine does on a focus change, which is almost nothing
+ * Byte basis 1. what the engine does on a focus change, which is almost nothing
  *
  * The window procedure is 0x0049905E, `C7 45 DC 5E 90 49 00` at 0x00498F6D writes it into the
  * `lpfnWndProc` field of the WNDCLASSA that RegisterClassA at 0x00498FD0 is handed. It switches on
- * `msg - 2`
- * through the byte table at 0x004991EB and the address table at 0x004991D7, and exactly four
- * messages have a case. WM_ACTIVATEAPP (0x1C) is one of them:
+ * `msg - 2` through the byte table at 0x004991EB and the address table at 0x004991D7, and exactly
+ * four messages have a case. WM_ACTIVATEAPP (0x1C) is one of them:
  *
  *   004990E5  8B 45 10              mov  eax,[ebp+0x10]        ; wParam: 1 = activated
  *   004990E8  A3 A0 A5 4B 00        mov  [004BA5A0], eax
@@ -41,9 +40,9 @@
  * not a defect this file repairs, and it is named here so nobody looks for it later.
  *
  * ----------------------------------------------------------------------------------------------
- * BYTE BASIS 2. the input devices are acquired once and never again
+ * Byte basis 2. the input devices are acquired once and never again
  *
- * stdControl_openMouse 0x0048DA7C sets the cooperative level and nothing else does:
+ * stdControl_openMouse 0x0048DA7C sets the cooperative level, and it is the only site that does:
  *
  *   0048DAEA  6A 06                 push 6                     ; NONEXCLUSIVE | FOREGROUND
  *   0048DAEC  E8 <rel32>            call 00498967              ; the engine's window
@@ -88,9 +87,9 @@
  * by calling exactly the two leaves its own case 0x13 calls, in the same order.
  *
  * ----------------------------------------------------------------------------------------------
- * BYTE BASIS 3. why the pointer still leaves, and why capture does not save it
+ * Byte basis 3. why the pointer still leaves, and why capture does not save it
  *
- * The confinement is warp-on-every-WM_MOUSEMOVE and nothing else: the import table has ClipCursor
+ * The confinement is warp-on-every-WM_MOUSEMOVE, nothing more: the import table has ClipCursor
  * nowhere, and the whole USER32 cursor vocabulary is SetCapture, ReleaseCapture, SetCursor and
  * SetCursorPos. A warp only happens when a message arrives, and a message only arrives while the
  * pointer is over the window, or while a button is down, which is the only case in which a
@@ -124,8 +123,8 @@
  *     WndProc::Handler Warning: filtering WM_ACTIVATEAPP: 0
  *     WndProc::Handler Warning: filtering WM_ACTIVATEAPP: 1
  * so 0x0046A155 and 0x0046A17E never run there. That is why the focus signal used here is polled
- * from the frame hook instead of taken from a message: a message can be filtered, GetForegroundWindow
- * cannot.
+ * from the frame hook instead of taken from a message: a message can be filtered,
+ * GetForegroundWindow cannot.
  *
  * SIZE NOTE: the file is over the preferred 400 lines and the excess is the three
  * listings above. They are what make a feature that holds process-global OS state reviewable:
@@ -271,10 +270,10 @@ static focus_guard_state_t focus_state;
  * state, so there is no sequence of ticks that can leave a clip standing while the game is not in
  * front, not a missed transition, not a first tick, not a configuration change.
  *
- * CONFINE and RELEASE are mutually exclusive by construction: the first needs
+ * Confine and release are mutually exclusive by construction: the first needs
  * (has_focus && confine_wanted), the second needs its negation.
  *
- * ACQUIRE and UNACQUIRE are the only actions that reach into the engine, and they fire on an
+ * Acquire and unacquire are the only actions that reach into the engine, and they fire on an
  * observed CHANGE only. The first tick deliberately produces neither: at that point nothing has
  * gone wrong yet, and sending the engine a resume it did not ask for would flush the input buffers
  * for no reason.
@@ -541,7 +540,7 @@ bool focus_guard_install(const focus_guard_config_t *config)
         return false;
     }
 
-    /* THE FALLBACK IS "DO NOTHING", and it has to be. Without a per-frame tick nothing would ever
+    /* The fallback is DO NOTHING, and it has to be. Without a per-frame tick nothing would ever
      * observe the foreground being lost, so a confinement applied once would be held for the
      * rest of the session, across every Alt-Tab, which is a worse bug than the one being fixed.
      * The re-acquire has the same single source of truth and goes with it. */

@@ -41,9 +41,9 @@
  * Traced forward to the end of the function (0x00433985), NOTHING after this block ever reads EAX,
  * ECX or EDX left over from it; every later use of the victim record reloads it fresh from
  * [ebp+8], and the first flag-testing instruction after it (FCOMP/FNSTSW at 0x004338FE) sets its
- * own flags rather than reading the SUB's. That is what makes this block safe to detour as a whole
- * and either skip entirely or replace outright, rather than needing to preserve anything about how
- * it executed. Unlike updateCam's chained detour above, which must run the original underneath
+ * own flags rather than reading the SUB's. This block is therefore safe to detour as a whole and
+ * either skip entirely or replace outright, rather than needing to preserve anything about how it
+ * executed. Unlike updateCam's chained detour above, which must run the original underneath
  * every time, this site's own hook is free to decide whether the trampoline runs at all. */
 static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
     0x8B, 0x55, 0x08,             /* mov edx,[ebp+8]      victim (character*)            */
@@ -81,8 +81,10 @@ static const uint8_t SIG_NPC_DAMAGE_APPLY[] = {
  * itself. on_npc_damage() communicates that choice through the static flag rather than a return
  * value in EAX, because popad below would overwrite EAX with whatever it held before the call and
  * erase any answer left in a register. */
-static void  *npc_damage_trampoline;   /* the original 15 bytes, replayed when neither cheat is on */
-static void  *npc_damage_continue;     /* site + NPC_DAMAGE_PROLOGUE_SIZE, resumed when one skips it */
+/* The original 15 bytes, replayed when neither cheat is on. */
+static void  *npc_damage_trampoline;
+/* site + NPC_DAMAGE_PROLOGUE_SIZE, resumed when one of the two skips the block. */
+static void  *npc_damage_continue;
 static bool   npc_damage_skip;
 
 /* Character record fields the one shot cheat needs, all of them read by diagnostics in the running
@@ -104,7 +106,39 @@ static bool   npc_damage_skip;
 #define NPC_SHOOTER_CLASS_OFFSET 0x08u
 #define SHOOTER_CLASS_PLAYER        1
 
-/* WHOSE SHOT WAS THAT. Without this the cheat is not "the player one shots NPCs", it is "every
+/* Whose side is the victim on. The engine has no faction table; the one word it has is the body's
+ * own class at +0x04, the same word the collision layers filter on and the one this file zeroes
+ * to switch collision off. A census of every actor placement in the eleven shipped levels says
+ * how the game uses the low band:
+ *
+ *     1   the player, and the party members that share the player's class so that his bolts
+ *         pass them: Qui-Gon, Obi-Wan, Jar Jar, Padme, Panaka, Anakin, the queen in her dress
+ *     2   combat and ambient NPCs: battle droids, thugs, jawas, gamorreans, animals
+ *     3   civilians and talkers: Watto, the Coruscant crowd, Palpatine, the Naboo pilots
+ *     4   tripod guns, 8 tanks (remapped to 2 by the spawner), 10 and up the pickups
+ *     9   the escort: the queen, Panaka, the Naboo guards, Jar Jar and Padme in the race
+ *
+ * A script can re-side an actor while the level runs (the "Set Owner" opcode writes this word),
+ * so the test reads the live word at the hit rather than anything authored. One shot is for
+ * enemies: a victim of the player's own class, an escort or a civilian takes the ordinary hit. */
+#define BODY_CLASS_PLAYER_PARTY  1
+#define BODY_CLASS_CIVILIAN      3
+#define BODY_CLASS_ESCORT        9
+
+static bool victim_is_on_the_players_side(const void *victim)
+{
+    const char *body = *(const char *const *)((const char *)victim + NPC_BODY_OFFSET);
+    int32_t     body_class;
+
+    if (body == NULL) {
+        return false;
+    }
+    body_class = *(const int32_t *)(body + NPC_BODY_CLASS_OFFSET);
+    return body_class == BODY_CLASS_PLAYER_PARTY || body_class == BODY_CLASS_CIVILIAN ||
+           body_class == BODY_CLASS_ESCORT;
+}
+
+/* Whose shot was that. Without this the cheat is not "the player one shots NPCs", it is "every
  * source of damage in the game is lethal": a droid firing at another droid kills it outright, and
  * so does a stray bolt that happens to catch Qui-Gon or Jar Jar, which can end an escort without
  * anything appearing to have gone wrong. The victim is the only thing the hook used to read, and
@@ -137,11 +171,11 @@ static void __cdecl on_npc_damage(char *frame_pointer)
         return;
     }
     if (own_state.cheats[CHEATS_OWN_ONE_SHOT_NPCS].on &&
-        damage_came_from_the_player(frame_pointer)) {
+        damage_came_from_the_player(frame_pointer) && !victim_is_on_the_players_side(victim)) {
         /* <=0 is what the death gate this function feeds (0x00437070, see dismemberment.c's own
-         * DEATH GATE comment) tests for.
+         * Death gate comment) tests for.
          *
-         * THIS IS NOT INDISTINGUISHABLE FROM ORDINARY LETHAL DAMAGE, and this comment used to say
+         * This is not indistinguishable from ordinary lethal damage, and this comment used to say
          * it was. It is indistinguishable to the GATE, which only asks whether health reached zero.
          * It is not indistinguishable to a script that gates its own death on a health BAND. The
          * scrapyard machine in Mos Espa asks for health at or below 900 of 999 while the player is
@@ -149,18 +183,20 @@ static void __cdecl on_npc_damage(char *frame_pointer)
          * health down through the band and the script fires. One store of zero steps over the band
          * entirely, so the script never sees a value inside it.
          *
-         * What that costs is visible in the game. When the engine takes the death instead, an actor
-         * whose model has no death animation completes the death state in a single tick and lands in
-         * the corpse state, which turns its collision off and leaves it drawn. It stays there for
-         * twenty minutes of level time, solid to look at and walked straight through, and its script
-         * never runs again because the interpreter only runs in the active state. Killed by hand
-         * that same machine explodes correctly; killed by this cheat it became a permanent ghost.
+         * What that costs is visible in the game. When the engine takes the death instead, an
+         * actor whose model has no death animation completes the death state in a single tick and
+         * lands in the corpse state, which turns its collision off and leaves it drawn. It stays
+         * there for twenty minutes of level time, solid to look at and walked straight through,
+         * and its script never runs again because the interpreter only runs in the active state.
+         * Killed by hand that same machine explodes correctly; killed by this cheat it became a
+         * permanent ghost.
          *
-         * So the cheat cleans up after itself. If the script already owns the death, the 0x10000 bit
-         * is set and everything it authored still happens, including its explosion, so nothing here
-         * touches it. If the engine is about to take the death, this claims it instead and hands the
-         * actor to the fade out state, which the engine finishes on its own: alpha decays, the actor
-         * asks to be removed, and it is freed. That is a clean disappearance rather than a ghost. */
+         * So the cheat cleans up after itself. If the script already owns the death, the 0x10000
+         * bit is set and everything it authored still happens, including its explosion, so nothing
+         * here touches it. If the engine is about to take the death, this claims it instead and
+         * hands the actor to the fade out state, which the engine finishes on its own: alpha
+         * decays, the actor asks to be removed, and it is freed. That is a clean disappearance
+         * rather than a ghost. */
         uint32_t state_flags = *(const uint32_t *)((const char *)victim + NPC_STATE_FLAGS_OFFSET);
 
         *(int32_t *)((char *)victim + 0x38) = 0;
@@ -171,8 +207,8 @@ static void __cdecl on_npc_damage(char *frame_pointer)
             *(uint32_t *)((char *)victim + NPC_STATE_FLAGS_OFFSET) =
                 state_flags | NPC_SCRIPT_OWNS_DEATH;
             if (body != NULL) {
-                /* Collision off, which is what every death in this engine does first and what the
-                 * fade state does not do for itself. */
+                /* Collision off. Every death in this engine does that first, and the fade state
+                 * does not do it for itself. */
                 *(uint32_t *)((char *)body + NPC_BODY_CLASS_OFFSET) = 0;
             }
             *(uint32_t *)((char *)victim + NPC_STATE_OFFSET) = NPC_STATE_FADEOUT;
@@ -181,7 +217,7 @@ static void __cdecl on_npc_damage(char *frame_pointer)
     }
 }
 
-/* WHY EVERY NAKED DETOUR BELOW SAVES THE x87 STACK.
+/* Why every naked detour below saves the x87 stack.
  *
  * pushad saves the eight general purpose registers and pushfd saves EFLAGS. Neither touches the
  * FPU, and this is a 1999 build with no SSE: every float the engine holds lives in the eight deep
@@ -194,8 +230,8 @@ static void __cdecl on_npc_damage(char *frame_pointer)
  * pushes three more, the ninth push does not fault: it marks the register indefinite. The engine
  * then carries on with a NaN where a coordinate used to be, and it surfaces somewhere else
  * entirely, frames later, as a camera that snaps to nowhere or a fall that never registers. Two
- * of these six sit in camera code and three in ground contact, which is exactly where the engine
- * is most likely to be holding a full stack.
+ * of these six sit in camera code and three in ground contact, where the engine is most likely
+ * to be holding a full stack.
  *
  * fnsave writes the whole x87 state out and reinitialises the unit, so the handler starts on a
  * clean FPU; frstor puts the engine's stack, tags and control word back exactly. 112 rather than

@@ -40,8 +40,8 @@
  * the cap, so the pacing decision inherits the jitter of the measurement. The simulation
  * accumulator adds the delta every frame. And every per frame filter in the game, the camera anchor
  * blend and the menu tweens among them, integrates it. What a player would describe is judder that
- * gets worse across a long session and that a level reload does not clear, which is what separates
- * this defect from the substep phase precession the clock rebase deals with.
+ * gets worse across a long session and that a level reload does not clear. Those two properties
+ * separate this defect from the substep phase precession the clock rebase deals with.
  *
  * ============================== What this does instead ========================================
  *
@@ -76,10 +76,12 @@
  * On by default, PreciseFrameTime=1, played and accepted by the maintainer. What stands behind it
  * offline is a byte census and arithmetic, which is a separate claim from how it feels. Every
  * address quoted above was read out of the retail executable and is an annotation only; one of the
- * three builds that ship is a recompile which puts the same code somewhere else, which is why the
- * two sites below are found by pattern.
+ * three builds that ship is a recompile which puts the same code somewhere else, so the two sites
+ * below are found by pattern.
  */
 #include "frame_delta.h"
+#include "frame_cap.h"
+#include "frame_wait.h"
 
 #include "common/detour.h"
 #include "common/logging.h"
@@ -93,8 +95,8 @@
 #include <stdint.h>
 
 /* --- 0x00475B75  sys_waitForFrame, at the function start ------------------------------------- *
- * The same anchor framerate_fix reads its cap immediates out of, which is why the pattern is the
- * same one rather than a second one that would have to be kept in step.
+ * The same anchor framerate_fix reads its cap immediates out of, so the pattern is the same one
+ * rather than a second one that would have to be kept in step.
  *
  * The prologue is eleven bytes and that is an instruction boundary:
  *
@@ -120,11 +122,13 @@ static const uint8_t SIG_FRAME_DELTA_PROLOGUE[] = {
  * a detour or a sibling patch in the same directory.
  *
  * The four immediate bytes are wildcarded. What is left still carries the absolute address of the
- * cheat cell, and that is what keeps the anchor unique. */
+ * cheat cell, which keeps the anchor unique. */
 static const uint8_t MASK_FRAME_DELTA_PROLOGUE[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF
 };
+_Static_assert(sizeof SIG_FRAME_DELTA_PROLOGUE == sizeof MASK_FRAME_DELTA_PROLOGUE,
+               "the frame delta prologue pattern and its mask are different lengths");
 #define WAIT_FOR_FRAME_PROLOGUE 11u
 
 /* --- 0x00475BA8  the store of the delta ------------------------------------------------------ *
@@ -150,8 +154,8 @@ static const uint8_t SIG_FRAME_DELTA_STORE[] = {
 
 /* One line when the first delta is actually written, and one every few minutes after that. The
  * install line alone cannot distinguish a module that is working from one that resolved its sites
- * and then never wrote anything, and that is the failure that looks most like success. 30000 frames
- * is about four minutes at 120 fps, so this is a handful of lines a session and not a flood. */
+ * and then never wrote anything, the failure that looks most like success. 30000 frames is about
+ * four minutes at 120 fps, so this is a handful of lines a session and not a flood. */
 #define REPORT_INTERVAL_FRAMES 30000u
 
 typedef void (__cdecl *wait_for_frame_fn_t)(void);
@@ -182,14 +186,24 @@ static frame_delta_state_t delta_state;
  * A scan for direct calls to this function returns five sites, two in the frame loop, two in the
  * menu loops and one in the debug loop, and none of them is reachable from the substep loop. So the
  * hook runs once per frame in the menus as well as in play, and never with the delta cell holding
- * the substep period instead of the frame period. */
+ * the substep period instead of the frame period.
+ *
+ * The optional sleep of FrameWaitSleep runs here too, ahead of the engine's own wait, and it
+ * returns at once while that is off. It only shortens the spin: the engine's loop still pumps the
+ * messages, reads its clock and leaves the wait on the deadline, so the delta measured below is
+ * measured exactly as before. */
 static void __cdecl hook_wait_for_frame(void)
 {
     wait_for_frame_fn_t original = (wait_for_frame_fn_t)delta_state.wait.original;
     LARGE_INTEGER       now;
     double              seconds;
 
+    if (delta_state.have_previous) {
+        frame_wait_before_spin((int64_t)delta_state.previous.QuadPart);
+    }
     original();
+    /* The cap's own measurement of a frame's work starts where this wait ends. */
+    frame_cap_wait_ends();
 
     if (!delta_state.active || delta_state.cell == NULL) {
         return;
@@ -287,4 +301,9 @@ void frame_delta_install(bool enabled)
              "never reset, so its resolution decays with uptime. This replaces the result and "
              "leaves that timestamp alone.",
              (unsigned)site, (unsigned)address);
+}
+
+bool frame_delta_hooked(void)
+{
+    return delta_state.active;
 }

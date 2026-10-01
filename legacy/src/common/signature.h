@@ -35,6 +35,11 @@ typedef struct signature {
     size_t         size;
     size_t         detour_prologue;  /* see below; 0 = this site is not a detour target */
     uintptr_t      address;  /* filled in by signature_resolve_table; 0 = unresolved */
+
+    /* For a function too short to be found once it has been detoured: see
+     * SIGNATURE_ENTRY_DETOUR_AFTER below. 0 in the first field means this entry does not use it. */
+    size_t         follows_entry;   /* 1-based position in this table of the entry in front */
+    size_t         follows_gap;     /* how many bytes past that entry's address this one starts */
 } signature_t;
 
 /* Convenience initialisers for a feature's own table. */
@@ -75,9 +80,109 @@ typedef struct signature {
 #define SIGNATURE_ENTRY_DETOUR_MASKED(name_text, array, mask_array, prologue) \
     { (name_text), (array), (mask_array), sizeof(array), (prologue), 0 }
 
-/* The standalone form of the same two-stage rule, for a site that is not part of a table. */
+/* A detour target too short to be found on its own once something has detoured it.
+ *
+ * The search above drops the prologue and anchors on what is left, so a function whose whole body
+ * is barely longer than its own prologue has a tail of two or three bytes. Two bytes match
+ * everywhere, the candidate list overflows, and the site resolves to nothing.
+ * bapview_overrideOff is fifteen bytes with a thirteen byte prologue and is exactly that.
+ *
+ * Such a function is reached from the one in front of it instead. `previous` is the 1-based
+ * position in this same table of that neighbour, which must sit EARLIER in the table so it is
+ * already resolved, and `gap` is how many bytes past its address this function begins. The pattern
+ * is still checked at the address that produces, tail exactly and head as prologue or branch, so a
+ * build that laid the two out differently is refused rather than assumed. */
+#define SIGNATURE_ENTRY_DETOUR_AFTER(name_text, array, prologue, previous, gap) \
+    { (name_text), (array), NULL, sizeof(array), (prologue), 0, (previous), (gap) }
+
+/* The standalone form of the two-stage rule, for a site that is not part of a table. */
 uintptr_t signature_find_detour_target(const uint8_t *bytes, const uint8_t *mask, size_t size,
                                        size_t prologue_size);
+
+/* The standalone form of SIGNATURE_ENTRY_DETOUR_AFTER: confirm a pattern at an address already
+ * worked out some other way, rather than searching for it. Resolve the neighbour in front, add its
+ * length, and hand the result here. The checks are the same two the table applies, the tail
+ * matching exactly and the head being either the authored prologue or a branch.
+ *
+ * Returns `address` when it holds this pattern, and 0 when it does not. */
+uintptr_t signature_find_at(uintptr_t address, const uint8_t *bytes, const uint8_t *mask,
+                            size_t size, size_t prologue_size);
+
+/* ==============================================================================================
+ * A redirected call is a write too, and it is declared where the pattern that finds it is.
+ *
+ * A detour writes the head of a function and says so with its prologue. Repointing one
+ * `call rel32` writes the four operand bytes behind an E8 in the middle of somebody else's code,
+ * and no prologue says so: a pattern of another module that pins those four bytes stops
+ * matching the day the call is repointed, with no line anywhere but that module's own "did not
+ * resolve".
+ *
+ * The declaration names the pattern the call is found by and the offset of its E8 inside it. The
+ * compiler holds the call and its operand to lying inside that pattern, and the declaration is the
+ * one line to search for before another pattern pins bytes in the same place. Put it at file
+ * scope, after the pattern:
+ *
+ *     SIGNATURE_REDIRECTED_CALL(SIG_X, X_CALL_OFFSET);
+ * ============================================================================================ */
+#define SIGNATURE_REDIRECTED_CALL(array, call_offset) \
+    _Static_assert((call_offset) + 5u <= sizeof(array), \
+                   "a redirected call and its operand lie inside the pattern that finds it")
+
+/* ==============================================================================================
+ * Reading an address out of a matched site, when somebody may already have written over it.
+ *
+ * The second stage above rescues the address of a site whose head is a foreign branch. It does
+ * not rescue the bytes in front of that address. An operand that sits inside the overwritten
+ * prologue is then read straight out of the other module's jump
+ * distance, and four bytes of jump distance are four bytes: they parse, they are the right width,
+ * and the only thing that stops them being used is whatever plausibility test the caller happens
+ * to apply afterwards.
+ *
+ * It happened. One module read the draw entry counter out of the first operand of the world
+ * submission, a `mov eax, [counter]` that is the very first instruction of that function, while
+ * another module detoured the same function with a five byte jump and loaded earlier. The site
+ * resolved correctly by its tail and the operand came back as a jump distance. The symptom was a
+ * refusal, which is the lucky case, and it was lucky only because a jump distance into another
+ * DLL happens to fall outside the host image, the one test that stood between it and being used.
+ * An operand at an offset landing on plausible bytes would have been used silently.
+ *
+ * The site was the world submission at 0x00406830 (file offset 0x5C30 in the retail image),
+ * which opens `A1 BC DE 59 00`, a `mov eax, [0x0059DEBC]` reading the draw entry counter; the
+ * recompiled executable that ships with the game's own level editor reads 0x0059DE6C there
+ * instead, which is why the operand is read out of the site rather than written down. A five
+ * byte branch replaces that whole first instruction, so the operand at offset 1 is the branch's
+ * distance.
+ *
+ * So: use this rather than reading the operand yourself. It decides which copy of the bytes to
+ * believe.
+ *
+ *   The live window still matches the site's own pattern: the site looks like itself, and memory
+ *   is the answer. This is the normal case, and it is also the case where another DLL has
+ *   rewritten an operand on purpose, a relocated table for instance. The operand bytes are a
+ *   wildcard in the pattern, so the window still matches and the new value is returned, which is
+ *   what the caller wants.
+ *
+ *   The live window does not match: somebody has written over the site, and the bytes it started
+ *   with are still in the executable on disk. They are read from there, checked against the same
+ *   pattern, and the image's relocation delta is added.
+ *
+ *   The live window does not match and the file cannot be read, because it is missing, short,
+ *   or laid out in a way the reader will not walk: refused, with a line that names the file
+ *   as the problem.
+ *
+ *   Neither copy matches the pattern: refused, with a log line saying so.
+ *
+ * The rule is deliberately not "is this offset inside my declared prologue". That number is the
+ * prologue this module would write and says nothing about what a foreign hook overwrote.
+ *
+ * The one case it cannot serve is a site that is both detoured across the operand and has had
+ * that operand deliberately rewritten by a third module. Memory has lost the value and the file
+ * never had the new one. Nothing can answer that, and this returns the file's value rather than
+ * detecting it.
+ *
+ * Only the name, bytes, mask, size and address of the site are read, so an entry declared with
+ * any of the initialisers above serves. */
+bool signature_read_address_operand(const signature_t *site, size_t offset, uintptr_t *address);
 
 /* Resolves every entry, logging one line each. Returns how many resolved uniquely. */
 size_t signature_resolve_table(signature_t *table, size_t count);
@@ -96,7 +201,7 @@ uintptr_t signature_find_unique(const uint8_t *bytes, const uint8_t *mask, size_
 size_t signature_count_matches(const uint8_t *bytes, const uint8_t *mask, size_t size,
                                uintptr_t *addresses, size_t max_addresses);
 
-/* The same search over a caller-supplied buffer, which is what the one above is built on.
+/* The same search over a caller-supplied buffer; the one above is built on it.
  *
  * It is separate so that the matcher can be checked without a game: every patch in this project
  * stands on this loop, and driving it through the host's own code section means the needle has to

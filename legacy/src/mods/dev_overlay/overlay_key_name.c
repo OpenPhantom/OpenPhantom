@@ -1,6 +1,8 @@
 /* overlay_key_name.c: see overlay_key_name.h. */
 #include "overlay_key_name.h"
 
+#include "common/text.h"
+
 #include <windows.h>
 
 #include <stdio.h>
@@ -12,43 +14,43 @@ void overlay_key_name(int32_t vk, char *out, size_t out_size)
         return;
     }
     if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) {
-        /* Both ranges are their own virtual key codes, which is why this is a cast and not a
-           lookup table. */
-        _snprintf(out, out_size, "%c", (char)vk);
+        /* Both ranges are their own virtual key codes, so this is a cast and not a lookup
+           table. */
+        text_format(out, out_size, "%c", (char)vk);
     } else if (vk >= VK_F1 && vk <= VK_F24) {
-        _snprintf(out, out_size, "F%d", (int)(vk - VK_F1 + 1));
+        text_format(out, out_size, "F%d", (int)(vk - VK_F1 + 1));
     } else if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
-        _snprintf(out, out_size, "Num%d", (int)(vk - VK_NUMPAD0));
+        text_format(out, out_size, "Num%d", (int)(vk - VK_NUMPAD0));
     } else {
         switch (vk) {
-        case VK_SPACE:    _snprintf(out, out_size, "Space");  break;
-        case VK_TAB:      _snprintf(out, out_size, "Tab");    break;
-        case VK_RETURN:   _snprintf(out, out_size, "Enter");  break;
-        case VK_ESCAPE:   _snprintf(out, out_size, "Esc");    break;
-        case VK_CONTROL:  _snprintf(out, out_size, "Ctrl");   break;
-        case VK_SHIFT:    _snprintf(out, out_size, "Shift");  break;
-        case VK_MENU:     _snprintf(out, out_size, "Alt");    break;
-        case VK_MULTIPLY: _snprintf(out, out_size, "Num*");   break;
-        case VK_ADD:      _snprintf(out, out_size, "Num+");   break;
-        case VK_SUBTRACT: _snprintf(out, out_size, "Num-");   break;
-        case VK_DIVIDE:   _snprintf(out, out_size, "Num/");   break;
-        case VK_DECIMAL:  _snprintf(out, out_size, "Num.");   break;
-        case VK_INSERT:   _snprintf(out, out_size, "Insert"); break;
-        case VK_DELETE:   _snprintf(out, out_size, "Delete"); break;
-        case VK_HOME:     _snprintf(out, out_size, "Home");   break;
-        case VK_END:      _snprintf(out, out_size, "End");    break;
-        case VK_OEM_3:    _snprintf(out, out_size, "Backtick"); break;
+        case VK_SPACE:    text_format(out, out_size, "Space");  break;
+        case VK_TAB:      text_format(out, out_size, "Tab");    break;
+        case VK_RETURN:   text_format(out, out_size, "Enter");  break;
+        case VK_ESCAPE:   text_format(out, out_size, "Esc");    break;
+        case VK_CONTROL:  text_format(out, out_size, "Ctrl");   break;
+        case VK_SHIFT:    text_format(out, out_size, "Shift");  break;
+        case VK_MENU:     text_format(out, out_size, "Alt");    break;
+        case VK_MULTIPLY: text_format(out, out_size, "Num*");   break;
+        case VK_ADD:      text_format(out, out_size, "Num+");   break;
+        case VK_SUBTRACT: text_format(out, out_size, "Num-");   break;
+        case VK_DIVIDE:   text_format(out, out_size, "Num/");   break;
+        case VK_DECIMAL:  text_format(out, out_size, "Num.");   break;
+        case VK_INSERT:   text_format(out, out_size, "Insert"); break;
+        case VK_DELETE:   text_format(out, out_size, "Delete"); break;
+        case VK_HOME:     text_format(out, out_size, "Home");   break;
+        case VK_END:      text_format(out, out_size, "End");    break;
+        case VK_OEM_3:    text_format(out, out_size, "Backtick"); break;
         /* Added when this patch started shipping keys it had no name for: the pointer release
            defaults to Scroll Lock and reached a screenshot as a bare "145". */
-        case VK_SCROLL:   _snprintf(out, out_size, "ScrLk");  break;
-        case VK_PAUSE:    _snprintf(out, out_size, "Pause");  break;
-        case VK_BACK:     _snprintf(out, out_size, "Backsp"); break;
-        case VK_PRIOR:    _snprintf(out, out_size, "PgUp");   break;
-        case VK_NEXT:     _snprintf(out, out_size, "PgDn");   break;
+        case VK_SCROLL:   text_format(out, out_size, "ScrLk");  break;
+        case VK_PAUSE:    text_format(out, out_size, "Pause");  break;
+        case VK_BACK:     text_format(out, out_size, "Backsp"); break;
+        case VK_PRIOR:    text_format(out, out_size, "PgUp");   break;
+        case VK_NEXT:     text_format(out, out_size, "PgDn");   break;
         /* Decimal, not hex, because this is the form the reading direction accepts. A code
            with no name here is shown so it can be typed straight back into OpenKey, and a hex
            string would be refused by the parser and fall back to the default key. */
-        default:          _snprintf(out, out_size, "%u", (unsigned)vk); break;
+        default:          text_format(out, out_size, "%u", (unsigned)vk); break;
         }
     }
     out[out_size - 1u] = '\0';
@@ -96,10 +98,17 @@ static const key_alias_t ALIASES[] = {
     { "right",       VK_RIGHT },
     { "capslock",    VK_CAPITAL },
     { "scrolllock",  VK_SCROLL },
+    /* The short forms are the ones the naming direction above prints. Without them these four
+     * keys failed the round trip this file promises: read "PgUp" off a panel row, put it in the
+     * settings file, and the parser refused it and fell back to the default key. */
+    { "scrlk",       VK_SCROLL },
+    { "backsp",      VK_BACK },
+    { "pgup",        VK_PRIOR },
+    { "pgdn",        VK_NEXT },
     { "pause",       VK_PAUSE },
     { "numpad+",     VK_ADD },
     { "numpadplus",  VK_ADD },
-    { "numplus",     VK_ADD },      /* the underscore form above collapses to this, not to numpad+ */
+    { "numplus",     VK_ADD },      /* the underscore form above collapses to this, not numpad+ */
     { "num+",        VK_ADD },
     { "numpad-",     VK_SUBTRACT },
     { "numpadminus", VK_SUBTRACT },
@@ -166,11 +175,11 @@ bool overlay_key_from_name(const char *text, int32_t *out)
         return false;
     }
 
-    /* A bare number is a virtual key code, which is what this setting has always been and what
-     * every ini written before this understood. It is also the only way to reach a key with no
+    /* A bare number is a virtual key code, as this setting has always been and as every ini
+     * written before this understood. It is also the only way to reach a key with no
      * name here, including the number row, whose keys are their own codes: 53 is the 5 key.
      *
-     * THE NUMBER ROW THEREFORE DOES NOT READ BACK from what the panel shows. The panel prints the
+     * The number row therefore does not read back from what the panel shows. The panel prints the
      * 5 key as "5" and this reads "5" as code 5, and the two cannot be reconciled: 0 has to keep
      * meaning unset, 8 and 9 are Backspace and Tab in every ini written before names existed, and
      * changing any of that would move somebody's working hotkey. Naming the ten keys some other

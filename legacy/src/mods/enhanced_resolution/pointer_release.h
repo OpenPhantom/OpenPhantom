@@ -35,10 +35,11 @@
  * back. That is the reason this suppresses the warp rather than moving the pointer somewhere: a
  * warp the engine did not ask for is a delta it will believe.
  *
- * The pointer is invisible over the client area, because the engine answers WM_SETCURSOR with
- * SetCursor(NULL) and returns 1. It becomes the ordinary system arrow the moment it crosses onto
- * the frame, which is where it is needed, so it is not worth fighting the engine for the few
- * hundred pixels in between.
+ * The engine answers WM_SETCURSOR with SetCursor(NULL) and returns 1, for the whole window and
+ * not only for the picture, so left alone a released pointer would be invisible over the title
+ * bar too. While released, the game's SetCursor import is answered with the ordinary arrow in
+ * place of that NULL, or with the sizing cursor the frame under it calls for, so the pointer is
+ * visible everywhere over the window. Handing it back hides it again.
  */
 #ifndef POINTER_RELEASE_H
 #define POINTER_RELEASE_H
@@ -60,7 +61,7 @@ bool pointer_release_install(const pointer_release_config_t *config);
 bool pointer_release_set_key(int32_t virtual_key);
 
 /* True while the pointer belongs to Windows rather than to the game. cursor_anchor.c asks this
- * before re-centring, which is the whole of the mechanism. Safe to call before install, and false
+ * before re-centring; the mechanism is no more than that. Safe to call before install, and false
  * then, so the caller needs no guard of its own. */
 bool pointer_release_is_active(void);
 

@@ -1,19 +1,19 @@
 /* diag_write_watch.c: which instruction wrote these four bytes.
  *
- * WHY THIS EXISTS. Reading the disassembly outward from a field tells you which functions COULD
+ * Why this exists. Reading the disassembly outward from a field tells you which functions could
  * write it. It does not tell you which one does, and this project has twice spent a long time on a
  * mechanism that turned out not to be the one running. A hardware data breakpoint answers the
  * question directly: the processor stops on the instruction that performed the write, and the
  * address in the exception's own context is that instruction. There is no inference left in it.
  *
- * HOW IT IS DONE, and why not the obvious way. The debug registers are per thread. The obvious
+ * How it is done, and why not the obvious way. The debug registers are per thread. The obvious
  * approach, calling SetThreadContext on GetCurrentThread from inside the frame callback, is not
  * reliable: a thread setting its own context has no defined behaviour for the register state it is
  * currently running on, and in practice the write is silently dropped, which looks exactly like
  * "nothing ever writes this field". A short lived helper thread suspends the simulation thread,
  * writes the registers into a stopped context, and resumes it. That is what a debugger does.
  *
- * The handler does NO FILE WORK. It runs inside an exception on the simulation thread, so it
+ * The handler does no file work. It runs inside an exception on the simulation thread, so it
  * records into a small fixed buffer and returns. The frame callback drains that buffer afterwards.
  * Logging from inside the handler would put file IO between the faulting instruction and the
  * instruction after it, which changes the timing of the very thing being measured, and would
@@ -23,7 +23,7 @@
  * own status bit and continues execution. It never alters a register, a flag or a game field, and
  * the write that triggered it has already happened by the time it runs.
  *
- * LIMITS worth knowing before trusting a report:
+ * LIMITS to know before trusting a report:
  *
  *   A debugger attached to the game owns these registers. If one is attached the arm will appear
  *   to succeed and then be overwritten, so do not run this under a debugger and believe it.
@@ -57,6 +57,10 @@
 
 /* Enough to hold a burst without the handler ever needing to allocate or block. A report that
  * overflows says so rather than silently dropping the tail. */
+/* Distinct instructions that rewrite the field with the value it already held. Eight is well
+ * past what has ever been seen; a ninth is dropped rather than growing this. */
+#define WATCH_UNCHANGED_SITES 8u
+
 #define WATCH_RECORD_MAX 64u
 
 typedef struct watch_record {
@@ -76,6 +80,18 @@ typedef struct write_watch_state {
     bool            have_last;
     volatile LONG   overflow;            /* changing writes the buffer could not hold */
     volatile LONG   unchanged;           /* writes that put the value back unchanged */
+
+    /* Who does those. Counting them without naming them was enough while this watched a field
+     * one writer rewrites out of habit. It is not enough for the question it is now asked: a
+     * character riding a platform has its previous position written TWICE a step, and the
+     * second write is the one that leaves nothing to interpolate. That write puts the same
+     * value back, so the tally hid the only address worth having. A tally per instruction
+     * rather than a record per write, so the cost stays a linear scan of eight and the buffer
+     * cannot fill. */
+    struct {
+        uint32_t      instruction;
+        volatile LONG count;
+    } unchanged_sites[WATCH_UNCHANGED_SITES];
     watch_record_t  records[WATCH_RECORD_MAX];
     LONG            reported;            /* records already drained by the frame callback */
 } write_watch_state_t;
@@ -108,7 +124,19 @@ static LONG CALLBACK on_debug_exception(EXCEPTION_POINTERS *info)
        than as a float so an unchanged NaN does not read as a change. */
     value = *(const volatile uint32_t *)watch_state.address;
     if (watch_state.have_last && value == watch_state.last_value) {
+        uint32_t writer = (uint32_t)info->ContextRecord->Eip;
+        size_t   slot;
+
         InterlockedIncrement(&watch_state.unchanged);
+        for (slot = 0; slot < WATCH_UNCHANGED_SITES; ++slot) {
+            if (watch_state.unchanged_sites[slot].count == 0) {
+                watch_state.unchanged_sites[slot].instruction = writer;
+            }
+            if (watch_state.unchanged_sites[slot].instruction == writer) {
+                InterlockedIncrement(&watch_state.unchanged_sites[slot].count);
+                break;
+            }
+        }
     } else {
         watch_state.have_last = true;
         watch_state.last_value = value;
@@ -169,8 +197,13 @@ static DWORD WINAPI apply_debug_registers(LPVOID parameter)
 
 static bool apply(uintptr_t address)
 {
-    apply_request_t request;
-    HANDLE          helper;
+    /* Static rather than a local, because the helper thread writes into it and the wait below is
+       bounded. On a timeout this function returns while that thread may still be running, and a
+       local would by then be somebody else's stack. A helper that finishes late writes into this
+       cell instead, where the only thing it can spoil is a result already reported as failed.
+       Nothing else reads it, and every apply sets both fields before starting. */
+    static apply_request_t request;
+    HANDLE                 helper;
 
     request.address = address;
     request.ok = false;
@@ -233,6 +266,12 @@ bool diag_write_watch_arm(uintptr_t address, const char *what)
     watch_state.count = 0;
     watch_state.overflow = 0;
     watch_state.reported = 0;
+    /* The remembered value belongs to whatever was being watched before this. Carried into a watch
+       on a different field, it made the first write compare against a number from somewhere else
+       and, whenever the two happened to match, be counted as unchanged and never recorded. There
+       is no predecessor to compare the first write against, and have_last says so. */
+    watch_state.have_last = false;
+    watch_state.last_value = 0;
     watch_state.what[0] = '\0';
     if (what != NULL) {
         size_t length = strlen(what);
@@ -260,8 +299,17 @@ void diag_write_watch_disarm(void)
     if (!watch_state.prepared || !watch_state.armed) {
         return;
     }
+    /* Cleared only once the debug registers really are clear. Clearing it first and ignoring the
+     * apply left DR0 and DR7 live with a handler that had stopped claiming the trap, which is an
+     * unhandled single step on the next write to the watched cell. If the apply fails, the helper
+     * thread not created or its wait expired, the watch stays armed and keeps reporting, which is
+     * the truthful state, and the log says why. */
+    if (!apply(0u)) {
+        diag_log_write("watch  could not be disarmed, so it stays armed and keeps reporting");
+        log_warning("the write watch could not clear its debug registers, so it stays armed");
+        return;
+    }
     watch_state.armed = false;
-    (void)apply(0u);
     diag_log_write("watch  disarmed");
 }
 
@@ -305,8 +353,19 @@ void diag_write_watch_report(void)
         watch_state.overflow = 0;
     }
     if (watch_state.unchanged != 0) {
-        diag_log_write("watch  and %ld writes put the same value back, not listed",
+        size_t slot;
+
+        diag_log_write("watch  and %ld writes put the same value back, by:",
                        (long)watch_state.unchanged);
+        for (slot = 0; slot < WATCH_UNCHANGED_SITES; ++slot) {
+            if (watch_state.unchanged_sites[slot].count == 0) {
+                continue;
+            }
+            diag_log_write("watch    the instruction just before %08X, %ld of them",
+                           (unsigned)watch_state.unchanged_sites[slot].instruction,
+                           (long)watch_state.unchanged_sites[slot].count);
+            watch_state.unchanged_sites[slot].count = 0;
+        }
         watch_state.unchanged = 0;
     }
 }

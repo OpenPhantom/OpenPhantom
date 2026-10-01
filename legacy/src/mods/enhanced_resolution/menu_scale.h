@@ -4,7 +4,7 @@
  * What this is for
  *
  * With MenuKeepsResolution=1 the menus keep the display mode instead of dropping it to 640x480,
- * which is what stops a full Direct3D 9 device rebuild on every menu open and close. The price is
+ * which stops a full Direct3D 9 device rebuild on every menu open and close. The price is
  * that the front end, the pause screens and the loading screen become a 640x480 island in the
  * middle of the picture: about 15 per cent of the area at 1080p and under 4 per cent at 2160p, so
  * the higher the resolution the smaller it looks. That price is the subject of issue #31.
@@ -12,16 +12,16 @@
  * The engine draws its menu bitmaps through swrle_blit, a run-length blitter that copies one source
  * pixel to one destination pixel. There is no scale term in it, and there is no stretching blit
  * anywhere in the image: all four arms of stdDisplay_blit were disassembled and none takes a
- * destination extent. So the canvas cannot be enlarged by asking the engine to stretch it. What CAN
- * be done is to make the canvas itself bigger and put bigger artwork into it, which is what this
- * does.
+ * destination extent. So the canvas cannot be enlarged by asking the engine to stretch it. What
+ * CAN be done, and what this does, is to make the canvas itself bigger and put bigger artwork
+ * into it.
  *
- * The bigger artwork can come from either of two places, and that is the difference between the
- * canvas being welded to one resolution and following the display:
+ * The bigger artwork can come from either of two places, the difference between the canvas being
+ * welded to one resolution and following the display:
  *
  *   from disk    a converted set on disk, and the canvas is read from it. The
- *                files are a fixed size, so the canvas is the size they were made for and nothing
- *                else. This came first and is still what a converted install does.
+ *                files are a fixed size, so the canvas is exactly the size they were made for.
+ *                This came first and is still what a converted install does.
  *
  *   as it loads  menu_art_load.c replicates each picture between the engine reading it and
  *                compressing it, so the artwork is whatever the canvas asks for. Then the DISPLAY
@@ -111,12 +111,12 @@
  * `configured_ratio` is the MenuScale setting: 0 means automatic, which is the default and the
  * useful answer; 1.0 is off; anything else is an explicit ratio, which exists for testing.
  *
- * WHERE AUTOMATIC TAKES ITS NUMBER FROM, and why it is one number rather than two. The engine blits
- * menu bitmaps one source pixel to one destination pixel, so the size a widget is drawn at is
- * simply the size of its bitmap. If the layout were scaled by one ratio and the artwork by another,
- * they would disagree everywhere: gaps, overlaps, and a canvas the background no longer covers,
- * which leaves stale pixels because nothing repaints them. So there is one ratio, and the two ends
- * of the question are settled in whichever order the install can settle them:
+ * Where automatic takes its number from, and why it is one number rather than two. The engine
+ * blits menu bitmaps one source pixel to one destination pixel, so the size a widget is drawn at
+ * is simply the size of its bitmap. If the layout were scaled by one ratio and the artwork by
+ * another, they would disagree everywhere: gaps, overlaps, and a canvas the background no longer
+ * covers, which leaves stale pixels because nothing repaints them. So there is one ratio, and the
+ * two ends of the question are settled in whichever order the install can settle them:
  *
  *   a converted set on disk   its size is the ratio, and the canvas is welded to it. The artwork
  *                             cannot follow a resolution change, so neither can the canvas.
@@ -127,18 +127,32 @@
  *
  * `cursor_cage_widens` is whether WidenMenuCursorArea is on. The cage is sized from this canvas, so
  * with it off the drawn cursor keeps the engine's 607x447 clamp while the widgets move outside it
- * and become unreachable, which is why this declines rather than install alongside it.
+ * and become unreachable, so this declines rather than install alongside it.
  *
  * Returns true only when every site resolved AND every write landed. A partial install is rolled
  * back: a menu drawn at one scale and hit tested at another is unusable in a way that looks like a
  * game bug rather than a patch failure. */
 bool menu_scale_install(float configured_ratio, bool cursor_cage_widens);
 
-/* The ratio in force, or 1.0 when this is not installed. */
-float menu_scale_ratio(void);
-
 /* The canvas the menus are drawn on, in pixels: 640x480 when this is not installed. The cursor cage
  * is sized from this, because the canvas is exactly the region the menus can repaint. */
 void menu_scale_canvas(int32_t *out_width, int32_t *out_height);
+
+/* The size the drawn menu cursor is drawn at, in pixels: what this feature last wrote into
+ * swpic_drawCursor's two immediates, or the shipped 32 while it has written nothing. The cursor
+ * cage is sized from it as well as from the canvas, because the cage stops the quad's top left
+ * corner and the quad hangs its own size beyond that. */
+int32_t menu_scale_cursor_size(void);
+
+/* font3d_queryFont's answer from beneath this module's hook: what the engine, and any DLL that
+ * detoured the function before this one, say the line height is, with none of the scaling the hook
+ * adds. `*out_hooked` is false, and the answer 0, while the hook is not installed; the caller then
+ * asks the engine itself, which is the same answer by a different route. For the subtitle layout,
+ * which draws behind an open menu and must not take the menu's line height. */
+uint32_t menu_scale_query_font_beneath(bool *out_hooked);
+
+/* Where font3d_queryFont is, as this module resolved it, or 0. A caller redirecting its own call
+ * to that function checks the call went there first. */
+uintptr_t menu_scale_query_font_site(void);
 
 #endif /* MENU_SCALE_H */

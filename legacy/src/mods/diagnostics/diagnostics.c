@@ -9,9 +9,13 @@
 #include "diag_frame.h"
 #include "diag_log.h"
 #include "diag_present.h"
+#include "diag_x87.h"
 #include "diag_characters.h"
 #include "diag_camera_owner.h"
+#include "diag_dialogue_ops.h"
+#include "diag_footsteps.h"
 #include "diag_projectiles.h"
+#include "diag_push_block.h"
 #include "diag_world.h"
 
 #include "common/host_image.h"
@@ -31,10 +35,6 @@
 static diagnostics_config_t diagnostics_state;
 static bool                 diagnostics_installed;
 
-const diagnostics_config_t *diagnostics_config(void)
-{
-    return &diagnostics_state;
-}
 
 /* The ceiling is per AREA and not a shared constant, because a clamp that silently truncates a
  * level the caller does understand is indistinguishable from a level nobody implemented. Fx has a
@@ -75,10 +75,13 @@ static void load_config(void)
     diagnostics_state.fx       = read_level_max("Fx", 3);
     diagnostics_state.frame    = read_level("Frame");
     diagnostics_state.present  = read_level("Present");
+    diagnostics_state.x87      = ini_read_bool(DIAGNOSTICS_SECTION, "X87", false) ? 1 : 0;
     diagnostics_state.projectiles = ini_read_bool(DIAGNOSTICS_SECTION, "Projectiles", false) ? 1
                                                                                               : 0;
     diagnostics_state.camera_owner =
         ini_read_bool(DIAGNOSTICS_SECTION, "CameraOwner", false) ? 1 : 0;
+    diagnostics_state.footsteps =
+        ini_read_bool(DIAGNOSTICS_SECTION, "Footsteps", false) ? 1 : 0;
     diagnostics_state.characters = read_level_max("Characters", 2);
     diagnostics_state.characters_radius =
         ini_read_int(DIAGNOSTICS_SECTION, "CharactersRadius", DEFAULT_CHARACTERS_RADIUS);
@@ -87,8 +90,17 @@ static void load_config(void)
                           sizeof(diagnostics_state.characters_watch));
     diagnostics_state.characters_watch_velocity =
         ini_read_bool(DIAGNOSTICS_SECTION, "CharacterWatchVelocity", false) ? 1 : 0;
+    /* 0 off, 1 the drawn body's position height, 2 its PREVIOUS position X. Read as a number
+     * rather than a flag so that 1 keeps meaning exactly what it always meant. */
     diagnostics_state.player_body_watch =
-        ini_read_bool(DIAGNOSTICS_SECTION, "PlayerBodyWatch", false) ? 1 : 0;
+        ini_read_int(DIAGNOSTICS_SECTION, "PlayerBodyWatch", 0);
+    if (diagnostics_state.player_body_watch < 0 ||
+        diagnostics_state.player_body_watch > 2) {
+        log_warning("PlayerBodyWatch=%d is out of range (0 to 2), using 0",
+                    diagnostics_state.player_body_watch);
+        diagnostics_state.player_body_watch = 0;
+    }
+    diagnostics_state.push_block = read_level_max("PushBlock", 1);
     diagnostics_state.frame_hitch_percent =
         ini_read_int(DIAGNOSTICS_SECTION, "FrameHitchPercent", 0);
 
@@ -133,7 +145,8 @@ static bool any_area_enabled(void)
             diagnostics_state.dialogue != 0 || diagnostics_state.fx       != 0 ||
             diagnostics_state.frame    != 0 || diagnostics_state.present  != 0 ||
             diagnostics_state.projectiles != 0 || diagnostics_state.characters != 0 ||
-            diagnostics_state.camera_owner != 0);
+            diagnostics_state.camera_owner != 0 || diagnostics_state.footsteps != 0 ||
+            diagnostics_state.x87 != 0 || diagnostics_state.push_block != 0);
 }
 
 void diagnostics_install(void)
@@ -146,14 +159,17 @@ void diagnostics_install(void)
         return;
     }
 
+    /* Second, as in every DLL, and before the configuration is read: the rule is unconditional,
+     * and a session that is switched off still says so in a log that names the right image. */
+    if (!host_image_resolve()) {
+        log_error("no 32-bit host image, diagnostics OFF");
+        return;
+    }
+
     load_config();
     if (!any_area_enabled()) {
         log_info("off (Enabled=0 or no area switched on), not one byte touched, .text is not "
                  "even read");
-        return;
-    }
-    if (!host_image_resolve()) {
-        log_error("no 32-bit host image, diagnostics OFF");
         return;
     }
     if (!diag_log_open(diagnostics_state.max_lines_per_second,
@@ -163,13 +179,15 @@ void diagnostics_install(void)
     diagnostics_installed = true;
 
     log_info("areas audio=%d music=%d trigger=%d fsm=%d level=%d player=%d dialogue=%d fx=%d "
-             "frame=%d present=%d projectiles=%d cameraOwner=%d | census=%dms max=%d lines/s",
+             "frame=%d present=%d projectiles=%d cameraOwner=%d footsteps=%d push_block=%d | "
+             "census=%dms max=%d lines/s",
              diagnostics_state.audio, diagnostics_state.music, diagnostics_state.trigger,
              diagnostics_state.fsm, diagnostics_state.level, diagnostics_state.player,
              diagnostics_state.dialogue, diagnostics_state.fx, diagnostics_state.frame,
              diagnostics_state.present, diagnostics_state.projectiles,
-             diagnostics_state.camera_owner,
-             diagnostics_state.audio_census_ms, diagnostics_state.max_lines_per_second);
+             diagnostics_state.camera_owner, diagnostics_state.footsteps,
+             diagnostics_state.push_block, diagnostics_state.audio_census_ms,
+             diagnostics_state.max_lines_per_second);
 
     observers += diag_audio_install(diagnostics_state.audio, diagnostics_state.audio_census_ms);
     observers += diag_music_install(diagnostics_state.music);
@@ -178,17 +196,21 @@ void diagnostics_install(void)
     observers += diag_level_install(diagnostics_state.level);
     observers += diag_player_install(diagnostics_state.player);
     observers += diag_dialogue_install(diagnostics_state.dialogue);
+    observers += diag_dialogue_ops_install(diagnostics_state.dialogue);
     observers += diag_fx_install(diagnostics_state.fx);
     observers += diag_frame_install(diagnostics_state.frame,
                                     diagnostics_state.frame_hitch_percent);
     observers += diag_present_install(diagnostics_state.present);
+    observers += diag_x87_install(diagnostics_state.x87);
     observers += diag_projectiles_install(diagnostics_state.projectiles);
     observers += diag_camera_owner_install(diagnostics_state.camera_owner);
+    observers += diag_footsteps_install(diagnostics_state.footsteps);
     observers += diag_characters_install(diagnostics_state.characters,
                                          diagnostics_state.characters_radius,
                                          diagnostics_state.characters_watch,
                                          diagnostics_state.characters_watch_velocity,
                                          diagnostics_state.player_body_watch);
+    observers += diag_push_block_install(diagnostics_state.push_block);
 
     log_info("%d observers active", observers);
     diag_log_write("diagnostics: %d observers active", observers);

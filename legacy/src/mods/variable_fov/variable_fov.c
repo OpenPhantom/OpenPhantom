@@ -1,7 +1,7 @@
 /* variable_fov.c: the camera hook. One number, written just before the engine derives everything.
  *
  * ==============================================================================================
- * BYTE BASIS
+ * Byte basis
  *
  *   rdCamera  +0x00 projType   +0x04 pCanvas
  *             +0x38 fovDeg     (HORIZONTAL; rdCamera_init clamps it to [5,179])
@@ -43,12 +43,12 @@
  *     (factor < 1) or let the clipper pass polygons that land beside the canvas anyway
  *     (factor > 1). That is why there is no vertical slider.
  *
- * THE HONEST CONSEQUENCE: the vertical field of view falls out of the horizontal one and the
+ * The honest consequence: the vertical field of view falls out of the horizontal one and the
  * canvas height, vFOV = 2*atan((halfHeight/halfWidth) * tan(hFOV/2)), and is not a free
  * parameter. Instead of a second slider, the caption shows both numbers.
  *
  * ==============================================================================================
- * THE ONE COUPLING is the 3-D front-end menu: FUN_0045C3D8 places menu objects with a hard-coded
+ * The one coupling is the 3-D front-end menu: FUN_0045C3D8 places menu objects with a hard-coded
  * focal length of 554.256 at [0x4A8888], which has exactly ONE reader in the whole image
  * (0x45C431). Change the field of view or the resolution and the menu box moves. We repoint that
  * one operand at our own cell and keep it consistent, we do NOT edit the constant, because an
@@ -58,6 +58,7 @@
 
 #include "fov_math.h"
 #include "fov_menu.h"
+#include "fov_poll.h"
 #include "fov_strings.h"
 
 #include "common/detour.h"
@@ -135,7 +136,8 @@ typedef struct variable_fov_state {
     variable_fov_config_t config;
     detour_t         build_projection_detour;
 
-    /* Our own cell for the front-end menu focal. It replaces [0x4A8888] for that ONE instruction. */
+    /* Our own cell for the front-end menu focal. It replaces [0x4A8888] for that ONE
+     * instruction. */
     volatile float   menu_focal_cell;
 
     /* The camera BuildProjection was last called on. rdCamera_BuildProjection is NOT a per-frame
@@ -176,8 +178,9 @@ static void load_config(void)
     fov_state.config.base_vertical_degrees =
         fov_clamp_float(ini_read_float(FOV_SECTION, "BaseVerticalDegrees", 46.826f), 30.0f, 60.0f);
     fov_state.config.extra_degrees =
-        /* NEGATIVE IS ALLOWED, and it has to be: on any frame wider than 4:3 the aspect correction
-         * already puts the horizontal well above 60, so selecting 60 means subtracting. */
+        /* A NEGATIVE value is allowed, and it has to be: on any frame wider than 4:3 the aspect
+         * correction already puts the horizontal well above 60, so selecting 60 means
+         * subtracting. */
         fov_clamp_float(ini_read_float(FOV_SECTION, "ExtraDegrees", 0.0f), -120.0f, 120.0f);
 
     fov_state.config.menu_slider = ini_read_bool(FOV_SECTION, "MenuSlider", false);
@@ -260,7 +263,7 @@ static void apply_fov(int32_t *camera)
         horizontal = *(float *)&camera[CAMERA_FOV_DEGREES_INDEX];
     }
 
-    /* The vertical is computed with THE ENGINE'S OWN half extents, i.e. (x1-x0)/2 and (y1-y0)/2
+    /* The vertical is computed with the engine's own half extents, i.e. (x1-x0)/2 and (y1-y0)/2
      * WITHOUT the +1 above. 0x476113 and 0x47612E form exactly those two numbers, and only that
      * way does the caption name the angle that is really on screen. */
     half_width  = (float)(canvas[CANVAS_X1_INDEX] - canvas[CANVAS_X0_INDEX]) * 0.5f;
@@ -322,7 +325,7 @@ static uint32_t __cdecl hook_build_projection(int32_t *camera)
 }
 
 /* Re-derives the projection from the CURRENT configuration without waiting for a canvas event.
- * This is what makes the slider mean anything: rdCamera_BuildProjection is a pure recompute,
+ * The slider changes nothing until this runs. rdCamera_BuildProjection is a pure recompute:
  * it reads pCanvas, projType and fovDeg and writes focal plus the frustum record, with no
  * allocation and no global (byte-read at 0x475FFA..0x4760F9), so calling it again is exactly
  * what the engine's own five setters do. */
@@ -391,13 +394,16 @@ void variable_fov_set_extra_degrees(float degrees)
  * the file back, so a value written by anything else, the developer overlay's own row being the
  * reason this exists, did nothing until the next launch.
  *
- * EVERY FRAME, and reading the file every frame is exactly what it does not do. Parsing a ninety
- * kilobyte ini sixty times a second to answer "has anything changed" would cost more than the
- * feature is worth, so ini_generation() is asked first: one attribute query, no parse, and the
- * read below only happens on a frame where the file has actually been written.
+ * Polled from the frame hook, and reading the file on every frame is exactly what it does not do.
+ * Parsing a ninety kilobyte ini sixty times a second to answer "has anything changed" would cost
+ * more than the feature is worth, so ini_generation() is asked first: one attribute query, no
+ * parse, and the read below only happens when the file has actually been written.
  *
- * A frame rather than a second because a slider being dragged in the developer overlay writes this
- * key as it moves, and a second of latency there is not a slider, it is a series of jumps.
+ * Even that query is not asked on every frame. It was, and at 240 frames a second that was 240
+ * attribute queries a second, measured at 11.7 microseconds each, for a number a person
+ * drags by hand. fov_poll.h throttles it to one look every 30 ms. Not a second, because a slider
+ * being dragged in the developer overlay writes this key as it moves, and a second of latency there
+ * is not a slider, it is a series of jumps; at 30 ms the drag previews about 33 times a second.
  *
  * The comparison is against the value in force rather than against the last value read, so the
  * video options slider moving the number and this poll seeing it agree instead of taking turns.
@@ -410,8 +416,8 @@ void variable_fov_set_extra_degrees(float degrees)
  * offset this DLL stores, and it cannot work the base out: it depends on the canvas, the aspect
  * mode and the engine's own projection, none of which exist in that DLL.
  *
- * THE BASE IS PUBLISHED, NOT THE PICTURE'S CURRENT WIDTH, and the difference is the whole reason
- * this works. The base moves only when the canvas or the aspect mode changes. The width moves
+ * What is published is the BASE, not the picture's current width, and the two behave very
+ * differently. The base moves only when the canvas or the aspect mode changes. The width moves
  * every time ExtraDegrees does, which is every frame of a slider being dragged, so a reader
  * computing "base = width - offset" from a width written even a moment ago would pair a stale
  * width with a current offset and get a base that drifts. Each drag step would then be measured
@@ -435,17 +441,34 @@ static void publish_base_fov(void)
     (void)ini_write_float(FOV_SECTION, "BaseFov", base, 1);
 }
 
+/* The poll's own line, on the first look and then every this many, about four minutes at one look
+ * every 30 ms: enough to show the throttle is live and what it cost, a handful of lines a
+ * session. */
+#define POLL_REPORT_LOOKS 8000u
+
 static void poll_extra_degrees(void)
 {
-    static uint64_t seen_generation;
-    uint64_t        generation = ini_generation();
-    float           wanted;
-    float           held;
+    static uint64_t   seen_generation;
+    static fov_poll_t poll;
+    uint64_t          generation;
+    float             wanted;
+    float             held;
 
     publish_base_fov();
 
+    if (!fov_poll_due(&poll, GetTickCount(), FOV_POLL_PERIOD_MS)) {
+        return;
+    }
+    if (poll.looks == 1u || (poll.looks % POLL_REPORT_LOOKS) == 0u) {
+        log_info("ExtraDegrees is looked for on disk every %u ms rather than every frame: %u "
+                 "look(s), %u change(s) taken",
+                 FOV_POLL_PERIOD_MS, poll.looks, poll.taken);
+    }
+
+    generation = ini_generation();
     if (generation == seen_generation) {
-        return;                                /* the file has not been written since the last look */
+        /* the file has not been written since the last look */
+        return;
     }
     seen_generation = generation;
 
@@ -456,6 +479,7 @@ static void poll_extra_degrees(void)
     }
 
     apply_extra_degrees(wanted);
+    ++poll.taken;
     log_info("ExtraDegrees changed on disk, %.1f to %.1f. The picture is now %.1f degrees across.",
              (double)held, (double)fov_state.config.extra_degrees,
              (double)variable_fov_horizontal_degrees());
@@ -542,7 +566,7 @@ void variable_fov_install(void)
 
     /* AFTER the menu, because the menu's own hook is the one that has to exist for the slider to
      * preview live and this one only makes an ini edit arrive sooner. Losing it costs a restart,
-     * which is what the setting did before, so it warns rather than refusing anything. */
+     * as the setting did before, so it warns rather than refusing anything. */
     if (!frame_hook_add(poll_extra_degrees)) {
         log_warning("no per-frame hook, so ExtraDegrees is read once at startup and an edit made "
                     "while the game runs waits for the next launch");

@@ -13,7 +13,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 <img width="1920" height="400" alt="Star Wars Episode I: The Phantom Menace running at ultrawide resolution with OpenPhantom." src="https://github.com/user-attachments/assets/ad9cd6fb-8bcd-4b25-8d0a-65e221888bfc" />
 
-*Ultra-wide support with OpenPhantom.*
+*Ultrawide support with OpenPhantom.*
 
 <img width="1920" height="1080" alt="Star Wars Episode I: The Phantom Menace running in 4K with expanded draw distance using OpenPhantom" src="https://github.com/user-attachments/assets/8ffa0c2f-d9a4-439c-a880-6eb123f29090" />
 
@@ -21,19 +21,19 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 <img width="1920" height="1080" alt="Star Wars Episode 1 The Phantom Menace Screenshot 2026 09 14 - 11 16 27 84" src="https://github.com/user-attachments/assets/59fd4625-e932-47fa-ad1a-18be13ede3e0" />
 
-*Free Camera/ No Clip/ Photo mode.*
+*Free camera, no clip and photo mode.*
 
 **Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
 
-## What's Included  
+## What's Included
 
 | | |
 |---|---|
 | [`installer/`](installer/) | **Working** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data; the disc is read on your machine. Everything it installs is inside the installer and nothing is downloaded. See its [README](installer/README.md) |
-| [`legacy/`](legacy/) | **Working**  Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
+| [`legacy/`](legacy/) | **Working** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
-| `architecture/` | How the original engine is put together, written down. Not started |
+| `architecture/` | How the original engine is put together, written down. One note so far, on which toolchain built the retail executable and which engine family it belongs to |
 
 ## Version numbers
 
@@ -42,12 +42,14 @@ release.
 
 | | numbering | tags |
 |---|---|---|
-| the patch, `legacy/` | `0.4.x` | `v0.4.0`, `v0.4.1`, ... |
-| the installer that carries it | `1.4.x` | `i1.4`, `i1.4.1`, ... |
+| the patch, `legacy/` | `1.0.x` | `v1.0.0`, `v1.0.1`, ... |
+| the installer that carries it | `2.0.x` | `i2.0.0`, `i2.0.1`, ... |
 
-The last digit moves together on a release. The DLLs carry the **patch** number, so a DLL's
-properties and the first line of `engine_fixes.log` say `0.4.3` while the installer that delivered
-them says `1.4.3`.
+The installer's first number is always one higher than the patch's, and the other two are the
+same. The DLLs carry the **patch** number, so a DLL's properties and the first line of
+`engine_fixes.log` say `1.0.0` while the installer that delivered them says `2.0.0`. Before
+1.0.0, which brought the multiplayer, the patch ran from `v0.2.0` to `v0.4.3` and the installer
+from `i1.0` to `i1.4.3`.
 
 **One release merged the two into a single number**, published as `v1.5.0` and `i1.5.0`. That's
 been undone. On GitHub that release is now **`v0.4.1` and `i1.4.1`**, and the one after it is
@@ -86,8 +88,8 @@ reports are all welcome, and you don't need to know the engine to start.
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has how we work: how to report something usefully, what a
 pull request needs, and the ground rules for working against a binary you do not have the source
-to. Each component adds its own rules on top; `legacy/CONTRIBUTING.md` is the one that exists so
-far.
+to. Each component adds its own rules on top: `legacy/CONTRIBUTING.md` for the engine fixes and
+`installer/CONTRIBUTING.md` for the installer.
 
 The most useful thing right now is testing. Every fix has been played in a full installation, and
 each one's README says what was checked. But a couple of machines isn't everywhere, so a report of
@@ -121,14 +123,15 @@ none of it.
 MIT. The source here is free to use, modify and distribute under those terms, provided the licence
 notice travels with it. See [LICENSE](LICENSE).
 
-The licence covers this source code only, and not the third-party binaries the installer carries
-in `installer/dist/`, which are each under their own terms and include GPL and proprietary
-components. See [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md), which also
-records what a release has to ship alongside the installer to satisfy them.
-
-It grants nothing regarding the original game, its
-assets, or anything else its rights holders own. Release archives may also contain third party
-components under their own licences, which are named in the release notes.
+The licence covers this source code only. It grants nothing regarding the original game, its
+assets, or anything else its rights holders own, and it does not cover the third-party code the
+project carries: the HACL* sources in `legacy/src/third_party/hacl/`, which are MIT, with KaRaMeL
+headers under Apache 2.0 and MIT; Mbed TLS, which the build downloads and links into
+`multiplayer.dll` under Apache 2.0; and the third-party binaries the installer carries in
+`installer/dist/`, which are each under their own terms and include GPL and proprietary
+components. [legacy/dist/THIRD-PARTY-NOTICES.txt](legacy/dist/THIRD-PARTY-NOTICES.txt) names
+what the patch carries, and [installer/THIRD-PARTY-NOTICES.md](installer/THIRD-PARTY-NOTICES.md)
+names the rest and records what a release has to ship alongside the installer to satisfy them.
 
 ## Contact
 

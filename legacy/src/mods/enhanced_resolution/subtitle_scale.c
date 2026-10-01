@@ -1,5 +1,12 @@
-/* subtitle_scale.c: see subtitle_scale.h. */
+/* subtitle_scale.c: see subtitle_scale.h.
+ *
+ * SIZE NOTE: a little over the 600 line mark. Twelve sites inside DLG_DrawLine and the bar it
+ * draws, each with its disassembly, the mapping argument that ties them together, and the journal
+ * that puts every write back when one refuses. The writes and the checks in front of them belong
+ * beside the sites they are about. */
 #include "subtitle_scale.h"
+
+#include "menu_scale.h"
 
 #include "common/detour.h"
 #include "common/frame_hook.h"
@@ -10,6 +17,7 @@
 #include "common/signature.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #define RESOLUTION_SECTION "enhanced_resolution"
 #define SUBTITLE_SCALE_KEY "SubtitleScale"
@@ -19,10 +27,26 @@
 #define AUTHORED_WIDTH  640.0f
 #define AUTHORED_HEIGHT 480.0f
 
-/* The engine's live display size. These are the integers its own two getters return, and the floats
- * the layout divides by are converted from the same pair. */
-#define SCREEN_WIDTH_INT  0x006D6314u
-#define SCREEN_HEIGHT_INT 0x006D632Cu
+/* The engine's live display size is the pair of integers its own two getters return, and the
+ * floats the layout divides by are converted from the same pair. Each getter is one load and a
+ * return:
+ *
+ *   0046B7B0  55 8B EC              push ebp / mov ebp,esp
+ *   0046B7B3  A1 14 63 6D 00        mov eax,[screenWidth]         operand at +0x04
+ *   0046B7B8  5D C3                 pop ebp / ret
+ *
+ * and the height getter is the same ten bytes with its own cell. The two centring calls below
+ * reach them, so the cells are read out of the getters the calls go to, and a call that does not
+ * go to a function of exactly this shape is not redirected. */
+static const uint8_t SIG_SCREEN_GETTER[] = {
+    0x55, 0x8B, 0xEC, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x5D, 0xC3
+};
+static const uint8_t MSK_SCREEN_GETTER[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_SCREEN_GETTER == sizeof MSK_SCREEN_GETTER,
+               "the screen getter pattern and its mask are different lengths");
+#define SCREEN_GETTER_CELL_OPERAND 0x04u
 
 /* --- the posScale pair inside DLG_DrawLine, at 0x00431545 -------------------------------------- *
  *   D9 05 D0 83 4A 00     fld  dword [1.0]
@@ -57,6 +81,72 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 };
 #define GLYPH_SCALE_WIDTH_OPERAND 8u
 
+/* --- the measure call inside the wrap loop, at 0x0043161D ------------------------------------- *
+ *   51         push ecx                    the character, after the two out pointers
+ *   E8 <rel>   call font3d_measureChar     one character, its width added to the row's total
+ *   83 C4 0C   add esp,0Ch                 the caller drops three arguments: cdecl
+ *
+ * The engine's measure answers `glyph width x scale + 1`: the pixel of spacing between glyphs is
+ * added after the scale, in device pixels. The draw advances by the glyph's own advance times
+ * the scale, spacing included, so at the authored size the two agree and at any other they do
+ * not: every character measures `scale-1` pixels narrower than it draws, and a sixty character
+ * row at 4K measures some two hundred pixels short of what lands on the screen. The wrap then let
+ * rows through that ran out of the bar on the right, which was photographed. The call is
+ * redirected to a function that adds the missing `k-1` to the answer, so the wrap measures what
+ * will be drawn; every other caller of the measure keeps the engine's own arithmetic. */
+#define MEASURE_CALL_FROM_GLYPH 0x97u   /* 0x0043161D - 0x00431586 */
+
+/* Where that call goes has to be the measure and not merely an address inside the image, since
+ * the replacement calls it with three arguments and cleans them itself. font3d_measureChar at
+ * 0x0046B2FC opens with a test of the current font and an early return:
+ *
+ *   55 8B EC 83 EC 0C     push ebp / mov ebp,esp / sub esp,0Ch
+ *   83 3D <font> 00       cmp dword [pCurFont],0
+ *   75 04                 jne +4
+ *   33 C0 EB 67           xor eax,eax / jmp to the epilogue
+ *   A1 <font> 8B 48 2C    mov eax,[pCurFont] / mov ecx,[eax+2Ch]
+ *
+ * Checked at the address the call names, with the six byte prologue allowed to be a jump, since a
+ * DLL that detours the measure for its own purposes has replaced exactly those bytes. */
+static const uint8_t SIG_MEASURE_CHAR[] = {
+    0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C,
+    0x83, 0x3D, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x75, 0x04,
+    0x33, 0xC0,
+    0xEB, 0x67,
+    0xA1, 0x00, 0x00, 0x00, 0x00,
+    0x8B, 0x48, 0x2C
+};
+static const uint8_t MSK_MEASURE_CHAR[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0xFF,
+    0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF
+};
+_Static_assert(sizeof SIG_MEASURE_CHAR == sizeof MSK_MEASURE_CHAR,
+               "the measure char pattern and its mask are different lengths");
+#define MEASURE_CHAR_PROLOGUE 6u
+
+/* --- the line height call, at 0x00431745 ----------------------------------------------------- *
+ *   E8 <rel>   call font3d_queryFont    then row y = 450 + height + 1, 18 per row up, less 13 or 4
+ *
+ * The one place the layout asks the font layer how tall a line is, and the reason a subtitle used
+ * to drop out of its box the moment a menu opened. The menu scale detours font3d_queryFont and
+ * answers a menu's text in drawn units, gated on a menu being open; the subtitle goes on drawing
+ * behind an open menu, its rows took the scaled height, and at 4K that put every row about fifty
+ * box units below the bar. The call is redirected to a function of this file's that asks the menu
+ * scale for the answer beneath its hook, so the hook never sees the call and has nothing to tell
+ * apart. An earlier version had the hook recognise the call by the address it returned to; that
+ * holds only while no other DLL detours font3d_queryFont after this one, and the moment one did
+ * the rows would have dropped out of the box again with nothing in the log. Located from the glyph
+ * scale like the calls below, and the call is required to go where the menu scale resolved the
+ * function before it is moved. */
+#define LINE_HEIGHT_CALL_FROM_GLYPH 0x1BFu   /* 0x00431745 - 0x00431586 */
+#define CALL_LENGTH 5u
+
 /* --- the two centring calls, at 0x0043177A and 0x0043179F ------------------------------------- *
  *   E8 <rel>   call screenWidth()    then (eax - 640) / 2, floored at zero
  *   E8 <rel>   call screenHeight()   then  eax - 480,      floored at zero
@@ -70,7 +160,7 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 /* --- the line wrap, compared twice against 580.0 at 0x004A83E8 ------------------------------- *
  *   D8 1D E8 83 4A 00     fcomp dword [580.0]     once before the loop and once inside it
  *
- * THIS HAS TO MOVE WITH THE BOX, and finding out why cost a screenshot. font3d_measureChar hands
+ * This has to move with the BOX, and finding out why cost a screenshot. font3d_measureChar hands
  * the glyph scale to the measurement, so the width it answers follows that scale; the wrap limit
  * is a bare constant and does not. Growing the box therefore made every character measure larger
  * against an unchanged limit, and lines broke after two or three words inside a box four times
@@ -86,7 +176,7 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
 /* --- the two offset clamps, at 0x00431793 and 0x004317B6 -------------------------------------- *
  *   7D 0A                 jge over `mov [offset], 0`
  *
- * BOTH HAVE TO GO, and this is the wall that made a scale above the fit produce an empty box.
+ * BOTH have to go; this is the wall that made a scale above the fit produce an empty box.
  * The engine floors each centring offset at zero, which is right for a box that is always at
  * most the size of the screen. Ours can be larger: the moment the box is taller than the
  * display, its top belongs ABOVE the top edge, and a floor of zero pins it there instead and
@@ -120,7 +210,7 @@ static const uint8_t SIG_GLYPH_SCALE[] = {
  *     x' = W/2 + k*(x - W/2)      scaled about the horizontal CENTRE
  *     y' = H   + k*(y - H)        scaled about the BOTTOM edge
  *
- * which is exactly where the text is anchored, and is the identity at k = 1. */
+ * The bottom edge is where the text is anchored, and the transform is the identity at k = 1. */
 static const uint8_t SIG_DRAW_BAR[] = {
     0x55, 0x8B, 0xEC, 0x81, 0xEC, 0xB0, 0x00, 0x00, 0x00, 0x57, 0x68, 0x00,
     0x00, 0x00, 0x3F, 0x8B, 0x45, 0x18, 0x50, 0xE8
@@ -147,7 +237,7 @@ typedef void(__cdecl *draw_bar_fn_t)(float x0, float y0, float x1, float y1, uin
  * So three divisors and two getters all read one pair of values, and that pair is the only thing
  * that has to be right.
  *
- * K IS FITTED BY HEIGHT, k = H/480, and that is what makes a 4:3 box behave on a 16:9 screen. By
+ * k is fitted BY HEIGHT, k = H/480, and only that fit makes a 4:3 box behave on a 16:9 screen. By
  * width it would be W/640, which at 16:9 makes the box taller than the screen and pushes the
  * baseline off the bottom. By height the box comes out 1.333*H wide, narrower than the screen, so
  * it pillarboxes exactly as the layout expects.
@@ -165,11 +255,19 @@ static float told_wrap   = AUTHORED_WRAP;
 
 static struct {
     detour_t  bar;
-    bool      installed;        /* the ten writes are in place */
+    bool      installed;        /* the eleven writes and the detour are in place */
+    bool      abandoned;        /* one of them was refused, the rest were put back, and it is not
+                                 * tried again: a site that was wrong once is wrong every time */
     bool      resolved;         /* the sites are known, which happens long before the display is */
     uintptr_t pos_site;
     uintptr_t glyph_site;
     uintptr_t bar_site;
+    uintptr_t width_getter;     /* where the two centring calls go, checked to be the getters */
+    uintptr_t height_getter;
+    uintptr_t line_height_target;   /* where the line height call went, 0 until resolved */
+    uintptr_t measure_char;         /* the engine's own measure, where the wrap's call went */
+    const volatile int32_t *screen_w;   /* the cells those getters load, read out of them */
+    const volatile int32_t *screen_h;
     float   scale;              /* the player's multiplier, on top of fitting the height */
     int32_t told_w;             /* what the two replacement getters answer */
     int32_t told_h;
@@ -192,6 +290,38 @@ static int32_t __cdecl told_screen_height(void)
 
 static float box_scale(int32_t height);
 
+/* The replacement for the wrap loop's measure, reached only from that one call: the engine's own
+ * answer with the spacing scaled like the glyph. Identity at k = 1. */
+typedef int32_t(__cdecl *measure_char_fn_t)(uint32_t character, float *out_width,
+                                            float *out_height);
+
+static int32_t __cdecl told_measure_char(uint32_t character, float *out_width, float *out_height)
+{
+    measure_char_fn_t original = (measure_char_fn_t)state.measure_char;
+    int32_t           answer   = original(character, out_width, out_height);
+
+    if (answer != 0 && out_width != NULL && state.seen_h > 0) {
+        *out_width += box_scale(state.seen_h) - 1.0f;
+    }
+    return answer;
+}
+
+/* The replacement for the line height call: the font layer's own answer from beneath the menu
+ * scale's hook, and the engine's own when that hook is not installed, which is the same number by
+ * the other route. */
+typedef uint32_t(__cdecl *query_font_fn_t)(void);
+
+static uint32_t __cdecl told_query_font(void)
+{
+    bool     hooked = false;
+    uint32_t answer = menu_scale_query_font_beneath(&hooked);
+
+    if (!hooked && state.line_height_target != 0) {
+        answer = ((query_font_fn_t)state.line_height_target)();
+    }
+    return answer;
+}
+
 /* The two backdrop quads, moved to match the box the text is now drawn in. */
 static void __cdecl hook_draw_bar(float x0, float y0, float x1, float y1, uint32_t argb)
 {
@@ -210,12 +340,11 @@ static void __cdecl hook_draw_bar(float x0, float y0, float x1, float y1, uint32
 
 static bool read_screen(int32_t *out_w, int32_t *out_h)
 {
-    if (!memory_is_readable_range(SCREEN_WIDTH_INT, sizeof(int32_t)) ||
-        !memory_is_readable_range(SCREEN_HEIGHT_INT, sizeof(int32_t))) {
+    if (state.screen_w == NULL || state.screen_h == NULL) {
         return false;
     }
-    *out_w = *(const int32_t *)(uintptr_t)SCREEN_WIDTH_INT;
-    *out_h = *(const int32_t *)(uintptr_t)SCREEN_HEIGHT_INT;
+    *out_w = *state.screen_w;
+    *out_h = *state.screen_h;
     return (*out_w > 0) && (*out_h > 0);
 }
 
@@ -264,11 +393,12 @@ static bool recompute(void)
     return true;
 }
 
-/* ALL TEN OR NONE. Three make the box bigger, two put it back where it belongs, two keep the line
- * breaks where the box is, two let it hang off the top edge once it is taller than the screen, and
- * the last moves the backdrop quad to match. Any subset is a box of the wrong size, in the wrong
- * place, wrapping at the wrong column, with its text under the bottom of the display, or with the
- * panel behind it still the old size, and every one of those has now been photographed. */
+/* All twelve or none. Three make the box bigger, two put it back where it belongs, three keep the
+ * line breaks where the box is, one keeps the rows in the box while a menu is open, two let it
+ * hang off the top edge once it is taller than the screen, and the last moves the backdrop quad to
+ * match. Any subset is a box of the wrong size, in the wrong place, wrapping at the wrong column,
+ * with its text under the bottom of the display, or with the panel behind it still the old size,
+ * and every one of those has been photographed. */
 static bool install_patches(void);
 
 /* Once a second, which is far more often than anybody drags. It exists for two reasons: the
@@ -290,8 +420,8 @@ static void on_frame(void)
 
     wanted = clamp_scale(ini_read_float(RESOLUTION_SECTION, SUBTITLE_SCALE_KEY, 1.0f));
     if (wanted == SUBTITLE_SCALE_ENGINE) {
-        /* Zero asks for the engine's own box back, and that is the one value this cannot honour
-         * while the game runs: the operands and the two calls would have to be put back, which is
+        /* Zero asks for the engine's own box back, the one value this cannot honour while the
+         * game runs: the operands and the two calls would have to be put back, which is
          * a code write rather than a number. The last good scale stands until the next launch. */
         wanted = state.scale;
     }
@@ -313,66 +443,172 @@ static void on_frame(void)
              (int)state.told_w, (int)state.told_h, (int)w, (int)h, (double)box_scale(h));
 }
 
-/* Rewrites one call's target. The instruction stays a call and its length does not change; only
- * where it goes does, and only at this one site. */
-/* The two wrap comparisons, each checked for its opcode before it is touched: both are the same
- * six byte `fcomp dword [imm32]`, so the operand sits two bytes in. */
+/* The eleven reversible writes go through the patch layer's journal, so a refusal part way
+ * through puts the earlier ones back and the engine draws its own box, the way the header
+ * promises. The detour is the twelfth and last, because a detour cannot be taken out again. */
+static patch_journal_t journal;
+
+/* An absolute operand is repointed only when it still holds what it was matched with. The pattern
+ * proved it once, at resolve; the writes happen later, once the display exists, and this is what
+ * makes them refuse a second run or a site something else has moved in the meantime. The patch
+ * layer does the compare and the write; a refusal is logged there. */
+static bool repoint_operand(uintptr_t at, uint32_t expected_old, const void *cell)
+{
+    if (patch_journal_repoint_operand(&journal, at, expected_old, (uint32_t)(uintptr_t)cell)
+            != PATCH_RESULT_OK) {
+        log_warning("the operand at %08X was not repointed, so the subtitle box is left alone",
+                    (unsigned)at);
+        return false;
+    }
+    return true;
+}
+
+/* The literal a pattern carries at an operand, which is the value that operand is expected to
+ * hold when it is written. */
+static uint32_t pattern_operand(const uint8_t *pattern, size_t offset)
+{
+    uint32_t value;
+
+    memcpy(&value, pattern + offset, sizeof value);
+    return value;
+}
+
+/* The wrap comparisons sit past the matched pattern, so the opcode in front of each is checked
+ * and the operand is required to name a float holding the authored 580 before it is moved. Both
+ * are the same six byte `fcomp dword [imm32]`, so the operand sits two bytes in. */
 static bool retarget_operand(uintptr_t operand_site, const void *cell)
 {
-    if (!memory_is_readable_range(operand_site - 2u, 6u) ||
-        *(const uint8_t *)(operand_site - 2u) != 0xD8u ||
-        *(const uint8_t *)(operand_site - 1u) != 0x1Du) {
+    static const uint8_t FCOMP_ABS[2] = { 0xD8, 0x1D };
+    uint32_t constant = 0;
+    float    value    = 0.0f;
+
+    if (!patch_validate_bytes(operand_site - 2u, FCOMP_ABS, sizeof FCOMP_ABS) ||
+        !memory_read_u32(operand_site, &constant) ||
+        !memory_is_inside_image(constant, sizeof(float)) ||
+        !memory_read(constant, &value, sizeof value) || value != AUTHORED_WRAP) {
         log_warning("the wrap comparison at %08X is not the one expected, so the subtitle box is "
                     "left alone", (unsigned)(operand_site - 2u));
         return false;
     }
-    return patch_write_pointer32(operand_site, cell) == PATCH_RESULT_OK;
+    return repoint_operand(operand_site, constant, cell);
 }
 
 /* Turns one `jge` into a `jmp`, having checked it is the conditional this expects. */
 static bool unclamp(uintptr_t site)
 {
-    if (!memory_is_readable_range(site, 2u) || *(const uint8_t *)site != JGE_REL8) {
+    static const uint8_t JGE[1] = { JGE_REL8 };
+    uint8_t              jmp    = JMP_REL8;
+
+    if (!patch_validate_bytes(site, JGE, sizeof JGE)) {
         log_warning("the offset clamp at %08X is not the branch expected, so the subtitle box is "
                     "left alone", (unsigned)site);
         return false;
     }
-    return patch_write_u8(site, JMP_REL8) == PATCH_RESULT_OK;
+    return patch_journal_write_bytes(&journal, site, &jmp, sizeof jmp) == PATCH_RESULT_OK;
 }
 
-static bool retarget_call(uintptr_t site, const void *destination)
+/* A call is redirected only while it still goes to the function it was resolved against. The
+ * instruction stays a call and its length does not change; only where it goes does, and only at
+ * this one site. The before-bytes are the displacement that reached the expected target. */
+static bool retarget_call(uintptr_t site, uintptr_t expected_target, const void *destination)
 {
-    int32_t rel;
+    uintptr_t current = 0;
+    uint32_t  displacement;
 
-    if (!memory_is_readable_range(site, 5u) || *(const uint8_t *)site != 0xE8u) {
-        log_warning("the site at %08X is not a call, so the subtitle box is left alone",
-                    (unsigned)site);
+    if (!patch_read_call_target(site, &current) || current != expected_target) {
+        log_warning("the call at %08X does not go to %08X any more, so the subtitle box is left "
+                    "alone", (unsigned)site, (unsigned)expected_target);
         return false;
     }
-    rel = (int32_t)((uintptr_t)destination - (site + 5u));
-    return patch_write_u32(site + 1u, (uint32_t)rel) == PATCH_RESULT_OK;
+    displacement = (uint32_t)((uintptr_t)destination - (site + CALL_LENGTH));
+    return patch_journal_write_u32(&journal, site + 1u, displacement) == PATCH_RESULT_OK;
+}
+
+/* Whether the ten bytes at `at` are a getter, operand aside. */
+static bool is_screen_getter(uintptr_t at)
+{
+    uint8_t body[sizeof SIG_SCREEN_GETTER];
+    size_t  index;
+
+    if (!memory_read(at, body, sizeof body)) {
+        return false;
+    }
+    for (index = 0; index < sizeof body; ++index) {
+        if (MSK_SCREEN_GETTER[index] != 0 && body[index] != SIG_SCREEN_GETTER[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Follows one centring call to its getter, checks the getter is the ten byte load-and-return
+ * above, and reads the cell out of it. */
+static bool resolve_getter(uintptr_t call, const char *what, uintptr_t *out_getter,
+                           const volatile int32_t **out_cell)
+{
+    uintptr_t getter = 0;
+    uint32_t  cell   = 0;
+    uint8_t   body[sizeof SIG_SCREEN_GETTER] = { 0 };
+
+    if (!patch_read_call_target(call, &getter) || !is_screen_getter(getter) ||
+        !memory_read_u32(getter + SCREEN_GETTER_CELL_OPERAND, &cell) ||
+        !memory_is_inside_image(cell, sizeof(int32_t))) {
+        (void)memory_read(getter, body, sizeof body);
+        log_warning("the call at %08X goes to %08X, which is not the %s getter expected: it "
+                    "reads %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X, so the subtitle "
+                    "box keeps the engine's own size", (unsigned)call, (unsigned)getter, what,
+                    body[0], body[1], body[2], body[3], body[4], body[5], body[6], body[7],
+                    body[8], body[9]);
+        return false;
+    }
+    *out_getter = getter;
+    *out_cell   = (const volatile int32_t *)(uintptr_t)cell;
+    return true;
 }
 
 static bool install_patches(void)
 {
-    if (patch_write_pointer32(state.pos_site + POS_SCALE_HEIGHT_OPERAND, &told_height)
-            != PATCH_RESULT_OK ||
-        patch_write_pointer32(state.pos_site + POS_SCALE_WIDTH_OPERAND, &told_width)
-            != PATCH_RESULT_OK ||
-        patch_write_pointer32(state.glyph_site + GLYPH_SCALE_WIDTH_OPERAND, &told_width)
-            != PATCH_RESULT_OK ||
+    if (state.abandoned) {
+        return false;
+    }
+    /* The line height call has to go where the menu scale found font3d_queryFont, so that the
+     * function it is redirected to asks beneath the right hook. With the menu scale not installed
+     * there is no hook and no site, and the redirected call answers with the engine's own
+     * function, so nothing changes. */
+    if (menu_scale_query_font_site() != 0 &&
+        state.line_height_target != menu_scale_query_font_site()) {
+        state.abandoned = true;
+        log_warning("the line height call goes to %08X and the menu scale found font3d_queryFont "
+                    "at %08X, so the subtitle box keeps the engine's own size",
+                    (unsigned)state.line_height_target, (unsigned)menu_scale_query_font_site());
+        return false;
+    }
+    patch_journal_reset(&journal);
+    if (!repoint_operand(state.pos_site + POS_SCALE_HEIGHT_OPERAND,
+                         pattern_operand(SIG_POS_SCALE, POS_SCALE_HEIGHT_OPERAND), &told_height) ||
+        !repoint_operand(state.pos_site + POS_SCALE_WIDTH_OPERAND,
+                         pattern_operand(SIG_POS_SCALE, POS_SCALE_WIDTH_OPERAND), &told_width) ||
+        !repoint_operand(state.glyph_site + GLYPH_SCALE_WIDTH_OPERAND,
+                         pattern_operand(SIG_GLYPH_SCALE, GLYPH_SCALE_WIDTH_OPERAND),
+                         &told_width) ||
         !retarget_operand(state.glyph_site + WRAP_FIRST_OPERAND_FROM_GLYPH, &told_wrap) ||
         !retarget_operand(state.glyph_site + WRAP_SECOND_OPERAND_FROM_GLYPH, &told_wrap) ||
-        !retarget_call(state.glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH,
+        !retarget_call(state.glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH, state.width_getter,
                        (const void *)told_screen_width) ||
-        !retarget_call(state.glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH,
+        !retarget_call(state.glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, state.height_getter,
                        (const void *)told_screen_height) ||
+        !retarget_call(state.glyph_site + MEASURE_CALL_FROM_GLYPH, state.measure_char,
+                       (const void *)told_measure_char) ||
+        !retarget_call(state.glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH, state.line_height_target,
+                       (const void *)told_query_font) ||
         !unclamp(state.glyph_site + CLAMP_X_FROM_GLYPH) ||
         !unclamp(state.glyph_site + CLAMP_Y_FROM_GLYPH) ||
         !detour_install(&state.bar, state.bar_site, (const void *)hook_draw_bar,
                         DRAW_BAR_PROLOGUE)) {
-        log_warning("the subtitle box could not be fully repointed, so it may now be drawn at the "
-                    "wrong size. Set SubtitleScale=0 and relaunch for the engine's own back");
+        patch_journal_undo(&journal);
+        state.abandoned = true;
+        log_warning("one of the subtitle box's twelve sites was refused, so the ones already "
+                    "written were put back and the engine draws its own box this session");
         return false;
     }
 
@@ -401,14 +637,17 @@ void subtitle_scale_install(void)
     state.scale = clamp_scale(ini_read_float(RESOLUTION_SECTION, SUBTITLE_SCALE_KEY, 1.0f));
     if (state.scale == SUBTITLE_SCALE_ENGINE) {
         log_info("SubtitleScale=0, so the subtitles keep the engine's own behaviour: a 640x480 box "
-                 "of fixed PIXELS centred on the screen, which is why the text shrinks as the "
+                 "of fixed PIXELS centred on the screen, so the text shrinks as the "
                  "display grows");
         return;
     }
 
     pos_site   = signature_find_unique(SIG_POS_SCALE, NULL, sizeof SIG_POS_SCALE);
     glyph_site = signature_find_unique(SIG_GLYPH_SCALE, NULL, sizeof SIG_GLYPH_SCALE);
-    bar_site   = signature_find_unique(SIG_DRAW_BAR, NULL, sizeof SIG_DRAW_BAR);
+    /* The bar is detoured, so it is searched for the way a detour target has to be: a DLL that
+     * hooked it first has replaced the nine bytes it opens with. */
+    bar_site   = signature_find_detour_target(SIG_DRAW_BAR, NULL, sizeof SIG_DRAW_BAR,
+                                              DRAW_BAR_PROLOGUE);
     if (pos_site == 0 || glyph_site == 0 || bar_site == 0) {
         log_warning("the subtitle layout was not found (%s, %s, %s), so it keeps the engine's own "
                     "size",
@@ -417,12 +656,43 @@ void subtitle_scale_install(void)
                     (bar_site != 0) ? "backdrop found" : "backdrop NOT found");
         return;
     }
+    if (!resolve_getter(glyph_site + CENTRE_WIDTH_CALL_FROM_GLYPH, "screen width",
+                        &state.width_getter, &state.screen_w) ||
+        !resolve_getter(glyph_site + CENTRE_HEIGHT_CALL_FROM_GLYPH, "screen height",
+                        &state.height_getter, &state.screen_h)) {
+        return;
+    }
+    /* The wrap's measure: the call must go to a function that opens the way font3d_measureChar
+     * does, and where it goes is remembered as the function the replacement calls. */
+    if (!patch_read_call_target(glyph_site + MEASURE_CALL_FROM_GLYPH, &state.measure_char) ||
+        signature_find_at(state.measure_char, SIG_MEASURE_CHAR, MSK_MEASURE_CHAR,
+                          sizeof SIG_MEASURE_CHAR, MEASURE_CHAR_PROLOGUE) == 0) {
+        log_warning("the call at %08X does not go to the measure expected (it goes to %08X), so "
+                    "the subtitle box keeps the engine's own size",
+                    (unsigned)(glyph_site + MEASURE_CALL_FROM_GLYPH),
+                    (unsigned)state.measure_char);
+        return;
+    }
+    /* The line height: the call must go into the image. Whether it goes where the menu scale
+     * finds font3d_queryFont is checked when the writes are made, since this runs before the menu
+     * scale has resolved anything. */
+    if (!patch_read_call_target(glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH,
+                                &state.line_height_target)) {
+        log_warning("the site at %08X is not the line height call expected, so the subtitle box "
+                    "keeps the engine's own size",
+                    (unsigned)(glyph_site + LINE_HEIGHT_CALL_FROM_GLYPH));
+        return;
+    }
     state.pos_site   = pos_site;
     state.glyph_site = glyph_site;
     state.bar_site   = bar_site;
     state.resolved   = true;
+    log_info("the subtitle layout is at %08X, its getters at %08X and %08X read the display from "
+             "%08X and %08X", (unsigned)glyph_site, (unsigned)state.width_getter,
+             (unsigned)state.height_getter, (unsigned)(uintptr_t)state.screen_w,
+             (unsigned)(uintptr_t)state.screen_h);
 
-    /* NOTHING IS WRITTEN until the display is known, on the order the game starts in rather than
+    /* NOTHING is written until the display is known, on the order the game starts in rather than
      * on caution. This runs from the loader, before any mode has been set, so the two size
      * cells are still zero and the numbers every one of the five writes depends on cannot be
      * computed yet. Patching anyway with the authored 640x480 in them would draw the box across

@@ -3,8 +3,8 @@
 These are the rules this directory is held to. Most of them exist because breaking them cost
 somebody a day, and the ones that sound fussy are usually the ones that did.
 
-Patches are welcome. If something here gets in your way, say so in the pull request rather than
-working around it quietly.
+Patches are welcome. If something here gets in your way, say so in the pull request. Working
+around it quietly helps nobody.
 
 ## The shape of the thing
 
@@ -37,7 +37,7 @@ Both failures are silent and both lie about their cause. Without the first, ever
 writes is dropped, including the warnings that would name the problem, and the log shows only the
 loader's "calling engine_fix_install" line, which reads like a crash. Without the second the
 signature scanner searches an empty range, so every pattern comes back with zero matches, which
-reads exactly like an unsupported executable. That combination cost two full test rounds once.
+reads like an unsupported executable. That combination cost two full test rounds once.
 
 **The tree mirrors the installation.** `src/common` is the static library, `src/loader` builds the
 `dinput.dll` that sits beside the executable, and every directory under `src/mods` builds one DLL
@@ -80,6 +80,12 @@ to install replaces the prologue with a jump. Every later DLL then searches for 
 begins with that prologue, finds nothing, and switches itself off. It happened on the first real
 run: four DLLs wanted `render_frameEnd` and only one got it. Use `SIGNATURE_ENTRY_DETOUR`, which
 falls back to the pattern's tail and proves the head is either the authored prologue or a branch.
+That applies to a pattern you only READ an operand out of as well, not just one you detour: the
+bytes are gone either way.
+
+A function barely longer than its own prologue has no usable tail, and two or three bytes match
+everywhere. `SIGNATURE_ENTRY_DETOUR_AFTER` reaches one of those from the function in front of it,
+naming that entry and the gap, and still checks the pattern where it lands.
 
 ## Writing into a live process
 
@@ -88,14 +94,16 @@ restoration, instruction cache flushing or readable range checks in feature code
 
 **Validate the whole range you are about to touch, not just its first address.** Then read it back
 and refuse if it is not what you expected. That single habit is also what makes patches
-idempotent: a second run finds the new value rather than the expected old one and declines.
+idempotent: a second run finds the new value where it expected the old one, and declines.
 
 **An unknown build must fail safely.** Never patch optimistically. A partially installed feature
-must stay inactive, and a failure after earlier writes should roll those writes back where the
-patch system supports it.
+must stay inactive, and a failure after earlier writes rolls those writes back: `patch_journal_t`
+in `common/patch.h` records each write and puts them back in reverse order, so a feature that
+writes several places promises all of them or none. Detours are not journaled, because a detour
+cannot be taken out, so a detour is placed last.
 
 **Log the branch, not only the result.** A silent exit is a blind spot. If a plausibility limit
-rejects something, it must say so rather than skip quietly.
+rejects something, it must say so.
 
 **Compute from the remembered original, never from the current value.** `baplight_applyLevelFog`
 has two callers, and without a remembered original the scale squares itself on the second run.
@@ -103,10 +111,10 @@ has two callers, and without a remembered original the scale squares itself on t
 **`memory_read_*` and `memory_is_readable_range` belong in installation code and in code that runs
 at human rates, never in a path the engine drives per object or per frame.** They call
 `VirtualQuery`, which is a system call, and `memory_read` validates the range again underneath, so
-a guarded pointer read costs two of them rather than one. Use `memory_try_read` or
+a guarded pointer read costs two of them. Use `memory_try_read` or
 `memory_try_readable` on any path the engine drives; a structured-exception frame is a few
 instructions of setup on x86, and it is also stricter, since it catches a fault anywhere in the
-range rather than trusting a walk done a moment earlier.
+range, where a walk done a moment earlier could be stale.
 
 This rule is written down because breaking it cost real time twice. A guard on
 `bapmap_tickMover`, which looks like draw-path frequency, was measured at 3,400 calls per frame
@@ -116,7 +124,7 @@ defect more mildly. `render_guard.c` had already stated the rule in a struct com
 only file that got it right, which is the argument for it living here instead.
 
 **Ask the cheap question first.** If an expensive walk feeds a test that will reject on a counter
-or a flag, do that test before the walk rather than after. `face_latch.c` walked four engine
+or a flag, do that test before the walk. `face_latch.c` walked four engine
 structures on every poll to answer a question its own throttle then discarded fifteen times out of
 sixteen.
 
@@ -128,12 +136,12 @@ return the original's result. Calculations and persistence belong in ordinary fu
 Calling conventions come from reverse engineering evidence, never from a guess. Get one wrong and
 the stack is corrupted at a point nowhere near the symptom.
 
-`common/detour.c` chains. That is the reason it exists rather than a vendored library.
+`common/detour.c` chains. That is why it exists and no vendored library does the job.
 When you place a detour on a function another DLL may also want, your `original` may be that DLL's
-hook rather than the engine. Call it exactly as if it were the real function and the chain unwinds
+hook and not the engine. Call it as if it were the real function and the chain unwinds
 correctly whatever order the DLLs loaded in. There is no uninstall, so a detour you place stands
 for the life of the process, and an install sequence that can fail halfway has to abandon the whole
-feature rather than leave live hooks behind.
+feature; live hooks left behind are the worse outcome.
 
 ## Comments
 
@@ -209,8 +217,9 @@ _Static_assert(offsetof(sw_widget_t, rect) == 0x20, "Unexpected rect offset");
 If the engine stores a boolean as a 32 bit integer, use `int32_t`. Binary compatibility beats
 modernisation; never reorder a binary structure for readability.
 
-No `sprintf`, `strcpy`, `strcat` or `gets`. Use the bounded forms and guarantee termination
-yourself, because the truncating ones do not.
+No `sprintf`, `strcpy`, `strcat` or `gets`. Format into a buffer with `text_format` from
+`common/text.h`, which always terminates and answers what it stored; `_snprintf` does neither on
+this toolchain, and the tree once carried three idioms for working around that.
 
 Warnings are errors here (`/W4 /WX`). Integer and pointer truncation, signed and unsigned
 conversions and incompatible function pointers are exactly the mistakes that stay invisible until
@@ -243,7 +252,7 @@ add_unit_test(<module> <directory under src/mods, or "" for common> [extra sourc
 
 Build the test against the **real** module, not a stub of it. A stub only proves the stub.
 
-Write the check text as a claim about the code rather than as a label: "an empty list is refused",
+Write the check text as a claim about the code: "an empty list is refused",
 not "test empty list". Where the check is the only place a byte level assumption is written down in
 English, that sentence is the documentation.
 
@@ -263,7 +272,14 @@ unit tests pass" the same as "it works in the game". Say which one you mean.
   and then did nothing, which is the failure mode that looks most like success
 * the feature's `README.md` updated: configuration keys, engine locations touched, limitations,
   and what you actually tested
-* `dist/engine_fixes.ini` updated if you added a setting, with the comment that explains it
+* `dist/engine_fixes.ini` updated if you added a setting, with the comment that explains it. The
+  default in the code and the value in the shipped file are two different things: the code default
+  is what a file that predates the key gets, and the shipped value is what a fresh install gets.
+  They are the same number unless the comment above the key says why they are not. A key that
+  changes how the game plays keeps a code default that leaves the game alone, so an old file does
+  not switch a feature on that it never mentioned; the exception is a repair the maintainers have
+  decided every installation gets, old file or not, and then the README says so beside the key
+  (`MatchDisplayRefresh`, `MoverSubstepClock` and `CameraTargetPair` are the three)
 
 Say plainly what you could not verify. "Reviewed statically, not run in the game" is a useful
 sentence; "everything works" is not.

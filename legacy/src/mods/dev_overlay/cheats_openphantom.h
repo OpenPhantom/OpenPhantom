@@ -1,6 +1,7 @@
-/* cheats_openphantom.h: the nine codes this project adds: unlimited ammunition, unlimited
- * health, no fog, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip,
- * jump boost, and free camera.
+/* cheats_openphantom.h: the ten codes this project adds: unlimited ammunition, unlimited
+ * health, invincible NPCs, one-shot NPCs, giant player, tiny player, no clip, super run, jump
+ * boost and free camera. No fog shares the panel but not this file's shape; it lives in
+ * cheats_no_fog.c and is described below only where it differs from these.
  *
  * The first two work the same way and it is the smallest way there is. The engine spends
  * ammunition and applies damage through one short function each, and while a cheat is on its
@@ -14,19 +15,19 @@
  * No fog is a different shape, because there is nothing to decline: fog is not spent, it is a bit
  * in the loaded level's own record, read fresh every frame by the renderer rather than cached
  * anywhere this project could detour instead. See cheats_no_fog.c for why it is a per-frame force
- * rather than a single write, and why turning it back off does not try to restore what a level
- * authored.
+ * rather than a single write, and why turning it back off puts back the band the level was
+ * holding when the cheat first saw it.
  *
  * Invincible NPCs and one-shot NPCs are the enemy-side counterpart to unlimited health, and share
  * one site rather than getting one each: enemy_receiveDamage (0x00433803) is the single function
  * every NPC's health, at character record +0x38, is ever subtracted through. Invincible NPCs
  * declines that subtraction outright, the same "decline, don't top up" shape as the player's own
  * unlimited health. One-shot NPCs cannot decline the same way, because the point is to change the
- * outcome, not skip it, so it forces the write to zero instead, which is exactly what the death
- * gate this function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0)
- * already treats as lethal. See cheats_openphantom.c's own site comment for the byte evidence,
- * and for why both cheats can share one detour instead of needing their own like ammunition and
- * player health do.
+ * outcome, not skip it, so it forces the write to zero instead, a value the death gate this
+ * function feeds (dismemberment.c's own DEATH GATE, reached only when health <= 0) already
+ * treats as lethal. See cheats_npc_damage.c's own site comment for the byte evidence, and for
+ * why both cheats can share one detour instead of needing their own like ammunition and player
+ * health do.
  *
  * Giant player and tiny player share one detour on rdThing_Draw, the function that renders any
  * object at all, the player included, called through exactly one of its two callers for ordinary
@@ -43,6 +44,12 @@
  * player's own collision size, which lives elsewhere entirely. Mutually exclusive by construction,
  * see cheats_openphantom_toggle(), so the panel is never showing one as on while the other's own
  * scale is silently the one being applied.
+ *
+ * Super run is one float. The stand tick pushes the run cap, 3.5 units a second, to the engine's
+ * own ramp as an immediate, and while the cheat is on that immediate holds the cap times
+ * SuperRunScale; the ramp carries the live speed up to it and back down when the cheat goes off.
+ * Written through the patch journal with the shipped value remembered. cheats_super_run.c has
+ * the site and what a faster run does and does not change.
  *
  * Jump boost multiplies the vertical velocity the engine's own jump-entry code writes, rather than
  * reimplementing a jump. There are two sites, not one: mode 6 ("Jump") and mode 7 ("Jedi Jump")
@@ -81,19 +88,22 @@
  * landing path ever expected a fall this big to be survived, never lets go afterward. All three
  * fire from the same "this fall just became significant" transition, all three are suppressed the
  * same way, and all three stop mattering the instant jump boost switches back off. See
- * cheats_openphantom.c's own site comment next to SIG_PLAYER_GROUND_CONTACT for the full
+ * cheats_fall_consequences.c's own site comment next to SIG_PLAYER_GROUND_CONTACT for the full
  * mechanism and every call site.
  *
  * Free camera is a different shape again, and does not move the player at all: it freezes the
  * whole simulation (one flag the engine's own fixed-timestep driver already checks every frame,
  * found rather than added) and drives the camera object directly through a chained detour on its
- * own per-frame update, the same site enhanced_input's free-look feature already detours. An
- * earlier attempt at this, noclip, letting the player walk through walls and fly, kept hitting
- * player-physics bugs (falling through unmodelled floors, a ledge pre-check, the mode-dispatch
- * that gates the collision hook, a pitch-redirect attempt that sank the player into ordinary
- * floors) that a camera untethered from the player's own state machine does not have, because the
- * player is not moving at all. Free camera replaced it outright rather than living alongside it.
- * See cheats_openphantom.c's own site comment for the byte evidence.
+ * own per-frame update, the same site enhanced_input's free-look feature already detours. The
+ * first attempt at this was a noclip that let the player walk through walls and fly, and it kept
+ * hitting player-physics bugs (falling through unmodelled floors, a ledge pre-check, the
+ * mode-dispatch that gates the collision hook, a pitch-redirect attempt that sank the player into
+ * ordinary floors) that a camera untethered from the player's own state machine does not have,
+ * because the player is not moving at all. Free camera replaced that version outright. No clip
+ * ships again, rebuilt in cheats_noclip.c on a different site, the wall raycast rather than a
+ * locomotion phase, and it no longer flies: walls and people stop being solid, the floor is left
+ * alone, a glide holds height where there is no floor, and flying is the free camera's job. See
+ * cheats_free_camera.c for the byte evidence.
  *
  * Free camera's own mouse look claims the cursor for as long as it is on, which locks the player
  * out of both the dev panel and the game's own pause menu at once; there is no cursor left to
@@ -107,7 +117,7 @@
  * it is bound, see cheats_openphantom_toggle()'s own gate, because turning it on without one is
  * a door with no handle on the inside.
  *
- * "Skip to next level" is not a toggle either, and not one of the eight cheats above: a debug-only
+ * "Skip to next level" is not a toggle either, and not one of the nine cheats above: a debug-only
  * action row, for iterating on a specific level without replaying everything before it. It writes
  * DAT_00881368 (cheats_original_actions.c's own OP_CREDITS_VAR, exposed read-only from there) to
  * the SAME value the level's own exit trigger writes, script opcode 0x606, sub-command 1, which
@@ -129,6 +139,7 @@ typedef enum cheats_own_id {
     CHEATS_OWN_GIANT_PLAYER,
     CHEATS_OWN_TINY_PLAYER,
     CHEATS_OWN_NOCLIP,
+    CHEATS_OWN_SUPER_RUN,
     CHEATS_OWN_JUMP_BOOST,
     CHEATS_OWN_FREECAM,   /* MUST stay last; overlay_model.c's row layout relies on it, and its
                             * own _Static_assert fails the build if this ever stops being true */
@@ -152,9 +163,27 @@ bool cheats_openphantom_is_on(cheats_own_id_t id);
 /* Jump boost's own multiplier; see this file's own header comment above for what it is applied
  * to. The getter always answers something usable, even before the cheat's own sites have resolved
  * or if they never do; the setter clamps into a fixed sane range rather than trusting whatever a
- * player typed, since this is fed straight into a real physics quantity rather than merely stored. */
+ * player typed, since this feeds straight into a real physics quantity rather than merely
+ * stored. */
+#define JUMP_BOOST_SCALE_MIN     0.5f
+#define JUMP_BOOST_SCALE_MAX     5.0f
+/* What install_jump_boost() seeds the scale with, and so what this row reads on every start: the
+ * scale is held in memory and no key carries it, unlike every other number the panel edits. Here
+ * with the band rather than in cheats_internal.h because the panel's own row drags between the
+ * three and cannot see that file. */
+#define JUMP_BOOST_SCALE_DEFAULT 1.3f
 float cheats_openphantom_jump_boost_scale(void);
 void cheats_openphantom_jump_boost_set_scale(float scale);
+
+/* Super run's multiplier. Read from SuperRunScale at install; the setter clamps into the band
+ * below, writes the key, and if the cheat is on rewrites the run cap at once, so a drag on the
+ * panel's track changes the speed while it runs. False when the file could not be written. */
+#define SUPER_RUN_SCALE_MIN 1.1f
+#define SUPER_RUN_SCALE_MAX 4.0f
+/* What the key falls back to, and what Default puts the panel's row back to. */
+#define SUPER_RUN_SCALE_DEFAULT 2.0f
+float cheats_openphantom_super_run_scale(void);
+bool  cheats_openphantom_super_run_set_scale(float scale);
 
 /* Flips one and answers the new state. A cheat whose site did not resolve stays off, and free
  * camera specifically also stays off with no key bound. See cheats_openphantom.c. */
@@ -186,7 +215,7 @@ void cheats_openphantom_suspend_jump_boost(void);
 void cheats_openphantom_resume_jump_boost(void);
 
 /* Notches scrolled since the last take, positive away from the player, the exact contract
- * overlay_input_take_wheel_delta() keeps. A function pointer rather than calling that function by
+ * input_owner_take_wheel() keeps. A function pointer rather than calling that function by
  * name: the wheel is only observable through window messages, which is overlay_input.c's own
  * domain and not something this file can poll for itself the way it already does for keys and the
  * cursor, but linking straight to that file would drag its whole message-hook subsystem into
@@ -194,7 +223,7 @@ void cheats_openphantom_resume_jump_boost(void);
  * unittests/CMakeLists.txt's own "never a stub" rule), a wheel source it would then have no way
  * to provide. NULL until dev_overlay.c wires the real one in once both cheats_openphantom_install()
  * and overlay_input_install() have run, and free camera treats "no source" exactly like "no
- * scrolling happened yet", which is what it already was for every DLL build before this existed. */
+ * scrolling happened yet", the state it was in for every DLL build before this existed. */
 typedef int32_t (*cheats_openphantom_wheel_source_fn_t)(void);
 void cheats_openphantom_set_wheel_source(cheats_openphantom_wheel_source_fn_t fn);
 

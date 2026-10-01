@@ -1,10 +1,11 @@
-/* input_switches.c: the live half of this DLL's configuration, Strafe and FreeLook.
+/* input_switches.c: the live half of this DLL's configuration: Strafe, FreeLook, CameraFollow and
+ * AirControl.
  *
  * The seam taken here is the one enhanced_input.c had already measured and named: the block of
  * setters and availability queries the controls screen calls, plus the once-a-second re-read that
- * drives the same two setters from the file. Not one line of it patches a byte, reads a player
- * record or runs on a substep, which is what makes it a different responsibility from the phase
- * thunks it used to sit beside. The thunks were rejected as the seam for the opposite reason: they
+ * drives all four setters from the file. Not one line of it patches a byte, reads a player
+ * record or runs on a substep, so it is a different responsibility from the phase thunks it used
+ * to sit beside. The thunks were rejected as the seam for the opposite reason: they
  * read eleven fields of the install state between them.
  *
  * What this file needs from enhanced_input.c is three answers, and it asks for them rather than
@@ -18,6 +19,8 @@
 #include "input_config.h"
 #include "camera_follow.h"
 #include "strafe_walk.h"
+
+#include "frame_clock.h"
 
 #include "common/frame_hook.h"
 #include "common/ini.h"
@@ -116,12 +119,12 @@ void enhanced_input_set_camera_follow(bool enabled)
         return;
     }
 
-    /* THE DEPENDENCY IS NOT ENFORCED HERE, and the reason is worth keeping.
+    /* The dependency is not enforced here, and the reason is worth keeping.
      *
      * The passive camera is built on free look, so the two have to move together, and the obvious
      * place to do it is right here: ask free look to switch on before arming this. That was tried
-     * and it desynced. Free look REFUSES while the player phases are not running, which is exactly
-     * the state the game is in while the developer menu is open, so the one moment a player is ever
+     * and it desynced. Free look REFUSES while the player phases are not running, exactly the
+     * state the game is in while the developer menu is open, so the one moment a player is ever
      * going to tick this box is the one moment free look will not take it. The row then read ON
      * with the feature off, and the poll below had already recorded the new value so it never
      * retried.
@@ -130,10 +133,10 @@ void enhanced_input_set_camera_follow(bool enabled)
      * them in order once the phases are running again, using the refusal handling it already has.
      * What is left here is only the half that can never refuse. */
 
-    /* TWO HOLDERS OF ONE SETTING, and both have to be told. camera_follow.c owns the answer for
+    /* Two holders of one setting, and both have to be told. camera_follow.c owns the answer for
      * the sideways walk's own lean, and free_look.c keeps a copy of the same switch because it
      * reads it on the render clock, where reaching for the ini would be wrong. Telling only one
-     * of them is what made the developer menu's row look dead: it wrote the file, the file was
+     * of them made the developer menu's row look dead: it wrote the file, the file was
      * not read back, and the feature kept whatever it had been given at launch. */
     input_config_set_camera_follow(enabled);
     camera_follow_configure(enabled, input_config()->strafe,
@@ -220,17 +223,18 @@ void enhanced_input_set_free_look(bool enabled)
     }
 }
 
-/* --- Strafe and FreeLook, re-read while the game runs -------------------------------------------
+/* --- The four switches, re-read while the game runs --------------------------------------------
  *
  * The controls screen pushes outward: it applies each switch and then writes it. Nothing read the
  * file back, so a value written by anything else, the developer overlay's own rows being the reason
  * this exists, did nothing until the next launch.
  *
  * The comparison is against the last value seen in the file, not against the setting in force, and
- * that is the whole care in this function. Both setters can refuse: strafe needs the keyboard axis
- * and mouse look, free look needs a follow camera this build recognises. Comparing against the
- * live setting would then find a difference the setter had just declined to close, retry it a
- * second later, and write a warning to the log every second for the rest of the session.
+ * that is the whole care in this function. Two of the setters can refuse: strafe needs the
+ * keyboard axis and mouse look, free look needs a follow camera this build recognises; the
+ * passive camera and the air steer never refuse. Comparing against the live setting would then
+ * find a difference the setter had just declined to close, retry it a second later, and write a
+ * warning to the log every second for the rest of the session.
  *
  * The care has a second half, which cost a released build. A setter can switch ANOTHER of these off
  * as a dependency of its own: free look going off takes the passive camera and the air steer with
@@ -241,17 +245,26 @@ void enhanced_input_set_free_look(bool enabled)
  * rest of the session.
  *
  * So a key this pass did NOT act on is re-read from the live setting afterwards, and a key it DID
- * act on is left alone. That is what keeps both halves true at once: the key that was just refused
+ * act on is left alone. That keeps both halves true at once: the key that was just refused
  * keeps its file-derived shadow and is not retried, and the key that was changed underneath us is
  * corrected. Only on a pass that acted, so an idle second still costs four reads and four compares.
  *
  * Once a second. The file is on disk and a whole second is invisible next to reaching for a key.
+ *
+ * A second measured on the engine's frame delta, not counted in frames. This counted 60 frames and
+ * called that a second, which it is only at 60 frames a second; this game's frame rate is uncapped,
+ * so on a fast machine the file was being re-read three or four times as often as intended. The
+ * frame count survives as the fallback for a frame clock that did not resolve, the one case where
+ * there is nothing better to count.
  */
-#define SWITCH_POLL_FRAMES 60u
+#define SWITCH_POLL_SECONDS 1.0f
+#define SWITCH_POLL_FRAMES_UNCLOCKED 60u
 
 static void poll_switches(void)
 {
     static uint32_t frames;
+    static float    elapsed;
+    static bool     clock_seen;
     static bool     seeded;
     static bool     seen_strafe;
     static bool     seen_free_look;
@@ -273,10 +286,21 @@ static void poll_switches(void)
         seen_air_control   = input_config()->air_control;
         seeded             = true;
     }
-    if (++frames < SWITCH_POLL_FRAMES) {
-        return;
+    {
+        const float step = frame_clock_seconds();
+
+        if (step > 0.0f) {
+            clock_seen = true;
+            elapsed += step;
+        }
+        ++frames;
+        if (clock_seen ? (elapsed < SWITCH_POLL_SECONDS)
+                       : (frames < SWITCH_POLL_FRAMES_UNCLOCKED)) {
+            return;
+        }
+        elapsed = 0.0f;
+        frames  = 0;
     }
-    frames = 0;
 
     strafe        = ini_read_bool(INPUT_SECTION, "Strafe", seen_strafe);
     free_look     = ini_read_bool(INPUT_SECTION, "FreeLook", seen_free_look);
@@ -285,7 +309,8 @@ static void poll_switches(void)
 
     if (strafe != seen_strafe) {
         seen_strafe = strafe;
-        enhanced_input_set_strafe(strafe);     /* logs whichever branch it took, refusals included */
+        /* logs whichever branch it took, refusals included */
+        enhanced_input_set_strafe(strafe);
         did_strafe = true;
     }
     if (free_look != seen_free_look) {

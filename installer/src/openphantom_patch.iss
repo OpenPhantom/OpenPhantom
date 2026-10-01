@@ -4,15 +4,22 @@
 ; install time. What sits in dist is already only the pieces these rows install: the patch as it
 ; comes out of its release archive, and 33 files of the 851 in VideoLAN's zip.
 
-; PatchVersion records which release dist\patch was taken from, on the PATCH's own line, 0.4.x. It
-; is not AppVer: the two numbers were merged at 1.5.0 and have been split again at j0nny's asking,
-; so this counts patch releases while AppVer counts installer builds. Nothing derives a URL or a
-; path from either, and the binaries inside dist\patch carry AppVer's line, not this one.
+; PatchVersion records which patch release dist\patch was taken from, and it is the number the
+; binaries inside it carry in their version resources. AppVer follows it by a fixed rule: the
+; first number one higher, the other two the same, so patch 1.0.0 ships in installer 2.0.0.
+; Nothing derives a URL or a path from either.
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "0.4.3"
+#define PatchVersion       "1.0.0"
 #define PatchSrc           "dist\patch"
+
+; The rule above, checked rather than promised. Both numbers are set by hand in two files, and a
+; copy of a version number has gone stale here before.
+#define PatchMajorEnd      Pos(".", PatchVersion)
+#if AppVer != Str(Int(Copy(PatchVersion, 1, PatchMajorEnd - 1)) + 1) + Copy(PatchVersion, PatchMajorEnd)
+  #error AppVer must be PatchVersion with its first number one higher, e.g. 2.0.0 for patch 1.0.0
+#endif
 
 ; dxwrapper is DirectDraw-to-Direct3D translation from a separate upstream project, not part of the
 ; patch, so it is kept apart from it: dist\patch is refreshed wholesale out of a patch release and
@@ -32,7 +39,7 @@
 
 ; FFmpeg, for the cutscene converter. It is the only thing in this installer that used to be fetched
 ; after installation rather than during it: convert_movies.ps1 downloads a pinned 106 MB build on
-; first use and caches it. Carrying it is what makes the whole thing work with no network at all.
+; first use and caches it. Carrying it lets the whole thing work with no network at all.
 ;
 ; This is the exact build the script pins, so it is what would have been downloaded anyway:
 ; ffmpeg-9.0-essentials_build.zip, sha256 e6b54767a6065919048f1a098eb27211ca4e12b4348a05d88777a5855d0b6e71
@@ -92,6 +99,7 @@ Name: "patch\variable_fov";        Description: "{cm:CompFov}";         Types: e
 Name: "patch\hud_ratio_scaling";   Description: "{cm:CompHud}";         Types: everything full custom
 Name: "patch\decal_fix";           Description: "{cm:CompDecal}";       Types: everything full custom
 Name: "patch\dialogue_anim_fix";   Description: "{cm:CompDialogueAnim}"; Types: everything full custom
+Name: "patch\dialogue_menu_fix";   Description: "{cm:CompDialogueMenu}"; Types: everything full custom
 Name: "patch\camera_handback_fix"; Description: "{cm:CompCameraHandback}"; Types: everything full custom
 Name: "patch\view_distance_fix";   Description: "{cm:CompViewDist}";    Types: everything full custom
 
@@ -102,6 +110,10 @@ Name: "patch\controller_input";    Description: "{cm:CompController}";  Types: e
 Name: "patch\dismemberment";       Description: "{cm:CompDismember}";   Types: everything custom
 Name: "patch\dev_overlay";         Description: "{cm:CompDevOverlay}";  Types: everything custom
 Name: "patch\diagnostics";         Description: "{cm:CompDiag}";        Types: everything custom
+
+; A mode of its own rather than a repair, so it is offered and "full" leaves it out. Its section in
+; engine_fixes.ini ships with Enabled=1, so ticking it is all a player has to do.
+Name: "patch\multiplayer";         Description: "{cm:CompMultiplayer}"; Types: everything custom
 
 Name: "patch\fmv_player";          Description: "{cm:CompFmvPlayer}";   Types: everything custom
 
@@ -122,17 +134,19 @@ Source: "{#PatchSrc}\dinput.dll"; DestDir: "{app}"; \
 Source: "{#PatchSrc}\engine_fixes.ini"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
+; What an animation ordinal means on each of the game's 164 characters, read beside the ini by the
+; multiplayer and by the panel's model swap, whose list past the five heroes is this file. Data the
+; release generates and nobody edits, so it is replaced like the ini.
+Source: "{#PatchSrc}\characters.ini"; DestDir: "{app}"; \
+    Components: patch; Flags: ignoreversion
+
 Source: "{#PatchSrc}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
-; The file above came out of the patch archive and is accurate about that archive: the patch and
-; DxWrapper, and nothing else. It says of libVLC and FFmpeg that neither "is redistributed here",
-; which was true while the installer downloaded them and is not any more.
-;
-; Rather than edit it, which would make it wrong about the archive it describes and would be undone
-; the next time dist\patch is refreshed, this second file covers what the installer adds and opens
-; by correcting that one paragraph. Installed with the patch, because everything it names is
-; installed with the patch or under it.
+; The file above came out of the patch archive and describes that archive: the patch, DxWrapper and
+; the two libraries inside multiplayer.dll, and where libVLC and FFmpeg come from when they are
+; present. This second file covers what the installer adds beyond the archive. Installed with the
+; patch, because everything it names is installed with the patch or under it.
 Source: "dist\THIRD-PARTY-NOTICES-Installer.txt"; DestDir: "{app}"; \
     Components: patch; Flags: ignoreversion
 
@@ -147,14 +161,14 @@ Source: "{#DxWrapperSrc}\dxwrapper-License.txt"; DestDir: "{app}"; \
 ; foreign one is the difference between the wrapper this release was tested with and one nobody has
 ; run.
 ;
-; This copy is not upstream's untouched: six settings are tuned for this game, and they are listed
+; This copy is not upstream's untouched: the settings tuned for this game are listed, and counted,
 ; in THIRD-PARTY-NOTICES.md. Re-apply them when dist\dxwrapper is refreshed, by diffing this file
 ; against the dxwrapper.ini inside the release archive rather than by working from that list.
 Source: "{#DxWrapperSrc}\dxwrapper.ini"; DestDir: "{app}"; \
     Components: patch\wrapper; Flags: ignoreversion
 
 ; One row per DLL, and the component name matches the file name so a rename is reviewable. The fixes
-; are independent of each other, which is why there is no dependency between the rows.
+; are independent of each other, so there is no dependency between the rows.
 Source: "{#PatchSrc}\mods\crt_copy_fix.dll";        DestDir: "{app}\mods"; \
     Components: patch\crt_copy_fix;        Flags: ignoreversion
 Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
@@ -162,21 +176,14 @@ Source: "{#PatchSrc}\mods\ground_clip_fix.dll";     DestDir: "{app}\mods"; \
 Source: "{#PatchSrc}\mods\enhanced_resolution.dll"; DestDir: "{app}\mods"; \
     Components: patch\enhanced_resolution; Flags: ignoreversion
 
-; The menu artwork converter. Like the movie one it carries no content: it makes bigger copies of
-; the pictures already inside the player's own big.lab and LOCALIZE.LAB, into a menu_hd folder the
-; DLL mounts and reads the scale out of. Without it MenuScale finds no converted artwork and leaves
-; the menus exactly as they shipped, so the two halves install together or the feature is absent.
-;
-; The menu artwork converter is not installed any more, and neither is Setup's use of it. The patch
-; enlarges each menu picture as the game loads it, at whatever resolution is in force, so converting
-; a set beforehand buys nothing: it produces the same nearest neighbour pixels, costs between 210 MB
-; and 840 MB, and holds the menus at the one size it was made for instead of letting them follow a
-; resolution change. MenuArtDirectory still mounts a folder of that name, which is how anybody who
-; has drawn better artwork than the originals supplies it; that is a different thing from enlarging
-; the originals and is the half worth keeping.
+; There is no menu artwork converter any more. The patch enlarges each menu picture as the game
+; loads it, at whatever resolution is in force, so a set converted beforehand bought nothing: the
+; same nearest neighbour pixels, between 210 MB and 840 MB on disk, and menus held at the one size
+; the set was made for. MenuArtDirectory still mounts a folder of that name, for anybody who has
+; drawn better artwork than the originals; that is a different thing from enlarging the originals.
 
-; The converter Setup itself runs, now for the cutscenes alone. It is a plain Win32 console program
-; and therefore the only one of the three converters that works everywhere: Wine runs it exactly as
+; The converter Setup itself runs, for the cutscenes. It is a plain Win32 console program and
+; therefore the one of the three cutscene converters that works everywhere: Wine runs it exactly as
 ; Windows does, so an installation under Proton or Lutris converts during Setup instead of leaving
 ; the player a pair of shell commands. It produces output byte-identical to the scripts beside it,
 ; which is checked rather than assumed.
@@ -208,6 +215,8 @@ Source: "{#PatchSrc}\mods\decal_fix.dll";           DestDir: "{app}\mods"; \
     Components: patch\decal_fix;           Flags: ignoreversion
 Source: "{#PatchSrc}\mods\dialogue_anim_fix.dll";   DestDir: "{app}\mods"; \
     Components: patch\dialogue_anim_fix;   Flags: ignoreversion
+Source: "{#PatchSrc}\mods\dialogue_menu_fix.dll";   DestDir: "{app}\mods"; \
+    Components: patch\dialogue_menu_fix;   Flags: ignoreversion
 Source: "{#PatchSrc}\mods\camera_handback_fix.dll"; DestDir: "{app}\mods"; \
     Components: patch\camera_handback_fix; Flags: ignoreversion
 Source: "{#PatchSrc}\mods\render_guard.dll";        DestDir: "{app}\mods"; \
@@ -230,6 +239,15 @@ Source: "{#PatchSrc}\mods\dev_overlay.dll";         DestDir: "{app}\mods"; \
     Components: patch\dev_overlay;         Flags: ignoreversion
 Source: "{#PatchSrc}\mods\diagnostics.dll";         DestDir: "{app}\mods"; \
     Components: patch\diagnostics;         Flags: ignoreversion
+Source: "{#PatchSrc}\mods\multiplayer.dll";         DestDir: "{app}\mods"; \
+    Components: patch\multiplayer;         Flags: ignoreversion
+
+; HACL* and Mbed TLS are compiled into multiplayer.dll, so their licence texts install with it. In
+; the game folder, because THIRD-PARTY-NOTICES.txt names them and says they sit next to it.
+Source: "{#PatchSrc}\hacl-License.txt"; DestDir: "{app}"; \
+    Components: patch\multiplayer; Flags: ignoreversion
+Source: "{#PatchSrc}\mbedtls-License.txt"; DestDir: "{app}"; \
+    Components: patch\multiplayer; Flags: ignoreversion
 
 Source: "{#PatchSrc}\mods\fmv_player.dll";          DestDir: "{app}\mods"; \
     Components: patch\fmv_player;          Flags: ignoreversion
@@ -277,7 +295,7 @@ Source: "{#VlcSrc}\libvlc.dll"; DestDir: "{app}\mods\fmv"; \
 Source: "{#VlcSrc}\libvlccore.dll"; DestDir: "{app}\mods\fmv"; \
     Components: patch\fmv_player\runtime; Flags: ignoreversion
 
-; LGPL, so the licence travels with the binaries.
+; VideoLAN's own licence text, the GPL v2, travels with the binaries.
 Source: "{#VlcSrc}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-License.txt"; \
     Components: patch\fmv_player\runtime; Flags: ignoreversion
 
@@ -299,7 +317,7 @@ Source: "{#VlcSrc}\COPYING.txt"; DestDir: "{app}\mods\fmv"; DestName: "vlc-Licen
 #emit VlcPlugin("packetizer", "libpacketizer_mpeg4audio_plugin.dll")
 #emit VlcPlugin("packetizer", "libpacketizer_copy_plugin.dll")
 
-; drawable is the module that accepts a window handle from outside libVLC, which is what
+; drawable is the module that accepts a window handle from outside libVLC, the handle that
 ; libvlc_media_player_set_hwnd hands over. Without it the handle reaches nothing and libVLC opens a
 ; window of its own instead: the movie plays, in a bordered window in the middle of the screen,
 ; rather than in the borderless monitor-sized overlay. It fails silently because a machine with VLC

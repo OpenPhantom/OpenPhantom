@@ -37,7 +37,7 @@ which is useful in itself.
 ```
 legacy/          Fixes that patch the original 1999 executable in memory.
                  Self contained: its own CMake project, its own tests, its own rules.
-engine/          The reimplementation.
+engine/          The new engine.
 editor/          Tools for maps, assets and game content.
 installer/       Packaging and setup.
 ```

@@ -5,11 +5,11 @@
 [![GitHub Stars](https://img.shields.io/github/stars/OpenPhantom/OpenPhantom?style=for-the-badge&label=Stars)](https://github.com/OpenPhantom/OpenPhantom/stargazers)
 [![License](https://img.shields.io/github/license/OpenPhantom/OpenPhantom?style=for-the-badge)](https://github.com/OpenPhantom/OpenPhantom/blob/main/LICENSE)
 
-OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a modern installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom reverse engineers and reconstructs the game's engine, with tools for modding, editing and extending the game.
+OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a modern installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom is building a new open source engine for the game, with tools for modding, editing and extending it.
 
 **[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x) · [Website](https://swopenphantom.org/)
 
-The project has two parts. The legacy patches are useful today: they modify the retail executable in memory so the game you already own runs with modern fixes. The reconstructed engine is the long-term work: rebuilding the game's systems from the ground up as clean source code that can support deeper modding and new features.
+The project has two parts. The legacy patches are useful today: they modify the retail executable in memory so the game you already own runs with modern fixes. The new engine is the long-term work: a modern engine of our own that plays the game from your own copy, built for deeper modding and new features.
 
 <img width="1920" height="400" alt="Star Wars Episode I: The Phantom Menace running at ultrawide resolution with OpenPhantom." src="https://github.com/user-attachments/assets/ad9cd6fb-8bcd-4b25-8d0a-65e221888bfc" />
 
@@ -35,7 +35,7 @@ The project has two parts. The legacy patches are useful today: they modify the 
 |---|---|
 | [`installer/`](installer/) | **Working** A wizard that installs the game from your own disc and then the parts of the patch you tick. It carries no game data; the disc is read on your machine. Everything it installs is inside the installer and nothing is downloaded. See its [README](installer/README.md) |
 | [`legacy/`](legacy/) | **Working** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
-| `engine/` | The reimplementation. Not started |
+| `engine/` | The new engine. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
 
 ## Version numbers
@@ -77,12 +77,13 @@ Full guides for installation, usage and configuration are in the
 
 ## Goals
 
-* Reconstruct the original engine as clean, maintainable source code.
+* Build a new, open source engine of our own that plays The Phantom Menace from your own copy of the game. It ships no game data.
 * Keep the original gameplay. If the 1999 look or feel was intended, it stays.
-* Run on modern systems, including Linux and 64 bit builds.
-* Improve stability, performance and extensibility without changing how the game plays.
-* Provide real tools for editing maps, assets and content.
+* Run natively on Windows and Linux, with the Steam Deck as a first-class target: 64-bit, Direct3D 11, Direct3D 12 and Vulkan, and every kind of controller.
+* Use modern hardware properly, several cores included, so large levels and long draw distances run smoothly.
+* Build an editor for maps, models, dialogue and the game's content, from a single pickup to a whole level.
 * Support community modding, and stay open to contributions.
+* Keep the legacy patches working for the game as it is today, until the new engine replaces them.
 
 ## Getting involved
 

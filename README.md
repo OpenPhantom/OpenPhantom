@@ -23,6 +23,10 @@ The project has two parts. The legacy patches are useful today: they modify the 
 
 *Free camera, no clip and photo mode.*
 
+<img width="1920" height="1080" alt="Star Wars  Episode 1 The Phantom Menace Screenshot 2026 10 01 - 21 21 52 11" src="https://github.com/user-attachments/assets/02f6c873-99b4-40aa-b792-3855fdf21075" />
+
+*Multiplayer Mode*
+
 **Want to play?** Download the [latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest) and run the OpenPhantom installer. It installs the original game from your own disc and applies the available patches and fixes for modern Windows PCs. You don't need to build anything from source.
 
 ## What's Included

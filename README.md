@@ -33,7 +33,6 @@ The project has two parts. The legacy patches are useful today: they modify the 
 | [`legacy/`](legacy/) | **Working** Fixes that patch the original 1999 executable in memory: field of view, resolutions, frame rate, mouse look, music, decals and more. A loader and one DLL per feature, built with CMake. See its [README](legacy/README.md) |
 | `engine/` | The reimplementation. Not started |
 | `editor/` | Tools for maps, assets and game content. Not started |
-| `architecture/` | How the original engine is put together, written down. One note so far, on which toolchain built the retail executable and which engine family it belongs to |
 
 ## Version numbers
 

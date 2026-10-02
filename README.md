@@ -7,7 +7,7 @@
 
 OpenPhantom is a PC fix and modding project for Star Wars Episode I: The Phantom Menace (1999). It gets the original PC game running on Windows 10 and Windows 11, and on Linux and Steam Deck through Proton, with a modern installer that works from your original CD, widescreen and ultrawide resolutions, uncapped FPS, a corrected field of view, mouse look, and working music and video. Alongside the fixes, OpenPhantom is building a new open source engine for the game, with tools for modding, editing and extending it.
 
-**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Discord](https://discord.gg/73UbZN2y7x) · [Website](https://swopenphantom.org/)
+**[Download the latest release](https://github.com/OpenPhantom/OpenPhantom/releases/latest)** · [Installation guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide) · [Multiplayer guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Multiplayer-Guide) · [Discord](https://discord.gg/73UbZN2y7x) · [Website](https://swopenphantom.org/)
 
 The project has two parts. The legacy patches are useful today: they modify the retail executable in memory so the game you already own runs with modern fixes. The new engine is the long-term work: a modern engine of our own that plays the game from your own copy, built for deeper modding and new features.
 
@@ -71,6 +71,7 @@ Full guides for installation, usage and configuration are in the
 [wiki](https://github.com/OpenPhantom/OpenPhantom/wiki):
 
 * [Installation Guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Installation-Guide)
+* [Multiplayer Guide](https://github.com/OpenPhantom/OpenPhantom/wiki/Multiplayer-Guide)
 * [Currently working on, with spoilers](https://github.com/OpenPhantom/OpenPhantom/wiki/Currently-Working-On-Spoilers)
 * [Known Issues](https://github.com/OpenPhantom/OpenPhantom/wiki/Known-Issues)
 * [Reporting Issues with the OpenPhantom Patches](https://github.com/OpenPhantom/OpenPhantom/wiki/Issues)

@@ -1,7 +1,7 @@
 # Legacy engine fixes
 
 Fixes for the original 1999 engine of *Star Wars Episode I: The Phantom Menace*, so the retail game
-runs properly on a current machine. This is not the OpenPhantom reimplementation and it does not
+runs properly on a current machine. This is not the new OpenPhantom engine and it does not
 replace it: it is a loader and a set of small DLLs that patch the retail executable in memory.
 
 Nothing on disk is modified. Drop the loader next to `WMAIN.EXE`, put the fixes you want in

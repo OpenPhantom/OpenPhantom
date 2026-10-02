@@ -39,11 +39,10 @@ legacy/          Fixes that patch the original 1999 executable in memory.
                  Self contained: its own CMake project, its own tests, its own rules.
 engine/          The reimplementation.
 editor/          Tools for maps, assets and game content.
-architecture/    How the original engine is put together, written down.
 installer/       Packaging and setup.
 ```
 
-`legacy/` and `installer/` have something in them, and `architecture/` has one note. The rest are
+`legacy/` and `installer/` have something in them. The rest are
 placeholders. Know that before you plan a large contribution: if you want to start one of them,
 open an issue first so the shape can be agreed before anybody writes a thousand lines.
 

@@ -6,17 +6,17 @@
  *   The speak entry's hull asks before every call it passes on. At the engine's own edge, a line
  *   that starts, and when the line changes, the line is judged: this machine's own body from the
  *   same reads the send makes of it, against the hearing radius its own lock level selects; the far
- *   players where the range gate measures them; the one question whether a scene runs for all,
- *   whether the line is that scene's, spoken within the engine's admission of where the scene
- *   gathers, and whether the scene gathered this player. The engine is then handed the place that
- *   makes its own admission agree with the verdict, field 0 at nought for a line kept alive silent
- *   and field 5 raised for a presented line; after the call both are given their resting values
- *   back, on every path.
+ *   players where the range gate measures them; and, on the host, the one question whether a scene
+ *   of the host's stands and whether the line is that scene's, which it is when the script that
+ *   speaks it is a run of the host's (mp_scene_claim). A client is in no scene, so there a line is
+ *   judged by the radius alone. The engine is then handed the place that makes its own admission
+ *   agree with the verdict, field 0 at nought for a line kept alive silent and field 5 raised for
+ *   a presented line; after the call both are given their resting values back, on every path.
  *
  *   Around that call the engine's answer is read: whether it voiced the line and on which channel,
  *   or why it refused, and later how that voice ended. A line is named in the log with its answer,
- *   up to a cap each level and always while a scene runs for all, and a scene for all is summed up
- *   once, when it ends here.
+ *   up to a cap each level and always while a scene of the host's stands, and such a scene is
+ *   summed up once, when it ends here.
  *
  *   A line of the host said again on a client is judged the same way before it is said, and is not
  *   said at all where this body is not near it. Once the engine has voiced it, an older voice of a
@@ -29,8 +29,9 @@
  *   the pair, and it is unconditional.
  *
  *   The camera of a spoken line is refused on the host where the line is not presented. A scene
- *   for all presents every line of it, so a scene of the host's keeps its camera; a far line said
- *   beside it is no line of it and is refused its camera as outside a scene.
+ *   of the host's presents every line of it to him, so it keeps its camera; a line a far player's
+ *   script speaks while it stands is no line of it and is refused its camera as outside a scene,
+ *   unless the host stands within the radius of it.
  *
  *   The answer a player chose is voiced at his own body. With the player dead the engine takes that
  *   place from no body at all and reads address 0x18; the call that voices it goes through here
@@ -68,9 +69,13 @@ float mp_voice_reach(void);
 /* The radius a line is heard within outside a scene's lock, 0 while the rule is not bound. */
 float mp_voice_hearing_radius(void);
 
+/* The channel a line is voiced on now, below nought for none, for the line that measures a
+ * standing scene. False while the rule is not bound or the cell does not read. */
+bool mp_voice_channel_now(int32_t *channel);
+
 /* The world a line was said in ended: a level's end, a restart, a savegame restored, the session's
- * start and its end. A scene for all still open is summed up, and the lines of the next level are
- * named from the first again. Called from the scene's one exit. */
+ * start and its end. A scene of the host's still open is summed up, and the lines of the next
+ * level are named from the first again. Called from the scene's one exit. */
 void mp_voice_world_ended(void);
 
 /* Around the original of the speak entry, from its hull. The place the engine is to be handed

@@ -16,7 +16,6 @@
 
 #include "mp_channel.h"
 #include "mp_crate_wire.h"
-#include "mp_scene_note.h"
 #include "mp_session.h"
 #include "mp_wire.h"
 
@@ -235,36 +234,28 @@ static void check_an_unchanged_state_is_not_repeated(void)
 }
 
 /* ==============================================================================================
- * The scene and the whole crate note are states too; a crate change note is not.
+ * The roster and the whole crate note side by side; a crate change note is no state.
  * ============================================================================================ */
 
 typedef enum wave_note {
-    WAVE_SCENE,
+    WAVE_ROSTER,
     WAVE_CRATES_WHOLE,
     WAVE_CRATES_CHANGE
 } wave_note_t;
 
-_Static_assert(MP_SCENE_NOTE_MAX_BYTES <= MP_CRATE_NOTE_MAX_BYTES,
+_Static_assert(ROSTER_NOTE_BYTES <= MP_CRATE_NOTE_MAX_BYTES,
                "one buffer of the crate sender's size holds either note");
 
-/* One note for `round`, with its clock at `clock`, encoded with the capacity its own sender hands
- * the encoder. The round is where a reader finds it again: the scene's anchor, the first block's
- * place. Only the scene's age and the crate note's tick carry the clock. */
+/* One note for `round`, with its clock at `clock`. The crate note is encoded with the capacity
+ * its own sender hands the encoder. The round is where a reader finds it again: the roster's
+ * name, the first block's place. Only the roster's round trip and the crate note's tick carry
+ * the clock. */
 static size_t wave_note(wave_note_t which, uint32_t round, uint32_t clock, uint8_t *out)
 {
-    mp_scene_note_t scene;
     mp_crate_note_t crates;
 
-    if (which == WAVE_SCENE) {
-        memset(&scene, 0, sizeof scene);
-        scene.serial       = 1u;
-        scene.generation   = 1u;
-        scene.phase        = (uint8_t)MP_SCENE_PHASE_RUNNING;
-        scene.what         = (uint8_t)MP_SCENE_WHAT_LOCK;
-        scene.trigger_slot = (uint8_t)MP_SCENE_TRIGGER_UNKNOWN;
-        scene.anchor[0]    = (float)round;
-        scene.age_ms       = mp_scene_note_age(clock * ROUND_MS);
-        return mp_scene_note_encode(&scene, out, MP_SCENE_NOTE_MAX_BYTES);
+    if (which == WAVE_ROSTER) {
+        return make_roster((uint8_t)round, (uint16_t)clock, out);
     }
     memset(&crates, 0, sizeof crates);
     crates.tick                 = 1000u + clock;
@@ -304,19 +295,19 @@ typedef struct wave_kind_read {
 } wave_kind_read_t;
 
 typedef struct wave_reader {
-    wave_kind_read_t scene;
+    wave_kind_read_t roster;
     wave_kind_read_t whole;
     wave_kind_read_t change;
-    uint32_t         torn;   /* a note of either tag that would not decode */
+    uint32_t         torn;   /* a crate note that would not decode */
 } wave_reader_t;
 
 static void wave_reader_init(wave_reader_t *reader)
 {
     memset(reader, 0, sizeof *reader);
-    reader->scene.last  = -1;
+    reader->roster.last = -1;
     reader->whole.last  = -1;
     reader->change.last = -1;
-    reader->scene.newer_each_time  = true;
+    reader->roster.newer_each_time = true;
     reader->whole.newer_each_time  = true;
     reader->change.newer_each_time = true;
 }
@@ -334,16 +325,11 @@ static void read_wave_notes(size_t k, wave_reader_t *reader)
 {
     uint8_t         note[MP_CHANNEL_MESSAGE_BYTES];
     size_t          bytes = 0;
-    mp_scene_note_t scene;
     mp_crate_note_t crates;
 
     while (mp_session_read_reliable(&s_client[k], 0, note, sizeof note, &bytes)) {
-        if (mp_scene_note_is_note(note, bytes)) {
-            if (!mp_scene_note_decode(note, bytes, &scene)) {
-                ++reader->torn;
-                continue;
-            }
-            wave_take(&reader->scene, (int)scene.anchor[0]);
+        if (bytes == ROSTER_NOTE_BYTES && note[0] == 0x8Fu) {
+            wave_take(&reader->roster, (int)note[9]);
         } else if (mp_crate_is_note(note, bytes)) {
             if (!mp_crate_note_decode(note, bytes, &crates)) {
                 ++reader->torn;
@@ -355,25 +341,26 @@ static void read_wave_notes(size_t k, wave_reader_t *reader)
     }
 }
 
-/* The host repeats its scene once a second and its whole crate note as often, and in between a
- * change goes at once. To a client whose acknowledgements do not come back, every one of them used
- * to take a seat of its own; now a second copy in the same substep overwrites the first before it
- * went out. A scene whose only news is its age is left out while the first is on its way. A whole
- * crate note is never such a repeat, because its tick is part of what it says (the check below
- * this one says why): it shrinks the copy on its way, and the next waits outside the channel, so
- * the kind still holds two seats however long the silence. */
+/* The host repeats its roster and its whole crate note, and in between a change goes at once. To
+ * a client whose acknowledgements do not come back, every one of them used to take a seat of its
+ * own; now a second copy in the same substep overwrites the first before it went out. A roster
+ * whose only news is a round trip is left out while the first is on its way. A whole crate note
+ * is never such a repeat, because its tick is part of what it says (the check below this one says
+ * why): it shrinks the copy on its way, and the next waits outside the channel, so the kind still
+ * holds two seats however long the silence. */
 static void check_two_in_a_row_take_one_seat(void)
 {
-    static const wave_note_t kinds[] = { WAVE_SCENE, WAVE_CRATES_WHOLE };
-    static const char *const names[] = { "scene", "whole crate" };
+    static const wave_note_t kinds[] = { WAVE_ROSTER, WAVE_CRATES_WHOLE };
+    static const char *const names[] = { "roster", "whole crate" };
     size_t                   i;
     uint32_t                 round;
 
-    ut_section("two scene or whole crate notes in a row take one seat of a channel nobody answers");
+    ut_section("two roster or whole crate notes in a row take one seat of a channel nobody "
+               "answers");
     for (i = 0; i < sizeof kinds / sizeof kinds[0]; ++i) {
         uint32_t refused = 0;
         size_t   most_seats = 0;
-        bool     scene = kinds[i] == WAVE_SCENE;
+        bool     roster = kinds[i] == WAVE_ROSTER;
 
         ut_check(net_build(1u), "the host and one client connected");
         s_net.muted[1] = true;
@@ -388,13 +375,13 @@ static void check_two_in_a_row_take_one_seat(void)
             net_round(1u, NULL, NULL);
             most_seats = seats_to_client() > most_seats ? seats_to_client() : most_seats;
         }
-        ut_checkf(refused == 0u && most_seats == (scene ? 1u : 2u) &&
-                      mp_session_reliable_pending(&s_host) == (scene ? 1u : 3u),
+        ut_checkf(refused == 0u && most_seats == (roster ? 1u : 2u) &&
+                      mp_session_reliable_pending(&s_host) == (roster ? 1u : 3u),
                   "40 %s notes later whose clock alone moved, at the most %u seat(s) and %u "
                   "pending: %s", names[i], (unsigned)most_seats,
                   (unsigned)mp_session_reliable_pending(&s_host),
-                  scene ? "one each, the age is no news"
-                        : "two seats and one waiting, the tick is part of the state");
+                  roster ? "one each, the round trip is no news"
+                         : "two seats and one waiting, the tick is part of the state");
     }
 }
 
@@ -447,19 +434,19 @@ static void check_whole_change_whole_to_a_silent_client(void)
 
 /* Both change every substep while the client is silent: each kind holds its shrunk copy and its
  * newest, never more, and each waits outside the channel in a row of its own. */
-static void check_a_changing_scene_and_crates_take_two_seats_each(void)
+static void check_a_changing_roster_and_crates_take_two_seats_each(void)
 {
     wave_reader_t reader;
     uint32_t      refused = 0;
     size_t        most_seats = 0;
     uint32_t      round;
 
-    ut_section("a scene and a whole crate note changing every substep take two seats each");
+    ut_section("a roster and a whole crate note changing every substep take two seats each");
     wave_reader_init(&reader);
     ut_check(net_build(1u), "the host and one client connected");
     s_net.muted[1] = true;
     for (round = 0u; round < 100u; ++round) {
-        refused += wave_refused(WAVE_SCENE, round, round);
+        refused += wave_refused(WAVE_ROSTER, round, round);
         refused += wave_refused(WAVE_CRATES_WHOLE, round, round);
         net_round(1u, NULL, NULL);
         most_seats = seats_to_client() > most_seats ? seats_to_client() : most_seats;
@@ -474,12 +461,12 @@ static void check_a_changing_scene_and_crates_take_two_seats_each(void)
         net_round(1u, NULL, NULL);
         read_wave_notes(0u, &reader);
     }
-    ut_checkf(reader.scene.last == 99 && reader.whole.last == 99 &&
-                  reader.scene.newer_each_time && reader.whole.newer_each_time &&
+    ut_checkf(reader.roster.last == 99 && reader.whole.last == 99 &&
+                  reader.roster.newer_each_time && reader.whole.newer_each_time &&
                   reader.torn == 0u,
-              "the client read %u scene(s) and %u whole crate note(s), each newer than the one "
-              "before, the last the newest (%d, %d)", (unsigned)reader.scene.count,
-              (unsigned)reader.whole.count, reader.scene.last, reader.whole.last);
+              "the client read %u roster(s) and %u whole crate note(s), each newer than the one "
+              "before, the last the newest (%d, %d)", (unsigned)reader.roster.count,
+              (unsigned)reader.whole.count, reader.roster.last, reader.whole.last);
     ut_check(mp_session_reliable_pending(&s_host) == 0u, "and nothing is pending any more");
 }
 
@@ -639,7 +626,7 @@ int main(void)
     check_an_unchanged_state_is_not_repeated();
     check_two_in_a_row_take_one_seat();
     check_whole_change_whole_to_a_silent_client();
-    check_a_changing_scene_and_crates_take_two_seats_each();
+    check_a_changing_roster_and_crates_take_two_seats_each();
     check_a_crate_change_note_is_never_replaced();
     check_the_bank_is_never_collapsed();
     check_an_empty_note_is_skipped();

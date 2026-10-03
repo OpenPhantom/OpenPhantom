@@ -534,20 +534,24 @@ uint32_t mp_bridge_far_departures(void)
 
 void mp_bridge_far_report_worlds(void)
 {
-    uint32_t holds = 0u;
+    uint32_t holds      = 0u;
+    uint32_t on_its_way = 0u;
     size_t   i;
 
     for (i = 1u; i <= MP_BANK_FAR_MAX; ++i) {
         holds += mp_interp_world_holds(&far_banks[i].interp);
     }
+    for (i = 0u; i < (size_t)MP_FAR_READERS; ++i) {
+        on_its_way += far_world.on_its_way[i];
+    }
     log_info("  the far poses of another world: %u resolved and kept off a puppet; refused to the "
-             "arrival %u, the re-entry %u, the range gate %u, the scene %u, the others %u; %u far "
-             "player(s) gathered for a scene on their way here; %u blend(s) held at a change of "
+             "arrival %u, the re-entry %u, the range gate %u, the scene %u, the others %u; a far "
+             "player was answered as on its way here %u time(s); %u blend(s) held at a change of "
              "world", (unsigned)far_world.unplaced,
              (unsigned)far_world.refused[MP_FAR_READER_ARRIVAL],
              (unsigned)far_world.refused[MP_FAR_READER_REENTRY],
              (unsigned)far_world.refused[MP_FAR_READER_RANGE_GATE],
              (unsigned)far_world.refused[MP_FAR_READER_SCENE],
-             (unsigned)far_world.refused[MP_FAR_READER_OTHER],
-             (unsigned)far_world.on_its_way[MP_FAR_READER_SCENE], (unsigned)holds);
+             (unsigned)far_world.refused[MP_FAR_READER_OTHER], (unsigned)on_its_way,
+             (unsigned)holds);
 }

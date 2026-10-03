@@ -47,6 +47,12 @@
 
 /* The world's own clock inside that record, in seconds, as the substep loop sets it. */
 #define WORLD_CLOCK_SECONDS 0x54u
+
+/* The wall clock of this rig: one frame is drawn a substep, a thirty second of a second, so
+ * the frames and the milliseconds of a deadline are reached in the order they were before the
+ * milliseconds were asked, the frames last. */
+#define RIG_MS_PER_SUBSTEP 32u
+
 #define PLACEMENT_BYTES    0xD0u
 #define PLACEMENTS         2u
 #define CRAWL_SPACES       4u
@@ -440,8 +446,8 @@ static void one_frame(void)
             mp_seat_note_no_body(i);
         }
     }
-    mp_reentry_tick(substeps);
-    mp_respawn_tick(substeps);
+    mp_reentry_tick(substeps, substeps * RIG_MS_PER_SUBSTEP);
+    mp_respawn_tick(substeps, substeps * RIG_MS_PER_SUBSTEP);
     the_host_is_resolved();
     mp_arrival_tick(substeps);
 }

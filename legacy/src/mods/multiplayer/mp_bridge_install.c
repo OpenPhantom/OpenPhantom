@@ -23,6 +23,7 @@
 #include "mp_host_settings.h"
 #include "mp_movie_gate.h"
 #include "mp_pause.h"
+#include "mp_player_help.h"
 #include "mp_puppet.h"
 #include "mp_relay_transport.h"
 #include "mp_relay_wire.h"
@@ -46,7 +47,8 @@
 
 /* The transport went up or is about to come down, said in one place. The cell and the session
  * note are written together by mp_armed, which the developer overlay and enhanced_input read; the
- * pause menu's call is repointed for as long as a transport stands, and put back before it goes. */
+ * pause menu's call is repointed for as long as a transport stands, and put back before it goes;
+ * and the reader of the developer menu's two buttons takes its mark as the transport goes up. */
 static void the_transport_is(bool standing, bool is_host)
 {
     /* The detonation flash is armed here, beside the pause, and not by each way in: a way in
@@ -54,6 +56,9 @@ static void the_transport_is(bool standing, bool is_host)
      * screen, and nothing but the report would say so. */
     if (standing) {
         mp_armed_set_transport(true, is_host);
+        /* The reader of the developer menu's two buttons takes its mark here, at the moment a
+         * session begins to exist: whatever was pressed before it is not this session's. */
+        mp_player_help_arm();
         (void)mp_pause_arm();
         (void)mp_flash_arm();
         return;
@@ -394,6 +399,9 @@ bool mp_bridge_uninstall_udp(void)
     /* Nor does any mod go on reading the host's settings, and the cheat and 60fps cells get this
      * side's own values back now: no frame begin of a session runs after this line. */
     mp_host_settings_withdraw();
+    /* And nobody listens for the developer menu's two buttons: the frame pump that reads them
+     * turns back from here on, so a teleport still under way is ended here with its fade. */
+    mp_player_help_withdraw();
     mp_world_holds_withdraw();
     log_info("the network transport is taken down: every peer was told goodbye, the socket is "
              "closed and the pump timer stopped");

@@ -1,10 +1,11 @@
 /* mp_scene_rule.h: the decisions a scene gate makes, as arithmetic.
  *
  * Pure, so all of them run with no game in the process. The reading of the engine and the hulls
- * are in mp_cutscene.c, and for the rule at the end, which player a scene's script meant, in
- * mp_scene_watch.c; what is here is the decision, which is the part worth driving over every
- * value it can be given. The gathering's own state machines are in mp_scene_flow; what is here are
- * the single questions every one of them asks.
+ * are in mp_cutscene.c; what is here is the decision, which is the part worth driving over every
+ * value it can be given. The state machines of the host's scene are in mp_scene_flow; what is
+ * here are the single questions every one of them asks. The rule at the end, which player an
+ * actor's script meant by what the actor last heard, is one arm of the question whose a script's
+ * run is, which mp_scene_claim_rule asks with the rest of its evidence.
  */
 #ifndef MULTIPLAYER_MP_SCENE_RULE_H
 #define MULTIPLAYER_MP_SCENE_RULE_H
@@ -39,15 +40,22 @@ bool mp_scene_putback_allowed(uint32_t saved_module_state);
  * The lesson of 2026-09-20 was that whoever refuses a raise must refuse the matching lower in the
  * same file. It is not enough to put them in one file: they have to ask ONE question.
  *
- * The third reason is a host gathering the players for a scene: its grab waits until everybody is
- * there. It is in this function and nowhere else, because a grab refused for a reason the put-back
- * does not know is the field run of 2026-09-20 once more. While it holds, a removal of the waiting
- * actor asks the engine's store before it puts anything back; the module is running then, so a
- * refused put-back is harmless and the one the store allows writes a running module onto itself. */
+ * The third reason is a host being brought to the place of a scene a far player set off: its grab
+ * waits until he stands there. It is in this function and nowhere else, because a grab refused
+ * for a reason the put-back does not know is the field run of 2026-09-20 once more. While it
+ * holds, a removal of the waiting actor asks the engine's store before it puts anything back; the
+ * module is running then, so a refused put-back is harmless and the one the store allows writes a
+ * running module onto itself.
+ *
+ * One refusal of the grab is not in this function, on purpose: on a host, a hero on a placement
+ * the player's own release wrote down is refused the grab by the door listener, actor by actor,
+ * until the level ends. Its put-back is not refused. Nothing was parked for that hero, and a hero
+ * that never took the player is removed as the level closes, when the player has no body left
+ * and the engine's put-back, player_resume at 0x00450FF1, returns before it writes anything. */
 bool mp_scene_hero_is_gated_here(bool client_holds, bool suppressed, bool gather_holds);
 
 /* The lock level a script's scene takes. A menu takes level one on every render it draws, and that
- * is not a scene. One number for the gates, the scene watch and the gathering. */
+ * is not a scene. One number for the gates, the scene watch and the host's scene. */
 #define MP_SCENE_LOCK_LEVEL 5
 
 /* Whether a scene runs on this machine by its own cells: the lock at a script's level, or the
@@ -65,7 +73,10 @@ typedef enum mp_scene_mode {
     MP_SCENE_MODE_PARKABLE,     /* standing, a sabre attack or Panaka: the three the engine's own
                                  * grab takes a player out of for a scene */
     MP_SCENE_MODE_DEATH,
-    MP_SCENE_MODE_OTHER         /* a jump, a fall, the water, a ledge, a push block, a gun */
+    MP_SCENE_MODE_OTHER,        /* a jump, a fall, the water, a ledge, a push block */
+    MP_SCENE_MODE_GUN           /* the tripod gun, which the engine's respawn would leave behind
+                                 * with its camera and its turret; read only where the gun's
+                                 * own mode resolved, and otherwise one of the others */
 } mp_scene_mode_t;
 
 /* Whether a player may be moved for a scene now, and if not, why not. */
@@ -73,15 +84,20 @@ typedef enum mp_scene_move {
     MP_SCENE_MOVE_YES = 0,
     MP_SCENE_MOVE_NO_BODY,      /* no body, or the module not running: a load, a respawn */
     MP_SCENE_MOVE_DEAD,
-    MP_SCENE_MOVE_MODE          /* alive, in a mode the teleport would leave in a wrong place */
+    MP_SCENE_MOVE_MODE,         /* alive, in a mode the teleport would leave in a wrong place */
+    MP_SCENE_MOVE_UNREAD,       /* alive, and the mode did not read: waited for, and never taken
+                                 * the hard way, which would respawn a player whose mode nobody
+                                 * knows */
+    MP_SCENE_MOVES
 } mp_scene_move_t;
 
-/* The one question the host asks before it seats itself and a client asks before it seats itself
- * or lets the mirror lock it. The teleport writes a position and clears the ground contact and
- * touches nothing else, so a body in a mode that owns its position, hanging off a ledge, riding a
- * gun, pushing a block, swimming or in the air, would be left in that mode at a place the mode
- * knows nothing about. The allowed list is the engine's own list for the same question: the modes
- * its grab parks a player from. A mode that could not be read is not allowed. `stands` is the
+/* The one question asked before a player is moved to a place, as the host is for a scene. The
+ * teleport writes a position and clears the ground contact and touches nothing else, so a body in
+ * a mode that owns its position, hanging off a ledge, riding a gun, pushing a block, swimming or
+ * in the air, would be left in that mode at a place the mode knows nothing about. The allowed
+ * list is the engine's own list for the same question: the modes
+ * its grab parks a player from. A mode that could not be read is not allowed, and is told apart
+ * from a mode that did read, because what a caller may do about the two differs. `stands` is the
  * engine's live player test. */
 mp_scene_move_t mp_scene_may_move(bool has_body, bool module_running, bool stands,
                                   mp_scene_mode_t mode);
@@ -175,29 +191,39 @@ typedef enum mp_scene_callee {
 mp_scene_callee_t mp_scene_camera_callee(const mp_scene_call_site_t *sites, size_t count,
                                          uintptr_t *entry);
 
-/* Whose a take of the camera by a script's dolly is, on the host. */
-typedef enum mp_scene_camera_owner {
-    MP_SCENE_CAMERA_OF_ITS_OWN = 0,   /* no scene runs: the take is a scene of its own */
-    MP_SCENE_CAMERA_OF_THE_LOCK,      /* the lock stands at a script's level */
-    MP_SCENE_CAMERA_OF_ALL            /* a scene the host gathered everybody for runs */
-} mp_scene_camera_owner_t;
+/* The camera group the engine takes for itself, outside any script: the fall, the tripod gun
+ * and the loading screen. */
+#define MP_SCENE_CAMERA_GROUP_ENGINE 0x0D
 
-/* Inside a locked scene a take is that scene moving its camera, and inside a scene that runs for
- * everybody it is that scene's as well: once the players are gathered, the player who set the
- * scene off stands beside its actor and is its actor's freshest answer, so the take would read as
- * a far player's scene of its own and the host would lose the camera of its own scene. A gathered
- * hero scene need not raise the lock, which is why the lock alone does not answer. Only a take
- * outside both is weighed as a scene of its own. `for_all` is mp_scene_for_all. */
-mp_scene_camera_owner_t mp_scene_camera_owner(int32_t lock_level, bool for_all);
+/* Whether a camera take is refused on a client whatever asked for it: every group but the
+ * engine's own. A scene on a client is the host's, and a client keeps its own view in it. The
+ * script sites are refused by their address before this is asked; of the takes of another
+ * group that leaves the savegame restoring the camera its scene had when it was saved. */
+bool mp_scene_camera_refused_on_a_client(bool client_holds, bool suppressed, int32_t group);
+
+/* The engine's input modes the lock and a menu set: play, and the lock's, which a dialogue
+ * takes as well. A menu sets its own while it is open. */
+#define MP_SCENE_INPUT_MODE_PLAY 0
+#define MP_SCENE_INPUT_MODE_LOCK 4
+
+/* Whether a menu of the engine that has just closed left the player standing: it put back the
+ * input mode its open found, the lock's, and the lock fell while it was open, which a running
+ * world under a session's pause allows. Nothing else is left to set the mode back, because only
+ * a release of the lock does and the lock is at nought. Asked once a frame; `menu_seen` is the
+ * caller's, true once a menu was seen open, and spent by the first look with none. A lock or a
+ * mode that does not read, -1, answers no. */
+bool mp_scene_menu_left_the_input_held(bool *menu_seen, bool menu_open, int32_t lock_level,
+                                       int32_t input_mode);
 
 /* ==============================================================================================
- * Which player a scene's script meant, the rule a host measures by before it moves anybody.
+ * Which player an actor's script meant, by what the actor last heard.
  * ============================================================================================ */
 
 /* How long an actor's last answer about a player still speaks for its script, in substeps. One
  * second at 32 Hz: long enough for a test in one state, a change of state and the scene opcode on
- * the next tick; short enough that a proximity test from a fight a minute ago names nobody. It is
- * the first thing the field measurement is for, and nothing else rests on it yet. */
+ * the next tick; short enough that a proximity test from a fight a minute ago names nobody. Whose
+ * a script's run is rests on it, and with that every door the script takes or gives back
+ * through on the host. */
 #define MP_SCENE_OWN_ANSWER_SUBSTEPS 32u
 
 /* What the actor running a scene's script last heard when it asked for a player. */

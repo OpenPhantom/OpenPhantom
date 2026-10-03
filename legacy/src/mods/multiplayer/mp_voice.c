@@ -15,6 +15,7 @@
 #include "mp_cutscene.h"
 #include "mp_own_body.h"
 #include "mp_range_gate.h"
+#include "mp_scene_claim.h"
 #include "mp_scene_host.h"
 #include "mp_session_now.h"
 #include "mp_voice_bind.h"
@@ -63,7 +64,7 @@ typedef struct flight {
     bool              from_model;    /* this body was read off its model */
     bool              field_set;     /* field 0 went to nought for the call */
     bool              priority_set;  /* field 5 went up for the call */
-    bool              scene;         /* a scene ran for all when the line was judged */
+    bool              scene;         /* a scene of the host's stood when the line was judged */
     bool              named;         /* its line was written */
     bool              let_go;        /* a client says the host's line: older owners let go after */
     bool              reaches;       /* the call gets past the option and the latch to the handle */
@@ -145,7 +146,7 @@ static const float *stow(const float at[3])
 }
 
 /* ==============================================================================================
- * A scene for all, told once when it ends here.
+ * A scene of the host's, told once when it ends here.
  * ============================================================================================ */
 
 static void close_the_scene(void)
@@ -167,15 +168,16 @@ static void open_the_scene(uint16_t serial)
     voice.scene.serial = serial;
 }
 
-/* The falling edge of the one question: the host's scene ends at its own end, a client's when its
- * mirror lets go. Asked once a frame, and by every judged line in between. */
+/* The falling edge of the one question: the host's scene ends at its own end. A client is in no
+ * scene, so there the question never rises. Asked once a frame, and by every judged line in
+ * between. */
 static void watch_the_scene(void)
 {
     mp_scene_known_t known;
     bool             now;
 
     memset(&known, 0, sizeof known);
-    now = mp_scene_for_all(&known);
+    now = mp_scene_host_stands(&known);
     if (!now) {
         close_the_scene();
         return;
@@ -198,8 +200,10 @@ void mp_voice_world_ended(void)
  * The judgement.
  * ============================================================================================ */
 
-/* A line is the scene's by its place alone, on the host as on a client: who speaks it is known to
- * the host only, and a question only one side can ask is one the two answer apart. */
+/* A line is the scene's by whose run speaks it: a scene of the host's stands and the script that
+ * speaks is a run of the host's (mp_scene_claim). Only a host is ever in a scene, so on a client
+ * the scene's clause is off and every line is judged by the radius around this player's own
+ * body. */
 static void judge(mp_voice_origin_t origin, const float *source)
 {
     mp_voice_question_t q;
@@ -215,11 +219,10 @@ static void judge(mp_voice_origin_t origin, const float *source)
         memcpy(q.source, source, sizeof q.source);
         memcpy(voice.flight.source, source, sizeof voice.flight.source);
     }
-    q.scene_for_all = mp_scene_for_all(&scene);
+    q.scene_for_all = mp_scene_host_stands(&scene);
     if (q.scene_for_all) {
-        q.scene_anchor_known = scene.anchor_known;
-        memcpy(q.scene_anchor, scene.anchor, sizeof q.scene_anchor);
-        q.gathered = scene.gathered;
+        q.scene_speaker = mp_scene_claim_run_is_the_hosts();
+        q.gathered      = scene.gathered;
         open_the_scene(scene.serial);
     }
     voice.flight.scene = q.scene_for_all;
@@ -245,8 +248,8 @@ static void judge(mp_voice_origin_t origin, const float *source)
     voice.flight.active = true;
 }
 
-/* Lines of a level are named up to a cap and then only counted; a line said while a scene runs
- * for all is always named. */
+/* Lines of a level are named up to a cap and then only counted; a line said while a scene of the
+ * host's stands is always named. */
 static bool may_name(void)
 {
     if (!voice.flight.scene && voice.named_level >= MP_VOICE_LINES_NAMED) {
@@ -575,8 +578,8 @@ void mp_voice_replay_end(int32_t line_id, int32_t started)
 
 /* Asked by the scene gates at the speak entry's camera take, inside the call the flight belongs
  * to. Only a host refuses: a client's own script cameras are refused before this is asked. A line
- * of a scene for all is presented and keeps its camera; a far line said beside such a scene is
- * refused as it would be outside one. */
+ * of a scene of the host's is presented and keeps its camera; a far line said beside such a scene
+ * is refused as it would be outside one. */
 static bool camera_of_the_line(void)
 {
     if (!voice.flight.active || !session_runs() || !mp_armed_is_host()) {
@@ -764,6 +767,15 @@ float mp_voice_reach(void)
 float mp_voice_hearing_radius(void)
 {
     return voice.bind.bound ? voice.bind.hearing.free : 0.0f;
+}
+
+/* The cell is the one the engine's own "is somebody talking", Dialog_ActorTalking 0x0043116F,
+ * reads while voices are on: the handle of the channel a line is voiced on, below nought for
+ * none. A script that waits for a line to end waits on it. */
+bool mp_voice_channel_now(int32_t *channel)
+{
+    return channel != NULL && voice.bind.bound &&
+           memory_try_read(voice.bind.cells.bark_cell, channel, sizeof *channel);
 }
 
 /* ==============================================================================================

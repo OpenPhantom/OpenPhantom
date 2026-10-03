@@ -1,8 +1,11 @@
-/* overlay_stubs.c: the drawing and input halves of the overlay, stubbed for the two model tests.
+/* overlay_stubs.c: the drawing and input halves of the overlay, stubbed for the model tests.
  *
- * Both overlay_model.c and overlay_groups.c link the real model and the real row sources, and
- * those reach across to the other half of the overlay in three places; the stubs below answer
- * for them, so the two programs share one copy instead of each carrying its own. */
+ * overlay_model.c, overlay_groups.c and the programs beside them link the real model and the
+ * real row sources, and those reach across to the other half of the overlay in a handful of
+ * places; the stubs below answer for them, so the programs share one copy instead of each
+ * carrying its own. */
+#include "overlay_stubs.h"
+
 #include "overlay_draw.h"
 #include "overlay_input.h"
 
@@ -28,8 +31,21 @@ bool overlay_draw_screen(float *out_width, float *out_height)
     return false;
 }
 
+/* There is no panel to close, so a close is only counted. The count is what lets a test say that
+ * a row which has to close the panel before it acts did ask for the close: the two buttons of the
+ * multiplayer group do, and an ask filed under an open panel is read against a player the panel
+ * itself holds. */
+uint32_t overlay_stubs_closes;
+
 void overlay_input_close(void)
 {
+    ++overlay_stubs_closes;
+}
+
+/* Asked by input_owner.c for who owns the pointer. Nothing in a test process opens the panel. */
+bool overlay_input_is_open(void)
+{
+    return false;
 }
 
 /* Reached by the row that binds the key opening the panel. Stubbed rather than linked in, for the

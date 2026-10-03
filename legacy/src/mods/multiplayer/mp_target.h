@@ -34,8 +34,14 @@
  * body at all. The engine answers it as it would with nobody else in the world.
  *
  * Every answer to kind 0 and kind 1 is also remembered per actor, whoever gave it, for the scene
- * watch: which player a scene's script last asked about is the first thing a host has to know
- * before it can gather anyone for that scene.
+ * watch: which player a script last asked about says whose its run is, and with it whose a scene
+ * is that the run sets off. The memory of a placement is let go when its actor is removed, so the
+ * next life of that placement does not open a door on its predecessor's answer.
+ *
+ * For a few actors the engine's own answer, the host, is kept and no far player is weighed against
+ * it: the actors of the host's own scene, an actor that has taken something of the host's and not
+ * given it back, and the actor of a scene just ended (mp_target_rule_claim). Who they are is
+ * asked of whoever was set to answer it; with nobody set, no answer is kept.
  *
  * One kind of actor is answered before either rule: an NPC copy that follows or helps goes with
  * the player it belongs to. Its owner's body while the owner stands, and the engine's own answer
@@ -51,6 +57,7 @@
 #define MULTIPLAYER_MP_TARGET_H
 
 #include "mp_npc_copies.h"
+#include "mp_target_rule.h"
 #include "mp_wire.h"
 
 #include <stdbool.h>
@@ -85,6 +92,17 @@ void mp_target_note_attack(uintptr_t victim_actor, uint32_t attacker_object);
 
 /* A key handed to a new life, a copy's, forgets whom its last one was angry with. */
 void mp_target_forget(uint32_t key);
+
+/* The actor of `key` was removed: what it last heard about the player is nobody's any more. Who
+ * hurt it stays, because a placement that wakes again within that memory is the same fight. */
+void mp_target_forget_answer(uint32_t key);
+
+/* Who says for which actors the host stays the player: it fills what it knows about `actor` into
+ * the evidence, all but whether the engine answered. NULL for nobody, and then no answer is
+ * kept. Asked on a host for every question about the player the engine answered, after the
+ * copies' rule and before a far player is weighed. */
+typedef void (*mp_target_claim_fn_t)(uintptr_t actor, mp_target_claim_evidence_t *evidence);
+void mp_target_set_claim(mp_target_claim_fn_t claim);
 
 /* The body of the player of world slot `slot` on this machine, false when nobody stands there:
  * gone, dead, or not resolved yet. */

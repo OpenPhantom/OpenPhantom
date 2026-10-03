@@ -15,6 +15,9 @@
  * hero keeps the player's quest items, keys, health and general ammunition, and the engine's swap
  * of the six inventory bytes stops rewriting the host's story. Outside a session it does nothing.
  *
+ * And the respawn's hull asks its listener before anything, which may answer that the respawn is
+ * not to be begun: a client's refusal of a warp a script of its own machine asked for.
+ *
  * The prototypes are byte evidence, not guesses: the savegame pair is cdecl with one argument and
  * a status return the single caller tests; respawn and spawn are cdecl with an index, a position
  * pointer and a heading, and every caller clears twelve bytes of stack; despawn takes and returns
@@ -69,6 +72,7 @@ typedef struct mp_lifecycle_state {
     detour_t hull[HULL_COUNT];
     uint32_t entries[HULL_COUNT];
     uint32_t entries_lent[HULL_COUNT];
+    uint32_t respawns_refused;   /* respawns the listener answered no to, never begun */
 
     mp_lifecycle_respawn_listener_t respawn_listener;
 } mp_lifecycle_state_t;
@@ -140,7 +144,10 @@ static int32_t __cdecl hook_restore(int32_t subversion)
 }
 
 /* The listener hears who asked before the respawn is begun: the respawn itself runs over several
- * substeps behind a fade, and the question is only whose call this was.
+ * substeps behind a fade, and the question is only whose call this was. A listener that answers
+ * no has the respawn not begun at all. The engine's body returns nothing and its first statement
+ * is a test that drops the call in silence, so a call not made is one the callers already live
+ * with. A refusal is counted here.
  *
  * engine: void player_respawnAt(i32 heroIndex, const vec3 *at, f32 heading) */
 static void __cdecl hook_respawn_at(int32_t hero_index, const void *at, float heading)
@@ -148,8 +155,10 @@ static void __cdecl hook_respawn_at(int32_t hero_index, const void *at, float he
     uintptr_t caller = (uintptr_t)_ReturnAddress();
     bool      lent;
 
-    if (lifecycle.respawn_listener != NULL) {
-        lifecycle.respawn_listener(caller, hero_index, (const float *)at, heading);
+    if (lifecycle.respawn_listener != NULL &&
+        !lifecycle.respawn_listener(caller, hero_index, (const float *)at, heading)) {
+        ++lifecycle.respawns_refused;
+        return;
     }
     lent = mp_bank_lend_block_begin();
     note_entry(HULL_RESPAWN_AT, lent);
@@ -253,5 +262,9 @@ void mp_lifecycle_report(const char *why)
                      hull_names[which], (unsigned)lifecycle.entries[which],
                      (unsigned)lifecycle.entries_lent[which]);
         }
+    }
+    if (lifecycle.respawns_refused != 0u) {
+        log_info("  %-18s refused %u time(s) by its listener and not begun",
+                 hull_names[HULL_RESPAWN_AT], (unsigned)lifecycle.respawns_refused);
     }
 }

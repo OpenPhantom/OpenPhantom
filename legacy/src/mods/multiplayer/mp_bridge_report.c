@@ -485,7 +485,7 @@ static void report_peers(const mp_session_t *host, const mp_session_t *client)
              (unsigned)most_to_one);
 }
 
-/* The ten state notes, one sentence each, named rather than numbered so that each is its own line
+/* The nine state notes, one sentence each, named rather than numbered so that each is its own line
  * when two runs' reports are compared. What a note was spared says whether the newest state is what
  * travels: copies overwritten before they went, copies in flight shrunk to four bytes, repeats left
  * out while an equal copy was on its way, and copies that waited outside a channel behind a shrunk

@@ -333,13 +333,30 @@ bool mp_body_far_player_stands(size_t index);
  * mp_body_slot_at, and the two differ whenever a foreign asset is worn. */
 int32_t mp_body_hero_at(size_t index);
 
-/* Put bank `index`'s body's collision back after a death clip took it away. The death clip's
- * authored event makes the draw pass zero the object's class and both cylinder words, after which
- * the pair pass never sees the body again; the far player's respawn gives him a new body on his
- * machine and the puppet has none, so this writes the co-op classes and the cylinder saved at the
- * spawn back onto the same object. Checked writes, counted, logged once; false when nothing was
- * saved or a write refused. */
-bool mp_body_collision_restore_at(size_t index);
+/* ============================== A far body in the way of a scene ================================
+ *
+ * While a scene plays on the host, the far players' bodies there are made passable: class 0 on
+ * the object, which every collision test of the engine skips, so no actor of the scene and not the
+ * host's own body is held up by a far player standing where the scene walks. The side and the
+ * cylinder stay. For that time shots, blades and blasts go through the far bodies, and nothing
+ * reads a far player's life off his class.
+ *
+ * One owner writes the class word, per body and only on a change; the rule is mp_contact_rule's,
+ * the owner is mp_body_passable.c. A death clip zeroes the class and both cylinder words; the far
+ * player's respawn gives him a new body on his own machine and the puppet has none, so a revival
+ * is when the co-op class and the cylinder saved at the spawn go back onto the same object,
+ * through the owner, which keeps the body passable instead while a scene wants it so. What the
+ * owner knows of the far player's life is the puppet's dead edge and nothing else. */
+
+/* Whether a scene wants the far bodies passable, said every substep on the host and once more by
+ * the scene's one exit. Bodies are made passable or given back on the change, each once. */
+void mp_body_set_scene_passable(bool passable);
+
+/* The far player of bank `index` died (false) or stands again (true), as the puppet takes the
+ * edge, with `object`, the body the puppet's window holds: the edge is spent there, so the owner
+ * writes onto that object rather than reading the bank's again. True when the owner wrote the
+ * body's class: put back, or made passable for a scene. */
+bool mp_body_collision_note_life_at(size_t index, bool alive, uint32_t object);
 
 /* ================================ The names that mean bank 1 ===================================
  * Every caller that still says "second" means the first far body. These call index 1. */

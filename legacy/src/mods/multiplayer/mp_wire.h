@@ -303,8 +303,12 @@
                               *    became playheads with a mask that means something. */
 
 /* Four tags handed out in one place, so that the two features using them, the scene and the push
- * blocks, cannot take one number twice. */
-#define MP_SCENE_NOTE_TAG 0xA4u   /* the scene the host gathers everybody for */
+ * blocks, cannot take one number twice. The scene's is retired with the wire number unchanged: a
+ * build that still sends it differs in the build of the multiplayer, which a host refuses at the
+ * handshake before any note is said. */
+#define MP_SCENE_NOTE_TAG 0xA4u   /* RETIRED: the host's scene, told to every client while a
+                                   * scene gathered all players; nobody sends it and nobody
+                                   * reads it, and the number stays claimed */
 #define MP_CRATE_NOTE_TAG 0xA5u   /* the host's note of its push blocks */
 #define MP_CRATE_PUSH_TAG 0xA6u   /* a client's wish to push one */
 #define MP_CRATE_FALL_TAG 0xA7u   /* a push block starting to fall, once */

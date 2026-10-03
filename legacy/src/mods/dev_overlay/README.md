@@ -26,16 +26,19 @@ settings now, and a player looking for any of those was looking under the wrong 
   mouse puts it), **Appearance** (who the player looks like), **Level selection** (the skip, and the
   level a new game starts at), **Engine** (the draw distance, the field of view, the fog and the
   subtitle size), **Controls** (the control scheme), **Multiplayer** (the key that opens the
-  multiplayer chat), **Window**, **Frame rate**, **Menus** (this panel's own size and key, and
-  whether this patch's settings appear on the game's own screens) and **Dismemberment**. The three
-  at the top are the three used while standing in a level, which is where the panel is opened from.
+  multiplayer chat, and two buttons for a player who is stuck in a session), **Window**,
+  **Frame rate**, **Menus** (this panel's own size and key, and whether this patch's settings
+  appear on the game's own screens) and **Dismemberment**. The three at the top are the three used
+  while standing in a level, which is where the panel is opened from.
 
   **Engine** names how the engine draws the world, and no DLL: three of them read the rows under
   it. Inside, the group keeps its name, the picture, because its slots and its row ids are written
   against it; the heading changes nothing a player has set or a session locks. **Multiplayer** is
-  a heading of its own for its one row, the chat's key, and it stands directly under **Controls**,
-  where a player looks for a key; **Menus**, where the row would otherwise belong, says neither
-  chat nor key and starts folded near the bottom.
+  a heading of its own. Its first row is the chat's key, and it stands directly under
+  **Controls**, where a player looks for a key; **Menus**, where that row would otherwise belong,
+  says neither chat nor key and starts folded near the bottom. Under the key are the two buttons
+  **Repair lock** and **Teleport to host**, which belong under the word a player in a session
+  looks for when something has gone wrong with it.
 
   It began as one group with a settings row appended, and the settings outgrew the cheats, so a
   reader had to scroll past invincibility to reach the draw distance. A second group, Utilities,
@@ -102,8 +105,11 @@ group that decides this one, and `held back` is one of the three shipped codes t
 are deliberately not offered. There is one more, `see why`: the entity spawner works out its own
 reason for the whole group and writes it as a sentence a few rows up, and the word on the row points
 at that sentence rather than repeating it, because it is longer than a chip and it changes with the
-world. The sentence behind the other kinds is written once, on the row directly under the first row
-that gives that reason. The
+world. Three more belong to the two buttons under **Multiplayer**: `MP only` is a button that has
+nothing to act on without a multiplayer session, `host` is the button that takes a player to the
+host, on the host's own machine, and `running` is a button whose last press the session is still
+working on. The sentence behind the other kinds is written once, on the row directly under the
+first row that gives that reason. The
 pointer is the game's own cursor.
 
 **On a client of a multiplayer session four taken rows read the host's value instead.** The host
@@ -1565,6 +1571,23 @@ to one this panel uses cannot be refused here; the multiplayer then opens the ch
 Nor are the placement keys and the free camera's key checked against the chat's when they are
 bound after it.
 
+## Repair lock and Teleport to host
+
+Two buttons under **Multiplayer**, below the chat's key, for the player who is stuck in a session.
+**Repair lock** gives this player's controls and camera back, whatever holds them; when nothing
+holds them, nothing happens. **Teleport to host** puts this player beside the host. Each acts for
+the player who presses it and for nobody else, which is why the session lock takes neither.
+
+The panel carries neither of them out. A press closes the panel and files an ask in a small
+record (`common/player_help_note`); `multiplayer.dll` acts on it and files its answer in a
+second one. While the free camera flies the panel stays up, and the ask says so.
+
+A button that cannot be pressed says why: `MP only` without a session, `host` for **Teleport to
+host** on the host's own machine, `n/a` when the session's multiplayer does not answer for the
+button, and `running` while the last press is still being worked on. The row `Last:` under the
+buttons shows what the last press came to, in the warning colour when it was refused, and the
+log carries the same as `player help: ...` lines.
+
 ## The subtitle size row
 
 The last two rows of the picture group under **Engine**, and they edit
@@ -1715,6 +1738,12 @@ capture's arm for the group's own block of ids; `overlay_session` holds that the
 can be pressed in a session; `overlay_legend` holds the `press a key` line and `overlay_notice` the
 two kinds of sentence. The row has not run against the game under its new heading, and neither
 have the footer's prompt or the colour of the confirmation.
+
+The two buttons under the chat's key are held by `player_help_note` (the two records and what
+each side refuses), `player_help_row` (when a button is offered or greyed, what a press files,
+the sentences of the line), `overlay_groups` and `overlay_session` (the group's shape without
+and with a session) and `overlay_width`. Both buttons have been pressed in the game, in a four
+player session.
 
 The host's values on a client are held by `overlay_session`, against the real records: the chip of
 every taken row on a host, on a client whose host named all four settings, on one whose host named

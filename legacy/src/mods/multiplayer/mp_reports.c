@@ -23,6 +23,7 @@
 #include "mp_crate.h"
 #include "mp_lobby.h"
 #include "mp_damage.h"
+#include "mp_death_music.h"
 #include "mp_input.h"
 #include "mp_install.h"
 #include "mp_lifecycle.h"
@@ -55,10 +56,12 @@
 #include "mp_npc_copies_bridge.h"
 #include "mp_npc_shot_relay.h"
 #include "mp_pause.h"
+#include "mp_player_help.h"
 #include "mp_pool.h"
 #include "mp_pumps.h"
 #include "mp_reentry.h"
 #include "mp_respawn.h"
+#include "mp_respawn_fade.h"
 #include "mp_round.h"
 #include "mp_scratch_bind.h"
 #include "mp_settings.h"
@@ -104,6 +107,8 @@ void mp_reports_run(const char *why)
     mp_hud_report();
     mp_reentry_report();
     mp_respawn_report();
+    mp_respawn_fade_report();
+    mp_death_music_report();
     mp_arrival_report();
     mp_spawnpoints_report();
     mp_start_report();
@@ -125,6 +130,7 @@ void mp_reports_run(const char *why)
     mp_target_report();
     mp_scene_watch_report();
     mp_scene_report();
+    mp_player_help_report();
     mp_crate_report();
     mp_chat_report();
     mp_chat_input_report();

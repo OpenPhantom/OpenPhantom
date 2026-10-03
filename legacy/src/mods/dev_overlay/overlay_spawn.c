@@ -393,7 +393,7 @@ void overlay_spawn_row(uint32_t slot, bool capturing, overlay_row_t *out)
                     npc_spawn_link_refusal() != NULL ? npc_spawn_link_refusal() : "");
         overlay_row_label(out->label, line);
         out->available = false;   /* a note, never clicked */
-        out->warn      = true;    /* a refusal, and the only note that is one */
+        out->warn      = true;    /* a refusal, and the only note of this group that is one */
         return;
     case SPAWN_HEADING:
         out->kind = OVERLAY_ROW_INFO;

@@ -4,8 +4,8 @@
  * channels, and a six byte dialogue module the hull really hulls; the session is the real reading
  * of the setup note.
  *
- * What it holds the module to: the one question on both roles, the lines of a scene for all and
- * the players it gathered, field 0 back at its resting value on every path a call can take, and
+ * What it holds the module to: the one question on both roles, the lines of a scene of the host's
+ * by whose run speaks them, field 0 back at its resting value on every path a call can take, and
  * the subtitle option written back in the very message that held it back. The hearing radius and
  * the engine's answer are mp_voice_heard's.
  */
@@ -134,72 +134,67 @@ static void check_a_host_whose_clients_left(void)
 }
 
 /* ==============================================================================================
- * The lines of a scene for all.
+ * The lines of a scene of the host's.
  * ============================================================================================ */
 
-static void in_a_scene(const float anchor[3], bool gathered)
+/* A scene of the host's stands, played far from this body; `far_run` says whether the script that
+ * speaks is a far player's run. */
+static void in_a_scene(bool far_run)
 {
+    static const float where[3] = { 0.0f, 90.0f, 0.0f };
+
     si.scene_for_all = true;
     si.anchor_known  = true;
-    si.gathered      = gathered;
+    si.gathered      = true;
+    si.far_run       = far_run;
     si.serial        = 2u;
-    memcpy(si.anchor, anchor, sizeof si.anchor);
+    memcpy(si.anchor, where, sizeof si.anchor);
 }
 
-/* Where the scene gathers is the one thing both sides know of it: a client is never told who
- * speaks a line, so the host does not ask either, and a line is the scene's on every machine when
- * it is spoken within the engine's admission of that place. */
+/* On the host a line is the scene's by whose run speaks it, wherever it is spoken: the scene's own
+ * actors mean the host, and a far player's conversation while the scene stands is his own. */
 static void check_the_lines_of_a_scene(void)
 {
-    static const float near_line[3] = { 0.0f, 30.0f, 0.0f };
-    static const float actor_off[3] = { 0.0f, 90.0f, 0.0f };
-    static const float far_off[3]   = { 0.0f, 400.0f, 0.0f };
-    si_spoken_t        said;
-    mp_voice_replay_t  replay;
-    int32_t            line;
+    si_spoken_t       said;
+    mp_voice_replay_t replay;
+    int32_t           line;
 
-    ut_section("a scene for all presents the lines spoken near where it gathers to a player it "
-               "gathered");
+    ut_section("a scene of the host's presents the lines a run of the host's speaks");
 
     si_set_the_world(true, MP_LOBBY_F_STARTED, false, true);
-    in_a_scene(actor_off, true);
+    in_a_scene(false);
     said = si_say(&si_actor_body, SI_LINE_AT);
     ut_check(said.handed == (const void *)SI_LINE_AT && said.camera,
-             "on the host a line spoken ninety units from where the scene gathers is presented "
-             "far from this body, and keeps its camera");
+             "on the host a line a run of the host's speaks is presented far from this body, and "
+             "keeps its camera");
     said = si_say(&si_other_body, SI_LINE_AT);
     ut_check(said.handed == (const void *)SI_LINE_AT && said.camera,
-             "whoever speaks it: the host asks the place, as a client does");
-    in_a_scene(near_line, true);
-    said = si_say(&si_other_body, SI_LINE_AT);
+             "whichever body speaks it: the one question is whose run it is");
+
+    ut_section("a line a far player's run speaks while the scene stands is none of it");
+
+    in_a_scene(true);
+    said = si_say(&si_actor_body, SI_LINE_AT);
+    ut_check(said.handed != (const void *)SI_LINE_AT && !said.camera,
+             "far from this body it is judged by the radius, withheld, and refused its camera as "
+             "outside a scene");
+    si.far_run = false;
+    said       = si_say(&si_actor_body, SI_LINE_AT);
     ut_check(said.handed == (const void *)SI_LINE_AT && said.camera,
-             "and so is a line thirty units from it");
-    in_a_scene(far_off, true);
-    said = si_say(&si_actor_body, SI_LINE_AT);
+             "and the next line of a run of the host's is the scene's again");
+
+    ut_section("with no scene standing whose run it is decides nothing");
+
+    si.scene_for_all = false;
+    said             = si_say(&si_actor_body, SI_LINE_AT);
     ut_check(said.handed != (const void *)SI_LINE_AT && !said.camera,
-             "a line four hundred units from it is none of the scene's, whoever speaks it, and is "
-             "refused its camera as outside a scene");
-    in_a_scene(near_line, false);
-    said = si_say(&si_actor_body, SI_LINE_AT);
-    ut_check(said.handed != (const void *)SI_LINE_AT && !said.camera,
-             "a host the scene did not gather judges a line of it by the radius");
+             "a line of a run of the host's far from this body is judged by the radius");
 
     si_set_the_world(true, MP_LOBBY_F_STARTED, true, true);
-    in_a_scene(actor_off, true);
     line   = si_next_line();
     replay = mp_voice_replay_begin(MP_VOICE_FROM_HOST, line, SI_LINE_AT);
-    ut_check(replay.say, "a client says a line of the host spoken ninety units from where the "
-             "scene gathers, which the host presents as well");
-    mp_voice_replay_end(line, 1);
-    in_a_scene(near_line, false);
-    line   = si_next_line();
-    replay = mp_voice_replay_begin(MP_VOICE_FROM_HOST, line, SI_LINE_AT);
-    ut_check(!replay.say, "unless the scene left this player where it stood, far from the line");
-    in_a_scene(far_off, true);
-    line   = si_next_line();
-    replay = mp_voice_replay_begin(MP_VOICE_FROM_HOST, line, SI_LINE_AT);
-    ut_check(!replay.say, "and holds back one far from that place and from this body");
-    si.scene_for_all = false;
+    ut_check(!replay.say, "and a client, which is in no scene, holds back a line of the host far "
+             "from its own body");
 }
 
 /* ==============================================================================================

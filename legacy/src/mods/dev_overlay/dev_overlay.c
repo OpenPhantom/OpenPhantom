@@ -36,6 +36,7 @@
 #include "pad_input.h"
 #include "pad_panel.h"
 #include "panel_cage.h"
+#include "player_help_row.h"
 #include "spawn_mode.h"
 #include "start_level.h"
 #include "start_level_row.h"
@@ -46,6 +47,8 @@
 #include "common/host_image.h"
 #include "common/ini.h"
 #include "common/logging.h"
+
+#include <windows.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -112,6 +115,9 @@ static void __cdecl hook_scene_end(void)
     npc_spawn_node_tick();   /* the copies a finished load left held */
     character_model_tick();  /* a model swap the appearance note refused, said again */
     far_model_tick(npc_spawn_node_epoch());   /* the far players' models, after the player's own */
+    /* The session's answer to the two buttons under Multiplayer, before the panel is rebuilt, so
+     * the rows and the click that follows them are decided on one reading. */
+    player_help_row_tick((uint32_t)GetTickCount());
     spawn_mode_frame();   /* the placement mode, on or off: before the owner is read, so a mode
                            * asked for this frame owns the pointer this frame */
     switch (input_owner_sync()) {
@@ -271,6 +277,9 @@ void dev_overlay_install(void)
     (void)model_blade_guard_install();
     /* The answer to the multiplayer's far models says from load on that somebody listens. */
     far_model_install();
+    /* And the empty ask of the two buttons under Multiplayer is on file from load on, so the
+     * multiplayer's reader finds the record the first time a session looks for it. */
+    player_help_row_install();
     pad_input_install();
     if (!cheats_ready) {
         log_warning("neither the game's own cheats nor this project's own could be reached, so "

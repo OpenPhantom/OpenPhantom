@@ -50,7 +50,7 @@ typedef struct seat_watch {
 } seat_watch_t;
 
 typedef struct wish_state {
-    bool  named_known;   /* a scene's gathering named a seat for this machine's player */
+    bool  named_known;   /* the host's scene named a seat for this machine's player */
     float named[3];
     float named_heading;
 

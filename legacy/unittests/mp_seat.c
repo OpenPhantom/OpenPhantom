@@ -11,6 +11,7 @@
 #include "unittest.h"
 
 #include "mp_seat.h"
+#include "mp_seat_internal.h"
 #include "mp_signatures.h"
 #include "mp_signatures_world.h"
 
@@ -19,6 +20,15 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/* One search with nothing to keep away from but the bodies handed in. */
+static mp_seat_outcome_t probe(const float target[3], bool beside, uint8_t slot,
+                               const mp_seat_body_t *bodies, size_t body_count,
+                               mp_seat_counts_t *counts, float seat[3])
+{
+    return mp_seat_probe_avoiding(target, beside, slot, bodies, body_count, NULL, counts,
+                                  seat);
+}
 
 static void check_what_the_ground_under_a_point_means(void)
 {
@@ -141,7 +151,7 @@ static void check_the_engine_side_refuses_without_a_game(void)
 
     memset(&counts, 0, sizeof counts);
     ut_section("nothing resolves in a test process");
-    ut_check(mp_seat_probe(SOMEWHERE, true, 1u, NULL, 0u, &counts, seat) == MP_SEAT_NO_PROBES,
+    ut_check(probe(SOMEWHERE, true, 1u, NULL, 0u, &counts, seat) == MP_SEAT_NO_PROBES,
              "a search before the install refuses rather than calling a null");
     ut_check(seat[0] == 0.0f && seat[1] == 0.0f && seat[2] == 0.0f,
              "and writes no seat, so a caller cannot use one it never got");
@@ -149,7 +159,7 @@ static void check_the_engine_side_refuses_without_a_game(void)
     ut_check(!mp_seat_level_running(), "and no level runs");
     mp_seat_install();
     ut_check(!mp_seat_probes_resolved(), "the install names what did not resolve and stays off");
-    ut_check(mp_seat_probe(SOMEWHERE, false, 0u, NULL, 0u, &counts, seat) == MP_SEAT_NO_LEVEL,
+    ut_check(probe(SOMEWHERE, false, 0u, NULL, 0u, &counts, seat) == MP_SEAT_NO_LEVEL,
              "after it, with no level, a search says so rather than probing the last level");
     mp_seat_report("the test's seat:", "the test's fallback:", &counts);
     ut_check(true, "and the report runs with nothing behind it");

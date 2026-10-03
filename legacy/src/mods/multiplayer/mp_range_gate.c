@@ -2,7 +2,9 @@
 #include "mp_range_gate.h"
 
 #include "mp_bank.h"
+#include "mp_cells.h"
 #include "mp_range_gate_rule.h"
+#include "mp_scene_claim_rule.h"
 #include "mp_signatures.h"
 #include "mp_stopwatch.h"
 
@@ -50,8 +52,11 @@ typedef struct range_gate_state {
     uint32_t engine_said_yes;  /* the engine's own answer stood, nothing was widened */
     uint32_t widened;          /* the engine said no and a far player said yes */
     uint32_t foreign_caller;   /* a call from neither of the two sites; must stay 0 */
-    uint32_t refreshes;
+    uint32_t refreshes;        /* one a substep, which makes it the clock of the wakings below */
     uint32_t bodies_seen;      /* far bodies copied over all refreshes */
+
+    /* Which far player the activation scan was last answered yes for, by placement record. */
+    mp_scene_woke_t woke;
 } range_gate_state_t;
 
 static range_gate_state_t gate;
@@ -141,6 +146,35 @@ static bool is_one_of_the_two(uintptr_t caller)
  * when it is yes, which is the common case and costs one call and one branch.
  * ============================================================================================ */
 
+/* The activation scan was answered yes for a placement the engine itself had out of range: which
+ * far player stood in it is written down by the placement's record. The two callers hand the test
+ * different places, and that is how the record is known with no read: the scan measures from the
+ * placement's authored position inside its record, the removal from the actor's own position.
+ *
+ *   004371F5  81 C2 AC 00 00 00   add edx, 0ACh    the record's position
+ *   004371FB  52                  push edx
+ *   004371FC  E8 B2 1C FF FF      call within_range      returns to 00437201, the scan
+ *   004332EC  05 D0 00 00 00      add eax, 0D0h    the actor's position
+ *   004332F1  50                  push eax
+ *   004332F2  E8 BC 5B FF FF      call within_range      returns to 004332F7, the removal
+ *
+ * The first far bank in range is the one named; two far players within the same radius of one
+ * placement stand together, and either's place is the scene's. */
+static void note_the_waking(const float at[3], float radius)
+{
+    size_t rows = sizeof gate.players.have / sizeof gate.players.have[0];
+    size_t bank;
+
+    for (bank = 1u; bank < gate.players.count && bank < rows; ++bank) {
+        if (gate.players.have[bank] &&
+            mp_range_gate_within(at, gate.players.positions[bank], radius)) {
+            mp_scene_woke_note(&gate.woke, (uintptr_t)at - MP_PLACEMENT_POSITION, (uint8_t)bank,
+                               gate.refreshes);
+            return;
+        }
+    }
+}
+
 static int __cdecl hook_within_range(const float at[3], const float player[3], float radius)
 {
     uintptr_t caller = (uintptr_t)_ReturnAddress();
@@ -160,6 +194,9 @@ static int __cdecl hook_within_range(const float at[3], const float player[3], f
     }
     if (mp_range_gate_any_within(&gate.players, at, radius)) {
         ++gate.widened;
+        if (caller == gate.callers[SCAN_CALLER]) {
+            note_the_waking(at, radius);
+        }
         return 1;
     }
     return answer;
@@ -245,6 +282,7 @@ void mp_range_gate_set_armed(bool armed)
     gate.armed = armed;
     if (!armed) {
         memset(&gate.players, 0, sizeof gate.players);
+        mp_range_gate_forget_woken();
     }
 }
 
@@ -296,6 +334,17 @@ bool mp_range_gate_measuring(void)
     return gate.installed && gate.armed && gate.far_body != NULL;
 }
 
+bool mp_range_gate_woke_for_far(uintptr_t record, uint8_t *bank)
+{
+    return gate.installed && mp_scene_woke_for(&gate.woke, record, gate.refreshes, bank);
+}
+
+void mp_range_gate_forget_woken(void)
+{
+    memset(gate.woke.row, 0, sizeof gate.woke.row);
+    gate.woke.next = 0u;
+}
+
 bool mp_range_gate_wake_redirected(void)
 {
     uint32_t displacement = 0;
@@ -324,4 +373,9 @@ void mp_range_gate_report(void)
              (unsigned)gate.foreign_caller);
     log_info("    the far bodies it measured against: %u refresh(es) carrying %u body(s)",
              (unsigned)gate.refreshes, (unsigned)gate.bodies_seen);
+    log_info("    the placements woken for a far player: %u answer(s) to the activation scan "
+             "written down with the player they were for, kept %u substep(s) each; %u row(s) "
+             "taken by a newer one while still fresh",
+             (unsigned)gate.woke.noted, (unsigned)MP_SCENE_WOKE_SUBSTEPS,
+             (unsigned)gate.woke.replaced);
 }

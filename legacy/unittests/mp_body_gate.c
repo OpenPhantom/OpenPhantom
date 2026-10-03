@@ -107,6 +107,11 @@ static void check_the_gate(void)
 #define WORLD_CLOCK       0x54u
 #define OBJECT_CLASS      0x04u
 
+/* The wall clock of this rig: one frame is drawn a substep, a thirty second of a second, so
+ * the frames and the milliseconds of a deadline are reached in the order they were before the
+ * milliseconds were asked, the frames last. */
+#define RIG_MS_PER_SUBSTEP 32u
+
 /* The fan's contact code, the one the player's handler answers with the burning death. */
 #define CODE_BURN 0x1Eu
 #define CAUSE_BURN 3
@@ -408,6 +413,10 @@ typedef struct host_side {
 static host_side_t host;
 static uint32_t    substep;
 
+/* The wall clock the two ticks are handed, and how far one drawn frame moves it. */
+static uint32_t rig_ms_per_frame = RIG_MS_PER_SUBSTEP;
+static uint32_t rig_clock_ms;
+
 static const seen_t *host_view(void)
 {
     uint32_t at = substep > HOST_LAG ? substep - HOST_LAG : 0u;
@@ -522,8 +531,9 @@ static void one_substep(void)
 
     mp_reentry_note_peer(0u, HOST_AT, 0.0f, true);
     mp_seat_note_body(0u, HOST_AT, 0.0f, true);
-    mp_reentry_tick(substep);
-    mp_respawn_tick(substep);
+    rig_clock_ms += rig_ms_per_frame;
+    mp_reentry_tick(substep, rig_clock_ms);
+    mp_respawn_tick(substep, rig_clock_ms);
 }
 
 static void run_substeps(uint32_t count)
@@ -780,6 +790,54 @@ static void check_an_empty_slot_on_a_living_body(void)
              "and the report names it");
 }
 
+/* The deadline of a wish and the patience over a corpse, on a machine that draws two hundred and
+ * forty frames a second. Both counted frames alone: such a machine gave a wish up in under four
+ * seconds and warned about every corpse after one, the length of the engine's own fade. The
+ * player module is parked, as a scene parks it, so the wish waits at the engine's gate for as
+ * long as this check wants. It runs through the two ticks, so it also pins which stamp belongs
+ * to which wait. */
+static void check_the_waits_on_a_fast_machine(void)
+{
+    const uint32_t FRAME_MS = 4u;
+    uint32_t       frames   = 0u;
+
+    ut_section("a wish and a corpse at 240 frames a second: the time decides with the frames");
+    open_a_level(3u, true);
+    rig_ms_per_frame = FRAME_MS;
+    put_u32(eng.hero_block + MP_HERO_BLOCK_MODULE_STATE, 0u);
+    while (eng.deaths == 0u && frames < 400u) {
+        one_substep();
+        ++frames;
+    }
+    ut_check(eng.deaths == 1u && mp_respawn_pending(),
+             "he dies in the fan and the wish is held at the engine's gate");
+
+    gate_log_mark();
+    run_substeps(MP_RESPAWN_DEADLINE_FRAMES + 20u);
+    ut_check(mp_respawn_pending() &&
+                 gate_log_count("is dropped rather than carried out", NULL) == 0u,
+             "nine hundred and twenty frames are under four seconds: the wish is not given up");
+    ut_check(gate_log_count("the way back is still being tried", NULL) == 0u,
+             "and no line calls him a corpse nothing has brought back, 680 frames past the old "
+             "patience");
+
+    run_substeps(100u);
+    ut_check(gate_log_count("the way back is still being tried", NULL) == 1u,
+             "past four seconds the corpse watch says once that the way back is being tried");
+    ut_check(mp_respawn_pending(), "which it is");
+
+    run_substeps(MP_RESPAWN_DEADLINE_MS / FRAME_MS - MP_RESPAWN_DEADLINE_FRAMES - 220u);
+    ut_check(mp_respawn_pending() &&
+                 gate_log_count("is dropped rather than carried out", NULL) == 0u,
+             "a hundred frames short of fifteen seconds it is still held");
+    run_substeps(200u);
+    ut_check(gate_log_count("is dropped rather than carried out", NULL) == 1u,
+             "and past fifteen seconds it is given up, once, with the line that says so");
+
+    rig_ms_per_frame = RIG_MS_PER_SUBSTEP;
+    put_u32(eng.hero_block + MP_HERO_BLOCK_MODULE_STATE, 1u);
+}
+
 int main(void)
 {
     bool installed;
@@ -798,6 +856,7 @@ int main(void)
     check_a_host_that_keeps_reporting();
     check_the_nodes();
     check_an_empty_slot_on_a_living_body();
+    check_the_waits_on_a_fast_machine();
 
     mp_body_report("the end of the test");
     mp_damage_report("the end of the test");

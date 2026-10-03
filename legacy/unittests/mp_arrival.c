@@ -21,11 +21,21 @@
 #include "mp_lobby.h"
 #include "mp_respawn.h"
 #include "mp_seat.h"
+#include "mp_seat_internal.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/* One search with nothing to keep away from but the bodies handed in. */
+static mp_seat_outcome_t probe(const float target[3], bool beside, uint8_t slot,
+                               const mp_seat_body_t *bodies, size_t body_count,
+                               mp_seat_counts_t *counts, float seat[3])
+{
+    return mp_seat_probe_avoiding(target, beside, slot, bodies, body_count, NULL, counts,
+                                  seat);
+}
 
 /* ---- the wire, as this test chooses to answer it -------------------------------------------- */
 
@@ -227,7 +237,7 @@ static void check_it_moves_nobody_with_no_game(void)
     ut_section("nothing resolves in a test process");
     ut_check(!mp_respawn_installed(),
              "the world probes are absent, which is what the seat search hangs on");
-    ut_check(mp_seat_probe(anchor, true, 1u, NULL, 0u, &counts, seat) != MP_SEAT_FOUND,
+    ut_check(probe(anchor, true, 1u, NULL, 0u, &counts, seat) != MP_SEAT_FOUND,
              "so no point beside anybody is ever produced");
     ut_check(seat[0] == 0.0f && seat[1] == 0.0f && seat[2] == 0.0f,
              "and a refused search writes no seat, so a caller cannot use one it never got");

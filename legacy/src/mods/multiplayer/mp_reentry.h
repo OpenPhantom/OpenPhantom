@@ -43,8 +43,10 @@
  *
  * The rule set counts its wait in SUBSTEPS, because that is the ladder both machines agree on.
  * mp_respawn counts its gate deadline in drawn FRAMES, because its own tick is the frame pump and
- * a wish must not expire while a level loads. The two are not the same ladder, so the wait is held
- * here, in substeps, and mp_respawn is asked for a re-entry with no delay once it has run out.
+ * a wish must not expire while a level loads, and in milliseconds of the wall clock beside them,
+ * because frames alone shrink with the frame rate. The two are not the same ladder, so the wait
+ * is held here, in substeps, and mp_respawn is asked for a re-entry with no delay once it has
+ * run out.
  * Handing the rule set's substeps to mp_respawn as a frame count would have been a silent unit
  * change: at sixty drawn frames a second the shipped default of five seconds, 160 substeps,
  * would have come back after 2.7 seconds, and at thirty after 5.3, neither the number the host
@@ -68,12 +70,17 @@
  * enough that a player who is never coming back learns it from the log rather than from waiting. */
 #define MP_REENTRY_GIVE_UP_SUBSTEPS 640u
 
-/* How long a corpse may lie before the run report says so, in DRAWN FRAMES, because the corpse
- * watch runs from the frame pump and the pump is the one clock that keeps running while the
- * simulation does not. Four seconds at sixty: past every fade the engine's own death plays, and
- * well short of the twenty a wish is given before it is dropped, so a player who is genuinely
- * stuck is named while he is still looking at the screen wondering. */
+/* How long a corpse may lie before the run report says so. Two numbers, and both have to be
+ * reached. The DRAWN FRAMES are there because the corpse watch runs from the frame pump and the
+ * pump is the one clock that keeps running while the simulation does not. The milliseconds are
+ * there because frames alone measure the frame rate: two hundred and forty of them are the four
+ * seconds that were meant at sixty a second and one second at two hundred and forty, which is
+ * the length of the engine's own fade, so every death was named there. Four seconds: past every
+ * fade the engine's own death plays, and well short of the twenty a wish is given before it is
+ * dropped, so a player who is genuinely stuck is named while he is still looking at the screen
+ * wondering. */
 #define MP_REENTRY_CORPSE_PATIENCE_FRAMES 240u
+#define MP_REENTRY_CORPSE_PATIENCE_MS     4000u
 
 /* What the outcome cell is raised to when a co-op session has nobody left standing. The campaign
  * loop spins while that cell reads 2 and leaves it for any other value; 1 rolls the credits and 3
@@ -146,8 +153,9 @@ typedef enum mp_reentry_corpse {
  * of it (field run 2026-09-17, team deathmatch on bridge.b3d). WAITING and STUCK are the same
  * facts with and without a wish, so each of them carries its own latch at the caller. */
 mp_reentry_corpse_t mp_reentry_corpse_state(bool corpse, uint32_t corpse_frames,
-                                            bool wish_pending, bool waiting_for_host,
-                                            bool session, bool level_running);
+                                            uint32_t corpse_ms, bool wish_pending,
+                                            bool waiting_for_host, bool session,
+                                            bool level_running);
 
 /* Whether a death that arrived is one this machine has to act on. A death with no slot set for
  * this machine is nobody's, because acting on it would put THIS player back for somebody else's
@@ -203,9 +211,10 @@ int mp_reentry_pick_anchor(const mp_reentry_peer_t *peers, size_t count, const f
  * wish; the rest are counted so that a report can say a death was heard and not acted on. */
 void mp_reentry_note_death(const mp_death_note_t *note);
 
-/* Once per drawn frame, with the host's substep count. It keeps the survival switch true to the
- * moment, and it is where a held wish is carried out, retried or given up. */
-void mp_reentry_tick(uint32_t host_substeps);
+/* Once per drawn frame, with the host's substep count and the wall clock the corpse watch's
+ * patience is measured in. It keeps the survival switch true to the moment, and it is where a
+ * held wish is carried out, retried or given up. */
+void mp_reentry_tick(uint32_t host_substeps, uint32_t now_ms);
 
 /* True while this client is down with nobody standing and is waiting for the host's choice. The
  * picture asks, because a player looking at a corpse needs to know that somebody else is picking

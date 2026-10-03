@@ -113,14 +113,6 @@ bool mp_voice_hear_from(uint32_t min_free_bits, uint32_t min_scene_bits, int32_t
  * V.
  * ============================================================================================ */
 
-/* A line of the scene that runs for all: spoken within the engine's admission of where it gathers
- * its players. The same question on the host and on a client, asked of what both know. */
-static bool of_the_scene(const mp_voice_question_t *q)
-{
-    return q->source_known && q->scene_anchor_known &&
-           within(q->source, q->scene_anchor, q->admit);
-}
-
 mp_voice_answer_t mp_voice_judge(const mp_voice_question_t *question)
 {
     mp_voice_answer_t answer;
@@ -136,7 +128,7 @@ mp_voice_answer_t mp_voice_judge(const mp_voice_question_t *question)
         return answer;
     }
     /* The engine asks the lock in the same call that pushes the radius, so this machine asks its
-     * own lock: a client in the host's scene stands at the scene's level itself. */
+     * own lock: a host in a scene of his own stands at the scene's level, a client never does. */
     answer.hear = question->lock_at_scene ? question->hear_scene : question->hear_free;
     if (question->source_known && question->body_known) {
         dx = question->source[0] - question->body[0];
@@ -151,7 +143,11 @@ mp_voice_answer_t mp_voice_judge(const mp_voice_question_t *question)
         answer.distance = -1.0f;
     }
 
-    answer.of_scene = question->scene_for_all && of_the_scene(question);
+    /* A line of the scene that stands is one a run of the host's speaks. It is asked of the
+     * speaker's run and not of the place: a far player's conversation beside the scene is spoken
+     * at the scene's place and is none of it, and an actor of the scene speaks its lines from
+     * wherever its script walks it. */
+    answer.of_scene = question->scene_for_all && question->scene_speaker;
     if (answer.of_scene && question->gathered) {
         answer.verdict  = MP_VOICE_PRESENTED;
         answer.by_scene = true;

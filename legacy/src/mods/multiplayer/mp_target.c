@@ -1,4 +1,10 @@
-/* mp_target.c: whom an NPC fights when there is more than one player. See mp_target.h. */
+/* mp_target.c: whom an NPC fights when there is more than one player. See mp_target.h.
+ *
+ * SIZE NOTE: a little over 600 lines. The hull, the two memories it keeps for every actor, who
+ * hurt it and what it last heard, and the readers of both share the one table and its clock, so
+ * they stay together; the decisions are mp_target_rule's. The next seam is the facing test, its
+ * site and its counts, which the hull only asks one question of.
+ */
 #include "mp_target.h"
 
 #include "mp_armed.h"
@@ -89,6 +95,9 @@ typedef struct target_state {
 
     const mp_npc_copies_t *copies;   /* the host's table, for whom a copy goes with */
     mp_target_owner_fn_t   owner;    /* where an owner stands */
+    mp_target_claim_fn_t   claim;    /* for which actors the host stays the player */
+    uint32_t               kept[MP_TARGET_CLAIMS];   /* answers kept for the host, by the reason */
+    uint32_t               answers_forgotten;        /* with the removal of their actor */
 
     uint32_t calls;           /* kind 0 or 1 answered while hosting */
     uint32_t to_far;          /* answered with a far player instead of the local one */
@@ -231,6 +240,19 @@ void mp_target_forget(uint32_t key)
     }
 }
 
+void mp_target_forget_answer(uint32_t key)
+{
+    if (key < MP_TARGET_SLOTS && target.answer[key].have) {
+        target.answer[key].have = false;
+        ++target.answers_forgotten;
+    }
+}
+
+void mp_target_set_claim(mp_target_claim_fn_t claim)
+{
+    target.claim = claim;
+}
+
 /* The remembered attacker of this actor, if the memory is fresh and still names a player's body,
  * standing or not. */
 static uint32_t remembered_attacker(uintptr_t actor)
@@ -359,6 +381,27 @@ static void remember_the_answer(uintptr_t actor)
     target.answer[index] = entry;
 }
 
+/* Whether the engine's own answer is kept for this actor, the host being the player it means
+ * (mp_target_rule_claim). Asked only where the engine answered: with the host dead the rule that
+ * follows is today's. */
+static bool kept_for_the_host(uintptr_t actor, int32_t ok)
+{
+    mp_target_claim_evidence_t evidence = { false, false, false, false, false };
+    mp_target_claim_t          claim;
+
+    if (ok == 0 || target.claim == NULL) {
+        return false;
+    }
+    target.claim(actor, &evidence);
+    evidence.engine_answered = true;
+    claim = mp_target_rule_claim(&evidence);
+    if (claim == MP_TARGET_CLAIM_NONE) {
+        return false;
+    }
+    ++target.kept[claim];
+    return true;
+}
+
 /* The menu's facing test is the engine's to answer, for this machine's own player. What the
  * extension would have said is still worked out, only to be counted: it is the number of menus a
  * far player would have opened here, or a dead host would have crashed on. */
@@ -393,6 +436,9 @@ static void note_the_facing_test(uintptr_t actor, const float here[3], const flo
  * wrote rather than to the body it chose: kind 1 can answer with an ally, and an ally is a
  * perfectly good answer that a far player only beats by being closer.
  *
+ * Two kinds of actor are answered before a far player is weighed, in this order: a copy that goes
+ * with its owner, and an actor the host stays the player for, whose answer is the engine's own.
+ *
  * engine: int resolve_target(character *actor, vec3 *out, i16 kind) */
 static int32_t __cdecl hook_resolve_target(uintptr_t actor, float *out, int32_t kind)
 {
@@ -426,6 +472,10 @@ static int32_t __cdecl hook_resolve_target(uintptr_t actor, float *out, int32_t 
         return ok;
     }
     if (goes_with_its_owner(actor, out, &ok)) {
+        remember_the_answer(actor);
+        return ok;
+    }
+    if (kept_for_the_host(actor, ok)) {
         remember_the_answer(actor);
         return ok;
     }
@@ -562,6 +612,15 @@ void mp_target_report(void)
              "both answered as the engine answers for the host, %u of them with no target",
              (unsigned)target.following, (unsigned)target.to_owner,
              (unsigned)target.owner_down, (unsigned)target.host_owned, (unsigned)target.nobody);
+    log_info("the player of a scene (the host): %u answer(s) kept for the host, %u for an actor "
+             "of his scene, %u for an actor that had taken the camera, the lock or the bars here "
+             "and not given back, %u for the actor of a scene just ended; %u answer(s) forgotten "
+             "with the removal of their actor",
+             (unsigned)(target.kept[MP_TARGET_CLAIM_SCENE] + target.kept[MP_TARGET_CLAIM_TAKER] +
+                        target.kept[MP_TARGET_CLAIM_AFTER]),
+             (unsigned)target.kept[MP_TARGET_CLAIM_SCENE],
+             (unsigned)target.kept[MP_TARGET_CLAIM_TAKER],
+             (unsigned)target.kept[MP_TARGET_CLAIM_AFTER], (unsigned)target.answers_forgotten);
     if (target.left_alone_count == 0u) {
         log_info("the facing test of the conversation menu: NOT left to the engine, because its "
                  "site did not resolve or did not call the resolver, so it is answered like every "

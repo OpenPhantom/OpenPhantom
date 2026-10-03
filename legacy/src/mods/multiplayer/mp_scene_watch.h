@@ -1,22 +1,31 @@
-/* mp_scene_watch.h: which player a scene's script meant, on the host, and the doors a scene's
- * gathering begins at.
+/* mp_scene_watch.h: the doors of a script on the host, heard and judged.
  *
- * A scene on the host begins inside the script of one actor: the lock opcode, the camera dolly, a
- * warp, or a spawn that puts the hero on a placement carrying the handover flag. Which player that
- * script meant, nothing could say until the watch was built. The engine asks for "the player", the
- * target resolver answers with whichever player it chose, and the cache the engine keeps of that
- * answer is written again by the actor's next question of any kind.
+ * A scene on the host begins inside the script of one actor: the lock opcode, a warp, or a spawn
+ * that puts the hero on a placement carrying the handover flag. And every script takes and gives
+ * back through a few calls of the engine: the bars, the camera, the lock, and their releases. A
+ * scene is the host's alone, the far players go on playing through it, and their scripts run on
+ * the host all the same. So each of those calls is judged by whose the run is.
  *
- * Two instruments. A hull on the head of ai_run knows whose script is running, and the target
- * resolver keeps each actor's last answer about a player. The doors are heard through listeners of
- * the modules that already hull them: the lock and the camera dolly in mp_cutscene, the respawn in
- * mp_lifecycle, the spawner in mp_arena. At each door the rule in mp_scene_rule names the player:
- * the actor's own fresh answer, the last attacker of an actor that died, or the host as the anchor.
+ * Three instruments. A hull on the head of ai_run tells whose script is running. The doors are
+ * heard through listeners of the modules that already hull them: the lock, the bars, the camera
+ * and their releases in mp_cutscene, the respawn in mp_lifecycle, the spawner in mp_arena. And at
+ * each door mp_scene_claim says whose the run is: the host's, or a far player's by the actor's
+ * own fresh answer, its last attacker or the player its placement woke for.
  *
- * What the watch does with that answer is the gathering's (mp_scene_host): a lock, a hero and a
- * warp begin one, and the hull on ai_run holds the scene's actor while it gathers. A camera alone
- * that a far player's scene asked for is refused, so the host's view is not swung to where that
- * player stands.
+ * What follows from the answer:
+ *
+ *   A run of the host's takes and gives back as the engine does with nobody else in the world,
+ *   and a lock or a hero of it begins a scene of the host's that runs at once.
+ *
+ *   A far player's run takes nothing of the host's: its bars and its camera are refused and
+ *   remembered for the run, and it gives back only what its own actor took. Its lock, or its
+ *   hero, is the door of a scene. With no scene of the host's standing that scene is the host's
+ *   from the door on: what the run was refused before it is made up, the lock goes through, and
+ *   the host's scene (mp_scene_host) holds the actor and brings the host to that player's place.
+ *   With a scene of the host's standing nothing of it is the host's: the lock is refused and that
+ *   scene plays without him, a hero is left to the engine, and both are said with a warning.
+ *
+ *   A warp is the engine's on a host, whoever it meant, and is refused on a client.
  *
  * Installed on the session's way in and never when the DLL loads, so single player runs none of
  * it. The hull and every listener ask one predicate first, the target resolver's own: hosting,

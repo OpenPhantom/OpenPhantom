@@ -422,24 +422,32 @@ static void take_the_start(void)
          * missing, so a transfer that stalled resumes on its own. A player who does not want to
          * wait has ZURUECK, which is a decision they can see themselves making. */
         if (from_save && setup.save_id != 0u) {
-            uint32_t now = mp_wallclock_ms();
+            uint32_t        now   = mp_wallclock_ms();
+            bool            ready = mp_bridge_savefile_ready(setup.save_id, setup.save_bytes);
+            mp_saves_look_t look  = MP_SAVES_LOOK_UNREADABLE;
+            mp_save_t       header;
 
-            if (mp_bridge_savefile_ready(setup.save_id, setup.save_bytes)) {
-                mp_save_t header;
-
+            if (ready) {
                 save = mp_bridge_savefile_path();
+                look = mp_bridge_savefile_look(setup.save_id, setup.save_bytes, &header);
+            }
+            if (ready && look == MP_SAVES_LOOK_NO_LEVEL) {
                 /* A file whose header names no shipped level is a save of a level loaded by path,
                  * and such a save carries the HOST's absolute path. It would
                  * be opened here as written, on a disk that has no such folder. The level itself
                  * is what this side loads then, as every client did before the file travelled. */
-                if (!mp_saves_read(save, &header)) {
-                    log_warning("the host's savegame is here but its header names no level of "
-                                "the game's own table, so this side begins the level fresh");
-                    save = NULL;
-                }
-            } else {
+                log_warning("the host's savegame is here but its header names no level of "
+                            "the game's own table, so this side begins the level fresh");
+                save = NULL;
+            } else if (!ready || look != MP_SAVES_LOOK_SAVE) {
+                /* Not here yet, or here and not readable in this moment. Neither is a reason to
+                 * begin the level fresh; the band says the file is coming and the next frame
+                 * looks again. A file that stays unreadable is written or asked for again by its
+                 * own module, which makes it not ready in between. */
                 char text[CAPTION_MAX];
                 bool overdue;
+
+                save = NULL;
 
                 /* A host that has gone is not a transfer that stalls: the band says what the
                  * connection is doing instead, and the wait goes on in case it comes back. */

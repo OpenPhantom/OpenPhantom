@@ -187,10 +187,10 @@ bool mp_start_level_running(void);
 bool mp_start_place_at(const float position[3], float heading);
 
 /* The same placement for a seat a scene hands out, and the scene's seat goes first. The placement
- * holds one pose, and an arrival after the host's savegame and a gathering for a scene can both
- * want it at once; the seat the scene hands out is the place every other player is being brought
- * to, so it wins, and an arrival asked for while it is held is set aside and counted. A scene's
- * seat replaces an arrival that was still held, counted as well. */
+ * holds one pose, and an arrival after the host's savegame and a seat of a scene can both want it
+ * at once; the seat is the place a scene waits for its host at, or the place beside the host a
+ * player asked to be put at, so it wins, and an arrival asked for while it is held is set aside
+ * and counted. A scene's seat replaces an arrival that was still held, counted as well. */
 bool mp_start_place_for_scene(const float position[3], float heading);
 
 /* What a new pose does to the one the placement holds. */

@@ -13,10 +13,11 @@
  * probe runs its own probes at the destination's height, so two points at a height nobody stands
  * at would ask about a line nobody walks.
  *
- * SIZE NOTE: under 600 lines. The one search every seat goes through, the re-entry's, the arrival's
- * and a scene's: the probes, the verdict per candidate, the places a wish keeps away from and the
- * report. The wish went to mp_seat_wish.c along the seam this note named. The next seam is the
- * seats that ended a life, mp_seat_note_seated to mp_seat_world_ended, which only judge reads.
+ * This is the one search every seat goes through, the re-entry's, the arrival's and the host's
+ * place for a scene: the probes, the one ring loop with its order, the verdict per candidate, the
+ * places a wish keeps away from and the report. The wish itself is mp_seat_wish.c. Should the
+ * file pass 600 lines again, the seam is the seats that ended a life, mp_seat_note_seated to
+ * mp_seat_world_ended, which only judge reads.
  */
 #include "mp_seat.h"
 
@@ -276,12 +277,13 @@ static bool line_is_walkable(const float from[3], const float to[3])
 }
 
 /* The verdict on one candidate, in the order the header of mp_seat_rule gives: the walkable line
- * first because it is the cheapest way to reject a candidate behind a wall, the floor next because
- * its answer is also the snap, what that floor is, the places this player is kept away from, the
- * bodies on the snapped seat, and the head clearance last because it has to run at the snapped
- * height. `on_a_ring` asks for the walkable line from the anchor, which every ring candidate
- * needs, around a body and around a point alike: a floor of its own within the band is also what
- * a room behind a thin wall has. `seat` carries the snapped point. */
+ * first because it is the cheapest probe to reject a candidate behind a wall, the floor next
+ * because its answer is also the snap, what that floor is, the places this player is kept away
+ * from, the bodies on the snapped seat, and the head clearance last because it has to run at the
+ * snapped height.
+ * `on_a_ring` asks for the walkable line from the anchor, which every ring candidate needs, around
+ * a body and around a point alike: a floor of its own within the band is also what a room behind
+ * a thin wall has. `seat` carries the snapped point. */
 static mp_seat_verdict_t judge(const float anchor[3], const float candidate[3], bool on_a_ring,
                                const mp_seat_body_t *bodies, size_t body_count,
                                const mp_seat_avoid_t *avoid, float seat[3])
@@ -355,10 +357,16 @@ static void count_refused(mp_seat_counts_t *counts, mp_seat_verdict_t verdict,
     }
 }
 
-mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uint8_t slot,
-                                         const mp_seat_body_t *bodies, size_t body_count,
-                                         const mp_seat_avoid_t *avoid, mp_seat_counts_t *counts,
-                                         float seat[3])
+/* The one ring loop. Every search runs it, whatever its order of directions and whatever it
+ * refuses on top of the probes: the rings outside, the near one first, and on each ring the
+ * directions in the order handed in. `anchor_floor` gets the reading of the floor under the
+ * target. */
+static mp_seat_outcome_t search_the_rings(const float target[3], bool beside,
+                                          const mp_seat_search_t *search,
+                                          const mp_seat_body_t *bodies, size_t body_count,
+                                          const mp_seat_avoid_t *avoid,
+                                          mp_seat_counts_t *counts, float seat[3],
+                                          mp_seat_floor_t *anchor_floor)
 {
     static const float RINGS[2] = { MP_SEAT_RING_NEAR, MP_SEAT_RING_FAR };
     float              anchor[3];
@@ -366,7 +374,6 @@ mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uin
     uint16_t           surface = 0u;
     mp_seat_floor_t    floor;
     mp_seat_verdict_t  verdict;
-    size_t             start;
     size_t             ring;
     size_t             step;
     bool               rings_walkable;
@@ -385,6 +392,7 @@ mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uin
     }
     ++counts->anchors_tried;
     floor = read_floor(target, &distance, &surface);
+    *anchor_floor = floor;
     if (floor != MP_SEAT_FLOOR_OK) {
         count_anchor(counts, floor);
         return MP_SEAT_ANCHOR_MOVING;
@@ -405,13 +413,12 @@ mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uin
     if (!rings_walkable) {
         return MP_SEAT_NONE_FREE;
     }
-    start = mp_seat_rule_ring_start(slot);
     for (ring = 0; ring < sizeof RINGS / sizeof RINGS[0]; ++ring) {
         for (step = 0; step < (size_t)MP_SEAT_RING_STEPS; ++step) {
             float offset[2];
             float candidate[3];
 
-            mp_seat_rule_ring_offset(start, step, RINGS[ring], offset);
+            mp_seat_rule_ring_offset(search->order[step], 0u, RINGS[ring], offset);
             candidate[0] = anchor[0] + offset[0];
             candidate[1] = anchor[1] + offset[1];
             candidate[2] = anchor[2];
@@ -425,11 +432,36 @@ mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uin
     return MP_SEAT_NONE_FREE;
 }
 
-mp_seat_outcome_t mp_seat_probe(const float target[3], bool beside, uint8_t slot,
-                                const mp_seat_body_t *bodies, size_t body_count,
-                                mp_seat_counts_t *counts, float seat[3])
+mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uint8_t slot,
+                                         const mp_seat_body_t *bodies, size_t body_count,
+                                         const mp_seat_avoid_t *avoid, mp_seat_counts_t *counts,
+                                         float seat[3])
 {
-    return mp_seat_probe_avoiding(target, beside, slot, bodies, body_count, NULL, counts, seat);
+    mp_seat_search_t search;
+    mp_seat_floor_t  floor = MP_SEAT_FLOOR_OK;
+
+    memset(&search, 0, sizeof search);
+    mp_seat_rule_slot_order(slot, search.order);
+    return search_the_rings(target, beside, &search, bodies, body_count, avoid, counts, seat,
+                            &floor);
+}
+
+mp_seat_outcome_t mp_seat_probe_ordered(const float target[3], bool beside,
+                                        const mp_seat_search_t *search,
+                                        const mp_seat_body_t *bodies, size_t body_count,
+                                        mp_seat_counts_t *counts, float seat[3],
+                                        mp_seat_floor_t *anchor_floor)
+{
+    mp_seat_floor_t floor = MP_SEAT_FLOOR_OK;
+
+    if (search == NULL) {
+        return MP_SEAT_NO_PROBES;
+    }
+    if (anchor_floor != NULL) {
+        *anchor_floor = MP_SEAT_FLOOR_OK;
+    }
+    return search_the_rings(target, beside, search, bodies, body_count, NULL, counts, seat,
+                            anchor_floor != NULL ? anchor_floor : &floor);
 }
 
 /* ==============================================================================================
@@ -547,7 +579,7 @@ void mp_seat_report_searches(const char *seat_label, const mp_seat_counts_t *cou
              "on a mover %u and over water or a drop %u; candidates refused: %u not walkable, %u "
              "no floor, %u a drop, %u a low ceiling, %u taken by a body, %u on a mover; anchors "
              "tried: %u (%u live re-reads), %u search(es) with nobody standing, %u seat(s) on "
-             "the anchor named by the gathering for a scene; also refused: %u a hurting floor, "
+             "the anchor named by the host's scene; also refused: %u a hurting floor, "
              "%u water, %u too near the death, %u a seat that ended a life",
              seat_label, (unsigned)counts->searches, (unsigned)counts->found_nothing,
              (unsigned)counts->anchor_falling, (unsigned)counts->anchor_on_mover,

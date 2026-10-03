@@ -16,6 +16,7 @@
 #include "unittest.h"
 
 #include "common/host_settings_note.h"
+#include "common/player_help_note.h"
 #include "common/session_note.h"
 #include "common/text.h"
 
@@ -23,7 +24,9 @@
 #include "overlay_model.h"
 #include "overlay_reason.h"
 #include "overlay_rows.h"
+#include "player_help_row.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -273,11 +276,69 @@ static void test_the_host_values_fit(void)
              "and both are withdrawn again");
 }
 
+/* The line under the two buttons of the multiplayer group, which no sweep above meets: it is
+ * there only after a press, and a press is taken only in a session whose multiplayer answers.
+ * Its longest sentence fills a label to the last character, so the sweep runs once more with
+ * that sentence on the line, and the line is read back whole. */
+static void test_the_last_press_fits(void)
+{
+    static const char    LONGEST[] = "    Last: repair lock found nothing holding you";
+    session_note_t       note;
+    player_help_answer_t answer;
+    player_help_ask_t    ask;
+    overlay_row_t        row;
+    bool                 met = false;
+    uint32_t             i;
+
+    ut_section("the line under the two buttons fits at its longest");
+    memset(&note, 0, sizeof note);
+    note.running = true;
+    memset(&ask, 0, sizeof ask);
+    memset(&answer, 0, sizeof answer);
+    answer.version = PLAYER_HELP_NOTE_VERSION;
+    answer.ready   = PLAYER_HELP_READY_LISTENING | PLAYER_HELP_READY_CAN_REPAIR |
+                     PLAYER_HELP_READY_CAN_TELEPORT;
+    ut_check(session_note_publish(&note) && player_help_answer_publish(&answer),
+             "a session with this machine a client, and a multiplayer that listens");
+    overlay_model_reset();
+    overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
+    overlay_model_rebuild();
+    player_help_row_tick(0u);
+    ut_check(player_help_row_press(PLAYER_HELP_KIND_REPAIR) && player_help_ask_read(&ask),
+             "Repair lock is pressed");
+    answer.serial  = ask.serial;
+    answer.kind    = ask.kind;
+    answer.outcome = PLAYER_HELP_OUTCOME_NOTHING;
+    ut_check(player_help_answer_publish(&answer), "and answered: nothing held the player");
+    player_help_row_tick(0u);
+
+    overlay_model_rebuild();
+    open_everything();
+    check_every_row_fits("the OpenPhantom tab with both buttons offered and the line under them");
+    for (i = 0; i < overlay_model_row_count(); ++i) {
+        if (overlay_model_row(i, &row) && row.kind == OVERLAY_ROW_INFO &&
+            row.group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER &&
+            strcmp(row.label, LONGEST) == 0) {
+            met = true;
+        }
+    }
+    ut_checkf(met && sizeof LONGEST == OVERLAY_LABEL_MAX,
+              "and the sweep met the line whole, %u characters, which is all a label holds",
+              (unsigned)(sizeof LONGEST - 1u));
+
+    memset(&answer, 0, sizeof answer);
+    answer.version = PLAYER_HELP_NOTE_VERSION;
+    note.running = false;
+    ut_check(player_help_answer_publish(&answer) && session_note_publish(&note),
+             "and both are withdrawn again");
+}
+
 int main(void)
 {
     test_the_tally();
     test_labels_and_chips_fit();
     test_the_host_values_fit();
+    test_the_last_press_fits();
 
     return ut_summary("every row of the panel fits the panel");
 }

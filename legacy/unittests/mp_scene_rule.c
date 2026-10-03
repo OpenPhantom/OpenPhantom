@@ -451,31 +451,33 @@ static void check_the_two_halves_ask_one_question(void)
              "and a client that did park lets its own put-back through");
 }
 
-/* The third reason, a host gathering the players for a scene, and every combination of the three.
- * The grab and the put-back ask this one function: a gathering that held the grab and not the
+/* The third reason, a host being brought to the place of a scene, and every combination of the
+ * three. The grab and the put-back ask this one function: a hold that held the grab and not the
  * put-back, or the other way round, would bring back a defect a field run showed on the host or
  * on a client. */
 static void check_the_third_reason(void)
 {
     unsigned bits;
 
-    ut_section("a host gathering the players holds the grab, and the put-back asks the same");
+    ut_section("a host on his way to a scene's place holds the grab, and the put-back asks the "
+               "same");
     ut_check(mp_scene_hero_is_gated_here(false, false, true),
-             "a host that gathers is where the pair applies: the grab waits for everybody");
+             "a host being brought is where the pair applies: the grab waits until he stands "
+             "there");
     ut_check(!mp_scene_hero_is_gated_here(false, true, true),
-             "an arena gathers nobody, and its hero passes as before");
+             "an arena brings nobody, and its hero passes as before");
     for (bits = 0u; bits < 8u; ++bits) {
-        bool client  = (bits & 1u) != 0u;
-        bool arena   = (bits & 2u) != 0u;
-        bool gathers = (bits & 4u) != 0u;
-        bool gated   = mp_scene_hero_is_gated_here(client, arena, gathers);
+        bool client = (bits & 1u) != 0u;
+        bool arena  = (bits & 2u) != 0u;
+        bool holds  = (bits & 4u) != 0u;
+        bool gated  = mp_scene_hero_is_gated_here(client, arena, holds);
 
-        ut_checkf(gated == ((client || gathers) && !arena),
-                  "client %u, arena %u, gathering %u: %s", (unsigned)client, (unsigned)arena,
-                  (unsigned)gathers, gated ? "gated" : "the engine's own");
+        ut_checkf(gated == ((client || holds) && !arena),
+                  "client %u, arena %u, the host's hold %u: %s", (unsigned)client,
+                  (unsigned)arena, (unsigned)holds, gated ? "gated" : "the engine's own");
     }
 
-    /* The removal of an actor that waits in its hold asks the put-back. With the gathering gated
+    /* The removal of an actor that waits in its hold asks the put-back. With the hold gating it
      * the store decides: nought is refused, and the module is running then, so nothing stops;
      * anything else is let through and writes a running module onto itself. */
     ut_check(mp_scene_hero_is_gated_here(false, false, true) && !mp_scene_putback_allowed(0u),

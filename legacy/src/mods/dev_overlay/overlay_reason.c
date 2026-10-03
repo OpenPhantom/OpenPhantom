@@ -22,6 +22,11 @@ typedef struct reason_words {
  * The three held-back codes are the opposite case. Their word is the same for all three, because
  * "held back" is what a player sees on the row, and the sentence is what separates them; each was
  * established against the running game, and none of them is a failure to resolve.
+ *
+ * The last three belong to the two buttons under Multiplayer. `MP only` was chosen over the
+ * plainer "no session" because that has ten characters, one more than a chip may cost, and over
+ * `session`, which is already the word for a row a session TOOK. None of the three is final: the
+ * session lock takes nothing from that group, so there is nothing for them to outrank.
  */
 static const reason_words_t WORDS[OVERLAY_REASON_COUNT] = {
     { "n/a",       NULL,                                       false },
@@ -31,7 +36,10 @@ static const reason_words_t WORDS[OVERLAY_REASON_COUNT] = {
     { "see why",   NULL,                                       true  },
     { "held back", "Held back: it breaks this menu",            true },
     { "held back", "Held back: nothing about it is visible",    true },
-    { "held back", "Held back: it misbehaves from this menu",   true }
+    { "held back", "Held back: it misbehaves from this menu",   true },
+    { "MP only",   "Only in a multiplayer session",            false },
+    { "host",      "You are the host",                         false },
+    { "running",   NULL,                                       false }
 };
 
 const char *overlay_reason_word(uint32_t reason)

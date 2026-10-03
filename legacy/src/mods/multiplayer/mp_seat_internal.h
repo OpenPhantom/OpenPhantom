@@ -26,9 +26,9 @@ typedef struct mp_seat_avoid {
     size_t       in_the_world;
 } mp_seat_avoid_t;
 
-/* One search around one anchor or point, as mp_seat_probe does it, with what a wish keeps away
- * from. `avoid` NULL keeps away from the bodies alone, which is what a scene's seating and a
- * foresight for another slot ask. */
+/* One search around one anchor or point, in the order of `slot`, the slot of the player being
+ * seated, with what a wish keeps away from. `avoid` NULL keeps away from the bodies alone, which
+ * is what a foresight for another slot asks. */
 mp_seat_outcome_t mp_seat_probe_avoiding(const float target[3], bool beside, uint8_t slot,
                                          const mp_seat_body_t *bodies, size_t body_count,
                                          const mp_seat_avoid_t *avoid, mp_seat_counts_t *counts,

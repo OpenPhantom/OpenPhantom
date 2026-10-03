@@ -68,3 +68,17 @@ int mp_target_rule_far_pick(const mp_target_far_t *far, size_t count, float engi
     *passed_dead     = without_the_test >= 0 && !far[without_the_test].stands;
     return answer;
 }
+
+mp_target_claim_t mp_target_rule_claim(const mp_target_claim_evidence_t *evidence)
+{
+    if (evidence == NULL || !evidence->engine_answered || !evidence->joined) {
+        return MP_TARGET_CLAIM_NONE;
+    }
+    if (evidence->of_the_scene) {
+        return MP_TARGET_CLAIM_SCENE;
+    }
+    if (evidence->taker) {
+        return MP_TARGET_CLAIM_TAKER;
+    }
+    return evidence->after_the_scene ? MP_TARGET_CLAIM_AFTER : MP_TARGET_CLAIM_NONE;
+}

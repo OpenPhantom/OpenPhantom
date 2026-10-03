@@ -727,11 +727,13 @@ static void perform_events(size_t bank, mp_puppet_peer_t *p, uint32_t record, ui
  * itself (0x19, 0x1A, 0x1B or 0x2A) arrives on the base channel through the state path; what
  * the rising edge adds is the shadow the retail death takes away, and what the falling edge adds
  * is the shadow back and the collision the death clip's authored event stripped, so the revived
- * far player can be hit and can hit again. The stripping is the draw loop's answer to the clip's
- * parameter event: it calls the collision disable at 0x0041401A, which zeroes the object class at
- * +0x04 and both cylinder words at +0xB8 and +0xBC, and the pair pass skips a class of 0, so
- * after one death the puppet would be invisible to every contact. The owner's respawn allocates
- * a new body on his machine; the puppet keeps its object, which is why the words go back here. */
+ * far player can be hit and can hit again. Both edges go to the body module, which owns that
+ * collision and keeps a revived body passable while a scene plays on the host. The stripping is
+ * the draw loop's answer to the clip's parameter event: it calls the collision disable at
+ * 0x0041401A, which zeroes the object class at +0x04 and both cylinder words at +0xB8 and +0xBC,
+ * and the pair pass skips a class of 0, so after one death the puppet would be invisible to every
+ * contact. The owner's respawn allocates a new body on his machine; the puppet keeps its object,
+ * which is why the words go back at the revival. */
 static void apply_vitals(size_t bank, mp_puppet_peer_t *p, uint32_t object)
 {
     uint32_t health = p->sample.state.health;
@@ -770,6 +772,7 @@ static void apply_vitals(size_t bank, mp_puppet_peer_t *p, uint32_t object)
     }
     p->dead_known   = true;
     p->dead_applied = dead;
+    (void)mp_body_collision_note_life_at(bank, !dead, object);   /* the edge, to its owner */
     flags = dead ? (flags & ~(uint32_t)OBJECT_CASTS_SHADOW) : (flags | OBJECT_CASTS_SHADOW);
     if (!mp_bank_window_write_u32(object + OBJECT_FLAGS, flags)) {
         ++puppet.shadow_faults;
@@ -781,7 +784,6 @@ static void apply_vitals(size_t bank, mp_puppet_peer_t *p, uint32_t object)
                  "from the wire (death %u)", (unsigned)puppet.died);
     } else {
         ++puppet.revived;
-        (void)mp_body_collision_restore_at(bank);   /* says so itself, once, or why not */
         log_info("the far player is back: the puppet's shadow is on again and its collision was "
                  "asked back (revival %u)", (unsigned)puppet.revived);
     }

@@ -25,32 +25,33 @@ typedef struct saves_state {
 
 static saves_state_t saves;
 
-bool mp_saves_parse_header(const uint8_t *bytes, size_t length, mp_save_t *out)
+mp_saves_look_t mp_saves_judge_header(const uint8_t *bytes, size_t length, mp_save_t *out)
 {
     size_t i;
 
     if (bytes == NULL || out == NULL || length < MP_SAVES_HEADER_BYTES) {
-        return false;
+        return MP_SAVES_LOOK_NOT_A_SAVE;
     }
     if (memcmp(bytes, MP_SAVES_MAGIC, MP_SAVES_MAGIC_BYTES) != 0) {
-        return false;
+        return MP_SAVES_LOOK_NOT_A_SAVE;
     }
     memset(out, 0, sizeof *out);
 
-    /* The two numbers are dwords in the file and bytes here, so anything that would not fit is a
-     * header this build does not understand rather than a value to truncate. */
-    if (bytes[MP_SAVES_OFF_SLOT + 1u] != 0u || bytes[MP_SAVES_OFF_SLOT + 2u] != 0u ||
-        bytes[MP_SAVES_OFF_SLOT + 3u] != 0u) {
-        return false;
-    }
+    /* The level index is a dword in the file and a byte here, so one that does not fit names no
+     * row. The word in front of it is not asked: the engine never writes it, so what it holds
+     * says nothing about the file.
+     *
+     * A level index that is no row of the table is still a save: a level loaded by its path is
+     * saved with minus one there, all four bytes set. It names no level, so nobody could be told
+     * which one to load, and that is its own answer, apart from a file that is no save. */
     if (bytes[MP_SAVES_OFF_LEVEL + 1u] != 0u || bytes[MP_SAVES_OFF_LEVEL + 2u] != 0u ||
         bytes[MP_SAVES_OFF_LEVEL + 3u] != 0u) {
-        return false;
+        return MP_SAVES_LOOK_NO_LEVEL;
     }
     out->slot        = bytes[MP_SAVES_OFF_SLOT];
     out->level_index = bytes[MP_SAVES_OFF_LEVEL];
     if (out->level_index >= LEVEL_TABLE_ENTRIES) {
-        return false;   /* it names no level, so nobody could be told which one to load */
+        return MP_SAVES_LOOK_NO_LEVEL;
     }
 
     {
@@ -75,10 +76,13 @@ bool mp_saves_parse_header(const uint8_t *bytes, size_t length, mp_save_t *out)
         text_format(out->name, sizeof out->name, mp_text(MP_TEXT_SAVE_FALLBACK_NAME),
                     (unsigned)out->slot);
     }
-    return true;
+    return MP_SAVES_LOOK_SAVE;
 }
 
-static bool read_header(const char *path, mp_save_t *out)
+/* A file that does not open is not a file that is no save. Another process may hold it for a
+ * moment: a second copy of the game in the same folder writes the received savegame under the
+ * same name and shares it with nobody while it does. */
+static mp_saves_look_t look_at_header(const char *path, mp_save_t *out)
 {
     uint8_t header[MP_SAVES_HEADER_BYTES];
     HANDLE  file;
@@ -88,12 +92,24 @@ static bool read_header(const char *path, mp_save_t *out)
     file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
                        FILE_ATTRIBUTE_NORMAL, NULL);
     if (file == INVALID_HANDLE_VALUE) {
-        return false;
+        return MP_SAVES_LOOK_UNREADABLE;
     }
     ok = ReadFile(file, header, (DWORD)sizeof header, &got, NULL) != 0 &&
          got == (DWORD)sizeof header;
     CloseHandle(file);
-    return ok && mp_saves_parse_header(header, sizeof header, out);
+    return ok ? mp_saves_judge_header(header, sizeof header, out) : MP_SAVES_LOOK_UNREADABLE;
+}
+
+static bool read_header(const char *path, mp_save_t *out)
+{
+    return look_at_header(path, out) == MP_SAVES_LOOK_SAVE;
+}
+
+static void keep_the_file_name(const char *file, mp_save_t *out)
+{
+    memset(out->file, 0, sizeof out->file);
+    memcpy(out->file, file, strlen(file) < sizeof out->file ? strlen(file)
+                                                            : sizeof out->file - 1u);
 }
 
 size_t mp_saves_scan(void)
@@ -148,15 +164,18 @@ const mp_save_t *mp_saves_at(size_t index)
     return index < saves.count ? &saves.save[index] : NULL;
 }
 
-bool mp_saves_read(const char *file, mp_save_t *out)
+mp_saves_look_t mp_saves_look(const char *file, mp_save_t *out)
 {
-    if (file == NULL || out == NULL || !read_header(file, out)) {
-        return false;
+    mp_saves_look_t look;
+
+    if (file == NULL || out == NULL) {
+        return MP_SAVES_LOOK_UNREADABLE;
     }
-    memset(out->file, 0, sizeof out->file);
-    memcpy(out->file, file, strlen(file) < sizeof out->file ? strlen(file)
-                                                            : sizeof out->file - 1u);
-    return true;
+    look = look_at_header(file, out);
+    if (look == MP_SAVES_LOOK_SAVE) {
+        keep_the_file_name(file, out);
+    }
+    return look;
 }
 
 const mp_save_t *mp_saves_find(const char *file)

@@ -27,6 +27,12 @@
  * true is returned untouched, so single player, a session with no far body and every caller
  * outside the two are the engine's own behaviour to the bit.
  *
+ * One thing is remembered beside the answer, and it changes no answer: which far player the
+ * activation scan was widened for, by placement, for a short while. The two callers hand the test
+ * different places, the placement's own for the scan and the actor's for the removal, so the
+ * placement is known without a read. Whoever asks whose a scene is reads it
+ * (mp_range_gate_woke_for_far).
+ *
  * Host only. A client may not widen its own activation: it would wake enemies for itself AND be
  * sent the host's, and the level belongs to the host. On a client this installs nothing.
  *
@@ -41,6 +47,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* A far body's position, bank by bank. Answers false for a bank with no body. */
 typedef bool (*mp_range_gate_far_body_fn_t)(size_t bank, float out[3]);
@@ -79,6 +86,21 @@ bool mp_range_gate_player(size_t bank, float out[3]);
 /* Whether the gate measures at all this session: installed and armed. With it off the table is
  * empty and every question above answers false. */
 bool mp_range_gate_measuring(void);
+
+/* Whether the placement whose record lies at `record` woke for a far player lately: within the
+ * last MP_SCENE_WOKE_SUBSTEPS substeps the activation scan was answered yes for it only because
+ * a far player stood in its range, the engine's own player not. `bank` names him. An actor that
+ * opens a door of a scene in its first run has asked for no player yet, and this is then all
+ * that says whose the scene is. The answer the gate gives the engine is not changed by it.
+ *
+ * Not written down: a waking the engine answered by itself. With the host dead the world anchor
+ * runs the scan on a far player's body, the engine says yes without this gate, and such a
+ * placement reads here as woken for nobody. */
+bool mp_range_gate_woke_for_far(uintptr_t record, uint8_t *bank);
+
+/* Nothing is remembered as woken: at the end of a world, because the next one's records may lie
+ * at the same addresses. */
+void mp_range_gate_forget_woken(void);
 
 /* Whether the activation scan's call into the range test no longer lands on the test itself, which
  * is what a module that scales the wake radius at that call does. False when it does, and when the

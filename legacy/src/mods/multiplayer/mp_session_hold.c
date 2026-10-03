@@ -19,7 +19,7 @@
  * send past its buffer with k_EResultLimitExceeded. It is the peer that goes, never the message for
  * everybody else.
  *
- * A broadcast of one of the ten state notes (mp_state_note_rule) is the sender's own newest
+ * A broadcast of one of the nine state notes (mp_state_note_rule) is the sender's own newest
  * state, and it goes as that, in the channel and in the hold alike: an equal copy on its way is
  * enough, and a newer one replaces the older rather than queueing behind it. A single send, and the
  * send that holds, pass what they are given on as an event, whatever its tag: the relays use them

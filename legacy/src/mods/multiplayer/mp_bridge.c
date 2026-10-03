@@ -438,11 +438,10 @@ static void send_events(void)
     mp_world_send(bridge.substep, &send_reliable);
     /* The push blocks: a host's note and falls, a client's wishes. */
     mp_crate_send(bridge.substep, &send_reliable);
-    /* And what the host's scripts switched on its level, from the side that owns the level, and
-     * the scene it plays for everybody. */
+    /* And what the host's scripts switched on its level, from the side that owns the level. A
+     * scene is not told to anybody: it is the host's alone. */
     if (bridge.mode == MP_BRIDGE_UDP_HOST) {
         mp_level_state_send(bridge.substep, mp_world_apply_generation(), &send_reliable);
-        mp_scene_host_send(bridge.substep, &send_reliable);
     }
 
     /* The campaign last: the body's moments are what a watching player sees, and a bank sweep
@@ -573,6 +572,12 @@ void mp_bridge_tick_post(void)
      * cost the collision one, because the two enemy and player slots run BEFORE this task either
      * way. The sending half is the one with something to gain, and it has moved. */
     receive_all();
+    /* Ahead of the handshake's question, on every substep: a client is given back whatever a
+     * scene left holding it out of this machine's own cells, and waits for nothing off the wire
+     * to be let go. */
+    if (bridge.mode == MP_BRIDGE_UDP_CLIENT) {
+        mp_scene_client_tick(bridge.substep);
+    }
     if (joined()) {
         mp_bridge_drain_reliable_notes(&bridge.drain);
         if (bridge.mode == MP_BRIDGE_UDP_HOST) {
@@ -603,7 +608,6 @@ void mp_bridge_tick_post(void)
             (void)mp_enemy_sync_spawn_pending();
             (void)mp_world_event_flush();   /* behind the bodies: an event needs its replica */
             mp_script_sound_flush();        /* the music the host holds and the loops it wants */
-            mp_scene_client_tick(bridge.substep);   /* after the notes of this substep */
         }
         /* Both UDP roles place their second body from the peer's own state; only the loopback,
          * which proves the command path, does not. */
@@ -620,8 +624,9 @@ void mp_bridge_tick_post(void)
         }
     } else if (bridge.mode == MP_BRIDGE_UDP_HOST) {
         /* A host whose clients have all gone still steps its scene: a door it hears then begins
-         * nothing, and a hold that stood when the last one left falls with its fade given back.
-         * Stepped only while somebody was joined, it held its scene's actor for good. */
+         * nothing, and a hold that stood when the last one left falls, at once or once the host
+         * has finished the way to his place. Stepped only while somebody was joined, it held its
+         * scene's actor for good. */
         mp_scene_host_tick(bridge.substep);
     }
     mp_stopwatch_leave(MP_WATCH_TICK_POST);

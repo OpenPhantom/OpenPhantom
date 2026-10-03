@@ -56,6 +56,7 @@ typedef enum count {
     C_MOVIE,
     C_LEVEL,
     C_SESSION,
+    C_REPAIR,
     C_HELD_FRAMES,
     C_HELD_AFTER_CLOSE,
     C_COUNT

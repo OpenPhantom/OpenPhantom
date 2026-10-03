@@ -53,6 +53,19 @@ typedef enum overlay_reason {
     OVERLAY_REASON_HELD_NO_EFFECT,
     OVERLAY_REASON_HELD_MISBEHAVES,
 
+    /* The opposite of the session's own code: a row that exists FOR a multiplayer session and
+     * has nothing to act on without one. The two buttons under Multiplayer carry it in single
+     * player. In a session whose multiplayer does not answer for a button the row names no
+     * reason and reads `n/a`, the word for something this build cannot do. */
+    OVERLAY_REASON_NEEDS_SESSION,
+
+    /* A row that takes this machine to the host, on the machine that is the host. */
+    OVERLAY_REASON_IS_HOST,
+
+    /* The row was pressed and what it started has not ended yet. The word says so on its own,
+     * and the line under the buttons says how it stands. */
+    OVERLAY_REASON_UNDER_WAY,
+
     OVERLAY_REASON_COUNT
 } overlay_reason_t;
 

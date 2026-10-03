@@ -75,7 +75,8 @@ mp_pause_way_t mp_pause_rule_way(bool open, bool transport, bool input_split);
  * way out. */
 typedef enum mp_pause_reason {
     MP_PAUSE_REASON_NONE = 0,
-    MP_PAUSE_REASON_DEATH,       /* the player's health is gone or the body is a corpse */
+    MP_PAUSE_REASON_DEATH,       /* the body is a corpse, or its health is gone while the
+                                  * player module runs */
     MP_PAUSE_REASON_SCENE,       /* a dialogue or scene lock rose while it was up */
     MP_PAUSE_REASON_LEVEL,       /* the level outcome left running */
     MP_PAUSE_REASON_SESSION,     /* the transport went down */
@@ -93,6 +94,8 @@ typedef struct mp_pause_look {
     bool     health_read;
     int32_t  health;
     bool     dead;           /* the body is the engine's corpse */
+    bool     module_running; /* the player module reads 1, the one state in which the engine
+                              * judges the health at all; false where it did not read */
     bool     lock_read;
     int32_t  lock;           /* the dialogue and scene lock level */
     bool     outcome_read;
@@ -144,6 +147,7 @@ typedef struct mp_pause_session {
     uint32_t          last_substeps;
     uint32_t          last_substep_ms;
     uint32_t          longest_stretch_ms;
+    bool              kept_open_parked;  /* no health, and no running module to judge it */
 
     /* Every opening so far. */
     uint32_t          opened_total;
@@ -160,6 +164,7 @@ typedef struct mp_pause_session {
     uint32_t          stalled_frames_total;
     uint32_t          longest_stretch_total_ms;
     uint32_t          substeps_total;
+    uint32_t          kept_open_parked_total;   /* openings that stayed open for that */
     mp_pause_left_t   last;
 } mp_pause_session_t;
 
@@ -171,7 +176,13 @@ bool mp_pause_rule_open(mp_pause_session_t *session, bool lock_read, int32_t loc
 
 /* One drawn frame under the menu. Counts it, and latches the first close reason it finds. Nothing
  * is judged on a frame with the gate held, because a load from inside the menu rewrites the very
- * cells a reason is read from. */
+ * cells a reason is read from.
+ *
+ * A death is what the engine lets in: the corpse flag, or no health while the player module runs.
+ * The engine judges the health only in the first phase of the running module, so a player a scene
+ * has parked, or one whose module is dying or respawning, is not dead by his health. A menu that
+ * closed itself for him on every opening left him no way out at all; such an opening stays open
+ * and is marked once. */
 void mp_pause_rule_look(mp_pause_session_t *session, const mp_pause_look_t *look);
 
 /* The transport went down under the menu. True when this latched the reason. */

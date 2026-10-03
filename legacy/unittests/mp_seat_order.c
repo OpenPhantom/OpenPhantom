@@ -7,14 +7,12 @@
  * body. Every client foresees the seats of the client slots below its own, with the bodies each
  * of them sees, and keeps them clear.
  *
- * What is replaced is the engine under the search and the bridge beside the order: the three probes
- * answer from a flat floor with the points the test makes unwalkable, crawl spaces and holes, the
- * cells are fields of this file, and so are the roster and the far banks. One machine at a time is
+ * What is replaced is the engine under the search and the bridge beside the order. The engine is
+ * the little world of mp_seat_little_world.c, which mp_seat_loop plays too: the three probes answer
+ * from a flat floor with the points the test makes unwalkable, crawl spaces and holes, and the
+ * cells are its fields. The roster and the far banks are this file's. One machine at a time is
  * played: the far bodies it sees are noted, its own body is the hero position, and its arrival wish
  * runs one look.
- *
- * SIZE NOTE: over 600 lines. A third of it is the engine and the session the test plays; the seam,
- * when it grows, is that third into a stand-in of its own, as mp_seat_world's is named.
  */
 #include "unittest.h"
 
@@ -24,6 +22,7 @@
 #include "mp_placements.h"
 #include "mp_roster.h"
 #include "mp_seat.h"
+#include "mp_seat_little_world.h"
 #include "mp_seat_order.h"
 #include "mp_signatures.h"
 #include "mp_signatures_world.h"
@@ -35,128 +34,8 @@
 #include <string.h>
 
 /* ==============================================================================================
- * The engine, as this test plays it.
+ * The session the order reads: the roster and which far bank shows a slot.
  * ============================================================================================ */
-
-#define WORLD_RECORD_BYTES  0x60u
-#define WORLD_CLOCK_SECONDS 0x54u   /* the world's own clock inside that record, in seconds */
-#define POINTS              8u
-#define NEAR_A_POINT        0.1f
-
-typedef struct little_world {
-    float  floor_z;
-    float  unwalkable[POINTS][3];   /* a walkable line that ends here is stopped */
-    size_t unwalkable_count;
-    float  crawl[POINTS][3];        /* a crawl space over each of these */
-    size_t crawl_count;
-    bool   crawl_everywhere;        /* and over every point but `open` */
-    float  open[3];
-    float  hole[3];                 /* no floor at all under this point */
-    bool   hole_on;
-} little_world_t;
-
-typedef struct little_engine {
-    uint32_t game_mode;
-    uint32_t world;
-    uint8_t  world_record[WORLD_RECORD_BYTES];
-    bool     own_known;
-    float    own[3];
-    uint32_t substep;
-} little_engine_t;
-
-static little_world_t  wld;
-static little_engine_t eng;
-
-static bool at(const float a[3], const float b[3])
-{
-    float dx = a[0] - b[0];
-    float dy = a[1] - b[1];
-
-    return dx * dx + dy * dy < NEAR_A_POINT * NEAR_A_POINT;
-}
-
-/* `points` is `count` points of three floats each. */
-static bool in_list(const float position[3], const float *points, size_t count)
-{
-    size_t i;
-
-    for (i = 0; i < count; ++i) {
-        if (at(position, &points[3u * i])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static void __cdecl fake_probe_floor(const float position[3], void *ground)
-{
-    float distance = wld.floor_z - position[2];
-
-    if (wld.hole_on && at(position, wld.hole)) {
-        distance = MP_PROBE_NO_FLOOR;
-    }
-    memcpy(ground, &distance, sizeof distance);
-}
-
-static float __cdecl fake_head_clearance(const float position[3], uint16_t mask)
-{
-    (void)mask;
-    if (wld.crawl_everywhere && !at(position, wld.open)) {
-        return 1.0f;
-    }
-    return in_list(position, &wld.crawl[0][0], wld.crawl_count) ? 1.0f : 0.0f;
-}
-
-static float __cdecl fake_walkable_distance(uintptr_t world, const float from[3],
-                                            const float to[3])
-{
-    (void)world;
-    (void)from;
-    return in_list(to, &wld.unwalkable[0][0], wld.unwalkable_count) ? 1.0f : 0.0f;
-}
-
-uintptr_t mp_cells_address(mp_cell_t cell)
-{
-    switch (cell) {
-    case MP_CELL_GAME_MODE: return (uintptr_t)&eng.game_mode;
-    case MP_CELL_LEVEL:     return (uintptr_t)&eng.world;
-    default:                return 0u;
-    }
-}
-
-bool mp_cells_hero_position(float out[3])
-{
-    if (!eng.own_known) {
-        return false;
-    }
-    memcpy(out, eng.own, sizeof eng.own);
-    return true;
-}
-
-size_t mp_signatures_world_resolve(void)
-{
-    return (size_t)MP_WORLD_SITE_COUNT;
-}
-
-uintptr_t mp_signatures_world_address(mp_world_site_t site)
-{
-    switch (site) {
-    case MP_WORLD_SITE_PROBE_FLOOR:       return (uintptr_t)&fake_probe_floor;
-    case MP_WORLD_SITE_HEAD_CLEARANCE:    return (uintptr_t)&fake_head_clearance;
-    case MP_WORLD_SITE_WALKABLE_DISTANCE: return (uintptr_t)&fake_walkable_distance;
-    default:                              return 0u;
-    }
-}
-
-bool mp_placements_table(uintptr_t *world, uint32_t *count, uint32_t *table)
-{
-    (void)world;
-    (void)count;
-    (void)table;
-    return false;
-}
-
-/* ---- the session the order reads: the roster and which far bank shows a slot ----------------- */
 
 #define SLOTS 8u   /* one past the highest slot a session holds */
 
@@ -219,45 +98,15 @@ bool mp_bridge_far_occupied(size_t bank)
  * The session, one machine at a time.
  * ============================================================================================ */
 
-static void set_the_clock(float seconds)
-{
-    memcpy(eng.world_record + WORLD_CLOCK_SECONDS, &seconds, sizeof seconds);
-}
-
 /* A level on a flat floor at `floor_z`, with nothing in the way yet. */
 static void open_the_level(float floor_z)
 {
-    memset(&wld, 0, sizeof wld);
-    wld.floor_z   = floor_z;
-    eng.game_mode = 2u;
-    eng.world     = (uint32_t)(uintptr_t)eng.world_record;
-    set_the_clock(1.0f);
+    little_world_open(floor_z);
     stand_in_no_session();
     mp_seat_world_ended();
     mp_seat_note_no_body(0u);
     mp_seat_note_no_body(1u);
     mp_seat_note_no_body(2u);
-}
-
-/* The point of `direction` on the ring of `radius` around `anchor`. */
-static void ring_point(const float anchor[3], size_t direction, float radius, float out[3])
-{
-    float offset[2];
-
-    mp_seat_rule_ring_offset(direction, 0u, radius, offset);
-    out[0] = anchor[0] + offset[0];
-    out[1] = anchor[1] + offset[1];
-    out[2] = anchor[2];
-}
-
-static void unwalkable(const float anchor[3], size_t direction)
-{
-    ring_point(anchor, direction, MP_SEAT_RING_NEAR, wld.unwalkable[wld.unwalkable_count++]);
-}
-
-static void crawl_over(const float anchor[3], size_t direction)
-{
-    ring_point(anchor, direction, MP_SEAT_RING_NEAR, wld.crawl[wld.crawl_count++]);
 }
 
 /* What one machine sees: this player's own body, and a far body per bank, NULL for none. The
@@ -291,15 +140,6 @@ static bool arrive(uint8_t slot, const float host[3], mp_seat_counts_t *counts, 
     mp_seat_order_wish_beside_host(&wish, "the offset", slot, false);
     mp_seat_wish_follow(&wish, host, 0.0f);
     return mp_seat_wish_step(&wish, ++eng.substep, counts, seat, &heading);
-}
-
-static float apart(const float a[3], const float b[3])
-{
-    float dx = a[0] - b[0];
-    float dy = a[1] - b[1];
-    float dz = a[2] - b[2];
-
-    return sqrtf(dx * dx + dy * dy + dz * dz);
 }
 
 static const uint8_t ROSTER_OF_THREE[3] = { 0u, 1u, 2u };

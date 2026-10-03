@@ -392,10 +392,31 @@ static void check_which_slots_come_first(void)
              "and no roster at all is no order");
 }
 
+/* The slot's order is the loop the search always ran, written out here as it was. */
+static void check_the_slot_order(void)
+{
+    uint8_t slot;
+    bool    same = true;
+
+    ut_section("the slot's order is the old start-and-step loop, for every slot");
+    for (slot = 0u; slot < 16u; ++slot) {
+        uint8_t order[MP_SEAT_RING_STEPS];
+        size_t  start = ((size_t)slot * 2u) % (size_t)MP_SEAT_RING_STEPS;
+        size_t  step;
+
+        mp_seat_rule_slot_order(slot, order);
+        for (step = 0u; step < (size_t)MP_SEAT_RING_STEPS; ++step) {
+            same = same && order[step] == (uint8_t)((start + step) % MP_SEAT_RING_STEPS);
+        }
+    }
+    ut_check(same, "sixteen slots, each the start direction and then one step at a time");
+}
+
 int main(void)
 {
     check_the_ring_starts_per_slot();
     check_the_ring();
+    check_the_slot_order();
     check_what_a_floor_reading_makes_of_a_candidate();
     check_whether_a_body_is_in_the_way();
     check_which_anchor_is_tried_first();

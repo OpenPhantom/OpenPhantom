@@ -101,7 +101,7 @@ typedef struct mp_dialog_relay {
     uint32_t taken;
     uint32_t applied;
     uint32_t out_of_earshot; /* held back: this body stands too far from where it was spoken */
-    uint32_t unmeasured;     /* said with no distance to measure, which only a scene for all does */
+    uint32_t unmeasured;     /* said with no distance to measure */
     uint32_t elsewhere;      /* a line about a level this side is not in */
     uint32_t torn;
     uint32_t no_level_here;  /* arrived while this side had no level open */
@@ -310,6 +310,13 @@ static bool block_is_active(void)
 static bool row_count(uint32_t *out)
 {
     return dialog.count_cell != 0u && memory_try_read_u32(dialog.count_cell, out);
+}
+
+bool mp_dialog_relay_answers_open(void)
+{
+    uint32_t count = 0;
+
+    return block_is_active() && row_count(&count) && count != 0u;
 }
 
 static bool selected_line(uint16_t *out)

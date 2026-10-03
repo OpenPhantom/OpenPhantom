@@ -4,15 +4,19 @@
  * SIZE NOTE: over 600 lines, and most of the excess is the paragraph below rather than
  * code, three field runs and three wrong repairs are written down here because the next person to
  * change a number needs to read them first. The two ends share the held file, the counters and the
- * report, and neither is meaningful without the other; the seam, should this grow, is the
- * Windows file handling (offer and write_the_file), which touches no wire at all.
+ * report, and neither is meaningful without the other. Two halves that touch no wire have left
+ * already: the write of the received file and the comparison in front of it are
+ * mp_savefile_disk's, and the look at that file before a restore is mp_bridge_savefile_look's.
+ * The seam, should this grow again, is the host's reading of the file it offers.
  */
 #include "mp_bridge_savefile.h"
 
 #include "mp_bridge_lobby.h"
+#include "mp_bridge_savefile_look.h"
 #include "mp_channel.h"
 #include "mp_lobby.h"
 #include "mp_savefile.h"
+#include "mp_savefile_disk.h"
 #include "mp_saves.h"
 #include "mp_wallclock.h"
 
@@ -176,6 +180,9 @@ typedef struct savefile_state {
     uint32_t stray_reliable_notes;    /* a note of the OLD shape, on the channel it left */
     uint32_t writes;
     uint32_t write_faults;
+    uint32_t last_write_error;        /* the system's code of the last write that failed */
+    uint32_t found_written;           /* the disk held these bytes already: not written again */
+    uint32_t now_ms;                  /* the clock of the last tick */
 } savefile_state_t;
 
 /* Static rather than on any stack: it carries two copies of a file. */
@@ -543,23 +550,29 @@ static void send_ack(uint32_t now_ms)
  * the only part of this that can fail after the bytes have been proven. */
 static void write_the_file(void)
 {
-    HANDLE handle;
-    DWORD  written = 0;
+    uint32_t error = 0u;
 
     (void)CreateDirectoryA(MP_SAVES_FOLDER, NULL);   /* exists on every installation; harmless */
-    handle = CreateFileA(MP_SAVES_JOIN_PATH, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                         FILE_ATTRIBUTE_NORMAL, NULL);
-    if (handle == INVALID_HANDLE_VALUE) {
-        ++sf.write_faults;
+    /* Another copy of the game running out of this folder is sent the same file and writes it
+     * under the same name. A file that already holds these bytes is left as it is: writing it
+     * again would take it away from a neighbour that is looking at it in that moment. */
+    if (mp_savefile_disk_holds(MP_SAVES_JOIN_PATH, sf.assembly.bytes, sf.assembly.total)) {
+        sf.written_id    = sf.assembly.file_id;
+        sf.written_bytes = sf.assembly.total;
+        ++sf.found_written;
+        /* The same line as the one after a write, up to its colon: a reader that compares two
+         * runs by their lines finds a client ready under one name, whichever of the two it was. */
+        log_info("the host's savegame is on disk as %s: already there, the same %lu bytes, named "
+                 "%08X, so it is not written again and is ready to be restored",
+                 MP_SAVES_JOIN_PATH, (unsigned long)sf.written_bytes, (unsigned)sf.written_id);
         return;
     }
-    if (!WriteFile(handle, sf.assembly.bytes, sf.assembly.total, &written, NULL) ||
-        written != sf.assembly.total) {
-        CloseHandle(handle);
+    if (!mp_savefile_disk_write(MP_SAVES_JOIN_PATH, sf.assembly.bytes, sf.assembly.total,
+                                &error)) {
         ++sf.write_faults;
+        sf.last_write_error = error;
         return;
     }
-    CloseHandle(handle);
     sf.written_id    = sf.assembly.file_id;
     sf.written_bytes = sf.assembly.total;
     ++sf.writes;
@@ -706,6 +719,7 @@ bool mp_bridge_savefile_take_note(size_t peer_index, const uint8_t *note, size_t
 
 void mp_bridge_savefile_tick(uint32_t now_ms)
 {
+    sf.now_ms = now_ms;
     drain_the_lane(now_ms);
     if (sf.is_client) {
         client_tick(now_ms);
@@ -717,6 +731,25 @@ void mp_bridge_savefile_tick(uint32_t now_ms)
 bool mp_bridge_savefile_ready(uint32_t save_id, uint32_t save_bytes)
 {
     return save_id != 0u && sf.written_id == save_id && sf.written_bytes == save_bytes;
+}
+
+/* What the look at the received file reads and does here: the bytes this side put together, this
+ * module's clock, and the forgetting of a write, after which the next tick writes the file again
+ * or asks the host for it. */
+const mp_savefile_assembly_t *mp_bridge_savefile_assembly(void)
+{
+    return &sf.assembly;
+}
+
+uint32_t mp_bridge_savefile_now_ms(void)
+{
+    return sf.now_ms;
+}
+
+void mp_bridge_savefile_forget_the_write(void)
+{
+    sf.written_id    = 0u;
+    sf.written_bytes = 0u;
 }
 
 uint32_t mp_bridge_savefile_percent(void)
@@ -745,6 +778,10 @@ void mp_bridge_savefile_report(void)
                  (unsigned)sf.assembly.files_rejected, (unsigned)sf.writes,
                  (unsigned)sf.write_faults, (unsigned)sf.written_id,
                  (unsigned long)sf.written_bytes);
+        log_info("  the savegame on the disk: found already there %u time(s) and not written "
+                 "again; the system's code of the last write that failed %lu",
+                 (unsigned)sf.found_written, (unsigned long)sf.last_write_error);
+        mp_bridge_savefile_look_report();
         if (sf.assembly.open && !sf.assembly.complete) {
             log_warning("  the savegame is NOT WHOLE here: %u of %u slice(s) are missing, the "
                         "lowest is %u. Every mask this side sends names them, so a host that is "

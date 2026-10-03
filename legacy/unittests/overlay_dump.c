@@ -36,13 +36,21 @@
  * distance reading what view_distance_fix applied. So one more pass, `client-session`, runs last,
  * with the host's four values and that acknowledgement published, and everything is withdrawn
  * after it; the runs before it print what they always printed.
+ *
+ * That last pass is also the one in which the two buttons under Multiplayer are offered, because
+ * a session offers them only where the multiplayer says it listens: the pass files that, presses
+ * Repair lock and files the answer, so it prints the line under the buttons as well. The passes
+ * before it print the buttons in their two greyed states.
  */
 #include "overlay_model.h"
 #include "overlay_reason.h"
 #include "overlay_spawn.h"
+#include "player_help_row.h"
+#include "session_lock.h"
 #include "strict_range_row.h"
 
 #include "common/host_settings_note.h"
+#include "common/player_help_note.h"
 #include "common/session_note.h"
 #include "common/text.h"
 
@@ -70,6 +78,43 @@ static void session(bool running)
     if (!session_note_publish(&note)) {
         printf("!! the session note refused to publish; the run below is not what it says\n");
     }
+}
+
+/* The two buttons under Multiplayer as a client of a listening session sees them: the multiplayer
+ * says it would carry both out, Repair lock is pressed and answered, so the pass prints both
+ * buttons offered and the line under them. Every pass before it prints them greyed, without a
+ * session for want of one and as a host with nobody listening. Withdrawn, the answer says nobody
+ * listens; the line stays where it is, being about the press and not about the session. */
+static void buttons(bool listening)
+{
+    player_help_answer_t answer;
+    player_help_ask_t    ask;
+
+    memset(&answer, 0, sizeof answer);
+    answer.version = PLAYER_HELP_NOTE_VERSION;
+    if (listening) {
+        answer.ready = PLAYER_HELP_READY_LISTENING | PLAYER_HELP_READY_CAN_REPAIR |
+                       PLAYER_HELP_READY_CAN_TELEPORT;
+    }
+    if (!player_help_answer_publish(&answer)) {
+        printf("!! the buttons' answer was refused; the run below is not what it says\n");
+    }
+    session_lock_refresh();   /* the session the buttons ask about, as the note stands now */
+    player_help_row_tick(0u);
+    if (!listening) {
+        return;
+    }
+    if (!player_help_row_press(PLAYER_HELP_KIND_REPAIR) || !player_help_ask_read(&ask)) {
+        printf("!! Repair lock was not taken; the run below is not what it says\n");
+        return;
+    }
+    answer.serial  = ask.serial;
+    answer.kind    = ask.kind;
+    answer.outcome = PLAYER_HELP_OUTCOME_DONE;
+    if (!player_help_answer_publish(&answer)) {
+        printf("!! the answer to the press was refused; the run below is not what it says\n");
+    }
+    player_help_row_tick(0u);
 }
 
 /* A session this machine is a client of, with the host's four values and view_distance_fix's
@@ -103,6 +148,7 @@ static void client(bool running)
         !session_note_publish(&note)) {
         printf("!! the client's records were refused; the run below is not what it says\n");
     }
+    buttons(running);
 }
 
 /* The settings the second run is made under. It writes the file beside this executable, which in

@@ -63,12 +63,11 @@ mp_lobby_note_class_t mp_lobby_note_class(const uint8_t *note, size_t bytes)
     case MP_LEVEL_STATE_TAG:
         return MP_LOBBY_NOTE_LEVEL_STATE;
 
-    case MP_SCENE_NOTE_TAG:
-        return MP_LOBBY_NOTE_SCENE;
-
     /* Everything else a running level says: a player's moments, the campaign, a hit, a death,
      * the round's table, the pickups taken, the conversation, the NPC copies, the push blocks, a
-     * player's sound and the chat, which is a level's alone. */
+     * player's sound and the chat, which is a level's alone. The retired scene note has its row
+     * here beside the retired choice: every tag of the band has one, sent or not. */
+    case MP_SCENE_NOTE_TAG:
     case MP_EVENT_SHOT:
     case MP_EVENT_PUSH:
     case MP_EVENT_SABRE:

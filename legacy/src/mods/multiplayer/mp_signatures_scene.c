@@ -82,11 +82,12 @@ const uint8_t MSK_SCENE_LETTERBOX[27] = {
  * still the proof: it has to hold at the address the calls name, its head as authored or already
  * a branch, and where it still matches whole it has to be at that same address.
  *
- * The release, bapview_overrideOff 0x00418421, is left open in both directions, and that is a
- * finding rather than an omission. It writes a constant nought into the same cell instead of
- * putting a saved value back, so a release for a take that never happened restores the resting
- * value and costs nobody anything. That is the test this file now applies to every pair it half
- * closes.
+ * The release, bapview_overrideOff 0x00418421, is left open on a client and for an arena, and
+ * that is a finding rather than an omission. It writes a constant nought into the same cell
+ * instead of putting a saved value back, so a release for a take that never happened restores
+ * the resting value and costs nobody anything. That is the test this file applies to every pair
+ * it half closes. On a host it is hulled for another reason, further down: there a far player's
+ * script would take down the camera of the host's own scene.
  *
  * Its twin sits directly behind it storing that zero, which is why the immediate
  * `01 00 00 00` is unmasked. The function is twenty three bytes end to end:
@@ -233,15 +234,30 @@ const uint8_t MSK_SCENE_SPEAK_TAKE[26] = {
 };
 
 /* ==============================================================================================
- * The gathering's own sites.
+ * The two releases, and the sites the host's scene reads.
  * ============================================================================================ */
 
 /* Dialog_LeaveInputLock 0x00430F18, __cdecl (int32_t level).
  *
  * The same head as the lock's entry with the opposite branch, `jle` where the entry has `jnz`, and
  * behind it the compare of the caller's level against the lock's own. Both cell operands are
- * masked; the one at +13 is also what camera_handback_fix reads, and the eleven byte prologue this
- * hull takes stops short of it. */
+ * masked; the one at +13 is also what camera_handback_fix reads, and the eleven byte prologue a
+ * hull takes stops short of it:
+ *
+ *   00430F18  55                       push ebp
+ *   00430F19  8B EC                    mov  ebp, esp
+ *   00430F1B  51                       push ecx
+ *   00430F1C  C7 45 FC 00 00 00 00     mov  dword [ebp-4], 0        eleven bytes to here
+ *   00430F23  83 3D 8C 4D 6C 00 00     cmp  dword [0x006C4D8C], 0
+ *   00430F2A  7E 25                    jle  the end
+ *   00430F2C  A1 8C 4D 6C 00           mov  eax, [0x006C4D8C]
+ *   00430F31  3B 45 08                 cmp  eax, [ebp+8]
+ *   00430F34  7F 1B                    jg   the end
+ *
+ * So a release lets go of a lock that stands above nought and at or below the level it is handed,
+ * sets the input mode to play, and answers 1; for any other lock it does nothing and answers 0.
+ * Five calls reach it in the retail image, 00430352, 0043037E and 00430E97 from the dialogue and
+ * 00434F57 and 00434FA6 from the two script ends. */
 const uint8_t SIG_SCENE_LOCK_LEAVE[30] = {
     0x55, 0x8B, 0xEC, 0x51, 0xC7, 0x45, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x83, 0x3D, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x7E, 0x25, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x3B, 0x45, 0x08, 0x7F, 0x1B
@@ -249,6 +265,29 @@ const uint8_t SIG_SCENE_LOCK_LEAVE[30] = {
 const uint8_t MSK_SCENE_LOCK_LEAVE[30] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
     0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+
+/* bapview_overrideOff 0x00418421, __cdecl (void), the twin behind bapview_overrideOn.
+ *
+ *   00418421  55                               push ebp
+ *   00418422  8B EC                            mov  ebp, esp
+ *   00418424  C7 05 E8 B4 5B 00 00 00 00 00    mov  dword [0x005BB4E8], 0   thirteen bytes to here
+ *   0041842E  5D                               pop  ebp
+ *   0041842F  C3                               ret
+ *
+ * Fifteen bytes, and a hull takes thirteen of them: what is left, a pop and a return, names no
+ * function, so this pattern is never searched for. With the operand masked it is also the shape of
+ * every function that stores a nought into one cell, and five of them have it in each of the six
+ * executables this tree is checked against. It is held at the address the two script ends call,
+ * the tail exactly and the head as authored or already another module's branch. The store's
+ * operand is absolute and masked; nothing in the thirteen bytes is relative. Six calls reach it
+ * in the retail image, 00434F50 and 00434F9F from the two script ends and 00417A93, 00430EAC,
+ * 0044013A and 00450933 from the engine's own. */
+const uint8_t SIG_SCENE_VIEW_RELEASE[15] = {
+    0x55, 0x8B, 0xEC, 0xC7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5D, 0xC3
+};
+const uint8_t MSK_SCENE_VIEW_RELEASE[15] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 
 /* 0x00447DA1, inside player_tickTask: the respawn's two arms.
@@ -300,4 +339,34 @@ const uint8_t MSK_SCENE_SUSPEND_MODES[92] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0x00
+};
+
+/* 0x004479F8, inside player_save: the mode pointer turned into its index.
+ *
+ * `mov eax, [pr]; mov ecx, [eax+60h]; push ecx; push table; call; add esp, 8; mov edx, [pr];
+ * mov [edx+39Ch], eax`. The record, the table and the call are masked; the store into the saved
+ * index at +0x39C tells this push from the aux table's push just before it. Unique in five
+ * images. */
+const uint8_t SIG_SCENE_MODE_TABLE_SAVE[34] = {
+    0xA1, 0x00, 0x00, 0x00, 0x00, 0x8B, 0x48, 0x60, 0x51, 0x68, 0x00, 0x00, 0x00, 0x00, 0xE8,
+    0x00, 0x00, 0x00, 0x00, 0x83, 0xC4, 0x08, 0x8B, 0x15, 0x00, 0x00, 0x00, 0x00, 0x89, 0x82,
+    0x9C, 0x03, 0x00, 0x00
+};
+const uint8_t MSK_SCENE_MODE_TABLE_SAVE[34] = {
+    0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF,
+    0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF
+};
+
+/* 0x00447BB0, inside player_restore: the saved index turned back into the mode pointer.
+ *
+ * `mov ecx, [pr]; mov edx, [ecx+39Ch]; mov eax, [pr]; mov ecx, [edx*4+table]; mov [eax+60h],
+ * ecx`. The record and the table are masked. Unique in five images. */
+const uint8_t SIG_SCENE_MODE_TABLE_RESTORE[27] = {
+    0x8B, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x8B, 0x91, 0x9C, 0x03, 0x00, 0x00, 0xA1, 0x00, 0x00,
+    0x00, 0x00, 0x8B, 0x0C, 0x95, 0x00, 0x00, 0x00, 0x00, 0x89, 0x48, 0x60
+};
+const uint8_t MSK_SCENE_MODE_TABLE_RESTORE[27] = {
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
+    0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF
 };

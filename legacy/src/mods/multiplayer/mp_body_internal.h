@@ -91,6 +91,11 @@ typedef struct mp_body_far {
     bool     health_seen;
     int32_t  health_known;
     uint32_t health_changes;
+    /* The object a scene made passable, nought for none, and the far player's dead edge as the
+     * puppet last took it. The mark is the object's and goes with the body; the edge is the far
+     * player's and outlives a rebuild, as the puppet's own does. */
+    uint32_t passable_object;
+    bool     lies_dead;
 
     /* The appearance the far side asked for, and when it asked. A wish rather than an immediate
      * rebuild because a rebuild may only run in the task slot with no bank window open, and the
@@ -115,6 +120,26 @@ bool mp_body_module_ready(void);
  * record rather than with the build, because the same fields are what the tick and the restore
  * read. */
 void mp_body_forget_body_state(mp_body_far_t *far);
+
+/* Put bank `index`'s body `object` back to its collision after a death clip took it away; the
+ * caller names the object it read, so nothing here can fail to read it. The death clip's
+ * authored event makes the draw pass zero the object's class and both cylinder words, after which
+ * the pair pass never sees the body again; the far player's respawn gives him a new body on his
+ * machine and the puppet has none, so this writes the co-op classes and the cylinder saved at the
+ * spawn back onto the same object. Checked writes, counted, logged once; false when nothing was
+ * saved or a write refused. Only the owner of the far bodies' scene collision calls it. */
+bool mp_body_collision_restore_at(size_t index, uint32_t object);
+
+/* The far bodies made passable for a scene, which live in mp_body_passable.c. The class a body
+ * built now is stamped with: 0 while a scene wants the far bodies passable and the far player
+ * lives, which also marks `object` as made passable; the bank's own class otherwise. The side is
+ * the bank's either way. */
+int32_t mp_body_collision_class_at(size_t index, uint32_t object);
+
+/* A contact the dispatcher delivers on `object`: counted there when it is a body made passable,
+ * because no engine test should post one. And that half's report line. */
+void mp_body_passable_note_contact(uint32_t object);
+void mp_body_passable_report(void);
 
 /* The shot hull, which lives in mp_body_shot.c. The install places it on the shot_spawn site it
  * resolved and learns whether it took; the report reads the shots left without their side and

@@ -69,7 +69,7 @@ typedef enum mp_bridge_far_reader {
     MP_FAR_READER_ARRIVAL,      /* a client's offset beside its host */
     MP_FAR_READER_REENTRY,      /* the re-entry's anchors and the seat's bodies */
     MP_FAR_READER_RANGE_GATE,   /* where a far body wakes the host's enemies and keeps them */
-    MP_FAR_READER_SCENE,        /* the host's scene: the place it gathers around, and who sits */
+    MP_FAR_READER_SCENE,        /* the host's scene: where the player who set it off stands */
     MP_FAR_READER_OTHER,        /* a body that stands, the world's anchor, the copies, a reply */
     MP_FAR_READERS
 } mp_bridge_far_reader_t;
@@ -167,7 +167,7 @@ bool mp_bridge_far_placed(size_t bank);
 bool mp_bridge_far_occupied(size_t bank);
 
 /* The line of the poses of another world: resolved and not placed on a puppet, refused to each
- * reader, far players gathered for a scene on their way here, and blends held at a change of
+ * reader, how often a far player was answered as on its way here, and blends held at a change of
  * world. */
 void mp_bridge_far_report_worlds(void);
 

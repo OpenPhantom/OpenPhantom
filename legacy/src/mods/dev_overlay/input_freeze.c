@@ -289,3 +289,11 @@ void input_freeze_hold(input_freeze_holder_t who, bool held)
     suspend_player(frozen);
 }
 
+/* The holders and not `suspended`: a holder is somebody of this DLL who wants the player held,
+ * whether or not the player's block resolved for the module to be written. A caller that asks is
+ * about to tell another DLL to leave that player alone, and the wish is what it has to pass on. */
+uint32_t input_freeze_holders(void)
+{
+    return freeze_state.holders;
+}
+

@@ -34,6 +34,19 @@ void mp_seat_rule_ring_offset(size_t start, size_t step, float radius, float off
     offset[1] = (float)(sin(angle) * (double)radius);
 }
 
+void mp_seat_rule_slot_order(uint8_t slot, uint8_t order[MP_SEAT_RING_STEPS])
+{
+    size_t start = mp_seat_rule_ring_start(slot);
+    size_t step;
+
+    if (order == NULL) {
+        return;
+    }
+    for (step = 0u; step < (size_t)MP_SEAT_RING_STEPS; ++step) {
+        order[step] = (uint8_t)((start + step) % (size_t)MP_SEAT_RING_STEPS);
+    }
+}
+
 mp_seat_verdict_t mp_seat_rule_floor_verdict(mp_seat_floor_t floor)
 {
     switch (floor) {

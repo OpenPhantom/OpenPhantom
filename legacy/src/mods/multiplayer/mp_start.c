@@ -361,15 +361,26 @@ bool mp_start_save(const char *file)
     }
     /* A choice out of the catalogue, or a file that reads as a save wherever it came from: the
      * one a client received from its host is the second kind, and it is exactly as much a save as
-     * the first. What is refused is a name that is neither. */
+     * the first. What is refused is a name that is neither.
+     *
+     * Refused only when the file read and was no save of a level. A file that did not open in
+     * this moment is not disproved by that: whoever asks for the received file has judged it
+     * already, out of the bytes it assembled, and a refusal here would throw away a start that
+     * was taken a line earlier and is not offered again. The engine's own restore opens the file
+     * itself a few frames on and says so if it cannot. */
     if (mp_saves_find(file) == NULL) {
-        mp_save_t header;
+        mp_save_t       header;
+        mp_saves_look_t look = mp_saves_look(file, &header);
 
-        if (!mp_saves_read(file, &header)) {
+        if (look == MP_SAVES_LOOK_NO_LEVEL || look == MP_SAVES_LOOK_NOT_A_SAVE) {
             log_warning("the lobby will not restore %s: it is not one of the savegames found and "
                         "does not read as one", file);
             ++start.refused;
             return false;
+        }
+        if (look == MP_SAVES_LOOK_UNREADABLE) {
+            log_warning("the savegame %s did not open as the start took it; the restore is asked "
+                        "for all the same and opens it itself", file);
         }
     }
     if (!write_u32(MP_CELL_LOAD_BY_NAME, 0u)) {

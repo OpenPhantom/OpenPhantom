@@ -20,9 +20,12 @@
 
 /* How many open handles one process keeps. Each distinct name costs one; a mod that files more
  * than this many kinds of note is doing something this layer was not built for, and is told so
- * once rather than silently losing the last one. The multiplayer opens thirteen names, so the
- * count is sixteen; it sizes this module's own table of handles and nothing that crosses to
- * another DLL. */
+ * once rather than silently losing the last one. The multiplayer opens the most, fourteen names:
+ * the session, the appearance, the spawner's wishes, grants and anchors, the two model wear
+ * records, the two movie records, the host's settings with the acknowledgements of the two mods
+ * that take them, and the ask and the answer of the player help. So the count is sixteen, and a
+ * fifteenth and sixteenth name still fit; it sizes this module's own table of handles and
+ * nothing that crosses to another DLL. */
 #define NOTE_SLOTS 16u
 
 typedef struct note_record {

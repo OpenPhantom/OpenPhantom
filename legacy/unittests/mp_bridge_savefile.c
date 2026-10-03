@@ -27,6 +27,7 @@
 
 #include "mp_bridge_lobby.h"
 #include "mp_bridge_savefile.h"
+#include "mp_bridge_savefile_look.h"
 #include "mp_lobby.h"
 #include "mp_loopback.h"
 #include "mp_savefile.h"
@@ -44,6 +45,7 @@
 
 #define TEST_FILE      "save\\UT_BRIDGE.SAV"
 #define TEST_FILE_SIZE (20u * 1024u + 333u)
+#define TEST_FILE_LEVEL 5u
 
 /* Static: a session is over two megabytes now that every peer carries a bulk ring, and the
  * loopback ring is another three hundred kilobytes. */
@@ -67,6 +69,12 @@ static void make_the_file(void)
     for (i = 0; i < sizeof s_file; ++i) {
         s_file[i] = (uint8_t)(i * 7u + (i >> 9));
     }
+    /* And a savegame's head over it, so the module that asks what the file is has an answer:
+     * the magic, and Mos Espa's row of the level table where the index stands. */
+    memset(s_file, 0, MP_SAVES_HEADER_BYTES);
+    memcpy(s_file, MP_SAVES_MAGIC, MP_SAVES_MAGIC_BYTES);
+    s_file[MP_SAVES_OFF_LEVEL] = TEST_FILE_LEVEL;
+    memcpy(s_file + MP_SAVES_OFF_NAME, "UT", 2u);
     s_id    = mp_savefile_digest(s_file, sizeof s_file);
     s_count = mp_savefile_chunk_count((uint32_t)sizeof s_file);
 
@@ -417,6 +425,96 @@ static void check_the_client_end(void)
     (void)DeleteFileA(MP_SAVES_JOIN_PATH);
 }
 
+/* Runs the client's transfer against the hand played host until the file is ready. */
+static bool receive_the_file(uint32_t *now)
+{
+    int tick;
+
+    memset(s_far_acked, 0, sizeof s_far_acked);
+    for (tick = 0; tick < 1500; ++tick) {
+        step(now);
+        far_host_take_masks();
+        if (tick % 6 == 0) {
+            far_host_send_unacked();
+        }
+        if (mp_bridge_savefile_ready(s_id, (uint32_t)sizeof s_file)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* What the received file is, asked before a restore, and a file a neighbour has put there.
+ *
+ * Three copies of the game out of one folder were all sent the host's savegame and all wrote it
+ * under its one name. The one that looked at the file while a neighbour wrote it could not open
+ * it, took that for a file that names no level, and began its level fresh beside a host that had
+ * restored. The look asks the bytes in memory first, waits on a file that does not open, has the
+ * file made again when that lasts, and the write leaves a file alone that holds the bytes. */
+static void check_the_look_and_a_file_already_there(void)
+{
+    const uint32_t size = (uint32_t)sizeof s_file;
+    uint32_t       now  = 0;
+    mp_save_t      save;
+    HANDLE         neighbour;
+    int            looks;
+
+    ut_section("the look at the received file: the bytes in memory first, then the disk");
+    fresh_pair(&now, 0x100C5u);
+    (void)DeleteFileA(MP_SAVES_JOIN_PATH);
+    /* The module holds one end for the process and remembers the file the section above wrote
+     * and then deleted. This section begins as a process that has written nothing. */
+    mp_bridge_savefile_forget_the_write();
+    mp_bridge_lobby_bind(&s_host, &s_client, NULL, true, NULL);
+    feed_the_client_a_setup();
+    ut_check(!mp_bridge_savefile_ready(s_id, size) && receive_the_file(&now),
+             "the client asks for the file and holds it");
+    memset(&save, 0, sizeof save);
+    ut_check(mp_bridge_savefile_look(s_id, size, &save) == MP_SAVES_LOOK_SAVE &&
+                 save.level_index == TEST_FILE_LEVEL &&
+                 strcmp(save.file, MP_SAVES_JOIN_PATH) == 0,
+             "asked of the bytes it assembled: a save, its level, and the one name it is "
+             "restored from");
+    neighbour = CreateFileA(MP_SAVES_JOIN_PATH, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+    ut_check(neighbour != INVALID_HANDLE_VALUE &&
+                 mp_bridge_savefile_look(s_id, size, &save) == MP_SAVES_LOOK_SAVE,
+             "and the same answer while a neighbour holds the file the way a write does: the "
+             "disk is not asked");
+
+    ut_section("a later session has the file by its name alone, and asks the disk");
+    mp_bridge_lobby_bind(&s_host, &s_client, NULL, true, NULL);
+    feed_the_client_a_setup();
+    ut_check(mp_bridge_savefile_ready(s_id, size), "the file written before is still ready");
+    ut_check(mp_bridge_savefile_look(s_id, size, &save) == MP_SAVES_LOOK_UNREADABLE,
+             "held by the neighbour it does not open: unreadable, which is no level to begin");
+    for (looks = 0; looks < 400 && mp_bridge_savefile_ready(s_id, size); ++looks) {
+        step(&now);
+        (void)mp_bridge_savefile_look(s_id, size, &save);
+    }
+    ut_checkf(looks >= 180 && looks <= 195,
+              "after three seconds of looks that did not read, a frame of 16 ms apart, the "
+              "write is forgotten and the file is no longer ready (%d looks)", looks);
+    if (neighbour != INVALID_HANDLE_VALUE) {
+        CloseHandle(neighbour);
+    }
+
+    ut_section("the file is asked of the host again, and found on the disk as it arrives");
+    neighbour = CreateFileA(MP_SAVES_JOIN_PATH, GENERIC_READ, FILE_SHARE_READ, NULL,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    ut_check(neighbour != INVALID_HANDLE_VALUE,
+             "a reader holds the file and lets nobody write it");
+    ut_check(receive_the_file(&now),
+             "the client is ready all the same: the disk holds these bytes, so it compared "
+             "and did not write");
+    ut_check(mp_bridge_savefile_look(s_id, size, &save) == MP_SAVES_LOOK_SAVE,
+             "and the look answers out of the bytes that arrived");
+    if (neighbour != INVALID_HANDLE_VALUE) {
+        CloseHandle(neighbour);
+    }
+    (void)DeleteFileA(MP_SAVES_JOIN_PATH);
+}
+
 /* ============================================================================================
  * Many clients at once. The loopback has two endpoints, so this section brings its own network: a
  * mailbox with a host and three clients, delivering in order and losing nothing, and a count of
@@ -682,6 +780,7 @@ int main(void)
     make_the_file();
     check_the_host_end();
     check_the_client_end();
+    check_the_look_and_a_file_already_there();
     check_the_budget_over_all_peers();
     check_the_pace_under_a_fast_pump();
     (void)DeleteFileA(TEST_FILE);

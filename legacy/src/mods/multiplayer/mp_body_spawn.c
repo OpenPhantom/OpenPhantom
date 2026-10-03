@@ -186,6 +186,7 @@ static void stamp_body(size_t index, const float pos[3])
     uint32_t  object = 0;
     uint32_t  pos_bits[3];
     int32_t   class_word = mp_bank_class_of(index);
+    int32_t   stamped;
     int       axis;
 
     if (far == NULL || pr_cell == 0 || !memory_read_u32(pr_cell, &block_addr) || block_addr == 0) {
@@ -210,7 +211,10 @@ static void stamp_body(size_t index, const float pos[3])
                     "be restored after a death clip", (unsigned)index);
     }
 
-    patch_write_u32(object + BAPOBJ_OBJ_CLASS, (uint32_t)class_word);
+    /* The class is asked of the owner of the far bodies' collision: a body built while a scene
+     * plays on the host is built passable and given back with the others. */
+    stamped = mp_body_collision_class_at(index, object);
+    patch_write_u32(object + BAPOBJ_OBJ_CLASS, (uint32_t)stamped);
     patch_write_u32(object + BAPOBJ_SHOOTER_CLASS, (uint32_t)class_word);
     /* The spawn gave it the player's node, whose slot is empty while the local player is dead;
      * in a session it takes a node of its own, so a contact on it reaches the dispatcher then. */
@@ -223,7 +227,7 @@ static void stamp_body(size_t index, const float pos[3])
     }
 
     log_info("bank %u's body stands: object %08X, class %d, at player 0's position",
-             (unsigned)index, (unsigned)object, (int)class_word);
+             (unsigned)index, (unsigned)object, (int)stamped);
 }
 
 /* ==============================================================================================

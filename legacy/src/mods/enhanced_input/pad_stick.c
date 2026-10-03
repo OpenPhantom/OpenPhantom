@@ -301,7 +301,8 @@ float pad_stick_y(void)
 
 bool pad_stick_wants_run(void)
 {
-    /* Not while a session's pause menu holds the input: with pad_run in front of the multiplayer's
+    /* Not while the session holds the input, by its pause menu, its chat or a scene: with pad_run
+     * in front of the multiplayer's
      * reader a pushed stick would still answer Run. */
     return pad_state.active && pad_state.running &&
            !session_note_input_held((uint32_t)GetTickCount());

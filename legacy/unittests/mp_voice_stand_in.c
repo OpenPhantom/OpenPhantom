@@ -12,6 +12,7 @@
 #include "mp_lobby.h"
 #include "mp_own_body.h"
 #include "mp_range_gate.h"
+#include "mp_scene_claim.h"
 #include "mp_scene_host.h"
 #include "mp_voice.h"
 #include "mp_voice_bind.h"
@@ -213,7 +214,7 @@ bool mp_range_gate_player(size_t bank, float out[3])
     return true;
 }
 
-bool mp_scene_for_all(mp_scene_known_t *known)
+bool mp_scene_host_stands(mp_scene_known_t *known)
 {
     if (known != NULL) {
         memset(known, 0, sizeof *known);
@@ -223,6 +224,11 @@ bool mp_scene_for_all(mp_scene_known_t *known)
         memcpy(known->anchor, si.anchor, sizeof known->anchor);
     }
     return si.scene_for_all;
+}
+
+bool mp_scene_claim_run_is_the_hosts(void)
+{
+    return !si.far_run;
 }
 
 const char *mp_voice_bind_cells(mp_voice_cells_t *out)
@@ -386,6 +392,7 @@ void si_set_the_world(bool note_known, uint8_t flags, bool is_client, bool joine
     si.scene_for_all   = false;
     si.anchor_known    = false;
     si.gathered        = false;
+    si.far_run         = false;
     si.serial          = 0u;
     si.lock            = 0;
     si.voices          = 1;

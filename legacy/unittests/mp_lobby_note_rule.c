@@ -76,7 +76,7 @@ static const note_case_t NOTES[] = {
     { (uint8_t)MP_NPC_COPY_WISH_TAG,    MP_LOBBY_NOTE_NEVER_TO_CLIENT, "a wish for a copy" },
     { (uint8_t)MP_NPC_COPY_ENTRY_TAG,   MP_LOBBY_NOTE_LEVEL_OTHER,     "a copy's entry" },
     { (uint8_t)MP_LEVEL_STATE_TAG,      MP_LOBBY_NOTE_LEVEL_STATE,     "the level's state" },
-    { (uint8_t)MP_SCENE_NOTE_TAG,       MP_LOBBY_NOTE_SCENE,           "the scene" },
+    { (uint8_t)MP_SCENE_NOTE_TAG,       MP_LOBBY_NOTE_LEVEL_OTHER,     "the retired scene note" },
     { (uint8_t)MP_CRATE_NOTE_TAG,       MP_LOBBY_NOTE_LEVEL_OTHER,     "the push blocks' note" },
     { (uint8_t)MP_CRATE_PUSH_TAG,       MP_LOBBY_NOTE_NEVER_TO_CLIENT, "a wish to push" },
     { (uint8_t)MP_CRATE_FALL_TAG,       MP_LOBBY_NOTE_LEVEL_OTHER,     "a push block falling" },

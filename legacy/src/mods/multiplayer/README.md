@@ -42,6 +42,11 @@ arrive beside the host, or beside the nearest player standing while the host is 
 * The pause menu does not stop the game for the others, and you can be hit while it is open.
 * Only the host talks to other characters. On a client the use key starts no conversation; what
   the host is told is heard and read by players standing near enough.
+* A cutscene is the host's alone. The other players go on playing; when one of them sets a
+  scene off, the host is brought there and the scene waits for him.
+* The developer menu has two buttons under **Multiplayer**, for the player who presses them:
+  **Repair lock** gives you your controls and camera back when a scene still holds them, and
+  **Teleport to host** puts a client beside the host.
 * A player who is killed comes back beside a player who is still standing. When everybody is down,
   the host decides how the level goes on.
 * When the host leaves, the session ends for everybody. When the last other player leaves, the
@@ -82,7 +87,7 @@ ammunition every hero can use. Single player is unchanged.
 | `PlayerName` | `Player` | the name the others see, up to fifteen ASCII characters. The menu writes it |
 | `Language` | empty | the language of the multiplayer's own texts: `en`, `de`, `fr`, `it` or `es`. Empty follows the Windows language, and a Windows language outside the five gives English |
 | `ChatKey` | `T` | the chat key: a letter, a digit or `F1` to `F12`. M, TAB, F4, F6, F7, F8, F10, F11 and F12 are taken and fall back to T. The developer menu's row **Key that opens the chat** sets it, also during a session |
-| `VoiceHearingRadiusFactor` | `4.0` | how far away a spoken line and its subtitle reach a player, 1.0 to 12.5. 4.0 is sixteen units, thirty two during a scene |
+| `VoiceHearingRadiusFactor` | `4.0` | how far away a spoken line and its subtitle reach a player, 1.0 to 12.5. 4.0 is sixteen units, thirty two for the host during a scene; the lines of his own scene reach him at any distance |
 | `NpcCopiesMax` | `16` | NPCs the developer menu's entity spawner may have standing at once in a session, 1 to 128 |
 | `NpcCopyCorpseSeconds` | `0` | seconds before the host removes the corpse of such an NPC, up to 1200. 0 leaves it to the game |
 | `AllowMods` | empty | DLLs outside this release that a session hosted here accepts, by name, separated by commas. Empty for a normal game |
@@ -106,11 +111,13 @@ Played:
 * the lobby, the host's saved game carried to a joining player, and each player on their own hero;
 * the other players moving, animating, changing weapons and using the lightsaber;
 * the host's world on every machine: doors, pickups, enemies and their shots, push blocks, quest
-  items and keys, spoken lines within earshot, the gas room's green fog, scenes that gather every
-  player, and the host's movie taking everybody on to the next level at the host's difficulty;
+  items and keys, spoken lines within earshot, the gas room's green fog, and the host's movie
+  taking everybody on to the next level at the host's difficulty;
 * being killed and coming back, a dead host's level going on for the others, the pause menu
   leaving the game running, and friendly fire both off and on;
 * the chat reaching every player;
+* cutscenes as the host's alone, and the host brought to a player who set a scene off;
+* the developer menu's **Repair lock** and **Teleport to host**;
 * joining a level that is already running, though without the wait for **I am ready**;
 * the host ending the session, and the host keeping its level when the last player leaves;
 * single player with the DLL enabled, where no second body appears.
@@ -137,6 +144,13 @@ with the multiplayer's report of what was sent, received and refused.
 * The chat works in a level, not in the lobby. A line is plain ASCII of up to 120 characters; on a
   Western Windows umlauts are written out as ae, oe and ue, elsewhere they become question marks.
 * The DLL check guards against accidents, not against intent. It looks only directly into `mods\`.
+* The host is in one cutscene at a time. A scene another player sets off meanwhile plays without
+  the host.
+* **Repair lock** on the host in the middle of a scene ends that scene by force, and what its
+  script would have done afterwards does not happen. In FEDSHIP, MAUL, ASSAULT and FINAL that
+  can leave the level without its end.
+* A scene of the host's and something another player sets off at the same moment share the
+  level's script registers and its one spoken line.
 * Team deathmatch is not offered yet.
 
 ## For developers
@@ -224,6 +238,10 @@ directly, the player spawn and death, the contact slot, the shot spawn, the inpu
 world draw, the key handler, the pause key, the use latch, the mover opener and closer, the
 activation scan and actor spawn, three script arms, the speak entry, the front end's menus, the
 cheat and difficulty cells and one entry of the shot table.
+
+For cutscenes it hulls the script runner, the player lock and its release, the letterbox, the
+camera's take and its clearing, and the hero's grab and its put-back. `camera_handback_fix`
+detours the camera's take and its clearing as well, and the chaining detour lets both stand.
 
 ### The hook on the world draw
 

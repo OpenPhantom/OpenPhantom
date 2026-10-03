@@ -134,7 +134,7 @@ void mp_enemy_sync_reset(void)
     mp_world_event_reset();
     mp_enemy_burst_reset();
     mp_level_state_reset();
-    mp_scene_exit_run();   /* a scene gathered in this world ends with it */
+    mp_scene_exit_run();   /* a scene of the host's in this world ends with it */
     memset(sync.let_go, 0, sizeof sync.let_go);
     ++sync.resets;
 }

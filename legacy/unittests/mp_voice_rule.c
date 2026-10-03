@@ -297,122 +297,97 @@ static void check_the_far_players(void)
              "a far player whose place is not a number is near nothing");
 }
 
-/* A scene for all runs, gathered around `anchor` (NULL: its place was not read). */
-static void in_a_scene(mp_voice_question_t *q, const float *anchor, bool gathered)
+/* A scene of the host's stands; `speaker` says whether the script that speaks is a run of the
+ * host's, `own` whether the scene is this machine's player's own. */
+static void in_a_scene(mp_voice_question_t *q, bool speaker, bool own)
 {
     q->scene_for_all = true;
-    q->gathered      = gathered;
+    q->scene_speaker = speaker;
+    q->gathered      = own;
     q->lock_at_scene = true;
-    if (anchor != NULL) {
-        q->scene_anchor_known = true;
-        memcpy(q->scene_anchor, anchor, sizeof q->scene_anchor);
-    }
 }
 
 static void check_the_scene(void)
 {
-    const float where[3]     = { 0.0f, 0.0f, 0.0f };
-    const float far_off[3]   = { 5000.0f, 0.0f, 0.0f };
-    const float gathers[3]   = { 0.0f, ADMIT, 0.0f };             /* exactly the admission */
-    const float elsewhere[3] = { 0.0f, ADMIT + 0.5f, 0.0f };
-    const float actor_off[3] = { 0.0f, 90.0f, 0.0f };             /* past the scene's radius */
-    const float beside[3]    = { 10.0f, 0.0f, 0.0f };
-    const float listens[3]   = { 0.0f, 20.0f, 0.0f };             /* inside the scene's radius */
-    float       nan_anchor[3];
+    const float where[3]   = { 0.0f, 0.0f, 0.0f };
+    const float far_off[3] = { 5000.0f, 0.0f, 0.0f };
+    const float beside[3]  = { 10.0f, 0.0f, 0.0f };
+    const float listens[3] = { 0.0f, 20.0f, 0.0f };             /* inside the scene's radius */
     mp_voice_question_t q;
     mp_voice_answer_t   a;
-    mp_voice_answer_t   host;
 
-    ut_section("a scene for all presents the lines spoken near where it gathers to a player it "
-               "gathered");
+    ut_section("a scene of the host's presents every line a run of the host's speaks");
 
-    ask(&q, where, far_off, false);
-    in_a_scene(&q, gathers, true);
+    ask(&q, where, far_off, true);
+    in_a_scene(&q, true, true);
     a = mp_voice_judge(&q);
     ut_check(a.verdict == MP_VOICE_PRESENTED && a.by_scene && a.of_scene && !a.beside,
-             "a line spoken exactly the admission from where the scene gathers is the scene's, "
-             "however far this body stands");
-
-    ut_section("the host and a client ask one question of a line of the scene");
-
-    /* The host used to know the scene's actor by its pointer, which a client is never told, and
-     * measured every other line with the scene's radius of thirty two units: an actor who spoke
-     * from ninety units was the scene's on the host and beside it on every client. */
-    ask(&q, where, far_off, true);
-    in_a_scene(&q, actor_off, true);
-    host = mp_voice_judge(&q);
-    ask(&q, where, far_off, false);
-    in_a_scene(&q, actor_off, true);
-    a = mp_voice_judge(&q);
-    ut_check(host.verdict == MP_VOICE_PRESENTED && host.by_scene &&
-                 a.verdict == MP_VOICE_PRESENTED && a.by_scene,
-             "a line spoken ninety units from where the scene gathers is presented to a gathered "
-             "host and to a gathered client alike");
+             "a line a run of the host's speaks is the scene's, however far this body stands");
 
     ask(&q, NULL, where, true);
-    in_a_scene(&q, where, true);
-    host = mp_voice_judge(&q);
-    ask(&q, NULL, where, false);
-    in_a_scene(&q, where, true);
+    in_a_scene(&q, true, true);
     a = mp_voice_judge(&q);
-    ut_check(host.verdict == MP_VOICE_WITHHELD && !host.of_scene && host.beside &&
-                 a.verdict == MP_VOICE_WITHHELD && !a.of_scene && a.beside,
-             "a line with no place is near no anchor, on the host as on a client");
+    ut_check(a.verdict == MP_VOICE_PRESENTED && a.by_scene && a.unknown,
+             "and so is one with no place: the scene's line is the scene's by its speaker");
 
-    ut_section("a player the scene left where it stood judges its lines by the radius");
+    ask(&q, where, NULL, true);
+    in_a_scene(&q, true, true);
+    a = mp_voice_judge(&q);
+    ut_check(a.verdict == MP_VOICE_PRESENTED && a.by_scene && a.unknown,
+             "and one spoken while this body cannot be measured");
+
+    ut_section("a line a far player's run speaks while the scene stands is judged by the radius");
+
+    ask(&q, where, far_off, true);
+    in_a_scene(&q, false, true);
+    a = mp_voice_judge(&q);
+    ut_check(a.verdict == MP_VOICE_WITHHELD && !a.by_scene && !a.of_scene && a.beside,
+             "far from this body and from everybody it is withheld, as outside a scene");
+
+    ask(&q, where, far_off, true);
+    in_a_scene(&q, false, true);
+    q.others = 1u;
+    memcpy(q.other[0], beside, sizeof q.other[0]);
+    a = mp_voice_judge(&q);
+    ut_check(a.verdict == MP_VOICE_SILENT && a.beside,
+             "with the far player it is spoken to beside it, the host keeps it alive at no "
+             "volume");
+
+    ask(&q, where, listens, true);
+    in_a_scene(&q, false, true);
+    a = mp_voice_judge(&q);
+    ut_check(a.verdict == MP_VOICE_PRESENTED && !a.by_scene && a.beside && a.hear == HEAR_SCENE,
+             "and this body near it presents it by the radius, the scene's under the scene's "
+             "lock, not by the scene");
+
+    ask(&q, NULL, where, true);
+    in_a_scene(&q, false, true);
+    a = mp_voice_judge(&q);
+    ut_check(a.verdict == MP_VOICE_WITHHELD && !a.of_scene && a.beside,
+             "a far player's line with no place is near nobody");
+
+    ut_section("a player whose own the scene is not judges its lines by the radius");
 
     ask(&q, where, far_off, false);
-    in_a_scene(&q, gathers, false);
+    in_a_scene(&q, true, false);
     a = mp_voice_judge(&q);
     ut_check(a.verdict == MP_VOICE_WITHHELD && !a.by_scene && a.of_scene && a.ungathered,
-             "a line of the scene far from a player it did not gather is withheld there");
+             "a line of the scene far from that player is withheld there");
 
     ask(&q, where, listens, false);
-    in_a_scene(&q, gathers, false);
+    in_a_scene(&q, true, false);
     a = mp_voice_judge(&q);
     ut_check(a.verdict == MP_VOICE_PRESENTED && !a.by_scene && a.ungathered,
              "and presented by the scene's radius when that player stands near it anyway");
 
-    ask(&q, where, far_off, true);
-    in_a_scene(&q, gathers, false);
-    q.others = 1u;
-    memcpy(q.other[0], beside, sizeof q.other[0]);
-    ut_check(mp_voice_judge(&q).verdict == MP_VOICE_SILENT,
-             "a host the scene did not gather keeps it alive for a player near it");
-
-    ut_section("a line that is none of the scene's is judged as outside a scene");
+    ut_section("with no scene standing whose run speaks decides nothing");
 
     ask(&q, where, far_off, false);
-    in_a_scene(&q, elsewhere, true);
-    a = mp_voice_judge(&q);
-    ut_check(a.verdict == MP_VOICE_WITHHELD && !a.by_scene && !a.of_scene && a.beside,
-             "half a unit farther from the anchor a far line is withheld, not played at the eye");
-
-    ask(&q, where, beside, false);
-    in_a_scene(&q, elsewhere, true);
-    a = mp_voice_judge(&q);
-    ut_check(a.verdict == MP_VOICE_PRESENTED && !a.by_scene && a.beside,
-             "and this body near it presents it by the radius, not by the scene");
-
-    ask(&q, where, far_off, false);
-    in_a_scene(&q, NULL, true);
-    ut_check(mp_voice_judge(&q).verdict == MP_VOICE_WITHHELD,
-             "a scene whose place was not read gathers no line");
-
-    memcpy(nan_anchor, where, sizeof nan_anchor);
-    nan_anchor[1] = not_a_number();
-    ask(&q, where, far_off, false);
-    in_a_scene(&q, nan_anchor, true);
-    ut_check(mp_voice_judge(&q).verdict == MP_VOICE_WITHHELD,
-             "an anchor that is not a number is near no line");
-
-    ask(&q, where, far_off, false);
-    q.gathered           = true;
-    q.scene_anchor_known = true;
-    memcpy(q.scene_anchor, where, sizeof q.scene_anchor);
+    q.gathered      = true;
+    q.scene_speaker = true;
     a = mp_voice_judge(&q);
     ut_check(a.verdict == MP_VOICE_WITHHELD && !a.by_scene && !a.beside && !a.of_scene,
-             "with no scene for all a place at the anchor does not count");
+             "a line of a run of the host's far from this body is withheld like any other");
 }
 
 static void check_the_place_handed_to_the_engine(void)

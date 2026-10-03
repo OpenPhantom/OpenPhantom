@@ -42,7 +42,9 @@
  * (local_look.c): a giant is a giant on every machine. No clip, super run and jump boost travel as
  * what they do, because positions travel. Unlimited health and ammunition are this machine's own
  * business and cost the session nothing. The field of view, the subtitle size, the window, the
- * pad and this panel's own size are settings nobody compares.
+ * pad and this panel's own size are settings nobody compares. The whole multiplayer group is left
+ * alone as well: the chat's key is this machine's own, and the two buttons under it exist for a
+ * session and act for the player who presses them and nobody else (player_help_row.h).
  *
  * The cost of being wrong is not symmetric, which is why the list is written out rather than
  * guessed at: a row locked that did not need to be is a row somebody cannot use while they play

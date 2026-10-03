@@ -167,7 +167,7 @@ static void check_it_refuses_with_no_game(void)
     mp_reentry_note_my_slot(0u);
     mp_reentry_note_death(&note);
     ut_check(!mp_respawn_pending(), "a death outside a session is counted and dropped");
-    mp_reentry_tick(0u);
+    mp_reentry_tick(0u, 0u);
     ut_check(!mp_respawn_pending(), "and a tick over it hands nothing over");
     mp_reentry_note_death(NULL);
     ut_check(!mp_respawn_pending(), "a null note is answered rather than dereferenced");
@@ -229,32 +229,41 @@ static void check_what_the_corpse_watch_answers(void)
 {
     const uint32_t PAST   = MP_REENTRY_CORPSE_PATIENCE_FRAMES;
     const uint32_t INSIDE = MP_REENTRY_CORPSE_PATIENCE_FRAMES - 1u;
+    const uint32_t TIME   = MP_REENTRY_CORPSE_PATIENCE_MS;
+    const uint32_t EARLY  = MP_REENTRY_CORPSE_PATIENCE_MS - 1u;
 
     ut_section("a corpse with a way back being tried is waiting, and without one it is stuck");
 
-    ut_check(mp_reentry_corpse_state(true, PAST, true, false, true, true) ==
+    ut_check(mp_reentry_corpse_state(true, PAST, TIME, true, false, true, true) ==
                  MP_REENTRY_CORPSE_WAITING,
              "a wish is being tried: say so, and let it be tried");
-    ut_check(mp_reentry_corpse_state(true, PAST, false, false, true, true) ==
+    ut_check(mp_reentry_corpse_state(true, PAST, TIME, false, false, true, true) ==
                  MP_REENTRY_CORPSE_STUCK,
              "the same corpse once the wish is gone is stuck: the answer does not depend on what "
              "was said while the wish was still there");
-    ut_check(mp_reentry_corpse_state(true, PAST, true, true, true, true) ==
+    ut_check(mp_reentry_corpse_state(true, PAST, TIME, true, true, true, true) ==
                  MP_REENTRY_CORPSE_HOST,
              "waiting for the host to pick the next world is its own state, not a defect");
 
     ut_section("and nothing is said or done before there is a reason");
 
-    ut_check(mp_reentry_corpse_state(false, PAST, false, false, true, true) ==
+    ut_check(mp_reentry_corpse_state(false, PAST, TIME, false, false, true, true) ==
                  MP_REENTRY_CORPSE_NO,
              "a living player is no corpse");
-    ut_check(mp_reentry_corpse_state(true, INSIDE, false, false, true, true) ==
+    ut_check(mp_reentry_corpse_state(true, INSIDE, TIME, false, false, true, true) ==
                  MP_REENTRY_CORPSE_NO,
              "and a corpse inside the patience is a death the engine is still playing out");
-    ut_check(mp_reentry_corpse_state(true, PAST, false, false, false, true) ==
+    ut_check(mp_reentry_corpse_state(true, PAST, EARLY, false, false, true, true) ==
+                 MP_REENTRY_CORPSE_NO,
+             "the frames of a fast machine are a second, which is the engine's own fade: "
+             "the patience is the time as well");
+    ut_check(mp_reentry_corpse_state(true, PAST * 8u, EARLY, true, false, true, true) ==
+                 MP_REENTRY_CORPSE_NO,
+             "and no number of frames inside that time says anything about a wish either");
+    ut_check(mp_reentry_corpse_state(true, PAST, TIME, false, false, false, true) ==
                  MP_REENTRY_CORPSE_NO,
              "with no session there is nothing to be stuck in");
-    ut_check(mp_reentry_corpse_state(true, PAST, false, false, true, false) ==
+    ut_check(mp_reentry_corpse_state(true, PAST, TIME, false, false, true, false) ==
                  MP_REENTRY_CORPSE_NO,
              "and a level the engine has ended itself is already showing a screen to leave by");
 }

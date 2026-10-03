@@ -462,7 +462,8 @@ void __cdecl enhanced_input_steer_thunk(void)
 
     classify_mode(&s);
 
-    /* A session's pause menu holds this player's input while the world, and these phases, run on.
+    /* A holder of the session, its pause menu, its chat or a scene, holds this player's input
+     * while the world, and these phases, run on.
      * Declining here keeps the stick and the mouse out of the body; the engine's own steer still
      * runs, on readers the multiplayer holds, so the body brakes and stands. */
     if (s.phase_active && input_gate_session_holds()) {

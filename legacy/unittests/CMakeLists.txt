@@ -438,6 +438,10 @@ add_unit_test(movie_note "")
 # The host's world settings for a session and each consumer's acknowledgement: no record and a
 # record of another shape both mean the consumer's own value, and every name the channel accepts.
 add_unit_test(host_settings_note "")
+# The two buttons of the developer menu that the multiplayer carries out: the ask the overlay
+# files and the answer the multiplayer files, their shape, what each side refuses, and the
+# comparison that keeps a press from before a session from firing in it.
+add_unit_test(player_help_note "")
 # Which DLL in the mods folder is one of this release's own: the classification from strings, the
 # readers on images built byte by byte and on the operating system's own DLLs.
 add_unit_test(mod_identity "")
@@ -497,6 +501,7 @@ add_unit_test(mp_body_wear multiplayer
     multiplayer/mp_events.c
     multiplayer/mp_wire.c
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -537,6 +542,7 @@ add_unit_test(mp_blade multiplayer
     multiplayer/mp_events.c
     multiplayer/mp_wire.c
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -577,6 +583,7 @@ add_unit_test(mp_blade_draw multiplayer
     multiplayer/mp_events.c
     multiplayer/mp_wire.c
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -701,6 +708,11 @@ set(OVERLAY_MODEL_SOURCES
     # multiplayer group it is drawn in
     dev_overlay/chat_key_row.c
     dev_overlay/overlay_multiplayer.c
+    # the two buttons of that group, which file an ask for the multiplayer and read its answer.
+    # A press asks whether the free camera keeps the panel up, which is input_owner.c's answer;
+    # nothing flies in a test process, so it answers no and the stubbed close is counted
+    dev_overlay/player_help_row.c
+    dev_overlay/input_owner.c
     dev_overlay/fog_follow_row.c
     dev_overlay/auto_range_row.c
     dev_overlay/dismemberment_row.c
@@ -845,6 +857,14 @@ add_unit_test(overlay_layout dev_overlay ${OVERLAY_MODEL_SOURCES})
 # the tab it shares nothing with.
 add_unit_test(overlay_width dev_overlay ${OVERLAY_MODEL_SOURCES})
 target_link_libraries(overlay_width_test PRIVATE xinput)
+# The panel's end of the two buttons under Multiplayer, with the multiplayer stood in for by the
+# records it would file: when a button is offered and the word it carries when it is not, what a
+# press files, which answer counts as the answer to the last press, how seldom the answer is
+# asked for while there is none, and every sentence of the line under the buttons against the
+# room it has. It links the whole list because a button asks the session lock, the free camera
+# and the input freeze, and those bring the rest.
+add_unit_test(player_help_row dev_overlay ${OVERLAY_MODEL_SOURCES})
+target_link_libraries(player_help_row_test PRIVATE xinput)
 target_link_libraries(overlay_layout_test PRIVATE xinput)
 target_link_libraries(overlay_keys_test PRIVATE xinput)
 # The entity spawner group with a spawner standing behind it. Every programme above links the real
@@ -1262,14 +1282,24 @@ set(BRIDGE_FAMILY
     multiplayer/mp_pause_rule.c
     multiplayer/mp_signatures_pause.c
     multiplayer/mp_cutscene.c
+    multiplayer/mp_cutscene_sites.c
     multiplayer/mp_signatures_scene.c
-    multiplayer/mp_scene_note.c
-    multiplayer/mp_scene_send.c
+    multiplayer/mp_scene_claim_rule.c
+    multiplayer/mp_scene_claim.c
     multiplayer/mp_scene_flow.c
+    multiplayer/mp_scene_doorless.c
+    multiplayer/mp_scene_room.c
+    multiplayer/mp_scene_scope.c
     multiplayer/mp_scene_bind.c
     multiplayer/mp_scene_host.c
+    multiplayer/mp_scene_seats.c
+    multiplayer/mp_scene_own.c
     multiplayer/mp_scene_host_report.c
     multiplayer/mp_scene_client.c
+    multiplayer/mp_scene_free_rule.c
+    multiplayer/mp_scene_free.c
+    multiplayer/mp_scene_hero_rule.c
+    multiplayer/mp_scene_hero_watch.c
     multiplayer/mp_npc_copies_bridge.c
     multiplayer/mp_npc_copies_run.c
     multiplayer/mp_npc_copies_run_host.c
@@ -1298,6 +1328,17 @@ set(BRIDGE_FAMILY
     multiplayer/mp_host_settings_rule.c
     multiplayer/mp_host_settings.c
     multiplayer/mp_world_holds.c
+    # The reader of the developer menu's two buttons, which the install arms and withdraws. Its
+    # repair closes the chat's open line, so the chat's input comes along with what it stands on.
+    multiplayer/mp_player_help_rule.c
+    multiplayer/mp_player_help.c
+    multiplayer/mp_repair_lock.c
+    multiplayer/mp_teleport_host.c
+    multiplayer/mp_chat_input.c
+    multiplayer/mp_chat_key_rule.c
+    multiplayer/mp_signatures_chat.c
+    multiplayer/mp_board.c
+    multiplayer/mp_score.c
     multiplayer/mp_world_door.c
     multiplayer/mp_signatures_door.c
     multiplayer/mp_trust.c
@@ -1364,7 +1405,9 @@ set(BRIDGE_FAMILY
     multiplayer/mp_levels.c
     multiplayer/mp_saves.c
     multiplayer/mp_savefile.c
+    multiplayer/mp_savefile_disk.c
     multiplayer/mp_bridge_savefile.c
+    multiplayer/mp_bridge_savefile_look.c
     multiplayer/mp_start.c
     multiplayer/mp_start_restore.c
     multiplayer/mp_start_wish.c
@@ -1424,6 +1467,7 @@ set(BRIDGE_FAMILY
     multiplayer/mp_actions.c
     multiplayer/mp_actions_sabre.c
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -1900,6 +1944,7 @@ add_unit_test(mp_puppet_sabre multiplayer
     multiplayer/mp_events.c
     multiplayer/mp_wire.c
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -2021,6 +2066,7 @@ add_unit_test(mp_effects multiplayer
     multiplayer/mp_events.c
     multiplayer/mp_wire.c
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -2213,6 +2259,7 @@ add_unit_test(mp_reentry multiplayer
     multiplayer/mp_target_rule.c
     ${ENEMY_FAMILY}
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -2258,6 +2305,18 @@ add_unit_test(mp_seat_order multiplayer
     multiplayer/mp_seat_rule.c
     multiplayer/mp_spawnpoints.c
 )
+target_sources(mp_seat_order_test PRIVATE mp_seat_little_world.c)
+
+# The one ring loop of the seat search, through the real search on the same little world: the
+# slot's order of directions pinned against the formula it always had, for every slot and every
+# set of blocked directions, and the reading of the floor under the anchor it hands back.
+add_unit_test(mp_seat_loop multiplayer
+    multiplayer/mp_seat.c
+    multiplayer/mp_seat_wish.c
+    multiplayer/mp_seat_rule.c
+    multiplayer/mp_spawnpoints.c
+)
+target_sources(mp_seat_loop_test PRIVATE mp_seat_little_world.c)
 
 # A fan the host reports every substep, and one death for it: the dispatcher and its gate, the
 # attribution, the death hull with its one entry per life, the rule set, the re-entry and the seat
@@ -2265,6 +2324,7 @@ add_unit_test(mp_seat_order multiplayer
 # late included. The rest of what the body module names is answered by the test.
 add_unit_test(mp_body_gate multiplayer
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_body_death.c
     multiplayer/mp_contact_rule.c
@@ -2406,6 +2466,20 @@ add_unit_test(mp_saves multiplayer
     multiplayer/mp_text.c
     multiplayer/mp_text_pick.c
     multiplayer/mp_text_second.c
+)
+
+# The reason a file is no choice, kept apart: the received savegame on the disk, whether it is
+# there already and putting it there, against real files, a neighbour that holds the file the
+# way a write does and one that reads it the way the engine's restore does.
+add_unit_test(mp_savefile_disk multiplayer
+    multiplayer/mp_savefile_disk.c
+)
+
+# What the music of a player is owed after his own death in a level that goes on: the bed he
+# had put back half a second after he stands, the death piece taken out of the sequence latch,
+# and every case in which a newer word stands and nothing is put over it.
+add_unit_test(mp_death_music_rule multiplayer
+    multiplayer/mp_death_music_rule.c
 )
 
 # A savegame cut into notes for the reliable channel and put back together on the other side:
@@ -2565,6 +2639,7 @@ add_unit_test(mp_damage multiplayer
     multiplayer/mp_target_rule.c
     ${ENEMY_FAMILY}
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -2587,6 +2662,7 @@ add_unit_test(mp_damage multiplayer
 # nothing resolved. The engine choreography itself is proven in game, not here.
 add_unit_test(mp_body multiplayer
     multiplayer/mp_body.c
+    multiplayer/mp_body_passable.c
     multiplayer/mp_body_gate.c
     multiplayer/mp_signatures_contact.c
     multiplayer/mp_body_shot.c
@@ -3098,57 +3174,77 @@ add_unit_test(mp_scene_trigger multiplayer
     multiplayer/mp_scene_rule.c
 )
 
-# The single questions a scene gathering asks: whether a scene runs, whether a player may be moved,
-# who asked for a respawn, where a hero's spawn came from and what a warp did to the quest bits.
+# The single questions a scene asks: whether a scene runs, whether a player may be moved, who
+# asked for a respawn, where a hero's spawn came from and what a warp did to the quest bits.
 add_unit_test(mp_scene_move multiplayer
     multiplayer/mp_scene_rule.c
 )
 
-# The host's scene as a note, 0xA4: its bytes, what it refuses and a round trip over every shape.
-add_unit_test(mp_scene_note multiplayer
-    multiplayer/mp_scene_note.c
-    multiplayer/mp_wire.c
+# The watch on the hero a scene hosts: when a walk counts as stuck, which target is the real one
+# across a detour, and when the hero is put onto it. Pure.
+add_unit_test(mp_scene_hero_rule multiplayer
+    multiplayer/mp_scene_hero_rule.c
 )
 
-# When the host's scene note goes out: at once on a change, throttled, repeated once a second, none
-# said once, and a full channel never loses a change.
-add_unit_test(mp_scene_send multiplayer
-    multiplayer/mp_scene_send.c
-    multiplayer/mp_scene_note.c
-    multiplayer/mp_level_state_rule.c
-    multiplayer/mp_director_rule.c
-    multiplayer/mp_wire.c
-)
-
-# A scene for everybody: the host's scene, a client's mirror and one player's seat, each walked
-# over every sequence of its inputs up to six long.
+# A scene of the host's: the host's scene and one player's seat, each walked over every sequence
+# of its inputs up to six long.
 add_unit_test(mp_scene_flow multiplayer
     multiplayer/mp_scene_flow.c
-    multiplayer/mp_scene_note.c
-    multiplayer/mp_scene_rule.c
-    multiplayer/mp_seat_rule.c
-    multiplayer/mp_wire.c
 )
 
-# What a scene for everybody waits for, and where each wait ends: every far player gone, a host
-# dead or where it cannot be moved, a client's warp it cannot take, a note that stands alone.
+# What a scene of the host's waits for, and where each wait ends: every far player gone, a host
+# dead or where it cannot be moved, a host with no place, and a seat with a bound of its own.
 add_unit_test(mp_scene_flow_wait multiplayer
     multiplayer/mp_scene_flow.c
-    multiplayer/mp_scene_note.c
-    multiplayer/mp_scene_rule.c
-    multiplayer/mp_seat_rule.c
-    multiplayer/mp_wire.c
 )
 
-# The seating of a scene: a seat of its own for every player around the place, and one beside a
-# seat handed out first for a player no seat around the place answered for, against a stand-in
-# blocked by direction and one of the ramp a scene of a field run was set off on.
-add_unit_test(mp_scene_seating multiplayer
+# The host at the place of a scene a far player set off: the hold that falls the moment he stands
+# there, the rule of the place, and a gathering's seat that is tried again and taken the hard way
+# rather than given up, with every short sequence of its inputs giving every fade back.
+add_unit_test(mp_scene_hold multiplayer
     multiplayer/mp_scene_flow.c
-    multiplayer/mp_scene_note.c
+    multiplayer/mp_scene_room.c
+)
+
+# A scene that runs on the host with no door heard: when the host takes it over and how its flow
+# stands then; and the input a menu leaves over a fallen lock.
+add_unit_test(mp_scene_doorless multiplayer
+    multiplayer/mp_scene_doorless.c
+    multiplayer/mp_scene_flow.c
     multiplayer/mp_scene_rule.c
-    multiplayer/mp_seat_rule.c
-    multiplayer/mp_wire.c
+)
+
+# Whose a script's doors are on the host, pure: whose a run is over every input against the rule
+# written plainly, the three marks of a taker bit by bit, the doors a far player's run was refused
+# in their order, the latch and a far player's lock that is no scene of the host's, the placements
+# woken for a far player, and a refused release owed to the host.
+add_unit_test(mp_scene_claim_rule multiplayer
+    multiplayer/mp_scene_claim_rule.c
+    multiplayer/mp_scene_rule.c
+)
+
+# What of a scene's hold on a player is given back: the plan out of one look, over every value
+# the look can carry, for a client that is never held and for a player who asks for himself.
+add_unit_test(mp_scene_free_rule multiplayer
+    multiplayer/mp_scene_free_rule.c
+)
+
+# Where the two releases of a scene live: the lock's held against the two script ends, and the
+# clearing of the camera's override read out of them, against the retail image's own bytes.
+add_unit_test(mp_scene_free_ends multiplayer
+    multiplayer/mp_scene_free_rule.c
+)
+
+# The host's input while he is brought to the place of a scene: when it is held, and every way
+# out of a scene letting it go, walked from a held input.
+add_unit_test(mp_scene_input multiplayer
+    multiplayer/mp_scene_flow.c
+)
+
+# The place of a scene: whether a body stands at it, whether the host stands there already, and
+# the way a body at it faces.
+add_unit_test(mp_scene_room multiplayer
+    multiplayer/mp_scene_room.c
 )
 
 # Which calls the target resolver's hull leaves to the engine: the conversation menu's facing test,
@@ -3281,9 +3377,9 @@ set(PEERS_SESSION
 add_unit_test(mp_session_peers multiplayer ${PEERS_SESSION})
 target_sources(mp_session_peers_test PRIVATE mp_peers_net.c)
 add_unit_test(mp_session_peers_state multiplayer ${PEERS_SESSION})
-# The scene and the crate note are built by their own encoders, as their senders build them.
+# The crate note is built by its own encoder, as its sender builds it.
 target_sources(mp_session_peers_state_test PRIVATE mp_peers_net.c
-    ${MODS}/multiplayer/mp_scene_note.c ${MODS}/multiplayer/mp_crate_wire.c)
+    ${MODS}/multiplayer/mp_crate_wire.c)
 
 # The lag-compensation rewind: a stored tick is exact, between two it interpolates, a request older
 # than the window is answered at the edge rather than refused, a future one at the newest, and a
@@ -3363,16 +3459,17 @@ add_unit_test(mp_channel_budget multiplayer multiplayer/mp_channel.c
     multiplayer/mp_channel_state.c multiplayer/mp_budget_rule.c)
 # What a session sends a second and what a payload packet weighs, for the report's peer lines.
 add_unit_test(mp_session_meter multiplayer multiplayer/mp_session_meter.c)
-# Which ten notes are states, and the key without the clock; the scene, the crate note and the
-# host's settings from their own encoders, so the clock left out is where those encoders put it.
+# Which nine notes are states, and the key without the clock; the crate note and the host's
+# settings from their own encoders, so the clock left out is where those encoders put it.
 add_unit_test(mp_state_note_rule multiplayer multiplayer/mp_state_note_rule.c
-    multiplayer/mp_scene_note.c multiplayer/mp_crate_wire.c multiplayer/mp_wire.c
+    multiplayer/mp_crate_wire.c multiplayer/mp_wire.c
     multiplayer/mp_host_settings_rule.c)
 add_unit_test(mp_flash multiplayer multiplayer/mp_flash_rule.c)
 # Every way a transport goes up arms the detonation flash and the way down puts the engine's arm
 # back, seen in a shot table of the test's own: the real install, flash rule, record of the
 # standing transport and menu settings, against stand-ins for the cells, the sessions, the
-# socket, the relay and the halves the install binds.
+# socket, the relay and the halves the install binds. The reader of the developer menu's two
+# buttons is armed and withdrawn beside them, counted by a stand-in.
 add_unit_test(mp_bridge_install multiplayer
     multiplayer/mp_bridge_install.c
     multiplayer/mp_flash.c
@@ -3382,6 +3479,29 @@ add_unit_test(mp_bridge_install multiplayer
     multiplayer/mp_rules.c
     multiplayer/mp_lobby.c
     multiplayer/mp_wire.c
+)
+# The two buttons of the developer menu as rules, the reader and the teleport: the mark that keeps
+# a press of before a session from firing, every row of the teleport's refusals in its order, and
+# the search that takes only a place beside the host.
+add_unit_test(mp_player_help_rule multiplayer
+    multiplayer/mp_player_help_rule.c
+)
+# The same rules, the repair: what a press asks on each role, what counts as nothing to do, which
+# input hold lost its owner, when the host's scene latches and what the answer says, with the real
+# plan of a scene's release under it and the real holders.
+add_unit_test(mp_player_help_repair multiplayer
+    multiplayer/mp_player_help_rule.c
+    multiplayer/mp_scene_free_rule.c
+    multiplayer/mp_armed.c
+)
+# The reader of the two buttons as it ships, against the two records in one process: the test
+# files an ask as the overlay does and reads the answer as the panel does, and the repair and the
+# teleport are stand-ins that answer what they are told to. A press of before a session never
+# carried out, nobody told to listen before a frame has run, the newest press answered, and an
+# open answer ended on the way out.
+add_unit_test(mp_player_help multiplayer
+    multiplayer/mp_player_help.c
+    multiplayer/mp_player_help_rule.c
 )
 # The note of the host's world settings, both directions of its bounds against the table, and
 # what the host says of its own ini, read the way each mod reads it.

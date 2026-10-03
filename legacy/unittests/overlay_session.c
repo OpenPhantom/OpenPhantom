@@ -38,10 +38,13 @@
 #include "overlay_model.h"
 #include "overlay_reason.h"
 #include "overlay_spawn.h"
+#include "overlay_stubs.h"
+#include "player_help_row.h"
 #include "session_lock.h"
 #include "spawn_place.h"
 
 #include "common/host_settings_note.h"
+#include "common/player_help_note.h"
 #include "common/session_note.h"
 #include "common/text.h"
 
@@ -446,6 +449,113 @@ static void test_the_chat_key_stays_free(void)
     session(false);
 }
 
+/* One of the two buttons under Multiplayer, found by its name, with where it stands. */
+static bool button(const char *label, overlay_row_t *out, uint32_t *index)
+{
+    uint32_t i;
+
+    for (i = 0; i < overlay_model_row_count(); ++i) {
+        if (overlay_model_row(i, out) && out->kind == OVERLAY_ROW_ACTION &&
+            out->group == (uint32_t)OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER &&
+            strcmp(out->label, label) == 0) {
+            *index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The answer record as the multiplayer of a session files it, and one reading of it. */
+static void the_session_answers(uint8_t ready)
+{
+    player_help_answer_t answer;
+
+    memset(&answer, 0, sizeof answer);
+    answer.version = PLAYER_HELP_NOTE_VERSION;
+    answer.ready   = ready;
+    ut_check(player_help_answer_publish(&answer),
+             ready != 0u ? "the multiplayer files that it listens for both buttons"
+                         : "the multiplayer files that nobody listens");
+    overlay_model_rebuild();          /* the lock's reading of the session, which the tick asks */
+    player_help_row_tick(0u);
+    overlay_model_rebuild();
+}
+
+/* The two buttons under Multiplayer are the opposite of everything above: a session is what
+ * OFFERS them. The lock takes neither. What offers them is the session note together with the
+ * multiplayer's own word that it listens, and a press files the next serial for it to read. The
+ * sentences, the greying while a press is worked on and the reading's throttle are
+ * unittests/player_help_row.c's. */
+static void test_the_two_buttons_need_a_session(void)
+{
+    const uint8_t     both = PLAYER_HELP_READY_LISTENING | PLAYER_HELP_READY_CAN_REPAIR |
+                             PLAYER_HELP_READY_CAN_TELEPORT;
+    overlay_row_t     row;
+    player_help_ask_t ask;
+    session_note_t    note;
+    uint32_t          at = 0;
+    uint32_t          before;
+    uint32_t          closes;
+
+    ut_section("the two buttons under Multiplayer, which a session offers and does not take");
+    overlay_model_reset();
+    overlay_model_set_tab(OVERLAY_TAB_OPENPHANTOM);
+    session(true);
+    overlay_model_rebuild();
+    open_everything();
+
+    the_session_answers(0u);
+    ut_check(button("Repair lock", &row, &at) && !row.available &&
+                 strcmp(overlay_chip_word(&row), "n/a") == 0,
+             "in a session whose multiplayer does not listen, Repair lock is greyed and reads "
+             "n/a: pressed, it would file an ask nobody reads");
+
+    the_session_answers(both);
+    ut_check(button("Repair lock", &row, &at) && row.available &&
+                 strcmp(overlay_chip_word(&row), "RUN") == 0,
+             "with the answer on file it is offered, on the host as well: a host can be held too");
+    ut_check(button("Teleport to host", &row, &at) && !row.available &&
+                 row.reason == (uint32_t)OVERLAY_REASON_IS_HOST &&
+                 strcmp(overlay_chip_word(&row), "host") == 0,
+             "Teleport to host is greyed on the host, whatever the multiplayer says it can do");
+    ut_check(overlay_model_row(at + 1u, &row) && row.kind == OVERLAY_ROW_INFO &&
+                 strcmp(row.label, "You are the host") == 0,
+             "and the sentence under it says why");
+
+    memset(&note, 0, sizeof note);
+    note.running = true;
+    ut_check(session_note_publish(&note), "the same session with this machine a client");
+    overlay_model_rebuild();
+    ut_check(button("Teleport to host", &row, &at) && row.available &&
+                 button("Repair lock", &row, &at) && row.available,
+             "on a client both buttons are offered");
+
+    before = player_help_ask_read(&ask) ? ask.serial : 0u;
+    closes = overlay_stubs_closes;
+    ut_check(overlay_model_activate(at), "pressing Repair lock is accepted");
+    ut_check(player_help_ask_read(&ask) && ask.serial == before + 1u &&
+                 ask.kind == PLAYER_HELP_KIND_REPAIR && ask.flags == 0u,
+             "and files an ask for a repair under the next serial, one more than the last, with "
+             "nothing of the overlay holding the player");
+    ut_check(overlay_stubs_closes == closes + 1u,
+             "after asking the panel to close, so the multiplayer reads a player the panel does "
+             "not hold");
+    overlay_model_rebuild();
+    ut_check(button("Teleport to host", &row, &at) && overlay_model_activate(at) &&
+                 player_help_ask_read(&ask) && ask.serial == before + 2u &&
+                 ask.kind == PLAYER_HELP_KIND_TELEPORT,
+             "a press of the other button files the serial after that one, as a teleport");
+
+    the_session_answers(0u);
+    session(false);
+    overlay_model_rebuild();
+    ut_check(button("Repair lock", &row, &at) && !row.available &&
+                 row.reason == (uint32_t)OVERLAY_REASON_NEEDS_SESSION &&
+                 button("Teleport to host", &row, &at) && !row.available &&
+                 row.reason == (uint32_t)OVERLAY_REASON_NEEDS_SESSION,
+             "and when the session ends both are greyed again, for want of a session");
+}
+
 /* Every kind of row a player can act on is a kind a session takes, held kind by kind.
  *
  * The lock and the panel's own summary read one predicate for this (overlay_model.h), and it is
@@ -730,5 +840,9 @@ int main(void)
     test_a_remembered_fold_unlocks_nothing();
     test_the_chat_key_stays_free();
     test_the_host_values_on_a_client();
+    /* After the host's values, not before: it runs the panel as a client with none of them on
+     * file, and their reader spaces its misses out by a second, so the section above would
+     * begin inside that second and read nothing. */
+    test_the_two_buttons_need_a_session();
     return ut_summary("the panel in a session");
 }

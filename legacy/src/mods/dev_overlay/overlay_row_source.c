@@ -67,7 +67,7 @@ uint32_t overlay_row_source_count(overlay_group_t group)
     case OVERLAY_GROUP_OPENPHANTOM_MENU_EXTRAS:
         return overlay_menu_extras_row_count();   /* two, and the fold's lines while open */
     case OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER:
-        return OVERLAY_MULTIPLAYER_ROW_COUNT;
+        return overlay_multiplayer_row_count();   /* three, and the line after a press */
     case OVERLAY_GROUP_OPENPHANTOM:
     default:
         /* Every cheat but free camera and the jump-boost scale; the numbering is in
@@ -203,7 +203,8 @@ void overlay_row_source_fill(overlay_group_t group, uint32_t id, overlay_row_t *
         return;
     }
     case OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER:
-        /* One key row, and the capture lands on it by its id, which carries the group's base. */
+        /* One key row, the first, and the capture lands on it by its id, which carries the
+         * group's base. The rows under it bind nothing. */
         out->id = MULTIPLAYER_FIRST_ID + id;
         overlay_multiplayer_row(id, overlay_edit_capturing_row(out->id), out);
         return;

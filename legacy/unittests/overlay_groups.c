@@ -31,8 +31,10 @@
 #include "overlay_multiplayer.h"
 #include "overlay_notice.h"
 #include "overlay_picture.h"
+#include "overlay_reason.h"
 #include "overlay_rows.h"
 #include "overlay_slider.h"
+#include "overlay_stubs.h"
 #include "overlay_utilities.h"
 #include "session_lock.h"
 #include "fog_band_row.h"
@@ -44,6 +46,7 @@
 #include "view_range_row.h"
 
 #include "common/ini.h"
+#include "common/player_help_note.h"
 
 #include "common/text.h"
 
@@ -109,6 +112,42 @@ static void test_utilities_group(void)
              "and its id is the second of the group\'s own block of ids");
 }
 
+/* The two buttons under the chat's key, with no session, which is how every row here is seen in
+ * this program. Both are there and both are greyed, with the one word that says a session is
+ * what is missing and its sentence once, under the first of them. What a press does in a session
+ * is unittests/overlay_session.c's. */
+static void test_the_two_buttons_without_a_session(void)
+{
+    player_help_ask_t ask;
+    const uint32_t    closes = overlay_stubs_closes;
+    const bool        filed = player_help_ask_read(&ask);
+    const uint32_t    serial = filed ? ask.serial : 0u;
+
+    ut_check(overlay_model_row(MP_ROW(OVERLAY_MULTIPLAYER_REPAIR), &row) &&
+                 row.kind == OVERLAY_ROW_ACTION && strcmp(row.label, "Repair lock") == 0 &&
+                 row.id == MULTIPLAYER_FIRST_ID + (uint32_t)OVERLAY_MULTIPLAYER_REPAIR,
+             "under the key, a button: Repair lock");
+    ut_check(!row.available && row.reason == (uint32_t)OVERLAY_REASON_NEEDS_SESSION &&
+                 strcmp(overlay_reason_word(row.reason), "MP only") == 0,
+             "greyed with no session, and its chip says a session is what it needs");
+    ut_check(overlay_model_row(MP_ROW(OVERLAY_MULTIPLAYER_REPAIR) + 1u, &row) &&
+                 row.kind == OVERLAY_ROW_INFO &&
+                 strcmp(row.label, "Only in a multiplayer session") == 0,
+             "the sentence behind that word stands under the first row that carries it");
+    ut_check(overlay_model_row(MP_ROW(OVERLAY_MULTIPLAYER_TELEPORT) + 1u, &row) &&
+                 row.kind == OVERLAY_ROW_ACTION && strcmp(row.label, "Teleport to host") == 0 &&
+                 row.id == MULTIPLAYER_FIRST_ID + (uint32_t)OVERLAY_MULTIPLAYER_TELEPORT,
+             "then the second button, Teleport to host, one row down for that sentence");
+    ut_check(!row.available && row.reason == (uint32_t)OVERLAY_REASON_NEEDS_SESSION,
+             "greyed for the same reason, and the sentence is not written a second time");
+    ut_check(!overlay_model_activate(MP_ROW(OVERLAY_MULTIPLAYER_REPAIR)) &&
+                 !overlay_model_activate(MP_ROW(OVERLAY_MULTIPLAYER_TELEPORT) + 1u),
+             "neither can be pressed");
+    ut_check(overlay_stubs_closes == closes && player_help_ask_read(&ask) == filed &&
+                 (!filed || ask.serial == serial),
+             "and a press that was refused neither closes the panel nor files an ask");
+}
+
 /* The chat's key, under a heading of its own, because a folded heading that says neither chat nor
  * key is not where a player looks for it.
  *
@@ -123,31 +162,38 @@ static void test_multiplayer_group(void)
     char saved[16];
     bool had_key;
 
-    ut_section("the multiplayer group, directly under the controls, with the chat\'s key");
+    ut_section("the multiplayer group, directly under the controls: the chat\'s key, two buttons");
     ut_check(overlay_model_row(MP_ROW(0u) - 1u, &row) && row.kind == OVERLAY_ROW_GROUP &&
                  strcmp(row.label, "Multiplayer") == 0,
-             "its heading follows the controls\' last row, folded: its one row is a key, and a "
+             "its heading follows the controls\' last row, folded: its first row is a key, and a "
              "player looking for a key looks beside the controls");
     ut_check(row.value[0] == '\0',
              "and folded it says nothing, since there is no switch under it and no choice");
     overlay_model_toggle_group((uint32_t)OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER);
     overlay_model_rebuild();
+    ut_check(overlay_multiplayer_row_count() == (uint32_t)OVERLAY_MULTIPLAYER_LAST &&
+                 OVERLAY_MULTIPLAYER_ROW_COUNT == (uint32_t)OVERLAY_MULTIPLAYER_LAST + 1u,
+             "the group draws three rows, the key and the two buttons, while no button has been "
+             "pressed, and budgets its ids for a fourth, the line that says what a press came to");
     ut_check(overlay_model_row_count() ==
                  OPEN_ABOVE_ROWS + OVERLAY_LEVELS_ENTRY_FIRST + OVERLAY_PICTURE_ROW_COUNT +
                  OVERLAY_FOG_ROW_COUNT + OVERLAY_CONTROLS_FIXED_ROWS +
-                 OVERLAY_MULTIPLAYER_ROW_COUNT,
-             "open, it holds the one row");
-    ut_check(overlay_model_row(MP_ROW(0), &row) && row.kind == OVERLAY_ROW_HOTKEY &&
+                 (uint32_t)OVERLAY_MULTIPLAYER_LAST + 1u,
+             "open, it holds those three and one sentence that says why the buttons are greyed");
+    ut_check(overlay_model_row(MP_ROW(OVERLAY_MULTIPLAYER_CHAT_KEY), &row) &&
+                 row.kind == OVERLAY_ROW_HOTKEY &&
                  strcmp(row.label, "Key that opens the chat") == 0,
-             "the chat\'s key, under the words the search finds it by");
-    ut_check(row.available && row.id == MULTIPLAYER_FIRST_ID,
-             "offered with no multiplayer loaded, since it writes a file, under the group\'s own "
-             "block of ids");
+             "the chat\'s key first, under the words the search finds it by");
+    ut_check(row.available && row.id == MULTIPLAYER_FIRST_ID && MULTIPLAYER_FIRST_ID == 1344u &&
+                 (uint32_t)OVERLAY_MULTIPLAYER_CHAT_KEY == 0u,
+             "offered with no multiplayer loaded, since it writes a file. It is still slot 0 and "
+             "its id is still 1344, the group\'s base: the buttons came in under it");
     ut_check(strcmp(row.value, "T") == 0,
              "and with no ChatKey in the file it shows T, the key the multiplayer falls back to");
-    ut_check(overlay_model_row(MP_ROW(1), &row) && row.kind == OVERLAY_ROW_GROUP &&
-                 strcmp(row.label, "Window") == 0,
-             "and the window\'s heading comes straight after");
+    test_the_two_buttons_without_a_session();
+    ut_check(overlay_model_row(MP_ROW(OVERLAY_MULTIPLAYER_LAST) + 1u, &row) &&
+                 row.kind == OVERLAY_ROW_GROUP && strcmp(row.label, "Window") == 0,
+             "and the window\'s heading comes straight after, with no line about a last press");
 
     had_key = ini_read_string("multiplayer", "ChatKey", "", before, sizeof before);
     overlay_notice_forget();

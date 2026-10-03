@@ -35,4 +35,10 @@ typedef enum input_freeze_holder {
  * per holder, so a caller may drive it from its own state every frame. */
 void input_freeze_hold(input_freeze_holder_t who, bool held);
 
+/* Who holds the player right now: the holders as a mask of input_freeze_holder_t, 0 while nobody
+ * does. For a caller that has to tell somebody else whether this DLL still has the player: the
+ * two buttons under Multiplayer close the panel and then say in their ask whether a holder is
+ * left, which is the free camera in flight. */
+uint32_t input_freeze_holders(void);
+
 #endif /* INPUT_FREEZE_H */

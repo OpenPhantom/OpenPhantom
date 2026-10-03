@@ -16,8 +16,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* How many lines of a level are named one by one before they are only counted. A line of a scene
- * for all is always named: a scene is where a line is most wanted and least often said. */
+/* How many lines of a level are named one by one before they are only counted. A line said
+ * while a scene of the host's stands is always named: a scene is where a line is most wanted
+ * and least often said. */
 #define MP_VOICE_LINES_NAMED 64u
 
 /* Everything the judgement bound, as the report quotes it. */
@@ -85,7 +86,7 @@ typedef struct mp_voice_counts {
     uint32_t unnamed;
 } mp_voice_counts_t;
 
-/* One scene for all, from the first line or frame it was seen running to its end here. */
+/* One scene of the host's, from the first line or frame it was seen running to its end here. */
 typedef struct mp_voice_scene_counts {
     uint32_t judged;
     uint32_t of_scene;
@@ -127,7 +128,7 @@ void mp_voice_report_line(const mp_voice_line_note_t *note);
 void mp_voice_report_ending(int32_t line, uint32_t lived_ms, mp_voice_end_t end,
                             bool channel_read);
 
-/* One scene for all ended here: the host's at its end, a client's when it was let go. */
+/* One scene of the host's ended here. A client is in no scene and writes none. */
 void mp_voice_report_scene(uint16_t serial, const mp_voice_scene_counts_t *scene);
 
 /* The report's lines: how the lines were presented and heard when the rule bound, and the reply

@@ -1,4 +1,4 @@
-/* mp_state_note_rule.c: the ten state notes and their keys. See the header. */
+/* mp_state_note_rule.c: the nine state notes and their keys. See the header. */
 #include "mp_state_note_rule.h"
 
 #include "mp_crate_wire.h"
@@ -7,7 +7,6 @@
 #include "mp_lobby.h"
 #include "mp_quest.h"
 #include "mp_roster.h"
-#include "mp_scene_note.h"
 #include "mp_scratch_wire.h"
 #include "mp_world.h"
 #include "mp_world_state.h"
@@ -45,7 +44,6 @@ static const state_kind_t KINDS[MP_STATE_NOTE_KINDS] = {
     { (uint8_t)MP_LEVEL_STATE_TAG,   "the level state" },
     { (uint8_t)MP_QUEST_STATE_TAG,   "the shared story" },
     { (uint8_t)MP_SCRATCH_TAG_AI,    "the blackboard" },
-    { (uint8_t)MP_SCENE_NOTE_TAG,    "the scene" },
     { (uint8_t)MP_CRATE_NOTE_TAG,    "the whole crate note" },
     { (uint8_t)MP_HOST_SETTINGS_TAG, "the host's settings" },
 };
@@ -82,9 +80,6 @@ static bool is_clock(uint8_t kind, const uint8_t *note, size_t bytes, size_t at)
     if (kind == (uint8_t)MP_WORLD_DIGEST_TAG || kind == (uint8_t)MP_WORLD_STATE_TAG ||
         kind == (uint8_t)MP_LEVEL_STATE_TAG) {
         return at >= TICK_AT && at < TICK_AT + TICK_BYTES;
-    }
-    if (kind == (uint8_t)MP_SCENE_NOTE_TAG) {
-        return at >= MP_SCENE_NOTE_AGE_AT && at < MP_SCENE_NOTE_AGE_AT + MP_SCENE_NOTE_AGE_BYTES;
     }
     if (kind == (uint8_t)MP_ROSTER_TAG && bytes >= ROSTER_HEAD_BYTES && at >= ROSTER_HEAD_BYTES) {
         size_t within = (at - ROSTER_HEAD_BYTES) % MP_ROSTER_ENTRY_BYTES;

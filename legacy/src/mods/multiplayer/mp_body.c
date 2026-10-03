@@ -3,8 +3,9 @@
  * SIZE NOTE: over 600 lines. The spawn and everything that builds or unbuilds a body are in
  * mp_body_spawn.c, the attribution and the friendly fire gate are in mp_body_death.c, the
  * bank-aware shot hull is in mp_body_shot.c, and the record those halves share is in
- * mp_body_internal.h. What is left is two things that run every substep and never read the player's
- * block: the dispatcher, and the tick with the collision restore.
+ * mp_body_internal.h, and the far bodies made passable for a scene are in mp_body_passable.c. What
+ * is left is two things that run every substep and never read the player's block: the dispatcher,
+ * and the tick with the collision restore.
  *
  * The next seam is the dispatcher with its arming. It is the dearer one: it shares the far bodies'
  * records, the two cells the install resolves, and the counters and switches the setters, the
@@ -135,6 +136,7 @@ void mp_body_forget_body_state(mp_body_far_t *far)
     far->death_reported       = false;
     far->health_seen          = false;
     far->health_known         = 0;
+    far->passable_object      = 0u;   /* the object the scene made passable has left */
 }
 
 uint32_t mp_body_contacts_total(void)      { return body.contacts_total; }
@@ -353,6 +355,7 @@ static uint32_t dispatch_one(void)
             ++body.contacts_other;
             to_far = true;
             mp_body_gate_note_far_contact();
+            mp_body_passable_note_contact(other);
         }
     }
 
@@ -543,9 +546,9 @@ void mp_body_tick_at(size_t index)
     }
 }
 
-/* Four checked writes onto the body's object, the handle read live out of the bank's own block
- * the same way the dispatcher reads the player's: the object does not change for the life of the
- * body, but a stored pointer would outlive a level.
+/* Four checked writes onto the body's object, which the caller read live, out of the bank's own
+ * block or out of the puppet's window: the object does not change for the life of the body, but a
+ * stored pointer would outlive a level.
  *
  * What is being undone: the engine's collision disable at 0x0041401A writes a radius of 0 at
  * obj+0xB8, a height of 0 at obj+0xBC and a class of 0 at obj+0x04, and the draw pass calls it
@@ -554,17 +557,13 @@ void mp_body_tick_at(size_t index)
  * invisible to it: no blade contact, no reflect, no cylinder. Both cylinder words are copied
  * unscaled from the actor at the bind (asset+0xEC and asset+0xF4), which is why they are read
  * off the object right after the spawn and written back as bits. */
-bool mp_body_collision_restore_at(size_t index)
+bool mp_body_collision_restore_at(size_t index, uint32_t object)
 {
     mp_body_far_t *far = far_of(index);
-    uint32_t       object = 0;
     int32_t        class_word;
     bool           ok;
 
-    if (far == NULL || !body.installed || !far->spawned || !far->cylinder_saved) {
-        return false;
-    }
-    if (!mp_bank_read_at(index, HERO_BLOCK_HACTOR, &object, sizeof object) || object == 0) {
+    if (far == NULL || !body.installed || !far->spawned || !far->cylinder_saved || object == 0) {
         return false;
     }
     class_word = mp_bank_class_of(index);
@@ -753,6 +752,7 @@ void mp_body_report(const char *why)
                  (unsigned)body.contacts_suppressed, (unsigned)mp_body_shot_side_faults(),
                  (unsigned)body.contacts_on_the_dead);
     }
+    mp_body_passable_report();
     mp_body_gate_report();
     mp_body_shot_report();
     mp_body_death_report();

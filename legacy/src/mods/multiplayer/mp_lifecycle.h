@@ -33,10 +33,12 @@ bool mp_lifecycle_installed(void);
  * arguments, before it is begun. A script's warp, the cheats' hero swap and this feature's own
  * re-entry all come through the same function, and only the return address tells them apart; a
  * warp's target is the position and heading it names. `at` is the engine's own three floats, read
- * and not kept. Called from inside the engine, so it counts, notes and at most writes a line.
- * Answers whether the respawn's hull stands, which is whether it will ever be called. NULL hears
- * nobody. */
-typedef void (*mp_lifecycle_respawn_listener_t)(uintptr_t caller, int32_t hero, const float *at,
+ * and not kept. Called from inside the engine, so it counts, notes and at most writes a line. The
+ * listener answers whether the respawn may be begun: false, and the engine's function is not
+ * called, which is how a client refuses the warp of a script of its own machine. The setter
+ * answers whether the respawn's hull stands, which is whether the listener will ever be called.
+ * NULL hears nobody. */
+typedef bool (*mp_lifecycle_respawn_listener_t)(uintptr_t caller, int32_t hero, const float *at,
                                                 float heading);
 bool mp_lifecycle_set_respawn_listener(mp_lifecycle_respawn_listener_t listener);
 

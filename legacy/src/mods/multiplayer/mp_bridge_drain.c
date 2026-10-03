@@ -48,7 +48,6 @@
 #include "mp_interp.h"
 #include "mp_level_state.h"
 #include "mp_payload_prefix.h"
-#include "mp_scene_client.h"
 #include "mp_snapshot.h"
 #include "mp_stopwatch.h"
 #include "mp_trust.h"
@@ -548,9 +547,6 @@ static void receive_event(mp_bridge_drain_t *drain, size_t peer_index, const uin
     if (mp_level_state_take(drain->mode == MP_BRIDGE_UDP_CLIENT, note, bytes)) {
         return;   /* what the host's scripts switched: kept, and applied from the next substep */
     }
-    if (mp_scene_client_take(drain->mode == MP_BRIDGE_UDP_CLIENT, note, bytes)) {
-        return;   /* the host's scene: kept, and followed in this substep's post-tick half */
-    }
     if (mp_crate_take(slot_of_sender(drain, peer_index), note, bytes)) {
         return;   /* a push block: a client's wish, or the host's note or fall */
     }
@@ -734,12 +730,11 @@ void mp_bridge_drain_lobby_report(void)
     uint32_t dropped = mp_bridge_drain_lobby_counts(NULL);
 
     log_info("  the lobby drained %u note(s) of a running level with no level here: dropped "
-             "(movers %u, removals %u, bolts %u, level state %u, scenes %u, other %u); %u lobby "
+             "(movers %u, removals %u, bolts %u, level state %u, other %u); %u lobby "
              "note(s) taken", (unsigned)dropped, (unsigned)lobby_dropped[MP_LOBBY_NOTE_MOVER],
              (unsigned)lobby_dropped[MP_LOBBY_NOTE_REMOVAL],
              (unsigned)lobby_dropped[MP_LOBBY_NOTE_BOLT],
              (unsigned)lobby_dropped[MP_LOBBY_NOTE_LEVEL_STATE],
-             (unsigned)lobby_dropped[MP_LOBBY_NOTE_SCENE],
              (unsigned)(lobby_dropped[MP_LOBBY_NOTE_LEVEL_OTHER] +
                         lobby_dropped[MP_LOBBY_NOTE_NEVER_TO_CLIENT] +
                         lobby_dropped[MP_LOBBY_NOTE_UNKNOWN]),

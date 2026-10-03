@@ -2,8 +2,8 @@
  *
  * Layer 1, pure. A client in its lobby has no level. Before a session starts that is harmless,
  * because the host sends nothing but the lobby's own notes. A client that joins a session whose
- * host already plays is sent everything a level says as well: mover events, removals, bolts, the
- * level's state, scenes. A mover event with no level waits and then fires into whatever level
+ * host already plays is sent everything a level says as well: mover events, removals, bolts and
+ * the level's state. A mover event with no level waits and then fires into whatever level
  * this side loads next, and a removal names an actor of a level that is not here. So the lobby
  * takes only what a lobby is for and drops the rest, counted by what it was.
  *
@@ -36,7 +36,6 @@ typedef enum mp_lobby_note_class {
     MP_LOBBY_NOTE_REMOVAL,          /* an actor the host removed */
     MP_LOBBY_NOTE_BOLT,             /* a bolt one of the host's actors fired */
     MP_LOBBY_NOTE_LEVEL_STATE,      /* what the host's scripts switched on its level */
-    MP_LOBBY_NOTE_SCENE,            /* the scene the host gathers everybody for */
     MP_LOBBY_NOTE_LEVEL_OTHER,      /* anything else a running level says */
     MP_LOBBY_NOTE_NEVER_TO_CLIENT,  /* a player's word to its host, which no host sends on */
     MP_LOBBY_NOTE_CLASSES

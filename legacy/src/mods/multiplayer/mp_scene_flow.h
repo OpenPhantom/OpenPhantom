@@ -1,71 +1,57 @@
-/* mp_scene_flow.h: a scene for everybody, as the state machines that run it.
+/* mp_scene_flow.h: a scene of the host's, as the state machines that run it.
  *
- * Layer 1, pure. The binding that reads the engine and calls it is in mp_scene_host.c for the host
- * and mp_scene_client.c for a client; what is here is every decision they make, so that a test can
- * walk each path with no game in the process.
+ * Layer 1, pure. The binding that reads the engine and calls it is mp_scene_host.c; what is here
+ * is every decision it makes, so that a test can walk each path with no game in the process.
  *
- * The rule: when any player, a far client as well, sets off a scene, a scene with the hero as an
- * actor or a warp, it starts for everybody, and EVERY player is brought to the place first. The
- * host is the actor. A client in the host's scene is locked, gets the bars and keeps its own
- * camera.
+ * The rule: a scene belongs to the host alone. A client is in no scene and goes on playing through
+ * it. When a far player sets a scene off, a lock or a scene with the hero as an actor, the host is
+ * brought to the place that player's body was tested at, and the scene waits until he stands
+ * there; then it runs as it does with nobody else in the world. Nobody else is waited for.
  *
- * Four machines:
+ * Two machines:
  *
- *   The HOST's scene: none, gathering, running, over. A lock or a hero scene holds its actor and
- *   the hero's grab while the players are gathered, and runs once everybody is seated or after
- *   MP_SCENE_HOLD_SUBSTEPS of the host standing; it never runs for everybody with the host dead,
- *   and a hero scene whose grab cannot come because the host may not be moved waits for him. All
- *   of that waiting ends at MP_SCENE_WAIT_CAP_SUBSTEPS from the beginning: then the scene is given
- *   up for everybody, the far players are let go and the engine plays it here as it would alone.
- *   With nobody else in the session nothing is held. A warp gathers the clients around the target
- *   the engine sends the host to and is over when the host has landed. A second scene while one
- *   gathers or runs, or while one given up may still be played here, is counted and not gathered:
- *   the engine has one lock, one camera and one hero. A warp is the exception, because the engine
- *   moves the host whatever this does, and the others follow him.
- *
- *   A client's MIRROR of the host's scene: free or held. Held while the newest note of this world
- *   says gathering or running a lock or a hero scene, and while the host is heard; the lock is held
- *   at the script's level on every substep of it, raised only once the player may be moved, and let
- *   go through exactly one exit.
+ *   The HOST's scene: none, gathering, running, over. A scene a far player set off begins held:
+ *   the actor whose script opened its door and the hero's grab wait while the host is brought,
+ *   and the hold falls on the first look that finds him standing at his place. It never falls
+ *   with the host dead or away from his place, and it waits while the place is still being read.
+ *   That waiting ends at MP_SCENE_WAIT_CAP_SUBSTEPS from the beginning, unless the engine's
+ *   respawn is bringing the host: a hero scene is given up, nothing is held any more, and the
+ *   engine plays it here as it would alone; a lock is dropped as no scene of the host's. With no
+ *   place to be brought to, the host of a hero scene is released where he stands and a lock is
+ *   dropped at once. With every far player gone the hold falls at once, unless the host is on his
+ *   way to a place already, which he then finishes. A scene the host set off himself begins
+ *   running, with nothing held. A warp holds nothing either and is over when the host has
+ *   landed. A second scene while one is held or runs, or while one given up may still be played
+ *   here, is counted and begins nothing: the engine has one lock, one camera and one hero. A
+ *   warp is the exception, because the engine moves the host whatever this does. So is a hero
+ *   its own actor spawns in the substep of its lock, which makes that scene a hero's.
  *
  *   One player's SEAT: wait until the body may be moved, fade out, hand the seat to the placement,
- *   wait until the body stands there, fade in. The host seats itself this way and a client does;
- *   every way out of it takes a held fade back.
+ *   wait until the body stands there, fade in. The host is brought to his place this way; every
+ *   way out of it takes a held fade back. A seat of a gathering is not given up while its scene
+ *   wants it: a try that did not take is tried again, twice, and a body that stays in a mode the
+ *   teleport may not move is brought by the engine's own respawn with its own hero, once.
  *
- *   The SEATING: every player to be seated, in turn, through the one seat search the re-entry and
- *   the arrival use, with the seats already handed out standing in as bodies, so that no two
- *   players are handed one seat and nobody is seated on the anchor. A player no seat around the
- *   place answered for is then searched beside every seat handed out, in the order they were
- *   handed out: each of those is a point with a floor, free and reachable on foot from the place,
- *   so a ring around it reaches one step further along what can be walked. Navigation meshes find
- *   standing room near a point the same way, over the reachable area rather than a fixed ring
- *   (Detour's findPolysAroundCircle, Unreal's GetRandomReachablePointInRadius).
+ * Where the place is, and whether a body stands at it, is mp_scene_room.
  *
- * References: Synergy, the co-operative mod of Half-Life 2, teleports the players at a scripted
- * point rather than stopping the script, and leaves them where the scene put them; Unreal's level
- * sequence is played by the server and replicated, the players locked in cinematic mode; a player
- * left behind is brought along under a black screen, as Destiny's "joining allies" does.
+ * References: Source's scripted sequence moves its actor onto the mark rather than walking it
+ * there, and starts only once the actor stands there alive; a body in a state the plain move
+ * cannot take is moved by the engine's own respawn, the state change Quake 3's TeleportPlayer and
+ * Unreal's SetMovementMode make for a teleport out of any movement.
  */
 #ifndef MULTIPLAYER_MP_SCENE_FLOW_H
 #define MULTIPLAYER_MP_SCENE_FLOW_H
 
-#include "mp_scene_note.h"
 #include "mp_scene_rule.h"
-#include "mp_seat_rule.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-/* How long a gathering may hold its scene, in substeps of the host STANDING: a second and a half
- * at thirty two a second. A dead host's time is not counted, because a hero scene cannot be played
- * by a corpse and the host's re-entry takes the gathering seat. */
-#define MP_SCENE_HOLD_SUBSTEPS 48u
-
-/* The longest a scene for everybody waits for its host, from its beginning until it is seen
- * running: the hold while the host lies dead, and a hero scene's grab while the host may not be
- * moved. Twenty seconds, the seat search's own bound for a wait. At it the scene is given up for
- * everybody rather than played on with a corpse or without its grab. */
+/* The longest a scene waits for its host, from its beginning until it is seen running: the hold
+ * while the host lies dead or is on his way, and a hero scene's grab while the host may not be
+ * moved. Twenty seconds, the seat search's own bound for a wait. At it the scene is given up
+ * rather than played on with a corpse or without its grab. */
 #define MP_SCENE_WAIT_CAP_SUBSTEPS 640u
 
 /* After a hold, how long the engine's grab of the hero or the lock may fail to show while the host
@@ -73,37 +59,50 @@
  * which the host may be moved. A host that may not be moved is waited for, up to the cap. */
 #define MP_SCENE_GRAB_GRACE_SUBSTEPS 64u
 
-/* How long the host repeats "over", two seconds, so a client that missed the change hears it. */
-#define MP_SCENE_OVER_SUBSTEPS 64u
-
 /* How long a warp's landing may take: the engine's own fade out of a second, the respawn, and its
  * fade in, with room. */
 #define MP_SCENE_WARP_CAP_SUBSTEPS 192u
 
-/* How long a client holds a scene with no word from the host at all, in milliseconds. */
-#define MP_SCENE_SILENCE_MS 2000u
-
 /* How near its seat a body has to stand to count as arrived, in world units. */
 #define MP_SCENE_ARRIVED_DISTANCE 1.0f
 
-/* The fade a gathering moves a player under, and the one a warp does, in seconds. The warp's is
- * the engine's own respawn fade. */
-#define MP_SCENE_FADE_SECONDS      0.25f
-#define MP_SCENE_WARP_FADE_SECONDS 1.0f
+/* How many times a gathering's seat tries again after a try that did not take: a fade that ended
+ * with the body in a mode it may not be moved from, or a placement the body did not take. */
+#define MP_SCENE_SEAT_RETRIES 2u
+
+/* After how many substeps in a mode the teleport may not move a gathering's seat takes the hard
+ * way, counted over every try: a second for the host, whose scene waits for him, and two for a
+ * seat nothing waits for. */
+#define MP_SCENE_HARD_HOST_SUBSTEPS   32u
+#define MP_SCENE_HARD_CLIENT_SUBSTEPS 64u
+
+/* How long the hard way may take, from the respawn asked for to the body standing on its seat:
+ * the engine's own fade out of a second, the respawn, and its fade in, with room. */
+#define MP_SCENE_RESPAWN_SUBSTEPS 192u
+
+/* The fade a player is moved under, in seconds. */
+#define MP_SCENE_FADE_SECONDS 0.25f
 
 /* From the hand-over to the body standing on its seat, in substeps: the placement takes a frame
  * and the body is written by the next player tick. */
 #define MP_SCENE_PLACE_SUBSTEPS 32u
 
-/* A client this near a warp's target when it hears of the warp is left where it is: it came back
- * there by its re-entry, or never left. */
-#define MP_SCENE_WARP_NEAR 8.0f
-
-/* How long a client's seat for a warp waits for its body to be movable, in substeps: ten seconds.
- * A warp is no scene the client is held in, so nothing else ends the wait while the host's note
- * keeps the warp's number; a player dead, swimming or at a gun would otherwise be moved minutes
- * later, long after the others. */
+/* How long a seat that sets itself a bound waits for its body to be movable, in substeps: ten
+ * seconds (wait_max of the seat's flow). A player dead, swimming or at a gun would otherwise be
+ * moved minutes later. */
 #define MP_SCENE_WARP_WAIT_SUBSTEPS 320u
+
+/* No world slot is known for the player a scene's script meant. */
+#define MP_SCENE_TRIGGER_UNKNOWN 0xFFu
+
+/* Where a scene of the host's stands. */
+typedef enum mp_scene_phase {
+    MP_SCENE_PHASE_NONE = 0,
+    MP_SCENE_PHASE_GATHERING,   /* held while the host is brought to its place; a warp until the
+                                 * host has landed */
+    MP_SCENE_PHASE_RUNNING,
+    MP_SCENE_PHASE_OVER         /* given up, and the engine may still play it here */
+} mp_scene_phase_t;
 
 /* What set a scene off. */
 typedef enum mp_scene_kind {
@@ -113,22 +112,9 @@ typedef enum mp_scene_kind {
     MP_SCENE_KINDS
 } mp_scene_kind_t;
 
-/* The note's `what` for a kind. A lock and a hero scene lock a client and give it the bars; a
- * warp only moves it. */
-uint8_t mp_scene_what_of(mp_scene_kind_t kind);
-
-/* Whether a scene runs for everybody now: gathering or running, and a lock or a hero scene. The
- * one answer for both roles, from the host's own state or a client's mirror of the note. */
-bool mp_scene_for_all_now(uint8_t phase, uint8_t what);
-
-/* What a scene for all knows of itself, for a line spoken while it runs: the place its players are
- * gathered around, known wherever a note of it arrived, and that alone, because a line is judged
- * the same way on every machine. The actor whose script began it is known on the host alone, no
- * note names it, so it is not told here. Read only while the scene runs for all.
- *
- * `gathered` is whether it gathered this machine's player: the player its script meant, who stands
- * at the place already, or one it seated there. A player it left where it stood, dead, with no seat
- * or in a mode that cannot be moved, or one still on the way, is not. */
+/* What a scene of the host's knows of itself, for a line spoken while it stands: its place and
+ * its number. Read only while the scene stands, and only on the host; a client is in no scene.
+ * `gathered` says the scene is this machine's player's own, which on the host it always is. */
 typedef struct mp_scene_known {
     bool      anchor_known;
     float     anchor[3];
@@ -142,25 +128,40 @@ typedef struct mp_scene_known {
 
 typedef enum mp_scene_release {
     MP_SCENE_RELEASE_NONE = 0,
-    MP_SCENE_RELEASE_SEATED,   /* everybody stood at their seat, the host standing */
-    MP_SCENE_RELEASE_BOUND,    /* the hold's second and a half ran out while the host stood */
-    MP_SCENE_RELEASE_ALONE,    /* every far player left the session: nobody is waited for */
-    MP_SCENE_RELEASE_NOBODY,   /* nobody was gathered: the place could not be read or sat on */
-    MP_SCENE_RELEASE_SEATED_SOME   /* everybody with a seat stood at it, and a far player had
-                                    * none: "everybody seated" would leave that player out */
+    MP_SCENE_RELEASE_AT_THE_PLACE,   /* the host stood at his place */
+    MP_SCENE_RELEASE_ALONE,          /* every far player left the session, and the host was not
+                                      * on his way to a place */
+    MP_SCENE_RELEASE_NOBODY          /* a hero scene, and the host has no place: neither the place
+                                      * of the player the script meant nor one beside the scene's
+                                      * actor could be stood on */
 } mp_scene_release_t;
 
 /* Why a hold fell, as the host's line says it after "because". */
 const char *mp_scene_release_text(mp_scene_release_t released);
 
+/* Why a lock a far player set off was dropped as no scene of the host's. A lock scene is played
+ * where its trigger stands, a lift above all, and a host who cannot be brought there has no part
+ * in it: the binding lets him go and the lock's script plays on for the player it meant. A hero
+ * scene is never dropped, because the engine takes the host for it wherever he stands. */
+typedef enum mp_scene_drop {
+    MP_SCENE_DROP_NONE = 0,
+    MP_SCENE_DROP_NO_PLACE,     /* the host has no place: a mover, nothing free, none to read */
+    MP_SCENE_DROP_AT_THE_CAP    /* the wait for the host ran out */
+} mp_scene_drop_t;
+
+/* Why a lock was dropped, as the host's line says it after "because". */
+const char *mp_scene_drop_text(mp_scene_drop_t dropped);
+
 /* What the host was when a scene was given up, as the host's line says it after "the host". */
 const char *mp_scene_given_up_text(mp_scene_move_t host);
+
+/* Why a body could not be moved, as a line says it in brackets. */
+const char *mp_scene_move_text(mp_scene_move_t move);
 
 typedef struct mp_scene_host_flow {
     mp_scene_phase_t   phase;
     mp_scene_kind_t    kind;
     uint16_t           serial;          /* 0 before the first scene; never started over */
-    uint8_t            warp_serial;     /* 0 before the first warp; never started over */
     bool               holds;           /* the scene's actor and the hero's grab are held */
     uint32_t           began;           /* substep counts */
     uint32_t           last;
@@ -170,105 +171,76 @@ typedef struct mp_scene_host_flow {
     bool               seen_running;
     mp_scene_release_t released;
     uint32_t           grace;           /* substeps with no grab while the host could be taken */
-    /* The wait ran out: over for everybody. Until the engine has played the scene here, or plainly
-     * will not, a door of it is no scene of its own. */
+    /* The wait ran out. Until the engine has played the scene here, or plainly will not, a door
+     * of it is no scene of its own. */
     bool               given_up;
     mp_scene_move_t    given_up_for;    /* the host then: dead, or where it could not be moved */
+    /* A held lock scene ended as no scene of the host's, by the step that set this. The binding
+     * reads it in that substep, before the one exit takes it away. */
+    mp_scene_drop_t    dropped;
 } mp_scene_host_flow_t;
 
 typedef enum mp_scene_begin {
-    MP_SCENE_BEGIN_NEW = 0,     /* a scene of its own, gathered */
-    MP_SCENE_BEGIN_SECOND,      /* inside a scene that gathers or runs: counted, not gathered */
+    MP_SCENE_BEGIN_NEW = 0,     /* a scene of its own */
+    MP_SCENE_BEGIN_SECOND,      /* inside a scene that is held or runs: counted, nothing begun */
     MP_SCENE_BEGIN_WARP_OVER    /* a warp inside a scene: it takes over */
 } mp_scene_begin_t;
 
+/* A door. `holds` is the caller's choice for a lock or a hero scene: with it the scene begins
+ * gathering, its actor and the hero's grab held until the host stands at his place; without it
+ * the scene begins running, as one the host set off himself does. A warp never holds and gathers
+ * until the host has landed. */
 mp_scene_begin_t mp_scene_host_begin(mp_scene_host_flow_t *flow, mp_scene_kind_t kind,
-                                     uint32_t now);
+                                     uint32_t now, bool holds);
+
+/* A scene the engine runs with no door heard, taken over as the host's (mp_scene_doorless): a new
+ * number, and running at once, seen running and with nothing held, because it runs already. Every
+ * field a beginning sets is set. Only from none and never a warp; a door heard while it runs is a
+ * second scene, counted. True when it was taken. */
+bool mp_scene_host_adopt(mp_scene_host_flow_t *flow, mp_scene_kind_t kind, uint32_t now);
 
 /* What the host's binding reads once a substep. */
 typedef struct mp_scene_host_look {
     uint32_t now;
     bool     host_stands;       /* the engine's live player test */
-    bool     everyone_seated;   /* the host and every far player handed a seat stand on it */
     bool     running;           /* mp_scene_running on the host's own cells */
     bool     warp_landed;       /* the host's respawn has come back to a running module */
     bool     alone;             /* no far player is in the session any more */
     mp_scene_move_t may_move;   /* mp_scene_may_move for the host: the engine grabs only a YES */
-    bool     nobody_gathered;   /* the seating found no place: nobody was handed a seat */
-    uint32_t unseated;          /* far players to be seated that no seat answered for */
+    bool     has_place;         /* the host has a place he is brought to or stands at */
+    bool     no_place;          /* the place was looked for and there is none: the host stays */
+    bool     place_pending;     /* the place of the player the script meant is read again */
+    bool     away;              /* the host has a place and does not stand at it, with his seat
+                                 * done and the module running */
+    bool     own_respawning;    /* the engine's respawn brings the host to his place: his seat
+                                 * is in it, and the module has left its running state */
 } mp_scene_host_look_t;
 
 /* One substep. True when the phase changed. */
 bool mp_scene_host_step(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *look);
+
+/* A hero's door opened by the scene's own actor in the substep its lock began the scene: one
+ * script raises the lock and spawns the hero right behind it. The scene is a hero scene from
+ * there, so its place is looked for as a hero's and it is never dropped. True when it became
+ * one; false for any other scene, and for a hero's door a substep later, which is a second
+ * scene. */
+bool mp_scene_host_takes_the_hero(mp_scene_host_flow_t *flow, uint32_t now);
 
 /* The one exit, for every way out of a scene's world: a level ending or changing, the session
  * ending. Back to none with nothing held. True when a hold stood, which is what the caller has to
  * give back. */
 bool mp_scene_host_leave(mp_scene_host_flow_t *flow);
 
-/* ==============================================================================================
- * A client's mirror of the host's scene.
- * ============================================================================================ */
+/* Whether a scene of the host's stands: a lock or a hero scene held or running, or one given up
+ * that the engine may still play here. A warp is no scene, and neither is none. While this holds
+ * the far bodies are passable on the host, and a door of a far player's run begins no second
+ * scene. */
+bool mp_scene_host_stands_now(const mp_scene_host_flow_t *flow);
 
-typedef struct mp_scene_mirror {
-    bool     known;        /* a note of this world has been taken since the last exit */
-    uint16_t serial;
-    uint8_t  phase;
-    uint8_t  what;
-    uint8_t  generation;
-    bool     locked;       /* the mirror raised the lock and owes it one release */
-    uint32_t heard_ms;     /* the last time the host was heard */
-    uint32_t held_since_ms;
-    float    anchor[3];    /* where the scene gathers, as its newest note says */
-} mp_scene_mirror_t;
-
-typedef enum mp_scene_take {
-    MP_SCENE_TAKE_NEW = 0,    /* a new scene, or a new phase of the one held */
-    MP_SCENE_TAKE_REPEAT,     /* nothing a client acts on has changed */
-    MP_SCENE_TAKE_FOREIGN,    /* a note of another world */
-    MP_SCENE_TAKE_OLDER       /* a scene older than the one held */
-} mp_scene_take_t;
-
-/* The place the scene gathers around is taken from a repeat as well: a host whose first note left
- * before the place was read sends it in the next one, which says nothing else new. */
-mp_scene_take_t mp_scene_mirror_take(mp_scene_mirror_t *mirror, const mp_scene_note_t *note,
-                                     uint8_t generation_here, uint32_t now_ms);
-
-/* What a substep of the mirror does, as bits. */
-#define MP_SCENE_MIRROR_RAISE  0x1u   /* the lock at the script's level, this substep */
-#define MP_SCENE_MIRROR_BARS   0x2u   /* the bars on, once, with the first raise */
-#define MP_SCENE_MIRROR_LET_GO 0x4u   /* the one release and the bars off */
-
-typedef enum mp_scene_let_go {
-    MP_SCENE_LET_GO_NONE = 0,
-    MP_SCENE_LET_GO_OVER,     /* the host said the scene is over, or none runs */
-    MP_SCENE_LET_GO_SILENT,   /* nothing from the host for MP_SCENE_SILENCE_MS */
-    MP_SCENE_LET_GO_EXIT      /* the level or the session this mirror belonged to ended */
-} mp_scene_let_go_t;
-
-typedef struct mp_scene_mirror_look {
-    uint32_t now_ms;
-    bool     host_heard;   /* any word of the host's arrived lately, not only this note */
-    bool     may_lock;     /* mp_scene_may_move answered yes for this player */
-} mp_scene_mirror_look_t;
-
-uint32_t mp_scene_mirror_step(mp_scene_mirror_t *mirror, const mp_scene_mirror_look_t *look,
-                              mp_scene_let_go_t *why);
-
-/* The one exit. LET_GO when the lock is the mirror's to release; everything forgotten. */
-uint32_t mp_scene_mirror_leave(mp_scene_mirror_t *mirror);
-
-/* Whether a note of the host's gathers this client: a scene for everybody, gathering or running,
- * that has not gathered it yet (`gathered_serial` is the scene its last seat was for) and hands it
- * a seat. Any such note does, not only the first: the channel keeps only the newest copy of the
- * note, so a gathering note still on its way can be replaced by the running one, and a note has to
- * stand on its own. A warp is followed by its own number (mp_scene_warp_wanted). */
-bool mp_scene_note_gathers(const mp_scene_note_t *note, uint16_t gathered_serial, bool seat_given);
-
-/* Whether a client's seat is still wanted by the note the mirror holds: the same scene, and for a
- * gathering's seat that scene still running for everybody. A warp's seat lives as long as its
- * number, bounded by its own wait (MP_SCENE_WARP_WAIT_SUBSTEPS). */
-bool mp_scene_seat_wanted(const mp_scene_mirror_t *mirror, uint16_t seat_serial, bool warp);
+/* Whether the scene may still be played here: released into running, or given up and not seen
+ * done by the engine. What the end of a level asks, because a scene whose script never reaches its
+ * end runs until then. */
+bool mp_scene_host_still_running(const mp_scene_host_flow_t *flow);
 
 /* ==============================================================================================
  * One player's seat.
@@ -280,36 +252,76 @@ typedef enum mp_scene_seat_stage {
     MP_SCENE_SEAT_FADING,     /* the screen goes dark */
     MP_SCENE_SEAT_PLACED,     /* handed to the placement; waiting for the body to stand there */
     MP_SCENE_SEAT_DONE,
-    MP_SCENE_SEAT_GIVEN_UP
+    MP_SCENE_SEAT_GIVEN_UP,
+    MP_SCENE_SEAT_RESPAWNING  /* the engine's respawn takes the body to the seat, under its own
+                               * fade */
 } mp_scene_seat_stage_t;
 
 typedef enum mp_scene_seat_act {
     MP_SCENE_SEAT_ACT_NONE = 0,
     MP_SCENE_SEAT_ACT_FADE_OUT,
     MP_SCENE_SEAT_ACT_PLACE,
-    MP_SCENE_SEAT_ACT_FADE_IN
+    MP_SCENE_SEAT_ACT_FADE_IN,
+    MP_SCENE_SEAT_ACT_RESPAWN   /* the engine's respawn with the player's own hero, onto the seat */
 } mp_scene_seat_act_t;
+
+/* Why a seat was given up. */
+typedef enum mp_scene_seat_end {
+    MP_SCENE_SEAT_END_NONE = 0,
+    MP_SCENE_SEAT_END_SCENE,       /* what it belongs to wants it no longer */
+    MP_SCENE_SEAT_END_DEADLINE,    /* a plain seat: a fade ended unmovable, or a placement not
+                                    * taken */
+    MP_SCENE_SEAT_END_WAITED_OUT,  /* the body never became movable within the seat's own bound */
+    MP_SCENE_SEAT_END_TRIES        /* a gathering's: out of tries, and the hard way closed */
+} mp_scene_seat_end_t;
 
 typedef struct mp_scene_seat_flow {
     mp_scene_seat_stage_t stage;
     uint32_t              since;
+    uint32_t              last;            /* the substep of the last look */
     float                 fade_seconds;
     bool                  fade_held;       /* a fade out stands that no fade in has answered */
     bool                  fade_on_clock;   /* the fade ended on this flow's own deadline */
+    uint32_t              fade_since;      /* when the fade out that stands began */
     mp_scene_move_t       refused;         /* why the body could not be moved, the last time */
     bool                  at_seat;         /* DONE with the body on its seat */
     uint32_t              wait_max;        /* substeps the body is waited for, 0 for no bound */
     bool                  waited_out;      /* GIVEN_UP because that wait ran out */
+    mp_scene_seat_end_t   ended;           /* why GIVEN_UP, or IDLE out of the hard way */
+
+    /* A gathering's seat, rather than a plain one: tried again rather than given up while its
+     * scene wants it, and taken the hard way after `hard_after` substeps in a mode the teleport
+     * may not move, 0 for no hard way. */
+    bool                  gathering;
+    uint32_t              hard_after;
+    uint32_t              retries;         /* tries that did not take, tried again */
+    bool                  tries_spent;     /* the last one did not take either */
+    uint32_t              mode_wait;       /* substeps in a mode the teleport may not move */
+    bool                  hard_spent;      /* the hard way was taken, which it is once */
+    bool                  hard_wanted;     /* the hard way was due at the last look and not taken */
+    bool                  respawn_left;    /* the module has been seen away from running */
+    bool                  respawn_failed;  /* the hard way ran out of time and the seat waits */
+    bool                  by_respawn;      /* DONE by the engine's respawn */
 } mp_scene_seat_flow_t;
 
+/* A plain seat: waits, fades, places and fades back, and gives up when a try does not take. */
 void mp_scene_seat_start(mp_scene_seat_flow_t *flow, uint32_t now, float fade_seconds);
+
+/* A gathering's seat: the same, tried again rather than given up while its scene wants it, and
+ * taken the hard way after `hard_after` substeps in a mode the teleport may not move. */
+void mp_scene_seat_start_gathering(mp_scene_seat_flow_t *flow, uint32_t now, float fade_seconds,
+                                   uint32_t hard_after);
 
 typedef struct mp_scene_seat_look {
     uint32_t        now;
-    bool            live;        /* the scene the seat belongs to still gathers */
+    bool            live;        /* what the seat belongs to still wants it */
     mp_scene_move_t may_move;
     bool            fade_done;   /* the engine's own tint says the fade is over */
-    bool            at_seat;     /* the body stands within MP_SCENE_ARRIVED_DISTANCE of the seat */
+    bool            at_seat;     /* the body stands at the seat */
+    bool            hard_ready;  /* mp_scene_bind_hard_way_open: the hard way may take the body */
+    bool            module_running;   /* the player module reads its running state */
+    bool            keep;        /* a seat to be kept once reached: the host's, while its hold
+                                  * stands. A body that leaves it is brought back */
 } mp_scene_seat_look_t;
 
 /* How long a fade may take before the flow goes on without the engine's word, in substeps. */
@@ -321,82 +333,52 @@ mp_scene_seat_act_t mp_scene_seat_step(mp_scene_seat_flow_t *flow,
 /* The exit for any way out: FADE_IN when a fade out still stands, and the flow is idle after. */
 mp_scene_seat_act_t mp_scene_seat_leave(mp_scene_seat_flow_t *flow);
 
-/* A client hearing of a warp: move to the seat, or stay because the warp is known already, the
- * note has no seat for this player, or the player is near the target anyway. */
-typedef enum mp_scene_warp_step {
-    MP_SCENE_WARP_MOVE = 0,
-    MP_SCENE_WARP_KNOWN,
-    MP_SCENE_WARP_NO_SEAT,
-    MP_SCENE_WARP_NEAR_ALREADY
-} mp_scene_warp_step_t;
-
-mp_scene_warp_step_t mp_scene_warp_wanted(uint8_t handled, uint8_t warp_serial, bool seat_given,
-                                          float distance_to_seat);
+/* Whether the engine's respawn is under way for this seat: asked, and the module has left its
+ * running state since. A respawn the engine declined in silence never is. */
+bool mp_scene_seat_respawn_under_way(const mp_scene_seat_flow_t *flow);
 
 /* ==============================================================================================
- * The seating.
+ * The host's input while he is brought to the place of a scene.
  * ============================================================================================ */
 
-/* One player's place in the seating. */
-typedef struct mp_scene_sitter {
-    bool    wanted;         /* this player is to be seated */
-    uint8_t slot;           /* its world slot, which is the direction its ring starts in */
-    bool    seated;         /* a seat answered */
-    float   seat[3];
-    bool    chained;        /* the seat was found beside a seat handed out first */
-    uint8_t beside_slot;    /* and that seat was this slot's */
-    uint8_t tried_beside;   /* seats handed out it was searched beside, found or not */
-} mp_scene_sitter_t;
+/* What the hold of the host's input looks at, at the head of a substep and again after his seat
+ * has stepped. */
+typedef struct mp_scene_input_look {
+    bool                  hosting;      /* the scene module is installed and this machine hosts */
+    mp_scene_phase_t      phase;
+    bool                  holds;        /* the scene's hold stands */
+    mp_scene_move_t       may_move;     /* mp_scene_may_move for the host */
+    bool                  has_seat;     /* the host has a place to be brought to */
+    mp_scene_seat_stage_t stage;        /* and his seat's stage */
+    bool                  fade_held;    /* his seat holds the screen dark */
+    bool                  held;         /* the input is held now */
+    bool                  seen_running;
+    uint32_t              since_phase;  /* substeps since the phase began */
+} mp_scene_input_look_t;
 
-/* What one search came to, as the seating reads it. */
-typedef enum mp_scene_probe {
-    MP_SCENE_PROBE_FOUND = 0,
-    MP_SCENE_PROBE_NONE,     /* nothing free around the anchor */
-    MP_SCENE_PROBE_ANCHOR    /* the anchor stands on a mover, over water or a drop, or falls; a
-                              * seat searched beside in the second pass is then no place to search
-                              * from, and nothing more */
-} mp_scene_probe_t;
+/* Whether the host's input is held, and when it is not, why. */
+typedef enum mp_scene_input {
+    MP_SCENE_INPUT_HELD = 0,
+    MP_SCENE_INPUT_NONE,          /* nothing to hold: the host has no place to be brought to */
+    MP_SCENE_INPUT_RUNS,          /* the grab was seen, the scene runs */
+    MP_SCENE_INPUT_NO_GRAB,       /* the grab did not show within its grace */
+    MP_SCENE_INPUT_OVER,          /* the scene is over, given up, or a warp that holds nobody */
+    MP_SCENE_INPUT_DEAD,
+    MP_SCENE_INPUT_TRY,           /* a try did not take, and the screen is back */
+    MP_SCENE_INPUT_NOT_HOSTING,
+    MP_SCENE_INPUTS
+} mp_scene_input_t;
 
-/* The one seat search, handed in: the binding passes mp_seat_probe, a test a stand-in of the same
- * shape. `bodies` are the players' bodies and the seats handed out so far. */
-typedef mp_scene_probe_t (*mp_scene_probe_fn_t)(void *context, const float anchor[3],
-                                                uint8_t slot, const mp_seat_body_t *bodies,
-                                                size_t body_count, float seat[3]);
+/* While the hold stands the input is held for a host in the fade, placed, at his place, or
+ * waiting in the dark for his body to come down: from each of those only his own jump would take
+ * him away again. After the hold falls it is held on, if it was held, until the grab is seen, at
+ * most MP_SCENE_GRAB_GRACE_SUBSTEPS, because the player's task may run before the enemies' in the
+ * substep the grab comes in. Never for a dead host, who needs no input to come back, and never for
+ * a host with no place, who is not moved at all. The caller writes the hold only when this
+ * changes. */
+mp_scene_input_t mp_scene_input_hold(const mp_scene_input_look_t *look);
 
-/* The host and the far players a session holds, and the bodies a seat must keep clear of: the
- * bodies handed in and every seat handed out. The largest is a warp's, the host, three far bodies,
- * the target and three seats; the host's binding, which knows the banks, asserts it. A seat that
- * finds the list full is still handed out, and only the next search does not keep clear of it. */
-#define MP_SCENE_SITTERS    4u
-#define MP_SCENE_BODIES_MAX 8u
-
-typedef enum mp_scene_seating {
-    MP_SCENE_SEATING_DONE = 0,          /* every wanted player searched; some may have no seat */
-    MP_SCENE_SEATING_ANCHOR_REFUSED     /* nobody is gathered: the anchor stands nowhere to sit */
-} mp_scene_seating_t;
-
-/* Two passes. The first searches every wanted player around the anchor, in the order given, and
- * an anchor it refuses gathers nobody. The second searches every wanted player still without a
- * seat beside each seat handed out so far, in the order they were handed out, those of the second
- * pass included; the first found wins and is a seat like any other. The first pass is what the
- * seating always did, so a scene that seats everybody in it seats them exactly as before. */
-mp_scene_seating_t mp_scene_seat_everyone(const float anchor[3], const mp_seat_body_t *bodies,
-                                          size_t body_count, mp_scene_sitter_t *sitters,
-                                          size_t sitter_count, mp_scene_probe_fn_t probe,
-                                          void *context);
-
-/* What one seating came to, per player it was to seat: a search is a player to be seated, and one
- * that found nothing is a player with no seat after both passes. Of the players no seat around the
- * place answered for, how many were seated beside a seat handed out first. A seating whose anchor
- * was refused searched nobody around the place, so `around_none` and `beside_a_seat` stay 0. */
-typedef struct mp_scene_seating_tally {
-    uint32_t wanted;
-    uint32_t unseated;
-    uint32_t around_none;
-    uint32_t beside_a_seat;
-} mp_scene_seating_tally_t;
-
-mp_scene_seating_tally_t mp_scene_seating_tally(const mp_scene_sitter_t *sitters,
-                                                size_t sitter_count, mp_scene_seating_t seating);
+/* Why the hold let go, as the host's line says it after "is let go: ". */
+const char *mp_scene_input_text(mp_scene_input_t why);
 
 #endif /* MULTIPLAYER_MP_SCENE_FLOW_H */

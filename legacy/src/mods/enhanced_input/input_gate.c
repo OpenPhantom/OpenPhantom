@@ -46,12 +46,13 @@ bool input_gate_session_holds(void)
     if (held && !gate.held) {
         ++gate.holds;
         gate.held_since_ms = now;
-        log_info("the player's input is held by a menu of the multiplayer session (hold %u): the "
-                 "view is not turned, the pad walk is left to the engine's own reading, and what "
-                 "the mouse banked is dropped", (unsigned)gate.holds);
+        log_info("the player's input is held by the multiplayer session (hold %u), by its pause "
+                 "menu, its chat or a scene: the view is not turned, the pad walk is left to the "
+                 "engine's own reading, and what the mouse banked is dropped",
+                 (unsigned)gate.holds);
     } else if (!held && gate.held) {
-        log_info("the player's input is free again after a menu of the multiplayer session held "
-                 "it for %lu ms", (unsigned long)(now - gate.held_since_ms));
+        log_info("the player's input is free again after the multiplayer session held it for %lu "
+                 "ms", (unsigned long)(now - gate.held_since_ms));
     }
     gate.held = held;
     return held;

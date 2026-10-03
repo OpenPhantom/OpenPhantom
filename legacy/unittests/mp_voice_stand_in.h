@@ -60,10 +60,11 @@ typedef struct stand_in {
     float    body[3];
     size_t   far_players;     /* 0 or 1, standing at `far_at` */
     float    far_at[3];
-    bool     scene_for_all;
+    bool     scene_for_all;   /* a scene of the host's stands */
     bool     anchor_known;
     float    anchor[3];
-    bool     gathered;        /* the scene gathered this player */
+    bool     gathered;        /* the scene is this player's own */
+    bool     far_run;         /* the script that speaks is a far player's run, not the host's */
     uint16_t serial;
     int32_t  lock;            /* the lock level this machine stands at */
     bool     hearing_refused; /* the radii did not bind */

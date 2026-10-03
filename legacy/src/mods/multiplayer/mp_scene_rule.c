@@ -31,6 +31,9 @@ mp_scene_move_t mp_scene_may_move(bool has_body, bool module_running, bool stand
     if (!stands || mode == MP_SCENE_MODE_DEATH) {
         return MP_SCENE_MOVE_DEAD;
     }
+    if (mode == MP_SCENE_MODE_UNREAD) {
+        return MP_SCENE_MOVE_UNREAD;
+    }
     return mode == MP_SCENE_MODE_PARKABLE ? MP_SCENE_MOVE_YES : MP_SCENE_MOVE_MODE;
 }
 
@@ -49,12 +52,26 @@ mp_scene_respawn_caller_t mp_scene_respawn_caller(uintptr_t caller, uintptr_t wa
     return MP_SCENE_RESPAWN_BY_IMAGE;
 }
 
-mp_scene_camera_owner_t mp_scene_camera_owner(int32_t lock_level, bool for_all)
+bool mp_scene_camera_refused_on_a_client(bool client_holds, bool suppressed, int32_t group)
 {
-    if (lock_level >= MP_SCENE_LOCK_LEVEL) {
-        return MP_SCENE_CAMERA_OF_THE_LOCK;
+    return client_holds && !suppressed && group != MP_SCENE_CAMERA_GROUP_ENGINE;
+}
+
+bool mp_scene_menu_left_the_input_held(bool *menu_seen, bool menu_open, int32_t lock_level,
+                                       int32_t input_mode)
+{
+    if (menu_seen == NULL) {
+        return false;
     }
-    return for_all ? MP_SCENE_CAMERA_OF_ALL : MP_SCENE_CAMERA_OF_ITS_OWN;
+    if (menu_open) {
+        *menu_seen = true;
+        return false;
+    }
+    if (!*menu_seen) {
+        return false;
+    }
+    *menu_seen = false;
+    return lock_level == 0 && input_mode == MP_SCENE_INPUT_MODE_LOCK;
 }
 
 mp_scene_hero_origin_t mp_scene_hero_origin(bool inside_image, bool script_running)

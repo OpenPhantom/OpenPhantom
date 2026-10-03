@@ -30,6 +30,7 @@ add_library(engine_fixes_common STATIC
     model_wear_note.c
     movie_note.c
     host_settings_note.c
+    player_help_note.c
     language.c
     character_profile.c
     mod_identity.c

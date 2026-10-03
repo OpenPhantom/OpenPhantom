@@ -128,10 +128,12 @@ typedef struct overlay_row {
                                       * run; see cheats_original_actions.h for why the four
                                       * play-as codes work this way and no other action does */
     /* Notes only: this note is a REFUSAL and is drawn in the warning colour rather than the dim
-     * grey every other note has. The entity spawner's "Refused: no room in front of you" is the
-     * one that sets it: it describes a state of the world and stays where it is, which is why it
-     * is a row and not the band above the footer (overlay_notice.h). Left false everywhere
-     * else, so a count, a reading or an explanation stays grey. */
+     * grey every other note has. Two notes set it. The entity spawner's "Refused: no room in
+     * front of you" describes a state of the world and stays where it is, which is why it is a
+     * row and not the band above the footer (overlay_notice.h). The line under the two buttons
+     * of the multiplayer group sets it when the session turned the last press down: that press
+     * closed the panel, and the band goes with every close. Left false everywhere else, so a
+     * count, a reading or an explanation stays grey. */
     bool               warn;
     /* Sixteen, not eight. Eight fitted "2.50x" and every state word, and then the dev menu
      * size row began reporting "auto 1.33x" and a player read "auto 1.", a truncation with no

@@ -1,16 +1,23 @@
 /* mp_cutscene.c: the doors a scene comes through, held shut while an arena runs and while a
- * scene on this machine belongs to the host. See the header for why the lock is refused rather
- * than released, why the cell is the wrong lever, and the rule the whole file is held to.
+ * scene on this machine belongs to the host, and on a host held for the script of a far player.
+ * See the header for why the lock is refused rather than released, why the cell is the wrong
+ * lever, and the rule the whole file is held to.
  *
- * SIZE NOTE: five sites and five hulls. The grab of the hero and its put-back stay in one file
- * on purpose, because a pair split over two files is the very mistake the rule in the header
- * exists to stop. The seams taken instead are the pure arithmetic, in mp_scene_rule, and the
- * patterns, in mp_signatures_scene, whose comments carry the byte evidence of every site.
+ * SIZE NOTE: seven hulls: the lock, the bars, the camera, the grab of the hero and its put-back,
+ * and the two releases a script gives a scene back through. Each pair stays in this one file on
+ * purpose, the grab with its put-back and every take with its release, because a pair split over
+ * two files is the very mistake the rule in the header exists to stop. The seams taken instead:
+ * the pure arithmetic is mp_scene_rule; the patterns are mp_signatures_scene, whose comments
+ * carry the byte evidence of every site; and where the sites are found on the running image, the
+ * script's takes and ends and the two functions read out of their calls, is mp_cutscene_sites,
+ * which left this file when the two releases came. The next seam is the reading of the cells
+ * behind the hulls, the lock's level and the bars' target, which only read the hulls' addresses.
  */
 #include "mp_cutscene.h"
 
 #include "mp_bank.h"
 #include "mp_cells.h"
+#include "mp_cutscene_sites.h"
 #include "mp_scene_rule.h"
 #include "mp_signatures_scene.h"
 
@@ -25,73 +32,46 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* A jmp rel32, which is what every detour in this tree leaves on the head it takes. The camera
- * hull reads the head before it installs its own, because afterwards the byte is its own. */
-#define SCENE_BRANCH_OPCODE 0xE9u
-
-/* Four of the five take one int and are cdecl. The return is carried through rather than dropped
+/* Five of the seven take one int and are cdecl. The return is carried through rather than dropped
  * even where the engine's own body sets none: a prototype that throws a return away is a trap
  * this tree has already paid for, and passing whatever is in the register costs nothing. */
 typedef int32_t(__cdecl *scene_fn_t)(int32_t argument);
 
-/* The put-back takes nothing at all, and its return is carried through for the same reason. */
+/* The put-back and the clearing of the camera take nothing at all, and their return is carried
+ * through for the same reason. */
 typedef int32_t(__cdecl *scene_putback_fn_t)(void);
-
-/* A site matched only to learn the address behind its call. */
-typedef struct scene_take {
-    const uint8_t *bytes;
-    const uint8_t *mask;
-    size_t         size;
-    size_t         after_the_call;
-    const char    *what;
-} scene_take_t;
-
-static const scene_take_t SCENE_TAKES[] = {
-    { SIG_SCENE_DOLLY_TAKE, MSK_SCENE_DOLLY_TAKE, sizeof SIG_SCENE_DOLLY_TAKE,
-      SCENE_DOLLY_TAKE_RETURN, "the camera dolly opcode" },
-    { SIG_SCENE_LOCK_TAKE, MSK_SCENE_LOCK_TAKE, sizeof SIG_SCENE_LOCK_TAKE,
-      SCENE_LOCK_TAKE_RETURN, "the lock player opcode" },
-    { SIG_SCENE_SPEAK_TAKE, MSK_SCENE_SPEAK_TAKE, sizeof SIG_SCENE_SPEAK_TAKE,
-      SCENE_SPEAK_TAKE_RETURN, "a spoken line" },
-};
-
-#define SCENE_TAKE_COUNT (sizeof SCENE_TAKES / sizeof SCENE_TAKES[0])
-
-/* The two of those a door listener is told where they stand, in the order above, and the spoken
- * line's, whose camera the judgement of the line decides. */
-#define SCENE_TAKE_DOLLY 0u
-#define SCENE_TAKE_LOCK  1u
-#define SCENE_TAKE_SPEAK 2u
 
 typedef struct cutscene {
     bool     installed;
     bool     suppressed;      /* the arena: a deathmatch has no scenes at all */
     bool     client_holds;    /* a client in a session: a scene belongs to the host */
-    bool     gather_holds;    /* a host gathering the players: the grab waits for them */
+    bool     gather_holds;    /* a host being brought to a scene's place: the grab waits */
 
     detour_t lock_hull;
     detour_t letterbox_hull;
     detour_t suspend_hull;
     detour_t putback_hull;
     detour_t camera_hull;
+    detour_t lock_off_hull;
+    detour_t camera_off_hull;
     bool     lock_bound;
     bool     letterbox_bound;
     bool     suspend_bound;
     bool     putback_bound;
     bool     camera_bound;
+    bool     lock_off_bound;
+    bool     camera_off_bound;
+    bool     releases_tried;   /* the two releases were looked for, which they are once */
 
     /* The player record pointer, read again on every put-back rather than followed once: the
      * bank moves it while a far body is being written, so a pointer cached here would be the
      * wrong record for as long as that lasts. */
     uintptr_t pr_cell;
-    uintptr_t script_returns[SCENE_TAKE_COUNT];
-    size_t    script_return_count;
-    size_t    camera_operands;        /* the calls that named the camera take, all agreeing */
-    bool      camera_pattern_agrees;  /* and its own pattern resolved at the same address */
-    bool      camera_head_branched;   /* its head was another module's branch already */
-    uintptr_t take_return[SCENE_TAKE_COUNT];   /* by take, nought where it did not resolve */
+    mp_cutscene_takes_t    takes;      /* where a script takes, and the camera take itself */
+    mp_cutscene_releases_t releases;   /* where it gives back */
 
     mp_cutscene_door_listener_t door_listener;
+    mp_cutscene_grab_listener_t grab_listener;
     mp_cutscene_line_camera_fn_t line_camera;
 
     uint32_t locks_refused;
@@ -99,6 +79,13 @@ typedef struct cutscene {
     uint32_t letterboxes_refused;
     uint32_t locks_refused_for_the_host;   /* and the same three, counted by the second reason */
     uint32_t letterboxes_refused_for_the_host;
+    uint32_t locks_refused_far;            /* on a host, by the door listener: a far player's */
+    uint32_t bars_refused_far;
+    uint32_t lock_offs_refused;            /* a script's release, refused by the door listener */
+    uint32_t camera_offs_refused;
+    uint32_t bars_offs_refused;
+    uint32_t lock_offs_passed;             /* a script's release the listener let through */
+    uint32_t camera_offs_passed;
     uint32_t suspends_refused;
     uint32_t suspends_passed;
     uint32_t putbacks_refused;
@@ -108,12 +95,14 @@ typedef struct cutscene {
     uint32_t modules_not_freed;  /* idle, and left alone: no body, or a swapped bank */
     uint32_t cameras_refused;
     uint32_t cameras_passed;
-    uint32_t cameras_refused_far;   /* the host's view kept from a far player's scene */
+    uint32_t cameras_refused_far;   /* the host's view kept from a far player's script */
+    uint32_t cameras_refused_other; /* a camera of another group, refused on a client */
     uint32_t grabs;                 /* the engine's grab answered 1: a hero taken for a scene */
-    uint32_t grabs_held;            /* asked while a gathering held it */
-    uint32_t putbacks_held;         /* refused while a gathering held the grab */
+    uint32_t grabs_held;            /* asked while the host was brought to the scene's place */
+    uint32_t putbacks_held;         /* refused while that hold stood */
     bool     putback_logged;
     bool     camera_logged;
+    bool     camera_other_logged;
 } cutscene_t;
 
 static cutscene_t scene;
@@ -127,8 +116,15 @@ static cutscene_t scene;
  * held back. */
 #define SCENE_LOCK_LEVEL MP_CUTSCENE_LOCK_LEVEL
 
-/* A raise let through is told to the door listener before it is made, so the listener can still
- * read the level the lock stood at.
+/* What the door listener says about a door on the host's path: true with nobody listening. */
+static bool the_listener_lets(mp_cutscene_door_t door, uintptr_t caller, int32_t argument)
+{
+    return scene.door_listener == NULL || scene.door_listener(door, caller, argument);
+}
+
+/* A raise is asked of the door listener before it is made, so the listener can still read the
+ * level the lock stood at. A raise it refuses is a far player's script taking the host, and is
+ * answered as every refusal here is.
  *
  * engine: int Dialog_EnterInputLock(int level) */
 static int32_t __cdecl hook_lock_enter(int32_t level)
@@ -140,10 +136,11 @@ static int32_t __cdecl hook_lock_enter(int32_t level)
         return 0;   /* the scene is the host's, and this side is not in it */
     }
     if (!scene.suppressed) {
-        ++scene.locks_passed;
-        if (scene.door_listener != NULL) {
-            (void)scene.door_listener(MP_CUTSCENE_DOOR_LOCK, (uintptr_t)_ReturnAddress(), level);
+        if (!the_listener_lets(MP_CUTSCENE_DOOR_LOCK, (uintptr_t)_ReturnAddress(), level)) {
+            ++scene.locks_refused_far;
+            return 0;
         }
+        ++scene.locks_passed;
         return original(level);
     }
     /* Nought is the answer the engine's own body gives for "the lock was already held", which is
@@ -154,14 +151,28 @@ static int32_t __cdecl hook_lock_enter(int32_t level)
     return 0;
 }
 
+/* Both callers of the bars are a script's two opcodes, so every call here is a script's.
+ *
+ * For an arena and on a client only the drawing is refused, never the clearing. The same function
+ * does both directions, and refusing both would mean that bars already on screen when an arena
+ * begins stay there for the whole match with nothing able to take them down.
+ *
+ * On a host the door listener is asked for both directions. The clearing it refuses is a far
+ * player's script taking down bars it did not put up, which are the host's own scene's; its own
+ * bars were refused, so nothing of its own is left standing.
+ *
+ * engine: void fxfade_setLetterbox(int on) */
 static int32_t __cdecl hook_letterbox(int32_t on)
 {
     scene_fn_t original = (scene_fn_t)scene.letterbox_hull.original;
+    uintptr_t  caller   = (uintptr_t)_ReturnAddress();
 
-    /* Only the drawing is refused, never the clearing. The same function does both directions,
-     * and refusing both would mean that bars already on screen when an arena begins stay there
-     * for the whole match with nothing able to take them down. */
     if (on == 0) {
+        if (!scene.suppressed && !scene.client_holds &&
+            !the_listener_lets(MP_CUTSCENE_DOOR_BARS_OFF, caller, on)) {
+            ++scene.bars_offs_refused;
+            return 0;
+        }
         return original(on);
     }
     if (scene.client_holds && !scene.suppressed) {
@@ -169,10 +180,52 @@ static int32_t __cdecl hook_letterbox(int32_t on)
         return 0;
     }
     if (!scene.suppressed) {
+        if (!the_listener_lets(MP_CUTSCENE_DOOR_BARS, caller, on)) {
+            ++scene.bars_refused_far;
+            return 0;
+        }
         return original(on);
     }
     ++scene.letterboxes_refused;
     return 0;
+}
+
+/* A script's release of the lock, asked of the door listener on a host. Only the two script ends
+ * are asked about, known by the address the call returns to; the dialogue's own releases and the
+ * release of what a scene holds, which calls this at its head, go through unasked. Nought is the
+ * engine's own answer for a release that let go of nothing.
+ *
+ * engine: int Dialog_LeaveInputLock(int level) */
+static int32_t __cdecl hook_lock_leave(int32_t level)
+{
+    uintptr_t caller = (uintptr_t)_ReturnAddress();
+
+    if (mp_scene_camera_is_a_script(scene.releases.lock_off_return, MP_CUTSCENE_ENDS, caller)) {
+        if (!the_listener_lets(MP_CUTSCENE_DOOR_LOCK_OFF, caller, level)) {
+            ++scene.lock_offs_refused;
+            return 0;
+        }
+        ++scene.lock_offs_passed;
+    }
+    return ((scene_fn_t)scene.lock_off_hull.original)(level);
+}
+
+/* A script's clearing of the camera's override, the same way: the two script ends are asked
+ * about, and the engine's own four callers and the release of what a scene holds are not.
+ *
+ * engine: void bapview_overrideOff(void) */
+static int32_t __cdecl hook_camera_off(void)
+{
+    uintptr_t caller = (uintptr_t)_ReturnAddress();
+
+    if (mp_scene_camera_is_a_script(scene.releases.camera_off_return, MP_CUTSCENE_ENDS, caller)) {
+        if (!the_listener_lets(MP_CUTSCENE_DOOR_CAMERA_OFF, caller, 0)) {
+            ++scene.camera_offs_refused;
+            return 0;
+        }
+        ++scene.camera_offs_passed;
+    }
+    return ((scene_putback_fn_t)scene.camera_off_hull.original)();
 }
 
 /* ==============================================================================================
@@ -180,7 +233,9 @@ static int32_t __cdecl hook_letterbox(int32_t on)
  * ============================================================================================ */
 
 /* The hero as an actor, refused for the same reason and with the engine's own answer. A host that
- * gathers the players answers "not yet" the same way, and the engine asks again next substep. */
+ * is being brought to the place of a scene answers "not yet" the same way, and the engine asks
+ * again next substep. So does a host for a hero the door listener refuses: the engine asks for
+ * every actor carrying the handover bit on every tick, and nought is its own "not now". */
 static int32_t __cdecl hook_suspend(int32_t actor)
 {
     scene_fn_t original = (scene_fn_t)scene.suspend_hull.original;
@@ -194,10 +249,16 @@ static int32_t __cdecl hook_suspend(int32_t actor)
         }
         return 0;
     }
+    if (!the_listener_lets(MP_CUTSCENE_DOOR_GRAB, (uintptr_t)_ReturnAddress(), 0)) {
+        return 0;   /* counted by the listener, which knows the actor that asked */
+    }
     ++scene.suspends_passed;
     answer = original(actor);
     if (answer != 0) {
         ++scene.grabs;
+        if (scene.grab_listener != NULL) {
+            scene.grab_listener();
+        }
     }
     return answer;
 }
@@ -237,8 +298,11 @@ static bool putback_allowed_here(bool *readable)
  * (mp_cells.h), and it is the value the module carries for the whole of an ordinary level.
  *
  * Only where nothing is parked. A module stopped WITH something parked is an ordinary scene in
- * progress, and the put-back that ends it is let through a few lines down. */
-static bool give_the_module_back(void)
+ * progress, and the put-back that ends it is let through a few lines down.
+ *
+ * Two callers: the put-back's gate below, and the release of what a scene holds, for a stopped
+ * module with nothing in the engine's store that nobody drives (mp_scene_free). */
+bool mp_cutscene_module_back(void)
 {
     uint32_t block = 0u;
     uint32_t state = 0u;
@@ -308,21 +372,22 @@ static int32_t __cdecl hook_putback(void)
     if (!putback_allowed_here(&readable)) {
         bool freed;
 
-        /* A host that gathers holds a grab it has not made: its module runs, and the refused
-         * put-back leaves it running. Counted apart, so the line the field runs carry keeps its
-         * meaning. */
+        /* A host on his way to a scene's place holds a grab it has not made: its module runs, and
+         * the refused put-back leaves it running. Counted apart, so the line the field runs carry
+         * keeps its meaning. */
         if (scene.gather_holds && !scene.client_holds) {
             ++scene.putbacks_held;
             return 0;
         }
-        freed = give_the_module_back();
+        freed = mp_cutscene_module_back();
         ++scene.putbacks_refused;
         if (!scene.putback_logged) {
             scene.putback_logged = true;
-            log_info("a script let the hero go on this machine although nothing was ever parked "
-                     "here, so the put-back was refused%s. Without the refusal the module would "
-                     "have been written to nought, the phases would have stopped and no spawn "
-                     "would have come for a living player. The removal that asked returns to %08X",
+            log_info("a script let the hero go on this machine with nothing parked here, never "
+                     "or no longer, so the put-back was refused%s. Without the refusal the "
+                     "module would have been written to nought, the phases would have stopped "
+                     "and no spawn would have come for a living player. The removal that asked "
+                     "returns to %08X",
                      freed ? " and the module, which was already stopped, was set running"
                            : " and the module was left running",
                      (unsigned)caller);
@@ -336,21 +401,25 @@ static int32_t __cdecl hook_putback(void)
     return ((scene_putback_fn_t)scene.putback_hull.original)();
 }
 
-/* The camera, refused for the three callers that are a script and for nobody else.
+/* The camera, refused for the three callers that are a script, and on a client for every group
+ * but the engine's own.
  *
  * The return address is the instrument, the same one the arena gate uses on the spawner, and it
  * fails open twice over: a site that did not resolve is not in the list, and an empty list
  * matches nothing. A call arriving from another module that detoured this function in front of
  * us carries that module's address and is let through as well, which loses the refusal rather
- * than the camera. A take let through is told to the door listener.
+ * than the camera. On a host the door listener is asked about the takes of the two opcodes and
+ * told of a spoken line's once it goes through.
  *
  * engine: void bapview_overrideOn(int group) */
 static int32_t __cdecl hook_camera_take(int32_t group)
 {
-    uintptr_t caller = (uintptr_t)_ReturnAddress();
+    uintptr_t        caller = (uintptr_t)_ReturnAddress();
+    const uintptr_t *take   = scene.takes.take_return;
 
     if ((scene.client_holds || scene.suppressed) &&
-        mp_scene_camera_is_a_script(scene.script_returns, scene.script_return_count, caller)) {
+        mp_scene_camera_is_a_script(scene.takes.script_returns, scene.takes.script_return_count,
+                                    caller)) {
         ++scene.cameras_refused;
         if (!scene.camera_logged) {
             scene.camera_logged = true;
@@ -360,29 +429,50 @@ static int32_t __cdecl hook_camera_take(int32_t group)
         }
         return 0;
     }
-    /* A spoken line's camera goes with the line: where this machine does not present the line,
-     * the view does not swing to its speaker either. The judgement of the line is the one
-     * question asked at this take; the door listener below never refuses it. The release writes
-     * a constant nought, so a refused take leaves nothing held. */
-    if (scene.line_camera != NULL && caller != 0u &&
-        caller == scene.take_return[SCENE_TAKE_SPEAK] && !scene.line_camera()) {
+    /* What is left on a client of a take of another group is a savegame restoring the camera
+     * its scene had when it was saved, from the restore's own call and not a script's. A scene
+     * there is the host's, and this side keeps its own view; the engine's own group, the fall,
+     * the gun and the loading screen, goes through as it does alone. Refused here, nothing has
+     * to be given back later. */
+    if (mp_scene_camera_refused_on_a_client(scene.client_holds, scene.suppressed, group)) {
+        ++scene.cameras_refused_other;
+        if (!scene.camera_other_logged) {
+            scene.camera_other_logged = true;
+            log_info("a camera take of group %d was refused on this client, where a scene is "
+                     "the host's and this side keeps its own view; only the engine's own group "
+                     "%d goes through. The take returns to %08X", (int)group,
+                     (int)MP_SCENE_CAMERA_GROUP_ENGINE, (unsigned)caller);
+        }
         return 0;
     }
-    /* The listener may keep the host's view: a camera alone that a far player's scene asked for
-     * would swing the host's camera across the map. The release writes a constant nought, so the
-     * refused take leaves nothing held. */
-    if (scene.door_listener != NULL &&
-        !scene.door_listener(MP_CUTSCENE_DOOR_CAMERA, caller, group)) {
-        ++scene.cameras_refused_far;
-        return 0;
+    /* A spoken line's camera goes with the line: where this machine does not present the line,
+     * the view does not swing to its speaker either. The judgement of the line is the one
+     * question asked at this take; the door listener is only told that it went through, because
+     * the speaker has then taken the camera here and may give it back. The release writes a
+     * constant nought, so a refused take leaves nothing held. */
+    if (caller != 0u && caller == take[MP_CUTSCENE_TAKE_SPEAK]) {
+        if (scene.line_camera != NULL && !scene.line_camera()) {
+            return 0;
+        }
+        (void)the_listener_lets(MP_CUTSCENE_DOOR_LINE_CAMERA, caller, group);
+    } else if (caller != 0u && (caller == take[MP_CUTSCENE_TAKE_DOLLY] ||
+                                caller == take[MP_CUTSCENE_TAKE_LOCK])) {
+        /* The listener may keep the host's view: a camera that a far player's script asked for
+         * would swing the host's camera across the map. Nothing is held by the refused take. */
+        if (!the_listener_lets(MP_CUTSCENE_DOOR_CAMERA, caller, group)) {
+            ++scene.cameras_refused_far;
+            return 0;
+        }
     }
     ++scene.cameras_passed;
     return ((scene_fn_t)scene.camera_hull.original)(group);
 }
 
+static uintptr_t bars_cell(void);
+
 /* The hook arrives as a plain pointer because the four bound here are not one prototype: three
- * take an int and the put-back takes nothing. The camera, the fifth, is found another way and is
- * bound by hull_the_camera. */
+ * take an int and the put-back takes nothing. The camera and the two releases are found another
+ * way, out of the calls a script makes (mp_cutscene_sites), and are bound where that is asked. */
 static bool hull_one(const uint8_t *bytes, const uint8_t *mask, size_t size, size_t prologue,
                      detour_t *hull, const void *hook, const char *what)
 {
@@ -401,105 +491,58 @@ static bool hull_one(const uint8_t *bytes, const uint8_t *mask, size_t size, siz
     return true;
 }
 
-/* The three script sites, resolved for their return addresses and for nothing else. A site that
- * does not resolve is left out of the list, and its opcode then keeps the camera. */
-static void resolve_the_script_takes(void)
+/* The camera take, bound at the address its callers name (mp_cutscene_sites_takes). The hull
+ * chains in front of a branch that is already there, like every detour in this tree, so the
+ * module that placed it still runs for every take this one lets through. */
+static bool hull_the_camera(void)
 {
-    size_t index;
+    uintptr_t entry = scene.takes.camera_entry;
 
-    scene.script_return_count = 0u;
-    for (index = 0; index < SCENE_TAKE_COUNT; ++index) {
-        uintptr_t site = signature_find_unique(SCENE_TAKES[index].bytes, SCENE_TAKES[index].mask,
-                                               SCENE_TAKES[index].size);
-
-        if (site == 0u) {
-            log_warning("the camera take of %s did not resolve, so a script of this machine can "
-                        "still swing the view there", SCENE_TAKES[index].what);
-            continue;
-        }
-        scene.script_returns[scene.script_return_count] =
-            site + (uintptr_t)SCENE_TAKES[index].after_the_call;
-        scene.take_return[index] = scene.script_returns[scene.script_return_count];
-        ++scene.script_return_count;
+    if (entry == 0u) {
+        return false;   /* why not is said where the sites are read */
     }
-}
-
-/* Where the camera take lives, read out of the calls the resolved script sites make to it. True
- * with the address in `entry` when every one of them calls the same place. A site whose bytes
- * cannot be read keeps its zeros, and zeros are not a call. */
-static bool camera_entry_from_the_calls(uintptr_t *entry)
-{
-    mp_scene_call_site_t sites[SCENE_TAKE_COUNT] = { { 0u, { 0u } } };
-    size_t               index;
-
-    scene.camera_operands = 0u;
-    for (index = 0; index < scene.script_return_count; ++index) {
-        sites[index].return_address = scene.script_returns[index];
-        (void)memory_read(scene.script_returns[index] - MP_SCENE_CALL_BYTES, sites[index].call,
-                          MP_SCENE_CALL_BYTES);
-    }
-    switch (mp_scene_camera_callee(sites, scene.script_return_count, entry)) {
-    case MP_SCENE_CALLEE_AGREED:
-        scene.camera_operands = scene.script_return_count;
-        return true;
-    case MP_SCENE_CALLEE_NOT_A_CALL:
-        log_warning("the arena cannot hold back the camera a script takes: a script site does "
-                    "not end in a call, so where the take lives cannot be read from it");
-        return false;
-    case MP_SCENE_CALLEE_DISAGREE:
-        log_warning("the arena cannot hold back the camera a script takes: its %u script sites "
-                    "call different addresses, so which one is the take cannot be told",
-                    (unsigned)scene.script_return_count);
-        return false;
-    case MP_SCENE_CALLEE_NO_SITES:
-    default:
-        return false;   /* every site that did not resolve has said so already */
-    }
-}
-
-/* The camera take, bound at the address its callers name, and checked against its own pattern.
- *
- * Two ways, and they are independent. The callers name the address in their call operands. The
- * pattern finds it by its bytes, sifting the tail when a foreign branch has replaced the head.
- * Where both answer they must answer the same, or one of them has found something that is not
- * this function and nothing is hulled. Where the pattern answers nothing, the bytes at the called
- * address are proved instead, tail exactly and head as authored or already a branch.
- *
- * The hull chains in front of a branch that is already there, like every detour in this tree, so
- * the module that placed it still runs for every take this one lets through. The head is read
- * BEFORE the install, because after it the byte is this hull's own. */
-static bool hull_the_camera(const uint8_t *bytes, const uint8_t *mask, size_t size,
-                            size_t prologue)
-{
-    uintptr_t entry = 0u;
-    uintptr_t found;
-    uint8_t   head = 0u;
-
-    scene.camera_pattern_agrees = false;
-    scene.camera_head_branched  = false;
-    if (scene.script_return_count == 0u || !camera_entry_from_the_calls(&entry)) {
-        return false;
-    }
-    found = signature_find_detour_target(bytes, mask, size, prologue);
-    if (found != 0u && found != entry) {
-        log_warning("the arena cannot hold back the camera a script takes: its callers name "
-                    "%08X and its pattern resolves at %08X", (unsigned)entry, (unsigned)found);
-        return false;
-    }
-    if (found == 0u && signature_find_at(entry, bytes, mask, size, prologue) == 0u) {
-        log_warning("the arena cannot hold back the camera a script takes: its callers name "
-                    "%08X and the bytes there are not the function its pattern was cut from",
-                    (unsigned)entry);
-        return false;
-    }
-    scene.camera_head_branched = memory_read_u8(entry, &head) && head == SCENE_BRANCH_OPCODE;
-    if (!detour_install(&scene.camera_hull, entry, (const void *)&hook_camera_take, prologue)) {
+    if (!detour_install(&scene.camera_hull, entry, (const void *)&hook_camera_take,
+                        SCENE_VIEW_OVERRIDE_PROLOGUE)) {
         log_warning("the arena cannot hold back the camera a script takes: the hull at %08X did "
                     "not install", (unsigned)entry);
         return false;
     }
-    scene.camera_pattern_agrees = (found != 0u);
     return true;
+}
+
+/* The two releases a script gives a scene back through, bound once, with the door listener: only
+ * a listener is ever asked at them, and it is set on a session's way in, so a game with no session
+ * runs neither hull. Each chains in front of a branch another module left on the head, and as the
+ * last installer it is the outermost hull, which is what makes the address it reads the script's
+ * own. Eleven bytes of the lock's release and thirteen of the camera's clearing are taken; both
+ * end on an instruction and neither holds a relative operand (mp_signatures_scene.c). */
+static void hull_the_releases(void)
+{
+    const mp_cutscene_releases_t *at = &scene.releases;
+
+    if (scene.releases_tried) {
+        return;
+    }
+    scene.releases_tried = true;
+    mp_cutscene_sites_releases(&scene.takes, &scene.releases);
+    scene.lock_off_bound = at->lock_off_entry != 0u &&
+                           detour_install(&scene.lock_off_hull, at->lock_off_entry,
+                                          (const void *)&hook_lock_leave,
+                                          SCENE_LOCK_LEAVE_PROLOGUE);
+    scene.camera_off_bound = at->camera_off_entry != 0u &&
+                             detour_install(&scene.camera_off_hull, at->camera_off_entry,
+                                            (const void *)&hook_camera_off,
+                                            SCENE_VIEW_RELEASE_PROLOGUE);
+    log_info("the releases of a script are bound for a host: the lock's release at %08X %s "
+             "(the script ends return to %08X and %08X), the clearing of the camera at %08X %s "
+             "(they return to %08X and %08X); a return of nought is an end that is not asked "
+             "about",
+             (unsigned)at->lock_off_entry, scene.lock_off_bound ? "held" : "NOT HELD",
+             (unsigned)at->lock_off_return[MP_CUTSCENE_END_DOLLY],
+             (unsigned)at->lock_off_return[MP_CUTSCENE_END_LOCK],
+             (unsigned)at->camera_off_entry, scene.camera_off_bound ? "held" : "NOT HELD",
+             (unsigned)at->camera_off_return[MP_CUTSCENE_END_DOLLY],
+             (unsigned)at->camera_off_return[MP_CUTSCENE_END_LOCK]);
 }
 
 bool mp_cutscene_install(void)
@@ -532,10 +575,9 @@ bool mp_cutscene_install(void)
                                    SCENE_RESUME_PROLOGUE, &scene.putback_hull,
                                    (const void *)&hook_putback, "the put-back of the hero");
 
-    resolve_the_script_takes();
-    scene.camera_bound = hull_the_camera(SIG_SCENE_VIEW_OVERRIDE, MSK_SCENE_VIEW_OVERRIDE,
-                                         sizeof SIG_SCENE_VIEW_OVERRIDE,
-                                         SCENE_VIEW_OVERRIDE_PROLOGUE);
+    /* The sites before the hull: the head of the camera take is read as another module left it. */
+    mp_cutscene_sites_takes(&scene.takes);
+    scene.camera_bound = hull_the_camera();
 
     scene.installed = scene.lock_bound || scene.letterbox_bound || scene.suspend_bound ||
                       scene.putback_bound || scene.camera_bound;
@@ -555,16 +597,23 @@ bool mp_cutscene_install(void)
              scene.suspend_bound ? "held" : "not held",
              scene.putback_bound ? "held" : "NOT HELD",
              scene.camera_bound ? "held" : "not held",
-             (unsigned)scene.script_return_count, (unsigned)scene.camera_operands,
+             (unsigned)scene.takes.script_return_count, (unsigned)scene.takes.camera_operands,
              !scene.camera_bound ? ""
-                 : (scene.camera_pattern_agrees ? ", where its own pattern resolves as well"
-                                                : ", where only the bytes could be proved"),
-             (scene.camera_bound && scene.camera_head_branched)
+                 : (scene.takes.camera_pattern_agrees ? ", where its own pattern resolves as well"
+                                                      : ", where only the bytes could be proved"),
+             (scene.camera_bound && scene.takes.camera_head_branched)
                  ? ", its head already a branch of another module" : "");
     /* Said once, at the site, because it is the sentence the missing half cost a field run to
      * learn. */
     log_info("the hero as a script's actor is a pair: what this side did not park it does not "
              "put back either, and the put-back has one caller");
+    if (scene.letterbox_bound && bars_cell() != 0u) {
+        log_info("the bars' target cell is at %08X, read out of the letterbox's own compare and "
+                 "store behind its hull", (unsigned)bars_cell());
+    } else if (scene.letterbox_bound) {
+        log_warning("the bars' target cell did not resolve out of the letterbox's own compare and "
+                    "store, so bars a savegame left on a client with no lock under them stay up");
+    }
     return true;
 }
 
@@ -583,12 +632,18 @@ void mp_cutscene_set_client_holds_back(bool holds)
                  : "is this side's own again");
 }
 
+bool mp_cutscene_client_holds_back(void)
+{
+    return scene.client_holds;
+}
+
 void mp_cutscene_doors(mp_cutscene_doors_t *doors)
 {
     if (doors != NULL) {
         doors->lock_entry        = scene.lock_bound ? scene.lock_hull.target : 0u;
-        doors->lock_take_return  = scene.take_return[SCENE_TAKE_LOCK];
-        doors->dolly_take_return = scene.camera_bound ? scene.take_return[SCENE_TAKE_DOLLY] : 0u;
+        doors->lock_take_return  = scene.takes.take_return[MP_CUTSCENE_TAKE_LOCK];
+        doors->dolly_take_return = scene.camera_bound
+                                       ? scene.takes.take_return[MP_CUTSCENE_TAKE_DOLLY] : 0u;
     }
 }
 
@@ -596,6 +651,9 @@ void mp_cutscene_set_door_listener(mp_cutscene_door_listener_t listener,
                                    mp_cutscene_doors_t *doors)
 {
     scene.door_listener = listener;
+    if (listener != NULL) {
+        hull_the_releases();
+    }
     mp_cutscene_doors(doors);
 }
 
@@ -604,18 +662,19 @@ void mp_cutscene_set_gather_holds(bool holds)
     scene.gather_holds = holds;
 }
 
+void mp_cutscene_set_grab_listener(mp_cutscene_grab_listener_t listener)
+{
+    scene.grab_listener = listener;
+}
+
 void mp_cutscene_set_line_camera(mp_cutscene_line_camera_fn_t judge)
 {
     scene.line_camera = judge;
 }
 
-/* The engine's own lock and bars, past the gates above: what a client's mirror of the host's
- * scene raises is the host's scene, not one of this machine's scripts. */
-int32_t mp_cutscene_engine_lock(int32_t level)
-{
-    return scene.lock_bound ? ((scene_fn_t)scene.lock_hull.original)(level) : 0;
-}
-
+/* The engine's own bars and camera take, past the gates above. A host makes up through them what
+ * a far player's run was refused before it reached the door of a scene, and the release of what a
+ * scene holds takes the bars down through the first with false. */
 void mp_cutscene_engine_bars(bool on)
 {
     if (scene.letterbox_bound) {
@@ -623,16 +682,70 @@ void mp_cutscene_engine_bars(bool on)
     }
 }
 
+void mp_cutscene_engine_camera(int32_t group)
+{
+    if (scene.camera_bound) {
+        (void)((scene_fn_t)scene.camera_hull.original)(group);
+    }
+}
+
+bool mp_cutscene_engine_resume(void)
+{
+    uint32_t block = 0u;
+
+    /* THE BANK FIRST: the put-back writes the record the pointer names, which inside a window
+     * is a far body's. */
+    if (!scene.putback_bound || mp_bank_is_swapped() || scene.pr_cell == 0u ||
+        !memory_read_u32(scene.pr_cell, &block) || block == 0u) {
+        return false;
+    }
+    if (((scene_putback_fn_t)scene.putback_hull.original)() == 0) {
+        return false;   /* no body to come back to: the put-back changed nothing */
+    }
+    /* The engine's own put-back never clears its store. Left standing, the removal of the
+     * actor later would be let through as a second put-back and write the module back over
+     * whatever it is by then, dying or coming back. */
+    return memory_try_write((uintptr_t)block + MP_HERO_BLOCK_SAVED_MODULE_STATE,
+                            &(uint32_t){ 0u }, sizeof(uint32_t));
+}
+
+/* The bars' target cell, out of the letterbox's own compare and its own store behind the hull,
+ * which have to agree and lie in the image; 0 when the letterbox is not hulled or they do not. */
+static uintptr_t bars_cell(void)
+{
+    uintptr_t entry    = scene.letterbox_hull.target;
+    uint32_t  compared = 0u;
+    uint32_t  stored   = 0u;
+    uint8_t   store    = 0u;
+
+    if (!scene.letterbox_bound ||
+        !memory_try_read_u32(entry + SCENE_BARS_TARGET_OPERAND, &compared) ||
+        !memory_try_read_u8(entry + SCENE_BARS_TARGET_STORE, &store) ||
+        store != SCENE_STORE_EAX_OPCODE ||
+        !memory_try_read_u32(entry + SCENE_BARS_TARGET_STORE_OPERAND, &stored) ||
+        compared == 0u || compared != stored ||
+        !memory_is_inside_image(compared, sizeof(int32_t))) {
+        return 0u;
+    }
+    return compared;
+}
+
+bool mp_cutscene_bars_on(void)
+{
+    uintptr_t cell   = bars_cell();
+    int32_t   target = 0;
+
+    return cell != 0u && memory_try_read(cell, &target, sizeof target) && target != 0;
+}
+
 void mp_cutscene_counts(mp_cutscene_counts_t *out)
 {
     if (out == NULL) {
         return;
     }
-    out->grabs                      = scene.grabs;
-    out->grabs_held                 = scene.grabs_held;
-    out->putbacks_held              = scene.putbacks_held;
-    out->cameras_refused_far        = scene.cameras_refused_far;
-    out->locks_refused_for_the_host = scene.locks_refused_for_the_host;
+    out->grabs         = scene.grabs;
+    out->grabs_held    = scene.grabs_held;
+    out->putbacks_held = scene.putbacks_held;
 }
 
 /* The one place the cell is derived: the compare and the load behind the hull have to name the
@@ -676,6 +789,11 @@ void mp_cutscene_set_suppressed(bool suppressed)
                                          : "played again, as a campaign plays them");
 }
 
+bool mp_cutscene_suppressed(void)
+{
+    return scene.suppressed;
+}
+
 void mp_cutscene_report(void)
 {
     if (!scene.installed) {
@@ -690,12 +808,25 @@ void mp_cutscene_report(void)
              "asked by a script of this machine and refused; %u hosting(s) let through, %u "
              "put-back(s) refused (%u of them gave a stopped module back, %u left an idle one "
              "alone) and %u let through "
-             "(%u of those unread), %u camera take(s) refused and %u let through",
+             "(%u of those unread), %u camera take(s) refused, %u camera take(s) of another "
+             "group refused on a client, and %u let through",
              (unsigned)scene.locks_refused_for_the_host,
              (unsigned)scene.letterboxes_refused_for_the_host,
              (unsigned)scene.suspends_refused, (unsigned)scene.suspends_passed,
              (unsigned)scene.putbacks_refused, (unsigned)scene.modules_freed,
              (unsigned)scene.modules_not_freed, (unsigned)scene.putbacks_passed,
              (unsigned)scene.putbacks_unread,
-             (unsigned)scene.cameras_refused, (unsigned)scene.cameras_passed);
+             (unsigned)scene.cameras_refused, (unsigned)scene.cameras_refused_other,
+             (unsigned)scene.cameras_passed);
+    log_info("    a far player's script on a host: %u lock(s), %u bar(s) and %u camera take(s) "
+             "refused at the gate; of a script's releases, %u of the lock and %u of the camera "
+             "let through and %u of the lock, %u of the camera and %u of the bars refused; the "
+             "lock's release %s, the clearing of the camera %s",
+             (unsigned)scene.locks_refused_far, (unsigned)scene.bars_refused_far,
+             (unsigned)scene.cameras_refused_far, (unsigned)scene.lock_offs_passed,
+             (unsigned)scene.camera_offs_passed, (unsigned)scene.lock_offs_refused,
+             (unsigned)scene.camera_offs_refused, (unsigned)scene.bars_offs_refused,
+             scene.lock_off_bound ? "held" : (scene.releases_tried ? "NOT HELD" : "not asked for"),
+             scene.camera_off_bound ? "held"
+                                    : (scene.releases_tried ? "NOT HELD" : "not asked for"));
 }

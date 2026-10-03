@@ -89,6 +89,7 @@ static mp_pause_look_t quiet_look(uint32_t now_ms, uint32_t substeps)
     look.substeps     = substeps;
     look.health_read  = true;
     look.health       = 100;
+    look.module_running = true;   /* a running player, whom a health of nought kills */
     look.lock_read    = true;
     look.lock         = 0;
     look.outcome_read = true;
@@ -446,6 +447,49 @@ static void check_the_reasons(void)
     mp_armed_set_transport(false, false);
 }
 
+/* A death is the engine's: the corpse flag, or no health while the player module runs. A parked
+ * player with no health is not dead until the scene gives him back, and a menu that closed itself
+ * for him on every opening was a game with no way out. The binding hands "module 1" in as a value;
+ * the dying and the respawning state, 3 and 4, arrive as false like the parked 0. */
+static void check_a_player_with_no_running_module(void)
+{
+    mp_pause_session_t s;
+    mp_pause_look_t    look = quiet_look(10u, 0u);
+    bool               said;
+
+    ut_section("a death is the corpse flag, or no health while the player module runs");
+    mp_armed_set_transport(true, true);
+    memset(&s, 0, sizeof s);
+    (void)mp_pause_rule_open(&s, true, 0, 0u, 0u, &said);
+    look.health         = 0;
+    look.module_running = false;
+    mp_pause_rule_look(&s, &look);
+    mp_pause_rule_look(&s, &look);
+    ut_check(s.reason == MP_PAUSE_REASON_NONE,
+             "a parked player with no health is no death, so the menu stays open");
+    ut_check(s.kept_open_parked && s.kept_open_parked_total == 1u,
+             "and the opening is marked as kept open for it, once however many frames it lasts");
+    look.module_running = true;
+    mp_pause_rule_look(&s, &look);
+    ut_check(s.reason == MP_PAUSE_REASON_DEATH,
+             "the same health with the module running is a death, and it closes the menu");
+    (void)mp_pause_rule_leave(&s, 0, 20u, NULL, 0u);
+    ut_check(!s.kept_open_parked, "and leaving clears the mark with the opening");
+
+    (void)mp_pause_rule_open(&s, true, 0, 0u, 0u, &said);
+    look.health         = -5;
+    look.module_running = false;
+    mp_pause_rule_look(&s, &look);
+    ut_check(s.reason == MP_PAUSE_REASON_NONE && s.kept_open_parked_total == 2u,
+             "a dying or respawning module with no health closes nothing either");
+    look.dead = true;
+    mp_pause_rule_look(&s, &look);
+    ut_check(s.reason == MP_PAUSE_REASON_DEATH,
+             "the corpse flag is a death whatever the module reads, as every real death sets it");
+    (void)mp_pause_rule_leave(&s, 0, 50u, NULL, 0u);
+    mp_armed_set_transport(false, false);
+}
+
 static void check_the_frames(void)
 {
     mp_pause_session_t s;
@@ -540,6 +584,7 @@ int main(void)
     check_every_way_out();
     check_the_holders();
     check_the_reasons();
+    check_a_player_with_no_running_module();
     check_the_frames();
     check_the_pump();
     check_one_predicate();

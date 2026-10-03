@@ -19,21 +19,27 @@
 #include "mp_chat_input.h"
 #include "mp_cutscene.h"
 #include "mp_bridge_lobby.h"
+#include "mp_death_music.h"
+#include "mp_enemy_sync.h"
 #include "mp_follow.h"
 #include "mp_host_settings.h"
 #include "mp_hud.h"
 #include "mp_lobby.h"
 #include "mp_movie_gate.h"
 #include "mp_pause.h"
+#include "mp_player_help.h"
 #include "mp_reentry.h"
 #include "mp_respawn.h"
+#include "mp_respawn_fade.h"
 #include "mp_round.h"
+#include "mp_scene_bind.h"
 #include "mp_scene_host.h"
 #include "mp_scene_watch.h"
 #include "mp_seat.h"
 #include "mp_session_now.h"
 #include "mp_session_over.h"
 #include "mp_start.h"
+#include "mp_wallclock.h"
 
 #include "common/frame_hook.h"
 #include "common/logging.h"
@@ -104,7 +110,7 @@ static void feed_reentry(void)
             mp_seat_note_no_body(bank - 1u);
         }
     }
-    mp_reentry_tick(mp_bridge_drain_substeps());
+    mp_reentry_tick(mp_bridge_drain_substeps(), mp_wallclock_ms());
 }
 
 static void bridge_frame_pump(void)
@@ -137,12 +143,28 @@ static void bridge_frame_pump(void)
      * have ended the level, and before the re-entry feed and the respawn, so a death is seen
      * before a quick re-entry stands the player up again. */
     mp_pause_frame();
+    /* After the pause's look, on either role: a menu of the engine that closed over a lock which
+     * fell while it was open has put back an input mode nothing is left to undo. */
+    mp_scene_bind_after_a_menu();
+    /* The two buttons of the developer menu, for the player who pressed: read here, because
+     * between two substeps no bank window is open and the engine is outside its walk of the
+     * actors, and ahead of the respawn and the placement below, so a place a teleport hands
+     * over on this frame is taken on this frame. */
+    mp_player_help_frame(mp_bridge_drain_substeps());
     feed_reentry();
     /* After the scene gate, so a frame sets both from the same reading of the setup note. */
     file_the_movie_gate();
     /* And the wish itself, which is retried, carried out or dropped here rather than at the moment
      * it was made: both engine gates it waits for are shut for the whole of a level load. */
-    mp_respawn_tick(mp_bridge_drain_substeps());
+    mp_respawn_tick(mp_bridge_drain_substeps(), mp_wallclock_ms());
+    /* The engine's re-entry waits on a fade that a closing menu takes away. Asked after the
+     * re-entry's own tick, which may just have called the engine's re-entry, and on every frame,
+     * because it is the player module's state that says so and not who asked for the re-entry. */
+    mp_respawn_fade_tick();
+    /* And the music of this player across his own death: what he heard while he lived, put back
+     * once he stands again in the same world. */
+    mp_death_music_tick(mp_respawn_player_lives(), mp_respawn_player_is_a_corpse(),
+                        mp_enemy_sync_resets(), mp_wallclock_ms());
     /* Before mp_start_tick, so a seat handed over in this frame is taken in this frame
      * rather than in the next one. */
     mp_arrival_tick(mp_bridge_drain_substeps());
@@ -179,9 +201,12 @@ void mp_pumps_arm(void)
 
     /* The scene watch, on the session's way in and never at the DLL's load, which is the only
      * reason it is armed here: a single player game never comes this way. It reads the target
-     * resolver's answers, and the arming has installed the resolver before it gets here. The
-     * gathering and the mirror after it, with their hull on the lock's release, for the same
-     * reason and in this order: the watch's doors are what begin a gathering. */
+     * resolver's answers, and the arming has installed the resolver before it gets here; with
+     * its door listener the two releases of a script are hulled. The host's scene after it, for
+     * the same reason and in this order: the watch's doors are what begin a scene of the host's,
+     * and the release of what a scene holds finds the lock's release behind that hull. The
+     * reader of the developer menu's two buttons says what it can do on its first frame, which
+     * comes after both. */
     (void)mp_scene_watch_install();
     (void)mp_scene_install();
     /* The chat's hook and cells once for the process, and its key read on every way in. */

@@ -1,5 +1,10 @@
 /* mp_enemy_relay.c: the host's removals, sent with their reason; the host's level seeing both
- * players. */
+ * players.
+ *
+ * SIZE NOTE: a line or two over 600. The host's hull on the engine's removal and a client's
+ * performing of what the host removed share the one detour and the table of lives a removal was
+ * sent for, so they stay together. The next seam is the client's half, from the performing to the
+ * message, which reads only that table and the detour's original. */
 #include "mp_enemy_relay.h"
 
 #include "mp_armed.h"
@@ -83,6 +88,8 @@ typedef struct enemy_relay_state {
     uint32_t repeated;      /* removals sent for a life a removal was already sent for */
     mp_enemy_relay_lives_t lives;
     bool     performed_logged;
+
+    mp_enemy_relay_removed_fn_t removed_listener;   /* a host's: every removal, by its key */
 
     mp_enemy_relay_copy_fn_t copy_listener;
     uint32_t                 copies_taken;     /* a copy's removal from the host */
@@ -195,6 +202,7 @@ static void __cdecl hook_enemy_delete(uintptr_t actor, int32_t reason)
     uint32_t body = 0;
     uint32_t flags = 0;
     uint8_t  generation = 0;
+    bool     keyed = false;
     bool     watched = false;
     bool     sent = false;
 
@@ -212,16 +220,21 @@ static void __cdecl hook_enemy_delete(uintptr_t actor, int32_t reason)
          *
          * The identity is read BEFORE the call, while the actor is still an actor; the outcome
          * AFTER it. A level teardown (4) is every machine's own business and is not watched. */
-        if (reason != MP_EVENT_REMOVE_LEVEL_END &&
-            mp_enemy_bind_index(actor, &index) && index < MP_WIRE_KEY_COUNT &&
-            memory_try_read_u32(actor + ACTOR_PLACEMENT, &placement) && placement != 0u &&
-            mp_enemy_sync_generation(index, &generation)) {
+        keyed = reason != MP_EVENT_REMOVE_LEVEL_END && mp_enemy_bind_index(actor, &index) &&
+                index < MP_WIRE_KEY_COUNT;
+        if (keyed && memory_try_read_u32(actor + ACTOR_PLACEMENT, &placement) &&
+            placement != 0u && mp_enemy_sync_generation(index, &generation)) {
             watched = true;
         } else if (reason != MP_EVENT_REMOVE_LEVEL_END) {
             ++relay.unsent;
         }
     }
     relay.original(actor, reason);
+    /* Whatever the removal did, the actor that carried this key is no actor any more, or a
+     * corpse: its last answer about the player and what it took for a scene end with it. */
+    if (keyed && relay.removed_listener != NULL) {
+        relay.removed_listener(index);
+    }
     if (watched) {
         int32_t effective = observed_reason(actor, (uintptr_t)placement);
 
@@ -279,6 +292,29 @@ static void perform(uintptr_t actor, const mp_event_t *event)
     relay.performing = false;
     mp_enemy_sync_performed(event->actor_index, actor, event->actor_generation,
                             (uint8_t)event->actor_reason);
+}
+
+/* A removal a client makes by itself, through that same door: the engine's removal behind this
+ * module's hull, and the sync told in the same call that the pointer is gone. Refused on a host,
+ * whose removals have to travel, which this door does not do. The reason is the release of the
+ * player: the engine turns every reason into that one for an actor that carries the handover
+ * bit, at the head whose bytes are above, and for it writes no spawn state and frees no body. */
+bool mp_enemy_relay_remove_here(uintptr_t actor, uint32_t key)
+{
+    mp_event_t event;
+    uint8_t    generation = 0;
+
+    if (!relay.installed || relay.host || key >= MP_WIRE_KEY_COUNT ||
+        !mp_enemy_bind_is_live(actor, key, NULL)) {
+        return false;
+    }
+    (void)mp_enemy_sync_generation(key, &generation);   /* 0 for a life the host never named */
+    memset(&event, 0, sizeof event);
+    event.actor_index      = (uint16_t)key;
+    event.actor_generation = generation;
+    event.actor_reason     = (uint8_t)MP_EVENT_REMOVE_HOST_RELEASE;
+    perform(actor, &event);
+    return true;
 }
 
 /* A removal the host sent for a copy. Only the overlay removes a copy (common/npc_spawn_note.h),
@@ -533,6 +569,11 @@ void mp_enemy_relay_set_far_body(mp_enemy_relay_far_body_fn_t far_body)
 void mp_enemy_relay_set_copy_listener(mp_enemy_relay_copy_fn_t listener)
 {
     relay.copy_listener = listener;
+}
+
+void mp_enemy_relay_set_removed_listener(mp_enemy_relay_removed_fn_t listener)
+{
+    relay.removed_listener = listener;
 }
 
 void mp_enemy_relay_report(void)

@@ -1,4 +1,5 @@
-/* mp_target_rule.h: which calls the target resolver's hull leaves alone, as arithmetic.
+/* mp_target_rule.h: which calls the target resolver's hull leaves alone, which far player answers
+ * the others, and for which actors the host stays the player, as arithmetic.
  *
  * Layer 1, pure. The hull and the engine reads are in mp_target.c; what is here is the decision,
  * so a test can drive it with no game in the process.
@@ -49,5 +50,45 @@ typedef struct mp_target_far {
  * without that test would have been a far player lying dead. */
 int mp_target_rule_far_pick(const mp_target_far_t *far, size_t count, float engine_distance,
                             bool *by_aggro, bool *passed_dead);
+
+/* Why the engine's own answer for the player, the host, is kept for an actor, and no far player
+ * is weighed against it. */
+typedef enum mp_target_claim {
+    MP_TARGET_CLAIM_NONE = 0,   /* it is not: the far players are weighed as for any actor */
+    MP_TARGET_CLAIM_SCENE,      /* an actor of the host's scene: the one whose script opened its
+                                 * door, its hero, or the actor that drives the host's body */
+    MP_TARGET_CLAIM_TAKER,      /* it took the camera, the lock or the bars on this host by its own
+                                 * script and has not given back */
+    MP_TARGET_CLAIM_AFTER,      /* the actor of a scene of the host's that has just ended */
+    MP_TARGET_CLAIMS
+} mp_target_claim_t;
+
+/* What is known when a script asks where the player is. */
+typedef struct mp_target_claim_evidence {
+    bool engine_answered;   /* the engine's own answer names a target: the host stands */
+    bool joined;            /* somebody else is in the session */
+    bool of_the_scene;
+    bool taker;
+    bool after_the_scene;
+} mp_target_claim_evidence_t;
+
+/* Whether the engine's answer stands, and why.
+ *
+ * A scene is the host's alone, and its script measures "the player" from tick to tick: how far he
+ * stands, whether he looks, whether he has walked on. Answered with whoever stands nearest, the
+ * scene would follow a far player who walks up to its actor. So for the scene's own actors the
+ * host is the player. The same holds for an actor that has taken something of the host's and has
+ * yet to give it back, because the test that gives back is a test of the player: a far player
+ * standing nearer would hold the host's camera for as long as he stood there. And for the actor
+ * of a scene just ended, so that the next part of a conversation in several parts still means the
+ * host.
+ *
+ * Nothing else is kept. Every other actor goes on answering every player, the far players' own
+ * fights and triggers included, while a scene of the host's stands.
+ *
+ * With no answer of the engine's the host lies dead, and the rule that follows is asked as ever:
+ * keeping "no target" would make every script's test for a player far away come true at once.
+ * With nobody joined there is no far player to weigh, and nothing is kept either. */
+mp_target_claim_t mp_target_rule_claim(const mp_target_claim_evidence_t *evidence);
 
 #endif /* MULTIPLAYER_MP_TARGET_RULE_H */

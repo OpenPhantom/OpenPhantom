@@ -58,8 +58,12 @@ static void check_without_a_game(void)
     mp_body_set_second_is_puppet(true);
     ut_check(mp_body_contacts_suppressed() == 0,
              "declaring the second body a puppet suppresses nothing by itself");
-    ut_check(!mp_body_collision_restore_at(1u),
-             "restoring the collision of a body that was never spawned is refused");
+    ut_check(!mp_body_collision_note_life_at(1u, true, 0x100u),
+             "a revival of a body that was never spawned writes no collision");
+    mp_body_set_scene_passable(true);
+    ut_check(mp_body_collision_class_at(1u, 0x100u) == MP_BODY_CLASS_PLAYER1,
+             "and without an install a body is stamped with its bank's class, scene or not");
+    mp_body_set_scene_passable(false);
     mp_body_set_second_is_puppet(false);
 }
 
@@ -79,8 +83,8 @@ static void check_the_field_of_bodies(void)
         ut_checkf(!mp_body_exists_at(index), "no body exists at index %u without a game",
                   (unsigned)index);
         ut_checkf(mp_body_hero_at(index) == -1, "and index %u wears no hero", (unsigned)index);
-        ut_checkf(!mp_body_collision_restore_at(index),
-                  "and index %u has no collision to restore", (unsigned)index);
+        ut_checkf(!mp_body_collision_note_life_at(index, true, 0x100u),
+                  "and index %u has no collision to put back", (unsigned)index);
     }
     mp_body_spawn_at(2u);
     mp_body_tick_at(3u);

@@ -88,9 +88,9 @@ static const tag_case_t TAGS[] = {
     { (uint8_t)MP_NPC_COPY_WISH_TAG,    true,  false, "a wish for an NPC copy" },
     { (uint8_t)MP_NPC_COPY_ENTRY_TAG,   false, false, "an NPC copy granted or refused" },
     { (uint8_t)MP_LEVEL_STATE_TAG,      false, false, "the level's state" },
-    /* The host's scene: a client mirrors it and never says one. A note of this tag from a player
-     * would lock every other player into a scene nobody runs. */
-    { (uint8_t)MP_SCENE_NOTE_TAG,       false, false, "the host's scene" },
+    /* The retired note of the host's scene: nobody sends it any more, and no player may say
+     * one. */
+    { (uint8_t)MP_SCENE_NOTE_TAG,       false, false, "the retired scene note" },
     { (uint8_t)MP_CRATE_NOTE_TAG,       false, false, "the host's push blocks" },
     /* A player may wish a push block somewhere; the host pushes it and nobody passes the wish
      * on, because the other players are told the block, not the wish. */

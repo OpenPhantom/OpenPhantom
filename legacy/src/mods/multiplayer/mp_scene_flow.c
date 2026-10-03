@@ -1,9 +1,12 @@
-/* mp_scene_flow.c: the gathering's state machines, pure. See the header.
+/* mp_scene_flow.c: the state machines of a scene of the host's, pure. See the header.
  *
- * SIZE NOTE: over 600 lines. Four machines that one gathering runs together, the host's scene, a
- * client's mirror, one player's seat and the seating, each small, and every one of them read by the
- * same two bindings. The next seam is the seating, mp_scene_seat_everyone and what it calls, which
- * shares nothing with the other three but the sitter type; its test is a file of its own already.
+ * SIZE NOTE: two machines the host's binding runs together, the host's scene and one player's
+ * seat, and the rule of the host's input, which reads the two together. The decisions about a
+ * scene that runs with no door are mp_scene_doorless's; only the host's taking one over stays
+ * here, because it sets every field a beginning sets. Where the place is went to mp_scene_room.
+ * The next seam is one player's seat, mp_scene_seat_start to mp_scene_seat_leave, which shares
+ * only the move type with the rest; its tests are files of their own already, and the input rule
+ * would go with it.
  */
 #include "mp_scene_flow.h"
 
@@ -20,28 +23,6 @@
  * end in only when it draws. */
 #define FADE_SLACK_SUBSTEPS 8u
 
-uint8_t mp_scene_what_of(mp_scene_kind_t kind)
-{
-    switch (kind) {
-    case MP_SCENE_KIND_LOCK:
-        return (uint8_t)(MP_SCENE_WHAT_LOCK | MP_SCENE_WHAT_BARS);
-    case MP_SCENE_KIND_HERO:
-        return (uint8_t)(MP_SCENE_WHAT_HERO | MP_SCENE_WHAT_LOCK | MP_SCENE_WHAT_BARS);
-    case MP_SCENE_KIND_WARP:
-        return (uint8_t)MP_SCENE_WHAT_WARP;
-    case MP_SCENE_KINDS:
-    default:
-        return 0u;
-    }
-}
-
-bool mp_scene_for_all_now(uint8_t phase, uint8_t what)
-{
-    return (phase == (uint8_t)MP_SCENE_PHASE_GATHERING ||
-            phase == (uint8_t)MP_SCENE_PHASE_RUNNING) &&
-           (what & (uint8_t)(MP_SCENE_WHAT_LOCK | MP_SCENE_WHAT_HERO)) != 0u;
-}
-
 /* ==============================================================================================
  * The host's scene.
  * ============================================================================================ */
@@ -49,19 +30,28 @@ bool mp_scene_for_all_now(uint8_t phase, uint8_t what)
 const char *mp_scene_release_text(mp_scene_release_t released)
 {
     switch (released) {
-    case MP_SCENE_RELEASE_SEATED:
-        return "everyone stood at their seat";
-    case MP_SCENE_RELEASE_BOUND:
-        return "the 1500 ms bound ran out while the host stood";
+    case MP_SCENE_RELEASE_AT_THE_PLACE:
+        return "the host stood at his place";
     case MP_SCENE_RELEASE_ALONE:
         return "every far player had left the session";
     case MP_SCENE_RELEASE_NOBODY:
-        return "nobody was gathered, every player stayed where it stood";
-    case MP_SCENE_RELEASE_SEATED_SOME:
-        return "everyone with a seat stood at it";
+        return "the host had no place to be brought to and stayed where he stood";
     case MP_SCENE_RELEASE_NONE:
     default:
         return "no hold stood";
+    }
+}
+
+const char *mp_scene_drop_text(mp_scene_drop_t dropped)
+{
+    switch (dropped) {
+    case MP_SCENE_DROP_NO_PLACE:
+        return "the host has no place where that player stands";
+    case MP_SCENE_DROP_AT_THE_CAP:
+        return "the host could not be brought there before the wait ran out";
+    case MP_SCENE_DROP_NONE:
+    default:
+        return "nothing was dropped";
     }
 }
 
@@ -74,9 +64,25 @@ const char *mp_scene_given_up_text(mp_scene_move_t host)
         return "could not be moved (a gun, the water, a push block, a jump or a ledge)";
     case MP_SCENE_MOVE_NO_BODY:
         return "had no body to be taken (a respawn or a load)";
+    case MP_SCENE_MOVE_UNREAD:
+        return "could not be read (its mode did not read)";
     case MP_SCENE_MOVE_YES:
+    case MP_SCENE_MOVES:
     default:
         return "stood again only as the wait ran out";
+    }
+}
+
+const char *mp_scene_move_text(mp_scene_move_t move)
+{
+    switch (move) {
+    case MP_SCENE_MOVE_NO_BODY: return "no body, a load or a respawn";
+    case MP_SCENE_MOVE_DEAD:    return "dead";
+    case MP_SCENE_MOVE_MODE:    return "a mode the teleport may not move";
+    case MP_SCENE_MOVE_UNREAD:  return "its mode did not read";
+    case MP_SCENE_MOVE_YES:
+    case MP_SCENE_MOVES:
+    default:                    return "none";
     }
 }
 
@@ -88,15 +94,14 @@ static uint16_t next_serial(uint16_t serial)
     return next == 0u ? 1u : next;
 }
 
-static uint8_t next_warp(uint8_t serial)
+static void enter(mp_scene_host_flow_t *flow, mp_scene_phase_t phase, uint32_t now)
 {
-    uint8_t next = (uint8_t)(serial + 1u);
-
-    return next == 0u ? 1u : next;
+    flow->phase       = phase;
+    flow->phase_since = now;
 }
 
 mp_scene_begin_t mp_scene_host_begin(mp_scene_host_flow_t *flow, mp_scene_kind_t kind,
-                                     uint32_t now)
+                                     uint32_t now, bool holds)
 {
     bool             inside;
     mp_scene_begin_t answer = MP_SCENE_BEGIN_NEW;
@@ -115,33 +120,37 @@ mp_scene_begin_t mp_scene_host_begin(mp_scene_host_flow_t *flow, mp_scene_kind_t
     }
     flow->serial        = next_serial(flow->serial);
     flow->kind          = kind;
-    flow->phase         = MP_SCENE_PHASE_GATHERING;
-    flow->holds         = kind != MP_SCENE_KIND_WARP;
+    flow->holds         = holds && kind != MP_SCENE_KIND_WARP;
     flow->began         = now;
     flow->last          = now;
-    flow->phase_since   = now;
     flow->hold_standing = 0u;
     flow->hold_dead     = 0u;
     flow->seen_running  = false;
     flow->released      = MP_SCENE_RELEASE_NONE;
     flow->grace         = 0u;
     flow->given_up      = false;
-    if (kind == MP_SCENE_KIND_WARP) {
-        flow->warp_serial = next_warp(flow->warp_serial);
-    }
+    flow->dropped       = MP_SCENE_DROP_NONE;
+    /* A warp gathers until the host has landed; a scene with nothing to wait for runs. */
+    enter(flow, flow->holds || kind == MP_SCENE_KIND_WARP ? MP_SCENE_PHASE_GATHERING
+                                                           : MP_SCENE_PHASE_RUNNING, now);
     return answer;
 }
 
-static void enter(mp_scene_host_flow_t *flow, mp_scene_phase_t phase, uint32_t now)
+bool mp_scene_host_adopt(mp_scene_host_flow_t *flow, mp_scene_kind_t kind, uint32_t now)
 {
-    flow->phase       = phase;
-    flow->phase_since = now;
+    if (flow == NULL || kind == MP_SCENE_KIND_WARP || kind >= MP_SCENE_KINDS ||
+        flow->phase != MP_SCENE_PHASE_NONE || flow->given_up) {
+        return false;
+    }
+    (void)mp_scene_host_begin(flow, kind, now, false);
+    flow->seen_running = true;
+    return true;
 }
 
-/* The wait has run out: over for everybody. The actor and the grab are free, the note says over so
- * every client is let go, and the engine plays the scene here as it would alone, with the host
- * dead or wherever he stands. Never a release into running: that would play the scene for
- * everybody with a corpse, or lock the clients into a scene whose grab cannot come. */
+/* The wait for the host has run out. The actor and the grab are free, and the engine plays the
+ * scene here as it would alone, with the host dead or wherever he stands. Never a release into
+ * running: the caller tells a scene given up from one whose host stood at his place, and only the
+ * second is measured against that place. */
 static void give_the_scene_up(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *look)
 {
     flow->holds        = false;
@@ -157,33 +166,54 @@ static bool out_of_time(const mp_scene_host_flow_t *flow, const mp_scene_host_lo
     return look->now - flow->began >= MP_SCENE_WAIT_CAP_SUBSTEPS;
 }
 
-/* A lock or a hero scene: the hold's clocks, then whether it falls. The substeps since the last
- * look belong to what this look found, the host standing or dead. A hold falls into running only
- * with the host standing: a dead host is waited for, his re-entry bringing him to the gathering. */
+/* A held lock a far player set off is no scene of the host's: the hold falls, nothing runs here,
+ * and the binding lets the host go of what the lock took at the door. */
+static void drop_the_lock(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *look,
+                          mp_scene_drop_t why)
+{
+    flow->holds   = false;
+    flow->dropped = why;
+    flow->grace   = 0u;
+    enter(flow, MP_SCENE_PHASE_NONE, look->now);
+}
+
+/* A held lock or hero scene: the hold's clocks, then whether it falls. The substeps since the
+ * last look belong to what this look found, the host standing or dead. A hold falls into running
+ * only with the host standing at his place: a dead host is waited for, his re-entry bringing him
+ * to the place, and so is one on his way to it. With every far player gone it falls at once, but
+ * not under a host who is on his way to a place already: the place is read and the grab would
+ * otherwise find him wherever he was. With no place, a hero scene is released where the host
+ * stands and a lock is dropped, a dead host's as well. At the cap a hero scene is given up and a
+ * lock dropped; the cap waits while the engine's respawn is bringing the host, because the module
+ * it parks then is the respawn's own. */
 static void step_the_hold(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *look,
                           uint32_t passed)
 {
+    bool lock = flow->kind == MP_SCENE_KIND_LOCK;
+
     if (look->host_stands) {
         flow->hold_standing += passed;
     } else {
         flow->hold_dead += passed;
     }
-    if (look->alone) {
-        /* With nobody else in the session there is nobody to wait for and nobody to play the
-         * scene for: it runs as it would with no session at all. */
+    if (look->alone && !look->has_place) {
+        /* With nobody else in the session there is nobody whose place the host would take: the
+         * scene runs as it would with no session at all. */
         flow->released = MP_SCENE_RELEASE_ALONE;
-    } else if (look->host_stands && look->nobody_gathered) {
-        /* Nobody was handed a seat, so "everybody seated" would be true of nobody. */
+    } else if (lock && look->no_place) {
+        drop_the_lock(flow, look, MP_SCENE_DROP_NO_PLACE);
+        return;
+    } else if (look->host_stands && look->no_place) {
         flow->released = MP_SCENE_RELEASE_NOBODY;
-    } else if (look->host_stands && look->everyone_seated) {
-        /* A far player no seat answered for is at no seat, so "everybody" would leave him out. */
-        flow->released = look->unseated == 0u ? MP_SCENE_RELEASE_SEATED
-                                              : MP_SCENE_RELEASE_SEATED_SOME;
-    } else if (look->host_stands && flow->hold_standing >= MP_SCENE_HOLD_SUBSTEPS) {
-        flow->released = MP_SCENE_RELEASE_BOUND;
+    } else if (look->host_stands && !look->away && !look->place_pending) {
+        flow->released = MP_SCENE_RELEASE_AT_THE_PLACE;
     } else {
-        if (out_of_time(flow, look)) {
-            give_the_scene_up(flow, look);
+        if (out_of_time(flow, look) && !look->own_respawning) {
+            if (lock) {
+                drop_the_lock(flow, look, MP_SCENE_DROP_AT_THE_CAP);
+            } else {
+                give_the_scene_up(flow, look);
+            }
         }
         return;
     }
@@ -211,6 +241,8 @@ static bool the_engine_is_done(mp_scene_host_flow_t *flow, const mp_scene_host_l
     return flow->grace >= MP_SCENE_GRAB_GRACE_SUBSTEPS;
 }
 
+/* A scene that is done is none at once: nothing is told to anybody after it, so nothing lingers.
+ * Over is kept for one case alone, a scene given up that the engine may still play here. */
 bool mp_scene_host_step(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *look)
 {
     mp_scene_phase_t before;
@@ -227,23 +259,23 @@ bool mp_scene_host_step(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *
         if (flow->kind != MP_SCENE_KIND_WARP) {
             step_the_hold(flow, look, passed);
         } else if (look->warp_landed || look->now - flow->began >= MP_SCENE_WARP_CAP_SUBSTEPS) {
-            enter(flow, MP_SCENE_PHASE_OVER, look->now);
+            enter(flow, MP_SCENE_PHASE_NONE, look->now);
         }
         break;
     case MP_SCENE_PHASE_RUNNING:
         /* The engine's grab comes a substep after the hold falls, so a scene counts as having
          * run only once it has been seen running. */
         if (the_engine_is_done(flow, look, passed)) {
-            enter(flow, MP_SCENE_PHASE_OVER, look->now);
-        } else if (!flow->seen_running && out_of_time(flow, look)) {
+            enter(flow, MP_SCENE_PHASE_NONE, look->now);
+        } else if (!flow->seen_running && out_of_time(flow, look) &&
+                   look->now - flow->phase_since >= MP_SCENE_GRAB_GRACE_SUBSTEPS) {
+            /* A hold that fell near the cap still gets the grace of the grab it fell for. */
             give_the_scene_up(flow, look);
         }
         break;
     case MP_SCENE_PHASE_OVER:
-        if (flow->given_up && the_engine_is_done(flow, look, passed)) {
+        if (!flow->given_up || the_engine_is_done(flow, look, passed)) {
             flow->given_up = false;
-        }
-        if (!flow->given_up && look->now - flow->phase_since >= MP_SCENE_OVER_SUBSTEPS) {
             enter(flow, MP_SCENE_PHASE_NONE, look->now);
         }
         break;
@@ -252,6 +284,33 @@ bool mp_scene_host_step(mp_scene_host_flow_t *flow, const mp_scene_host_look_t *
         break;
     }
     return flow->phase != before;
+}
+
+bool mp_scene_host_takes_the_hero(mp_scene_host_flow_t *flow, uint32_t now)
+{
+    if (flow == NULL || flow->kind != MP_SCENE_KIND_LOCK || flow->began != now ||
+        (flow->phase != MP_SCENE_PHASE_GATHERING && flow->phase != MP_SCENE_PHASE_RUNNING)) {
+        return false;
+    }
+    flow->kind = MP_SCENE_KIND_HERO;
+    return true;
+}
+
+bool mp_scene_host_stands_now(const mp_scene_host_flow_t *flow)
+{
+    if (flow == NULL) {
+        return false;
+    }
+    if (flow->given_up) {
+        return true;
+    }
+    return flow->kind != MP_SCENE_KIND_WARP && (flow->phase == MP_SCENE_PHASE_GATHERING ||
+                                                flow->phase == MP_SCENE_PHASE_RUNNING);
+}
+
+bool mp_scene_host_still_running(const mp_scene_host_flow_t *flow)
+{
+    return flow != NULL && (flow->phase == MP_SCENE_PHASE_RUNNING || flow->given_up);
 }
 
 bool mp_scene_host_leave(mp_scene_host_flow_t *flow)
@@ -266,118 +325,9 @@ bool mp_scene_host_leave(mp_scene_host_flow_t *flow)
     flow->phase    = MP_SCENE_PHASE_NONE;
     flow->released = MP_SCENE_RELEASE_NONE;
     flow->given_up = false;
+    flow->dropped  = MP_SCENE_DROP_NONE;
     flow->grace    = 0u;
     return held;
-}
-
-/* ==============================================================================================
- * A client's mirror.
- * ============================================================================================ */
-
-/* Whether the note the mirror holds asks for the lock: a lock or a hero scene, gathering or
- * running. The same question the public one asks, for the same note. */
-static bool wants_the_lock(const mp_scene_mirror_t *mirror)
-{
-    return mirror->known && mp_scene_for_all_now(mirror->phase, mirror->what);
-}
-
-mp_scene_take_t mp_scene_mirror_take(mp_scene_mirror_t *mirror, const mp_scene_note_t *note,
-                                     uint8_t generation_here, uint32_t now_ms)
-{
-    if (mirror == NULL || note == NULL) {
-        return MP_SCENE_TAKE_FOREIGN;
-    }
-    if (note->generation != generation_here) {
-        return MP_SCENE_TAKE_FOREIGN;
-    }
-    if (mirror->known && mirror->generation == note->generation &&
-        mp_scene_serial_after(mirror->serial, note->serial)) {
-        return MP_SCENE_TAKE_OLDER;
-    }
-    if (mirror->known && mirror->generation == note->generation &&
-        mirror->serial == note->serial && mirror->phase == note->phase &&
-        mirror->what == note->what) {
-        memcpy(mirror->anchor, note->anchor, sizeof mirror->anchor);
-        return MP_SCENE_TAKE_REPEAT;
-    }
-    mirror->known      = true;
-    mirror->generation = note->generation;
-    mirror->serial     = note->serial;
-    mirror->phase      = note->phase;
-    mirror->what       = note->what;
-    mirror->heard_ms   = now_ms;
-    memcpy(mirror->anchor, note->anchor, sizeof mirror->anchor);
-    return MP_SCENE_TAKE_NEW;
-}
-
-/* The one release: what the mirror raised, it lets go of once. */
-static uint32_t let_go(mp_scene_mirror_t *mirror, mp_scene_let_go_t reason,
-                       mp_scene_let_go_t *why)
-{
-    if (!mirror->locked) {
-        return 0u;
-    }
-    mirror->locked = false;
-    if (why != NULL) {
-        *why = reason;
-    }
-    return MP_SCENE_MIRROR_LET_GO;
-}
-
-uint32_t mp_scene_mirror_step(mp_scene_mirror_t *mirror, const mp_scene_mirror_look_t *look,
-                              mp_scene_let_go_t *why)
-{
-    if (why != NULL) {
-        *why = MP_SCENE_LET_GO_NONE;
-    }
-    if (mirror == NULL || look == NULL) {
-        return 0u;
-    }
-    if (look->host_heard) {
-        mirror->heard_ms = look->now_ms;
-    }
-    if (wants_the_lock(mirror) && look->now_ms - mirror->heard_ms >= MP_SCENE_SILENCE_MS) {
-        /* A host this long silent is gone or stopped; the note it last sent is forgotten, so the
-         * next one it sends is taken as new and holds the player again. */
-        mirror->phase = MP_SCENE_PHASE_NONE;
-        return let_go(mirror, MP_SCENE_LET_GO_SILENT, why);
-    }
-    if (!wants_the_lock(mirror)) {
-        return let_go(mirror, MP_SCENE_LET_GO_OVER, why);
-    }
-    if (mirror->locked) {
-        return MP_SCENE_MIRROR_RAISE;
-    }
-    if (!look->may_lock) {
-        return 0u;
-    }
-    mirror->locked        = true;
-    mirror->held_since_ms = look->now_ms;
-    return MP_SCENE_MIRROR_RAISE | MP_SCENE_MIRROR_BARS;
-}
-
-bool mp_scene_note_gathers(const mp_scene_note_t *note, uint16_t gathered_serial, bool seat_given)
-{
-    return note != NULL && seat_given && (note->what & MP_SCENE_WHAT_WARP) == 0u &&
-           mp_scene_for_all_now(note->phase, note->what) && note->serial != gathered_serial;
-}
-
-bool mp_scene_seat_wanted(const mp_scene_mirror_t *mirror, uint16_t seat_serial, bool warp)
-{
-    return mirror != NULL && mirror->known && mirror->serial == seat_serial &&
-           (warp || mp_scene_for_all_now(mirror->phase, mirror->what));
-}
-
-uint32_t mp_scene_mirror_leave(mp_scene_mirror_t *mirror)
-{
-    uint32_t act;
-
-    if (mirror == NULL) {
-        return 0u;
-    }
-    act = let_go(mirror, MP_SCENE_LET_GO_EXIT, NULL);
-    memset(mirror, 0, sizeof *mirror);
-    return act;
 }
 
 /* ==============================================================================================
@@ -391,9 +341,21 @@ void mp_scene_seat_start(mp_scene_seat_flow_t *flow, uint32_t now, float fade_se
     }
     memset(flow, 0, sizeof *flow);
     flow->stage        = MP_SCENE_SEAT_WAITING;
+    flow->ended        = MP_SCENE_SEAT_END_NONE;
     flow->since        = now;
+    flow->last         = now;
     flow->fade_seconds = fade_seconds;
     flow->refused      = MP_SCENE_MOVE_YES;
+}
+
+void mp_scene_seat_start_gathering(mp_scene_seat_flow_t *flow, uint32_t now, float fade_seconds,
+                                   uint32_t hard_after)
+{
+    mp_scene_seat_start(flow, now, fade_seconds);
+    if (flow != NULL) {
+        flow->gathering  = true;
+        flow->hard_after = hard_after;
+    }
 }
 
 uint32_t mp_scene_seat_fade_deadline(float fade_seconds)
@@ -405,72 +367,248 @@ uint32_t mp_scene_seat_fade_deadline(float fade_seconds)
     return (uint32_t)substeps + FADE_SLACK_SUBSTEPS;
 }
 
-static mp_scene_seat_act_t give_up(mp_scene_seat_flow_t *flow)
+static mp_scene_seat_act_t give_up(mp_scene_seat_flow_t *flow, mp_scene_seat_end_t ended)
 {
     bool held = flow->fade_held;
 
     flow->stage     = MP_SCENE_SEAT_GIVEN_UP;
+    flow->ended     = ended;
     flow->fade_held = false;
     return held ? MP_SCENE_SEAT_ACT_FADE_IN : MP_SCENE_SEAT_ACT_NONE;
+}
+
+/* Whether the hard way is due: a gathering's seat whose body has been in a mode the teleport may
+ * not move for its bound, counted over every try, and is in one now. */
+static bool hard_way_due(const mp_scene_seat_flow_t *flow, const mp_scene_seat_look_t *look)
+{
+    return flow->gathering && flow->hard_after != 0u && look->may_move == MP_SCENE_MOVE_MODE &&
+           flow->mode_wait >= flow->hard_after;
+}
+
+static bool hard_way_left(const mp_scene_seat_flow_t *flow, const mp_scene_seat_look_t *look)
+{
+    return flow->hard_after != 0u && !flow->hard_spent && look->hard_ready;
+}
+
+/* The engine's respawn onto the seat. A fade this flow holds is given back first, on its own look:
+ * the respawn fades the screen by itself, and every fade out of this flow has to be answered by
+ * exactly one of its own fades in. */
+static mp_scene_seat_act_t take_the_hard_way(mp_scene_seat_flow_t *flow,
+                                             const mp_scene_seat_look_t *look)
+{
+    if (flow->fade_held) {
+        flow->fade_held = false;
+        return MP_SCENE_SEAT_ACT_FADE_IN;
+    }
+    flow->stage        = MP_SCENE_SEAT_RESPAWNING;
+    flow->since        = look->now;
+    flow->hard_spent   = true;
+    flow->respawn_left = false;
+    return MP_SCENE_SEAT_ACT_RESPAWN;
+}
+
+/* Out of tries: the hard way while it is left, otherwise the seat is given up. */
+static mp_scene_seat_act_t the_last_way(mp_scene_seat_flow_t *flow,
+                                        const mp_scene_seat_look_t *look)
+{
+    if (hard_way_left(flow, look)) {
+        return take_the_hard_way(flow, look);
+    }
+    return give_up(flow, MP_SCENE_SEAT_END_TRIES);
+}
+
+/* A try that did not take: back to waiting, once more while tries are left. The screen stays dark
+ * after a fade the body could not be moved at the end of, so a body that comes down is placed at
+ * once rather than under a second fade; after a placement it did not take, the screen comes
+ * back. */
+static mp_scene_seat_act_t try_again(mp_scene_seat_flow_t *flow, const mp_scene_seat_look_t *look,
+                                     bool screen_back)
+{
+    flow->stage = MP_SCENE_SEAT_WAITING;
+    flow->since = look->now;
+    if (flow->retries >= MP_SCENE_SEAT_RETRIES) {
+        flow->tries_spent = true;
+        return the_last_way(flow, look);
+    }
+    ++flow->retries;
+    if (screen_back && flow->fade_held) {
+        flow->fade_held = false;
+        return MP_SCENE_SEAT_ACT_FADE_IN;
+    }
+    return MP_SCENE_SEAT_ACT_NONE;
+}
+
+static mp_scene_seat_act_t step_waiting(mp_scene_seat_flow_t *flow,
+                                        const mp_scene_seat_look_t *look, uint32_t passed)
+{
+    if (!look->live) {
+        return give_up(flow, MP_SCENE_SEAT_END_SCENE);
+    }
+    flow->mode_wait += look->may_move == MP_SCENE_MOVE_MODE ? passed : 0u;
+    if (look->may_move != MP_SCENE_MOVE_YES) {
+        flow->refused = look->may_move;
+    }
+    /* A player who dies in the dark sees his death: his re-entry is anchored on the seat, and a
+     * try is not spent on it. */
+    if (flow->gathering && look->may_move == MP_SCENE_MOVE_DEAD && flow->fade_held) {
+        flow->fade_held = false;
+        return MP_SCENE_SEAT_ACT_FADE_IN;
+    }
+    if (flow->tries_spent) {
+        return the_last_way(flow, look);
+    }
+    if (look->may_move != MP_SCENE_MOVE_YES) {
+        if (flow->wait_max != 0u && look->now - flow->since >= flow->wait_max) {
+            flow->waited_out = true;
+            return give_up(flow, MP_SCENE_SEAT_END_WAITED_OUT);
+        }
+        /* The screen is kept dark after a try only for a body about to come down or about to be
+         * taken the hard way; with that way closed it comes back after the time a placement
+         * gets, whatever keeps the body. */
+        if (flow->fade_held && !hard_way_left(flow, look) &&
+            look->now - flow->since >= MP_SCENE_PLACE_SUBSTEPS) {
+            flow->fade_held = false;
+            return MP_SCENE_SEAT_ACT_FADE_IN;
+        }
+        if (hard_way_due(flow, look)) {
+            if (hard_way_left(flow, look)) {
+                return take_the_hard_way(flow, look);
+            }
+            flow->hard_wanted = true;
+        }
+        return MP_SCENE_SEAT_ACT_NONE;
+    }
+    if (flow->fade_held) {
+        flow->stage = MP_SCENE_SEAT_PLACED;
+        flow->since = look->now;
+        return MP_SCENE_SEAT_ACT_PLACE;
+    }
+    flow->stage      = MP_SCENE_SEAT_FADING;
+    flow->since      = look->now;
+    flow->fade_since = look->now;
+    flow->fade_held  = true;
+    return MP_SCENE_SEAT_ACT_FADE_OUT;
+}
+
+static mp_scene_seat_act_t step_fading(mp_scene_seat_flow_t *flow,
+                                       const mp_scene_seat_look_t *look, uint32_t passed)
+{
+    if (!look->live) {
+        return give_up(flow, MP_SCENE_SEAT_END_SCENE);
+    }
+    flow->mode_wait += look->may_move == MP_SCENE_MOVE_MODE ? passed : 0u;
+    if (flow->gathering && look->may_move == MP_SCENE_MOVE_DEAD) {
+        flow->refused   = MP_SCENE_MOVE_DEAD;
+        flow->stage     = MP_SCENE_SEAT_WAITING;
+        flow->since     = look->now;
+        flow->fade_held = false;
+        return MP_SCENE_SEAT_ACT_FADE_IN;
+    }
+    if (!look->fade_done &&
+        look->now - flow->since < mp_scene_seat_fade_deadline(flow->fade_seconds)) {
+        return MP_SCENE_SEAT_ACT_NONE;
+    }
+    flow->fade_on_clock = !look->fade_done;
+    if (look->may_move != MP_SCENE_MOVE_YES) {
+        flow->refused = look->may_move;
+        if (!flow->gathering) {
+            return give_up(flow, MP_SCENE_SEAT_END_DEADLINE);
+        }
+        return try_again(flow, look, false);
+    }
+    flow->stage = MP_SCENE_SEAT_PLACED;
+    flow->since = look->now;
+    return MP_SCENE_SEAT_ACT_PLACE;
+}
+
+static mp_scene_seat_act_t step_placed(mp_scene_seat_flow_t *flow,
+                                       const mp_scene_seat_look_t *look)
+{
+    /* Handed over: the scene ending now does not take the seat back, the body is on its way. */
+    if (look->at_seat) {
+        flow->stage     = MP_SCENE_SEAT_DONE;
+        flow->at_seat   = true;
+        flow->fade_held = false;
+        return MP_SCENE_SEAT_ACT_FADE_IN;
+    }
+    if (look->now - flow->since < MP_SCENE_PLACE_SUBSTEPS) {
+        return MP_SCENE_SEAT_ACT_NONE;
+    }
+    if (!flow->gathering) {
+        return give_up(flow, MP_SCENE_SEAT_END_DEADLINE);
+    }
+    return try_again(flow, look, true);
+}
+
+/* The engine's respawn: done once the module has left its running state, come back to it and the
+ * body stands on the seat. A respawn the engine declined, or one that put the body elsewhere, ends
+ * at its bound and the seat waits again, without the hard way, which is taken once. A scene that
+ * wants the seat no longer leaves the respawn to land where it lands, with no fade of this flow. */
+static mp_scene_seat_act_t step_respawning(mp_scene_seat_flow_t *flow,
+                                           const mp_scene_seat_look_t *look)
+{
+    if (!look->live) {
+        flow->stage = MP_SCENE_SEAT_IDLE;
+        flow->ended = MP_SCENE_SEAT_END_SCENE;
+        return MP_SCENE_SEAT_ACT_NONE;
+    }
+    flow->respawn_left = flow->respawn_left || !look->module_running;
+    if (flow->respawn_left && look->module_running && look->at_seat) {
+        flow->stage      = MP_SCENE_SEAT_DONE;
+        flow->at_seat    = true;
+        flow->by_respawn = true;
+        return MP_SCENE_SEAT_ACT_NONE;
+    }
+    if (look->now - flow->since >= MP_SCENE_RESPAWN_SUBSTEPS) {
+        flow->stage          = MP_SCENE_SEAT_WAITING;
+        flow->since          = look->now;
+        flow->respawn_failed = true;
+    }
+    return MP_SCENE_SEAT_ACT_NONE;
+}
+
+/* A seat to be kept that the body left, pushed or fallen off, is a try that did not take. */
+static mp_scene_seat_act_t step_done(mp_scene_seat_flow_t *flow, const mp_scene_seat_look_t *look)
+{
+    if (!flow->gathering || !look->keep || !look->live || look->at_seat) {
+        return MP_SCENE_SEAT_ACT_NONE;
+    }
+    flow->at_seat = false;
+    return try_again(flow, look, false);
 }
 
 mp_scene_seat_act_t mp_scene_seat_step(mp_scene_seat_flow_t *flow,
                                        const mp_scene_seat_look_t *look)
 {
+    uint32_t passed;
+
     if (flow == NULL || look == NULL) {
         return MP_SCENE_SEAT_ACT_NONE;
     }
+    passed            = look->now - flow->last;
+    flow->last        = look->now;
+    flow->hard_wanted = false;
     switch (flow->stage) {
     case MP_SCENE_SEAT_WAITING:
-        if (!look->live) {
-            return give_up(flow);
-        }
-        if (look->may_move != MP_SCENE_MOVE_YES) {
-            flow->refused = look->may_move;
-            if (flow->wait_max != 0u && look->now - flow->since >= flow->wait_max) {
-                flow->waited_out = true;
-                return give_up(flow);
-            }
-            return MP_SCENE_SEAT_ACT_NONE;
-        }
-        flow->stage     = MP_SCENE_SEAT_FADING;
-        flow->since     = look->now;
-        flow->fade_held = true;
-        return MP_SCENE_SEAT_ACT_FADE_OUT;
+        return step_waiting(flow, look, passed);
     case MP_SCENE_SEAT_FADING:
-        if (!look->live) {
-            return give_up(flow);
-        }
-        if (!look->fade_done &&
-            look->now - flow->since < mp_scene_seat_fade_deadline(flow->fade_seconds)) {
-            return MP_SCENE_SEAT_ACT_NONE;
-        }
-        flow->fade_on_clock = !look->fade_done;
-        if (look->may_move != MP_SCENE_MOVE_YES) {
-            flow->refused = look->may_move;
-            return give_up(flow);
-        }
-        flow->stage = MP_SCENE_SEAT_PLACED;
-        flow->since = look->now;
-        return MP_SCENE_SEAT_ACT_PLACE;
+        return step_fading(flow, look, passed);
     case MP_SCENE_SEAT_PLACED:
-        /* Handed over: the scene ending now does not take the seat back, the body is on its way. */
-        if (look->at_seat) {
-            flow->stage     = MP_SCENE_SEAT_DONE;
-            flow->at_seat   = true;
-            flow->fade_held = false;
-            return MP_SCENE_SEAT_ACT_FADE_IN;
-        }
-        if (look->now - flow->since >= MP_SCENE_PLACE_SUBSTEPS) {
-            return give_up(flow);
-        }
-        return MP_SCENE_SEAT_ACT_NONE;
-    case MP_SCENE_SEAT_IDLE:
+        return step_placed(flow, look);
+    case MP_SCENE_SEAT_RESPAWNING:
+        return step_respawning(flow, look);
     case MP_SCENE_SEAT_DONE:
+        return step_done(flow, look);
+    case MP_SCENE_SEAT_IDLE:
     case MP_SCENE_SEAT_GIVEN_UP:
     default:
         return MP_SCENE_SEAT_ACT_NONE;
     }
+}
+
+bool mp_scene_seat_respawn_under_way(const mp_scene_seat_flow_t *flow)
+{
+    return flow != NULL && flow->stage == MP_SCENE_SEAT_RESPAWNING && flow->respawn_left;
 }
 
 mp_scene_seat_act_t mp_scene_seat_leave(mp_scene_seat_flow_t *flow)
@@ -486,151 +624,68 @@ mp_scene_seat_act_t mp_scene_seat_leave(mp_scene_seat_flow_t *flow)
     return held ? MP_SCENE_SEAT_ACT_FADE_IN : MP_SCENE_SEAT_ACT_NONE;
 }
 
-mp_scene_warp_step_t mp_scene_warp_wanted(uint8_t handled, uint8_t warp_serial, bool seat_given,
-                                          float distance_to_seat)
-{
-    if (warp_serial == 0u || warp_serial == handled) {
-        return MP_SCENE_WARP_KNOWN;
-    }
-    if (!seat_given) {
-        return MP_SCENE_WARP_NO_SEAT;
-    }
-    if (isfinite(distance_to_seat) && distance_to_seat < MP_SCENE_WARP_NEAR) {
-        return MP_SCENE_WARP_NEAR_ALREADY;
-    }
-    return MP_SCENE_WARP_MOVE;
-}
-
 /* ==============================================================================================
- * The seating.
+ * The host's input while he is brought to the place of a scene.
  * ============================================================================================ */
 
-/* What the seating has handed out so far: the bodies every search keeps clear of, a seat among
- * them, and the sitters in the order they were seated. */
-typedef struct seating {
-    mp_seat_body_t around[MP_SCENE_BODIES_MAX];
-    size_t         taken;
-    size_t         order[MP_SCENE_SITTERS];
-    size_t         handed;
-} seating_t;
-
-/* Sitter `index` has its seat: a seat handed out is a body the next search has to keep clear of,
- * and one the second pass may search beside. */
-static void hand_out(seating_t *seating, const mp_scene_sitter_t *sitters, size_t index)
+/* While the hold stands: a host with a place in the fade, placed, at it, or waiting in the
+ * dark. */
+static mp_scene_input_t while_it_holds(const mp_scene_input_look_t *look)
 {
-    const mp_scene_sitter_t *sitter = &sitters[index];
-
-    if (seating->taken < MP_SCENE_BODIES_MAX) {
-        mp_seat_body_t *body = &seating->around[seating->taken++];
-
-        body->known  = true;
-        body->stands = true;
-        memcpy(body->position, sitter->seat, sizeof body->position);
-        body->heading = 0.0f;
+    if (look->may_move == MP_SCENE_MOVE_DEAD) {
+        return MP_SCENE_INPUT_DEAD;
     }
-    if (seating->handed < MP_SCENE_SITTERS) {
-        seating->order[seating->handed++] = index;
+    if (!look->has_seat) {
+        return MP_SCENE_INPUT_NONE;
+    }
+    switch (look->stage) {
+    case MP_SCENE_SEAT_FADING:
+    case MP_SCENE_SEAT_PLACED:
+    case MP_SCENE_SEAT_DONE:
+        return MP_SCENE_INPUT_HELD;
+    case MP_SCENE_SEAT_WAITING:
+        return look->fade_held ? MP_SCENE_INPUT_HELD : MP_SCENE_INPUT_TRY;
+    case MP_SCENE_SEAT_IDLE:
+    case MP_SCENE_SEAT_GIVEN_UP:
+    case MP_SCENE_SEAT_RESPAWNING:
+    default:
+        return MP_SCENE_INPUT_TRY;
     }
 }
 
-/* The second pass: every wanted player still without a seat, in turn, beside every seat handed out
- * so far in the order they were handed out, those this pass hands out included. Each of those is a
- * point with a floor, free, and reachable on foot from the place, because the search asked for the
- * walkable line to it; a ring around it reaches one step further along what can be walked. The
- * anchor answer here says only that this seat is no place to search from, never that nobody is
- * gathered: the first pass has settled that. */
-static void seat_beside_the_seats(seating_t *seating, mp_scene_sitter_t *sitters,
-                                  size_t sitter_count, mp_scene_probe_fn_t probe, void *context)
+mp_scene_input_t mp_scene_input_hold(const mp_scene_input_look_t *look)
 {
-    size_t unseated_at;
-
-    for (unseated_at = 0u; unseated_at < sitter_count; ++unseated_at) {
-        mp_scene_sitter_t *sitter = &sitters[unseated_at];
-        size_t             beside_at;
-
-        if (!sitter->wanted || sitter->seated) {
-            continue;
-        }
-        for (beside_at = 0u; beside_at < seating->handed && !sitter->seated; ++beside_at) {
-            const mp_scene_sitter_t *first = &sitters[seating->order[beside_at]];
-
-            ++sitter->tried_beside;
-            if (probe(context, first->seat, sitter->slot, seating->around, seating->taken,
-                      sitter->seat) != MP_SCENE_PROBE_FOUND) {
-                continue;
-            }
-            sitter->seated      = true;
-            sitter->chained     = true;
-            sitter->beside_slot = first->slot;
-            hand_out(seating, sitters, unseated_at);
-        }
+    if (look == NULL || !look->hosting) {
+        return MP_SCENE_INPUT_NOT_HOSTING;
     }
+    if (look->phase == MP_SCENE_PHASE_GATHERING && look->holds) {
+        return while_it_holds(look);
+    }
+    if (look->phase != MP_SCENE_PHASE_RUNNING) {
+        return MP_SCENE_INPUT_OVER;
+    }
+    if (look->seen_running) {
+        return MP_SCENE_INPUT_RUNS;
+    }
+    if (!look->held) {
+        return MP_SCENE_INPUT_NONE;
+    }
+    return look->since_phase <= MP_SCENE_GRAB_GRACE_SUBSTEPS ? MP_SCENE_INPUT_HELD
+                                                             : MP_SCENE_INPUT_NO_GRAB;
 }
 
-mp_scene_seating_t mp_scene_seat_everyone(const float anchor[3], const mp_seat_body_t *bodies,
-                                          size_t body_count, mp_scene_sitter_t *sitters,
-                                          size_t sitter_count, mp_scene_probe_fn_t probe,
-                                          void *context)
+const char *mp_scene_input_text(mp_scene_input_t why)
 {
-    seating_t seating;
-    size_t    i;
-
-    if (anchor == NULL || sitters == NULL || probe == NULL) {
-        return MP_SCENE_SEATING_ANCHOR_REFUSED;
+    switch (why) {
+    case MP_SCENE_INPUT_HELD:        return "it is held";
+    case MP_SCENE_INPUT_RUNS:        return "the scene runs";
+    case MP_SCENE_INPUT_NO_GRAB:     return "the grab did not show within its grace";
+    case MP_SCENE_INPUT_OVER:        return "the scene is over";
+    case MP_SCENE_INPUT_DEAD:        return "the host died";
+    case MP_SCENE_INPUT_TRY:         return "a try did not take";
+    case MP_SCENE_INPUT_NOT_HOSTING: return "this machine hosts no longer";
+    case MP_SCENE_INPUT_NONE:
+    case MP_SCENE_INPUTS:
+    default:                         return "nothing holds it";
     }
-    memset(&seating, 0, sizeof seating);
-    for (i = 0u; bodies != NULL && i < body_count && seating.taken < MP_SCENE_BODIES_MAX; ++i) {
-        seating.around[seating.taken++] = bodies[i];
-    }
-    for (i = 0u; i < sitter_count; ++i) {
-        sitters[i].seated       = false;
-        sitters[i].chained      = false;
-        sitters[i].beside_slot  = 0u;
-        sitters[i].tried_beside = 0u;
-    }
-    for (i = 0u; i < sitter_count; ++i) {
-        mp_scene_sitter_t *sitter = &sitters[i];
-        mp_scene_probe_t   found;
-
-        if (!sitter->wanted) {
-            continue;
-        }
-        found = probe(context, anchor, sitter->slot, seating.around, seating.taken, sitter->seat);
-        if (found == MP_SCENE_PROBE_ANCHOR) {
-            size_t undone;
-
-            for (undone = 0u; undone < sitter_count; ++undone) {
-                sitters[undone].seated = false;
-            }
-            return MP_SCENE_SEATING_ANCHOR_REFUSED;
-        }
-        if (found != MP_SCENE_PROBE_FOUND) {
-            continue;
-        }
-        sitter->seated = true;
-        hand_out(&seating, sitters, i);
-    }
-    seat_beside_the_seats(&seating, sitters, sitter_count, probe, context);
-    return MP_SCENE_SEATING_DONE;
-}
-
-mp_scene_seating_tally_t mp_scene_seating_tally(const mp_scene_sitter_t *sitters,
-                                                size_t sitter_count, mp_scene_seating_t seating)
-{
-    mp_scene_seating_tally_t tally;
-    size_t                   i;
-
-    memset(&tally, 0, sizeof tally);
-    for (i = 0u; sitters != NULL && i < sitter_count; ++i) {
-        if (!sitters[i].wanted) {
-            continue;
-        }
-        ++tally.wanted;
-        tally.unseated += sitters[i].seated ? 0u : 1u;
-        if (seating == MP_SCENE_SEATING_DONE && (sitters[i].chained || !sitters[i].seated)) {
-            ++tally.around_none;
-            tally.beside_a_seat += sitters[i].chained ? 1u : 0u;
-        }
-    }
-    return tally;
 }

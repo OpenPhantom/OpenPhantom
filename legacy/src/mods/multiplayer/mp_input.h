@@ -71,8 +71,9 @@ float    mp_input_advance_hold(const mp_input_command_t *command, int32_t action
                                float *held_for, float dt);
 
 /* Who answers a reader's call, in this order: the far body's injected command while bank 1 is
- * active, whatever else holds; a neutral answer while the pause menu or the chat holds this
- * player's input and the id is one the menu does not read; the engine otherwise. */
+ * active, whatever else holds; a neutral answer while a holder of the session, the pause menu,
+ * the chat or a scene, holds this player's input and the id is one the menus do not read; the
+ * engine otherwise. */
 typedef enum mp_input_route {
     MP_INPUT_ROUTE_ENGINE = 0,
     MP_INPUT_ROUTE_BANK,

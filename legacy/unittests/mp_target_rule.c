@@ -1,9 +1,11 @@
-/* Which calls the target resolver's hull leaves to the engine.
+/* Which calls the target resolver's hull leaves to the engine, and for which actors the host stays
+ * the player.
  *
  * The one caller that must not be extended is the conversation menu's facing test. Before this
  * rule, the hull answered it with the nearest far player like every other kind 0 call; the
  * reference below is that behaviour, and the rule is held to differing from it at exactly one
- * place, the facing test's own return address.
+ * place, the facing test's own return address. The actors the engine's answer is kept for are
+ * walked at the end, over every input the rule can be given.
  */
 #include "unittest.h"
 
@@ -202,6 +204,68 @@ static void check_the_living_are_answered_as_before(void)
     ut_checkf(apart == 0u, "%u of %u cases answer otherwise", apart, cases);
 }
 
+/* The few actors the host stays the player for. Before the rule nobody was: the reference is "no
+ * claim", and the rule is held to differing from it only where the engine answered, somebody is
+ * joined, and the actor is one of the three kinds. */
+static void check_for_whom_the_host_stays_the_player(void)
+{
+    mp_target_claim_evidence_t e;
+    unsigned                   code;
+    unsigned                   wrong   = 0u;
+    unsigned                   claimed = 0u;
+
+    ut_section("the engine's answer is kept for the scene's actors, a taker, and the actor of a "
+               "scene just ended");
+
+    e = (mp_target_claim_evidence_t){ true, true, true, false, false };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_SCENE,
+             "an actor of the host's scene means the host");
+    e = (mp_target_claim_evidence_t){ true, true, false, true, false };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_TAKER,
+             "an actor that took here and has not given back means the host");
+    e = (mp_target_claim_evidence_t){ true, true, false, false, true };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_AFTER,
+             "the actor of a scene just ended means the host");
+    e = (mp_target_claim_evidence_t){ true, true, true, true, true };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_SCENE,
+             "the scene is named first where more than one holds");
+    e = (mp_target_claim_evidence_t){ true, true, false, true, true };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_TAKER, "then the taker");
+
+    ut_section("and for nobody else, nor with the host dead, nor with nobody joined");
+
+    e = (mp_target_claim_evidence_t){ true, true, false, false, false };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_NONE,
+             "any other actor goes on answering every player while a scene stands");
+    e = (mp_target_claim_evidence_t){ false, true, true, true, true };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_NONE,
+             "with no answer of the engine's, the host dead, the rule that follows is asked as "
+             "before: no target is not kept for a scene's actor");
+    e = (mp_target_claim_evidence_t){ true, false, true, true, true };
+    ut_check(mp_target_rule_claim(&e) == MP_TARGET_CLAIM_NONE,
+             "with nobody joined there is nobody to weigh, and nothing is kept");
+    ut_check(mp_target_rule_claim(NULL) == MP_TARGET_CLAIM_NONE, "no evidence keeps nothing");
+
+    for (code = 0u; code < 32u; ++code) {
+        mp_target_claim_t claim;
+        bool              may;
+
+        e.engine_answered = (code & 1u) != 0u;
+        e.joined          = (code & 2u) != 0u;
+        e.of_the_scene    = (code & 4u) != 0u;
+        e.taker           = (code & 8u) != 0u;
+        e.after_the_scene = (code & 16u) != 0u;
+        claim = mp_target_rule_claim(&e);
+        may   = e.engine_answered && e.joined &&
+                (e.of_the_scene || e.taker || e.after_the_scene);
+        wrong   += (claim != MP_TARGET_CLAIM_NONE) == may ? 0u : 1u;
+        claimed += claim != MP_TARGET_CLAIM_NONE ? 1u : 0u;
+    }
+    ut_checkf(wrong == 0u && claimed == 7u,
+              "over all thirty two inputs the answer is kept in exactly the seven it may be "
+              "(%u wrong, %u kept)", wrong, claimed);
+}
+
 int main(void)
 {
     check_the_facing_test_is_left_alone();
@@ -209,6 +273,7 @@ int main(void)
     check_the_facing_test_is_not_kept();
     check_a_far_player_lying_dead_is_nobody();
     check_the_living_are_answered_as_before();
+    check_for_whom_the_host_stays_the_player();
 
     return ut_summary("the target rule");
 }

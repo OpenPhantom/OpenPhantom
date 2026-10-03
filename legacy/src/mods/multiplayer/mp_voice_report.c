@@ -34,20 +34,21 @@ static void report_the_hearing(const mp_voice_bindings_t *b, const char *why)
     }
     if (why != NULL) {
         log_warning("the lines are heard here within the engine's admission of %.1f u: %s, so a "
-                    "line is presented as far as the engine plays a voice, and a scene for all "
-                    "presents its own lines to a player it gathered", (double)h->admit, why);
+                    "line is presented as far as the engine plays a voice, and a scene of the "
+                    "host's presents to the host every line a run of the host's speaks",
+                    (double)h->admit, why);
         return;
     }
     log_info("the lines are heard here within %.1f u of this body, %.1f u under a scene's lock "
              "(%.2f full-volume radii of a voice, %.1f and %.1f read at %08X and %08X, the lock "
              "level %d at %08X); a host keeps a line alive at no volume while any player stands "
-             "within %.1f u, the admission read at %08X and %08X, one number; a scene for all "
-             "presents the lines spoken within %.1f u of where it gathers, on the host and on a "
-             "client alike, to a player it gathered", (double)h->free, (double)h->scene,
+             "within %.1f u, the admission read at %08X and %08X, one number; a scene of the "
+             "host's presents to the host every line a run of the host's speaks, at any "
+             "distance", (double)h->free, (double)h->scene,
              (double)h->factor, (double)h->min_free, (double)h->min_scene,
              (unsigned)b->hear.free_at, (unsigned)b->hear.scene_at, (int)h->lock,
              (unsigned)b->hear.lock_at, (double)h->admit, (unsigned)b->cells.reach_at[0],
-             (unsigned)b->cells.reach_at[1], (double)h->admit);
+             (unsigned)b->cells.reach_at[1]);
 }
 
 static void report_the_answer(const mp_voice_bindings_t *b, const char *answer_why,
@@ -131,13 +132,13 @@ static const char *origin_name(mp_voice_origin_t origin)
 static const char *extra_of(const mp_voice_line_note_t *n)
 {
     if (n->answer.by_scene) {
-        return ", because a scene runs for all";
+        return ", because it is a line of the host's scene";
     }
     if (n->answer.ungathered) {
-        return ", a line of a scene that did not gather this player";
+        return ", a line of a scene that is not this player's";
     }
     if (n->answer.beside) {
-        return ", no line of the scene that runs for all";
+        return ", a far player's line while a scene of the host's stands";
     }
     if (n->handed && n->place == MP_VOICE_AT_EYE) {
         return ", at the place of the eye";
@@ -259,10 +260,10 @@ static void report_the_lines(const mp_voice_counts_t *c, const mp_voice_bindings
     log_info("  the presentation of the lines: %u judged here (%u by a script of this machine, %u "
              "said again for the host), %u presented (this body within %.1f u), %u kept alive "
              "silent for the script, %u withheld with nobody near, %u with no body or no place "
-             "known; %u presented because they were lines of a scene that ran for all, %u withheld "
-             "while the lock stood at a scene level and no scene ran for all, %u judged by the "
-             "reach while a scene ran for all, being no line of it, %u lines of a scene judged by "
-             "the reach because it did not gather this player",
+             "known; %u presented because they were lines of the host's scene, %u withheld "
+             "while the lock stood at a scene level and no scene of the host's stood, %u judged "
+             "by the reach while a scene of the host's stood, being a far player's line, %u "
+             "lines of a scene judged by the reach because the scene was not this player's",
              (unsigned)c->judged, (unsigned)c->by_script, (unsigned)c->by_host,
              (unsigned)c->presented, (double)b->hearing.free, (unsigned)c->silent,
              (unsigned)c->withheld, (unsigned)c->unknown, (unsigned)c->by_scene,
@@ -331,8 +332,9 @@ void mp_voice_report_write(const mp_voice_counts_t *count, const mp_voice_bindin
          * nought refused is what a scene of its own has to show. */
         log_info("  the camera of a far line: %u refused on the host, %u passed",
                  (unsigned)count->cameras_refused, (unsigned)count->cameras_passed);
-        log_info("  the lines named one by one: %u written (%u of them while a scene ran for all, "
-                 "which are never left out), %u left out after the first %u of a level",
+        log_info("  the lines named one by one: %u written (%u of them while a scene of the "
+                 "host's stood, which are never left out), %u left out after the first %u of a "
+                 "level",
                  (unsigned)count->named, (unsigned)count->named_in_scene,
                  (unsigned)count->unnamed, (unsigned)MP_VOICE_LINES_NAMED);
     } else {

@@ -200,6 +200,10 @@ size_t mp_seat_rule_ring_start(uint8_t slot);
  * turn divided into MP_SEAT_RING_STEPS, direction 0 along positive x; the index wraps. */
 void mp_seat_rule_ring_offset(size_t start, size_t step, float radius, float offset[2]);
 
+/* The order a ring's directions are tried in from a player's slot: its start direction, then one
+ * step at a time, wrapping. Every search asks its rings in this order. */
+void mp_seat_rule_slot_order(uint8_t slot, uint8_t order[MP_SEAT_RING_STEPS]);
+
 /* What a floor reading makes of a candidate: free, or refused for that reading. */
 mp_seat_verdict_t mp_seat_rule_floor_verdict(mp_seat_floor_t floor);
 

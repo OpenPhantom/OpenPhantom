@@ -59,7 +59,9 @@
  * its head, so both hooks run whichever loads first. The evidence that this arrangement holds is a
  * run with `[diagnostics] Enabled=1` in which both lines appear.
  *
- * SIZE NOTE: under 300 lines, no seam.
+ * SIZE NOTE: mp_dialog_relay.c stands a few lines under 600. The seam, when the next line needs
+ * the room, is the pick on the host: it shares the record and the report with the rest and
+ * neither the hull nor the replay.
  */
 #ifndef MULTIPLAYER_MP_DIALOG_RELAY_H
 #define MULTIPLAYER_MP_DIALOG_RELAY_H
@@ -98,6 +100,12 @@ void mp_dialog_relay_set_send(mp_dialog_relay_send_fn_t send);
  * for that: the engine raises the flag the script itself polls, so watching it is the honest
  * reading of what the player did. On a client it does nothing. */
 void mp_dialog_relay_tick(void);
+
+/* Whether a conversation on this machine has its answers on show: the block says active and
+ * holds at least one answer row, by the cells the host's watch reads. While it does the engine
+ * takes the lock at level one again on every frame it draws the list, and the list owns the
+ * input mode and the camera it took. False where the cells did not resolve. */
+bool mp_dialog_relay_answers_open(void);
 
 bool mp_dialog_relay_take_message(const uint8_t *note, size_t bytes);
 

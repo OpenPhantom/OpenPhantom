@@ -14,14 +14,14 @@
  *   of four. Farther out the engine would still play it, fainter and fainter up to its admission of
  *   a hundred units, and a subtitle for a voice nobody can follow is one to keep off the screen.
  *
- *   A scene that runs for everybody presents every line of it to a player it gathered, because
- *   gathering the players is what makes each of them a listener. A line is the scene's when it is
- *   spoken within the engine's admission of the place the players are gathered around. That place
- *   is the one thing of a scene the host and every client know alike: a client is never told who
- *   speaks a line, so the host does not ask either, and the two cannot answer the same line apart.
- *   The gathering is the barrier; the admission only keeps out a line the engine would not voice
- *   from there. A player the scene left where it stood, dead or with no seat, and any line said
- *   beside the scene, are judged by the radius as outside one.
+ *   A scene of the host's presents every line of it to the host, wherever in the scene it is
+ *   spoken: the scene is his, and its script is paced by its lines. A line is the scene's when
+ *   the script that speaks it is a run of the host's, which the scene's own actors always are; a
+ *   line the dialogue speaks by itself is the host's own conversation and is the scene's too.
+ *   A line a far player's script speaks while the scene stands is none of it and is judged by the
+ *   radius as outside a scene: that player goes on playing, and his conversation is his. Only a
+ *   host is ever in a scene; on a client the question is answered no, and every line there is
+ *   judged by the radius.
  *
  *   Otherwise a HOST keeps the line alive at no volume while any player stands within the engine's
  *   admission: the script of the host is paced by its voice channel, and a player near the event is
@@ -114,10 +114,10 @@ bool mp_voice_hear_from(uint32_t min_free_bits, uint32_t min_scene_bits, int32_t
                         mp_voice_hearing_t *out);
 
 typedef struct mp_voice_question {
-    bool   scene_for_all;      /* a scene runs for everybody on this machine */
-    bool   scene_anchor_known;
-    float  scene_anchor[3];    /* where that scene gathers its players */
-    bool   gathered;           /* this machine's player was gathered by it */
+    bool   scene_for_all;      /* a scene of the host's stands; never on a client */
+    bool   scene_speaker;      /* the script that speaks the line is a run of the host's, or no
+                                * script speaks it at all */
+    bool   gathered;           /* the scene is this machine's player's own: the host's always */
     bool   source_known;
     float  source[3];          /* where the line is spoken */
     bool   body_known;
@@ -125,7 +125,7 @@ typedef struct mp_voice_question {
     float  hear_free;
     float  hear_scene;
     bool   lock_at_scene;      /* this machine's lock stands at the level the voice asks for */
-    float  admit;              /* also how far from where a scene gathers a line is its line */
+    float  admit;              /* the engine's admission, within which a host keeps a line alive */
     bool   keeps_alive;        /* this machine hosts: its scripts are paced by the line */
     size_t others;             /* how many rows of `other` carry a far player */
     float  other[MP_VOICE_MAX_OTHERS][3];
@@ -133,10 +133,10 @@ typedef struct mp_voice_question {
 
 typedef struct mp_voice_answer {
     mp_voice_verdict_t verdict;
-    bool  by_scene;    /* presented as a line of the scene, to a player it gathered */
-    bool  of_scene;    /* a line of the scene that runs for all, gathered or not */
-    bool  ungathered;  /* a line of it, judged by the radius because this player was not gathered */
-    bool  beside;      /* a scene runs for all and this line is none of it: judged by the radius */
+    bool  by_scene;    /* presented as a line of the scene, to the player whose scene it is */
+    bool  of_scene;    /* a line of the scene that stands, the player's own or not */
+    bool  ungathered;  /* a line of it, judged by the radius: the scene is not this player's */
+    bool  beside;      /* a scene stands and this line is none of it: judged by the radius */
     bool  unknown;     /* this body or the place could not be measured */
     float distance;    /* this body from the place; negative when unknown */
     float hear;        /* the radius the line was judged by */

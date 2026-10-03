@@ -144,10 +144,11 @@ _Static_assert(SPAWN_FIRST_ID + OVERLAY_SPAWN_ROWS_MAX <= MODELSWAP_FIRST_ID,
                "the NPC spawner rows have grown into the model swap group's ids: raise "
                "MODELSWAP_FIRST_ID");
 
-/* The multiplayer group, the chat's key. The next free block after the model swap's, because a
- * group takes the next free block when it arrives. The key capture in overlay_edit.c tests its
- * arms from the highest base down and the model swap's arm binds nothing, so this group needs an
- * arm of its own above that one or its key is dropped without a word. */
+/* The multiplayer group: the chat's key, the two buttons a session carries out and the line under
+ * them. The next free block after the model swap's, because a group takes the next free block
+ * when it arrives. The key capture in overlay_edit.c tests its arms from the highest base down
+ * and the model swap's arm binds nothing, so this group needs an arm of its own above that one or
+ * its key is dropped without a word. The key is the group's first row and its id is this base. */
 #define MULTIPLAYER_FIRST_ID 1344u
 _Static_assert(MODELSWAP_FIRST_ID + OVERLAY_MODELSWAP_ROWS_MAX <= MULTIPLAYER_FIRST_ID,
                "the model swap rows have grown into the Multiplayer group's ids: raise "
@@ -155,10 +156,13 @@ _Static_assert(MODELSWAP_FIRST_ID + OVERLAY_MODELSWAP_ROWS_MAX <= MULTIPLAYER_FI
 
 /* Every source on the OpenPhantom tab, all of them open, the folds open and a full size list:
  * twelve headings, every row each source can draw, and one note per heading for the sentence a
- * session writes under the rows it takes. This is the number OVERLAY_ROWS_MAX has to cover, and
- * the Original tab is far smaller. It once counted three groups and left the frame rate group
- * out, seven rows short of what overlay_model_rebuild() builds; the array still held them, so
- * nothing was lost, but the assert was guarding a smaller number than the real one.
+ * session writes under the rows it takes. The multiplayer group, which a session takes nothing
+ * from, spends its note on the one sentence that says why its two buttons are greyed: there is
+ * never more than one, without a session for both and on the host for one of them. This is the
+ * number OVERLAY_ROWS_MAX has to cover, and the Original tab is far smaller. It once counted
+ * three groups and left the frame rate group out, seven rows short of what
+ * overlay_model_rebuild() builds; the array still held them, so nothing was lost, but the assert
+ * was guarding a smaller number than the real one.
  *
  * Fourteen sources draw here and twelve of them have a heading, because two are drawn inside
  * another group's body; the headings are what a player counts and the sources are what this

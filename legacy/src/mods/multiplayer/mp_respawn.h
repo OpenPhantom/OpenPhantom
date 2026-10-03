@@ -32,10 +32,11 @@
  * those this module has a third condition of its own, the seat: it will not put a body inside a
  * wall or inside the team mate.
  *
- * So a request is remembered rather than performed. Every frame it is retried, and after
- * MP_RESPAWN_DEADLINE_FRAMES with the gates shut it is dropped with a line in the log rather than
- * carried out at some later moment nobody chose it. That is the same shape the lobby's placement
- * and hero wishes already have, and for the same reasons.
+ * So a request is remembered rather than performed. Every frame it is retried, and once
+ * MP_RESPAWN_DEADLINE_FRAMES and MP_RESPAWN_DEADLINE_MS have both passed with the gates shut it
+ * is dropped with a line in the log rather than carried out at some later moment nobody chose.
+ * That is the same shape the lobby's placement and hero wishes already have, and for the same
+ * reasons.
  *
  * =================================== The seat is searched at the time =========================
  *
@@ -61,10 +62,19 @@
 #include <stdint.h>
 
 /* How long a wish waits for the engine's gates, counted from the request and including whatever
- * delay the caller asked for. The frame pump does not run while a level loads, so these are drawn
- * frames rather than wall clock time. A wish whose gates are open and whose seat is not found ends
- * through the seat's own stages instead. */
+ * delay the caller asked for, and how long a landing is waited for. Two numbers, and both have to
+ * be reached. The frames are there because the frame pump does not run while a level loads, so a
+ * wait cannot run out behind a loading screen. The milliseconds are there because frames alone
+ * measure the frame rate: nine hundred of them are fifteen seconds at sixty a second, which is
+ * what was meant, and under four at two hundred and forty, where the engine's own fade of one
+ * second and a seat search still have to fit. A wish whose gates are open and whose seat is not
+ * found ends through the seat's own stages instead. */
 #define MP_RESPAWN_DEADLINE_FRAMES 900u
+#define MP_RESPAWN_DEADLINE_MS     15000u
+
+/* The player module's state while the engine's re-entry waits for its fade to end: state 4 starts
+ * the fade and becomes this one, and this one spawns the body once the fade has run its time. */
+#define MP_RESPAWN_MODULE_FADING 3u
 
 /* What the body comes back with. The engine's own "give the player his health" sites write this
  * value, so it is the game's idea of full rather than this module's. */
@@ -123,17 +133,31 @@ bool mp_respawn_at(const float position[3], float heading, uint8_t slot, uint32_
  * candidate has to be walkable, so the body comes back somewhere its mate could have walked to. */
 bool mp_respawn_beside(const float *died_at, uint8_t slot, uint32_t delay_frames);
 
+/* True while a wish waits, while a re-entry lands, and while a living player moved by
+ * mp_respawn_move_living lands. */
 bool mp_respawn_pending(void);
 void mp_respawn_cancel(void);
+
+/* The engine's re-entry for a LIVING player, with his own hero, onto `position`: the one way the
+ * engine has to bring a player out of any mode, a jump, a fall, the water or a ledge, which the
+ * teleport would leave him in. Nothing else of a re-entry: no health is written, because the
+ * player lives and the spawn keeps the health it finds; no seat is searched, because the caller
+ * has one; and no seat is noted as one a life began on, because no life ended. Carried out at
+ * once or refused: refused unless the module runs, no wish or landing of this module is under way
+ * and the pose is finite. Its landing is watched apart from a re-entry's, and the contact slot's
+ * listener is called once the body stands again, because the spawn has overwritten that slot
+ * just as it does after a death. */
+bool mp_respawn_move_living(const float position[3], float heading);
 
 /* Takes back a wish that is still waiting for its seat, for the caller whose rule set no longer
  * wants it carried out. A body whose re-entry the engine has already been asked for is left to
  * land. True when a wish was taken back. */
 bool mp_respawn_withdraw(void);
 
-/* From the frame pump, once per frame, with the substep count the seat's clock is measured in.
- * This is where a wish is retried, carried out or dropped, and where the landing is noticed. */
-void mp_respawn_tick(uint32_t substeps);
+/* From the frame pump, once per frame, with the substep count the seat's clock is measured in and
+ * the wall clock the deadlines are measured in. This is where a wish is retried, carried out or
+ * dropped, and where the landing is noticed. */
+void mp_respawn_tick(uint32_t substeps, uint32_t now_ms);
 
 void mp_respawn_set_landed_listener(mp_respawn_landed_fn_t listener);
 
@@ -145,8 +169,22 @@ void mp_respawn_set_landed_listener(mp_respawn_landed_fn_t listener);
  * mode configured is a rule of the round and an open gate is not a reason to break it; the gates
  * are asked about before the deadline, because a wish that becomes possible on the very frame it
  * runs out is better carried out than thrown away. */
-mp_respawn_step_t mp_respawn_step(bool pending, bool gates_open,
-                                  uint32_t frames_waited, uint32_t delay_frames);
+mp_respawn_step_t mp_respawn_step(bool pending, bool gates_open, uint32_t frames_waited,
+                                  uint32_t waited_ms, uint32_t delay_frames);
+
+/* Whether a wait has run out: both the frames and the milliseconds have been reached. */
+bool mp_respawn_deadline_passed(uint32_t frames, uint32_t ms);
+
+/* The milliseconds a wait has lasted at this look. The first look of a wait stamps its time, and
+ * the stamp has a bit of its own: the wall clock starts at nought, so a time of nought is a time
+ * and not "not stamped", and a wait that was never stamped would read as fifteen seconds old the
+ * moment the clock passed that. Whoever begins a wait clears the bit. */
+uint32_t mp_respawn_waited_ms(bool *stamped, uint32_t *since_ms, uint32_t now_ms);
+
+/* Whether the engine's re-entry has lost its fade: the player module waits in the state that
+ * ends when the fade does, and the tint is neither running nor run out. The engine's own sequence
+ * never produces that, so it means the fade was stopped under the wait. */
+bool mp_respawn_fade_is_lost(uint32_t module_state, bool fade_done, bool fade_runs);
 
 /* Whether a pose is a finite point and heading at all. A pose that came off the wire is not this
  * machine's arithmetic and the engine's re-entry stores what it is handed without looking. */

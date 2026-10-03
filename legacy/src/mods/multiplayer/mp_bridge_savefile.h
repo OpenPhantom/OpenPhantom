@@ -40,6 +40,7 @@
 #ifndef MULTIPLAYER_MP_BRIDGE_SAVEFILE_H
 #define MULTIPLAYER_MP_BRIDGE_SAVEFILE_H
 
+#include "mp_saves.h"
 #include "mp_session.h"
 
 #include <stdbool.h>
@@ -117,6 +118,17 @@ void mp_bridge_savefile_tick(uint32_t now_ms);
  * and verified. What the lobby screen asks before it acts on a start. */
 bool mp_bridge_savefile_ready(uint32_t save_id, uint32_t save_bytes);
 const char *mp_bridge_savefile_path(void);
+
+/* CLIENT: what the file the setup names is, once it is ready: a save of a level of the table, a
+ * save that names no level, or a file that did not read. Asked of the bytes this side put
+ * together while it still holds them, which hash to the file's name and cannot fail for a reason
+ * of the disk, and of the disk otherwise. A file that does not read is looked at again on the
+ * next call; after three seconds of it the write is forgotten, so the file is written again from
+ * the bytes held or asked of the host again, and mp_bridge_savefile_ready answers no until then.
+ * Whoever asks begins no level on a file that did not read. One case is answered otherwise, and
+ * says so in its own line: bytes that arrived whole, hash to the file's name and are no savegame
+ * cannot read differently later, so they are answered as a save that names no level. */
+mp_saves_look_t mp_bridge_savefile_look(uint32_t save_id, uint32_t save_bytes, mp_save_t *out);
 
 /* CLIENT: how much of the file the setup names is in, 0..100, for the screen's line. */
 uint32_t mp_bridge_savefile_percent(void);

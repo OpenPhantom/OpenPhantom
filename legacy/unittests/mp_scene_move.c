@@ -1,4 +1,4 @@
-/* The single questions a scene gathering asks: whether a scene runs, whether a player may be moved,
+/* The single questions the host's scene asks: whether a scene runs, whether a player may be moved,
  * who asked for a respawn, where a hero's spawn came from and what a warp did to the quest bits.
  *
  * Each is a rule a host and a client ask in several places, which is why each is one function
@@ -48,8 +48,9 @@ static void check_when_a_scene_runs(void)
 /* The teleport writes a position and clears the ground contact, and nothing else. */
 static void check_who_may_be_moved(void)
 {
-    static const mp_scene_mode_t MODES[4] = {
-        MP_SCENE_MODE_UNREAD, MP_SCENE_MODE_PARKABLE, MP_SCENE_MODE_DEATH, MP_SCENE_MODE_OTHER
+    static const mp_scene_mode_t MODES[5] = {
+        MP_SCENE_MODE_UNREAD, MP_SCENE_MODE_PARKABLE, MP_SCENE_MODE_DEATH, MP_SCENE_MODE_OTHER,
+        MP_SCENE_MODE_GUN
     };
     unsigned bits;
     size_t   mode;
@@ -59,10 +60,15 @@ static void check_who_may_be_moved(void)
              "standing, a sabre attack or Panaka, alive, with a body: yes");
     ut_check(mp_scene_may_move(true, true, false, MP_SCENE_MODE_DEATH) == MP_SCENE_MOVE_DEAD,
              "a corpse is not moved, where the placement's own two gates would have let it");
-    ut_check(mp_scene_may_move(true, true, true, MP_SCENE_MODE_OTHER) == MP_SCENE_MOVE_MODE,
+    ut_check(mp_scene_may_move(true, true, true, MP_SCENE_MODE_OTHER) == MP_SCENE_MOVE_MODE &&
+                 mp_scene_may_move(true, true, true, MP_SCENE_MODE_GUN) == MP_SCENE_MOVE_MODE,
              "hanging, swimming, pushing, on a gun or in the air: not moved");
-    ut_check(mp_scene_may_move(true, true, true, MP_SCENE_MODE_UNREAD) == MP_SCENE_MOVE_MODE,
-             "a mode that did not read is not a mode anybody may be moved from");
+    /* This said MODE until a scene could take a player the hard way, by the engine's respawn,
+     * out of a mode the teleport may not move: a mode that did not read must never be taken
+     * that way, so it is a reason of its own now, and still no move. */
+    ut_check(mp_scene_may_move(true, true, true, MP_SCENE_MODE_UNREAD) == MP_SCENE_MOVE_UNREAD,
+             "a mode that did not read is not a mode anybody may be moved from, and it is told "
+             "apart from one that did");
     ut_check(mp_scene_may_move(false, true, true, MP_SCENE_MODE_PARKABLE) ==
                  MP_SCENE_MOVE_NO_BODY,
              "no body: nothing to move");
@@ -70,7 +76,7 @@ static void check_who_may_be_moved(void)
                  MP_SCENE_MOVE_NO_BODY,
              "a module not running, a load, a respawn or a park: the placement would refuse it");
     for (bits = 0u; bits < 8u; ++bits) {
-        for (mode = 0u; mode < 4u; ++mode) {
+        for (mode = 0u; mode < 5u; ++mode) {
             bool            body    = (bits & 1u) != 0u;
             bool            running = (bits & 2u) != 0u;
             bool            stands  = (bits & 4u) != 0u;
@@ -174,38 +180,6 @@ static void check_what_a_warp_did_to_the_quest_bits(void)
              "with nothing to compare, nothing changed");
 }
 
-/* The dolly's camera on the host: a take inside the lock or inside a scene that runs for
- * everybody belongs to that scene, and only a take outside both is weighed as a scene of its own.
- * The lock goes first, because it is the older answer and has its own counter. */
-static void check_whose_camera_a_take_is(void)
-{
-    static const int32_t LOCKS[4] = { 0, 1, MP_SCENE_LOCK_LEVEL, 99 };
-    size_t               lock;
-    unsigned             for_all;
-    unsigned             wrong = 0u;
-
-    ut_section("a camera take inside a scene for everybody is that scene's, as one inside a lock");
-    ut_check(mp_scene_camera_owner(0, true) == MP_SCENE_CAMERA_OF_ALL,
-             "a gathered hero scene that never raised the lock keeps its camera on the host");
-    ut_check(mp_scene_camera_owner(1, true) == MP_SCENE_CAMERA_OF_ALL,
-             "and so does one with a menu's lock of one");
-    ut_check(mp_scene_camera_owner(0, false) == MP_SCENE_CAMERA_OF_ITS_OWN,
-             "with no scene running a take is weighed as a scene of its own");
-    for (lock = 0u; lock < 4u; ++lock) {
-        for (for_all = 0u; for_all < 2u; ++for_all) {
-            mp_scene_camera_owner_t owner = mp_scene_camera_owner(LOCKS[lock], for_all != 0u);
-            mp_scene_camera_owner_t want  = LOCKS[lock] >= MP_SCENE_LOCK_LEVEL
-                                                ? MP_SCENE_CAMERA_OF_THE_LOCK
-                                                : (for_all != 0u ? MP_SCENE_CAMERA_OF_ALL
-                                                                 : MP_SCENE_CAMERA_OF_ITS_OWN);
-
-            wrong += owner == want ? 0u : 1u;
-        }
-    }
-    ut_checkf(wrong == 0u, "over every lock level and both answers of the scene for all, the lock "
-              "first: %u wrong", wrong);
-}
-
 int main(void)
 {
     check_when_a_scene_runs();
@@ -213,6 +187,5 @@ int main(void)
     check_who_asked_for_a_respawn();
     check_where_a_hero_came_from();
     check_what_a_warp_did_to_the_quest_bits();
-    check_whose_camera_a_take_is();
     return ut_summary("the scene's single questions");
 }

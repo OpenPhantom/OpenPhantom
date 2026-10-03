@@ -516,16 +516,16 @@ void mp_chat_input_report(void)
              "refused name(s); %u open(s), %u key press(es) left to a mod further in that took "
              "it, %u refused: no input hold, %u character(s) typed, %u replaced by a "
              "transliteration, %u refused for no room; closed %u by enter, %u by escape, %u by a "
-             "menu, %u by a movie, %u by the level, %u by the session; the input held for %u "
-             "frame(s), %u held after the close",
+             "menu, %u by a movie, %u by the level, %u by the session, %u by the player's repair "
+             "lock; the input held for %u frame(s), %u held after the close",
              input.key_ever_read ? input.key_name : "T", (unsigned)c->reads, (unsigned)c->changes,
              (unsigned)c->refused_names, (unsigned)c->opens, (unsigned)c->left_to_chain,
              (unsigned)c->no_hold, (unsigned)c->typed, (unsigned)c->transliterated,
              (unsigned)c->no_room, (unsigned)c->closed[MP_CHAT_CLOSE_ENTER],
              (unsigned)c->closed[MP_CHAT_CLOSE_ESCAPE], (unsigned)c->closed[MP_CHAT_CLOSE_MENU],
              (unsigned)c->closed[MP_CHAT_CLOSE_MOVIE], (unsigned)c->closed[MP_CHAT_CLOSE_LEVEL],
-             (unsigned)c->closed[MP_CHAT_CLOSE_SESSION], (unsigned)c->held_frames,
-             (unsigned)c->held_after_close);
+             (unsigned)c->closed[MP_CHAT_CLOSE_SESSION], (unsigned)c->closed[MP_CHAT_CLOSE_REPAIR],
+             (unsigned)c->held_frames, (unsigned)c->held_after_close);
     if (input.tried && !input.installed) {
         log_warning("  the chat keys: the key handler was never hooked, so the chat could "
                     "not open");

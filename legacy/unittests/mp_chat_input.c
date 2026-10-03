@@ -10,6 +10,10 @@
  * With the argument no-movie-cell the operand of the movie cell is refused, which is the one way
  * the cell can be missing while the hook stands. The module arms once a process, so that case is a
  * run of its own.
+ *
+ * SIZE NOTE: a little over 600 lines. It is one program because the module arms once a process:
+ * every case runs against the one armed module, and the fingers and the readers at the top, a
+ * third of the file, are what all of them press and read with.
  */
 #include "unittest.h"
 
@@ -86,7 +90,7 @@ static bool only_closed_by(const counts_t *before, const counts_t *after, count_
     if (!before->read || !after->read) {
         return false;
     }
-    for (reason = C_ENTER; reason <= C_SESSION; ++reason) {
+    for (reason = C_ENTER; reason <= C_REPAIR; ++reason) {
         const unsigned long grew = reason == (int)counter ? 1ul : 0ul;
 
         if (after->value[reason] != before->value[reason] + grew) {
@@ -251,17 +255,18 @@ typedef enum way {
     WAY_OUTCOME,
     WAY_LOAD,
     WAY_SESSION_EXIT,
+    WAY_REPAIR,
     WAY_NO_TRANSPORT,
     WAY_COUNT
 } way_t;
 
 static const char *const WAY_NAME[WAY_COUNT] = {
     "enter", "escape", "a menu", "a movie", "the level outcome", "a load", "the session's exit",
-    "the transport gone"
+    "the player's repair lock", "the transport gone"
 };
 
 static const count_t WAY_COUNTER[WAY_COUNT] = {
-    C_ENTER, C_ESCAPE, C_MENU, C_MOVIE, C_LEVEL, C_LEVEL, C_SESSION, C_SESSION
+    C_ENTER, C_ESCAPE, C_MENU, C_MOVIE, C_LEVEL, C_LEVEL, C_SESSION, C_REPAIR, C_SESSION
 };
 
 /* The movie is seen by the thread timer's look, since the engine draws no frame while one plays;
@@ -281,6 +286,9 @@ static void take(way_t way)
         return;
     case WAY_SESSION_EXIT:
         mp_chat_input_close(MP_CHAT_CLOSE_SESSION);
+        return;
+    case WAY_REPAIR:
+        mp_chat_input_close(MP_CHAT_CLOSE_REPAIR);
         return;
     case WAY_NO_TRANSPORT:
         mp_armed_set_transport(false, false);

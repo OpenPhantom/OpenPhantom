@@ -30,10 +30,11 @@ static const overlay_tab_t GROUP_TAB[OVERLAY_GROUP_COUNT] = {
  * The enum keeps the order it grew in, because a row id is derived from it and the ids are what
  * the typed value and the hotkey capture remember a row by.
  *
- * The multiplayer's heading stands directly under the controls. Its one row is the key that opens
- * the chat, and a player looking for a key looks beside the controls. The row was the third one
- * under Menus before it had a heading of its own, and a heading that says neither chat nor key,
- * folded and second from the bottom, is where it was not found. */
+ * The multiplayer's heading stands directly under the controls. Its first row is the key that
+ * opens the chat, and a player looking for a key looks beside the controls. The row was the third
+ * one under Menus before it had a heading of its own, and a heading that says neither chat nor
+ * key, folded and second from the bottom, is where it was not found. The two buttons under the
+ * key are for a player stuck in a session, who looks under the word Multiplayer for them. */
 static const overlay_group_t DRAW_ORDER[] = {
     OVERLAY_GROUP_ORIGINAL_TOGGLES,
     OVERLAY_GROUP_ORIGINAL_ACTIONS,
@@ -118,7 +119,8 @@ static const char *const TITLE[OVERLAY_GROUP_COUNT] = {
     [OVERLAY_GROUP_OPENPHANTOM_CONTROLS]   = "Controls",
     [OVERLAY_GROUP_OPENPHANTOM_WINDOW]     = "Window",
     [OVERLAY_GROUP_OPENPHANTOM_FRAMERATE]  = "Frame rate",
-    /* The multiplayer's settings that belong to this machine alone, the chat's key today. */
+    /* What this machine's own player has to do with the multiplayer: the chat's key, and the
+     * two buttons that ask a session to let the player go or to bring them to the host. */
     [OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER] = "Multiplayer"
 };
 

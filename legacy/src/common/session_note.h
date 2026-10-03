@@ -48,7 +48,8 @@ typedef struct session_note {
                       * still saying its last word */
     bool is_host;    /* this machine is the one the others follow. Meaningless while `running` is
                       * false, and published as false there rather than left as it was */
-    bool input_held; /* the session's pause menu or its chat holds this player's input. Published
+    bool input_held; /* a holder of the session, its pause menu, its chat or a scene that keeps
+                      * the host at its place, holds this player's input. Published
                       * as false while `running` is false, for the same reason */
 } session_note_t;
 

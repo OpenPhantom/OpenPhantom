@@ -13,8 +13,9 @@
  * holder in mp_armed, so neither the pause menu nor the chat can free the other's.
  *
  * The one way out is mp_chat_input_close, whatever the reason: Enter, Escape, a menu that opens, a
- * movie, the level ending or loading, the session ending. The frame pump looks for the reasons no
- * key brings once a frame, and the end of a session calls it from the session's own exit. A chat
+ * movie, the level ending or loading, the session ending, the player's repair lock. The frame pump
+ * looks for the reasons no key brings once a frame, the end of a session calls it from the
+ * session's own exit, and the repair calls it for the player who asked to be let go. A chat
  * closed by a key keeps the input held until that key is up again, for at most a second: Enter
  * still down after the hold was gone would be read by a dialogue as a choice when it is let go.
  *
@@ -38,6 +39,7 @@ typedef enum mp_chat_close {
     MP_CHAT_CLOSE_MOVIE,
     MP_CHAT_CLOSE_LEVEL,       /* the level ended, or a load holds the simulation */
     MP_CHAT_CLOSE_SESSION,
+    MP_CHAT_CLOSE_REPAIR,      /* the player's repair lock, pressed in the developer menu */
     MP_CHAT_CLOSE_COUNT
 } mp_chat_close_t;
 

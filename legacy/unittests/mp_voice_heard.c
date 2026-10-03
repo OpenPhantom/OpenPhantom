@@ -4,7 +4,7 @@
  * Three things the judgement of a line does, and each is walked here against a bank of twelve
  * channels laid out as the engine's: a line is presented within four full volume radii of a voice
  * and no farther; a presented line is handed priority 101 and every path puts 90 back; the engine's
- * answer to a line and the end of its voice are read and named, with a line of a scene for all
+ * answer to a line and the end of its voice are read and named, with a line of the host's scene
  * always named and every other line up to a cap each level, and a scene summed up once when it
  * ends. And once a client has said a line of the host again and the engine voiced it, an older
  * voice lets go of the handle it shares with it; a line the engine did not voice, the same line
@@ -383,7 +383,7 @@ static void check_how_a_voice_ends(void)
 }
 
 /* ==============================================================================================
- * The cap each level, and a scene for all.
+ * The cap each level, and a scene of the host's.
  * ============================================================================================ */
 
 static void check_the_cap_and_the_scene(void)
@@ -406,7 +406,8 @@ static void check_the_cap_and_the_scene(void)
     ut_check(si_logged_count("a line was judged here:") == 1u,
              "and the next level names its lines from the first again");
 
-    ut_section("while a scene runs for all every line is named, and the scene is summed up once");
+    ut_section("while a scene of the host's stands every line is named, and the scene is summed "
+               "up once");
 
     for (index = 0u; index < MP_VOICE_LINES_NAMED; ++index) {
         (void)said_again_at(500.0f);

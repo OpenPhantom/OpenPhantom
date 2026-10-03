@@ -72,6 +72,11 @@ bool mp_armed_input_held(void)
     return armed.transport_standing && armed.holders != 0u;
 }
 
+uint32_t mp_armed_holders(void)
+{
+    return armed.transport_standing ? armed.holders : 0u;
+}
+
 void mp_armed_note_counts(uint32_t *said, uint32_t *refused)
 {
     if (said != NULL) {

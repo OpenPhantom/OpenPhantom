@@ -385,6 +385,7 @@ add_engine_fix(dev_overlay
     open_key_row.c
     chat_key_row.c
     overlay_multiplayer.c
+    player_help_row.c
     fog_follow_row.c
     auto_range_row.c
     fov_row.c
@@ -578,6 +579,7 @@ add_engine_fix(multiplayer
     mp_hero_carry.c
     mp_hero_carry_rule.c
     mp_body.c
+    mp_body_passable.c
     mp_body_shot.c
     mp_body_gate.c
     mp_signatures_contact.c
@@ -612,6 +614,9 @@ add_engine_fix(multiplayer
     mp_lobby_note_rule.c
     mp_rules.c
     mp_respawn.c
+    mp_respawn_fade.c
+    mp_death_music_rule.c
+    mp_death_music.c
     mp_seat.c
     mp_seat_wish.c
     mp_seat_order.c
@@ -631,6 +636,10 @@ add_engine_fix(multiplayer
     mp_hud.c
     mp_reentry.c
     mp_arrival.c
+    mp_player_help_rule.c
+    mp_player_help.c
+    mp_repair_lock.c
+    mp_teleport_host.c
     mp_follow.c
     mp_world_values.c
     mp_session_over.c
@@ -660,16 +669,26 @@ add_engine_fix(multiplayer
     mp_death.c
     mp_match.c
     mp_cutscene.c
+    mp_cutscene_sites.c
     mp_signatures_scene.c
     mp_scene_rule.c
-    mp_scene_note.c
-    mp_scene_send.c
+    mp_scene_claim_rule.c
+    mp_scene_claim.c
     mp_scene_flow.c
+    mp_scene_doorless.c
+    mp_scene_room.c
+    mp_scene_scope.c
     mp_scene_exit.c
     mp_scene_bind.c
     mp_scene_host.c
+    mp_scene_seats.c
+    mp_scene_own.c
+    mp_scene_hero_rule.c
+    mp_scene_hero_watch.c
     mp_scene_host_report.c
     mp_scene_client.c
+    mp_scene_free_rule.c
+    mp_scene_free.c
     mp_movie_gate.c
     mp_host_settings_rule.c
     mp_host_settings.c
@@ -677,7 +696,9 @@ add_engine_fix(multiplayer
     mp_levels.c
     mp_saves.c
     mp_savefile.c
+    mp_savefile_disk.c
     mp_bridge_savefile.c
+    mp_bridge_savefile_look.c
     mp_start.c
     mp_start_restore.c
     mp_start_wish.c

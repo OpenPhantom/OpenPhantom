@@ -80,6 +80,7 @@
 #include "overlay_freecam.h"
 #include "overlay_levels.h"
 #include "overlay_menu_extras.h"
+#include "overlay_multiplayer.h"
 #include "overlay_picture.h"
 #include "overlay_row_ids.h"
 #include "overlay_spawn.h"
@@ -713,7 +714,8 @@ bool overlay_model_activate(uint32_t index)
     case OVERLAY_GROUP_OPENPHANTOM_FRAMERATE:
         return overlay_framerate_toggle(row.id - FRAMERATE_FIRST_ID);
     case OVERLAY_GROUP_OPENPHANTOM_MULTIPLAYER:
-        return false;    /* its one row binds a key, and that was taken above */
+        /* The two buttons; the key row was taken above, where its capture starts. */
+        return overlay_multiplayer_toggle(row.id - MULTIPLAYER_FIRST_ID);
     case OVERLAY_GROUP_ORIGINAL_TOGGLES:
         (void)cheats_original_toggle(row.id);
         return true;

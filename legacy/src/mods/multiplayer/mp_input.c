@@ -69,7 +69,8 @@ typedef struct mp_input_state {
     uint32_t           injected_hold;
     uint32_t           delta_faults;   /* the frame delta cell was unreadable on an injected hold */
 
-    /* The same four reads while the pause menu or the chat held this player's input. */
+    /* The same four reads while a holder of the session, the pause menu, the chat or a scene,
+     * held this player's input. */
     uint32_t           withheld_digital;
     uint32_t           withheld_relative;
     uint32_t           withheld_down;
@@ -183,8 +184,9 @@ float mp_input_hold_withheld(float banked, bool *dropped)
 }
 
 /* ==============================================================================================
- * The hooks. At bank 0 each one is the original, unless the pause menu or the chat holds the
- * input; at any other bank the command answers. The counts they keep were held against a field
+ * The hooks. At bank 0 each one is the original, unless a holder of the session (the pause menu,
+ * the chat or a scene) holds the input; at any other bank the command answers. The counts they
+ * keep were held against a field
  * run of 322 ticked substeps: 644 digital reads, two per substep (the steer's move axis and its
  * keyboard turn after the relative read answered zero), 322 relative, one per substep, and 1932
  * button reads, six per substep, three from the ground actions (sidle, jump, use) and three from

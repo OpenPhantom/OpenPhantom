@@ -43,6 +43,9 @@
  * The removal also carries a burst into pieces the actor made just before it, and the replica
  * bursts first, in the same call (mp_enemy_burst.h). Which removal is performed is decided as it
  * was before the burst existed; the burst only goes in front of a performed one.
+ *
+ * One removal a client performs with no message: mp_enemy_relay_remove_here, for an actor that
+ * drives the client's own body.
  */
 #ifndef MULTIPLAYER_MP_ENEMY_RELAY_H
 #define MULTIPLAYER_MP_ENEMY_RELAY_H
@@ -99,6 +102,13 @@ void mp_enemy_relay_set_far_body(mp_enemy_relay_far_body_fn_t far_body);
 typedef uintptr_t (*mp_enemy_relay_copy_fn_t)(uint32_t k, uint8_t generation, uint8_t reason);
 void mp_enemy_relay_set_copy_listener(mp_enemy_relay_copy_fn_t listener);
 
+/* A host's hearing of every removal the engine makes there, once the engine's removal is back,
+ * with the key the actor carried: what was remembered about an actor by its placement is not the
+ * next life's. Not told for a level's own teardown, which ends every memory by itself, and not
+ * for an actor whose key did not read. NULL for nobody. */
+typedef void (*mp_enemy_relay_removed_fn_t)(uint32_t key);
+void mp_enemy_relay_set_removed_listener(mp_enemy_relay_removed_fn_t listener);
+
 /* Once per substep from inside the substep: the tick the messages sent until the next call
  * carry. */
 void mp_enemy_relay_tick(uint32_t tick);
@@ -106,6 +116,16 @@ void mp_enemy_relay_tick(uint32_t tick);
 /* Takes a despawn message if it is one. On a client it performs the removal; on a host it is
  * taken and dropped, because the host is where removals come from. */
 bool mp_enemy_relay_take_message(const uint8_t *note, size_t bytes);
+
+/* On a client, removes the live actor of placement `key` through the engine's own removal, by
+ * the door a removal of the host's is performed through, with no word from the host: the one
+ * case is an actor that carries the handover bit and drives this client's own body, which a
+ * savegame restored there and which no scene may hold a client under. The engine's removal puts
+ * the player back first and leaves the body, which is the player's, alone. The actor is asked of
+ * its own record first, because a remembered address the pool has taken back holds old bytes.
+ * False, and nothing removed, on a host, before the install, and for an actor that is not that
+ * placement's live one. Never from inside the engine's own walk of the actor list. */
+bool mp_enemy_relay_remove_here(uintptr_t actor, uint32_t key);
 
 /* The lives a removal has been sent for, so a second note for the same life is counted. A hook that
  * keeps corpses answers the engine's removal test, which runs every substep for a body out of

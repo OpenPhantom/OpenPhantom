@@ -62,6 +62,11 @@ typedef struct follow_state {
     uint32_t starts;
     uint32_t start_refusals;
     uint32_t file_waits;
+    uint32_t file_unread_waits; /* looks that found the received file unreadable, and waited */
+    uint32_t files_no_level;    /* a file that names no level: the level itself was begun */
+    uint32_t host_files_unread; /* the host: its own file did not read as its level began */
+    uint32_t host_files_unoffered; /* of those, files that could not be offered either */
+    uint32_t unoffered_starts;  /* a client: a world out of a savegame the host named none of */
 
     /* The hero the pick is put on with, at every level begin of the session. */
     uint32_t heroes_asked;
@@ -185,14 +190,43 @@ static void announce_the_new_world(const mp_lobby_setup_t *current)
     mp_lobby_setup_t next = *current;
     mp_save_t        header;
     uint32_t         index = 0;
+    mp_saves_look_t  look  = MP_SAVES_LOOK_NO_LEVEL;
 
-    if (follow.restoring[0] != '\0' && mp_saves_read(follow.restoring, &header)) {
+    memset(&header, 0, sizeof header);
+    if (follow.restoring[0] != '\0') {
+        look = mp_saves_look(follow.restoring, &header);
+    }
+    /* A file that did not read just now is still the file this world came out of: the engine has
+     * it open and has restored it. It is offered as any other, and the level is the one the
+     * engine's own counter names, which the restore has set by now. Only a file that reads and
+     * names no level, or no file at all, is announced as a level begun fresh. */
+    if (look == MP_SAVES_LOOK_SAVE || look == MP_SAVES_LOOK_UNREADABLE ||
+        look == MP_SAVES_LOOK_NOT_A_SAVE) {
+        bool named;
+
         next.flags |= (uint8_t)MP_LOBBY_F_FROM_SAVE;
         if (!mp_bridge_savefile_offer(follow.restoring, &next.save_id, &next.save_bytes)) {
             next.save_id    = 0u;
             next.save_bytes = 0u;
         }
-        if (!name_shipped(&next, header.level_index)) {
+        if (look == MP_SAVES_LOOK_SAVE) {
+            named = name_shipped(&next, header.level_index);
+        } else {
+            ++follow.host_files_unread;
+            if (next.save_id != 0u) {
+                log_warning("the savegame %s this world came out of did not read as its level "
+                            "began, so the level is named by the engine's own counter; the "
+                            "file is offered to the players all the same", follow.restoring);
+            } else {
+                ++follow.host_files_unoffered;
+                log_warning("the savegame %s this world came out of did not read as its level "
+                            "began and could not be offered either, so the level is named "
+                            "by the engine's own counter and the players begin it fresh",
+                            follow.restoring);
+            }
+            named = read_u32(MP_CELL_LEVEL_INDEX, &index) && name_shipped(&next, index);
+        }
+        if (!named) {
             ++follow.changes_as_before;
         }
         ++follow.changes_from_save;
@@ -406,11 +440,34 @@ static void start(const mp_lobby_setup_t *setup)
             return;
         }
         save = mp_bridge_savefile_path();
-        if (!mp_saves_read(save, &header)) {
+        switch (mp_bridge_savefile_look(setup->save_id, setup->save_bytes, &header)) {
+        case MP_SAVES_LOOK_SAVE:
+            break;
+        case MP_SAVES_LOOK_NO_LEVEL:
+            /* A save of a level loaded by its path carries the host's own path, which this disk
+             * has no folder for. The level itself is what this side loads then. */
+            ++follow.files_no_level;
             log_warning("the host's savegame is here but names no level of the game's own table, "
                         "so this side begins the level fresh");
             save = NULL;
+            break;
+        case MP_SAVES_LOOK_NOT_A_SAVE:
+        case MP_SAVES_LOOK_UNREADABLE:
+        default:
+            /* Not a reason to begin the level fresh: that would be a second campaign beside the
+             * host's. The next frame looks again, and the file's own module writes it again or
+             * asks the host for it once this has lasted. */
+            ++follow.file_unread_waits;
+            return;
         }
+    }
+    if (from_save && setup->save_id == 0u) {
+        /* The host could not read its own file for its players. Nothing can be waited for, so
+         * the level is begun as it stands, and the line says that this is not the host's
+         * campaign. */
+        ++follow.unoffered_starts;
+        log_warning("the host's world is out of a savegame the host could not offer, so this "
+                    "side begins the level fresh, beside a host that restored it");
     }
     follow.file_wait_logged = false;
     (void)mp_bridge_lobby_take_start(&taken);
@@ -527,4 +584,12 @@ void mp_follow_report(void)
              (unsigned)follow.leaves, (unsigned)follow.leave_faults, (unsigned)follow.starts,
              (unsigned)follow.start_refusals, (unsigned)follow.file_waits,
              follow.leaving ? "LEAVING NOW, not arrived" : "not on the way anywhere");
+    log_info("  the host's savegame at a world change: %u look(s) found it unreadable and waited "
+             "(must not end in a fresh level), %u file(s) named no level of the table and the "
+             "level itself was begun, %u world(s) the host could offer no savegame of were begun "
+             "fresh; on the host %u file(s) did not read as their level began, %u of them could "
+             "not be offered either",
+             (unsigned)follow.file_unread_waits, (unsigned)follow.files_no_level,
+             (unsigned)follow.unoffered_starts, (unsigned)follow.host_files_unread,
+             (unsigned)follow.host_files_unoffered);
 }

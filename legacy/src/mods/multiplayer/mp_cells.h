@@ -254,6 +254,55 @@ typedef enum mp_cell {
  * also carry an enemy class, so a filter that reads the class alone takes the player with it. */
 #define MP_PLACEMENT_F_HOSTS_PLAYER 0x2000u
 
+/* The actor built from a placement record, 0 while none: written by spawn_actor 0x00437250 and
+ * cleared by every delete. The record is variable in length, a head of 0xF0 bytes and then the
+ * route nodes; the table of placements a script names by slot sits at +0x6C with no length of
+ * its own, a 0 there being padding and placement 0 alike, and nothing here reads it. */
+#define MP_PLACEMENT_LIVE_ACTOR       0xD0u
+
+/* A live actor, the engine's `character`, in the fields a scene reads to see where a scripted walk
+ * goes and whether it gets there. The chase opcode is the only writer of the walk request and the
+ * enemy tick clears it before every script run, so a 1 read after that tick means the chase ran in
+ * it. The chase stores its goal in the target field, except while it walks a detour, when the
+ * field holds the detour point instead.
+ *
+ * Where the engine reads and writes them: the waypoint by set_waypoint 0x0042BF60; the move mode
+ * by spawn_actor 0x00437250 from the record and by the script's opcode 0x409 in ai_run
+ * 0x00433D0B, which clamps it to 0 to 8; the speed by opcode 0x408 and read by the chase,
+ * move_chaseDrive 0x00429DF4, which walks backwards below 0; the target stored by the chase (at
+ * 0x00429E39) and read again while the detour flag or the clear sight flag stands, and by
+ * move_trackZ 0x0042A8DE for a flier; the walk request set by opcode 0x201 in ai_run and cleared
+ * by enemy_preTick 0x00435C67 before every script run; the detour flag set by the chase when it
+ * finds a detour and cleared when it reaches the detour point, without storing the goal again.
+ *
+ * And the fields that say where an actor's script stands, which the line of a standing scene
+ * prints: the state the actor list's tick, enemy_tickAll 0x00432BF2, switches on, 1 active, 3
+ * standing by and 0x10 waiting for the player's body; the health the wait for a death, opcode
+ * 0x102, holds against nought; the five counters of opcodes 0x101, 0x10A, 0x203, 0x204 and 0x412
+ * in ai_run; the script's own state, which opcode 0x400 sets through ai_setMode 0x004335A5 and
+ * which indexes the script's table of state labels in ai_reloadState; and the clip the body
+ * plays beside the clip the script asked for by opcode 0x202, which op_animation 0x0042E3AD makes
+ * the playing one. */
+#define MP_CHARACTER_PLACEMENT        0x10u   /* the authored record this actor was made from */
+#define MP_CHARACTER_STATE_FLAGS      0x14u
+#define MP_CHARACTER_STATE            0x20u   /* i32 */
+#define MP_CHARACTER_BODY             0x34u
+#define MP_CHARACTER_HEALTH           0x38u   /* i32 */
+#define MP_CHARACTER_WAYPOINT         0x58u
+#define MP_CHARACTER_COUNTERS         0x5Cu   /* i32[5] */
+#define MP_CHARACTER_COUNTER_COUNT    5u
+#define MP_CHARACTER_SCRIPT_STATE     0x7Cu   /* i32 */
+#define MP_CHARACTER_MOVE_MODE        0x98u   /* i32; scripts rewrite it, so a live actor is read
+                                               * here and not off its record. An odd mode walks
+                                               * through bodies and geometry */
+#define MP_CHARACTER_MOVE_SPEED       0x9Cu   /* f32; negative walks backwards, zero only turns */
+#define MP_CHARACTER_MOVE_TARGET      0xA0u   /* vec3 */
+#define MP_CHARACTER_POS              0xD0u   /* vec3 */
+#define MP_CHARACTER_MOVE_REQUESTED   0x174u  /* i32 */
+#define MP_CHARACTER_CLIP             0x1BCu  /* i32, the clip the body plays */
+#define MP_CHARACTER_CLIP_ASKED       0x1C0u  /* i32, the clip the script asked for */
+#define MP_CHARACTER_F_DETOUR         0x400000u
+
 /* The two classes an arena buries. 8 is the tank, which spawn_actor maps to 2 before it builds. */
 /* The pickup band, closed at both ends, exactly as the engine's own contact handler tests it:
  * `kind >= 0x0a && kind <= 0x1b` is what sends a touch to Plr_PickUp. ABOVE the band the classes

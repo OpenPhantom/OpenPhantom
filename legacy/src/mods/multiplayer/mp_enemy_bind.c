@@ -44,8 +44,8 @@
 #define A_STATE_FLAGS   0x14u
 #define A_INDEX         0x18u   /* the placement index; one writer in the engine */
 #define A_STATE         0x20u
-#define A_PARK_SHADOW   0x24u   /* where parking stows the state it took away */
-#define A_PLACEMENT     0x10u   /* the authored record this actor was made from */
+#define A_PARK_SHADOW   0x24u   /* where parking stows the state it took away, and the
+                                 * engine's own removal reason for an actor that ticks */
 #define A_BODY          0x34u
 #define A_HEALTH        0x38u
 #define A_HEADING       0xACu
@@ -53,12 +53,12 @@
 #define A_PITCH         0xB8u
 #define A_ACTUAL_YAW    0xBCu
 #define A_ROLL          0xC0u
-#define A_POS           0xD0u   /* three floats */
-
-/* The authored record the actor points at. The spawner writes its live word with the actor's
- * address and every delete clears it. */
-#define R_LIVE_WORD     0xD0u
 #define A_VELOCITY      0xDCu   /* three floats */
+
+/* The actor's position, its authored record and that record's live word, which the spawner
+ * writes with the actor's address and every delete clears, are MP_CHARACTER_POS,
+ * MP_CHARACTER_PLACEMENT and MP_PLACEMENT_LIVE_ACTOR in mp_cells.h, because a scene reads
+ * them too. */
 
 /* The body. The pose pair is what buys the free interpolation between substeps. */
 #define B_POSE_POS      0x18u
@@ -326,7 +326,7 @@ static bool read_actor(uintptr_t actor, mp_enemy_record_t *record, uint32_t *bod
     }
     record->value[MP_ENEMY_F_INDEX] = *index & 0xFFu;
 
-    if (!read_position_triple(actor + A_POS, record, MP_ENEMY_F_POS_X)) {
+    if (!read_position_triple(actor + MP_CHARACTER_POS, record, MP_ENEMY_F_POS_X)) {
         return false;
     }
 
@@ -429,7 +429,7 @@ static void describe_replica(const char *when, uintptr_t actor, uint32_t body, c
     (void)memory_try_read_u32(actor + A_INDEX, &index);
     (void)memory_try_read_u32(actor + A_STATE, &state);
     (void)memory_try_read_u32((uintptr_t)body + B_FLAGS, &flags);
-    (void)memory_try_read(actor + A_POS, at, sizeof at);
+    (void)memory_try_read(actor + MP_CHARACTER_POS, at, sizeof at);
     (void)memory_try_read((uintptr_t)body + B_POSE_POS, drawn, sizeof drawn);
     log_info("a replica %s: placement %u, state %u, body flags %08X; the host says %.2f %.2f %.2f, "
              "the actor stands at %.2f %.2f %.2f, the body is drawn at %.2f %.2f %.2f; its "
@@ -538,7 +538,7 @@ bool mp_enemy_bind_write(uintptr_t actor, uint32_t key, const mp_enemy_record_t 
     }
     heading = (float)(record->value[MP_ENEMY_F_HEADING] & 0xFFFFu) / 182.044444f;
 
-    if (!memory_try_write(actor + A_POS, pos, sizeof pos)) {
+    if (!memory_try_write(actor + MP_CHARACTER_POS, pos, sizeof pos)) {
         ++bind.refused;
         ++bind.refused_unwritable;
         return false;
@@ -693,6 +693,22 @@ bool mp_enemy_bind_is_parked(uintptr_t actor)
     return bind.installed && memory_try_read_u32(actor + A_STATE, &state) && state == STATE_PARKED;
 }
 
+/* The word parking stows a state in is the engine's removal reason. The script's opcode 0x20b
+ * with mode 7 writes 2 there and leaves the body alone (enemy_scriptedDeath 0x00435A57: `mov
+ * dword [edx+0x24], 2` at 0x00435C30), and the actor list's tick reads it at the end of each
+ * actor's own tick (0x004332A6: `cmp dword [ecx+0x24], 0; je; push 1; ...; call enemy_delete`).
+ * A parked actor's word is its stowed state, and a waiting one is not ticked to its end. */
+#define REMOVAL_ASKED 2u
+bool mp_enemy_bind_remove_by_engine(uintptr_t actor, uint32_t key)
+{
+    uint32_t state = 0;
+
+    return mp_enemy_bind_is_live(actor, key, NULL) &&
+           memory_try_read_u32(actor + A_STATE, &state) && state != STATE_PARKED &&
+           state != STATE_NOT_TICKED &&
+           memory_try_write(actor + A_PARK_SHADOW, &(uint32_t){ REMOVAL_ASKED }, sizeof(uint32_t));
+}
+
 static bool has_a_body(uintptr_t actor)
 {
     uint32_t body = 0;
@@ -801,8 +817,9 @@ mp_enemy_slot_t mp_enemy_bind_slot(uintptr_t actor, uint32_t key, mp_enemy_liven
     s->read = bind.installed && actor != 0 &&
               memory_try_read(actor - NODE_TO_ACTOR, &s->link, sizeof s->link) &&
               memory_try_read_u32(actor + A_INDEX, &s->index) &&
-              memory_try_read_u32(actor + A_PLACEMENT, &s->record) && s->record != 0u &&
-              memory_try_read((uintptr_t)s->record + R_LIVE_WORD, &s->live_word,
+              memory_try_read_u32(actor + MP_CHARACTER_PLACEMENT, &s->record) &&
+              s->record != 0u &&
+              memory_try_read((uintptr_t)s->record + MP_PLACEMENT_LIVE_ACTOR, &s->live_word,
                               sizeof s->live_word);
     return mp_enemy_slot_of(s, actor, key);
 }

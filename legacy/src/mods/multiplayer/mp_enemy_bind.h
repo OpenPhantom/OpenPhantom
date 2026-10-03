@@ -46,9 +46,10 @@
  *
  * Positions, angles, health, the reaction state, the volatile flag bits and the body's pose pair;
  * the drawn bit, the shadow bit, the class, the alpha and the dissolve of the body as the host's
- * body has them, which mp_enemy_body writes; and the hidden flags of the body's nodes and meshes,
- * which mp_enemy_nodes writes the way the engine's own savegame restores them. Everything else
- * in the actor is a pointer or bookkeeping: the placement, the script,
+ * body has them, which mp_enemy_body writes; the hidden flags of the body's nodes and meshes,
+ * which mp_enemy_nodes writes the way the engine's own savegame restores them; and the removal
+ * reason, which mp_enemy_bind_remove_by_engine writes the way a script's own removal does.
+ * Everything else in the actor is a pointer or bookkeeping: the placement, the script,
  * the template, the body, the instruction pointer, the placement index, the floor block, the
  * tracked shot, the last attacker, the target, and the effect handle. Breaking any of those takes
  * the engine apart, so nothing here writes them.
@@ -137,6 +138,20 @@ bool mp_enemy_bind_close_pair(uintptr_t actor, mp_enemy_pair_close_t *out);
 /* Parks an actor so the local simulation steps over it entirely, or lets it go again. */
 bool mp_enemy_bind_park(uintptr_t actor, bool parked);
 bool mp_enemy_bind_is_parked(uintptr_t actor);
+
+/* Has the engine remove `actor` by itself, at the end of that actor's own next tick: the removal
+ * reason a script's own "remove me" writes is written into the actor, and the actor list's tick
+ * then calls the engine's removal for it. That removal gives the player's body back first when
+ * the actor carries the handover bit, through the put-back, and frees no body it does not own.
+ * The script of the actor runs once more before it goes.
+ *
+ * Only for the live actor of placement `key`, asked of its record like every write here, because
+ * the reason written into a slot the pool has handed to another actor would remove that one for
+ * good. Never for a parked actor, whose word at that place is the state parking stowed and whose
+ * tick is stepped over, and never for one that still waits for the player, which is not ticked
+ * to its end until it has taken him. False when nothing was written. Nothing is removed while
+ * the actors do not tick, so whoever asks looks again a few substeps later. */
+bool mp_enemy_bind_remove_by_engine(uintptr_t actor, uint32_t key);
 
 /* Lets a replica go AND puts it in the state the far side last reported, rather than the state
  * it was parked in, and a body a removal kept as a corpse whatever the record says. A

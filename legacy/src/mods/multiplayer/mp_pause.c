@@ -65,6 +65,7 @@ typedef struct pause_state {
     bool               note_refusal_said;
     bool               put_back_said;
     bool               write_fault_said;
+    uint32_t           kept_open_lines;
     mp_pause_session_t session;
     uint32_t           arms;
     uint32_t           disarms;
@@ -137,9 +138,9 @@ static void bind_the_looks(pause_binding_t *b)
         log_warning("the dialogue and scene lock did not resolve, so a scene that begins under a "
                     "session's pause menu does not close it");
     }
-    if (b->hero_block == 0u && b->status_cell == 0u) {
-        log_warning("neither the hero block nor the status record resolved, so a death under a "
-                    "session's pause menu does not close it");
+    if (b->hero_block == 0u) {
+        log_warning("the hero block did not resolve, so a death under a session's pause menu does "
+                    "not close it: the corpse flag and the player module are both read there");
     }
 }
 
@@ -232,6 +233,30 @@ static const char *reply_word(int32_t reply)
         break;
     }
     return "answered";
+}
+
+/* An opening that stays up over a player with no health and no running module, once each, and
+ * after a handful of them only counted. */
+#define KEPT_OPEN_LINES_MAX 16u
+
+static void say_kept_open(bool module_read, uint32_t module)
+{
+    if (pause.kept_open_lines >= KEPT_OPEN_LINES_MAX) {
+        return;
+    }
+    ++pause.kept_open_lines;
+    if (module_read && module == 0u) {
+        log_info("the pause menu stays open over a parked player with no health: the engine lets "
+                 "no death in until the player is given back");
+        return;
+    }
+    if (!module_read) {
+        log_info("the pause menu stays open over a player with no health whose module did not "
+                 "read: the engine lets a death in only while the module runs");
+        return;
+    }
+    log_info("the pause menu stays open over a player with no health whose module is not running "
+             "(state %u): the engine lets no death in there", (unsigned)module);
 }
 
 static void say_the_reason(void)
@@ -439,9 +464,12 @@ void mp_pause_frame(void)
 {
     mp_pause_look_t   look;
     mp_pause_reason_t before = pause.session.reason;
+    bool              kept_before = pause.session.kept_open_parked;
     uint32_t          gate = 0u;
     uint32_t          record = 0u;
     uint32_t          corpse = 0u;
+    uint32_t          module = 0u;
+    bool              module_read;
     uint32_t          lock = 0u;
 
     if (!pause.session.open) {
@@ -456,12 +484,20 @@ void mp_pause_frame(void)
     look.dead         = pause.bound.hero_block != 0u &&
                         read_u32(pause.bound.hero_block + MP_HERO_BLOCK_DEAD, &corpse) &&
                         corpse != 0u;
+    /* "Module 1" as a value: the rule reads no engine cell, and the engine judges a death by the
+     * health only while the module runs. */
+    module_read         = pause.bound.hero_block != 0u &&
+                          read_u32(pause.bound.hero_block + MP_HERO_BLOCK_MODULE_STATE, &module);
+    look.module_running = module_read && module == MP_HERO_MODULE_RUNNING;
     look.lock_read    = read_u32(pause.bound.lock, &lock);
     look.lock         = (int32_t)lock;
     look.outcome_read = read_u32(pause.bound.outcome, &look.outcome);
     mp_pause_rule_look(&pause.session, &look);
     if (before == MP_PAUSE_REASON_NONE && pause.session.reason != MP_PAUSE_REASON_NONE) {
         say_the_reason();
+    }
+    if (!kept_before && pause.session.kept_open_parked) {
+        say_kept_open(module_read, module);
     }
 }
 
@@ -541,6 +577,9 @@ void mp_pause_report(void)
              (unsigned)pause.write_faults);
     log_info("  the pause menu's forced close, taken up again: %u time(s) a key of the player's "
              "started it over after it had been given up", (unsigned)s->rearmed_total);
+    log_info("  the pause menu over a player with no health and no running module: %u opening(s) "
+             "stayed open, because the engine lets no death in there",
+             (unsigned)s->kept_open_parked_total);
     log_info("  the player list over a session's pause menu: the world pumped on %u frame(s), the "
              "menu's own pump on %u", (unsigned)pause.world_pumps, (unsigned)pause.menu_pumps);
     mp_armed_note_counts(&said, &refused);

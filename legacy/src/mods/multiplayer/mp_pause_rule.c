@@ -69,6 +69,7 @@ static void clear_the_opening(mp_pause_session_t *s)
     s->last_substeps      = 0u;
     s->last_substep_ms    = 0u;
     s->longest_stretch_ms = 0u;
+    s->kept_open_parked   = false;
 }
 
 bool mp_pause_rule_open(mp_pause_session_t *session, bool lock_read, int32_t lock,
@@ -107,8 +108,17 @@ bool mp_pause_rule_open(mp_pause_session_t *session, bool lock_read, int32_t loc
  * that has fallen since lowers the floor so that the next one to rise closes it. */
 static mp_pause_reason_t judge(mp_pause_session_t *s, const mp_pause_look_t *look)
 {
-    if ((look->health_read && look->health <= 0) || look->dead) {
+    if (look->dead) {
         return MP_PAUSE_REASON_DEATH;
+    }
+    if (look->health_read && look->health <= 0) {
+        if (look->module_running) {
+            return MP_PAUSE_REASON_DEATH;
+        }
+        if (!s->kept_open_parked) {
+            s->kept_open_parked = true;
+            ++s->kept_open_parked_total;
+        }
     }
     if (look->lock_read) {
         if (look->lock > s->lock_floor) {

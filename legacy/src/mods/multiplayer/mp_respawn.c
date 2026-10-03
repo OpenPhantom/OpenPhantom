@@ -6,6 +6,12 @@
  * a second caller needed the same search with a slot of its own and a fallback. What stays is the
  * door: the gates, the health, the engine's re-entry and the wait for the body to stand.
  *
+ * SIZE NOTE: over 600 lines. The door of the re-entry and, through the same door, the move
+ * of a living player a scene asks for: the gates, the landing and the report of both. The move
+ * shares the engine's re-entry and the landing listener with the rest and nothing else. The
+ * next seam is the pure decisions at the top, mp_respawn_step to mp_respawn_pose_is_usable,
+ * which a test reaches without the door.
+ *
  * The reasoning is in the header. Two things about the code are worth having in front of a
  * maintainer, because neither is visible in a type:
  *
@@ -69,6 +75,22 @@ typedef struct respawn_state {
     bool     left_running;    /* the module state has been seen away from 1 since the call */
     uint32_t landing_frames;
 
+    /* A living player moved by the same re-entry, watched on its own: none of the landing above
+     * belongs to it, because no life ended and none began. */
+    bool     moving;
+    bool     moving_left;
+    uint32_t moving_frames;
+
+    /* The wall clock beside each of the three frame counts above, because a deadline needs both
+     * to have passed. Each is stamped by the first look of its wait and cleared where the wait
+     * begins. */
+    bool     wish_stamped;
+    uint32_t wish_since_ms;
+    bool     landing_stamped;
+    uint32_t landing_since_ms;
+    bool     moving_stamped;
+    uint32_t moving_since_ms;
+
     /* Counters. Every path out of this module increments exactly one of them. */
     uint32_t asked;
     uint32_t refused;
@@ -79,6 +101,10 @@ typedef struct respawn_state {
     uint32_t landings_lost;
     uint32_t landed_dead;     /* the body the engine stood up was a corpse again */
     uint32_t health_writes;
+    uint32_t moves_asked;     /* living players moved by the re-entry for a scene */
+    uint32_t moves_refused;
+    uint32_t moves_landed;
+    uint32_t moves_declined;  /* the module never left its running state: the engine said no */
 } respawn_state_t;
 
 static respawn_state_t rs;
@@ -87,8 +113,8 @@ static respawn_state_t rs;
  * The pure decisions.
  * ============================================================================================ */
 
-mp_respawn_step_t mp_respawn_step(bool pending, bool gates_open,
-                                  uint32_t frames_waited, uint32_t delay_frames)
+mp_respawn_step_t mp_respawn_step(bool pending, bool gates_open, uint32_t frames_waited,
+                                  uint32_t waited_ms, uint32_t delay_frames)
 {
     if (!pending) {
         return MP_RESPAWN_STEP_IDLE;
@@ -99,10 +125,32 @@ mp_respawn_step_t mp_respawn_step(bool pending, bool gates_open,
     if (gates_open) {
         return MP_RESPAWN_STEP_RUN;
     }
-    if (frames_waited >= MP_RESPAWN_DEADLINE_FRAMES) {
+    if (mp_respawn_deadline_passed(frames_waited, waited_ms)) {
         return MP_RESPAWN_STEP_DROP;
     }
     return MP_RESPAWN_STEP_WAIT;
+}
+
+bool mp_respawn_deadline_passed(uint32_t frames, uint32_t ms)
+{
+    return frames >= MP_RESPAWN_DEADLINE_FRAMES && ms >= MP_RESPAWN_DEADLINE_MS;
+}
+
+uint32_t mp_respawn_waited_ms(bool *stamped, uint32_t *since_ms, uint32_t now_ms)
+{
+    if (stamped == NULL || since_ms == NULL) {
+        return 0u;
+    }
+    if (!*stamped) {
+        *stamped  = true;
+        *since_ms = now_ms;
+    }
+    return (uint32_t)(now_ms - *since_ms);
+}
+
+bool mp_respawn_fade_is_lost(uint32_t module_state, bool fade_done, bool fade_runs)
+{
+    return module_state == MP_RESPAWN_MODULE_FADING && !fade_done && !fade_runs;
 }
 
 bool mp_respawn_is_a_corpse(uint32_t dead_flag, uint32_t mode, uint32_t death_descriptor)
@@ -297,6 +345,7 @@ static void hold(uint32_t delay_frames)
 {
     rs.delay_frames = delay_frames;
     rs.frames       = 0u;
+    rs.wish_stamped = false;
     rs.pending      = true;
     ++rs.asked;
 }
@@ -351,7 +400,7 @@ bool mp_respawn_beside(const float *died_at, uint8_t slot, uint32_t delay_frames
 
 bool mp_respawn_pending(void)
 {
-    return rs.pending || rs.landing;
+    return rs.pending || rs.landing || rs.moving;
 }
 
 void mp_respawn_cancel(void)
@@ -427,10 +476,11 @@ static void run_now(const float seat[3], float heading)
     rs.respawn_at((int32_t)hero, seat, heading);
     mp_seat_note_seated(seat);
 
-    rs.pending        = false;
-    rs.landing        = true;
-    rs.left_running   = false;
-    rs.landing_frames = 0u;
+    rs.pending         = false;
+    rs.landing         = true;
+    rs.left_running    = false;
+    rs.landing_frames  = 0u;
+    rs.landing_stamped = false;
     ++rs.done;
     log_info("hero %u was given %d health and asked back at %.2f %.2f %.2f facing %.2f; the "
              "engine's own fade now takes it from here", (unsigned)hero, MP_RESPAWN_HEALTH,
@@ -444,19 +494,21 @@ static void run_now(const float seat[3], float heading)
  * the whole re-entry: the re-entry writes 0 into it, so nothing is delivered to a player on his
  * way back, and the spawn writes the engine's own contact handler (0x00448369) into it, so any
  * module that held a dispatcher there has lost it by the time the body stands. */
-static void watch_for_landing(void)
+static void watch_for_landing(uint32_t now_ms)
 {
+    uint32_t waited_ms = mp_respawn_waited_ms(&rs.landing_stamped, &rs.landing_since_ms, now_ms);
+
     ++rs.landing_frames;
 
     if (!rs.left_running) {
         if (!module_state_is(1u)) {
             rs.left_running = true;
-        } else if (rs.landing_frames >= MP_RESPAWN_DEADLINE_FRAMES) {
+        } else if (mp_respawn_deadline_passed(rs.landing_frames, waited_ms)) {
             rs.landing = false;
             ++rs.landings_lost;
             log_warning("the re-entry was asked for %u frames ago and the player module never "
-                        "left its running state, so the engine declined it in silence",
-                        (unsigned)rs.landing_frames);
+                        "left its running state, so the engine declined it in silence (%u ms)",
+                        (unsigned)rs.landing_frames, (unsigned)waited_ms);
         }
         return;
     }
@@ -469,8 +521,8 @@ static void watch_for_landing(void)
         if (mp_respawn_player_is_a_corpse()) {
             ++rs.landed_dead;
             log_warning("the player was asked back %u frame(s) ago and the body the engine stood "
-                        "up is a corpse again, so nothing is handed on for it",
-                        (unsigned)rs.landing_frames);
+                        "up is a corpse again, so nothing is handed on for it (%u ms)",
+                        (unsigned)rs.landing_frames, (unsigned)waited_ms);
             return;
         }
         ++rs.landed_count;
@@ -478,15 +530,64 @@ static void watch_for_landing(void)
         if (rs.landed != NULL) {
             rs.landed();
         }
-        log_info("the player is standing again after %u frame(s)", (unsigned)rs.landing_frames);
+        log_info("the player is standing again after %u frame(s), %u ms",
+                 (unsigned)rs.landing_frames, (unsigned)waited_ms);
         return;
     }
-    if (rs.landing_frames >= MP_RESPAWN_DEADLINE_FRAMES) {
+    if (mp_respawn_deadline_passed(rs.landing_frames, waited_ms)) {
         rs.landing = false;
         ++rs.landings_lost;
         log_warning("the player was asked back %u frames ago and no living body has come up "
-                    "since, so whatever owns the contact dispatch slot is NOT re-armed",
-                    (unsigned)rs.landing_frames);
+                    "since, so whatever owns the contact dispatch slot is NOT re-armed (%u ms)",
+                    (unsigned)rs.landing_frames, (unsigned)waited_ms);
+    }
+}
+
+bool mp_respawn_move_living(const float position[3], float heading)
+{
+    uint32_t hero = 0u;
+
+    if (!rs.installed || rs.pending || rs.landing || rs.moving ||
+        !mp_respawn_pose_is_usable(position, heading) || !module_state_is(1u) ||
+        !memory_read_u32(rs.hero_block + MP_HERO_BLOCK_HERO_INDEX, &hero)) {
+        ++rs.moves_refused;
+        return false;
+    }
+    rs.respawn_at((int32_t)hero, position, heading);
+    rs.moving         = true;
+    rs.moving_left    = false;
+    rs.moving_frames  = 0u;
+    rs.moving_stamped = false;
+    ++rs.moves_asked;
+    return true;
+}
+
+/* The round trip of a living player's move: the module leaves its running state and comes back to
+ * it. A module that never left within the deadline was refused by the engine in silence. */
+static void watch_the_move(uint32_t now_ms)
+{
+    uint32_t waited_ms = mp_respawn_waited_ms(&rs.moving_stamped, &rs.moving_since_ms, now_ms);
+
+    ++rs.moving_frames;
+    if (!rs.moving_left) {
+        rs.moving_left = !module_state_is(1u);
+        if (!rs.moving_left && mp_respawn_deadline_passed(rs.moving_frames, waited_ms)) {
+            rs.moving = false;
+            ++rs.moves_declined;
+        }
+        return;
+    }
+    if (gates_are_open()) {
+        rs.moving = false;
+        ++rs.moves_landed;
+        if (rs.landed != NULL) {
+            rs.landed();
+        }
+        return;
+    }
+    if (mp_respawn_deadline_passed(rs.moving_frames, waited_ms)) {
+        rs.moving = false;
+        ++rs.moves_declined;
     }
 }
 
@@ -504,17 +605,22 @@ static void look_for_the_seat(uint32_t substeps)
     ++rs.frames;
 }
 
-void mp_respawn_tick(uint32_t substeps)
+void mp_respawn_tick(uint32_t substeps, uint32_t now_ms)
 {
     mp_respawn_shut_t shut;
+    uint32_t          waited_ms;
 
     if (!rs.installed) {
+        return;
+    }
+    if (rs.moving) {
+        watch_the_move(now_ms);
         return;
     }
     /* A body on its way back outranks a fresh wish, and the wish waits rather than being lost:
      * mp_respawn_pending answers true throughout, so a caller that asks twice is told so. */
     if (rs.landing) {
-        watch_for_landing();
+        watch_for_landing(now_ms);
         return;
     }
     if (!rs.pending) {
@@ -526,8 +632,10 @@ void mp_respawn_tick(uint32_t substeps)
     shut          = which_gate_is_shut();
     rs.last_shut  = shut;
     rs.shut_frames[(size_t)shut] += 1u;
+    waited_ms     = mp_respawn_waited_ms(&rs.wish_stamped, &rs.wish_since_ms, now_ms);
 
-    switch (mp_respawn_step(true, shut == MP_RESPAWN_SHUT_NOTHING, rs.frames, rs.delay_frames)) {
+    switch (mp_respawn_step(true, shut == MP_RESPAWN_SHUT_NOTHING, rs.frames, waited_ms,
+                            rs.delay_frames)) {
     case MP_RESPAWN_STEP_RUN:
         look_for_the_seat(substeps);
         break;
@@ -535,9 +643,9 @@ void mp_respawn_tick(uint32_t substeps)
         rs.pending = false;
         ++rs.dropped;
         log_warning("a re-entry was asked for %u frames ago and is dropped rather than carried "
-                    "out at some later moment nobody chose it. The last look said: %s. Of those "
-                    "frames %u had no level, %u no running player module, %u no body and %u an "
-                    "open door with no seat", (unsigned)rs.frames,
+                    "out at some later moment nobody chose it (%u ms). The last look said: %s. Of "
+                    "those frames %u had no level, %u no running player module, %u no body and %u "
+                    "an open door with no seat", (unsigned)rs.frames, (unsigned)waited_ms,
                     mp_respawn_shut_word(rs.last_shut),
                     (unsigned)rs.shut_frames[MP_RESPAWN_SHUT_LEVEL],
                     (unsigned)rs.shut_frames[MP_RESPAWN_SHUT_MODULE],
@@ -575,6 +683,9 @@ void mp_respawn_report(void)
     log_info("  the landing: %u body(s) came back and were handed on, %u never did, %u landing(s) "
              "that found the body dead again (must be 0)",
              (unsigned)rs.landed_count, (unsigned)rs.landings_lost, (unsigned)rs.landed_dead);
+    log_info("  the move of a living player: %u asked by a scene, %u refused at the door, %u "
+             "landed, %u declined by the engine", (unsigned)rs.moves_asked,
+             (unsigned)rs.moves_refused, (unsigned)rs.moves_landed, (unsigned)rs.moves_declined);
     log_info("  the looks while a wish waited: %u with no level, %u with the player module not "
              "running, %u with no body, %u with the door open and no seat",
              (unsigned)rs.shut_frames[MP_RESPAWN_SHUT_LEVEL],

@@ -44,8 +44,8 @@
  * taken only by a body, never by a seat another machine is about to hand out. So a wish beside the
  * host can be told the client slots of the session below its own, and it then foresees, on every
  * look, the seat each of them takes around the same anchor, lowest first, with the bodies that
- * slot's own machine sees, and keeps those seats clear as the scene's seating keeps the seats it
- * has handed out. Every client computes the same answer from the same roster without a message,
+ * slot's own machine sees, and keeps those seats clear. Every client computes the same answer from
+ * the same roster without a message,
  * as every node of a lockstep game checks a spawn spot in the same player order (Doom's
  * G_CheckSpot). It holds while every machine reads the host at the same place; where it does not,
  * the next form is the host handing the seats out, as Quake 3's ClientSpawn and Unreal's
@@ -134,16 +134,26 @@ mp_seat_floor_t mp_seat_floor_state(float floor_distance, bool on_mover);
 void mp_seat_note_body(size_t index, const float position[3], float heading, bool stands);
 void mp_seat_note_no_body(size_t index);
 
-/* One search around one anchor or one point, for any caller that seats: `beside` makes `target` a
- * body to step away from, never a candidate itself; otherwise the point itself is tried first.
- * Two rings of eight, starting in the direction of `slot`, the slot of the player being seated,
- * and every ring candidate reachable on foot from `target`, beside a body and around a point alike.
- * A candidate on a floor that hurts or in water is refused, and one closer than
- * MP_SEAT_BODY_CLEARANCE to any of `bodies` is taken. Every refused candidate is counted in
- * `counts` by its reason. */
-mp_seat_outcome_t mp_seat_probe(const float target[3], bool beside, uint8_t slot,
-                                const mp_seat_body_t *bodies, size_t body_count,
-                                mp_seat_counts_t *counts, float seat[3]);
+/* How one search walks its rings: on each ring the directions in `order`. */
+typedef struct mp_seat_search {
+    uint8_t order[MP_SEAT_RING_STEPS];
+} mp_seat_search_t;
+
+/* One search around one anchor or one point: `beside` makes `target` a body to step away from,
+ * never a candidate itself; otherwise the point itself is tried first. Two rings of eight in the
+ * order handed in, and every ring candidate reachable on foot from `target`, beside a body and
+ * around a point alike. A candidate on a floor that hurts or in water is refused, and one closer
+ * than MP_SEAT_BODY_CLEARANCE to any of `bodies` is taken. Every refused candidate is counted in
+ * `counts` by its reason. The reading of the floor under `target` is handed back in
+ * `anchor_floor`, which may be NULL: MP_SEAT_FLOOR_OK when the anchor stood on its floor,
+ * otherwise the reading that made the answer MP_SEAT_ANCHOR_MOVING, so a caller can tell a mover
+ * from a fall. The host's scene looks for the host's place through it, in the order of his slot;
+ * a wish asks the same loop with what it keeps away from (mp_seat_internal.h). */
+mp_seat_outcome_t mp_seat_probe_ordered(const float target[3], bool beside,
+                                        const mp_seat_search_t *search,
+                                        const mp_seat_body_t *bodies, size_t body_count,
+                                        mp_seat_counts_t *counts, float seat[3],
+                                        mp_seat_floor_t *anchor_floor);
 
 /* Starting a wish. `who` must outlive it. `died_at` may be NULL, and then the players are tried in
  * bank order. */

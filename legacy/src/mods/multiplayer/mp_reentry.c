@@ -99,6 +99,7 @@ typedef struct mp_reentry {
      * anywhere saying why. Everything above counts what DID happen; this counts what stopped. */
     bool     corpse;
     uint32_t corpse_frames;
+    uint32_t corpse_since_ms;   /* the wall clock at the first frame this corpse was seen */
     bool     spoke_waiting;     /* the line about a way back being tried was written */
     bool     spoke_stuck;       /* and the one about a corpse nothing brings back */
     uint32_t corpses_stuck;     /* lives that stood still long enough to be named */
@@ -378,10 +379,14 @@ static void end_the_level(void)
 }
 
 mp_reentry_corpse_t mp_reentry_corpse_state(bool corpse, uint32_t corpse_frames,
-                                            bool wish_pending, bool waiting_for_host,
-                                            bool session, bool level_running)
+                                            uint32_t corpse_ms, bool wish_pending,
+                                            bool waiting_for_host, bool session,
+                                            bool level_running)
 {
-    if (!corpse || corpse_frames < MP_REENTRY_CORPSE_PATIENCE_FRAMES) {
+    /* Both, the frames and the time: frames alone run out in one second at two hundred and forty
+     * a second, which is no longer than the engine's own fade back in. */
+    if (!corpse || corpse_frames < MP_REENTRY_CORPSE_PATIENCE_FRAMES ||
+        corpse_ms < MP_REENTRY_CORPSE_PATIENCE_MS) {
         return MP_REENTRY_CORPSE_NO;
     }
     /* Waiting for the host outranks the general "a wish is being tried", because it is the one
@@ -533,11 +538,12 @@ static bool player_is_a_corpse(void)
  *
  * Said once per life, and it names which link is missing rather than that one is: the wish, the
  * session, the anchor, or the death nobody heard. */
-static void watch_the_corpse(void)
+static void watch_the_corpse(uint32_t now_ms)
 {
     bool     corpse = player_is_a_corpse();
     uint32_t resolved = 0;
     uint32_t standing = 0;
+    uint32_t corpse_ms;
 
     if (!corpse) {
         re.corpse        = false;
@@ -546,9 +552,13 @@ static void watch_the_corpse(void)
         re.spoke_stuck   = false;
         return;
     }
+    if (!re.corpse) {
+        re.corpse_since_ms = now_ms;   /* the first frame of this corpse */
+    }
     re.corpse = true;
     ++re.corpse_frames;
-    switch (mp_reentry_corpse_state(true, re.corpse_frames,
+    corpse_ms = (uint32_t)(now_ms - re.corpse_since_ms);
+    switch (mp_reentry_corpse_state(true, re.corpse_frames, corpse_ms,
                                     mp_respawn_pending() || re.waiting,
                                     mp_reentry_waiting_for_host(), re.session,
                                     level_is_still_running())) {
@@ -558,17 +568,19 @@ static void watch_the_corpse(void)
         if (!re.spoke_waiting) {
             re.spoke_waiting = true;
             log_info("this player has been down for %u frames with nobody standing, waiting for "
-                     "the host to pick the next world", (unsigned)re.corpse_frames);
+                     "the host to pick the next world (%u ms)", (unsigned)re.corpse_frames,
+                     (unsigned)corpse_ms);
         }
         return;
     case MP_REENTRY_CORPSE_WAITING:
         if (!re.spoke_waiting) {
             re.spoke_waiting = true;
             log_warning("this player has been a corpse for %u frames and the way back is still "
-                        "being tried: %s. The pause menu stays shut until he stands",
+                        "being tried: %s. The pause menu stays shut until he stands (%u ms)",
                         (unsigned)re.corpse_frames,
                         re.waiting ? "the rule set is holding the wish"
-                                   : "a seat is being looked for");
+                                   : "a seat is being looked for",
+                        (unsigned)corpse_ms);
         }
         return;
     case MP_REENTRY_CORPSE_STUCK:
@@ -583,12 +595,12 @@ static void watch_the_corpse(void)
     re.spoke_stuck = true;
     ++re.corpses_stuck;
     count_peers(&resolved, &standing);
-    log_error("THIS PLAYER IS A CORPSE THAT NOTHING IS BRINGING BACK, %u frames on, in a level "
-              "that is still running. The engine will not open a pause menu for a corpse, so "
-              "there is no way out of it at all. Missing link: %s. The game is %u, %u other "
-              "player(s) are standing of %u resolved here, and %u death(s) have been heard "
+    log_error("THIS PLAYER IS A CORPSE THAT NOTHING IS BRINGING BACK, %u frames and %u ms on, "
+              "in a level that is still running. The engine will not open a pause menu for a "
+              "corpse, so there is no way out of it at all. Missing link: %s. The game is %u, %u "
+              "other player(s) are standing of %u resolved here, and %u death(s) have been heard "
               "here",
-              (unsigned)re.corpse_frames,
+              (unsigned)re.corpse_frames, (unsigned)corpse_ms,
               re.deaths_seen == 0u
                   ? "NO DEATH WAS EVER REPORTED HERE, so no wish was ever made"
                   : (anchor_is_alive()
@@ -651,7 +663,7 @@ static void ask_the_rule_again(void)
                                               : "this client waits for the host's screen");
 }
 
-void mp_reentry_tick(uint32_t host_substeps)
+void mp_reentry_tick(uint32_t host_substeps, uint32_t now_ms)
 {
     mp_reentry_rule_t rule;
     uint32_t          wait;
@@ -660,7 +672,7 @@ void mp_reentry_tick(uint32_t host_substeps)
     apply_survival();
     /* Before the wish is acted on, so a corpse that is on its way back this frame is described as
      * one rather than as a corpse nothing is doing anything about. */
-    watch_the_corpse();
+    watch_the_corpse(now_ms);
     /* Before the seat search's own tick, which the frame pump runs after this one. */
     ask_the_rule_again();
 

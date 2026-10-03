@@ -10,6 +10,11 @@
  * loopback, which never comes down in a process and so goes last. The menu's door is also held to
  * saying that the transport is the menu's before the statement is handed over, since the statement
  * asks.
+ *
+ * The reader of the developer menu's two buttons is armed on the same ways in and withdrawn on
+ * the same way down. It is a stand-in here that counts, and it is held to being armed with the
+ * transport already standing and withdrawn with it already down: the reader takes its mark when
+ * a session begins to exist, and says that nobody listens once none does.
  */
 #include "unittest.h"
 
@@ -31,6 +36,7 @@
 #include "mp_loopback.h"
 #include "mp_movie_gate.h"
 #include "mp_pause.h"
+#include "mp_player_help.h"
 #include "mp_puppet.h"
 #include "mp_relay_transport.h"
 #include "mp_relay_wire.h"
@@ -87,6 +93,10 @@ static struct {
     unsigned flash_lines;
     unsigned learned;
     bool     learned_by_menu;
+    unsigned help_arms;             /* the reader of the two buttons, armed */
+    unsigned help_arms_standing;    /* of those, with the transport already standing */
+    unsigned help_withdrawals;
+    unsigned help_withdrawals_down; /* of those, with the transport already down */
 } s_world;
 
 /* ===================================== What the module calls ============================== */
@@ -366,6 +376,18 @@ void mp_host_settings_withdraw(void)
 {
 }
 
+void mp_player_help_arm(void)
+{
+    ++s_world.help_arms;
+    s_world.help_arms_standing += mp_armed_transport() ? 1u : 0u;
+}
+
+void mp_player_help_withdraw(void)
+{
+    ++s_world.help_withdrawals;
+    s_world.help_withdrawals_down += mp_armed_transport() ? 0u : 1u;
+}
+
 void mp_world_holds_withdraw(void)
 {
 }
@@ -435,10 +457,14 @@ static uint32_t thermal_entry(void)
 }
 
 /* A way in: the transport stands, the entry holds the rule's arm in place of the engine's, and the
- * rule and the pause were each armed once. */
+ * rule and the pause were each armed once. The reader of the two buttons is not counted here by
+ * the caller: every way in arms it once, so the two counts move together over the whole run. */
 static void check_armed(const char *way, bool put_up, unsigned said, unsigned paused)
 {
     ut_checkf(put_up && mp_armed_transport(), "%s: the transport stands", way);
+    ut_checkf(s_world.help_arms == s_world.pause_arms &&
+                  s_world.help_arms_standing == s_world.help_arms,
+              "%s: the reader of the two buttons was armed with it, the transport standing", way);
     ut_checkf(thermal_entry() != SHOT_HANDLER_THERMAL && thermal_entry() != 0u,
               "%s: the thermal detonator's entry holds the rule's arm (%08X)", way,
               (unsigned)thermal_entry());
@@ -450,10 +476,14 @@ static void check_armed(const char *way, bool put_up, unsigned said, unsigned pa
 /* The way down, which every network transport shares. */
 static void check_taken_down(const char *way)
 {
-    unsigned disarms = s_world.pause_disarms;
+    unsigned disarms   = s_world.pause_disarms;
+    unsigned withdrawn = s_world.help_withdrawals;
 
     ut_checkf(mp_bridge_uninstall_udp() && !mp_armed_transport(),
               "%s: the transport comes down", way);
+    ut_checkf(s_world.help_withdrawals == withdrawn + 1u &&
+                  s_world.help_withdrawals_down == s_world.help_withdrawals,
+              "%s: the reader of the two buttons is withdrawn once, the transport down", way);
     ut_checkf(thermal_entry() == SHOT_HANDLER_THERMAL,
               "%s: the entry holds the engine's own arm again", way);
     ut_checkf(s_world.pause_disarms == disarms + 1u, "%s: and the pause is put back", way);

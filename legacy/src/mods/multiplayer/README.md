@@ -44,6 +44,8 @@ arrive beside the host, or beside the nearest player standing while the host is 
   the host is told is heard and read by players standing near enough.
 * A cutscene is the host's alone. The other players go on playing; when one of them sets a
   scene off, the host is brought there and the scene waits for him.
+* When the level itself moves the host to another place, as the assault on the palace does each
+  time it changes the hero, the other players are brought beside him and keep their own heroes.
 * The developer menu has two buttons under **Multiplayer**, for the player who presses them:
   **Repair lock** gives you your controls and camera back when a scene still holds them, and
   **Teleport to host** puts a client beside the host.
@@ -115,6 +117,8 @@ Played:
   taking everybody on to the next level at the host's difficulty;
 * being killed and coming back, a dead host's level going on for the others, the pause menu
   leaving the game running, and friendly fire both off and on;
+* the other players following the host when the level moves him, and coming back after a death
+  by a long fall with the camera behind the player again;
 * the chat reaching every player;
 * cutscenes as the host's alone, and the host brought to a player who set a scene off;
 * the developer menu's **Repair lock** and **Teleport to host**;
@@ -124,6 +128,8 @@ Played:
 
 Not played yet:
 
+* a respawn that got lost being asked for again, and a respawn waiting out an open developer menu;
+* a level that starts with the jump button stuck down, which the engine can leave behind;
 * the lobby holding a late player until **I am ready**;
 * the host's settings on a client, and the items a player keeps when the hero changes;
 * the check of builds and DLLs, `AllowMods`, and the refusals that name a file or a DLL;

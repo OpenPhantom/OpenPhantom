@@ -61,7 +61,8 @@ typedef struct respawn_state {
     uint32_t          shut_frames[4];
     mp_respawn_shut_t last_shut;
 
-    mp_respawn_landed_fn_t landed;
+    mp_respawn_landed_fn_t      landed;
+    mp_respawn_camera_back_fn_t camera_back;
 
     /* The wish, and its seat. */
     bool             pending;
@@ -105,7 +106,14 @@ typedef struct respawn_state {
     uint32_t moves_refused;
     uint32_t moves_landed;
     uint32_t moves_declined;  /* the module never left its running state: the engine said no */
+    uint32_t fall_cameras;       /* a long fall's camera given back as its body was replaced */
+    uint32_t fall_cameras_kept;  /* and the ones nothing could give back */
+    uint32_t places_brought;     /* corpses brought to their seat from a place no level has */
+    bool     said_camera_kept;
 } respawn_state_t;
+
+/* The lines written one by one for what a replaced body left behind. */
+#define LEFT_BEHIND_LINES 8u
 
 static respawn_state_t rs;
 
@@ -181,6 +189,46 @@ bool mp_respawn_player_is_a_corpse(void)
     return mp_respawn_record_is_a_corpse(mp_cells_address(MP_CELL_HERO_BLOCK));
 }
 
+bool mp_respawn_fall_holds_the_camera(uint32_t fall_state)
+{
+    return fall_state == MP_RESPAWN_FALL_DECIDED;
+}
+
+bool mp_respawn_record_fall_holds_the_camera(uintptr_t record)
+{
+    uint32_t fall = 0u;
+
+    return record != 0u && memory_try_read_u32(record + MP_HERO_BLOCK_FALL_STATE, &fall) &&
+           mp_respawn_fall_holds_the_camera(fall);
+}
+
+bool mp_respawn_place_is_lost(const float position[3])
+{
+    int axis;
+
+    if (position == NULL) {
+        return false;
+    }
+    for (axis = 0; axis < 3; ++axis) {
+        if (!isfinite(position[axis]) || fabsf(position[axis]) > MP_RESPAWN_PLACE_LIMIT) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool mp_respawn_record_bring_to(uintptr_t record, const float seat[3])
+{
+    float lies[3];
+
+    if (record == 0u || seat == NULL || mp_respawn_place_is_lost(seat) ||
+        !memory_try_read(record + MP_HERO_BLOCK_POS, lies, sizeof lies) ||
+        !mp_respawn_place_is_lost(lies)) {
+        return false;
+    }
+    return memory_try_write(record + MP_HERO_BLOCK_POS, seat, sizeof lies);
+}
+
 bool mp_respawn_pose_is_usable(const float position[3], float heading)
 {
     int axis;
@@ -242,6 +290,11 @@ bool mp_respawn_installed(void)
 void mp_respawn_set_landed_listener(mp_respawn_landed_fn_t listener)
 {
     rs.landed = listener;
+}
+
+void mp_respawn_set_camera_back(mp_respawn_camera_back_fn_t hand)
+{
+    rs.camera_back = hand;
 }
 
 /* ==============================================================================================
@@ -316,6 +369,11 @@ static bool module_state_is(uint32_t wanted)
 bool mp_respawn_player_lives(void)
 {
     return rs.installed && module_state_is(1u) && !mp_respawn_player_is_a_corpse();
+}
+
+bool mp_respawn_player_is_parked(void)
+{
+    return rs.installed && module_state_is(MP_RESPAWN_MODULE_PARKED);
 }
 
 /* ==============================================================================================
@@ -439,6 +497,47 @@ bool mp_respawn_grant_health(void)
     return true;
 }
 
+/* The camera of a long fall, given back with the body that took it. Asked of the record before
+ * the engine's re-entry is called, while it is still that body's. */
+static void give_back_a_falls_camera(void)
+{
+    if (!mp_respawn_record_fall_holds_the_camera(rs.hero_block)) {
+        return;
+    }
+    if (rs.camera_back != NULL && rs.camera_back()) {
+        ++rs.fall_cameras;
+        if (rs.fall_cameras <= LEFT_BEHIND_LINES) {
+            log_info("the body that is replaced took the camera for a long fall, which the "
+                     "engine gives back only as a level ends: the camera's override is cleared "
+                     "with the body");
+        }
+        return;
+    }
+    ++rs.fall_cameras_kept;
+    if (!rs.said_camera_kept) {
+        rs.said_camera_kept = true;
+        log_warning("the body that is replaced took the camera for a long fall and nothing here "
+                    "can give it back, the clearing of the camera's override is not bound: the "
+                    "player comes back under a camera that looks straight down until the level "
+                    "ends");
+    }
+}
+
+/* A corpse that lies nowhere, brought to the seat before the engine's fade reads its place. */
+static void bring_a_lost_corpse_to(const float seat[3])
+{
+    if (!mp_respawn_record_bring_to(rs.hero_block, seat)) {
+        return;
+    }
+    ++rs.places_brought;
+    if (rs.places_brought <= LEFT_BEHIND_LINES) {
+        log_info("the corpse lay at a place no level has, the height of a body that fell out of "
+                 "the world, so its record is brought to the seat at %.2f %.2f %.2f before the "
+                 "engine's fade feeds its place to the camera", (double)seat[0], (double)seat[1],
+                 (double)seat[2]);
+    }
+}
+
 /* The health first and the re-entry second, in the same frame. The spawn at the far end of the
  * engine's own fade writes the loadout and the ammunition and never touches the health word, so a
  * body that comes back without this dies again on the next substep it is ticked. In the spawn at
@@ -473,6 +572,8 @@ static void run_now(const float seat[3], float heading)
     rs.set_health(MP_RESPAWN_HEALTH);
     ++rs.health_writes;
 
+    bring_a_lost_corpse_to(seat);
+    give_back_a_falls_camera();
     rs.respawn_at((int32_t)hero, seat, heading);
     mp_seat_note_seated(seat);
 
@@ -553,6 +654,7 @@ bool mp_respawn_move_living(const float position[3], float heading)
         ++rs.moves_refused;
         return false;
     }
+    give_back_a_falls_camera();   /* a living body moved out of a fall that was decided */
     rs.respawn_at((int32_t)hero, position, heading);
     rs.moving         = true;
     rs.moving_left    = false;
@@ -686,6 +788,11 @@ void mp_respawn_report(void)
     log_info("  the move of a living player: %u asked by a scene, %u refused at the door, %u "
              "landed, %u declined by the engine", (unsigned)rs.moves_asked,
              (unsigned)rs.moves_refused, (unsigned)rs.moves_landed, (unsigned)rs.moves_declined);
+    log_info("  what a replaced body left behind: the camera of a long fall given back %u "
+             "time(s) and kept %u time(s) for want of the engine's clearing (must be 0); %u "
+             "corpse(s) brought to their seat from a place no level has",
+             (unsigned)rs.fall_cameras, (unsigned)rs.fall_cameras_kept,
+             (unsigned)rs.places_brought);
     log_info("  the looks while a wish waited: %u with no level, %u with the player module not "
              "running, %u with no body, %u with the door open and no seat",
              (unsigned)rs.shut_frames[MP_RESPAWN_SHUT_LEVEL],

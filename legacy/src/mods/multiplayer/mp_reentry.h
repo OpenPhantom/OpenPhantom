@@ -32,6 +32,18 @@
  * after a wipe is its own step and is not built; what is built is that the level ENDS rather than
  * standing there with two corpses in it.
  *
+ * ============================ Coming back is a state, not an event ============================
+ *
+ * A death makes one wish, and a wish can be lost on its way without a word: a gate stays shut
+ * past its deadline, the engine declines a re-entry in silence, the note of the death never
+ * arrives. A deadline is the only way to learn of an answer that never comes, so the deadlines
+ * stay. What one of them ends is an attempt and not the coming back: a player who lies dead in a
+ * level that is still running, with no wish held anywhere, has his wish made again out of the
+ * facts as they stand, and the rule set decides as it does for a death. The level is ended for
+ * him by that rule set, when nobody stands, and otherwise only after
+ * MP_REENTRY_WISHES_AGAIN_MAX wishes in a row came to nothing, because the engine opens no pause
+ * menu for a corpse and a level nobody can leave is worse than one that ends.
+ *
  * ================================== Everything is pushed in ===================================
  *
  * Which slot this machine holds, where the other players are and what game is being played are
@@ -43,8 +55,10 @@
  *
  * The rule set counts its wait in SUBSTEPS, because that is the ladder both machines agree on.
  * mp_respawn counts its gate deadline in drawn FRAMES, because its own tick is the frame pump and
- * a wish must not expire while a level loads, and in milliseconds of the wall clock beside them,
- * because frames alone shrink with the frame rate. The two are not the same ladder, so the wait
+ * a wish must not expire while a level loads, and in milliseconds beside them, because frames
+ * alone shrink with the frame rate. Those milliseconds are the pump's, which stand while a level
+ * runs and the engine cannot answer, the player parked or no substep running, so no deadline is
+ * reached behind a menu that is left open. The two are not the same ladder, so the wait
  * is held here, in substeps, and mp_respawn is asked for a re-entry with no delay once it has
  * run out.
  * Handing the rule set's substeps to mp_respawn as a frame count would have been a silent unit
@@ -141,7 +155,7 @@ typedef enum mp_reentry_corpse {
     MP_REENTRY_CORPSE_NO = 0,   /* no corpse, or one the engine is still playing out */
     MP_REENTRY_CORPSE_WAITING,  /* a way back is being tried: said once, and left to be tried */
     MP_REENTRY_CORPSE_HOST,     /* down with nobody standing, waiting for the host's next world */
-    MP_REENTRY_CORPSE_STUCK     /* nothing is bringing him back: named, and let out */
+    MP_REENTRY_CORPSE_STUCK     /* nothing is bringing him back: named, and wished back */
 } mp_reentry_corpse_t;
 
 /* The rule, over facts the caller has gathered.
@@ -156,6 +170,21 @@ mp_reentry_corpse_t mp_reentry_corpse_state(bool corpse, uint32_t corpse_frames,
                                             uint32_t corpse_ms, bool wish_pending,
                                             bool waiting_for_host, bool session,
                                             bool level_running);
+
+/* How many times in a row the wish of one corpse is made again before the level is ended for him
+ * after all. One such wish takes the watch's patience and then whatever loses it, the fifteen
+ * seconds of a gate or the twenty a wish is tried for, so eight of them are two minutes and more
+ * of lying dead beside somebody who stands. */
+#define MP_REENTRY_WISHES_AGAIN_MAX 8u
+
+/* What is done about a corpse nothing is bringing back. */
+typedef enum mp_reentry_stuck {
+    MP_REENTRY_STUCK_WISH_AGAIN = 0,  /* the wish is made again, out of the state he is in */
+    MP_REENTRY_STUCK_LET_OUT          /* that came to nothing too often: the level ends for him */
+} mp_reentry_stuck_t;
+
+/* `wishes_again` is how many were made for this corpse already, without his standing between. */
+mp_reentry_stuck_t mp_reentry_stuck_step(uint32_t wishes_again);
 
 /* Whether a death that arrived is one this machine has to act on. A death with no slot set for
  * this machine is nobody's, because acting on it would put THIS player back for somebody else's
@@ -211,9 +240,10 @@ int mp_reentry_pick_anchor(const mp_reentry_peer_t *peers, size_t count, const f
  * wish; the rest are counted so that a report can say a death was heard and not acted on. */
 void mp_reentry_note_death(const mp_death_note_t *note);
 
-/* Once per drawn frame, with the host's substep count and the wall clock the corpse watch's
- * patience is measured in. It keeps the survival switch true to the moment, and it is where a
- * held wish is carried out, retried or given up. */
+/* Once per drawn frame, with the host's substep count and the clock the corpse watch's patience
+ * is measured in: the pump's, which is the wall clock left standing while the engine cannot
+ * answer. It keeps the survival switch true to the moment, and it is where a held wish is
+ * carried out, retried or given up, and where a lost one is made again. */
 void mp_reentry_tick(uint32_t host_substeps, uint32_t now_ms);
 
 /* True while this client is down with nobody standing and is waiting for the host's choice. The

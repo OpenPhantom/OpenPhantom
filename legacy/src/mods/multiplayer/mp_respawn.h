@@ -67,14 +67,22 @@
  * wait cannot run out behind a loading screen. The milliseconds are there because frames alone
  * measure the frame rate: nine hundred of them are fifteen seconds at sixty a second, which is
  * what was meant, and under four at two hundred and forty, where the engine's own fade of one
- * second and a seat search still have to fit. A wish whose gates are open and whose seat is not
- * found ends through the seat's own stages instead. */
+ * second and a seat search still have to fit. They are the milliseconds the pump hands in, which
+ * stand while a level runs and the engine cannot answer, the player parked or no substep
+ * running, so neither number is reached behind a menu that is left open. A wish whose gates are
+ * open and whose seat is not found ends through the seat's own stages instead. */
 #define MP_RESPAWN_DEADLINE_FRAMES 900u
 #define MP_RESPAWN_DEADLINE_MS     15000u
 
 /* The player module's state while the engine's re-entry waits for its fade to end: state 4 starts
  * the fade and becomes this one, and this one spawns the body once the fade has run its time. */
 #define MP_RESPAWN_MODULE_FADING 3u
+
+/* And the state the engine itself calls suspended: a menu, a dialogue, a scene or a tool has
+ * parked the player, and the player's task runs no phase and no fade while it reads so.
+ * The engine's predicate at 0x00450FD8 compares the field at +4 of the player block with nought
+ * and answers 1 for it. */
+#define MP_RESPAWN_MODULE_PARKED 0u
 
 /* What the body comes back with. The engine's own "give the player his health" sites write this
  * value, so it is the game's idea of full rather than this module's. */
@@ -109,6 +117,19 @@ typedef enum mp_respawn_step {
 /* Called once, after the body is standing again, so that whoever owns the contact dispatch slot
  * on the player's task node can put its procedure back. */
 typedef void (*mp_respawn_landed_fn_t)(void);
+
+/* Clears the camera's override through the engine's own function and answers whether it could.
+ * Set by whoever resolved that function; with none set a fall's camera stays, and the report
+ * says how often. */
+typedef bool (*mp_respawn_camera_back_fn_t)(void);
+
+/* The fall state of a record whose fall is decided (MP_HERO_BLOCK_FALL_STATE). */
+#define MP_RESPAWN_FALL_DECIDED 2u
+
+/* Past this in any direction a body lies nowhere. The shipped levels stay inside a few hundred
+ * units; a body with no floor under it at all has 3.4e38, the floor probe's own "none", added to
+ * its height by the fall's death, and again on every substep it lies dead. */
+#define MP_RESPAWN_PLACE_LIMIT 100000.0f
 
 /* Resolves the sites, the cells and the seat's three world probes. False with a log line when
  * something required did not resolve, in which case every request below answers false rather than
@@ -155,11 +176,14 @@ bool mp_respawn_move_living(const float position[3], float heading);
 bool mp_respawn_withdraw(void);
 
 /* From the frame pump, once per frame, with the substep count the seat's clock is measured in and
- * the wall clock the deadlines are measured in. This is where a wish is retried, carried out or
- * dropped, and where the landing is noticed. */
+ * the clock the deadlines are measured in, the wall clock left standing while the engine cannot
+ * answer. This is where a wish is retried, carried out or dropped, and where the landing is
+ * noticed. */
 void mp_respawn_tick(uint32_t substeps, uint32_t now_ms);
 
 void mp_respawn_set_landed_listener(mp_respawn_landed_fn_t listener);
+
+void mp_respawn_set_camera_back(mp_respawn_camera_back_fn_t hand);
 
 /* ==============================================================================================
  * The pure decisions, so that a test can pin them with no game in the process.
@@ -190,6 +214,42 @@ bool mp_respawn_fade_is_lost(uint32_t module_state, bool fade_done, bool fade_ru
  * machine's arithmetic and the engine's re-entry stores what it is handed without looking. */
 bool mp_respawn_pose_is_usable(const float position[3], float heading);
 
+/* ============================== What a replaced body leaves behind ============================
+ *
+ * Two things outlive a body that the engine's re-entry replaces, because in the game as shipped
+ * the level ended with the death and took them along.
+ *
+ * The camera of a long fall. A fall of more than eight units forces the camera onto a group of
+ * its own, looking straight down, and the engine clears that override as a level ends, as a
+ * script or the tripod gun gives its own back, and nowhere on the respawn. A body that comes
+ * back in a level that went on running would stand under that camera for the rest of the level.
+ * The fall update at 0x0044F162 makes the call, to the override's setter at 0x0041840A with
+ * group 13, whose record it has just rewritten to a pitch the camera's frame update floors at
+ * 270 degrees. The clearing at 0x00418421 has six callers in the image: the camera module's own
+ * answer to the level's end, the end of a spoken line, two script opcodes, the load and save
+ * menu and the leaving of the tripod gun. None of them is on the fall, on the death or on the
+ * respawn.
+ * So the override is cleared as the body that took it is replaced, and only then: the cell does
+ * not say who took it, a scene's camera is not this module's to take, and the record of the body
+ * says whether its own fall was decided.
+ *
+ * A place no level has. The engine's re-entry feeds the corpse's position to the camera on every
+ * tick of its fade, and the camera averages what it is fed into its anchor. A corpse that fell
+ * out of the world lies at 3.4e38 or at infinity, which leaves the anchor far away for seconds
+ * or, once it is no number, until the next level is loaded. So such a record is brought to the
+ * seat before the re-entry is asked; in those two states of the module nothing but the camera
+ * reads it. The player's task at 0x00447D38 runs no phase in its states 4 and 3 and calls the
+ * camera's feed with the record's position on every tick of state 3. The 3.4e38 is the floor
+ * probe's start value for "no floor below": the fall's timer adds the probe's answer to the
+ * height in the statement before it enters the death, and the death's own update adds it again
+ * on every substep the body lies. The same field run logged those three deaths at that height. */
+bool mp_respawn_fall_holds_the_camera(uint32_t fall_state);
+bool mp_respawn_record_fall_holds_the_camera(uintptr_t record);
+bool mp_respawn_place_is_lost(const float position[3]);
+
+/* Brings a record that lies nowhere to `seat`. True when it lay nowhere and was written. */
+bool mp_respawn_record_bring_to(uintptr_t record, const float seat[3]);
+
 /* ============================== The one answer to "is he a corpse" ============================
  *
  * The dead flag at 1 and the death descriptor on the mode slot: what the death entry leaves and
@@ -208,6 +268,10 @@ bool mp_respawn_player_is_a_corpse(void);
 /* This machine's player lives: the module in its running state and no corpse. A body in the fade
  * of its re-entry, parked by a scene or dead is not living. False before the install. */
 bool mp_respawn_player_lives(void);
+
+/* The player module reads MP_RESPAWN_MODULE_PARKED: the engine carries no re-entry on until it
+ * reads something else again. False before the install and for a block that does not read. */
+bool mp_respawn_player_is_parked(void);
 
 void mp_respawn_report(void);
 

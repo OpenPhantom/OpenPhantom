@@ -1,5 +1,5 @@
-/* mp_teleport_host.c: a client's own player put beside the host, because the player asked. See
- * the header.
+/* mp_teleport_host.c: a client's own player put beside the host, because the player asked or a
+ * script warped the host away. See the header.
  *
  * Two things about the code are worth having in front of a maintainer:
  *
@@ -171,6 +171,21 @@ mp_player_help_verdict_t mp_teleport_host_ask(bool overlay_holds, uint32_t subst
              (double)host.position[0], (double)host.position[1], (double)host.position[2],
              far_off, (unsigned)MP_TELEPORT_SEARCH_SUBSTEPS);
     return verdict;
+}
+
+mp_player_help_verdict_t mp_teleport_host_would(float host_at[3], bool *host_known)
+{
+    mp_teleport_look_t   look;
+    mp_bridge_far_pose_t host;
+
+    look_at_the_door(&look, false, &host);
+    if (host_known != NULL) {
+        *host_known = look.host_pose;
+    }
+    if (host_at != NULL && look.host_pose) {
+        memcpy(host_at, host.position, sizeof host.position);
+    }
+    return mp_teleport_door(&look);
 }
 
 /* ==============================================================================================

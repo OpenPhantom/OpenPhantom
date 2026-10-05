@@ -56,6 +56,11 @@ void mp_scene_free_look(mp_scene_free_look_t *out, uint32_t substep);
  * actor list: from the bridge's task in a substep, or between two substeps. */
 uint32_t mp_scene_free_now(uint32_t plan, uint32_t substep);
 
+/* The camera's override cleared for a body that is being replaced, with no plan, no look and no
+ * line: the re-entry asks it for a body whose long fall took the camera, and says so itself.
+ * False where the clearing is not bound. Between two substeps, as the call above. */
+bool mp_scene_free_fall_camera(void);
+
 void mp_scene_free_report(void);
 
 #endif /* MULTIPLAYER_MP_SCENE_FREE_H */

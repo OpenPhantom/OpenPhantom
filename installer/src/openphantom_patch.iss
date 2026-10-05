@@ -11,7 +11,7 @@
 ;
 ; To refresh: take the files out of OpenPhantom-patch-X.Y.Z.zip into dist\patch, keeping the folder
 ; layout, since every row below names a path inside it.
-#define PatchVersion       "1.0.0"
+#define PatchVersion       "1.0.1"
 #define PatchSrc           "dist\patch"
 
 ; The rule above, checked rather than promised. Both numbers are set by hand in two files, and a

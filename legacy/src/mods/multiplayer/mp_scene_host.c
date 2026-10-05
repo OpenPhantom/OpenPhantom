@@ -37,6 +37,7 @@
 #include "mp_cutscene.h"
 #include "mp_enemy_bind.h"
 #include "mp_enemy_relay.h"
+#include "mp_level_state_warp.h"
 #include "mp_quest.h"
 #include "mp_respawn.h"
 #include "mp_scene_bind.h"
@@ -336,13 +337,18 @@ size_t mp_scene_host_latched(uint32_t *keys, size_t max)
 
 /* A warp the engine takes: the waiting re-entry ends, because the warp's own spawn brings the host
  * back at its target, and a re-entry left waiting would put him back beside a far player the moment
- * he lands. And the quest window as it stands, for the count the landing makes. */
+ * he lands. And the quest window as it stands, for the count the landing makes. The far players
+ * are told here, in the substep of the door and a fade before the host stands at the target, so
+ * that each of them follows him on its own machine. This is the one place every taken warp
+ * passes: the door returns before it only for a host with nobody joined and for a warp the engine
+ * drops, and a warp over a standing scene still comes through it. */
 static void a_warp_is_taken(const float *at, float heading, int32_t hero)
 {
     ++sh.n.warps;
     memcpy(sh.warp_at, at, sizeof sh.warp_at);
     sh.warp_heading      = heading;
     sh.warp_hero         = hero;
+    sh.warp_told         = mp_level_state_warp_say(hero, at);
     hs.warp_left_running = false;
     hs.quest_known       = mp_scene_bind_quest_window(hs.quest_before);
     if (mp_respawn_pending()) {

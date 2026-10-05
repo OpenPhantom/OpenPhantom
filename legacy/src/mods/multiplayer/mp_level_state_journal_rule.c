@@ -124,5 +124,5 @@ mp_level_journal_plan_t mp_level_journal_plan(const mp_level_state_note_t *note,
 
 bool mp_level_journal_is_moment(uint8_t kind)
 {
-    return kind == (uint8_t)MP_LEVEL_JOURNAL_CRAWL;
+    return kind == (uint8_t)MP_LEVEL_JOURNAL_CRAWL || kind == (uint8_t)MP_LEVEL_JOURNAL_WARP;
 }

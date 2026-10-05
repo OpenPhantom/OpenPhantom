@@ -500,6 +500,15 @@ uint32_t mp_scene_free_now(uint32_t plan, uint32_t substep)
     return given;
 }
 
+bool mp_scene_free_fall_camera(void)
+{
+    if (!f.installed || f.camera_off == NULL) {
+        return false;
+    }
+    f.camera_off();
+    return true;
+}
+
 void mp_scene_free_report(void)
 {
     if (!f.installed) {

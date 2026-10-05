@@ -1,4 +1,5 @@
-/* mp_teleport_host.h: a client's own player put beside the host, because the player asked.
+/* mp_teleport_host.h: a client's own player put beside the host, because the player asked or
+ * because a script warped the host away.
  *
  * Layer 3. The second button of the developer menu's Multiplayer heading, "Teleport to host". It
  * is wiring and nothing new: the host's pose is the one every substep resolves for his puppet,
@@ -17,7 +18,9 @@
  * It makes the place right and not the world: movers, push blocks and doors are not brought
  * into step, so a player can be put beside a host behind a door that is shut on his own machine.
  *
- * The decisions are mp_player_help_rule's; who answers the press is mp_player_help.c.
+ * The decisions are mp_player_help_rule's; who answers the press is mp_player_help.c. A warp of
+ * the host's is followed through the same door and the same two phases, pressed by
+ * mp_player_help.c when mp_warp_follow says the host stands at the warp's target.
  */
 #ifndef MULTIPLAYER_MP_TELEPORT_HOST_H
 #define MULTIPLAYER_MP_TELEPORT_HOST_H
@@ -35,6 +38,11 @@ bool mp_teleport_host_bound(void);
  * answer to the press either way. `substeps` is the frame pump's count, the clock of the search
  * and of the move. */
 mp_player_help_verdict_t mp_teleport_host_ask(bool overlay_holds, uint32_t substeps);
+
+/* What the door would answer to a press now, as a look alone: nothing begins and no line is
+ * written, so a caller may ask on every frame until it opens. `host_known` says whether a pose
+ * of the host in this world was read, and `host_at` then receives where he stands. */
+mp_player_help_verdict_t mp_teleport_host_would(float host_at[3], bool *host_known);
 
 /* One frame of a teleport under way, before the placement and the respawn are ticked, so a
  * place handed over on this frame is taken on this frame. True on the frame it ends, and

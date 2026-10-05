@@ -23,6 +23,10 @@
  *
  * What a press does is mp_repair_lock for the first button and mp_teleport_host for the second;
  * a repair ends a teleport under way. The decisions are mp_player_help_rule's.
+ *
+ * The teleport has this one caller. A warp of the host's that a client follows (mp_warp_follow)
+ * is the same teleport, so it is pressed from here as well, on the frame that module says it is
+ * due; it answers no press, and its end goes back to that module and not into the record.
  */
 #ifndef MULTIPLAYER_MP_PLAYER_HELP_H
 #define MULTIPLAYER_MP_PLAYER_HELP_H

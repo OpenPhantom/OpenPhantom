@@ -85,17 +85,19 @@ static void report_host(const mp_level_state_counts_t *n, const mp_level_state_l
              escort_said(last), (unsigned)last->escort_health, (unsigned)last->viewer_runs,
              (unsigned)mp_level_state_journal_newest());
     log_info("  the level's journal (host): %u entr(ies) (%u emitter, %u light, %u fog, %u crawl, "
-             "%u escort)",
+             "%u escort, %u warp)",
              (unsigned)(n->journal_entries[MP_LEVEL_JOURNAL_EMITTER] +
                         n->journal_entries[MP_LEVEL_JOURNAL_LIGHT] +
                         n->journal_entries[MP_LEVEL_JOURNAL_FOG] +
                         n->journal_entries[MP_LEVEL_JOURNAL_CRAWL] +
-                        n->journal_entries[MP_LEVEL_JOURNAL_ESCORT]),
+                        n->journal_entries[MP_LEVEL_JOURNAL_ESCORT] +
+                        n->journal_entries[MP_LEVEL_JOURNAL_WARP]),
              (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_EMITTER],
              (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_LIGHT],
              (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_FOG],
              (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_CRAWL],
-             (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_ESCORT]);
+             (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_ESCORT],
+             (unsigned)n->journal_entries[MP_LEVEL_JOURNAL_WARP]);
 }
 
 static void report_client(const mp_level_state_counts_t *n)
@@ -117,18 +119,20 @@ static void report_client(const mp_level_state_counts_t *n)
              mp_level_state_holds_a_note() ? "a note waits for the next substep"
                                            : "no note waits");
     log_info("  the level's journal (client): %u entr(ies) replayed in order (%u emitter, %u "
-             "light, %u fog, %u crawl, %u escort), %u this side already had, %u the engine did "
-             "not take; %u jump(s) past the window healed from the state, %u entr(ies) lost in "
-             "them; %u first note(s), %u crawl(s) not shown on a first note",
+             "light, %u fog, %u crawl, %u escort, %u warp), %u this side already had, %u the "
+             "engine did not take; %u jump(s) past the window healed from the state, %u "
+             "entr(ies) lost in them; %u first note(s), %u crawl(s) not shown on a first note",
              (unsigned)(n->replayed[MP_LEVEL_JOURNAL_EMITTER] +
                         n->replayed[MP_LEVEL_JOURNAL_LIGHT] + n->replayed[MP_LEVEL_JOURNAL_FOG] +
                         n->replayed[MP_LEVEL_JOURNAL_CRAWL] +
-                        n->replayed[MP_LEVEL_JOURNAL_ESCORT]),
+                        n->replayed[MP_LEVEL_JOURNAL_ESCORT] +
+                        n->replayed[MP_LEVEL_JOURNAL_WARP]),
              (unsigned)n->replayed[MP_LEVEL_JOURNAL_EMITTER],
              (unsigned)n->replayed[MP_LEVEL_JOURNAL_LIGHT],
              (unsigned)n->replayed[MP_LEVEL_JOURNAL_FOG],
              (unsigned)n->replayed[MP_LEVEL_JOURNAL_CRAWL],
-             (unsigned)n->replayed[MP_LEVEL_JOURNAL_ESCORT], (unsigned)n->already,
+             (unsigned)n->replayed[MP_LEVEL_JOURNAL_ESCORT],
+             (unsigned)n->replayed[MP_LEVEL_JOURNAL_WARP], (unsigned)n->already,
              (unsigned)n->not_taken, (unsigned)n->jumps, (unsigned)n->lost, (unsigned)n->firsts,
              (unsigned)n->crawls_first);
 }

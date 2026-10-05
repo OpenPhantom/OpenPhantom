@@ -58,6 +58,7 @@
 #include "mp_menu.h"
 #include "mp_mod_allow.h"
 #include "mp_module.h"
+#include "mp_mouse_latch.h"
 #include "mp_dialog_relay.h"
 #include "mp_quest_relay.h"
 #include "mp_npc_copies_bridge.h"
@@ -66,6 +67,7 @@
 #include "mp_range_gate.h"
 #include "mp_reentry.h"
 #include "mp_respawn.h"
+#include "mp_scene_free.h"
 #include "mp_round.h"
 #include "mp_scratch_bind.h"
 #include "mp_settings.h"
@@ -312,6 +314,10 @@ static void on_module_message(int msg)
         }
         break;
     case 5:
+        /* The engine's flush of its devices has run by now, this node being the last to hear a
+         * level begin: the mouse buttons it can leave down are released before a substep reads
+         * them. */
+        mp_mouse_latch_level_begins();
         /* The host's difficulty first, on a client, so everything below reads the value this
          * level is played at. */
         mp_follow_difficulty_note_level_begin();
@@ -744,7 +750,14 @@ static bool resolve_tables(void)
      * write over a null the engine is about to overwrite itself. */
     if (mp_respawn_install()) {
         mp_respawn_set_landed_listener(&mp_body_arm_dispatcher);
+        /* And the camera of a long fall goes with the body that took it: the clearing is the
+         * scene release's, which binds it on a session's way in and answers false before. */
+        mp_respawn_set_camera_back(&mp_scene_free_fall_camera);
     }
+
+    /* The mouse buttons the engine's own flush can leave down as a level begins in a window that
+     * is not in front, jump among them. One table of the engine's, found here with the others. */
+    (void)mp_mouse_latch_install();
 
     /* The live scoreboard. It resolves nine sites of its own, so it belongs with the tables; it
      * draws nothing until a deathmatch round is running inside a running level. */

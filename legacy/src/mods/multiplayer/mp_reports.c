@@ -50,6 +50,7 @@
 #include "mp_bridge_public.h"
 #include "mp_menu.h"
 #include "mp_module.h"
+#include "mp_mouse_latch.h"
 #include "mp_pickup_relay.h"
 #include "mp_dialog_relay.h"
 #include "mp_quest_relay.h"
@@ -100,6 +101,7 @@ void mp_reports_run(const char *why)
     mp_hero_carry_report();
     mp_body_report(why);
     mp_input_report(why);
+    mp_mouse_latch_report();
     mp_pause_report();
     mp_damage_report(why);
     mp_bridge_report(why);
@@ -107,6 +109,7 @@ void mp_reports_run(const char *why)
     mp_hud_report();
     mp_reentry_report();
     mp_respawn_report();
+    mp_pumps_report();
     mp_respawn_fade_report();
     mp_death_music_report();
     mp_arrival_report();

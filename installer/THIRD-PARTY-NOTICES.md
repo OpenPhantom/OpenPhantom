@@ -12,7 +12,7 @@ patch's own files in `dist/patch/` are this project's; the two libraries compile
 
 | Component | Version | Licence | Upstream |
 |---|---|---|---|
-| OpenPhantom patch | 1.0.0 | this project's | https://github.com/OpenPhantom/OpenPhantom |
+| OpenPhantom patch | 1.0.1 | this project's | https://github.com/OpenPhantom/OpenPhantom |
 | HACL* (compiled into the patch's `multiplayer.dll`) | commit `504c2987452f87fe44bce9b9f12e19d6e051761f` | MIT | https://github.com/hacl-star/hacl-star |
 | KaRaMeL headers (included by HACL*), Copyright (c) INRIA and Microsoft Corporation | the copy HACL* carries at that commit | Apache 2.0 and MIT | https://github.com/FStarLang/karamel |
 | Mbed TLS with TF-PSA-Crypto (compiled into the patch's `multiplayer.dll`) | 4.1.1 | Apache 2.0, chosen from its dual Apache 2.0 or GPL 2.0 or later | https://github.com/Mbed-TLS/mbedtls |

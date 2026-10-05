@@ -5,11 +5,12 @@
  * leave the level running at all.
  *
  * SIZE NOTE: past 600 lines since the co-op wipe grew a role, because the machine that used to end
- * the level on every side now ends it on one and waits on the others. The seam, if this grows
- * again, is the corpse watch and the net under it, about ninety lines from `watch_the_corpse`
- * down: they are a second question about the same player, asked once a frame rather than once a
- * death, and they share nothing with the rules above but the state block. Everything above them is
- * one subject and does not split.
+ * the level on every side now ends it on one and waits on the others, and longer again since the
+ * corpse watch makes a lost wish again where it used to end the level. The seam is the corpse
+ * watch and the last resort under it, about a hundred and fifty lines from `wish_again` down: they
+ * are a second question about the same player, asked once a frame rather than once a death, and
+ * they share nothing with the rules above but the state block. Everything above them is one
+ * subject and does not split.
  */
 #include "mp_reentry.h"
 
@@ -101,8 +102,12 @@ typedef struct mp_reentry {
     uint32_t corpse_frames;
     uint32_t corpse_since_ms;   /* the wall clock at the first frame this corpse was seen */
     bool     spoke_waiting;     /* the line about a way back being tried was written */
-    bool     spoke_stuck;       /* and the one about a corpse nothing brings back */
-    uint32_t corpses_stuck;     /* lives that stood still long enough to be named */
+    bool     spoke_stuck;       /* and the one about a corpse the level was ended for */
+    uint32_t wishes_again_now;  /* wishes made again for the corpse that lies now */
+    uint32_t wishes_again;      /* and for every corpse of the run */
+    bool     wish_of_the_watch; /* the wish in flight was made by the watch, for a corpse */
+    uint32_t wishes_not_needed; /* such wishes taken back because the body stood after all */
+    uint32_t corpses_let_out;   /* corpses the level was ended for, the last resort */
 } mp_reentry_t;
 
 static mp_reentry_t re;
@@ -405,9 +410,16 @@ mp_reentry_corpse_t mp_reentry_corpse_state(bool corpse, uint32_t corpse_frames,
     return MP_REENTRY_CORPSE_STUCK;
 }
 
-/* The net under a corpse nothing is bringing back. It does not ask who suppressed the death,
- * because the answer is not knowable from here and the player's situation is the same either way:
- * the level's own outcome says it is still running, and the body in it is dead. */
+mp_reentry_stuck_t mp_reentry_stuck_step(uint32_t wishes_again)
+{
+    return wishes_again < MP_REENTRY_WISHES_AGAIN_MAX ? MP_REENTRY_STUCK_WISH_AGAIN
+                                                      : MP_REENTRY_STUCK_LET_OUT;
+}
+
+/* The last resort under a corpse whose wish was made again and again and came to nothing every
+ * time. It does not ask who suppressed the death, because the answer is not knowable from here
+ * and the player's situation is the same either way: the level's own outcome says it is still
+ * running, and the body in it is dead. */
 static void end_the_level_for_a_stuck_corpse(void)
 {
     if (raise_the_outcome("this player is a corpse nothing is bringing back")) {
@@ -427,7 +439,10 @@ static void end_the_level_for_a_stuck_corpse(void)
  * choice rather than a wrong one. */
 static bool read_death_position(float out[3])
 {
-    return mp_cells_hero_position(out);
+    /* A body that fell out of the world lies at a place no level has by the time its death is
+     * heard. That is no place to measure a distance from, and the re-entry refuses one that is
+     * no number, so it counts as not known. */
+    return mp_cells_hero_position(out) && !mp_respawn_place_is_lost(out);
 }
 
 void mp_reentry_note_death(const mp_death_note_t *note)
@@ -462,6 +477,7 @@ void mp_reentry_note_death(const mp_death_note_t *note)
     mp_seat_note_life_ended();
 
     re.waiting             = true;
+    re.wish_of_the_watch   = false;
     re.died_at             = re.clock;
     re.died_suppressed     = mp_damage_survives_death();
     re.died_position_known = read_death_position(re.died_position);
@@ -528,6 +544,77 @@ static bool player_is_a_corpse(void)
     return mp_respawn_player_is_a_corpse();
 }
 
+/* The wish made again, out of the state this player is in rather than out of a death.
+ *
+ * A death makes one wish, and a wish can be lost on its way without a word: a gate that stays
+ * shut past its deadline, a re-entry the engine declines in silence, a wait that is given up, a
+ * note of the death that never arrives. Each of those left a corpse in a level that went on
+ * running, and the net under it ended the level for him. But coming back is what a death in a
+ * session means, so what was lost is asked for again. The facts are read as they stand now and
+ * the rule set decides as it does for a death: beside the living, at a point, the end of the
+ * level on a host with nobody standing, the wait for the host on a client.
+ *
+ * The watch's patience begins again with it, so one corpse is wished back once a patience at
+ * the most, and a deathmatch's own wait is served again as for a death. */
+static void wish_again(uint32_t now_ms, uint32_t corpse_ms, uint32_t standing, uint32_t resolved)
+{
+    uint32_t lives = 0u;
+    bool     lives_known = mp_damage_entry_lives_ended(&lives);
+    bool     heard = !mp_reentry_death_is_new(lives_known, lives, re.down_known, re.down_life);
+
+    ++re.wishes_again_now;
+    ++re.wishes_again;
+    log_warning("this player lies dead in a level that is still running and nothing is bringing "
+                "him back, %u frames and %u ms on: %s. His wish is made again, %u of at most %u "
+                "for one corpse; the game is %u and %u other player(s) are standing of %u "
+                "resolved here",
+                (unsigned)re.corpse_frames, (unsigned)corpse_ms,
+                heard ? "the wish his death made is gone, dropped at a gate, given up, refused "
+                        "or declined by the engine in silence, and the lines above say which"
+                      : "no death of this life was heard here, so no wish was made for it",
+                (unsigned)re.wishes_again_now, (unsigned)MP_REENTRY_WISHES_AGAIN_MAX,
+                (unsigned)re.mode, (unsigned)standing, (unsigned)resolved);
+
+    if (!heard) {
+        /* The life is taken as down from here, so a note of its death that still arrives is the
+         * same death and not a second wish. */
+        re.down_known = lives_known;
+        re.down_life  = lives;
+        mp_seat_note_life_ended();
+    }
+    re.waiting           = true;
+    re.wish_of_the_watch = true;
+    re.handed_over       = false;
+    re.died_at           = re.clock;
+    /* The outcome still reads "running" over a dead body, or the watch would not have come here:
+     * nothing else is going to end this level, so the rule set may. */
+    re.died_suppressed     = true;
+    re.died_position_known = read_death_position(re.died_position);
+    re.corpse_frames       = 0u;
+    re.corpse_since_ms     = now_ms;
+}
+
+/* A wish the watch made is for a corpse. When the body stands after all, through a re-entry that
+ * was believed lost and that the engine finished, the wish is taken away again, wherever it
+ * waits: carried out, it would put a living player through a second fade onto another seat. */
+static void a_standing_player_needs_no_wish(void)
+{
+    if (!re.wish_of_the_watch || !mp_respawn_player_lives()) {
+        return;
+    }
+    re.wish_of_the_watch = false;
+    if (re.waiting) {
+        re.waiting = false;
+    } else if (!re.handed_over || !mp_respawn_withdraw()) {
+        return;   /* carried out, or landing: it is this wish that stood him up */
+    }
+    re.handed_over = false;
+    ++re.wishes_not_needed;
+    log_info("this player stands again while the wish the watch made for his corpse was still "
+             "waiting, so the wish is taken back: the engine finished a re-entry that was "
+             "believed lost");
+}
+
 /* The one line that answers "I died and nothing happened".
  *
  * Every counter in this file grows when something works. None of them grows when a player dies
@@ -536,8 +623,8 @@ static bool player_is_a_corpse(void)
  * not open a pause menu for a corpse. Until this line existed the whole failure was silent on
  * both machines.
  *
- * Said once per life, and it names which link is missing rather than that one is: the wish, the
- * session, the anchor, or the death nobody heard. */
+ * Said for every wish that is made again, and it names which link was missing rather than that
+ * one was: the wish that was lost on its way, or the death nobody heard. */
 static void watch_the_corpse(uint32_t now_ms)
 {
     bool     corpse = player_is_a_corpse();
@@ -550,6 +637,7 @@ static void watch_the_corpse(uint32_t now_ms)
         re.corpse_frames = 0u;
         re.spoke_waiting = false;
         re.spoke_stuck   = false;
+        re.wishes_again_now = 0u;
         return;
     }
     if (!re.corpse) {
@@ -589,39 +677,37 @@ static void watch_the_corpse(uint32_t now_ms)
     default:
         return;
     }
+    count_peers(&resolved, &standing);
+    if (mp_reentry_stuck_step(re.wishes_again_now) == MP_REENTRY_STUCK_WISH_AGAIN) {
+        wish_again(now_ms, corpse_ms, standing, resolved);
+        return;
+    }
     if (re.spoke_stuck) {
-        return;   /* named and let out once; the outcome is raised by the net below, not here */
+        return;   /* named and let out once */
     }
     re.spoke_stuck = true;
-    ++re.corpses_stuck;
-    count_peers(&resolved, &standing);
-    log_error("THIS PLAYER IS A CORPSE THAT NOTHING IS BRINGING BACK, %u frames and %u ms on, "
-              "in a level that is still running. The engine will not open a pause menu for a "
-              "corpse, so there is no way out of it at all. Missing link: %s. The game is %u, %u "
-              "other player(s) are standing of %u resolved here, and %u death(s) have been heard "
-              "here",
-              (unsigned)re.corpse_frames, (unsigned)corpse_ms,
-              re.deaths_seen == 0u
-                  ? "NO DEATH WAS EVER REPORTED HERE, so no wish was ever made"
-                  : (anchor_is_alive()
-                         ? "a death was heard and the wish is gone: it was given up or refused"
-                         : "nobody is standing to come back beside, and the level was not ended "
-                           "either"),
+    ++re.corpses_let_out;
+    log_error("THIS PLAYER IS A CORPSE THAT NOTHING BRINGS BACK: his wish was made again %u "
+              "time(s) and each came to nothing, and he lies dead in a level that is still "
+              "running, %u frames and %u ms after the last. The engine opens no pause menu for "
+              "a corpse, so there is no way out of it at all. The game is %u, %u other "
+              "player(s) are standing of %u resolved here, and %u death(s) have been heard here",
+              (unsigned)re.wishes_again_now, (unsigned)re.corpse_frames, (unsigned)corpse_ms,
               (unsigned)re.mode, (unsigned)standing, (unsigned)resolved,
               (unsigned)re.deaths_seen);
 
     /* And the player is let out, because a level with no way out is worse than a level that ends.
      *
-     * This is a net rather than a feature, and it is written to catch a state nobody can name in
-     * advance: whatever went wrong upstream, what the player is looking at is a corpse, a world
-     * that goes on running around it and a menu key that does nothing. Raising the outcome hands
-     * him the continue screen he already knows from dying alone, from which he can leave.
+     * This is the last resort and not the answer; the answer is the wish made again, above. It
+     * is reached only when that was done MP_REENTRY_WISHES_AGAIN_MAX times for one corpse and
+     * not one of them stood him up, which is something broken that nobody could name in
+     * advance. What the player is looking at then is a corpse, a world that goes on running
+     * around it and a menu key that does nothing; raising the outcome hands him the continue
+     * screen he already knows from dying alone, from which he can leave.
      *
-     * Its conditions are what keep it from ever firing in ordinary play: the level's own outcome
-     * cell still has to read "running", so a death the engine handled itself is not touched; no
-     * wish may be held and no re-entry may be on its way, so a slow seat search is not cut short;
-     * and it waits out the patience first. If this fires at all, something above it is broken and
-     * the line before it says what. */
+     * Its conditions are the watch's own: the level's outcome cell still has to read "running",
+     * so a death the engine handled itself is not touched, and no wish may be held and no
+     * re-entry may be on its way, so a slow seat search is not cut short. */
     end_the_level_for_a_stuck_corpse();
 }
 
@@ -673,6 +759,7 @@ void mp_reentry_tick(uint32_t host_substeps, uint32_t now_ms)
     /* Before the wish is acted on, so a corpse that is on its way back this frame is described as
      * one rather than as a corpse nothing is doing anything about. */
     watch_the_corpse(now_ms);
+    a_standing_player_needs_no_wish();
     /* Before the seat search's own tick, which the frame pump runs after this one. */
     ask_the_rule_again();
 
@@ -731,7 +818,8 @@ void mp_reentry_tick(uint32_t host_substeps, uint32_t now_ms)
         ++re.given_up;
         log_warning("this player asked to come back %u substep(s) ago and neither a seat beside "
                     "the living nor a free spawn point has answered since, so the wish is "
-                    "dropped", (unsigned)(host_substeps - re.died_at));
+                    "dropped; the watch over the corpse makes it again if he still lies there",
+                    (unsigned)(host_substeps - re.died_at));
     }
 }
 
@@ -766,10 +854,14 @@ void mp_reentry_report(void)
              "%u it holds", (unsigned)re.no_anchor, (unsigned)re.levels_ended,
              (unsigned)re.level_end_faults, (unsigned)re.no_point,
              (unsigned)mp_spawnpoints_count());
-    log_info("  the corpse watch: this player is %s and %u life/lives stood still long enough to "
-             "be named and let out. A life named here is a level with no pause menu and no way "
-             "out, so any number above nought is the defect the player reported",
-             re.corpse ? "A CORPSE RIGHT NOW" : "not a corpse", (unsigned)re.corpses_stuck);
+    log_info("  the corpse watch: this player is %s; %u time(s) a corpse lay with nothing "
+             "bringing it back and its wish was made again, each of them a wish lost on its way "
+             "that a warning above names, and %u of those wishes were taken back because he "
+             "stood after all; %u corpse(s) the level was ended for after %u such wishes in a "
+             "row came to nothing (must be 0)",
+             re.corpse ? "A CORPSE RIGHT NOW" : "not a corpse", (unsigned)re.wishes_again,
+             (unsigned)re.wishes_not_needed, (unsigned)re.corpses_let_out,
+             (unsigned)MP_REENTRY_WISHES_AGAIN_MAX);
     log_info("  the survival switch: %s, granted %u time(s) and revoked %u; this machine holds "
              "world slot %u (%s), the game is %u and %u other player(s) are standing of %u "
              "resolved here",

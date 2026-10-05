@@ -17,6 +17,7 @@
 #include "mp_level_state_fog.h"
 #include "mp_level_state_internal.h"
 #include "mp_level_state_journal_rule.h"
+#include "mp_level_state_warp.h"
 #include "mp_level_state_report.h"
 
 #include "common/logging.h"
@@ -554,6 +555,7 @@ void mp_level_state_reset(void)
     state.level       = 0u;
     mp_level_state_fog_reset();
     mp_fog_viewers_reset();
+    mp_level_state_warp_reset();
 }
 
 bool mp_level_state_holds_a_note(void)
@@ -570,6 +572,7 @@ void mp_level_state_report(bool host)
     mp_level_state_report_switches(host, state.arms_hulled);
     mp_level_state_fog_report(host);
     mp_level_state_report_counts(host, &state.n, &state.last);
+    mp_level_state_warp_report(host);
     mp_fog_viewers_report(host);
     mp_level_state_drawn_report(host);
     mp_level_state_report_placements(host, state.host_changes, mp_level_state_apply_changes(),

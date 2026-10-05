@@ -50,7 +50,7 @@ release.
 
 The installer's first number is always one higher than the patch's, and the other two are the
 same. The DLLs carry the **patch** number, so a DLL's properties and the first line of
-`engine_fixes.log` say `1.0.0` while the installer that delivered them says `2.0.0`. Before
+`engine_fixes.log` say `1.0.1` while the installer that delivered them says `2.0.1`. Before
 1.0.0, which brought the multiplayer, the patch ran from `v0.2.0` to `v0.4.3` and the installer
 from `i1.0` to `i1.4.3`.
 

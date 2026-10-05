@@ -9,4 +9,7 @@
  * through a level load. Runs on the thread that will run the engine's message loop. */
 void mp_pumps_arm(void);
 
+/* The clock the re-entry's waits are measured on: what it counted and what it left out. */
+void mp_pumps_report(void);
+
 #endif /* MULTIPLAYER_MP_PUMPS_H */

@@ -12,6 +12,7 @@
  */
 #include "unittest.h"
 
+#include "mp_cells.h"
 #include "mp_respawn.h"
 
 #include <math.h>
@@ -229,9 +230,73 @@ static void check_what_a_corpse_is(void)
              "and with no game in the process this player is not one either");
 }
 
+/* What the engine's re-entry does not take along with the body it replaces. */
+static void check_what_a_body_leaves_behind(void)
+{
+    static const float seat[3]  = { 31.09f, 82.31f, 41.00f };
+    static const float lying[3] = { 33.94f, 92.34f, 41.00f };
+    uint8_t            record[0x400];
+    float              place[3];
+    float              at[3];
+    uint32_t           fall;
+
+    ut_section("the camera of a long fall belongs to the body whose fall was decided");
+    ut_check(mp_respawn_fall_holds_the_camera(2u), "fall state 2, the fall decided: it took it");
+    ut_check(!mp_respawn_fall_holds_the_camera(0u) && !mp_respawn_fall_holds_the_camera(3u) &&
+                 !mp_respawn_fall_holds_the_camera(1u),
+             "a fall that only began, a landing playing out and any other value did not");
+    memset(record, 0, sizeof record);
+    ut_check(!mp_respawn_record_fall_holds_the_camera(0u) &&
+                 !mp_respawn_record_fall_holds_the_camera((uintptr_t)record),
+             "no record, and a record out of a spawn's wipe, hold no camera");
+    fall = MP_RESPAWN_FALL_DECIDED;
+    memcpy(record + MP_HERO_BLOCK_FALL_STATE, &fall, sizeof fall);
+    ut_check(mp_respawn_record_fall_holds_the_camera((uintptr_t)record),
+             "the record of a body that died of a long fall still says so");
+
+    ut_section("a place no level has");
+    memcpy(place, lying, sizeof place);
+    ut_check(!mp_respawn_place_is_lost(place), "a body lying on a floor of the level is not lost");
+    place[2] = 3.4e38f;
+    ut_check(mp_respawn_place_is_lost(place),
+             "the height the fall's death adds over no floor at all is");
+    place[2] = (float)INFINITY;
+    ut_check(mp_respawn_place_is_lost(place), "so is the infinity one more substep makes of it");
+    place[2] = (float)NAN;
+    ut_check(mp_respawn_place_is_lost(place), "and no number");
+    place[2] = -MP_RESPAWN_PLACE_LIMIT - 1.0f;
+    ut_check(mp_respawn_place_is_lost(place), "far below counts as far above does");
+    place[2] = MP_RESPAWN_PLACE_LIMIT;
+    ut_check(!mp_respawn_place_is_lost(place), "the limit itself is still a place");
+    ut_check(!mp_respawn_place_is_lost(NULL), "no place read is not a lost one");
+
+    ut_section("only a record that lies nowhere is brought to the seat");
+    memset(record, 0, sizeof record);
+    memcpy(record + MP_HERO_BLOCK_POS, lying, sizeof lying);
+    ut_check(!mp_respawn_record_bring_to((uintptr_t)record, seat) &&
+                 memcmp(record + MP_HERO_BLOCK_POS, lying, sizeof lying) == 0,
+             "a corpse on the floor stays where it lies: the camera fades out over it as before");
+    memcpy(place, lying, sizeof place);
+    place[2] = 3.4e38f;
+    memcpy(record + MP_HERO_BLOCK_POS, place, sizeof place);
+    ut_check(mp_respawn_record_bring_to((uintptr_t)record, seat),
+             "one out of the world is written");
+    memcpy(at, record + MP_HERO_BLOCK_POS, sizeof at);
+    ut_check(at[0] == seat[0] && at[1] == seat[1] && at[2] == seat[2],
+             "and reads the seat afterwards, all three of it");
+    ut_check(!mp_respawn_record_bring_to((uintptr_t)record, seat),
+             "asked again it is no longer lost, and nothing is written twice");
+    memcpy(record + MP_HERO_BLOCK_POS, place, sizeof place);
+    ut_check(!mp_respawn_record_bring_to((uintptr_t)record, place) &&
+                 !mp_respawn_record_bring_to((uintptr_t)record, NULL) &&
+                 !mp_respawn_record_bring_to(0u, seat),
+             "a seat that is itself nowhere, no seat and no record write nothing");
+}
+
 int main(void)
 {
     check_what_a_corpse_is();
+    check_what_a_body_leaves_behind();
     check_the_tick_of_one_wish();
     check_the_time_a_wait_has_lasted();
     check_when_the_fade_is_lost();

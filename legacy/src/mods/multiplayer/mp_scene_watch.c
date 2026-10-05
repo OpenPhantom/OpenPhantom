@@ -453,6 +453,8 @@ static bool on_scene_door(mp_cutscene_door_t door, uintptr_t caller, int32_t arg
  * parked, and their scripts do not run; one that runs all the same, let go or woken here, would
  * respawn this player at the warp's target with the warp's hero, which is the host's to be sent
  * and nobody else's. The engine's respawn is not called at all, so nothing of it is left behind.
+ * A client follows the host's own warp instead, as its own hero, when the level's journal tells
+ * of it.
  * Known by the address the call returns to, the warp opcode's own, and asked of the one level the
  * scene gates hold a client's scripts back by. */
 static bool refuse_a_client_its_warp(uintptr_t caller, int32_t hero)
@@ -464,8 +466,8 @@ static bool refuse_a_client_its_warp(uintptr_t caller, int32_t hero)
     ++watch.client_warps_refused;
     if (watch.client_warps_refused <= CLIENT_WARP_LINES_MAX) {
         log_info("a script of this machine asked to warp this player as hero %d and was "
-                 "refused: a warp is the host's, and a client stays where it is and what it is",
-                 (int)hero);
+                 "refused: a warp is the host's, and a client keeps its hero and follows the "
+                 "host's own warp when it hears of it", (int)hero);
     }
     return true;
 }

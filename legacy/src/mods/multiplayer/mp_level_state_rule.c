@@ -106,6 +106,7 @@ static bool journal_entry_is_sound(const mp_level_journal_entry_t *entry)
     case MP_LEVEL_JOURNAL_FOG:
         return mp_level_state_fog_command((int32_t)entry->a);
     case MP_LEVEL_JOURNAL_CRAWL:
+    case MP_LEVEL_JOURNAL_WARP:   /* every sixteen bits are a position, and any byte a hero */
         return true;
     case MP_LEVEL_JOURNAL_ESCORT:
         return entry->a <= MP_LEVEL_STATE_ESCORT_HEALTH;

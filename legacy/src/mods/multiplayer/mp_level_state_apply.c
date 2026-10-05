@@ -3,6 +3,7 @@
 
 #include "mp_level_state_bind.h"
 #include "mp_level_state_fog.h"
+#include "mp_level_state_warp.h"
 
 #include "common/logging.h"
 
@@ -182,6 +183,11 @@ static void play_entry(mp_level_state_apply_t *a, const mp_level_journal_entry_t
         break;
     case MP_LEVEL_JOURNAL_ESCORT:
         played = match_escort(a, entry->a != 0u, entry->a);
+        break;
+    case MP_LEVEL_JOURNAL_WARP:
+        /* Kept for whoever follows the host; nothing of this level changes here. */
+        mp_level_state_warp_play(entry);
+        played = true;
         break;
     default:
         return;

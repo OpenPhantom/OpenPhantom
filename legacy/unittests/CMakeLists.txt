@@ -1118,6 +1118,11 @@ add_unit_test(mp_bank_window multiplayer
     multiplayer/mp_bank_spawn.c
 )
 
+# The mouse buttons the engine's flush leaves down as a level begins: the four cells released on
+# a table of the test's own, the keys and the joystick's buttons beside them left alone, which
+# of the released buttons nobody was pressing, and the refusal with no game in the process.
+add_unit_test(mp_mouse_latch multiplayer multiplayer/mp_mouse_latch.c)
+
 # The input split's decision core: which action reads which command field, the bound the digital
 # axes honour, and the tap-versus-hold contract whose accumulator the caller owns and whose return
 # fires on exactly the release call. The bank comes along because the dispatch asks it which class
@@ -1239,6 +1244,7 @@ set(ENEMY_FAMILY
     multiplayer/mp_level_state_fog.c
     multiplayer/mp_level_state_fog_rule.c
     multiplayer/mp_level_state_journal_rule.c
+    multiplayer/mp_level_state_warp.c
     multiplayer/mp_level_state_drawn.c
     multiplayer/mp_fog_viewers.c
     multiplayer/mp_fog_viewers_rule.c
@@ -1334,6 +1340,10 @@ set(BRIDGE_FAMILY
     multiplayer/mp_player_help.c
     multiplayer/mp_repair_lock.c
     multiplayer/mp_teleport_host.c
+    # A warp of the host's followed by a client, which the reader of the two buttons presses the
+    # teleport for.
+    multiplayer/mp_warp_follow_rule.c
+    multiplayer/mp_warp_follow.c
     multiplayer/mp_chat_input.c
     multiplayer/mp_chat_key_rule.c
     multiplayer/mp_signatures_chat.c
@@ -2277,6 +2287,15 @@ add_unit_test(mp_reentry multiplayer
     multiplayer/mp_content.c
 )
 
+# The watch over a corpse through the real rule set, over a re-entry the test plays: a wish that
+# was lost on its way is made again, a death nobody heard is wished for all the same, the level
+# is ended for a corpse by the rule set or as the last resort only, and the patience follows the
+# clock it is handed.
+add_unit_test(mp_reentry_again multiplayer
+    multiplayer/mp_reentry.c
+    multiplayer/mp_seat_rule.c
+)
+
 # The rule set, the re-entry, the seat search, the spawn points and the arrival together, against a
 # small world the test plays: the three probes, the cells, the engine's own re-entry, the wire and
 # the placement are fields and functions of the test file, so none of the engine side is linked.
@@ -2877,6 +2896,21 @@ add_unit_test(mp_level_state_journal_rule multiplayer
     multiplayer/mp_level_state_fog_rule.c
     multiplayer/mp_level_state_rule.c
     multiplayer/mp_director_rule.c
+    multiplayer/mp_wire.c
+)
+
+# A warp of the host's from his word to what a client hears: the entry's hero and target, a
+# target the quantisation does not carry, and the way through the real journal and the real
+# note's codec, with a first note, a repeat, a jump past the window and a level's end. The
+# host's journal is the test's own, behind the one call the level's state gives the module.
+add_unit_test(mp_level_state_warp multiplayer
+    multiplayer/mp_level_state_warp.c
+    multiplayer/mp_level_state_journal_rule.c
+    multiplayer/mp_level_state_fog_rule.c
+    multiplayer/mp_level_state_rule.c
+    multiplayer/mp_director_rule.c
+    multiplayer/mp_enemy_wire.c
+    multiplayer/mp_fieldset.c
     multiplayer/mp_wire.c
 )
 
@@ -3494,11 +3528,19 @@ add_unit_test(mp_player_help_repair multiplayer
     multiplayer/mp_scene_free_rule.c
     multiplayer/mp_armed.c
 )
+# When a client follows a warp of the host's: the wait for the host to stand at the target while
+# the door still says the player is beside him, the refusals that pass and the ones that end the
+# wait, the bound of twenty seconds, and which end of a teleport is tried again.
+add_unit_test(mp_warp_follow_rule multiplayer
+    multiplayer/mp_warp_follow_rule.c
+    multiplayer/mp_player_help_rule.c
+)
 # The reader of the two buttons as it ships, against the two records in one process: the test
 # files an ask as the overlay does and reads the answer as the panel does, and the repair and the
 # teleport are stand-ins that answer what they are told to. A press of before a session never
 # carried out, nobody told to listen before a frame has run, the newest press answered, and an
-# open answer ended on the way out.
+# open answer ended on the way out. The follow of a warp is a stand-in as well: its teleport is
+# pressed through the same door, answers no press and counts as none.
 add_unit_test(mp_player_help multiplayer
     multiplayer/mp_player_help.c
     multiplayer/mp_player_help_rule.c
@@ -3906,3 +3948,8 @@ add_unit_test(mp_crate_play multiplayer
 # seen to go backwards, and a real ten millisecond wait measured as roughly ten milliseconds,
 # which the tick count's sixteen millisecond steps could not promise.
 add_unit_test(mp_wallclock multiplayer multiplayer/mp_wallclock.c)
+
+# The clock the re-entry's waits are measured on: the wall clock, left standing while a level runs
+# and this machine does not simulate it. Frames without a substep are the ordinary case, the front
+# end runs on, and a hold of any length neither counts nor wraps.
+add_unit_test(mp_live_clock multiplayer multiplayer/mp_live_clock.c)

@@ -35,6 +35,8 @@ typedef struct mp_scene_host_shared {
     float     warp_at[3];
     float     warp_heading;
     int32_t   warp_hero;
+    uint16_t  warp_told;      /* the number the level's journal gave the warp, 0 when it took
+                               * none and no far player hears of it */
 
     /* Where the scene is played and the host stands. */
     bool      anchor_known;   /* the place of the scene is known */

@@ -545,6 +545,7 @@ add_engine_fix(multiplayer
     dll_main.c
     multiplayer.c
     mp_pumps.c
+    mp_live_clock.c
     mp_bootstrap.c
     mp_module.c
     mp_task.c
@@ -575,6 +576,7 @@ add_engine_fix(multiplayer
     mp_damage.c
     mp_damage_entry.c
     mp_input.c
+    mp_mouse_latch.c
     mp_lifecycle.c
     mp_hero_carry.c
     mp_hero_carry_rule.c
@@ -640,6 +642,8 @@ add_engine_fix(multiplayer
     mp_player_help.c
     mp_repair_lock.c
     mp_teleport_host.c
+    mp_warp_follow_rule.c
+    mp_warp_follow.c
     mp_follow.c
     mp_world_values.c
     mp_session_over.c
@@ -885,6 +889,7 @@ add_engine_fix(multiplayer
     mp_level_state_fog.c
     mp_level_state_fog_rule.c
     mp_level_state_journal_rule.c
+    mp_level_state_warp.c
     mp_level_state_drawn.c
     mp_fog_viewers.c
     mp_fog_viewers_rule.c

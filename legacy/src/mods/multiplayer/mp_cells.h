@@ -189,6 +189,12 @@ typedef enum mp_cell {
 #define MP_HERO_BLOCK_HERO_INDEX   0x6Cu   /* which hero the player is, and its status index */
 #define MP_HERO_BLOCK_POS        0x118u
 #define MP_HERO_BLOCK_HEADING    0x2A0u    /* one float */
+/* The fall's own state: 0 as a fall begins, 2 once it is decided, 3 while a landing plays out.
+ * The fall update at 0x0044F162 writes the 2 when more than eight units of air are covered and
+ * the body is not over water, in the same block in which it rewrites camera region 13, forces
+ * the camera onto it and pins the camera's anchor. Only the next fall's entry and a spawn's wipe
+ * of the block write it again, so a body that died of that fall still carries the 2. */
+#define MP_HERO_BLOCK_FALL_STATE 0x358u
 /* Written to 1 by the death entry and never cleared in place: a body that comes back is a NEW one
  * out of player_spawnHero, so this reads 0 again only after a despawn and a spawn. It is the
  * engine's own answer to "is this player a corpse", and it is what `sys_pause` tests before it

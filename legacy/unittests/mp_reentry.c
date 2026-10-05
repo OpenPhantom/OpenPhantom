@@ -268,6 +268,23 @@ static void check_what_the_corpse_watch_answers(void)
              "and a level the engine has ended itself is already showing a screen to leave by");
 }
 
+/* What is done about a corpse nothing is bringing back: his wish is made again, and the level is
+ * ended for him only when that came to nothing so often that something is broken. Until this rule
+ * the first such look ended the level, four seconds after a wish was lost. */
+static void check_what_is_done_about_a_stuck_corpse(void)
+{
+    ut_section("a corpse nothing is bringing back is wished back, not let out of the level");
+    ut_check(mp_reentry_stuck_step(0u) == MP_REENTRY_STUCK_WISH_AGAIN,
+             "the first time his wish is made again");
+    ut_check(mp_reentry_stuck_step(MP_REENTRY_WISHES_AGAIN_MAX - 1u) ==
+                 MP_REENTRY_STUCK_WISH_AGAIN,
+             "and every time up to the last one that is allowed");
+    ut_check(mp_reentry_stuck_step(MP_REENTRY_WISHES_AGAIN_MAX) == MP_REENTRY_STUCK_LET_OUT,
+             "past that the level is ended for him, because a corpse has no menu to leave by");
+    ut_check(MP_REENTRY_WISHES_AGAIN_MAX >= 4u,
+             "and that is never the first answer, nor the second");
+}
+
 /* The field run: thirty five notes of one death before the first fade was over, then two of the
  * next body's, then four more. The notes are counted as the rule set counts them; before the life
  * count every one of them was a wish, and each wish replaced the one before. */
@@ -312,6 +329,7 @@ int main(void)
     check_it_refuses_with_no_game();
     check_who_to_come_back_beside();
     check_what_the_corpse_watch_answers();
+    check_what_is_done_about_a_stuck_corpse();
     check_one_wish_per_life();
 
     return ut_summary("mp_reentry");

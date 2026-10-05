@@ -164,6 +164,9 @@ typedef enum mp_level_journal_kind {
     MP_LEVEL_JOURNAL_FOG,       /* a: the command; b: its frames; c: its float's bits */
     MP_LEVEL_JOURNAL_CRAWL,     /* b: the text the line crawls */
     MP_LEVEL_JOURNAL_ESCORT,    /* a: the health */
+    MP_LEVEL_JOURNAL_WARP,      /* a script sent the host somewhere else. a: the hero he became;
+                                 * b: where, x; c: y in the low word and z in the high one, each
+                                 * in the enemy record's quantisation */
     MP_LEVEL_JOURNAL_KINDS
 } mp_level_journal_kind_t;
 

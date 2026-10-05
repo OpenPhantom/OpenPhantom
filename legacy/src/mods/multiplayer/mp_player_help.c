@@ -21,6 +21,7 @@
 #include "mp_scene_free.h"
 #include "mp_teleport_host.h"
 #include "mp_wallclock.h"
+#include "mp_warp_follow.h"
 
 #include "common/logging.h"
 #include "common/player_help_note.h"
@@ -63,6 +64,8 @@ typedef struct help_state {
     uint32_t             file_refused_ms;
     bool                 said_refusal;
     uint32_t             teleport_serial;   /* the press the teleport under way answers */
+    bool                 teleport_follows;  /* or it was pressed for a warp of the host's, and
+                                             * answers no press */
     help_counts_t        n;
 } help_state_t;
 
@@ -163,7 +166,13 @@ static bool leave_the_teleport(const char *why, uint8_t *reason)
     if (!mp_teleport_host_leave(why, &ended.reason)) {
         return false;
     }
-    count_a_teleport(ended);
+    if (help.teleport_follows) {
+        /* Pressed for a warp of the host's: it is no press's teleport and counts as none. */
+        help.teleport_follows = false;
+        mp_warp_follow_left(why);
+    } else {
+        count_a_teleport(ended);
+    }
     if (reason != NULL) {
         *reason = ended.reason;
     }
@@ -176,16 +185,34 @@ static void take_a_teleport(uint32_t serial, bool overlay_holds, uint32_t subste
 
     ++help.n.teleports;
     if (verdict.outcome == PLAYER_HELP_OUTCOME_OPEN) {
-        help.teleport_serial = serial;
+        help.teleport_serial  = serial;
+        help.teleport_follows = false;
     }
     count_a_teleport(verdict);
     answer(serial, PLAYER_HELP_KIND_TELEPORT, verdict, 0u);
 }
 
-/* The end of the teleport under way, answered to the press that began it, unless a newer press
- * has been answered since: a second press of the same button, refused as busy. */
-static void end_the_teleport(mp_player_help_verdict_t ended)
+/* The teleport pressed for a warp of the host's, on the frame the follow says it is due. The
+ * overlay asked for nothing, so nothing of the answer's record is touched and no press is
+ * counted; what the door said goes to the follow. */
+static void take_a_follow(uint32_t substeps)
 {
+    const mp_player_help_verdict_t verdict = mp_teleport_host_ask(false, substeps);
+
+    help.teleport_follows = verdict.outcome == PLAYER_HELP_OUTCOME_OPEN;
+    mp_warp_follow_pressed(verdict, substeps);
+}
+
+/* The end of the teleport under way, answered to the press that began it, unless a newer press
+ * has been answered since: a second press of the same button, refused as busy. One pressed for a
+ * warp of the host's ends for the follow instead. */
+static void end_the_teleport(mp_player_help_verdict_t ended, uint32_t substeps)
+{
+    if (help.teleport_follows) {
+        help.teleport_follows = false;
+        mp_warp_follow_ended(ended, substeps);
+        return;
+    }
     count_a_teleport(ended);
     if (help.answer.kind == (uint8_t)PLAYER_HELP_KIND_TELEPORT &&
         help.answer.serial == help.teleport_serial) {
@@ -273,9 +300,14 @@ void mp_player_help_frame(uint32_t substeps)
             take_a_teleport(ask.serial, overlay_holds, substeps);
         }
     }
+    /* After a press of the player's, which goes first: a warp of the host's that this player
+     * follows finds the door busy then, and waits. */
+    if (mp_warp_follow_due(substeps)) {
+        take_a_follow(substeps);
+    }
     /* After the press, so a teleport taken on this frame has its first look on this frame. */
     if (mp_teleport_host_frame(substeps, &ended)) {
-        end_the_teleport(ended);
+        end_the_teleport(ended, substeps);
     }
     mp_repair_lock_frame(substeps);
     if (help.dirty && (!help.file_waits ||
@@ -295,6 +327,7 @@ void mp_player_help_withdraw(void)
     help.armed = false;
     ++help.n.withdrawals;
     left = leave_the_teleport("the session ended", &reason);
+    mp_warp_follow_left("the session ended");   /* a warp still waited for, with no teleport yet */
     mp_repair_lock_session_ended();
     /* An answer left open would grey its button into the next session, whether or not the
      * teleport it answered was still found under way. */
@@ -360,4 +393,5 @@ void mp_player_help_report(void)
              (unsigned)n->open_at_exit, help.armed ? "; it listens now" : "");
     mp_repair_lock_report();
     mp_teleport_host_report();
+    mp_warp_follow_report();
 }

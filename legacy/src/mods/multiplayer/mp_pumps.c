@@ -24,6 +24,7 @@
 #include "mp_follow.h"
 #include "mp_host_settings.h"
 #include "mp_hud.h"
+#include "mp_live_clock.h"
 #include "mp_lobby.h"
 #include "mp_movie_gate.h"
 #include "mp_pause.h"
@@ -39,6 +40,7 @@
 #include "mp_session_now.h"
 #include "mp_session_over.h"
 #include "mp_start.h"
+#include "mp_task.h"
 #include "mp_wallclock.h"
 
 #include "common/frame_hook.h"
@@ -71,6 +73,47 @@ static void file_the_movie_gate(void)
 
     mp_movie_gate_pump(runs, client, generation);
     mp_host_settings_pump();
+}
+
+/* The clock the re-entry's waits are measured on, and the one look at it a drawn frame takes: the
+ * wall clock, left standing while a level runs and the engine cannot answer, because the player
+ * is parked or because no substep runs. The count that says the second is the substep task's,
+ * which is entered once a substep and never in a held world. Both ticks of the re-entry are
+ * handed the same reading, so a wish, its landing and the watch over the corpse wait on one
+ * clock.
+ *
+ * What keeps the engine from answering, as the image has it. The player's task runs no phase and
+ * no fade while the module state reads nought, the state the engine's own predicate at 0x00450FD8
+ * answers "suspended" for. The developer menu writes that nought for as long as its panel is open
+ * and puts the state it found back as the panel closes, so a re-entry it was opened over stands
+ * where it was, in its state 4 or 3, for as long as the panel does. And the frame function tests
+ * the engine's pause flag at 0x0043EA1C and jumps past its call of the substep loop at 0x0043EA27
+ * while the flag is set; the frame's end below that gate still runs, and this pump with it.
+ * Inside a session the developer menu leaves that flag alone, the world not being one machine's
+ * to stop, so there the parked player is all that tells: a field run had the panel open over a
+ * re-entry with every substep running. */
+#define HOLD_LINES 8u
+
+static mp_live_clock_t reentry_clock;
+static uint32_t        holds_said;
+
+static uint32_t look_at_the_reentry_clock(void)
+{
+    bool     held_before = reentry_clock.holding;
+    bool     parked = mp_respawn_player_is_parked();
+    uint32_t live_ms = mp_live_clock_look(&reentry_clock, mp_task_ticks(),
+                                          mp_seat_level_running(), parked, mp_wallclock_ms());
+
+    if (reentry_clock.holding && !held_before && mp_respawn_pending() &&
+        holds_said < HOLD_LINES) {
+        ++holds_said;
+        log_info("a re-entry is under way and the engine cannot carry it on: %s. The deadlines "
+                 "of the re-entry stand until it can",
+                 parked ? "the player module is parked, as a menu, a scene or the developer "
+                          "menu parks it"
+                        : "no substep has run for a quarter of a second");
+    }
+    return live_ms;
 }
 
 /* What the re-entry rules have to know and cannot read for themselves: which world slot this
@@ -110,7 +153,7 @@ static void feed_reentry(void)
             mp_seat_note_no_body(bank - 1u);
         }
     }
-    mp_reentry_tick(mp_bridge_drain_substeps(), mp_wallclock_ms());
+    mp_reentry_tick(mp_bridge_drain_substeps(), look_at_the_reentry_clock());
 }
 
 static void bridge_frame_pump(void)
@@ -156,7 +199,7 @@ static void bridge_frame_pump(void)
     file_the_movie_gate();
     /* And the wish itself, which is retried, carried out or dropped here rather than at the moment
      * it was made: both engine gates it waits for are shut for the whole of a level load. */
-    mp_respawn_tick(mp_bridge_drain_substeps(), mp_wallclock_ms());
+    mp_respawn_tick(mp_bridge_drain_substeps(), reentry_clock.ms);   /* this frame's look */
     /* The engine's re-entry waits on a fade that a closing menu takes away. Asked after the
      * re-entry's own tick, which may just have called the engine's re-entry, and on every frame,
      * because it is the player module's state that says so and not who asked for the re-entry. */
@@ -231,4 +274,14 @@ void mp_pumps_arm(void)
     mp_bridge_note_pump_timer((uintptr_t)timer);
     log_info("the session is pumped between substeps from the frame hook and from a %u ms "
              "thread timer", (unsigned)BRIDGE_PUMP_TIMER_MS);
+}
+
+void mp_pumps_report(void)
+{
+    log_info("  the clock of the re-entry's waits: %u ms counted, and %u ms left out in %u "
+             "stretch(es) in which a level ran and the engine could not answer, the player "
+             "parked or no substep running; it %s",
+             (unsigned)reentry_clock.ms, (unsigned)reentry_clock.held_ms,
+             (unsigned)reentry_clock.holds,
+             reentry_clock.holding ? "STANDS right now" : "runs");
 }

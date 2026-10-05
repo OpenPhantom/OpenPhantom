@@ -55,8 +55,8 @@
 ; Nothing here compares versions. An existing installation is found by AppId and the player is asked
 ; what to do with it, so no number decides whether an install is allowed.
 ;
-; Tagged i2.0.0, keeping the prefix the installer has always used. The patch is tagged v1.0.0.
-#define AppVer "2.0.0"
+; Tagged with an i in front, the prefix the installer has always used. The patch's tag has a v.
+#define AppVer "2.0.1"
 
 ; The extractor that turns the disc's GAMEDATA\GOBS\BIG.Z into big.lab. Built from src\is3_extract\.
 #define ExtractorExe "src\is3_extract\build\Release\is3_extract.exe"

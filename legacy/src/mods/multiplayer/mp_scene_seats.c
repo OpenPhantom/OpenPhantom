@@ -10,6 +10,10 @@
  * the host. While that player is in the air or in the water it is read again every substep, for a
  * second, and the scene's hold waits. A host who stands at the place found is not moved. Nobody
  * else is given a place: a far player goes on playing where he is.
+ *
+ * A warp is the one move of the host's that takes the far players along. Nothing is searched for
+ * it here: the level's journal has told them where the engine sends him, and each of them comes
+ * beside him on its own machine once he stands there.
  */
 #include "mp_scene_host_internal.h"
 
@@ -310,16 +314,26 @@ void mp_scene_seats_forget(void)
     memset(&ss, 0, sizeof ss);
 }
 
-/* A warp: the engine sends the host to its target, and no far player follows it. */
+/* A warp: the engine sends the host to its target, and the far players follow him there, told by
+ * the level's journal. One the journal took no entry for is said as a warning, because then the
+ * host stands alone at the target. */
 static void say_the_warp(void)
 {
     mp_scene_host_shared_t *sh = mp_scene_host_shared();
 
-    if (mp_scene_host_line_allowed()) {
-        log_info("a script warped this host to %.2f %.2f %.2f as hero %d; no far player is "
-                 "moved for it", (double)sh->anchor[0], (double)sh->anchor[1],
-                 (double)sh->anchor[2], (int)sh->warp_hero);
+    if (!mp_scene_host_line_allowed()) {
+        return;
     }
+    if (sh->warp_told != 0u) {
+        log_info("a script warped this host to %.2f %.2f %.2f as hero %d; the far players are "
+                 "told as number %u of the level's journal and follow him there",
+                 (double)sh->anchor[0], (double)sh->anchor[1], (double)sh->anchor[2],
+                 (int)sh->warp_hero, (unsigned)sh->warp_told);
+        return;
+    }
+    log_warning("a script warped this host to %.2f %.2f %.2f as hero %d and the level's journal "
+                "took no entry for it, so no far player follows him", (double)sh->anchor[0],
+                (double)sh->anchor[1], (double)sh->anchor[2], (int)sh->warp_hero);
 }
 
 void mp_scene_seats_start(void)

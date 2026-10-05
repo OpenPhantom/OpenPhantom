@@ -60,6 +60,11 @@ static void check_the_window(void)
                   journal.entry[0].sequence == 5u && journal.entry[15].sequence == 20u,
               "twenty pushed, sixteen kept, 5 to 20 (%u..%u)",
               (unsigned)journal.entry[0].sequence, (unsigned)journal.entry[15].sequence);
+    ut_check(mp_level_journal_push(&journal, (uint8_t)MP_LEVEL_JOURNAL_WARP, 3u, 0xFFFFu,
+                                   0xFFFFFFFFu) == 21u &&
+                 journal.entry[15].kind == (uint8_t)MP_LEVEL_JOURNAL_WARP &&
+                 journal.entry[15].b == 0xFFFFu && journal.entry[15].c == 0xFFFFFFFFu,
+             "a warp of the host's is an entry like the others, with every bit of its place");
 }
 
 static void check_the_plan(void)
@@ -116,6 +121,13 @@ static void check_the_plan(void)
                  !mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_LIGHT) &&
                  !mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_FOG),
              "of which only the line is played; the lights and the fog come from the state");
+    ut_check(mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_WARP) &&
+                 !mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_EMITTER) &&
+                 !mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_ESCORT) &&
+                 !mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_NONE) &&
+                 !mp_level_journal_is_moment((uint8_t)MP_LEVEL_JOURNAL_KINDS),
+             "a warp of the host's is a moment too, and no other kind is: where a script sent "
+             "him is in no part of the state");
     note.journal_count = 0u;
     plan = mp_level_journal_plan(&note, true, 4u);
     ut_check(plan.jump && plan.lost == 26u && plan.count == 0u,

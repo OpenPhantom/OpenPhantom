@@ -12,10 +12,12 @@
  *
  * When a client finds the numbers jumped past the window, what it missed is gone. It takes the
  * level from the note's state instead and counts the jump; the text lines inside the window that
- * it has not seen are still shown, because a line is a moment and no state carries it. A client's
- * first note of a level and generation shows no line at all: a late joiner is not handed the text
- * the others read a minute ago (Quake 3's server commands work the same way, the gamestate for the
- * newcomer and the commands only from there on).
+ * it has not seen are still shown, because a line is a moment and no state carries it. A warp of
+ * the host's is a moment in the same way: no part of the level's state says where a script sent
+ * him, so one still in the window is heard after a jump too. A client's first note of a level and
+ * generation shows no line and hears no warp: a late joiner is not handed the text the others
+ * read a minute ago, and it arrives beside the host as he stands (Quake 3's server commands work
+ * the same way, the gamestate for the newcomer and the commands only from there on).
  *
  * The numbers run 1..65535 and never 0, which means none, and wrap; "after" is the nearer way
  * round the circle.
@@ -66,7 +68,8 @@ typedef struct mp_level_journal_plan {
 mp_level_journal_plan_t mp_level_journal_plan(const mp_level_state_note_t *note, bool known,
                                               uint16_t last);
 
-/* The kinds that are moments rather than a change of state: only these are played after a jump. */
+/* The kinds that are moments rather than a change of state, a line of text and a warp of the
+ * host's: only these are played after a jump. */
 bool mp_level_journal_is_moment(uint8_t kind);
 
 #endif /* MULTIPLAYER_MP_LEVEL_STATE_JOURNAL_RULE_H */

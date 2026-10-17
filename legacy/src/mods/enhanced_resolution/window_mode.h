@@ -205,6 +205,12 @@ bool window_mode_fit_frame(const window_mode_rect_t *monitor,
                            int32_t frame_width, int32_t frame_height,
                            window_mode_rect_t *client);
 
+/* Replaces the centring with WindowedLeft/WindowedTop: the client's corner `left`,`top` pixels in
+ * from the monitor's, pulled back until the window, frame included, is all on the monitor. False,
+ * leaving the rectangle as it arrived, when either is negative, which is "keep it centred". */
+bool window_mode_place(const window_mode_rect_t *monitor, int32_t left, int32_t top,
+                       int32_t frame_width, int32_t frame_height, window_mode_rect_t *client);
+
 /* The style word a mode wants, or 0 for WINDOW_MODE_AUTHENTIC, which is the signal to leave
  * GWL_STYLE exactly as the engine set it. */
 uint32_t window_mode_style(window_mode_kind_t mode);

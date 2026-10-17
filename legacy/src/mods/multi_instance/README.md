@@ -41,8 +41,8 @@ reading its own pad. The log lists every id that answers at startup, with the pa
   reached the title screen.
 - Both import table entries replaced, on both copies. Not yet played with two pads.
 
-## What it does not cover
+## The rest of the pad
 
-`controller_input`'s right stick look, Start and trigger roll are synthesised with `SendInput`,
-which only reaches the window in front; a copy behind another one moves, attacks and jumps from its
-pad but does not look with the right stick, pause or roll from it.
+`controller_input`'s right stick look, Start and trigger roll go through `SendInput`, which only
+reaches the window in front. `[controller_input] BackgroundInput=1` answers them from inside the
+game for a copy behind another one; see that module's README.

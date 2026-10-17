@@ -68,6 +68,8 @@ foreach ($player in @(@{ Dir = $Player1; Pad = 0; Left = 0 }, @{ Dir = $Player2;
     Set-IniKey $ini 'multiplayer' 'AllowMods' 'multi_instance'
     # The pad the game's own WinMM joystick code reads; the log lists which ids answer.
     Set-IniKey $ini 'multi_instance' 'Joystick' "$($player.Pad)"
+    # Right stick, Start and triggers for whichever window is not in front.
+    Set-IniKey $ini 'controller_input' 'BackgroundInput' '1'
     $obi = "$($player.Dir)\obi.ini"
     Set-IniKey $obi 'options' 'screen_width' "$width"
     Set-IniKey $obi 'options' 'screen_height' "$height"

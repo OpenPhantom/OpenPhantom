@@ -534,6 +534,7 @@ add_engine_fix(dev_overlay
 add_engine_fix(controller_input
     dll_main.c
     controller_input.c
+    background_input.c
     look_counts.c
 )
 target_link_libraries(controller_input PRIVATE xinput)

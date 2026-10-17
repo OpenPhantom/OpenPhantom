@@ -45,6 +45,32 @@ itself, not in how it gets loaded.
 | `Deadzone` | `0.24` | Radial deadzone on the right stick, 0 to just under 1. |
 | `LookSensitivity` | `4000.0` | Synthesised mouse counts per second at full stick deflection, 1 to 100000. |
 | `TriggerThreshold` | `30` | How far a trigger must travel (0-255) before roll engages. |
+| `BackgroundInput` | `0` | Keep look, pause and roll working while the window is behind another one. See below. |
+
+### A window that is not in front
+
+Everything this DLL sends goes through `SendInput`, which reaches only the window in front. With
+two copies of the game side by side on one screen (`multi_instance.dll`), the copy behind the other
+would lose its right stick, Start and triggers. `BackgroundInput=1` answers that copy from inside
+its own process instead, while the window in front keeps the `SendInput` path unchanged
+(`background_input.c`):
+
+* **Look.** The stick's counts, from the same arithmetic as the `SendInput` path, are added to
+  `control_readAxisRelative` (`0x004652C3`) for action 0, the mouse turn the steer reads once per
+  substep. The pattern is `multiplayer.dll`'s own; this DLL loads first, so its detour sits behind
+  that one's and only answers the reads it passes through for this player.
+* **Roll.** `stdControl_pollKeyboard` (`0x0048DCEF`) folds DirectInput's keys into three tables
+  indexed by scan code: held (`0x861068`), hold time (`0x860BC8`) and presses (`0x861510`). Behind
+  another window the keyboard is unacquired and the tables never move. After the poll returns,
+  Left Alt (`0x38`) and Left or Right (`0xCB`, `0xCD`) are written into them with the poll's own
+  `GetDeviceState` edges, which is what the `SendInput` Alt and arrow taps produced in front. All
+  four addresses are read out of operands.
+* **Pause.** Escape is posted to the game's own window as `WM_KEYDOWN` then `WM_KEYUP`, the
+  message the pause hotkey handler takes. A playing movie is not skipped this way, because the
+  movie player polls `GetAsyncKeyState`.
+
+Not yet played: the patterns resolve once each on the retail image and the DLL builds with no
+warnings, but no session with two pads has been run.
 
 ### The vertical axis is off
 

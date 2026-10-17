@@ -20,6 +20,7 @@
  */
 #include "controller_input.h"
 
+#include "background_input.h"
 #include "look_counts.h"
 
 #include "common/host_image.h"
@@ -122,6 +123,7 @@ typedef struct controller_input_config {
     float deadzone;
     float look_sensitivity;
     int   trigger_threshold;
+    bool  background_input;
 } controller_input_config_t;
 
 typedef struct controller_input_state {
@@ -159,6 +161,11 @@ typedef struct controller_input_state {
     /* The fraction of a mouse count owed from earlier polls. See look_counts.h; it is a
      * record rather than two doubles here because the arithmetic that owns it lives there. */
     look_carry_t look_carry;
+
+    /* BackgroundInput=1 and at least one of its hooks stood; in_background is whether the last
+     * poll found the window behind another, so the hand-over happens once per change. */
+    bool background_armed;
+    bool in_background;
 } controller_input_state_t;
 
 static controller_input_state_t ci_state;
@@ -389,6 +396,9 @@ static void poll_once(void)
            Without it a trigger held at the moment the pad drops out leaves a synthetic Alt down
            in the game, and in whatever gets focus after it, until the pad comes back. */
         release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
+        if (ci_state.background_armed) {
+            background_input_release(&state.Gamepad);
+        }
         ci_state.pad_connected = false;
         return;
     }
@@ -403,8 +413,32 @@ static void poll_once(void)
     /* Nothing is injected unless this game is the window the player is actually looking at. The
        poll itself keeps running, so the pad stays tracked and a return to the game is instant. */
     if (!is_game_foreground()) {
+        /* Behind another window the pad answers from inside the game instead, see
+           background_input.h; the SendInput state is released once, on the way in, so the
+           background path's own edges are not reset on every poll. */
+        if (ci_state.background_armed) {
+            background_settings_t settings = {
+                ci_state.config.look_enabled, ci_state.config.pause_enabled,
+                ci_state.config.roll_enabled, ci_state.config.deadzone,
+                ci_state.config.look_sensitivity, ci_state.config.trigger_threshold,
+                ESCAPE_HOLD_MS, ROLL_TAP_DOWN_MS, ROLL_TAP_PERIOD_MS
+            };
+
+            if (!ci_state.in_background) {
+                release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
+                background_input_release(&state.Gamepad);
+                ci_state.in_background = true;
+            }
+            background_input_poll(&state.Gamepad, dt, &settings);
+            return;
+        }
         release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
         return;
+    }
+    if (ci_state.in_background) {
+        background_input_release(&state.Gamepad);
+        release_everything_held(&state.Gamepad, ci_state.config.trigger_threshold);
+        ci_state.in_background = false;
     }
 
     if (ci_state.config.look_enabled) {
@@ -454,6 +488,7 @@ static void load_config(controller_input_config_t *config)
                                               DEFAULT_LOOK_SENSITIVITY);
     config->trigger_threshold = ini_read_int (CONTROLLER_SECTION, "TriggerThreshold",
                                               DEFAULT_TRIGGER_THRESHOLD);
+    config->background_input = ini_read_bool (CONTROLLER_SECTION, "BackgroundInput", false);
 
     if (config->controller_index < 0 || config->controller_index > 3) {
         log_warning("ControllerIndex=%d is out of range (0 to 3), using 0",
@@ -531,6 +566,10 @@ void controller_input_install(void)
         return;
     }
 
+    if (ci_state.config.background_input) {
+        ci_state.background_armed = background_input_install();
+    }
+
     /* The thread runs for the life of the process and nothing stops it: feature DLLs are never
      * unloaded, and the loop owns nothing that has to be released before the process ends. */
     ci_state.thread = CreateThread(NULL, 0, poll_thread_proc, NULL, 0, &thread_id);
@@ -542,11 +581,14 @@ void controller_input_install(void)
     }
 
     log_info("armed on its own thread (id %lu): controller %d, look %s (sensitivity %.0f, "
-             "deadzone %.2f, vertical %s), pause %s, roll %s (trigger threshold %d)",
+             "deadzone %.2f, vertical %s), pause %s, roll %s (trigger threshold %d), behind "
+             "another window %s",
              (unsigned long)thread_id, ci_state.config.controller_index,
              ci_state.config.look_enabled ? "on" : "off",
              (double)ci_state.config.look_sensitivity, (double)ci_state.config.deadzone,
              ci_state.config.look_vertical ? "on" : "off",
              ci_state.config.pause_enabled ? "on" : "off",
-             ci_state.config.roll_enabled ? "on" : "off", ci_state.config.trigger_threshold);
+             ci_state.config.roll_enabled ? "on" : "off", ci_state.config.trigger_threshold,
+             ci_state.background_armed ? "answered from inside the game"
+                                       : "nothing (BackgroundInput=0 or its hooks did not stand)");
 }

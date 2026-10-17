@@ -42,6 +42,9 @@
  * this tree that is not driven by the game's own render loop; see controller_input.c's own header
  * for the full account.
  *
+ * The one exception is BackgroundInput, for a window behind another one, where SendInput cannot
+ * reach; background_input.h says what it detours and why.
+ *
  * Produces: controller_input.dll
  */
 #ifndef CONTROLLER_INPUT_H

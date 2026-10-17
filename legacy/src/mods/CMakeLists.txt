@@ -209,6 +209,13 @@ add_engine_fix(crt_copy_fix
     crt_copy_fix.c
 )
 
+add_engine_fix(multi_instance
+    dll_main.c
+    multi_instance.c
+    joystick_select.c
+)
+target_link_libraries(multi_instance PRIVATE winmm)
+
 add_engine_fix(decal_fix
     dll_main.c
     decal_fix.c

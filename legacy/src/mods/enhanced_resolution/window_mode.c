@@ -332,6 +332,23 @@ static void apply_window_mode(void)
         if (frame_extra(mode_state.config.mode, window, &frame_width, &frame_height)) {
             (void)window_mode_fit_frame(&monitor, frame_width, frame_height, &client);
         }
+
+        /* An explicit position replaces the centring, kept far enough in that the whole window,
+         * frame included, stays on the monitor. The borderless mode is the monitor and has none. */
+        if (mode_state.config.mode != WINDOW_MODE_BORDERLESS &&
+            mode_state.config.windowed_left >= 0 && mode_state.config.windowed_top >= 0) {
+            int32_t left = mode_state.config.windowed_left;
+            int32_t top  = mode_state.config.windowed_top;
+
+            if (left > monitor.width - (client.width + frame_width)) {
+                left = monitor.width - (client.width + frame_width);
+            }
+            if (top > monitor.height - (client.height + frame_height)) {
+                top = monitor.height - (client.height + frame_height);
+            }
+            client.left = monitor.left + (left > 0 ? left : 0);
+            client.top  = monitor.top + (top > 0 ? top : 0);
+        }
     }
 
     style = window_mode_style(mode_state.config.mode);

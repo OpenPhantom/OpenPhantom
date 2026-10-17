@@ -125,6 +125,12 @@ typedef struct window_mode_config {
     int32_t windowed_width;
     int32_t windowed_height;
 
+    /* Where a sized mode puts the client's top left corner, measured from the top left of the
+     * monitor the window is on. -1 on either axis keeps it centred, which is the default. Exists
+     * for copies of the game meant to sit side by side on one screen, which centring stacks. */
+    int32_t windowed_left;
+    int32_t windowed_top;
+
     /* Whether the device is being built windowed, which is WindowedPresent in the same section.
      * Read here only so that a sized mode can say in the log what its picture depends on: the
      * graphics wrapper clips what it presents against the window's client rectangle, and only a

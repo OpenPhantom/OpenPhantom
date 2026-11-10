@@ -50,6 +50,7 @@ foreach ($file in Get-ChildItem $Player1 -Recurse -File) {
 }
 
 Add-Type -AssemblyName System.Windows.Forms
+# Full height; launch.ps1 marks both windows full screen so the taskbar drops behind them.
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $width = [int]($screen.Width / 2)
 $height = $screen.Height
@@ -61,7 +62,7 @@ foreach ($player in @(@{ Dir = $Player1; Pad = 0; Left = 0 }, @{ Dir = $Player2;
     Set-IniKey $ini 'enhanced_resolution' 'WindowedWidth' "$width"
     Set-IniKey $ini 'enhanced_resolution' 'WindowedHeight' "$height"
     Set-IniKey $ini 'enhanced_resolution' 'WindowedLeft' "$($player.Left)"
-    Set-IniKey $ini 'enhanced_resolution' 'WindowedTop' '0'
+    Set-IniKey $ini 'enhanced_resolution' 'WindowedTop' "$($screen.Top)"
     Set-IniKey $ini 'controller_input' 'ControllerIndex' "$($player.Pad)"
     # multi_instance.dll is outside the release, and a host refuses a joiner that loads one unless
     # it is named here; a machine that loads one cannot host either.
@@ -70,12 +71,14 @@ foreach ($player in @(@{ Dir = $Player1; Pad = 0; Left = 0 }, @{ Dir = $Player2;
     Set-IniKey $ini 'multi_instance' 'Joystick' "$($player.Pad)"
     # Right stick, Start and triggers for whichever window is not in front.
     Set-IniKey $ini 'controller_input' 'BackgroundInput' '1'
+    # Windows gives an Xbox pad's WinMM input to the window in front only; XInput has no such gate.
+    Set-IniKey $ini 'multi_instance' 'XInputSlot' "$($player.Pad)"
     $obi = "$($player.Dir)\obi.ini"
     Set-IniKey $obi 'options' 'screen_width' "$width"
     Set-IniKey $obi 'options' 'screen_height' "$height"
 }
-# One soundtrack, not two playing a few milliseconds apart.
+# One soundtrack, not two playing a few milliseconds apart. Effects stay on: player 1's copy places
+# player 2's sounds by distance from player 1, so a muted player 2 loses his own fights when apart.
 Set-IniKey "$Player2\obi.ini" 'options' 'MVOL' '0'
-Set-IniKey "$Player2\obi.ini" 'options' 'SVOL' '0'
 
 "player 1: $Player1`nplayer 2: $Player2`neach window ${width}x${height}"

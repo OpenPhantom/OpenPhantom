@@ -42,6 +42,8 @@
 #include "multi_instance.h"
 
 #include "joystick_select.h"
+#include "xinput_joy.h"
+#include "keyboard_gate.h"
 
 #include "common/host_image.h"
 #include "common/ini.h"
@@ -117,7 +119,14 @@ void multi_instance_install(void)
     }
     installed = true;
 
-    joystick_select_install(ini_read_int(MULTI_SECTION, "Joystick", -1));
+    {
+        int slot = ini_read_int(MULTI_SECTION, "XInputSlot", -1);
+
+        if (slot < 0 || !xinput_joy_install(slot)) {
+            joystick_select_install(ini_read_int(MULTI_SECTION, "Joystick", -1));
+        }
+    }
+    keyboard_gate_install();
 
     class_name = find_class_name();
     if (class_name == NULL) {

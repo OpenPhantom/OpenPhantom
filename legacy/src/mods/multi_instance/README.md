@@ -12,6 +12,30 @@ gets its own window and reads its own pad.
 |---|---|---|
 | `Enabled` | `1` | `0` leaves the game refusing a second copy |
 | `Joystick` | `-1` | the WinMM joystick id this copy reads, 0 to 15. `-1` lets the game choose the first that answers |
+| `XInputSlot` | `-1` | 0 to 3: answer the game's joystick from this XInput pad instead, in front or behind. Overrides `Joystick` |
+
+## An Xbox pad behind another window
+
+Windows sends an Xbox pad's WinMM/DirectInput reports only to the process in front; behind, every
+axis reads centred and no button is down (measured 2026-11-11: XInput showed the stick off centre
+while WinMM read exactly 32767 on every axis). The engine's buttons and turning come through WinMM,
+so the copy behind lost them. `XInputSlot` replaces `joyGetPosEx` and `joyGetDevCapsA` with
+`xinput_joy.c`, which lays the XInput state out the way the pad looks through WinMM in front and
+copies its capabilities. While the window is in front the real WinMM reading still answers, and the
+first twelve disagreements are logged, which is how the layout is checked in the field.
+
+A read that fails answers a centred pad rather than `JOYERR_UNPLUGGED`: the engine's poll clears its
+enabled and present flags on one failure (`0x0048E15B`) and never sets them again, which left a
+Bluetooth pad that dropped out for a moment (error 1167, fourteen times in one session) walking
+forward and back and nothing else for the rest of the level.
+
+## The keyboard
+
+`stdControl_openKeyboard` (`0x0048D9E8`) sets no cooperative level, so DirectInput's default,
+non-exclusive and background, lets every copy read every key. `keyboard_gate.c` drains the
+keyboard's buffer before the engine's poll while this copy's window is behind, and releases the keys
+still down when it went behind. It runs before the poll, so `controller_input`'s background roll,
+written after the poll, is untouched.
 
 ## The window class
 
@@ -32,8 +56,8 @@ The engine's controller surface is `joyGetNumDevs`, `joyGetPosEx` and `joyGetDev
 walks the ids and keeps the first that answers in one global (`0x008619DC`), so every copy on a
 machine takes the same pad. `Joystick` replaces the game's two import table entries for
 `joyGetPosEx` and `joyGetDevCapsA` with stand-ins that ask for the configured id whatever id the game
-passes, so the walk settles on it. WinMM has no notion of focus, so a copy behind the other keeps
-reading its own pad. The log lists every id that answers at startup, with the pad's name.
+passes, so the walk settles on it. That chooses the pad but not focus: an Xbox pad goes dead behind
+another window, see above. The log lists every id that answers at startup, with the pad's name.
 
 ## Testing status
 

@@ -5,7 +5,7 @@
  * for, in one global (retail 0x008619DC), and every later read passes that id. Two copies on one
  * machine therefore both take the first pad. Answering every id the game asks about with the one
  * configured here makes the walk settle on it, and from then on this copy reads that pad and no
- * other, whichever window is in front: WinMM has no notion of focus.
+ * other. An Xbox pad still reads dead behind another window; xinput_joy.h answers that.
  *
  * Only this module's import table entries for the game are replaced; nothing in the engine is
  * patched, and other DLLs' own WinMM calls are untouched.

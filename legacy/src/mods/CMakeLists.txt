@@ -213,8 +213,10 @@ add_engine_fix(multi_instance
     dll_main.c
     multi_instance.c
     joystick_select.c
+    xinput_joy.c
+    keyboard_gate.c
 )
-target_link_libraries(multi_instance PRIVATE winmm)
+target_link_libraries(multi_instance PRIVATE winmm xinput)
 
 add_engine_fix(decal_fix
     dll_main.c

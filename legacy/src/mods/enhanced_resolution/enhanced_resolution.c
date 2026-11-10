@@ -184,6 +184,8 @@ typedef struct resolution_config {
     int32_t window_mode;              /* 0 authentic, 1 borderless, 2 windowed */
     int32_t windowed_width;           /* 0 = the display mode */
     int32_t windowed_height;
+    int32_t windowed_left;            /* -1 = centred */
+    int32_t windowed_top;
     bool windowed_present;
     bool windowed_fill;
     int32_t pointer_release_key;
@@ -247,7 +249,9 @@ static void load_config(void)
     config->window_mode           = ini_read_int (RESOLUTION_SECTION, "WindowMode", 0);
     config->windowed_width        = ini_read_int (RESOLUTION_SECTION, "WindowedWidth", 0);
     config->windowed_height       = ini_read_int (RESOLUTION_SECTION, "WindowedHeight", 0);
-    config->windowed_present      = ini_read_bool(RESOLUTION_SECTION, "WindowedPresent", false);
+    config->windowed_left         = ini_read_int (RESOLUTION_SECTION, "WindowedLeft", -1);
+    config->windowed_top          = ini_read_int (RESOLUTION_SECTION, "WindowedTop", -1);
+    config->windowed_present     = ini_read_bool(RESOLUTION_SECTION, "WindowedPresent", false);
     config->windowed_fill         = ini_read_bool(RESOLUTION_SECTION, "WindowedFill", true);
     config->pointer_release_key   = ini_read_int (RESOLUTION_SECTION, "PointerReleaseKey", 0x91);
 
@@ -522,6 +526,8 @@ static bool install_window_mode(void)
     mode_config.mode = (window_mode_kind_t)resolution_state.config.window_mode;
     mode_config.windowed_width  = resolution_state.config.windowed_width;
     mode_config.windowed_height = resolution_state.config.windowed_height;
+    mode_config.windowed_left   = resolution_state.config.windowed_left;
+    mode_config.windowed_top    = resolution_state.config.windowed_top;
     mode_config.windowed_present = resolution_state.config.windowed_present;
 
     return window_mode_install(&mode_config);

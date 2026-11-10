@@ -1,3 +1,9 @@
+/* window_mode.c: the shape of the game's window, its geometry and the two detours that apply it.
+ *
+ * SIZE NOTE: a little over 600 lines. The geometry, the detours and the install are one
+ * responsibility, and the geometry is what grew, with window_mode_place. It is pure and covered by
+ * the unit test, which makes it the seam to take, into a file of its own, if this grows again.
+ */
 #include "window_mode.h"
 
 #include "window_fit.h"
@@ -232,6 +238,25 @@ bool window_mode_fit_frame(const window_mode_rect_t *monitor,
     return true;
 }
 
+bool window_mode_place(const window_mode_rect_t *monitor, int32_t left, int32_t top,
+                       int32_t frame_width, int32_t frame_height, window_mode_rect_t *client)
+{
+    int32_t room_left;
+    int32_t room_top;
+
+    if (monitor == NULL || client == NULL || left < 0 || top < 0) {
+        return false;
+    }
+
+    /* The furthest the outer window can sit from the monitor's corner and still be all on it. A
+     * window as large as the monitor has no room at all, and goes to the corner. */
+    room_left = monitor->width  - (client->width  + frame_width);
+    room_top  = monitor->height - (client->height + frame_height);
+    client->left = monitor->left + (left < room_left ? left : (room_left > 0 ? room_left : 0));
+    client->top  = monitor->top  + (top  < room_top  ? top  : (room_top  > 0 ? room_top  : 0));
+    return true;
+}
+
 /* ==============================================================================================
  * The window
  * ============================================================================================ */
@@ -331,6 +356,12 @@ static void apply_window_mode(void)
 
         if (frame_extra(mode_state.config.mode, window, &frame_width, &frame_height)) {
             (void)window_mode_fit_frame(&monitor, frame_width, frame_height, &client);
+        }
+        /* The borderless mode is the monitor and has no position of its own. */
+        if (mode_state.config.mode != WINDOW_MODE_BORDERLESS) {
+            (void)window_mode_place(&monitor, mode_state.config.windowed_left,
+                                    mode_state.config.windowed_top, frame_width, frame_height,
+                                    &client);
         }
     }
 

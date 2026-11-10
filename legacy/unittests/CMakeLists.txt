@@ -992,6 +992,9 @@ add_unit_test(limb_mode_pick dismemberment dismemberment/limb_mode_pick.c)
 # survive from one poll to the next or the stick is dead until it is pushed a long way.
 add_unit_test(look_counts controller_input controller_input/look_counts.c)
 
+# The XInput pad dressed as the WinMM joystick the engine reads, for a copy behind another window.
+add_unit_test(xinput_joy multi_instance multi_instance/xinput_joy.c)
+
 # Where each drawn object was a simulation step ago. The engine keeps that beside the current
 # position and blends between the two, but a platform's carry overwrites it with the current
 # one, so a rider has nothing to blend. What is checked here is a property of a SEQUENCE: the

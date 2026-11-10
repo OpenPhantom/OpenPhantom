@@ -257,6 +257,54 @@ static void test_the_frame_fit_refusals(void)
           "the return value still places a window it can see");
 }
 
+static void test_two_halves_side_by_side(void)
+{
+    window_mode_rect_t left  = { 0, 0, 1280, 1440 };
+    window_mode_rect_t right = { 0, 0, 1280, 1440 };
+
+    ut_check(window_mode_place(&primary, 0, 0, 0, 0, &left) &&
+             window_mode_place(&primary, 1280, 0, 0, 0, &right),
+          "two frameless halves of one monitor are placed");
+    ut_check(left.left == 0 && left.top == 0 && right.left == 1280 && right.top == 0 &&
+             left.width == 1280 && right.width == 1280,
+          "at its corner and at its middle, touching and not overlapping, with their sizes kept");
+}
+
+static void test_a_placement_is_relative_to_its_monitor(void)
+{
+    window_mode_rect_t out = { 0, 0, 960, 1080 };
+
+    ut_check(window_mode_place(&secondary, 960, 0, 0, 0, &out) &&
+             out.left == -960 && out.top == 0,
+          "the position is measured from the monitor the window is on, negative origin included");
+}
+
+static void test_a_placement_past_the_edge_is_pulled_back(void)
+{
+    window_mode_rect_t out = { 0, 0, 1280, 720 };
+    window_mode_rect_t full = { 0, 0, 2560, 1440 };
+
+    ut_check(window_mode_place(&primary, 2000, 1000, FRAME_WIDTH, FRAME_HEIGHT, &out) &&
+             out.left == 2560 - (1280 + FRAME_WIDTH) && out.top == 1440 - (720 + FRAME_HEIGHT),
+          "a position past the right and bottom edges is pulled back until the framed window fits");
+    ut_check(window_mode_place(&primary, 100, 100, 0, 0, &full) &&
+             full.left == 0 && full.top == 0,
+          "a window the size of the monitor has no room to move and goes to the corner");
+}
+
+static void test_a_negative_position_keeps_the_centre(void)
+{
+    window_mode_rect_t out = { 7, 8, 800, 600 };
+
+    ut_check(!window_mode_place(&primary, -1, 0, 0, 0, &out) &&
+             !window_mode_place(&primary, 0, -1, 0, 0, &out) &&
+             !window_mode_place(NULL, 0, 0, 0, 0, &out) &&
+             !window_mode_place(&primary, 0, 0, 0, 0, NULL),
+          "-1 on either axis, the shipped value, places nothing, nor does a missing argument");
+    ut_check(out.left == 7 && out.top == 8 && out.width == 800 && out.height == 600,
+          "and the centred rectangle comes out exactly as it went in");
+}
+
 int main(void)
 {
     ut_section("the authentic mode");
@@ -285,6 +333,12 @@ int main(void)
 
     ut_section("the sized modes");
     test_the_sized_modes();
+
+    ut_section("an explicit position instead of the centre");
+    test_two_halves_side_by_side();
+    test_a_placement_is_relative_to_its_monitor();
+    test_a_placement_past_the_edge_is_pulled_back();
+    test_a_negative_position_keeps_the_centre();
 
     return ut_summary("window_mode");
 }

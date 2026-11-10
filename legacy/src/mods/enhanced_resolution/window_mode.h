@@ -125,6 +125,12 @@ typedef struct window_mode_config {
     int32_t windowed_width;
     int32_t windowed_height;
 
+    /* Where a sized mode puts the client's top left corner, measured from the top left of the
+     * monitor the window is on. -1 on either axis keeps it centred, which is the default. Exists
+     * for copies of the game meant to sit side by side on one screen, which centring stacks. */
+    int32_t windowed_left;
+    int32_t windowed_top;
+
     /* Whether the device is being built windowed, which is WindowedPresent in the same section.
      * Read here only so that a sized mode can say in the log what its picture depends on: the
      * graphics wrapper clips what it presents against the window's client rectangle, and only a
@@ -198,6 +204,12 @@ bool window_mode_client_rect(window_mode_kind_t mode, const window_mode_rect_t *
 bool window_mode_fit_frame(const window_mode_rect_t *monitor,
                            int32_t frame_width, int32_t frame_height,
                            window_mode_rect_t *client);
+
+/* Replaces the centring with WindowedLeft/WindowedTop: the client's corner `left`,`top` pixels in
+ * from the monitor's, pulled back until the window, frame included, is all on the monitor. False,
+ * leaving the rectangle as it arrived, when either is negative, which is "keep it centred". */
+bool window_mode_place(const window_mode_rect_t *monitor, int32_t left, int32_t top,
+                       int32_t frame_width, int32_t frame_height, window_mode_rect_t *client);
 
 /* The style word a mode wants, or 0 for WINDOW_MODE_AUTHENTIC, which is the signal to leave
  * GWL_STYLE exactly as the engine set it. */

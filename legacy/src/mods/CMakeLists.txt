@@ -209,6 +209,15 @@ add_engine_fix(crt_copy_fix
     crt_copy_fix.c
 )
 
+add_engine_fix(multi_instance
+    dll_main.c
+    multi_instance.c
+    joystick_select.c
+    xinput_joy.c
+    keyboard_gate.c
+)
+target_link_libraries(multi_instance PRIVATE winmm xinput)
+
 add_engine_fix(decal_fix
     dll_main.c
     decal_fix.c
@@ -527,6 +536,7 @@ add_engine_fix(dev_overlay
 add_engine_fix(controller_input
     dll_main.c
     controller_input.c
+    background_input.c
     look_counts.c
 )
 target_link_libraries(controller_input PRIVATE xinput)
